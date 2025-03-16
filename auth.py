@@ -17,8 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import AsyncSessionLocal
 from sqlalchemy import select
 
-from db import SessionLocal  # Keep sync session for auth routes
-from sqlalchemy.orm import Session  # <-- Add this line
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
 
@@ -66,17 +64,16 @@ async def register_user(
     """
     lower_username = creds.username.lower()
     validate_password(creds.password)
-    existing_user = db.query(User).filter(
-        User.username == lower_username
-    ).first()
+    result = await db.execute(select(User).where(User.username == lower_username))
+    existing_user = result.scalars().first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already taken")
 
     hashed_pw = bcrypt.hashpw(creds.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     user = User(username=lower_username, password_hash=hashed_pw)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     logger.info(f"User registered successfully: {user.username}")
     return {"message": f"User '{user.username}' registered successfully"}
@@ -93,7 +90,8 @@ async def login_user(
     """
     from fastapi import Response
     lower_username = creds.username.lower()
-    user = db.query(User).filter(User.username == lower_username).first()
+    result = await db.execute(select(User).where(User.username == lower_username))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(
             status_code=401,

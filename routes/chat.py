@@ -91,7 +91,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 @router.post("/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     conversation_data: ConversationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -119,7 +119,7 @@ async def create_conversation(
 
 @router.get("/conversations", response_model=dict)
 async def list_conversations(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -148,7 +148,7 @@ async def list_conversations(
 @router.get("/conversations/{chat_id}", response_model=dict)
 async def get_conversation(
     chat_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -167,7 +167,7 @@ async def get_conversation(
 async def update_conversation(
     chat_id: str,
     update_data: ConversationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -190,7 +190,7 @@ async def update_conversation(
 @router.delete("/conversations/{chat_id}", response_model=dict)
 async def delete_conversation(
     chat_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -212,7 +212,7 @@ async def delete_conversation(
 @router.get("/conversations/{chat_id}/messages", response_model=dict)
 async def list_messages(
     chat_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -238,7 +238,7 @@ async def list_messages(
 async def create_message(
     chat_id: str,
     new_msg: MessageCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -267,11 +267,9 @@ async def create_message(
 
     if new_msg.image_data:
         try:
+            from utils.openai import extract_base64_data
             import base64
-            if "base64," in new_msg.image_data:
-                base64_str = new_msg.image_data.split("base64,")[1]
-            else:
-                base64_str = new_msg.image_data
+            base64_str = extract_base64_data(new_msg.image_data)
             base64.b64decode(base64_str, validate=True)
         except Exception as e:
             raise HTTPException(status_code=400, detail="Invalid image data")
