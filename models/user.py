@@ -8,6 +8,7 @@ and ownership of chats/projects in the Azure Chat Application.
 from sqlalchemy import Column, Integer, String, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from db import Base
 
 class User(Base):
