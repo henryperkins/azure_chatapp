@@ -64,6 +64,7 @@ class MessageCreate(BaseModel):
     """
     content: str = Field(..., min_length=1, description="The text content of the user message")
     role: str = Field(default="user", description="The role: user, assistant, or system.", pattern=r"^(user|assistant|system)$")
+    image_data: Optional[str] = None
 
 
 # -----------------------------
