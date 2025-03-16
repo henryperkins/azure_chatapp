@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
 # Example: 'postgresql+asyncpg://user:pass@localhost:5432/azure_chat'
-DATABASE_URL = "postgresql+asyncpg://user:pass@localhost:5433/azure_chat"
+DATABASE_URL = "postgresql+asyncpg://user:pass@localhost:5432/azure_chat"
 
 async_engine = create_async_engine(DATABASE_URL, echo=True)
 AsyncSessionLocal = async_sessionmaker(async_engine, expire_on_commit=False)
