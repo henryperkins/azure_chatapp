@@ -126,12 +126,9 @@ function processCodeBlocks(text) {
  * Basic function to safely escape HTML characters.
  */
 function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return str.replace(/[^\w. ]/gi, function(c) {
+    return '&#' + c.charCodeAt(0) + ';';
+  });
 }
 
 /**

@@ -91,35 +91,27 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
   }
   
   // Refresh the token if it's close to expiring
-  function refreshTokenIfNeeded() {
+  async function refreshTokenIfNeeded() {
     const token = localStorage.getItem("access_token");
     if (!token) return;
-  
+
     try {
-      const payload = token.split('.')[1];
-      const decoded = JSON.parse(atob(payload));
-      // Refresh if within 5 minutes of expiration
-      const timeLeft = (decoded.exp * 1000) - Date.now();
-      if (timeLeft < 5 * 60 * 1000 && timeLeft > 0) {
-        fetch("/api/auth/refresh", {
-          method: "GET",
-          headers: { "Authorization": `Bearer ${token}` }
-        })
-          .then(checkResponse)
-          .then(data => {
-            localStorage.setItem("access_token", data.access_token);
-            // Optionally update UI or do nothing
-          })
-          .catch(err => console.error("Error refreshing token:", err));
-      } else if (timeLeft <= 0) {
-        // Already expired
-        localStorage.removeItem("access_token");
-        updateAuthStatus();
-        console.warn("Session expired. Please log in again.");
+      const { exp } = JSON.parse(atob(token.split('.')[1]));
+      const timeLeft = exp * 1000 - Date.now();
+      
+      if (timeLeft < 300000 && timeLeft > 0) { // 5 min threshold
+        const newToken = await fetch("/api/auth/refresh", {
+          headers: getHeaders()
+        }).then(checkResponse);
+        
+        localStorage.setItem("access_token", newToken.access_token);
+        return true;
       }
     } catch (e) {
-      console.error("Token parse error", e);
+      console.error("Token refresh failed:", e);
+      localStorage.removeItem("access_token");
     }
+    return false;
   }
   
   function updateAuthStatus() {

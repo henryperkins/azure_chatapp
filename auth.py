@@ -52,6 +52,12 @@ def get_db():
         db.close()
 
 
+def validate_password(password: str):
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    if not any(c.isupper() for c in password):
+        raise ValueError("Password must contain uppercase letters")
+
 @router.post("/register")
 def register_user(
     creds: UserCredentials,
@@ -62,6 +68,7 @@ def register_user(
     Fails if the username already exists.
     """
     lower_username = creds.username.lower()
+    validate_password(creds.password)
     existing_user = db.query(User).filter(
         User.username == lower_username
     ).first()
@@ -124,10 +131,15 @@ def login_user(
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
     logger.info(f"User '{user.username}' logged in successfully.")
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+        max_age=3600
+    )
+    return {"message": "Login successful"}
 
 
 # ------------------------------

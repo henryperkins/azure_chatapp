@@ -15,11 +15,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from db import Base, async_engine
 from auth import router as auth_router
 from routes.chat import router as chat_router
 from routes.file_upload import router as file_upload_router
 from routes.project_routes import router as project_router
+
+app.add_middleware(HTTPSRedirectMiddleware)
 
 app = FastAPI(
     title="Azure OpenAI Chat Application",
