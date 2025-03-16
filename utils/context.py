@@ -35,9 +35,9 @@ def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> 
 
     # Prepare a system prompt to instruct summarization
     system_prompt = {
-        "role": "system",
+        "role": "developer",
         "content": (
-            "You are a summarization assistant. Read the conversation below and provide a concise, coherent summary. "
+            "Formatting re-enabled. You are a summarization assistant. Read the conversation below and provide a concise, coherent summary. "
             "Focus on key points and user requests, omitting extraneous details. Keep it under 200 tokens."
         )
     }
