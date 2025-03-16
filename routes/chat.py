@@ -321,10 +321,16 @@ async def websocket_chat_endpoint(
     Must authenticate via query param or cookies.
     """
     await websocket.accept()
-    token = await websocket.receive_text()
+    
+    # Get cookie from headers
+    cookie_header = websocket.headers.get("cookie")
+    token = None
+    if cookie_header:
+        cookies = dict(cookie.split("=") for cookie in cookie_header.split("; "))
+        token = cookies.get("access_token")
 
     from utils.auth_deps import get_current_user_and_token
-    user = await get_current_user_and_token(token)
+    user = await get_current_user_and_token(token=token)
     if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
