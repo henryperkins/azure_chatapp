@@ -320,29 +320,43 @@ async def create_message(
         "content": message.content
     }
 
+    if new_msg.image_data:
+        try:
+            import base64
+            if "base64," in new_msg.image_data:
+                base64_str = new_msg.image_data.split("base64,")[1]
+            else:
+                base64_str = new_msg.image_data
+            base64.b64decode(base64_str, validate=True)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Invalid image data")
+
     if message.role == "user":
         messages_query = await db.execute(select(Message).where(Message.chat_id == chat.id).order_by(Message.timestamp.asc()))
         conv_messages = messages_query.scalars().all()
         message_dicts = [{"role": m.role, "content": m.content} for m in conv_messages]
         message_dicts = manage_context(message_dicts)
 
-        if chat.model_id is not None:
-            try:
-                openai_response = openai_chat(messages=message_dicts, model_name="o3-mini")
-                assistant_content = openai_response["choices"][0]["message"]["content"]
-                assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
-                db.add(assistant_msg)
-                await db.commit()
-                await db.refresh(assistant_msg)
+        try:
+            openai_response = openai_chat(
+                messages=message_dicts,
+                model_name="o1" if new_msg.image_data else chat.model_id,
+                image_data=new_msg.image_data
+            )
+            assistant_content = openai_response["choices"][0]["message"]["content"]
+            assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
+            db.add(assistant_msg)
+            await db.commit()
+            await db.refresh(assistant_msg)
 
-                response_payload["assistant_message"] = {
-                    "id": assistant_msg.id,
-                    "role": assistant_msg.role,
-                    "content": assistant_msg.content
-                }
-            except Exception as e:
-                logger.error("Error calling Azure OpenAI: %s", e)
-                response_payload["assistant_error"] = str(e)
+            response_payload["assistant_message"] = {
+                "id": assistant_msg.id,
+                "role": assistant_msg.role,
+                "content": assistant_msg.content
+            }
+        except Exception as e:
+            logger.error("Error calling Azure OpenAI: %s", e)
+            response_payload["assistant_error"] = str(e)
 
     return response_payload
 
