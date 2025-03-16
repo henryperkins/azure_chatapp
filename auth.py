@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
-from utils.auth_deps import verify_token
+from utils.auth_deps import verify_token, get_current_user_and_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -202,7 +202,7 @@ def refresh_token(current_user: User = Depends(get_current_user)):
     return {"access_token": new_token, "token_type": "bearer"}
 
 @router.get("/verify")
-async def verify_auth_status(current_user: User = Depends(get_current_user)):
+async def verify_auth_status(current_user: User = Depends(get_current_user_and_token)):
     """
     Endpoint for frontend to verify valid auth state
     """

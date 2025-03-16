@@ -45,6 +45,8 @@ async def get_current_user_and_token(token: str = Depends(oauth2_scheme)):
     raise HTTPException(status_code=401, detail="Not authenticated")
 
 async def _get_user_from_token(token: str):
+    if token.startswith("Bearer "):
+        token = token[7:]
     async for session in get_async_session():
         decoded = verify_token(token)
         username = decoded.get("sub")
