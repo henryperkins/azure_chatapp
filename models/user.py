@@ -24,3 +24,9 @@ class User(Base):
 
     def __repr__(self):
         return f"<User {self.username} (#{self.id})>"
+
+    @classmethod
+    async def get_by_username(cls, db: AsyncSession, username: str):
+        from sqlalchemy import select
+        result = await db.execute(select(cls).filter(cls.username == username))
+        return result.scalars().first()
