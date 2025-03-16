@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
