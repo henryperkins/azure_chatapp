@@ -199,3 +199,10 @@ def refresh_token(current_user: User = Depends(get_current_user)):
     }
     new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return {"access_token": new_token, "token_type": "bearer"}
+
+@router.get("/verify")
+async def verify_auth_status(current_user: User = Depends(get_current_user)):
+    """
+    Endpoint for frontend to verify valid auth state
+    """
+    return {"authenticated": True, "username": current_user.username}
