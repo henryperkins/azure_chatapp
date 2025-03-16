@@ -16,7 +16,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    # Increase the column length for password_hash to ensure the full bcrypt hash is stored
+    password_hash = Column(String(200), nullable=False)
     role = Column(String, default="user")  # e.g. "admin", "user"
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
