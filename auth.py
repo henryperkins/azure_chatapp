@@ -18,6 +18,7 @@ from db import AsyncSessionLocal
 from sqlalchemy import select
 
 from db import SessionLocal  # Keep sync session for auth routes
+from sqlalchemy.orm import Session  # <-- Add this line
 from models.user import User
 
 logger = logging.getLogger(__name__)
