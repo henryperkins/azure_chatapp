@@ -91,29 +91,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   
-  // Refresh the token if it's close to expiring
-  async function refreshTokenIfNeeded() {
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
-
-    try {
-      const { exp } = JSON.parse(atob(token.split('.')[1]));
-      const timeLeft = exp * 1000 - Date.now();
-      
-      if (timeLeft < 300000 && timeLeft > 0) { // 5 min threshold
-        const newToken = await fetch("/api/auth/refresh", {
-          headers: getHeaders()
-        }).then(checkResponse);
-        
-        localStorage.setItem("access_token", newToken.access_token);
-        return true;
-      }
-    } catch (e) {
-      console.error("Token refresh failed:", e);
-      localStorage.removeItem("access_token");
-    }
-    return false;
-  }
   
   async function updateAuthStatus() {
     const token = localStorage.getItem("access_token");
