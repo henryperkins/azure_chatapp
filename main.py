@@ -10,6 +10,8 @@ The FastAPI entrypoint for the Azure OpenAI Chat Application.
 import logging
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from db import init_db, Base, async_engine
@@ -48,7 +50,7 @@ app.add_middleware(
 
 @app.get("/", include_in_schema=False)
 async def root():
-    return {"message": "Azure OpenAI Chat API - See /docs for endpoints"}
+    return FileResponse("static/index.html")
 
 import os
 if os.getenv("ENV") == "production":
