@@ -12,7 +12,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import init_db, Base
+from db import init_db, Base, async_engine
 from auth import router as auth_router
 from routes.chat import router as chat_router
 from routes.file_upload import router as file_upload_router
