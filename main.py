@@ -31,6 +31,8 @@ file uploads, and more.
     version="1.0.0"
 )
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
