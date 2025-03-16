@@ -80,13 +80,17 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
       body: JSON.stringify({ username, password })
     })
       .then(checkResponse)
-      .then((data) => {
+      .then(data => {
+        if (!data.access_token) {
+          throw new Error("No access token in response");
+        }
         localStorage.setItem("access_token", data.access_token);
         updateAuthStatus();
+        window.location.reload();  // Refresh to apply auth state
       })
       .catch((err) => {
         console.error("Login error:", err);
-        alert("Login failed. Check console for details.");
+        showNotification(err.message || "Login failed", "error");
       });
   }
   
@@ -114,32 +118,27 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
     return false;
   }
   
-  function updateAuthStatus() {
-    refreshTokenIfNeeded();
-    const authSection = document.getElementById("authSection");
-    const chatUI = document.getElementById("chatUI");
-    const storedToken = localStorage.getItem("access_token");
-    
-    if (storedToken) {
-      if (authStatus) {
-        authStatus.textContent = "Authenticated";
-        authStatus.classList.remove("text-red-600");
-        authStatus.classList.add("text-green-600");
+  async function updateAuthStatus() {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      // Show login UI
+      return;
+    }
+
+    try {
+      const resp = await fetch("/api/auth/verify", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      
+      if (resp.ok) {
+        // User is authenticated
+      } else {
+        // Handle expired/invalid token
       }
-      if (authSection && chatUI) {
-        authSection.classList.add("hidden");
-        chatUI.classList.remove("hidden");
-      }
-    } else {
-      if (authStatus) {
-        authStatus.textContent = "Not Authenticated";
-        authStatus.classList.remove("text-green-600");
-        authStatus.classList.add("text-red-600");
-      }
-      if (authSection && chatUI) {
-        authSection.classList.remove("hidden");
-        chatUI.classList.add("hidden");
-      }
+    } catch (err) {
+      console.error("Auth check failed:", err);
     }
   }
 
