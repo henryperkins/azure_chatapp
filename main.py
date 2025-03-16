@@ -8,13 +8,13 @@ The FastAPI entrypoint for the Azure OpenAI Chat Application.
 """
 
 import logging
-
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import init_db, Base, async_engine
+from db import Base, async_engine
 from auth import router as auth_router
 from routes.chat import router as chat_router
 from routes.file_upload import router as file_upload_router
@@ -50,16 +50,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/", include_in_schema=False)
 async def root():
     return FileResponse("static/index.html")
 
-import os
 if os.getenv("ENV") == "production":
     @app.middleware("http")
     async def force_https(request, call_next):
         response = await call_next(request)
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        if isinstance(response, Response):
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 
