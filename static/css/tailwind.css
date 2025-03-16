@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Add custom vision styles */
+.vision-response {
+    @apply border-l-4 border-purple-500 pl-4 bg-purple-50 dark:bg-purple-900/20;
+}
+
+.vision-indicator {
+    @apply inline-flex items-center text-sm text-purple-600 dark:text-purple-300;
+}
