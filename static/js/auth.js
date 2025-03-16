@@ -83,6 +83,7 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
     .then(checkResponse)
     .then(data => {
         localStorage.setItem("access_token", data.access_token);
+        document.cookie = `access_token=${data.access_token}; path=/; samesite=lax`;
         updateAuthStatus();
         document.dispatchEvent(new CustomEvent("authStateChanged", {
             detail: { authenticated: true }
@@ -129,7 +130,8 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
       const resp = await fetch("/api/auth/verify", {
         headers: {
           "Authorization": `Bearer ${token}`
-        }
+        },
+        credentials: "include"
       });
       
       if (resp.ok) {
