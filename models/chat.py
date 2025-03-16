@@ -30,7 +30,7 @@ class Chat(Base):
     # messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
 
     # Relationship for projects could be many-to-many via a bridging table chat_projects
-    projects = relationship("Project", secondary="chat_projects", back_populates="projects")
+    projects = relationship("Project", secondary="chat_projects", back_populates="chats")
 
     def __repr__(self):
         return f"<Chat {self.id} (User #{self.user_id}) title={self.title}>"
