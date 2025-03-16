@@ -426,7 +426,8 @@ async def handle_assistant_response(
 
     if chat.model_id is not None:
         try:
-            openai_response = openai_chat(messages=message_dicts, model_name="o3-mini")
+            chat = await session.get(Chat, chat_id)
+            openai_response = openai_chat(messages=message_dicts, model_name=chat.model_id)
             assistant_content = openai_response["choices"][0]["message"]["content"]
             assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
             session.add(assistant_msg)

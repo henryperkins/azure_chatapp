@@ -15,7 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendBtn = document.getElementById("sendBtn");
   const chatTitleEl = document.getElementById("chatTitle");
   const chatTitleEditBtn = document.getElementById("chatTitleEditBtn");
-  const wsUrl = chatId ? `ws://${window.location.host}/api/chat/ws/${chatId}` : null;
+  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const wsUrl = chatId ? `${protocol}${window.location.host}/api/chat/ws/${chatId}` : null;
 
   let socket = null;
 
