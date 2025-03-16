@@ -12,6 +12,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const reasoningToggle = document.getElementById("reasoningToggle");
   const visionToggle = document.getElementById("visionToggle");
 
+  const visionDetailSelect = document.createElement('select');
+  visionDetailSelect.id = 'visionDetail';
+  visionDetailSelect.innerHTML = `
+    <option value="auto">Auto</option>
+    <option value="low">Low Detail</option>
+    <option value="high">High Detail</option>
+  `;
+
+  document.getElementById('visionPanel').appendChild(
+    Object.assign(document.createElement('div'), {
+      className: 'mt-2',
+      innerHTML: `<label class="block text-sm font-medium dark:text-gray-200">Image Detail:</label>`
+    })
+  ).appendChild(visionDetailSelect);
+
+  visionDetailSelect.addEventListener('change', () => {
+    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+    window.MODEL_CONFIG.visionDetail = visionDetailSelect.value;
+  });
+
   // Load existing settings from localStorage (or defaults)
   const storedModel = localStorage.getItem("modelName") || "o3-mini";
   const storedMaxTokens = localStorage.getItem("maxTokens") || "500";

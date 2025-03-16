@@ -107,9 +107,11 @@ function processCodeBlocks(text) {
   result += text.slice(lastIndex);
 
   // Add support for image responses: [Image: http://...]
-  const imageRegex = /\[Image:\s+(https?:\/\/\S+\.(?:png|jpg|jpeg))\]/gi;
-  result = result.replace(imageRegex, (match, url) => {
-    return `<img src="${url}" alt="Generated image" class="max-w-full h-auto rounded-lg shadow-md mt-2" />`;
+  const imageRegex = /\[Image:\s*(data:image\/[^;]+;base64,[^\]]+)\]/gi;
+  result = result.replace(imageRegex, (match, base64) => {
+    return `<img src="${base64}" alt="Uploaded content" 
+                 class="max-w-full h-auto rounded-lg shadow-md mt-2 border
+                        border-gray-200 dark:border-gray-600">`;
   });
 
   return result;
