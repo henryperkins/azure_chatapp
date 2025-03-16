@@ -411,10 +411,10 @@ async def websocket_chat_endpoint(
                     await session.refresh(message)
                     if message.role == "user":
                         await handle_assistant_response(chat_id, session, websocket)
-            except json.JSONDecodeError:
-                await websocket.send_json({"error": "Invalid JSON format"})
-            except Exception as e:
-                await websocket.send_json({"error": str(e)})
+                except json.JSONDecodeError:
+                    await websocket.send_json({"error": "Invalid JSON format"})
+                except Exception as e:
+                    await websocket.send_json({"error": str(e)})
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for chat_id=%s", chat_id)
         return
