@@ -36,11 +36,19 @@ logger = logging.getLogger(__name__)
 # Apply CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development. Restrict in production.
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return {"message": "Azure OpenAI Chat API - See /docs for endpoints"}
 
 import os
 if os.getenv("ENV") == "production":
@@ -71,8 +79,6 @@ app.include_router(file_upload_router, prefix="/api/files", tags=["files"])
 app.include_router(project_router, prefix="/api/projects", tags=["projects"])
 
 
-def health_check():
-    """
-    A simple health-check endpoint to confirm the service is running.
-    """
+@app.get("/health")
+async def health_check():
     return {"status": "ok"}
