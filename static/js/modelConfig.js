@@ -14,27 +14,43 @@ document.addEventListener("DOMContentLoaded", () => {
   // Safely handle the possibility that the 'reasoningPanel' doesn't exist
   const reasoningPanel = document.getElementById("reasoningPanel");
   if (reasoningPanel) {
-    const reasoningEffortSelect = document.createElement("select");
-    reasoningEffortSelect.id = "reasoningEffortSelect";
-    reasoningEffortSelect.className = "border border-gray-300 rounded p-1 ml-2";
-    reasoningEffortSelect.innerHTML = `
-      <option value="">(disabled)</option>
-      <option value="low">Low</option>
-      <option value="medium">Medium</option>
-      <option value="high">High</option>
-    `;
-  
-    const containerDiv = Object.assign(document.createElement("div"), {
-      className: "mt-2",
-      innerHTML: `<label class="block text-sm font-medium dark:text-gray-200">Reasoning Effort:</label>`
-    });
-  
-    reasoningPanel.appendChild(containerDiv).appendChild(reasoningEffortSelect);
-  
-    // Listen for changes to reasoning effort
-    reasoningEffortSelect.addEventListener("change", () => {
+    // Create a slider in place of the select
+    const label = document.createElement("label");
+    label.textContent = "Reasoning Effort:";
+    label.className = "block text-sm font-medium dark:text-gray-200";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.id = "reasoningEffortRange";
+    slider.min = "1";
+    slider.max = "3";
+    slider.value = "1";
+    slider.step = "1";
+    slider.className = "mt-2 w-full";
+
+    const sliderOutput = document.createElement("span");
+    sliderOutput.className = "ml-2";
+
+    function updateSliderOutput(value) {
+      if (value === "1") {
+        sliderOutput.textContent = "Low";
+      } else if (value === "2") {
+        sliderOutput.textContent = "Medium";
+      } else {
+        sliderOutput.textContent = "High";
+      }
+    }
+
+    updateSliderOutput(slider.value);
+
+    slider.addEventListener("input", () => {
+      updateSliderOutput(slider.value);
       persistSettings();
     });
+
+    reasoningPanel.appendChild(label);
+    reasoningPanel.appendChild(slider);
+    reasoningPanel.appendChild(sliderOutput);
   }
 
   const visionDetailSelect = document.createElement('select');
@@ -93,9 +109,13 @@ document.addEventListener("DOMContentLoaded", () => {
       window.MODEL_CONFIG.maxTokens = Number(maxTokensSelect.value);
     }
     // Reasoning effort
-    const reasoningEffortSelectEl = document.getElementById("reasoningEffortSelect");
-    if (reasoningEffortSelectEl) {
-      const effort = reasoningEffortSelectEl.value;
+    const reasoningEffortRange = document.getElementById("reasoningEffortRange");
+    if (reasoningEffortRange) {
+      let effort = '';
+      if (reasoningEffortRange.value === '1') effort = 'low';
+      else if (reasoningEffortRange.value === '2') effort = 'medium';
+      else effort = 'high';
+
       localStorage.setItem("reasoningEffort", effort);
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
       window.MODEL_CONFIG.reasoningEffort = effort;
@@ -105,6 +125,35 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("visionEnabled", String(visionToggle.checked));
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
       window.MODEL_CONFIG.visionEnabled = visionToggle.checked;
+    }
+    updateModelConfigDisplay();
+    updateModelConfigDisplay();
+  }
+  
+  function updateModelConfigDisplay() {
+    const currentModelNameEl = document.getElementById("currentModelName");
+    const currentMaxTokensEl = document.getElementById("currentMaxTokens");
+    const currentReasoningEl = document.getElementById("currentReasoning");
+    const visionEnabledStatusEl = document.getElementById("visionEnabledStatus");
+  
+    // Model
+    if (currentModelNameEl) {
+      currentModelNameEl.textContent = window.MODEL_CONFIG?.modelName || "N/A";
+    }
+  
+    // Max Tokens
+    if (currentMaxTokensEl) {
+      currentMaxTokensEl.textContent = window.MODEL_CONFIG?.maxTokens?.toString() || "N/A";
+    }
+  
+    // Reasoning
+    if (currentReasoningEl) {
+      currentReasoningEl.textContent = window.MODEL_CONFIG?.reasoningEffort || "N/A";
+    }
+  
+    // Vision
+    if (visionEnabledStatusEl) {
+      visionEnabledStatusEl.textContent = window.MODEL_CONFIG?.visionEnabled ? "Enabled" : "Disabled";
     }
   }
 
@@ -131,9 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (maxTokensSelect) {
     maxTokensSelect.addEventListener("change", persistSettings);
   }
-  if (reasoningToggle) {
-    reasoningToggle.addEventListener("change", persistSettings);
-  }
+  // Removed references to reasoningToggle since it's no longer used (replaced by the new slider)
   if (visionToggle) {
     visionToggle.addEventListener("change", persistSettings);
   }
