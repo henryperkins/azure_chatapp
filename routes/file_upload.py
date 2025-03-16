@@ -89,8 +89,9 @@ def upload_file(
     def virus_scan(file_bytes: bytes):
         """Integration with ClamAV or cloud scan service"""
         # Implement actual scanning logic
-        if b"malicious_pattern" in file_bytes:  # Example check
-            raise HTTPException(400, "File rejected by security scan")
+        if b"PK" in file_bytes[:4]:  # Simple ZIP file check
+            raise HTTPException(400, "ZIP archives not allowed")
+        # Add more heuristic checks
 
     virus_scan(contents)
     if len(contents) > MAX_FILE_BYTES:

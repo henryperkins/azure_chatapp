@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # JWT Configuration
-JWT_SECRET = "YOUR_JWT_SECRET_KEY"
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    logger.warning("Using default JWT secret - insecure for production!")
 # Replace with a secure random key in production
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour expiry note

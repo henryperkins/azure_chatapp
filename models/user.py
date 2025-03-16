@@ -20,7 +20,7 @@ class User(Base):
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     # Example relationships:
-    # chats = relationship("Chat", back_populates="user", lazy="joined")
+    chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username} (#{self.id})>"
