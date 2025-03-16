@@ -59,10 +59,8 @@ def openai_chat(
     }
 
     logger.info(
-        "API Request | Model: %s | Tokens: %d | User: %s",
-        model_name,
-        estimate_token_count(messages),
-        current_user.username if current_user else 'unknown'
+        "API Request | Model: %s",
+        model_name
     )
 
     # reasoning_effort is only applicable for "o3-mini" or "o1"
