@@ -14,11 +14,12 @@ import jwt
 from fastapi import APIRouter, HTTPException, Depends, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from db import AsyncSessionLocal
+from db import AsyncSessionLocal, get_async_session
 from sqlalchemy import select
 
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
+from utils.auth_deps import verify_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -151,7 +152,7 @@ async def login_user(
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(AsyncSessionLocal)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Retrieves the current user from JWT.

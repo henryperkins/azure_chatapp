@@ -21,6 +21,7 @@ import chardet
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import httpx
+import requests
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,7 +141,7 @@ async def upload_file(
             status=resp_json.get("status", "uploaded"),
             object_type=resp_json["object"]
         )
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         logger.error(f"Exception uploading file to Azure: {e}")
         raise HTTPException(
             status_code=502, 
@@ -149,10 +150,10 @@ async def upload_file(
 
 
 @router.get("/files/{file_id}", response_model=dict)
-def get_file_info(
+async def get_file_info(
     file_id: str,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Gets details for a single file from Azure OpenAI, including status, size, purpose, etc.
@@ -166,7 +167,8 @@ def get_file_info(
     }
     endpoint_url = f"{AZURE_OPENAI_ENDPOINT}/openai/files/{file_id}?api-version={API_VERSION}"
     try:
-        resp = requests.get(endpoint_url, headers=headers, timeout=30)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(endpoint_url, headers=headers, timeout=30)
         if resp.status_code == 200:
             return resp.json()
         logger.error(f"Azure get file info error: {resp.status_code} -> {resp.text}")
@@ -174,7 +176,7 @@ def get_file_info(
             status_code=resp.status_code,
             detail=f"Error retrieving file info: {resp.text}"
         )
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         logger.error(f"Exception retrieving file info: {e}")
         raise HTTPException(
             status_code=502,
@@ -183,10 +185,10 @@ def get_file_info(
 
 
 @router.get("/files/{file_id}/content", response_model=dict)
-def get_file_content(
+async def get_file_content(
     file_id: str,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Retrieves the content of the file from Azure OpenAI. 
@@ -199,7 +201,8 @@ def get_file_content(
     }
     endpoint_url = f"{AZURE_OPENAI_ENDPOINT}/openai/files/{file_id}/content?api-version={API_VERSION}"
     try:
-        resp = requests.get(endpoint_url, headers=headers, timeout=30)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(endpoint_url, headers=headers, timeout=30)
         if resp.status_code == 200:
             # Azure returns plain text or JSON
             # We'll convert it to a JSON response
@@ -209,7 +212,7 @@ def get_file_content(
             status_code=resp.status_code,
             detail=f"Error retrieving file content: {resp.text}"
         )
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         logger.error(f"Exception retrieving file content: {e}")
         raise HTTPException(
             status_code=502,
