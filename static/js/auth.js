@@ -85,17 +85,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateAuthStatus() {
     const token = localStorage.getItem("access_token");
+    const authSection = document.getElementById("authSection");
+    const chatUI = document.getElementById("chatUI");
     if (token) {
       if (authStatus) {
         authStatus.textContent = "Authenticated";
         authStatus.classList.remove("text-red-600");
         authStatus.classList.add("text-green-600");
       }
+      if (authSection && chatUI) {
+        authSection.classList.add("hidden");
+        chatUI.classList.remove("hidden");
+      }
     } else {
       if (authStatus) {
         authStatus.textContent = "Not Authenticated";
         authStatus.classList.remove("text-green-600");
         authStatus.classList.add("text-red-600");
+      }
+      if (authSection && chatUI) {
+        authSection.classList.remove("hidden");
+        chatUI.classList.add("hidden");
       }
     }
   }

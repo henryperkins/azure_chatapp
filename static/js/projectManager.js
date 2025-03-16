@@ -52,14 +52,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load all user projects
   function loadProjects() {
-    fetch("/api/projects", { method: "GET", headers: getHeaders() })
-      .then(checkResponse)
-      .then((data) => {
-        if (data.projects) {
-          renderProjectList(data.projects);
+      const token = getAuthToken();
+      if (!token) {
+        console.warn("No auth token found. Please log in first.");
+        if (typeof showNotification === 'function') {
+          showNotification("Please log in to load your Project list.", "info");
         }
-      })
-      .catch((err) => console.error("Error loading projects:", err));
+        return;
+      }
+      fetch("/api/projects", { method: "GET", headers: getHeaders() })
+        .then(checkResponse)
+        .then((data) => {
+          if (data.projects) {
+            renderProjectList(data.projects);
+          }
+        })
+        .catch((err) => console.error("Error loading projects:", err));
   }
 
   // Create a new project

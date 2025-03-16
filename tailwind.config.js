@@ -1,3 +1,5 @@
+const colors = require('tailwindcss/colors');
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   // Enable dark mode using the 'class' strategy:
@@ -7,9 +9,9 @@ module.exports = {
 
   // The 'content' array tells Tailwind which files to scan for class names.
   content: [
-    './index.html',
-    './js/**/*.js',
-    './css/**/*.css',
+    './static/index.html',
+    './static/js/**/*.js',
+    './static/css/**/*.css',
     // If you have additional subdirectories or template files:
     '../backend/**/*.html',
     // Adjust or add paths to match your project structure:
@@ -19,9 +21,6 @@ module.exports = {
     // Extend or override the default Tailwind theme here.
     extend: {
       // Example: custom breakpoints, or additional brand colors, etc.
-      spacing: {
-        'touch-min': '44px',
-      },
       screens: {
         // Already in Tailwind by default, but you can add new ones:
         'xs': '320px',
@@ -31,8 +30,9 @@ module.exports = {
       },
       // Example: brand-specific colors
       colors: {
-        brandBlue: '#1E40AF',
-        brandLightBlue: '#60A5FA',
+          brandBlue: '#1E40AF',
+          brandLightBlue: '#60A5FA',
+          purple: colors.purple
       },
       // Example: custom spacing or font families
       spacing: {
