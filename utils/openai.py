@@ -57,7 +57,12 @@ def openai_chat(
         "max_completion_tokens": max_completion_tokens
     }
 
-    logger.info(f"API Request | Model: {model_name}, Max Tokens: {max_completion_tokens}")
+    logger.info(
+        "API Request | Model: %s | Tokens: %d | User: %s",
+        model_name,
+        estimate_token_count(messages),
+        current_user.username if current_user else 'unknown'
+    )
 
     # reasoning_effort is only applicable for "o3-mini" or "o1"
     if reasoning_effort and model_name in ["o3-mini", "o1"]:
@@ -67,15 +72,20 @@ def openai_chat(
     # (Hypothetical approach — actual Azure GPT-with-vision usage may differ)
     if model_name == "o1" and image_data:
         import base64
+        file_type = "jpeg"  # or detect from image_data if needed
         encoded_image = base64.b64encode(image_data).decode("utf-8")
         vision_message = {
             "role": "user",
             "content": [
-                {"type": "text", "text": messages[-1]['content'] if messages else ""},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}}
+                {"type": "text", "text": messages[-1]['content']},
+                {"type": "image_url",
+                 "image_url": {
+                     "url": f"data:image/{file_type};base64,{encoded_image}"
+                 }}
             ]
         }
         payload["messages"] = [vision_message]
+        payload["max_completion_tokens"] = 1500
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=60)
