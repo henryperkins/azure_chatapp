@@ -129,6 +129,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function appendMessage(role, content) {
+    if (content.includes('[Conversation summarized]')) {
+      const summaryEl = document.createElement('div');
+      summaryEl.innerHTML = window.showSummaryIndicator();
+      conversationArea.appendChild(summaryEl);
+    }
+
     const msgDiv = document.createElement("div");
     msgDiv.classList.add("mb-2", "p-2", "rounded");
 
