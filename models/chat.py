@@ -11,7 +11,7 @@ Defines the Chat model, representing a conversation's metadata:
 from sqlalchemy import Column, String, Integer, Boolean, TIMESTAMP, text, ForeignKey
 from sqlalchemy.orm import relationship
 
-from ..db import Base
+from db import Base
 
 class Chat(Base):
     __tablename__ = "chats"

@@ -7,7 +7,7 @@ Each record can hold the filename, path, inline content, etc.
 
 from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, text, ForeignKey
 from sqlalchemy.orm import relationship
-from ..db import Base
+from db import Base
 
 class ProjectFile(Base):
     __tablename__ = "project_files"

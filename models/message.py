@@ -9,7 +9,7 @@ import json
 from sqlalchemy import Column, Integer, String, Text, JSON, TIMESTAMP, text, ForeignKey
 from sqlalchemy.orm import relationship
 
-from ..db import Base
+from db import Base
 
 class Message(Base):
     __tablename__ = "messages"

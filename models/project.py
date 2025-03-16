@@ -8,7 +8,7 @@ that can be attached to one or more chats for context.
 from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, text, ForeignKey
 from sqlalchemy.orm import relationship
 
-from ..db import Base
+from db import Base
 
 class Project(Base):
     __tablename__ = "projects"
