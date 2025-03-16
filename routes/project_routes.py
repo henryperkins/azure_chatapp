@@ -160,13 +160,13 @@ def update_project(
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
     if update_data.name is not None:
-        proj.name = update_data.name.strip()
+        proj.name = update_data.name.strip()  # type: ignore[assignment]
     if update_data.subtitle is not None:
-        proj.subtitle = update_data.subtitle.strip()
+        proj.subtitle = update_data.subtitle.strip()  # type: ignore[assignment]
     if update_data.description is not None:
-        proj.description = update_data.description.strip()
+        proj.description = update_data.description.strip()  # type: ignore[assignment]
     if update_data.notes is not None:
-        proj.notes = update_data.notes.strip()
+        proj.notes = update_data.notes.strip()  # type: ignore[assignment]
 
     db.commit()
     db.refresh(proj)
