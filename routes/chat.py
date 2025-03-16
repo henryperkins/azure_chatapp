@@ -72,12 +72,6 @@ class MessageCreate(BaseModel):
 # Dependency
 # -----------------------------
 
-async def get_db():
-    """
-    Dependency to get an asynchronous database session.
-    """
-    async with get_async_session() as session:
-        yield session
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -160,18 +154,7 @@ async def get_conversation(
     """
     Retrieve metadata about a specific conversation, verifying ownership.
     """
-    result = await db.execute(
-        select(Chat)
-        .where(
-            Chat.id == chat_id,
-            Chat.user_id == current_user.id,
-            Chat.is_deleted.is_(False)
-        )
-    )
-    chat = result.scalars().first()
-    if not chat:
-        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
-
+    chat = await get_valid_chat(chat_id, current_user, db)
     return {
         "id": chat.id,
         "title": chat.title,
@@ -190,17 +173,7 @@ async def update_conversation(
     """
     Updates the conversation's title or model_id.
     """
-    result = await db.execute(
-        select(Chat)
-        .where(
-            Chat.id == chat_id,
-            Chat.user_id == current_user.id,
-            Chat.is_deleted.is_(False)
-        )
-    )
-    chat = result.scalars().first()
-    if not chat:
-        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+    chat = await get_valid_chat(chat_id, current_user, db)
 
     if update_data.title is not None:
         chat.title = update_data.title.strip()
@@ -255,17 +228,7 @@ async def list_messages(
     """
     Retrieves all messages for a conversation, sorted by timestamp ascending.
     """
-    result = await db.execute(
-        select(Chat)
-        .where(
-            Chat.id == chat_id,
-            Chat.user_id == current_user.id,
-            Chat.is_deleted.is_(False)
-        )
-    )
-    chat = result.scalars().first()
-    if not chat:
-        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+    chat = await get_valid_chat(chat_id, current_user, db)
 
     messages = await db.execute(select(Message).where(Message.chat_id == chat_id).order_by(Message.timestamp.asc()))
     messages = messages.scalars().all()
@@ -390,7 +353,8 @@ async def websocket_chat_endpoint(
     await websocket.accept()
     token = await websocket.receive_text()
 
-    user = await get_current_user(token)
+    from utils.auth_deps import get_current_user_and_token
+    user = await get_current_user_and_token(token)
     if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -470,3 +434,41 @@ async def handle_assistant_response(
     except Exception as e:
         logger.error("Error calling Azure OpenAI: %s", e)
         await websocket.send_json({"error": f"Error from OpenAI: {str(e)}"})
+from typing import List, Dict
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+from models.chat import Chat
+from models.message import Message
+
+async def get_valid_chat(chat_id: str, user: User, db: AsyncSession):
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.id == chat_id,
+            Chat.user_id == user.id,
+            Chat.is_deleted.is_(False)
+        )
+    )
+    chat = result.scalars().first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return chat
+
+def convert_messages_to_dicts(messages) -> List[Dict]:
+    return [{"role": str(m.role), "content": str(m.content)} for m in messages]
+
+async def save_assistant_response(chat_id: str, content: str, db: AsyncSession):
+    assistant_msg = Message(chat_id=chat_id, role="assistant", content=content)
+    db.add(assistant_msg)
+    await db.commit()
+    await db.refresh(assistant_msg)
+    return assistant_msg
+
+from pydantic import BaseModel
+from datetime import datetime
+
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    timestamp: datetime
