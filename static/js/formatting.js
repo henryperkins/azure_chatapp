@@ -35,6 +35,13 @@ export function formatText(content) {
   return safe;
 }
 
+export function showSummaryIndicator() {
+  const indicator = document.createElement('div');
+  indicator.className = 'summary-indicator bg-yellow-100 p-2 mb-2 text-sm';
+  indicator.textContent = '⚠️ Conversation was summarized to maintain context';
+  return indicator;
+}
+
 /**
  * Summaries often returned by do_summarization could be collapsed by default.
  * This function wraps summarized text in a collapsible element with a toggle.

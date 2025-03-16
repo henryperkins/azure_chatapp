@@ -57,19 +57,25 @@ def openai_chat(
         "max_completion_tokens": max_completion_tokens
     }
 
+    logger.info(f"API Request | Model: {model_name}, Max Tokens: {max_completion_tokens}")
+
     # reasoning_effort is only applicable for "o3-mini" or "o1"
     if reasoning_effort and model_name in ["o3-mini", "o1"]:
         payload["reasoning_effort"] = reasoning_effort
 
     # If image_data is provided and model_name == "o1", handle GPT with Vision
     # (Hypothetical approach — actual Azure GPT-with-vision usage may differ)
-    if image_data and model_name == "o1":
-        # Model's vision input might be passed differently. We'll do a simple example:
-        headers["Content-Type"] = "application/json"  # Or multipart if needed
-        # Some hypothetical field "image_data" might be base64-encoded
+    if model_name == "o1" and image_data:
         import base64
         encoded_image = base64.b64encode(image_data).decode("utf-8")
-        payload["image"] = encoded_image
+        vision_message = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": messages[-1]['content'] if messages else ""},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}}
+            ]
+        }
+        payload["messages"] = [vision_message]
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=60)

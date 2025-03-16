@@ -83,6 +83,14 @@ def upload_file(
         )
 
     contents = file.file.read()
+    import html
+    sanitized_content = html.escape(contents.decode("utf-8"))
+
+    def virus_scan(file_bytes: bytes):
+        # TODO: implement real virus scanning
+        pass
+
+    virus_scan(contents)
     if len(contents) > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=400, 

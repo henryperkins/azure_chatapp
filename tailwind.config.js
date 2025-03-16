@@ -34,6 +34,7 @@ module.exports = {
       // Example: custom spacing or font families
       spacing: {
         '128': '32rem',
+        'touch-min': '44px',
       },
     },
   },
