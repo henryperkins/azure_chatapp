@@ -51,7 +51,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Event listeners for changes
   if (modelSelect) {
-    modelSelect.addEventListener("change", persistSettings);
+    modelSelect.addEventListener('change', () => {
+      persistSettings();
+      const isVisionModel = modelSelect.value === 'o1';
+      document.getElementById('visionPanel').classList.toggle('hidden', !isVisionModel);
+      document.getElementById('reasoningToggle').disabled = !['o3-mini', 'o1'].includes(modelSelect.value);
+    });
   }
   if (maxTokensSelect) {
     maxTokensSelect.addEventListener("change", persistSettings);
@@ -78,11 +83,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const visionInputEl = document.getElementById('visionFileInput');
   if (visionInputEl) {
     visionInputEl.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const base64Image = await convertToBase64(file);
-        window.MODEL_CONFIG.visionImage = base64Image;
+      const statusEl = document.getElementById('visionStatus');
+      if (window.MODEL_CONFIG?.modelName !== 'o1') {
+        statusEl.textContent = 'Vision only works with o1 model';
+        e.target.value = ''; // Clear invalid selection
+        return;
       }
+
+      const file = e.target.files[0];
+      if (file.size > 5000000) {
+        statusEl.textContent = 'File must be ≤5MB';
+        return;
+      }
+
+      statusEl.textContent = 'Processing...';
+      window.MODEL_CONFIG.visionImage = await convertToBase64(file);
+      statusEl.textContent = 'Ready for analysis';
     });
   }
 });
