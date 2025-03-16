@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Azure OpenAI Chat</title>
+
+  <!-- Tailwind CSS (production build or dev) -->
+  <link rel="stylesheet" href="./css/tailwind.css" />
+
+  <!-- Ensure responsive, mobile-friendly behavior -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- CSRF token (if your backend sets it) -->
+  <meta name="csrf-token" content="" />
+</head>
+<body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
+
+  <!--
+    Top Navbar
+    -------------------------------------------------------------------------
+    Includes:
+      - Main brand / logo
+      - Toggle button for sidebar on mobile
+      - Live user status indicator (Online/Offline)
+      - Possibly a logout/account button or route link
+  -->
+  <header class="bg-white shadow-sm border-b border-gray-200 dark:border-gray-700 dark:bg-gray-800">
+    <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
+      <div class="flex items-center">
+        <button id="navToggleBtn" class="mr-3 focus:outline-none md:hidden">
+          <!-- Some icon for toggling the sidebar on mobile -->
+          <svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
+               viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <h1 class="text-xl font-semibold dark:text-gray-100">Azure OpenAI Chat</h1>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <!-- Example user status text, updated in app.js -->
+        <span id="userStatus" class="transition-colors text-sm font-medium">Offline</span>
+        <!-- Example logout or user menu link, adjust to your logic -->
+        <a href="#" class="text-sm text-blue-600 hover:underline dark:text-blue-400">Logout</a>
+      </div>
+    </div>
+  </header>
+
+  <!--
+    Main Container
+    -------------------------------------------------------------------------
+    Contains:
+      - Collapsible sidebar for conversation listing, project listing, or search
+      - Main content area with separate panels for:
+          * Model Selection
+          * Chat UI
+          * Project Manager
+          * Summaries or advanced features
+      - Overlaid ephemeral notifications at top or bottom
+  -->
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Sidebar (hidden on mobile by default) -->
+    <nav id="mainSidebar"
+         class="hidden md:block w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+      <div class="p-4 dark:text-gray-100">
+        <h2 class="font-semibold text-lg mb-2">Conversations</h2>
+        <!-- Quick-search input for conversation titles/dates -->
+        <div class="mb-3">
+          <input type="text"
+                 placeholder="Search..."
+                 class="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
+        </div>
+        <ul class="space-y-2 text-sm">
+          <!-- Placeholder conversation items, replaced dynamically -->
+          <li class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">
+            <span>Conversation #1</span>
+          </li>
+          <li class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">
+            <span>Conversation #2</span>
+          </li>
+          <!-- Empty state suggestion: <li class="text-gray-500">No conversations yet—Begin now!</li> -->
+        </ul>
+        <hr class="my-4 dark:border-gray-700" />
+
+        <!-- Projects or additional sidebar sections -->
+        <h2 class="font-semibold text-lg mb-2">Projects</h2>
+        <ul class="space-y-2 text-sm">
+          <!-- Placeholder projects, replaced dynamically -->
+          <li class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">
+            <span>Project Alpha</span>
+          </li>
+          <li class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">
+            <span>Project Beta</span>
+          </li>
+          <!-- File upload or project creation logic from project_manager.js -->
+        </ul>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Notification area for ephemeral toasts -->
+      <div id="notificationArea"
+           class="fixed top-16 right-4 z-50 w-72 space-y-2"></div>
+
+      <!-- Scroll container -->
+      <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
+        <!-- Model Selection & Configuration Interface -->
+        <section id="modelConfigSection" class="mb-6 bg-white dark:bg-gray-800 rounded shadow p-4">
+          <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Model Configuration</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+
+            <!-- Model Selection -->
+            <div>
+              <label for="modelSelect" class="block font-medium dark:text-gray-200">Select Model</label>
+              <select id="modelSelect"
+                      class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="o3-mini">o3-mini</option>
+                <option value="o1">o1 (Vision Support)</option>
+                <option value="o1-mini">o1-mini</option>
+                <option value="o1-preview">o1-preview</option>
+              </select>
+            </div>
+
+            <!-- Max Tokens Selection -->
+            <div>
+              <label for="maxTokens" class="block font-medium dark:text-gray-200">Max Completion Tokens</label>
+              <select id="maxTokens"
+                      class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+                <option value="1500">1500</option>
+                <option value="2000">2000</option>
+              </select>
+            </div>
+
+            <!-- Reasoning Effort Toggle (conditional display for "o3-mini" & "o1") -->
+            <div class="flex items-center space-x-2 mt-2">
+              <input type="checkbox" id="reasoningToggle"
+                     class="w-4 h-4 border-gray-300 dark:border-gray-600 focus:ring-blue-500"
+                     disabled />
+              <label for="reasoningToggle"
+                     class="text-sm font-medium dark:text-gray-200 select-none">
+                Reasoning Effort (Only for "o3-mini"/"o1")
+              </label>
+            </div>
+
+            <!-- Vision Panel for "o1" (hidden by default) -->
+            <div id="visionPanel" class="col-span-1 md:col-span-2 hidden">
+              <label class="block font-medium dark:text-gray-200">Image Upload (o1 Vision)</label>
+              <input type="file" accept="image/png,image/jpeg"
+                     class="mt-2 text-sm dark:text-gray-200"
+                     id="visionFileInput" />
+              <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                Upload JPEG or PNG (≤4 MB). A loading indicator or error message will appear below if invalid.
+              </p>
+              <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                <!-- Filled dynamically: "Analyzing..." or error messages -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Placeholder for persistent user model config display -->
+          <div id="modelConfigDisplay"
+               class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm dark:text-gray-200">
+            <span>Selected Model: <span id="currentModelName">o3-mini</span></span><br/>
+            <span>Max Tokens: <span id="currentMaxTokens">500</span></span><br/>
+            <span>Reasoning Effort: <span id="currentReasoning">N/A</span></span><br/>
+            <span>Vision: <span id="visionEnabledStatus">Disabled</span></span>
+          </div>
+
+          <!-- Potential loading indicator for config changes -->
+          <div id="modelConfigLoading" class="mt-3 hidden text-blue-600 flex items-center text-sm">
+            <svg class="animate-spin h-5 w-5 mr-2 text-blue-600"
+                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            Updating configuration...
+          </div>
+        </section>
+
+        <!-- Chat UI (with real-time or fetch-based approach) -->
+        <section id="chatUI"
+                 class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
+          <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Chat Interface</h2>
+          <!-- conversationArea or chat bubbles displayed here -->
+          <div id="conversationArea"
+               class="border border-gray-200 dark:border-gray-700 h-64 overflow-y-auto p-2 rounded mb-4 dark:bg-gray-900 dark:text-gray-100">
+            <!-- Chat messages appended dynamically by chat.js -->
+          </div>
+          <!-- Chat input and send button -->
+          <div class="flex space-x-2 items-center">
+            <input type="text"
+                   id="chatInput"
+                   placeholder="Type your message..."
+                   class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-200 focus:ring-blue-500 focus:outline-none" />
+            <button id="sendBtn"
+                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+              Send
+            </button>
+          </div>
+          <!-- Potential real-time typing or WS status indicators -->
+          <div id="typingIndicator" class="text-sm text-gray-500 mt-2 hidden">
+            Assistant is typing...
+          </div>
+        </section>
+
+        <!-- Project Manager panel or feature (handled by project_manager.js) -->
+        <section id="projectManagerPanel"
+                 class="bg-white dark:bg-gray-800 rounded shadow p-4">
+          <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Project Management</h2>
+          <!-- e.g. listing projects, creating new ones, uploading files. Usually invoked from sidebar or buttons. -->
+          <div class="text-sm dark:text-gray-200">
+            <!-- Placeholder content, replaced by project_manager.js logic -->
+            <p>Use the sidebar or project_manager.js to manage projects and attach them to chats.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!--
+    Scripts
+    -------------------------------------------------------------------------
+    Load your compiled or raw JS at the end of <body> to ensure the DOM is ready.
+  -->
+  <script src="./js/app.js"></script>
+  <script src="./js/auth.js"></script>
+  <script src="./js/formatting.js" type="module"></script>
+  <script src="./js/model-config.js"></script>
+  <script src="./js/chat.js"></script>
+  <script src="./js/project_manager.js"></script>
+</body>
+</html>
