@@ -84,21 +84,49 @@ document.addEventListener("DOMContentLoaded", () => {
   if (visionInputEl) {
     visionInputEl.addEventListener('change', async (e) => {
       const statusEl = document.getElementById('visionStatus');
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Validate model
       if (window.MODEL_CONFIG?.modelName !== 'o1') {
         statusEl.textContent = 'Vision only works with o1 model';
-        e.target.value = ''; // Clear invalid selection
+        e.target.value = '';
         return;
       }
 
-      const file = e.target.files[0];
-      if (file.size > 5000000) {
-        statusEl.textContent = 'File must be ≤5MB';
+      // Validate file type
+      if (!['image/jpeg', 'image/png'].includes(file.type)) {
+        statusEl.textContent = 'Only JPEG/PNG allowed';
+        e.target.value = '';
         return;
+      }
+
+      // Validate file size
+      if (file.size > 5 * 1024 * 1024) {
+        statusEl.textContent = 'File must be <5MB';
+        e.target.value = '';
+        return;
+      }
+
+      // Show preview image
+      const preview = document.getElementById('visionPreview');
+      if (preview) {
+        preview.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.className = 'max-h-32 object-contain mt-2 rounded';
+        preview.appendChild(img);
       }
 
       statusEl.textContent = 'Processing...';
-      window.MODEL_CONFIG.visionImage = await convertToBase64(file);
-      statusEl.textContent = 'Ready for analysis';
+      try {
+        const base64 = await convertToBase64(file);
+        window.MODEL_CONFIG.visionImage = base64;
+        statusEl.textContent = 'Ready for analysis';
+      } catch (err) {
+        statusEl.textContent = 'Error processing image';
+        console.error(err);
+      }
     });
   }
 });

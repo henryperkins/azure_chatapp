@@ -105,6 +105,13 @@ function processCodeBlocks(text) {
     lastIndex = codeRegex.lastIndex;
   }
   result += text.slice(lastIndex);
+
+  // Add support for image responses: [Image: http://...]
+  const imageRegex = /\[Image:\s+(https?:\/\/\S+\.(?:png|jpg|jpeg))\]/gi;
+  result = result.replace(imageRegex, (match, url) => {
+    return `<img src="${url}" alt="Generated image" class="max-w-full h-auto rounded-lg shadow-md mt-2" />`;
+  });
+
   return result;
 }
 
