@@ -25,6 +25,7 @@ from models.user import User
 from models.project import Project
 from models.chat import Chat
 from models.chat_project import ChatProject
+from sqlalchemy.future import select
 from utils.auth_deps import get_current_user_and_token
 
 logger = logging.getLogger(__name__)
