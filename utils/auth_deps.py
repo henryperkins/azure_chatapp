@@ -3,7 +3,7 @@ import os
 import jwt
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from models.user import User
 from db import get_async_session
@@ -27,22 +27,10 @@ def verify_token(token: str):
         logger.warning("Invalid token.")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_current_user_and_token(token: str = Depends(oauth2_scheme)):
-    # First try header token
-    try:
-        return await _get_user_from_token(token)
-    except HTTPException:
-        # Fallback to cookie token
-        pass
-
-    # Check cookies directly
-    from fastapi import Request
-    request: Request = Request()
-    cookie_token = request.cookies.get("access_token")
-    if cookie_token:
-        return await _get_user_from_token(cookie_token)
-
-    raise HTTPException(status_code=401, detail="Not authenticated")
+async def get_current_user_and_token(request: Request = Request(), token: str = Depends(oauth2_scheme)):
+    # Unified check
+    token = request.cookies.get("access_token") or token
+    return await _get_user_from_token(token)
 
 async def _get_user_from_token(token: str):
     if token.startswith("Bearer "):
