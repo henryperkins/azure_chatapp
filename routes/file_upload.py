@@ -61,7 +61,7 @@ def get_db():
         db.close()
 
 @router.post("/files", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
-def upload_file(
+async def upload_file(
     file: UploadFile = File(...),
     purpose: str = "assistants",
     current_user: User = Depends(get_current_user_and_token),
@@ -82,7 +82,7 @@ def upload_file(
             detail="Only .txt files allowed."
         )
 
-    contents = file.file.read()
+    contents = await file.read()
     import html
     sanitized_content = html.escape(contents.decode("utf-8"))
 
