@@ -19,18 +19,18 @@ class Chat(Base):
     id = Column(String, primary_key=True)  # e.g. a UUID string
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String, default="New Chat")
-    model_id = Column(Integer, nullable=True)
+    model_id = Column(String, nullable=True)
     is_deleted = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     # If you define a relationship to the user:
-    # user = relationship("User", back_populates="chats", lazy="joined")
+    user = relationship("User", back_populates="chats")
 
     # If you define a relationship to messages:
     # messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
 
     # Relationship for projects could be many-to-many via a bridging table chat_projects
-    # projects = relationship("Project", secondary="chat_projects", back_populates="chats")
+    projects = relationship("Project", secondary="chat_projects", back_populates="projects")
 
     def __repr__(self):
         return f"<Chat {self.id} (User #{self.user_id}) title={self.title}>"

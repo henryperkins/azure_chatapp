@@ -24,6 +24,7 @@ from ..db import SessionLocal
 from ..models.user import User
 from ..models.project import Project
 from ..models.chat import Chat
+from ..models.chat_project import ChatProject
 from ..utils.auth_deps import get_current_user_and_token
 
 logger = logging.getLogger(__name__)
@@ -236,17 +237,10 @@ def attach_project_to_chat(
 
     # Insert bridging row into chat_projects table
     # Example: no duplicates
-    check_stmt = """
-    SELECT COUNT(*) FROM chat_projects
-    WHERE chat_id=:c AND project_id=:p
-    """
-    exists_count = db.execute(check_stmt, {"c": chat_id, "p": project_id}).scalar()
-    if exists_count == 0:
-        insert_stmt = """
-        INSERT INTO chat_projects (chat_id, project_id)
-        VALUES (:c, :p)
-        """
-        db.execute(insert_stmt, {"c": chat_id, "p": project_id})
+    existing = db.query(ChatProject).filter_by(chat_id=chat_id, project_id=project_id).first()
+    if not existing:
+        association = ChatProject(chat_id=chat_id, project_id=project_id)
+        db.add(association)
         db.commit()
         logger.info(f"Project {project_id} attached to chat {chat_id}")
         return {"success": True, "attached": True}
