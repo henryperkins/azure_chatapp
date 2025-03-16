@@ -75,23 +75,23 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
 
   function loginUser(username, password) {
     fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+        credentials: "include"
     })
-      .then(checkResponse)
-      .then(data => {
-        if (!data.access_token) {
-          throw new Error("No access token in response");
-        }
+    .then(checkResponse)
+    .then(data => {
         localStorage.setItem("access_token", data.access_token);
         updateAuthStatus();
-        window.location.reload();  // Refresh to apply auth state
-      })
-      .catch((err) => {
+        document.dispatchEvent(new CustomEvent("authStateChanged", {
+            detail: { authenticated: true }
+        }));
+    })
+    .catch((err) => {
         console.error("Login error:", err);
         showNotification(err.message || "Login failed", "error");
-      });
+    });
   }
   
   // Refresh the token if it's close to expiring
