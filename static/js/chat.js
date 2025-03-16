@@ -52,6 +52,30 @@ document.addEventListener("DOMContentLoaded", () => {
   if (chatTitleEditBtn) {
     chatTitleEditBtn.addEventListener("click", editChatTitle);
   }
+  
+  const newChatBtn = document.getElementById("newChatBtn");
+  if (newChatBtn) {
+    newChatBtn.addEventListener("click", createNewChat);
+  }
+  
+  function createNewChat() {
+    fetch("/api/chat/conversations", {
+      method: "POST",
+      headers: {
+        ...getAuthHeaders(),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ title: "New Chat" })
+    })
+      .then(checkResponse)
+      .then(data => {
+        if (data.id) {
+          // Navigate to new chat conversation
+          window.location.href = `/?chatId=${data.id}`;
+        }
+      })
+      .catch(err => console.error("Error creating new chat:", err));
+  }
 
   // -----------------------------
   // Functions
@@ -77,7 +101,26 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     socket.onclose = () => {
-      console.warn("WebSocket closed. You could auto-reconnect here if needed.");
+      console.warn("WebSocket closed. Attempting to refresh token and reconnect...");
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        fetch("/api/auth/refresh", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` }
+        })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data && data.access_token) {
+              localStorage.setItem("access_token", data.access_token);
+            }
+          })
+          .finally(() => {
+            setTimeout(() => initializeWebSocket(), 1000);
+          });
+      } else {
+        // If no token exists, simply wait a moment then reconnect
+        setTimeout(() => initializeWebSocket(), 1000);
+      }
     };
   }
 
@@ -104,10 +147,11 @@ document.addEventListener("DOMContentLoaded", () => {
     chatInput.value = "";
 
     // Create payload with optional image data
+    const modelName = localStorage.getItem("modelName") || "o3-mini";
     const payload = {
       role: "user",
       content: userMsg,
-      model_id: parseInt(localStorage.getItem("modelId") || "3"),
+      model_id: modelName,
       image_data: visionImage || null,
       vision_detail: window.MODEL_CONFIG?.visionDetail || "auto"
     };
