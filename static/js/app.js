@@ -45,6 +45,60 @@ document.addEventListener("DOMContentLoaded", () => {
     showNotification("Your session has expired. Please log in again.", "error");
     updateUserSessionState();
   });
+  
+  /**
+   * Load the user's conversation list only if a valid access token is present.
+   */
+  function loadConversationList() {
+    const token = localStorage.getItem('access_token') || '';
+    if (!token) {
+      showNotification("Please log in to view your conversations.", "info");
+      showNotification("Please log in to see your conversation list.", "info");
+      return;
+    }
+    fetch('/api/chat/conversations', {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer ' + token
+      }
+    })
+    .then(resp => {
+      if (!resp.ok) {
+        return resp.text().then((text) => {
+          throw new Error(`${resp.status}: ${text}`);
+        });
+      }
+      return resp.json();
+    })
+    .then((data) => {
+      const container = document.getElementById('sidebarConversations');
+      if (!container) return;
+      container.innerHTML = '';
+      if (data.conversations && data.conversations.length > 0) {
+        data.conversations.forEach((item) => {
+          const li = document.createElement('li');
+          li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
+          li.textContent = item.title || 'Conversation ' + item.id;
+          li.addEventListener('click', () => {
+            // Navigate to the chat page for that conversation
+            window.location.search = 'chatId=' + item.id;
+          });
+          container.appendChild(li);
+        });
+      } else {
+        const li = document.createElement('li');
+        li.className = 'text-gray-500';
+        li.textContent = 'No conversations yet—Begin now!';
+        container.appendChild(li);
+      }
+    })
+    .catch((err) => console.error('Error loading conversation list:', err));
+  }
+  
+  // Automatically load the conversation list if the element is present
+  if (document.getElementById('sidebarConversations')) {
+    loadConversationList();
+  }
 
   // -----------------------------
   // Functions

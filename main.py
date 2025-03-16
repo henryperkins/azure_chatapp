@@ -82,7 +82,11 @@ app.include_router(file_upload_router, prefix="/api/files", tags=["files"])
 # Include the project router
 app.include_router(project_router, prefix="/api/projects", tags=["projects"])
 
-
 @app.get("/health")
 async def health_check():
+    return {"status": "ok"}
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("static/favicon.ico")
     return {"status": "ok"}
