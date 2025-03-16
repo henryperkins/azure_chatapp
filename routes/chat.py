@@ -415,9 +415,9 @@ async def websocket_chat_endpoint(
                     await websocket.send_json({"error": "Invalid JSON format"})
                 except Exception as e:
                     await websocket.send_json({"error": str(e)})
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected for chat_id=%s", chat_id)
-        return
+        except WebSocketDisconnect:
+            logger.info("WebSocket disconnected for chat_id=%s", chat_id)
+            return
 
 
 async def handle_assistant_response(
