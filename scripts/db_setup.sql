@@ -1,4 +1,3 @@
 CREATE USER "user" WITH PASSWORD 'pass';
 CREATE DATABASE azure_chat OWNER "user";
 GRANT ALL PRIVILEGES ON DATABASE azure_chat TO "user";
-\q
