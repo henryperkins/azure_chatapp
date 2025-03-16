@@ -107,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const payload = {
       role: "user",
       content: userMsg,
+      model_id: parseInt(localStorage.getItem("modelId") || "3"),
       image_data: visionImage || null,
       vision_detail: window.MODEL_CONFIG?.visionDetail || "auto"
     };

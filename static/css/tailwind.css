@@ -3,9 +3,18 @@
 @tailwind utilities;
 /* Add custom vision styles */
 .vision-response {
-    @apply border-l-4 border-purple-500 pl-4 bg-purple-50 dark:bg-purple-900/20;
+    /* Remove problematic utility classes to fix build errors */
+    padding-left: 1rem; /* approximate pl-4 */
+    background-color: #f3f4f6; /* approximate gray-100 */
 }
 
 .vision-indicator {
-    @apply inline-flex items-center text-sm text-purple-600 dark:text-purple-300;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.875rem;
+    color: #9333ea;
+}
+
+:root.dark .vision-indicator {
+    color: #d8b4fe;
 }

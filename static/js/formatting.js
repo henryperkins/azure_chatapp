@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
  * - Optionally detects triple-backtick code blocks or other syntax
  * - Can parse or highlight code if a library is integrated
  */
-export function formatText(content) {
+function formatText(content) {
   // 1) Escape any malicious HTML
   let safe = escapeHtml(content);
 
@@ -32,10 +32,15 @@ export function formatText(content) {
   // 3) If you want advanced markdown parsing, integrate a library or custom parse
   // safe = marked.parse(safe);
 
-  return safe;
-}
+  const result = safe;
 
-export function showSummaryIndicator() {
+
+  return result;
+}
+window.formatText = formatText;
+window.showSummaryIndicator = showSummaryIndicator;
+
+function showSummaryIndicator() {
   const indicator = document.createElement('div');
   indicator.className = 'summary-indicator bg-yellow-100 p-2 mb-2 text-sm';
   indicator.textContent = '⚠️ Conversation was summarized to maintain context';
@@ -46,9 +51,9 @@ export function showSummaryIndicator() {
  * Summaries often returned by do_summarization could be collapsed by default.
  * This function wraps summarized text in a collapsible element with a toggle.
  */
-export function wrapSummarizedContent(summary) {
+function wrapSummarizedContent(summary) {
   return `
-    <div class="bg-yellow-50 p-2 border-l-4 border-yellow-300 text-sm my-2 summarized-block" 
+    <div class="bg-yellow-50 p-2 border-l-4 border-yellow-300 text-sm my-2 summarized-block"
          data-collapsed="true">
       <div class="flex items-center justify-between">
         <span class="font-semibold text-yellow-800">Summarized Content</span>
@@ -67,7 +72,7 @@ export function wrapSummarizedContent(summary) {
  * Utility to attach event listeners for toggling summarized content.
  * This can be invoked after you insert the summarized-block into the DOM.
  */
-export function activateSummaryToggles(container) {
+function activateSummaryToggles(container) {
   const toggles = container.querySelectorAll(".toggle-summary-btn");
   toggles.forEach((btn) => {
     btn.addEventListener("click", () => {

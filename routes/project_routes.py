@@ -57,7 +57,7 @@ class ProjectUpdate(BaseModel):
 # Project Routes
 # -----------------------------
 
-@router.post("/projects", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 def create_project(
     proj_data: ProjectCreate,
     current_user: User = Depends(get_current_user_and_token),
@@ -87,7 +87,7 @@ def create_project(
     }
 
 
-@router.get("/projects", response_model=dict)
+@router.get("", response_model=dict)
 def list_projects(
     current_user: User = Depends(get_current_user_and_token),
     db: Session = Depends(get_db)
@@ -114,7 +114,7 @@ def list_projects(
     return {"projects": data}
 
 
-@router.get("/projects/{project_id}", response_model=dict)
+@router.get("/{project_id}", response_model=dict)
 def get_project(
     project_id: int,
     current_user: User = Depends(get_current_user_and_token),
@@ -141,7 +141,7 @@ def get_project(
     }
 
 
-@router.patch("/projects/{project_id}", response_model=dict)
+@router.patch("/{project_id}", response_model=dict)
 def update_project(
     project_id: int,
     update_data: ProjectUpdate,
@@ -182,7 +182,7 @@ def update_project(
     }
 
 
-@router.delete("/projects/{project_id}", response_model=dict)
+@router.delete("/{project_id}", response_model=dict)
 def delete_project(
     project_id: int,
     current_user: User = Depends(get_current_user_and_token),
@@ -208,7 +208,7 @@ def delete_project(
 
 
 # Extra route for attaching the Project to a Chat (optional)
-@router.post("/projects/{project_id}/attach_chat/{chat_id}", response_model=dict)
+@router.post("/{project_id}/attach_chat/{chat_id}", response_model=dict)
 def attach_project_to_chat(
     project_id: int,
     chat_id: str,
