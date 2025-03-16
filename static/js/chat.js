@@ -96,13 +96,30 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function sendMessage(chatId, userMsg) {
+    const visionImage = window.MODEL_CONFIG?.visionImage;
+
     // Immediately display user message
     appendMessage("user", userMsg);
     chatInput.value = "";
 
+    // Create payload with optional image data
+    const payload = {
+      role: "user",
+      content: userMsg,
+      image_data: visionImage || null
+    };
+
+    // Clear vision data after sending
+    if (visionImage) {
+      window.MODEL_CONFIG.visionImage = null;
+      const inputEl = document.getElementById('visionFileInput');
+      if (inputEl) inputEl.value = '';
+      const statusEl = document.getElementById('visionStatus');
+      if (statusEl) statusEl.textContent = '';
+    }
+
     // If WebSocket is connected, send via socket
     if (socket && socket.readyState === WebSocket.OPEN) {
-      const payload = { role: "user", content: userMsg };
       socket.send(JSON.stringify(payload));
     } else {
       // Fallback to a standard fetch
@@ -112,11 +129,10 @@ document.addEventListener("DOMContentLoaded", () => {
           ...getAuthHeaders(),
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ role: "user", content: userMsg })
+        body: JSON.stringify(payload)
       })
         .then(checkResponse)
         .then((resp) => {
-          // If the server responded with an assistant message, display it
           if (resp.assistant_message) {
             appendMessage(resp.assistant_message.role, resp.assistant_message.content);
           }
@@ -125,6 +141,18 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         })
         .catch((err) => console.error("Error sending message via fetch:", err));
+    }
+
+    // Add visual indicator for image attachments
+    if (visionImage) {
+      const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
+      const lastUserDiv = msgDivs[msgDivs.length - 1];
+      if (lastUserDiv) {
+        const imgIndicator = document.createElement('div');
+        imgIndicator.className = 'text-sm text-gray-500 mt-1';
+        imgIndicator.textContent = '📷 Image attached';
+        lastUserDiv.appendChild(imgIndicator);
+      }
     }
   }
 

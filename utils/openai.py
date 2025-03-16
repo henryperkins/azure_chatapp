@@ -27,7 +27,7 @@ def openai_chat(
     model_name: str = "o3-mini",
     max_completion_tokens: int = 500,
     reasoning_effort: Optional[str] = None,
-    image_data: Optional[bytes] = None
+    image_data: Optional[str] = None  # now expects base64 string
 ) -> dict:
     """
     Calls Azure OpenAI's chat completion API. 
@@ -71,20 +71,27 @@ def openai_chat(
     # If image_data is provided and model_name == "o1", handle GPT with Vision
     # (Hypothetical approach — actual Azure GPT-with-vision usage may differ)
     if model_name == "o1" and image_data:
-        import base64
-        file_type = "jpeg"  # or detect from image_data if needed
-        encoded_image = base64.b64encode(image_data).decode("utf-8")
+        # Extract the base64 content from data URL
+        if "base64," in image_data:
+            base64_str = image_data.split("base64,")[1]
+        else:
+            base64_str = image_data
+
         vision_message = {
             "role": "user",
             "content": [
                 {"type": "text", "text": messages[-1]['content']},
-                {"type": "image_url",
-                 "image_url": {
-                     "url": f"data:image/{file_type};base64,{encoded_image}"
-                 }}
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_str}",
+                        "detail": "auto"
+                    }
+                }
             ]
         }
-        payload["messages"] = [vision_message]
+        # Preserve conversation history
+        payload["messages"] = messages[:-1] + [vision_message]
         payload["max_completion_tokens"] = 1500
 
     try:
