@@ -26,9 +26,10 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 
+allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 app = FastAPI(
     middleware=[
-        Middleware(TrustedHostMiddleware, allowed_hosts=["yourdomain.com"]),
+        Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts),
         Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET"))
     ],
     title="Azure OpenAI Chat Application",
@@ -41,7 +42,8 @@ file uploads, and more.
     version="1.0.0"
 )
 
-app.add_middleware(HTTPSRedirectMiddleware)
+if os.getenv("ENV") == "production":
+    app.add_middleware(HTTPSRedirectMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -70,6 +72,10 @@ app.add_middleware(
 
 @app.get("/", include_in_schema=False)
 async def root():
+    return FileResponse("static/index.html")
+
+@app.get("/index.html", include_in_schema=False)
+async def index():
     return FileResponse("static/index.html")
 
 if os.getenv("ENV") == "production":
