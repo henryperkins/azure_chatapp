@@ -314,7 +314,8 @@ async def create_message(
 @router.websocket("/ws/{chat_id}")
 async def websocket_chat_endpoint(
     websocket: WebSocket,
-    chat_id: str
+    chat_id: str,
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Real-time chat updates for conversation {chat_id}.
@@ -335,9 +336,8 @@ async def websocket_chat_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    async with get_async_session() as session:
-        try:
-            while True:
+    try:
+        while True:
                 data = await websocket.receive_text()
                 try:
                     data_dict = json.loads(data)
@@ -346,11 +346,11 @@ async def websocket_chat_endpoint(
                         role=data_dict['role'],
                         content=data_dict['content'],
                     )
-                    session.add(message)
-                    await session.commit()
-                    await session.refresh(message)
+                    db.add(message)
+                    await db.commit()
+                    await db.refresh(message)
                     if message.role == "user":
-                        await handle_assistant_response(chat_id, session, websocket)
+                        await handle_assistant_response(chat_id, db, websocket)
                 except json.JSONDecodeError:
                     await websocket.send_json({"error": "Invalid JSON format"})
                 except Exception as e:

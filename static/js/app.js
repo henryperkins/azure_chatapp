@@ -65,7 +65,8 @@ document.addEventListener("DOMContentLoaded", () => {
       headers: {
         'Authorization': `Bearer ${token.trim()}`,
         'Content-Type': 'application/json'
-      }
+      },
+      credentials: 'include'
     })
     .then(resp => {
       if (!resp.ok) {
