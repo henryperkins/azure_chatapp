@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from db import get_async_session  # Ensure this is correctly defined
+from db import get_async_session
 from models.user import User
 from models.chat import Chat
 from models.message import Message
@@ -98,7 +98,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 async def create_conversation(
     conversation_data: ConversationCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Creates a new conversation for the authenticated user.
@@ -126,7 +126,7 @@ async def create_conversation(
 @router.get("/conversations", response_model=dict)
 async def list_conversations(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Returns a list of conversations owned by the current user.
@@ -155,7 +155,7 @@ async def list_conversations(
 async def get_conversation(
     chat_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Retrieve metadata about a specific conversation, verifying ownership.
@@ -185,7 +185,7 @@ async def update_conversation(
     chat_id: str,
     update_data: ConversationUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Updates the conversation's title or model_id.
@@ -218,7 +218,7 @@ async def update_conversation(
 async def delete_conversation(
     chat_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Soft-deletes a conversation by updating is_deleted = True.
@@ -250,7 +250,7 @@ async def delete_conversation(
 async def list_messages(
     chat_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Retrieves all messages for a conversation, sorted by timestamp ascending.
@@ -286,7 +286,7 @@ async def create_message(
     chat_id: str,
     new_msg: MessageCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Adds a new user or system message to the conversation,
