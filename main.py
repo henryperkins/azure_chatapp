@@ -27,8 +27,6 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 
 app = FastAPI(
-
-app.add_middleware(HTTPSRedirectMiddleware)
     middleware=[
         Middleware(TrustedHostMiddleware, allowed_hosts=["yourdomain.com"]),
         Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET"))
@@ -42,6 +40,8 @@ file uploads, and more.
 """,
     version="1.0.0"
 )
+
+app.add_middleware(HTTPSRedirectMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
