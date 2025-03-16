@@ -112,3 +112,7 @@ async def openai_chat(
     except httpx.RequestError as e:
         logger.error(f"Error calling Azure OpenAI: {e}")
         raise RuntimeError(f"Unable to reach Azure OpenAI endpoint: {str(e)}")
+def extract_base64_data(image_data: str) -> str:
+    if "base64," in image_data:
+        return image_data.split("base64,")[1]
+    return image_data
