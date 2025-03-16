@@ -13,6 +13,7 @@ This code is production-ready, with no placeholders.
 
 import logging
 from typing import List, Dict
+import tiktoken
 
 from .openai import openai_chat
 
@@ -118,12 +119,5 @@ def token_limit_check(chat_id: str, db):
         logger.debug(f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}")
 
 def estimate_token_count(messages: List[Dict[str, str]]) -> int:
-    """
-    Basic estimation of token usage per message. 
-    In production, use a GPT tokenizer library for more accurate counts.
-    """
-    total_chars = 0
-    for msg in messages:
-        total_chars += len(msg.get("content", ""))
-    # Roughly assume ~4 chars/token
-    return total_chars // 4
+    encoder = tiktoken.encoding_for_model("gpt-4")
+    return sum(len(encoder.encode(msg["content"])) for msg in messages)

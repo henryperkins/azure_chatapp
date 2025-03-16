@@ -180,7 +180,8 @@ document.addEventListener("DOMContentLoaded", () => {
       default:
         msgDiv.classList.add("bg-white");
     }
-    msgDiv.textContent = content;
+    const safeContent = window.formatText(content);
+    msgDiv.innerHTML = safeContent;
     conversationArea.appendChild(msgDiv);
     conversationArea.scrollTop = conversationArea.scrollHeight;
   }
