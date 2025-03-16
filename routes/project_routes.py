@@ -83,19 +83,19 @@ async def create_project(
 
 
 @router.get("", response_model=dict)
-def list_projects(
+async def list_projects(
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Returns a list of the user's projects, newest first.
     """
-    results = (
-        db.query(Project)
-        .filter(Project.user_id == current_user.id)
+    results = await db.execute(
+        select(Project)
+        .where(Project.user_id == current_user.id)
         .order_by(Project.created_at.desc())
-        .all()
     )
+    projects = results.scalars().all()
     data = []
     for proj in results:
         data.append({
@@ -110,19 +110,19 @@ def list_projects(
 
 
 @router.get("/{project_id}", response_model=dict)
-def get_project(
+async def get_project(
     project_id: int,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Retrieves details for a single project. Must belong to the user.
     """
-    proj = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id, Project.user_id == current_user.id)
     )
+    proj = result.scalars().first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
@@ -137,20 +137,20 @@ def get_project(
 
 
 @router.patch("/{project_id}", response_model=dict)
-def update_project(
+async def update_project(
     project_id: int,
     update_data: ProjectUpdate,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Updates the specified fields of an existing project if user is the owner.
     """
-    proj = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id, Project.user_id == current_user.id)
     )
+    proj = result.scalars().first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
@@ -163,8 +163,8 @@ def update_project(
     if update_data.notes is not None:
         proj.notes = update_data.notes.strip()  # type: ignore[assignment]
 
-    db.commit()
-    db.refresh(proj)
+    await db.commit()
+    await db.refresh(proj)
     logger.info(f"Project {proj.id} updated by user {current_user.id}")
 
     return {
@@ -178,25 +178,25 @@ def update_project(
 
 
 @router.delete("/{project_id}", response_model=dict)
-def delete_project(
+async def delete_project(
     project_id: int,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Deletes (permanently) a project if owned by the current user.
     Ensures no further usage in conversation context.
     """
-    proj = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id, Project.user_id == current_user.id)
     )
+    proj = result.scalars().first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
-    db.delete(proj)
-    db.commit()
+    await db.delete(proj)
+    await db.commit()
     logger.info(f"Project {project_id} permanently deleted by user {current_user.id}")
 
     return {"status": "deleted", "project_id": project_id}
@@ -204,45 +204,51 @@ def delete_project(
 
 # Extra route for attaching the Project to a Chat (optional)
 @router.post("/{project_id}/attach_chat/{chat_id}", response_model=dict)
-def attach_project_to_chat(
+async def attach_project_to_chat(
     project_id: int,
     chat_id: str,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Associates a project with a chat if both belong to the user.
     E.g. storing the link in a bridging table 'chat_projects'.
     """
-    proj = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id, Project.user_id == current_user.id)
     )
+    proj = result.scalars().first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
-    chat = (
-        db.query(Chat)
-        .filter(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
-        .first()
+    result_chat = await db.execute(
+        select(Chat)
+        .where(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
     )
+    chat = result_chat.scalars().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found or access denied")
 
     # Insert bridging row into chat_projects table
     # Example: no duplicates
-    existing = db.query(ChatProject).filter_by(chat_id=chat_id, project_id=project_id).first()
+    result_existing = await db.execute(
+        select(ChatProject).where(ChatProject.chat_id == chat_id, ChatProject.project_id == project_id)
+    )
+    existing = result_existing.scalars().first()
     if not existing:
         association = ChatProject(chat_id=chat_id, project_id=project_id)
         db.add(association)
-        db.commit()
+        await db.commit()
         logger.info(f"Project {project_id} attached to chat {chat_id}")
         return {"success": True, "attached": True}
     else:
         return {"success": True, "attached": False, "message": "Project already attached to chat"}
-def get_valid_project(project_id: int, user: User, db: Session):
-    proj = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
+async def get_valid_project(project_id: int, user: User, db: AsyncSession):
+    result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.user_id == user.id)
+    )
+    proj = result.scalars().first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
     return proj
