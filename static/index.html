@@ -24,12 +24,12 @@
       - Live user status indicator (Online/Offline)
       - Possibly a logout/account button or route link
   -->
-  <header class="bg-white shadow-sm border-b border-gray-200 dark:border-gray-700 dark:bg-gray-800">
+  <header role="banner" class="bg-white shadow-sm border-b border-gray-200 dark:border-gray-700 dark:bg-gray-800">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
       <div class="flex items-center">
-        <button id="navToggleBtn" class="mr-3 focus:outline-none md:hidden">
+        <button id="navToggleBtn" class="mr-3 focus:outline-none md:hidden" aria-label="Toggle sidebar navigation">
           <!-- Some icon for toggling the sidebar on mobile -->
-          <svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
+          <svg role="img" aria-label="Menu icon" class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
                viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 6h16M4 12h16M4 18h16" />
