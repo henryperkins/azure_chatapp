@@ -147,19 +147,6 @@ async def login_user(
 # JWT Verification & Dependencies
 # ------------------------------
 
-def verify_token(token: str):
-    """
-    Verifies and decodes a JWT token.
-    """
-    try:
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return decoded
-    except jwt.ExpiredSignatureError:
-        logger.warning("Token has expired.")
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
-        logger.warning("Invalid token.")
-        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 async def get_current_user(

@@ -18,9 +18,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from db import SessionLocal
+from db import get_async_session
 from models.user import User
 from models.project import Project
 from models.chat import Chat
@@ -30,12 +30,6 @@ from utils.auth_deps import get_current_user_and_token
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # -----------------------------
 # Pydantic Schemas
@@ -58,15 +52,15 @@ class ProjectUpdate(BaseModel):
 # -----------------------------
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_project(
+async def create_project(
     proj_data: ProjectCreate,
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Creates a new project for the authenticated user.
     """
-    proj = get_valid_project(-999999, current_user, db)  # dummy usage just to show the function exists
+    # Remove the dummy get_valid_project(...) call for now
     new_proj = Project(
         name=proj_data.name.strip(),
         subtitle=(proj_data.subtitle.strip() if proj_data.subtitle else None),
@@ -75,8 +69,8 @@ def create_project(
         user_id=current_user.id
     )
     db.add(new_proj)
-    db.commit()
-    db.refresh(new_proj)
+    await db.commit()
+    await db.refresh(new_proj)
     logger.info(f"Project created: {new_proj.name} by user {current_user.id}")
 
     return {
