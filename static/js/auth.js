@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Check if already logged in
   updateAuthStatus();
 
+setInterval(checkTokenExpiry, 5 * 60 * 1000);
   // -----------------------------
   // Event Listeners
   // -----------------------------
@@ -74,7 +75,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(checkResponse)
       .then((data) => {
         localStorage.setItem("access_token", data.access_token);
-        alert("Login successful!");
         updateAuthStatus();
       })
       .catch((err) => {
@@ -82,9 +82,41 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("Login failed. Check console for details.");
       });
   }
-
-  function updateAuthStatus() {
+  
+  // Refresh the token if it's close to expiring
+  function refreshTokenIfNeeded() {
     const token = localStorage.getItem("access_token");
+    if (!token) return;
+  
+    try {
+      const payload = token.split('.')[1];
+      const decoded = JSON.parse(atob(payload));
+      // Refresh if within 5 minutes of expiration
+      const timeLeft = (decoded.exp * 1000) - Date.now();
+      if (timeLeft < 5 * 60 * 1000 && timeLeft > 0) {
+        fetch("/api/auth/refresh", {
+          method: "GET",
+          headers: { "Authorization": `Bearer ${token}` }
+        })
+          .then(checkResponse)
+          .then(data => {
+            localStorage.setItem("access_token", data.access_token);
+            // Optionally update UI or do nothing
+          })
+          .catch(err => console.error("Error refreshing token:", err));
+      } else if (timeLeft <= 0) {
+        // Already expired
+        localStorage.removeItem("access_token");
+        updateAuthStatus();
+        console.warn("Session expired. Please log in again.");
+      }
+    } catch (e) {
+      console.error("Token parse error", e);
+    }
+  }
+  
+  function updateAuthStatus() {
+    refreshTokenIfNeeded();
     const authSection = document.getElementById("authSection");
     const chatUI = document.getElementById("chatUI");
     if (token) {
@@ -110,6 +142,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+function checkTokenExpiry() {
+  const token = localStorage.getItem("access_token");
+  if (token) {
+    try {
+      const payload = token.split('.')[1];
+      const decoded = JSON.parse(atob(payload));
+      if (decoded.exp * 1000 < Date.now()) {
+        localStorage.removeItem("access_token");
+        updateAuthStatus();
+        alert("Session expired. Please log in again.");
+      }
+    } catch (e) {
+      console.error("Token parse error", e);
+    }
+  }
+}
   function checkResponse(resp) {
     if (!resp.ok) {
       return resp.text().then((text) => {
