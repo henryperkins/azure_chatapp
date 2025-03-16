@@ -92,10 +92,20 @@ def login_user(
             detail="Invalid username or password"
         )
 
-    if not bcrypt.checkpw(
-        creds.password.encode("utf-8"),
-        user.password_hash.encode("utf-8")
-    ):
+    # Safely catch corrupt hashes
+    try:
+        valid_password = bcrypt.checkpw(
+            creds.password.encode("utf-8"),
+            user.password_hash.encode("utf-8")
+        )
+    except ValueError:
+        # Means the stored hash is invalid/corrupt
+        raise HTTPException(
+            status_code=400,
+            detail="Corrupted password hash. Please reset or re-register your account."
+        )
+
+    if not valid_password:
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
@@ -110,67 +120,76 @@ def login_user(
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
     logger.info(f"User '{user.username}' logged in successfully.")
-    def verify_token(token: str):
-        """
-        Verifies and decodes a JWT token.
-        """
-        try:
-            decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            return decoded
-        except jwt.ExpiredSignatureError:
-            logger.warning("Token has expired.")
-            raise HTTPException(status_code=401, detail="Token has expired")
-        except jwt.InvalidTokenError:
-            logger.warning("Invalid token.")
-            raise HTTPException(status_code=401, detail="Invalid token")
-    
-    
-    def get_current_user(
-       token: str = Depends(lambda: None),
-       db: Session = Depends(get_db)
-    ):
-        """
-        Retrieves the current user from JWT.
-        Use as a FastAPI dependency where needed.
-        Example usage:
-           @router.get("/me")
-           def me_route(current_user=Depends(get_current_user)):
-               return current_user
-        """
-        if not token:
-            raise HTTPException(
-                status_code=401,
-                detail="Authorization token not provided"
-            )
-    
-        scheme, _, param = token.partition(" ")
-        if scheme.lower() != "bearer":
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid authorization scheme"
-            )
-    
-        decoded = verify_token(param)
-        username = decoded.get("sub")
-        if not username:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-    
-        user = db.query(User).filter(User.username == username).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-    
-        return user
-    
-    
-    @router.get("/refresh")
-    def refresh_token(current_user: User = Depends(get_current_user)):
-        """
-        Provides a new token, effectively "refreshing" the session if the user is still valid.
-        """
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        payload = {
-            "sub": current_user.username,
-            "exp": expire
-        }
-        token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-        return {"access_token": token, "token_type": "bearer"}
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
+
+
+# ------------------------------
+# JWT Verification & Dependencies
+# ------------------------------
+
+def verify_token(token: str):
+    """
+    Verifies and decodes a JWT token.
+    """
+    try:
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return decoded
+    except jwt.ExpiredSignatureError:
+        logger.warning("Token has expired.")
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        logger.warning("Invalid token.")
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def get_current_user(
+    token: str = Depends(lambda: None),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves the current user from JWT.
+    Use as a FastAPI dependency where needed.
+    Example usage:
+       @router.get("/me")
+       def me_route(current_user=Depends(get_current_user)):
+           return current_user
+    """
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization token not provided"
+        )
+
+    scheme, _, param = token.partition(" ")
+    if scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization scheme"
+        )
+
+    decoded = verify_token(param)
+    username = decoded.get("sub")
+    if not username:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+@router.get("/refresh")
+def refresh_token(current_user: User = Depends(get_current_user)):
+    """
+    Provides a new token, effectively "refreshing" the session if the user is still valid.
+    """
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": current_user.username,
+        "exp": expire
+    }
+    new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {"access_token": new_token, "token_type": "bearer"}
