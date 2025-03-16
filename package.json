@@ -1,0 +1,29 @@
+{
+  "name": "azure_chatapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "tailwind.config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css",
+    "dev:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henryperkins/azure_chatapp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/henryperkins/azure_chatapp/issues"
+  },
+  "homepage": "https://github.com/henryperkins/azure_chatapp#readme",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.14",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "postcss-cli": "^11.0.1",
+    "tailwindcss": "^4.0.14"
+  }
+}

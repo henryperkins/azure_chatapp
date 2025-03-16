@@ -13,23 +13,29 @@ Includes:
 """
 
 import logging
-from typing import List, Optional
+import json
+from typing import Optional
 from uuid import uuid4
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
-from ..db import SessionLocal
-from ..models.user import User
-from ..models.chat import Chat
-from ..models.message import Message
-from ..utils.auth_deps import get_current_user_and_token
-from ..utils.openai import openai_chat
-from ..utils.context import manage_context, token_limit_check
+from db import get_async_session  # Ensure this is correctly defined
+from models.user import User
+from models.chat import Chat
+from models.message import Message
+from utils.auth_deps import get_current_user_and_token  # Ensure this is correctly defined
+from utils.openai import openai_chat
+from utils.context import manage_context, token_limit_check
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 # -----------------------------
@@ -37,28 +43,49 @@ router = APIRouter()
 # -----------------------------
 
 class ConversationCreate(BaseModel):
+    """
+    Pydantic model for creating a new conversation.
+    """
     title: str = Field(..., min_length=1, max_length=100, description="A user-friendly title for the new conversation")
     model_id: Optional[int] = Field(None, description="Optional numeric ID referencing the chosen model deployment")
 
+
 class ConversationUpdate(BaseModel):
+    """
+    Pydantic model for updating an existing conversation.
+    """
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[int] = None
 
+
 class MessageCreate(BaseModel):
+    """
+    Pydantic model for creating a new message.
+    """
     content: str = Field(..., min_length=1, description="The text content of the user message")
-    role: str = Field("user", description="The role: user, assistant, or system.")
+    role: str = Field(default="user", description="The role: user, assistant, or system.", pattern=r"^(user|assistant|system)$")
 
 
 # -----------------------------
 # Dependency
 # -----------------------------
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    """
+    Dependency to get an asynchronous database session.
+    """
+    async with get_async_session() as session:
+        yield session
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """
+    Dependency to get the current authenticated user.
+    """
+    user = await get_current_user_and_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    return user
 
 
 # -----------------------------
@@ -66,10 +93,10 @@ def get_db():
 # -----------------------------
 
 @router.post("/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_conversation(
+async def create_conversation(
     conversation_data: ConversationCreate,
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Creates a new conversation for the authenticated user.
@@ -82,55 +109,64 @@ def create_conversation(
         user_id=current_user.id,
         title=conversation_data.title.strip(),
         model_id=conversation_data.model_id,
-        is_deleted=False
+        is_deleted=False,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
     )
     db.add(new_chat)
-    db.commit()
-    db.refresh(new_chat)
+    await db.commit()
+    await db.refresh(new_chat)
 
-    logger.info(f"Conversation created with id={chat_id} by user_id={current_user.id}")
+    logger.info("Conversation created with id=%s by user_id=%s", chat_id, current_user.id)
     return {"conversation_id": chat_id, "title": new_chat.title}
 
 
 @router.get("/conversations", response_model=dict)
-def list_conversations(
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+async def list_conversations(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Returns a list of conversations owned by the current user.
     """
-    chats = (
-        db.query(Chat)
-        .filter(Chat.user_id == current_user.id, Chat.is_deleted == False)
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False)
+        )
         .order_by(Chat.created_at.desc())
-        .all()
     )
-    items = []
-    for chat in chats:
-        items.append({
+    chats = result.scalars().all()
+    items = [
+        {
             "id": chat.id,
             "title": chat.title,
             "model_id": chat.model_id,
             "created_at": chat.created_at
-        })
+        } for chat in chats
+    ]
     return {"conversations": items}
 
 
 @router.get("/conversations/{chat_id}", response_model=dict)
-def get_conversation(
+async def get_conversation(
     chat_id: str,
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Retrieve metadata about a specific conversation, verifying ownership.
     """
-    chat = (
-        db.query(Chat)
-        .filter(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
-        .first()
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.id == chat_id,
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False)
+        )
     )
+    chat = result.scalars().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Conversation not found or access denied")
 
@@ -143,20 +179,24 @@ def get_conversation(
 
 
 @router.patch("/conversations/{chat_id}", response_model=dict)
-def update_conversation(
+async def update_conversation(
     chat_id: str,
     update_data: ConversationUpdate,
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    Updates the conversation's title or model_id. 
+    Updates the conversation's title or model_id.
     """
-    chat = (
-        db.query(Chat)
-        .filter(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
-        .first()
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.id == chat_id,
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False)
+        )
     )
+    chat = result.scalars().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Conversation not found or access denied")
 
@@ -165,34 +205,38 @@ def update_conversation(
     if update_data.model_id is not None:
         chat.model_id = update_data.model_id
 
-    db.commit()
-    db.refresh(chat)
-    logger.info(f"Conversation {chat_id} updated by user {current_user.id}")
+    await db.commit()
+    await db.refresh(chat)
+    logger.info("Conversation %s updated by user %s", chat_id, current_user.id)
 
     return {"id": chat.id, "title": chat.title, "model_id": chat.model_id}
 
 
 @router.delete("/conversations/{chat_id}", response_model=dict)
-def delete_conversation(
+async def delete_conversation(
     chat_id: str,
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Soft-deletes a conversation by updating is_deleted = True.
     Does not permanently remove data from the database by default.
     """
-    chat = (
-        db.query(Chat)
-        .filter(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
-        .first()
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.id == chat_id,
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False)
+        )
     )
+    chat = result.scalars().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Conversation not found or access denied")
 
     chat.is_deleted = True
-    db.commit()
-    logger.info(f"Conversation {chat_id} soft-deleted by user {current_user.id}")
+    await db.commit()
+    logger.info("Conversation %s soft-deleted by user %s", chat_id, current_user.id)
     return {"status": "deleted", "conversation_id": chat_id}
 
 
@@ -201,73 +245,72 @@ def delete_conversation(
 # -----------------------------
 
 @router.get("/conversations/{chat_id}/messages", response_model=dict)
-def list_messages(
+async def list_messages(
     chat_id: str,
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Retrieves all messages for a conversation, sorted by timestamp ascending.
     """
-    # Verify chat ownership
-    chat = (
-        db.query(Chat)
-        .filter(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
-        .first()
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.id == chat_id,
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False)
+        )
     )
+    chat = result.scalars().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Conversation not found or access denied")
 
-    messages = (
-        db.query(Message)
-        .filter(Message.chat_id == chat_id)
-        .order_by(Message.timestamp.asc())
-        .all()
-    )
-    output = []
-    for msg in messages:
-        output.append({
+    messages = await db.execute(select(Message).where(Message.chat_id == chat_id).order_by(Message.timestamp.asc()))
+    messages = messages.scalars().all()
+    output = [
+        {
             "id": msg.id,
             "role": msg.role,
             "content": msg.content,
             "metadata": msg.get_metadata_dict(),
             "timestamp": msg.timestamp
-        })
+        } for msg in messages
+    ]
     return {"messages": output}
 
 
 @router.post("/conversations/{chat_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_message(
+async def create_message(
     chat_id: str,
     new_msg: MessageCreate,
-    current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    Adds a new user or system message to the conversation, 
+    Adds a new user or system message to the conversation,
     and optionally triggers an assistant response if role = 'user'.
     """
-    # Verify chat ownership
-    chat = (
-        db.query(Chat)
-        .filter(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
-        .first()
+    chat_query = await db.execute(
+        select(Chat)
+        .where(
+            Chat.id == chat_id,
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False)
+        )
     )
+    chat = chat_query.scalars().first()
     if not chat:
         raise HTTPException(status_code=404, detail="Conversation not found or access denied")
 
-    # Insert the user message
     message = Message(
-        chat_id=chat.id,
+        chat_id=chat_id,
         role=new_msg.role.lower().strip(),
         content=new_msg.content.strip(),
         metadata=None
     )
     db.add(message)
-    db.commit()
-    db.refresh(message)
-
-    # Summarization or token checks can be done here
+    await db.commit()
+    await db.refresh(message)
     token_limit_check(chat_id, db)
 
     response_payload = {
@@ -277,34 +320,20 @@ def create_message(
         "content": message.content
     }
 
-    # If it's a user message, we might call Azure OpenAI to get an assistant response
     if message.role == "user":
-        # Retrieve conversation context from DB
-        conv_messages = (
-            db.query(Message)
-            .filter(Message.chat_id == chat.id)
-            .order_by(Message.timestamp.asc())
-            .all()
-        )
+        messages_query = await db.execute(select(Message).where(Message.chat_id == chat.id).order_by(Message.timestamp.asc()))
+        conv_messages = messages_query.scalars().all()
         message_dicts = [{"role": m.role, "content": m.content} for m in conv_messages]
-        # (Optional) manage summarization or chunk
         message_dicts = manage_context(message_dicts)
 
-        # Call openai_chat if model_id is set
         if chat.model_id is not None:
-            # Example usage:
             try:
-                openai_response = openai_chat(messages=message_dicts, model_name="o3-mini")  # or select model
+                openai_response = openai_chat(messages=message_dicts, model_name="o3-mini")
                 assistant_content = openai_response["choices"][0]["message"]["content"]
-                # Insert assistant message
-                assistant_msg = Message(
-                    chat_id=chat.id,
-                    role="assistant",
-                    content=assistant_content
-                )
+                assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
                 db.add(assistant_msg)
-                db.commit()
-                db.refresh(assistant_msg)
+                await db.commit()
+                await db.refresh(assistant_msg)
 
                 response_payload["assistant_message"] = {
                     "id": assistant_msg.id,
@@ -312,8 +341,7 @@ def create_message(
                     "content": assistant_msg.content
                 }
             except Exception as e:
-                logger.error(f"Error calling Azure OpenAI: {e}")
-                # We won't fail the route; just note the error
+                logger.error("Error calling Azure OpenAI: %s", e)
                 response_payload["assistant_error"] = str(e)
 
     return response_payload
@@ -326,23 +354,75 @@ def create_message(
 @router.websocket("/ws/{chat_id}")
 async def websocket_chat_endpoint(
     websocket: WebSocket,
-    chat_id: str
+    chat_id: str,
+    token: str = Query(..., description="JWT token for authentication")
 ):
     """
     Real-time chat updates for conversation {chat_id}.
-    Must authenticate via query param or cookies. 
+    Must authenticate via query param or cookies.
     """
     await websocket.accept()
-    # In production, parse token from query params or subprotocol to check user ownership.
-    # For brevity, omitted. Here we assume it's authorized.
+
+    user = await get_current_user(token)
+    if not user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     try:
         while True:
             data = await websocket.receive_text()
-            # data -> parse as JSON, or handle plain text
-            # Insert message into DB, or call openai
-            # Echo or broadcast to clients:
-            await websocket.send_text(f"Echo: {data}")
+            try:
+                data_dict = json.loads(data)
+                message = Message(
+                    chat_id=chat_id,
+                    role=data_dict['role'],
+                    content=data_dict['content'],
+                )
+                async with get_async_session() as session:
+                    session.add(message)
+                    await session.commit()
+                    await session.refresh(message)
+                    if message.role == "user":
+                        await handle_assistant_response(chat_id, session, websocket)
+            except json.JSONDecodeError:
+                await websocket.send_json({"error": "Invalid JSON format"})
+            except Exception as e:
+                await websocket.send_json({"error": str(e)})
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for chat_id={chat_id}")
+        logger.info("WebSocket disconnected for chat_id=%s", chat_id)
         return
+
+
+async def handle_assistant_response(
+    chat_id: str,
+    session: AsyncSession,
+    websocket: WebSocket
+):
+    """
+    Handles the assistant response for a given conversation.
+    """
+    messages_query = await session.execute(select(Message).where(Message.chat_id == chat_id).order_by(Message.timestamp.asc()))
+    messages = messages_query.scalars().all()
+    message_dicts = [{"role": m.role, "content": m.content} for m in messages]
+    message_dicts = manage_context(message_dicts)
+
+    chat_query = await session.execute(select(Chat).where(Chat.id == chat_id))
+    chat = chat_query.scalars().first()
+
+    if chat.model_id is not None:
+        try:
+            openai_response = openai_chat(messages=message_dicts, model_name="o3-mini")
+            assistant_content = openai_response["choices"][0]["message"]["content"]
+            assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
+            session.add(assistant_msg)
+            await session.commit()
+            await session.refresh(assistant_msg)
+
+            await websocket.send_json({
+                "id": assistant_msg.id,
+                "role": assistant_msg.role,
+                "content": assistant_msg.content
+            })
+        except Exception as e:
+            logger.error("Error calling Azure OpenAI: %s", e)
+            await websocket.send_json({"error": f"Error from OpenAI: {str(e)}"})
