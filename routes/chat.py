@@ -74,14 +74,6 @@ class MessageCreate(BaseModel):
 
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """
-    Dependency to get the current authenticated user.
-    """
-    user = await get_current_user_and_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    return user
 
 
 # -----------------------------
