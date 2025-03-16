@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from db import SessionLocal
+from db import SessionLocal  # Keep sync session for auth routes
 from models.user import User
 
 logger = logging.getLogger(__name__)

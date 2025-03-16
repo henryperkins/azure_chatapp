@@ -53,12 +53,10 @@ if os.getenv("ENV") == "production":
 
 @app.on_event("startup")
 async def on_startup():
-    """
-    Runs automatically on application startup.
-    Ensures the database is initialized or migrations are run.
-    """
-    await init_db()
-    logger.info("Application startup completed. Database initialized.")
+    # Use async engine for migrations
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database initialized")
 
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
