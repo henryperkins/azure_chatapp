@@ -147,7 +147,11 @@ def login_user(
         samesite="Lax",
         max_age=3600
     )
-    return {"message": "Login successful"}
+    return {
+        "message": "Login successful",
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 
 # ------------------------------
