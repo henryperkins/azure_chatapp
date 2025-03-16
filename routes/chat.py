@@ -381,14 +381,14 @@ async def create_message(
 @router.websocket("/ws/{chat_id}")
 async def websocket_chat_endpoint(
     websocket: WebSocket,
-    chat_id: str,
-    token: str = Query(..., description="JWT token for authentication")
+    chat_id: str
 ):
     """
     Real-time chat updates for conversation {chat_id}.
     Must authenticate via query param or cookies.
     """
     await websocket.accept()
+    token = await websocket.receive_text()
 
     user = await get_current_user(token)
     if not user:

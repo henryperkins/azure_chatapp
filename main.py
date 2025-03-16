@@ -22,9 +22,17 @@ from routes.chat import router as chat_router
 from routes.file_upload import router as file_upload_router
 from routes.project_routes import router as project_router
 
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from fastapi.middleware import Middleware
+
 app.add_middleware(HTTPSRedirectMiddleware)
 
 app = FastAPI(
+    middleware=[
+        Middleware(TrustedHostMiddleware, allowed_hosts=["yourdomain.com"]),
+        Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET"))
+    ],
     title="Azure OpenAI Chat Application",
     description="""
 A secure, robust, and intuitively designed web-based chat application 
