@@ -19,6 +19,9 @@ module.exports = {
     // Extend or override the default Tailwind theme here.
     extend: {
       // Example: custom breakpoints, or additional brand colors, etc.
+      spacing: {
+        'touch-min': '44px',
+      },
       screens: {
         // Already in Tailwind by default, but you can add new ones:
         'xs': '320px',
