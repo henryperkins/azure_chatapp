@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
-API_VERSION = "2025-02-01-preview"
+API_VERSION = "2024-12-01-preview"
 
 import httpx
 
@@ -32,6 +32,9 @@ async def openai_chat(
     image_data: Optional[str] = None,
     vision_detail: str = "auto"
 ) -> dict:
+    VALID_DETAIL_VALUES = ["auto", "low", "high"]
+    if vision_detail not in VALID_DETAIL_VALUES:
+        raise ValueError(f"Invalid vision_detail: {vision_detail}. Must be one of {VALID_DETAIL_VALUES}.")
     """
     Calls Azure OpenAI's chat completion API. 
     Allows optional 'reasoning_effort' if using "o3-mini" or "o1".
@@ -69,10 +72,19 @@ async def openai_chat(
         payload["reasoning_effort"] = reasoning_effort
 
     if model_name == "o1" and image_data:
-        if "base64," in image_data:
+        # Check if multiple images exceed limit
+        if image_data.count("base64,") > 1:
+            # For now, we only handle a single image, but let's enforce a max 10
+            if image_data.count("base64,") > 10:
+                raise ValueError("Exceeded maximum of 10 images for vision API.")
+            # If multiple images are present, we are not fully handling them, but let's proceed with the first
+            logger.warning("Multiple images detected, using only the first one for now.")
             base64_str = image_data.split("base64,")[1]
         else:
-            base64_str = image_data
+            if "base64," in image_data:
+                base64_str = image_data.split("base64,")[1]
+            else:
+                base64_str = image_data
 
         vision_message = {
             "role": "user",
