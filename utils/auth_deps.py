@@ -3,7 +3,6 @@ from fastapi import Depends, HTTPException
 from sqlalchemy import select
 from models.user import User
 from db import get_async_session
-from auth import verify_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -19,3 +18,25 @@ async def get_current_user_and_token(token: str = Depends(oauth2_scheme)):
             return user
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid credentials")
+import logging
+import os
+import jwt
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_ALGORITHM = "HS256"
+
+def verify_token(token: str):
+    """
+    Verifies and decodes a JWT token.
+    """
+    try:
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return decoded
+    except jwt.ExpiredSignatureError:
+        logger.warning("Token has expired.")
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        logger.warning("Invalid token.")
+        raise HTTPException(status_code=401, detail="Invalid token")

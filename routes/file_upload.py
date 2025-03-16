@@ -17,15 +17,17 @@ Integrates with the Azure REST API references for:
 
 import logging
 import os
-import requests
 import chardet
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import httpx
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
 
-from db import SessionLocal
+from db import get_async_session
 from utils.auth_deps import get_current_user_and_token
 from models.user import User
 
@@ -53,19 +55,13 @@ class FileUploadResponse(BaseModel):
     status: str
     object_type: str
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.post("/files", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
     purpose: str = "assistants",
     current_user: User = Depends(get_current_user_and_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Uploads a file to Azure OpenAI. The file must be:
@@ -93,7 +89,10 @@ async def upload_file(
             raise HTTPException(400, "ZIP archives not allowed")
         # Add more heuristic checks
 
-    virus_scan(contents)
+    from concurrent.futures import ThreadPoolExecutor
+    import asyncio
+    with ThreadPoolExecutor() as pool:
+        await asyncio.get_event_loop().run_in_executor(pool, virus_scan, contents)
     if len(contents) > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=400, 
@@ -122,8 +121,9 @@ async def upload_file(
     }
 
     try:
-        # Use requests toolbelt or similar library for multipart if needed
-        multipart_resp = requests.post(endpoint_url, headers=headers, files=form_data, timeout=60)
+        import httpx
+        async with httpx.AsyncClient() as client:
+            multipart_resp = await client.post(endpoint_url, headers=headers, files=form_data, timeout=60)
         if multipart_resp.status_code != 201:
             logger.error(f"Azure files upload failed: {multipart_resp.text}")
             raise HTTPException(
