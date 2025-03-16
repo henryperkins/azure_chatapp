@@ -42,6 +42,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+if os.getenv("ENV") == "production":
+    @app.middleware("http")
+    async def force_https(request, call_next):
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
 
 @app.on_event("startup")
 async def on_startup():

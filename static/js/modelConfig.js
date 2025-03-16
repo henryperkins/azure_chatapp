@@ -65,4 +65,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Ensure window.MODEL_CONFIG is in sync on load
   persistSettings();
+
+  async function convertToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  }
+
+  const visionInputEl = document.getElementById('visionFileInput');
+  if (visionInputEl) {
+    visionInputEl.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const base64Image = await convertToBase64(file);
+        window.MODEL_CONFIG.visionImage = base64Image;
+      }
+    });
+  }
 });
