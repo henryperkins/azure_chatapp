@@ -17,7 +17,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Check if already logged in
   updateAuthStatus();
 
-setInterval(checkTokenExpiry, 5 * 60 * 1000);
   // -----------------------------
   // Event Listeners
   // -----------------------------
@@ -41,7 +40,6 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
-      localStorage.removeItem("access_token");
       updateAuthStatus();
     });
   }
@@ -82,8 +80,6 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
     })
     .then(checkResponse)
     .then(data => {
-        localStorage.setItem("access_token", data.access_token);
-        document.cookie = `access_token=${data.access_token}; path=/; samesite=lax`;
         updateAuthStatus();
         document.dispatchEvent(new CustomEvent("authStateChanged", {
             detail: { authenticated: true }
@@ -144,22 +140,6 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
     }
   }
 
-function checkTokenExpiry() {
-  const token = localStorage.getItem("access_token");
-  if (token) {
-    try {
-      const payload = token.split('.')[1];
-      const decoded = JSON.parse(atob(payload));
-      if (decoded.exp * 1000 < Date.now()) {
-        localStorage.removeItem("access_token");
-        updateAuthStatus();
-        alert("Session expired. Please log in again.");
-      }
-    } catch (e) {
-      console.error("Token parse error", e);
-    }
-  }
-}
   function checkResponse(resp) {
     if (!resp.ok) {
       return resp.text().then((text) => {
