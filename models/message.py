@@ -28,9 +28,4 @@ class Message(Base):
         return f"<Message #{self.id} role={self.role}, chat_id={self.chat_id}>"
 
     def get_metadata_dict(self):
-        if self.message_metadata:
-            try:
-                return json.loads(self.message_metadata)
-            except Exception:
-                pass
-        return {}
+        return self.message_metadata or {}

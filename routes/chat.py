@@ -395,22 +395,22 @@ async def websocket_chat_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    try:
-        while True:
-            data = await websocket.receive_text()
-            try:
+    async with get_async_session() as session:
+        try:
+            while True:
+                data = await websocket.receive_text()
+                try:
                 data_dict = json.loads(data)
                 message = Message(
                     chat_id=chat_id,
                     role=data_dict['role'],
                     content=data_dict['content'],
                 )
-                async with get_async_session() as session:
-                    session.add(message)
-                    await session.commit()
-                    await session.refresh(message)
-                    if message.role == "user":
-                        await handle_assistant_response(chat_id, session, websocket)
+                session.add(message)
+                await session.commit()
+                await session.refresh(message)
+                if message.role == "user":
+                    await handle_assistant_response(chat_id, session, websocket)
             except json.JSONDecodeError:
                 await websocket.send_json({"error": "Invalid JSON format"})
             except Exception as e:

@@ -90,7 +90,7 @@ def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     logger.info("Conversation was too large; older messages summarized.")
     return new_conversation
 
-def token_limit_check(chat_id: str, db):
+async def token_limit_check(chat_id: str, db):
     """
     Example helper to be called after inserting a new message in the DB. 
     Retrieves messages, checks token usage, triggers summarization if needed.
@@ -99,13 +99,15 @@ def token_limit_check(chat_id: str, db):
     :param db: The database session or context for retrieving messages.
     """
     # Retrieve all messages from DB
-    query = """
+    from sqlalchemy import text
+    query = text(\"""
     SELECT role, content
     FROM messages
     WHERE chat_id=:chat_id
     ORDER BY timestamp ASC
-    """
-    rows = db.execute(query, {"chat_id": chat_id}).mappings().all()
+    \""")
+    result = await db.execute(query, {"chat_id": chat_id})
+    rows = result.mappings().all()
     messages = [{"role": r["role"], "content": r["content"]} for r in rows]
 
     total_tokens = estimate_token_count(messages)

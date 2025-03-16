@@ -13,7 +13,9 @@ import bcrypt
 import jwt
 from fastapi import APIRouter, HTTPException, Depends, Response
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from db import AsyncSessionLocal
+from sqlalchemy import select
 
 from db import SessionLocal  # Keep sync session for auth routes
 from models.user import User
@@ -189,7 +191,8 @@ async def get_current_user(
         if not username:
             raise HTTPException(status_code=401, detail="Invalid token payload")
     
-        user = db.query(User).filter(User.username == username).first()
+        result = await db.execute(select(User).where(User.username == username))
+        user = result.scalars().first()
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return user
