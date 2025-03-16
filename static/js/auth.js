@@ -119,7 +119,9 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
     refreshTokenIfNeeded();
     const authSection = document.getElementById("authSection");
     const chatUI = document.getElementById("chatUI");
-    if (token) {
+    const storedToken = localStorage.getItem("access_token");
+    
+    if (storedToken) {
       if (authStatus) {
         authStatus.textContent = "Authenticated";
         authStatus.classList.remove("text-red-600");

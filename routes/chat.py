@@ -47,7 +47,7 @@ class ConversationCreate(BaseModel):
     Pydantic model for creating a new conversation.
     """
     title: str = Field(..., min_length=1, max_length=100, description="A user-friendly title for the new conversation")
-    model_id: Optional[int] = Field(None, description="Optional numeric ID referencing the chosen model deployment")
+    model_id: Optional[str] = Field(None, description="Optional model ID referencing the chosen model deployment")
 
 
 class ConversationUpdate(BaseModel):
@@ -55,7 +55,7 @@ class ConversationUpdate(BaseModel):
     Pydantic model for updating an existing conversation.
     """
     title: Optional[str] = Field(None, min_length=1, max_length=100)
-    model_id: Optional[int] = None
+    model_id: Optional[str] = None
 
 
 class MessageCreate(BaseModel):
@@ -336,15 +336,25 @@ async def create_message(
     if message.role == "user":
         messages_query = await db.execute(select(Message).where(Message.chat_id == chat.id).order_by(Message.timestamp.asc()))
         conv_messages = messages_query.scalars().all()
-        message_dicts = [{"role": m.role, "content": m.content} for m in conv_messages]
+
+        # Force role/content to str so type hints see them as valid strings.
+        message_dicts = [{"role": str(m.role), "content": str(m.content)} for m in conv_messages]
+
+        # manage_context expects List[Dict[str, str]]
         message_dicts = manage_context(message_dicts)
 
         try:
+            # If new_msg.image_data is set, use "o1", otherwise use chat.model_id or default fallback
+            chosen_model = "o1" if new_msg.image_data else (chat.model_id or "o1")
+
+            # vision_detail expects a str, coalesce None to "auto"
+            chosen_vision = new_msg.vision_detail if new_msg.vision_detail else "auto"
+
             openai_response = openai_chat(
                 messages=message_dicts,
-                model_name="o1" if new_msg.image_data else chat.model_id,
+                model_name=chosen_model,
                 image_data=new_msg.image_data,
-                vision_detail=new_msg.vision_detail
+                vision_detail=chosen_vision
             )
             assistant_content = openai_response["choices"][0]["message"]["content"]
             assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
@@ -420,27 +430,43 @@ async def handle_assistant_response(
     """
     messages_query = await session.execute(select(Message).where(Message.chat_id == chat_id).order_by(Message.timestamp.asc()))
     messages = messages_query.scalars().all()
-    message_dicts = [{"role": m.role, "content": m.content} for m in messages]
+
+    # Force role/content to str
+    message_dicts = [{"role": str(m.role), "content": str(m.content)} for m in messages]
+
+    # manage_context expects List[Dict[str, str]]
     message_dicts = manage_context(message_dicts)
 
     chat_query = await session.execute(select(Chat).where(Chat.id == chat_id))
-    chat = chat_query.scalars().first()
+    chat_instance = chat_query.scalars().first()
 
-    if chat.model_id is not None:
-        try:
-            chat = await session.get(Chat, chat_id)
-            openai_response = openai_chat(messages=message_dicts, model_name=chat.model_id)
-            assistant_content = openai_response["choices"][0]["message"]["content"]
-            assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
-            session.add(assistant_msg)
-            await session.commit()
-            await session.refresh(assistant_msg)
+    if chat_instance is None:
+        await websocket.send_json({"error": "Chat not found"})
+        return
 
-            await websocket.send_json({
-                "id": assistant_msg.id,
-                "role": assistant_msg.role,
-                "content": assistant_msg.content
-            })
-        except Exception as e:
-            logger.error("Error calling Azure OpenAI: %s", e)
-            await websocket.send_json({"error": f"Error from OpenAI: {str(e)}"})
+    # if chat_instance.model_id is not None, we do the request
+    chosen_model = chat_instance.model_id or "o1"
+
+    try:
+        # retrieve latest from DB again
+        chat_instance = await session.get(Chat, chat_id)
+        if chat_instance is None:
+            await websocket.send_json({"error": "Chat not found after refresh"})
+            return
+
+        # pass chosen_model as str
+        openai_response = openai_chat(messages=message_dicts, model_name=chosen_model)
+        assistant_content = openai_response["choices"][0]["message"]["content"]
+        assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
+        session.add(assistant_msg)
+        await session.commit()
+        await session.refresh(assistant_msg)
+
+        await websocket.send_json({
+            "id": assistant_msg.id,
+            "role": assistant_msg.role,
+            "content": assistant_msg.content
+        })
+    except Exception as e:
+        logger.error("Error calling Azure OpenAI: %s", e)
+        await websocket.send_json({"error": f"Error from OpenAI: {str(e)}"})
