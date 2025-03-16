@@ -26,9 +26,9 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 
-app.add_middleware(HTTPSRedirectMiddleware)
-
 app = FastAPI(
+
+app.add_middleware(HTTPSRedirectMiddleware)
     middleware=[
         Middleware(TrustedHostMiddleware, allowed_hosts=["yourdomain.com"]),
         Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET"))
