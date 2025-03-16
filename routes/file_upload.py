@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from db import SessionLocal
-from ..utils.auth_deps import get_current_user_and_token
+from utils.auth_deps import get_current_user_and_token
 from ..models.user import User
 
 router = APIRouter()
