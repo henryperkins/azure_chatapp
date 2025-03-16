@@ -338,26 +338,26 @@ async def websocket_chat_endpoint(
 
     try:
         while True:
-                data = await websocket.receive_text()
-                try:
-                    data_dict = json.loads(data)
-                    message = Message(
-                        chat_id=chat_id,
-                        role=data_dict['role'],
-                        content=data_dict['content'],
-                    )
-                    db.add(message)
-                    await db.commit()
-                    await db.refresh(message)
-                    if message.role == "user":
-                        await handle_assistant_response(chat_id, db, websocket)
-                except json.JSONDecodeError:
-                    await websocket.send_json({"error": "Invalid JSON format"})
-                except Exception as e:
-                    await websocket.send_json({"error": str(e)})
-        except WebSocketDisconnect:
-            logger.info("WebSocket disconnected for chat_id=%s", chat_id)
-            return
+            data = await websocket.receive_text()
+            try:
+                data_dict = json.loads(data)
+                message = Message(
+                    chat_id=chat_id,
+                    role=data_dict['role'],
+                    content=data_dict['content'],
+                )
+                db.add(message)
+                await db.commit()
+                await db.refresh(message)
+                if message.role == "user":
+                    await handle_assistant_response(chat_id, db, websocket)
+            except json.JSONDecodeError:
+                await websocket.send_json({"error": "Invalid JSON format"})
+            except Exception as e:
+                await websocket.send_json({"error": str(e)})
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected for chat_id=%s", chat_id)
+        return
 
 
 async def handle_assistant_response(
