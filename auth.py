@@ -61,14 +61,15 @@ def register_user(
     Registers a new user with hashed password.
     Fails if the username already exists.
     """
+    lower_username = creds.username.lower()
     existing_user = db.query(User).filter(
-        User.username == creds.username
+        User.username == lower_username
     ).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already taken")
 
     hashed_pw = bcrypt.hashpw(creds.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    user = User(username=creds.username, password_hash=hashed_pw)
+    user = User(username=lower_username, password_hash=hashed_pw)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -85,7 +86,8 @@ def login_user(
     """
     Authenticates the user and returns a JWT if valid.
     """
-    user = db.query(User).filter(User.username == creds.username).first()
+    lower_username = creds.username.lower()
+    user = db.query(User).filter(User.username == lower_username).first()
     if not user:
         raise HTTPException(
             status_code=401,
@@ -106,9 +108,11 @@ def login_user(
         )
 
     if not valid_password:
+        # Provide more specific debug logging to distinguish issues
+        logger.debug(f"User '{user.username}' tried to login with invalid password.")
         raise HTTPException(
             status_code=401,
-            detail="Invalid credentials"
+            detail="Invalid username or password"
         )
 
     # Construct payload for JWT
@@ -145,17 +149,12 @@ def verify_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-def get_current_user(
+async def get_current_user(
     token: str = Depends(lambda: None),
     db: Session = Depends(get_db)
 ):
     """
     Retrieves the current user from JWT.
-    Use as a FastAPI dependency where needed.
-    Example usage:
-       @router.get("/me")
-       def me_route(current_user=Depends(get_current_user)):
-           return current_user
     """
     if not token:
         raise HTTPException(
@@ -163,22 +162,27 @@ def get_current_user(
             detail="Authorization token not provided"
         )
 
-    scheme, _, param = token.partition(" ")
-    if scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization scheme"
-        )
-
-    decoded = verify_token(param)
-    username = decoded.get("sub")
-    if not username:
-        raise HTTPException(status_code=401, detail="Invalid token payload")
-
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
+    # Check if this is coming directly (with Bearer prefix) or via oauth2_scheme (just token)
+    if token.lower().startswith("bearer "):
+        # Direct call with full Authorization header
+        _, _, param = token.partition(" ")
+        token = param
+    
+    # Now we can safely verify the token itself
+    try:
+        decoded = verify_token(token)
+        username = decoded.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+    
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+    except Exception as e:
+        # Add this for debugging
+        logger.error(f"Token verification error: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 @router.get("/refresh")
