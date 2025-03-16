@@ -5,7 +5,7 @@ Defines the User model responsible for authentication identity, roles,
 and ownership of chats/projects in the Azure Chat Application.
 """
 
-from sqlalchemy import Column, Integer, String, TIMESTAMP, text
+from sqlalchemy import Column, Integer, String, TIMESTAMP, text, Boolean
 from sqlalchemy.orm import relationship
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ class User(Base):
     password_hash = Column(String(200), nullable=False)
     role = Column(String, default="user")  # e.g. "admin", "user"
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    is_active = Column(Boolean, default=True, nullable=False)
 
     # Example relationships:
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
