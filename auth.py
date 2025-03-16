@@ -85,14 +85,16 @@ def register_user(
     return {"message": f"User '{user.username}' registered successfully"}
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")
 def login_user(
+    response: Response,
     creds: UserCredentials,
     db: Session = Depends(get_db)
 ):
     """
     Authenticates the user and returns a JWT if valid.
     """
+    from fastapi import Response
     lower_username = creds.username.lower()
     user = db.query(User).filter(User.username == lower_username).first()
     if not user:
