@@ -6,6 +6,7 @@ secure password hashing (bcrypt), and session expiry logic.
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 
 import bcrypt
