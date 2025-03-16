@@ -12,11 +12,11 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import init_db
-from .auth import router as auth_router
-# You'll also need to import your other routers, for example:
-# from .routes.chat import router as chat_router
-# from .routes.file_upload import router as file_upload_router
+from db import init_db
+from auth import router as auth_router
+from routes.chat import router as chat_router
+from routes.file_upload import router as file_upload_router
+from routes.project_routes import router as project_router
 
 app = FastAPI(
     title="Azure OpenAI Chat Application",
@@ -42,6 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.on_event("startup")
 async def on_startup():
     """
@@ -54,11 +55,16 @@ async def on_startup():
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
-# Example of including additional routers:
-# app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
-# app.include_router(file_upload_router, prefix="/api/files", tags=["files"])
+# Include the chat router
+app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
 
-@app.get("/health", tags=["health"])
+# Include the file upload router
+app.include_router(file_upload_router, prefix="/api/files", tags=["files"])
+
+# Include the project router
+app.include_router(project_router, prefix="/api/projects", tags=["projects"])
+
+
 def health_check():
     """
     A simple health-check endpoint to confirm the service is running.
