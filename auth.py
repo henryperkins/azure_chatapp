@@ -49,10 +49,16 @@ class LoginResponse(BaseModel):
 
 
 def validate_password(password: str):
-    if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+    if len(password) < 12:
+        raise ValueError("Password must be at least 12 characters")
     if not any(c.isupper() for c in password):
         raise ValueError("Password must contain uppercase letters")
+    if not any(c.islower() for c in password):
+        raise ValueError("Password must contain lowercase letters")
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Password must contain numbers")
+    if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?~' for c in password):
+        raise ValueError("Password must contain at least one special character")
 
 @router.post("/register")
 async def register_user(
