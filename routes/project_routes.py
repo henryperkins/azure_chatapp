@@ -98,7 +98,7 @@ async def list_projects(
     )
     projects = results.scalars().all()
     data = []
-    for proj in results:
+    for proj in projects:
         data.append({
             "id": proj.id,
             "name": proj.name,
