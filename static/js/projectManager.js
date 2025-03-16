@@ -39,35 +39,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Helper: get JWT from localStorage
   function getAuthToken() {
-    return localStorage.getItem("access_token") || "";
+    return (localStorage.getItem("access_token") || "").trim();
   }
 
   // Helper: create fetch headers
   function getHeaders() {
+    const token = getAuthToken().trim();
+    if (!token) {
+      return { "Content-Type": "application/json" };
+    }
     return {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + getAuthToken()
+      "Authorization": `Bearer ${token}`
     };
   }
 
   // Load all user projects
   function loadProjects() {
-      const token = getAuthToken();
-      if (!token) {
-        console.warn("No auth token found. Please log in first.");
-        if (typeof showNotification === 'function') {
-          showNotification("Please log in to load your Project list.", "info");
+    const token = getAuthToken();
+    if (!token) {
+      // Don't show errors in console when simply not logged in
+      console.log("Not attempting to load projects - user not logged in");
+      return;
+    }
+    fetch("/api/projects", { method: "GET", headers: getHeaders() })
+      .then(checkResponse)
+      .then((data) => {
+        if (data.projects) {
+          renderProjectList(data.projects);
         }
-        return;
-      }
-      fetch("/api/projects", { method: "GET", headers: getHeaders() })
-        .then(checkResponse)
-        .then((data) => {
-          if (data.projects) {
-            renderProjectList(data.projects);
-          }
-        })
-        .catch((err) => console.error("Error loading projects:", err));
+      })
+      .catch((err) => {
+        if (!err.message.includes("401")) {
+          console.error("Error loading projects:", err);
+        }
+      });
   }
 
   // Create a new project

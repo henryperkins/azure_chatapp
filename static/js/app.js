@@ -51,15 +51,20 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function loadConversationList() {
     const token = localStorage.getItem('access_token') || '';
-    if (!token) {
-      showNotification("Please log in to view your conversations.", "info");
-      showNotification("Please log in to see your conversation list.", "info");
+  
+    // Only attempt to load conversations if we have a token
+    if (!token.trim()) {
+      // Quietly handle the case when not logged in
+      console.log("Not attempting to load conversations - user not logged in");
       return;
     }
+    const authHeader = `Bearer ${token.trim()}`;
+    console.log("Authorization header being sent:", authHeader);
     fetch('/api/chat/conversations', {
       method: 'GET',
       headers: {
-        Authorization: 'Bearer ' + token
+        'Authorization': `Bearer ${token.trim()}`,
+        'Content-Type': 'application/json'
       }
     })
     .then(resp => {

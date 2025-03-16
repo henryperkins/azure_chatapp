@@ -9,7 +9,13 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Define chatId first so it can be used anywhere in the scope
   const chatId = window.CHAT_CONFIG?.chatId || "";
+  
+  const noChatSelectedMessage = document.getElementById("noChatSelectedMessage");
+  if (noChatSelectedMessage) {
+    noChatSelectedMessage.classList.toggle("hidden", chatId !== "");
+  }
   const conversationArea = document.getElementById("conversationArea");
   const chatInput = document.getElementById("chatInput");
   const sendBtn = document.getElementById("sendBtn");
@@ -35,7 +41,15 @@ document.addEventListener("DOMContentLoaded", () => {
     sendBtn.addEventListener("click", () => {
       const userMsg = chatInput.value.trim();
       if (userMsg) {
-        sendMessage(chatId, userMsg);
+        if (chatId) {
+          sendMessage(chatId, userMsg);
+        } else {
+          if (window.showNotification) {
+            window.showNotification("Please start a new conversation first.", "error");
+          } else {
+            console.error("Please start a new conversation first.");
+          }
+        }
       }
     });
   }
@@ -44,7 +58,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.key === "Enter") {
         const userMsg = chatInput.value.trim();
         if (userMsg) {
-          sendMessage(chatId, userMsg);
+          if (chatId) {
+            sendMessage(chatId, userMsg);
+          } else {
+            if (window.showNotification) {
+              window.showNotification("Please start a new conversation first.", "error");
+            } else {
+              console.error("Please start a new conversation first.");
+            }
+          }
         }
       }
     });
@@ -140,6 +162,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function sendMessage(chatId, userMsg) {
+    if (!chatId) {
+      console.error("Cannot send message: No active conversation");
+      if (window.showNotification) {
+        window.showNotification("Please start a new conversation first.", "error");
+      }
+      return;
+    }
+
     const visionImage = window.MODEL_CONFIG?.visionImage;
 
     // Immediately display user message
@@ -265,9 +295,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getAuthHeaders() {
-    const token = localStorage.getItem("access_token") || "";
+    const token = (localStorage.getItem("access_token") || "").trim();
     return {
-      Authorization: `Bearer ${token}`
+      "Authorization": `Bearer ${token}`
     };
   }
 
