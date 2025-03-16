@@ -111,20 +111,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateUserSessionState() {
     const token = localStorage.getItem("access_token");
+    const authStatus = document.getElementById("authStatus");
+
     if (token) {
-      // Mark user as Online
-      if (userStatusEl) {
-        userStatusEl.textContent = "Online";
-        userStatusEl.classList.add("text-green-500");
-        userStatusEl.classList.remove("text-red-500");
-      }
+        fetch("/api/auth/verify", {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        .then(resp => {
+            if(resp.ok) {
+                if(authStatus) {
+                    authStatus.textContent = "Authenticated";
+                    authStatus.classList.remove("text-red-600");
+                    authStatus.classList.add("text-green-600");
+                }
+            } else {
+                localStorage.removeItem("access_token");
+                if(authStatus) {
+                    authStatus.textContent = "Not Authenticated";
+                    authStatus.classList.remove("text-green-600");
+                    authStatus.classList.add("text-red-600");
+                }
+            }
+        });
     } else {
-      // Mark user as Offline
-      if (userStatusEl) {
-        userStatusEl.textContent = "Offline";
-        userStatusEl.classList.add("text-red-500");
-        userStatusEl.classList.remove("text-green-500");
-      }
+        if(authStatus) {
+            authStatus.textContent = "Not Authenticated";
+            authStatus.classList.remove("text-green-600");
+            authStatus.classList.add("text-red-600");
+        }
     }
   }
 
