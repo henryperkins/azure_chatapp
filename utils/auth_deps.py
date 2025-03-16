@@ -28,15 +28,28 @@ def verify_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def get_current_user_and_token(token: str = Depends(oauth2_scheme)):
+    # First try header token
+    try:
+        return await _get_user_from_token(token)
+    except HTTPException:
+        # Fallback to cookie token
+        pass
+
+    # Check cookies directly
+    from fastapi import Request
+    request: Request = Request()
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return await _get_user_from_token(cookie_token)
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
+
+async def _get_user_from_token(token: str):
     async for session in get_async_session():
-        try:
-            decoded = verify_token(token)
-            username = decoded.get("sub")
-            result = await session.execute(select(User).where(User.username == username))
-            user = result.scalars().first()
-            if not user:
-                raise HTTPException(status_code=401, detail="User not found")
-            return user
-        except Exception as e:
-            logger.error(f"Auth error: {str(e)}")
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+        decoded = verify_token(token)
+        username = decoded.get("sub")
+        result = await session.execute(select(User).where(User.username == username))
+        user = result.scalars().first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user

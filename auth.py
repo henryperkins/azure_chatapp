@@ -129,11 +129,12 @@ async def login_user(
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
     logger.info(f"User '{user.username}' logged in successfully.")
+    secure_cookie = os.getenv("ENV") == "production"
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
-        secure=True,
+        secure=secure_cookie,
         samesite="Lax",
         max_age=3600
     )
