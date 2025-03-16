@@ -21,9 +21,10 @@ class Project(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
 
     # If bridging table chat_projects is used, define association:
-    # chats = relationship("Chat", secondary="chat_projects", back_populates="projects")
+    chats = relationship("Chat", secondary="chat_projects", back_populates="projects")
 
     # If you track files in the same or separate table:
     # files = relationship("ProjectFile", back_populates="project.")
