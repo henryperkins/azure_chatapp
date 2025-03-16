@@ -11,3 +11,5 @@ tiktoken
 python-multipart
 python-jose[cryptography]
 aiofiles==23.2.1
+itsdangerous>=2.1.2
+starlette>=0.27.0
