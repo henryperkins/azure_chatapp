@@ -197,17 +197,7 @@ async def delete_conversation(
     Soft-deletes a conversation by updating is_deleted = True.
     Does not permanently remove data from the database by default.
     """
-    result = await db.execute(
-        select(Chat)
-        .where(
-            Chat.id == chat_id,
-            Chat.user_id == current_user.id,
-            Chat.is_deleted.is_(False)
-        )
-    )
-    chat = result.scalars().first()
-    if not chat:
-        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+    chat = await get_valid_chat(chat_id, current_user, db)
 
     chat.is_deleted = True
     await db.commit()
@@ -255,17 +245,7 @@ async def create_message(
     Adds a new user or system message to the conversation,
     and optionally triggers an assistant response if role = 'user'.
     """
-    chat_query = await db.execute(
-        select(Chat)
-        .where(
-            Chat.id == chat_id,
-            Chat.user_id == current_user.id,
-            Chat.is_deleted.is_(False)
-        )
-    )
-    chat = chat_query.scalars().first()
-    if not chat:
-        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+    chat = await get_valid_chat(chat_id, current_user, db)
 
     message = Message(
         chat_id=chat_id,
@@ -395,36 +375,26 @@ async def handle_assistant_response(
     messages_query = await session.execute(select(Message).where(Message.chat_id == chat_id).order_by(Message.timestamp.asc()))
     messages = messages_query.scalars().all()
 
-    # Force role/content to str
-    message_dicts = [{"role": str(m.role), "content": str(m.content)} for m in messages]
-
-    # manage_context expects List[Dict[str, str]]
+    message_dicts = convert_messages_to_dicts(messages)
     message_dicts = manage_context(message_dicts)
 
     chat_query = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat_instance = chat_query.scalars().first()
-
     if chat_instance is None:
         await websocket.send_json({"error": "Chat not found"})
         return
 
-    # if chat_instance.model_id is not None, we do the request
     chosen_model = chat_instance.model_id or "o1"
 
     try:
-        # retrieve latest from DB again
         chat_instance = await session.get(Chat, chat_id)
         if chat_instance is None:
             await websocket.send_json({"error": "Chat not found after refresh"})
             return
 
-        # pass chosen_model as str
         openai_response = openai_chat(messages=message_dicts, model_name=chosen_model)
         assistant_content = openai_response["choices"][0]["message"]["content"]
-        assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
-        session.add(assistant_msg)
-        await session.commit()
-        await session.refresh(assistant_msg)
+        assistant_msg = await save_assistant_response(chat_id, assistant_content, session)
 
         await websocket.send_json({
             "id": assistant_msg.id,
