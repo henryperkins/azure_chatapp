@@ -27,7 +27,8 @@ def openai_chat(
     model_name: str = "o3-mini",
     max_completion_tokens: int = 500,
     reasoning_effort: Optional[str] = None,
-    image_data: Optional[str] = None  # now expects base64 string
+    image_data: Optional[str] = None,  # now expects base64 string
+    vision_detail: str = "auto"
 ) -> dict:
     """
     Calls Azure OpenAI's chat completion API. 
@@ -85,7 +86,7 @@ def openai_chat(
                     "type": "image_url",
                     "image_url": {
                         "url": f"data:image/jpeg;base64,{base64_str}",
-                        "detail": "auto"
+                        "detail": vision_detail
                     }
                 }
             ]

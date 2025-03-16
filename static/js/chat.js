@@ -107,8 +107,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const payload = {
       role: "user",
       content: userMsg,
-      image_data: visionImage || null
+      image_data: visionImage || null,
+      vision_detail: window.MODEL_CONFIG?.visionDetail || "auto"
     };
+
+    if (visionImage) {
+      const detailText = `Detail: ${window.MODEL_CONFIG?.visionDetail || "auto"}`;
+      const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
+      const lastUserDiv = msgDivs[msgDivs.length - 1];
+      if (lastUserDiv) {
+        const detailEl = document.createElement('div');
+        detailEl.className = 'text-xs text-gray-500 mt-1';
+        detailEl.textContent = detailText;
+        lastUserDiv.appendChild(detailEl);
+      }
+    }
 
     // Clear vision data after sending
     if (visionImage) {

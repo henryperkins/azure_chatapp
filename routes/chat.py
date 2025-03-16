@@ -65,6 +65,7 @@ class MessageCreate(BaseModel):
     content: str = Field(..., min_length=1, description="The text content of the user message")
     role: str = Field(default="user", description="The role: user, assistant, or system.", pattern=r"^(user|assistant|system)$")
     image_data: Optional[str] = None
+    vision_detail: Optional[str] = "auto"
 
 
 # -----------------------------
@@ -342,7 +343,8 @@ async def create_message(
             openai_response = openai_chat(
                 messages=message_dicts,
                 model_name="o1" if new_msg.image_data else chat.model_id,
-                image_data=new_msg.image_data
+                image_data=new_msg.image_data,
+                vision_detail=new_msg.vision_detail
             )
             assistant_content = openai_response["choices"][0]["message"]["content"]
             assistant_msg = Message(chat_id=chat_id, role="assistant", content=assistant_content)
