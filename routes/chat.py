@@ -400,17 +400,17 @@ async def websocket_chat_endpoint(
             while True:
                 data = await websocket.receive_text()
                 try:
-                data_dict = json.loads(data)
-                message = Message(
-                    chat_id=chat_id,
-                    role=data_dict['role'],
-                    content=data_dict['content'],
-                )
-                session.add(message)
-                await session.commit()
-                await session.refresh(message)
-                if message.role == "user":
-                    await handle_assistant_response(chat_id, session, websocket)
+                    data_dict = json.loads(data)
+                    message = Message(
+                        chat_id=chat_id,
+                        role=data_dict['role'],
+                        content=data_dict['content'],
+                    )
+                    session.add(message)
+                    await session.commit()
+                    await session.refresh(message)
+                    if message.role == "user":
+                        await handle_assistant_response(chat_id, session, websocket)
             except json.JSONDecodeError:
                 await websocket.send_json({"error": "Invalid JSON format"})
             except Exception as e:
