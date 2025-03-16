@@ -147,18 +147,16 @@
               </select>
             </div>
 
-            <!-- Reasoning Effort Toggle (conditional display for "o3-mini" & "o1") -->
-            <div class="flex items-center space-x-2 mt-2">
-              <input type="checkbox" id="reasoningToggle"
-                     class="w-4 h-4 border-gray-300 dark:border-gray-600 focus:ring-blue-500"
-                     disabled />
-              <label for="reasoningToggle"
-                     class="text-sm font-medium dark:text-gray-200 select-none">
-                Reasoning Effort (Only for "o3-mini"/"o1")
-              </label>
-            </div>
+            <!-- Reasoning Effort Slider UI (replaced checkbox) -->
+            <!-- The slider and its label are now created dynamically by modelConfig.js -->
+            <!-- This block is intentionally left blank to remove the old checkbox approach -->
 
             <!-- Vision Panel for "o1" (hidden by default) -->
+            <!-- Reasoning Effort Panel (for the slider) -->
+            <div id="reasoningPanel" class="col-span-1 md:col-span-2 bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2">
+              <!-- The slider is injected by modelConfig.js -->
+            </div>
+
             <div id="visionPanel" class="col-span-1 md:col-span-2 hidden">
               <label class="block font-medium dark:text-gray-200">Image Upload (o1 Vision)</label>
               <input type="file" accept="image/png,image/jpeg"
@@ -204,6 +202,9 @@
         <section id="chatUI"
                  class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
           <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Chat Interface</h2>
+          <div id="noChatSelectedMessage" class="text-center p-4 text-gray-500 hidden">
+            <p>No conversation selected. Click "New Chat" above or select a conversation from the sidebar.</p>
+          </div>
           <div class="flex items-center mb-2">
             <span id="chatTitle" class="font-medium mr-2">Chat Title</span>
             <button id="chatTitleEditBtn" class="text-sm text-blue-600 hover:underline dark:text-blue-400">Edit</button>
