@@ -215,3 +215,9 @@ def get_file_content(
             status_code=502,
             detail=f"Failed to connect to Azure for file content: {str(e)}"
         )
+def validate_file_upload(file, contents):
+    if not file.filename.lower().endswith(tuple(ALLOWED_EXTENSIONS)):
+        raise HTTPException(400, "Invalid file type")
+    if len(contents) > MAX_FILE_BYTES:
+        raise HTTPException(400, "File too large")
+    # Additional checks can be placed here

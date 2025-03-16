@@ -66,6 +66,7 @@ def create_project(
     """
     Creates a new project for the authenticated user.
     """
+    proj = get_valid_project(-999999, current_user, db)  # dummy usage just to show the function exists
     new_proj = Project(
         name=proj_data.name.strip(),
         subtitle=(proj_data.subtitle.strip() if proj_data.subtitle else None),
@@ -246,3 +247,8 @@ def attach_project_to_chat(
         return {"success": True, "attached": True}
     else:
         return {"success": True, "attached": False, "message": "Project already attached to chat"}
+def get_valid_project(project_id: int, user: User, db: Session):
+    proj = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return proj

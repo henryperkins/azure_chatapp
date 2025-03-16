@@ -47,15 +47,6 @@ class LoginResponse(BaseModel):
     token_type: str
 
 
-def get_db():
-    """
-    Dependency that provides a database session.
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def validate_password(password: str):
@@ -65,9 +56,9 @@ def validate_password(password: str):
         raise ValueError("Password must contain uppercase letters")
 
 @router.post("/register")
-def register_user(
+async def register_user(
     creds: UserCredentials,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Registers a new user with hashed password.
@@ -92,10 +83,10 @@ def register_user(
 
 
 @router.post("/login")
-def login_user(
+async def login_user(
     response: Response,
     creds: UserCredentials,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Authenticates the user and returns a JWT if valid.
