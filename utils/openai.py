@@ -22,12 +22,14 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
 API_VERSION = "2025-02-01-preview"
 
-def openai_chat(
+import httpx
+
+async def openai_chat(
     messages: List[Dict[str, str]],
     model_name: str = "o3-mini",
     max_completion_tokens: int = 500,
     reasoning_effort: Optional[str] = None,
-    image_data: Optional[str] = None,  # now expects base64 string
+    image_data: Optional[str] = None,
     vision_detail: str = "auto"
 ) -> dict:
     """
@@ -63,14 +65,10 @@ def openai_chat(
         model_name
     )
 
-    # reasoning_effort is only applicable for "o3-mini" or "o1"
     if reasoning_effort and model_name in ["o3-mini", "o1"]:
         payload["reasoning_effort"] = reasoning_effort
 
-    # If image_data is provided and model_name == "o1", handle GPT with Vision
-    # (Hypothetical approach — actual Azure GPT-with-vision usage may differ)
     if model_name == "o1" and image_data:
-        # Extract the base64 content from data URL
         if "base64," in image_data:
             base64_str = image_data.split("base64,")[1]
         else:
@@ -89,16 +87,16 @@ def openai_chat(
                 }
             ]
         }
-        # Preserve conversation history
         payload["messages"] = messages[:-1] + [vision_message]
         payload["max_completion_tokens"] = 1500
 
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
-        if response.status_code != 200:
-            logger.error(f"Azure OpenAI error: {response.status_code} => {response.text}")
-            raise ValueError(f"OpenAI request failed ({response.status_code}): {response.text}")
-        return response.json()
-    except requests.RequestException as e:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers, timeout=60)
+            if response.status_code != 200:
+                logger.error(f"Azure OpenAI error: {response.status_code} => {response.text}")
+                raise ValueError(f"OpenAI request failed ({response.status_code}): {response.text}")
+            return response.json()
+    except httpx.RequestError as e:
         logger.error(f"Error calling Azure OpenAI: {e}")
         raise RuntimeError(f"Unable to reach Azure OpenAI endpoint: {str(e)}")
