@@ -6,6 +6,7 @@ that can be attached to one or more chats for context.
 """
 
 from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, text, ForeignKey
+from models.chat_project import ChatProject
 from sqlalchemy.orm import relationship
 
 from db import Base

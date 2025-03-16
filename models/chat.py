@@ -9,6 +9,7 @@ Defines the Chat model, representing a conversation's metadata:
 """
 
 from sqlalchemy import Column, String, Integer, Boolean, TIMESTAMP, text, ForeignKey
+from models.chat_project import ChatProject
 from sqlalchemy.orm import relationship
 
 from db import Base
