@@ -52,7 +52,8 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password }),
+      credentials: "include"
     })
       .then(checkResponse)
       .then((data) => {
