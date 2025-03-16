@@ -59,10 +59,17 @@ setInterval(checkTokenExpiry, 5 * 60 * 1000);
       .then(checkResponse)
       .then((data) => {
         alert(data.message || "Registration successful!");
+        // auto-login immediately after registration
+        loginUser(username, password);
       })
       .catch((err) => {
         console.error("Registration error:", err);
-        alert("Failed to register. Check console for details.");
+        const msgString = err.message || "";
+        if (msgString.includes("Username already taken")) {
+          alert("Username is already taken. Please choose another.");
+        } else {
+          alert("Failed to register: " + msgString);
+        }
       });
   }
 
