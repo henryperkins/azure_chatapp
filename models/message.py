@@ -18,7 +18,7 @@ class Message(Base):
     chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     role = Column(String, nullable=False)        # "user", "assistant", "system"
     content = Column(Text, nullable=False)
-    metadata = Column(JSON(none_as_null=True), default=dict)  # Could store JSON metadata: {token_count, truncated, etc.}
+    message_metadata = Column(JSON(none_as_null=True), default=dict)
     timestamp = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     # Relationship back to Chat if you want direct ORM usage
@@ -28,9 +28,9 @@ class Message(Base):
         return f"<Message #{self.id} role={self.role}, chat_id={self.chat_id}>"
 
     def get_metadata_dict(self):
-        if self.metadata:
+        if self.message_metadata:
             try:
-                return json.loads(self.metadata)
+                return json.loads(self.message_metadata)
             except Exception:
                 pass
         return {}
