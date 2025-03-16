@@ -8,6 +8,7 @@ The FastAPI entrypoint for the Azure OpenAI Chat Application.
 """
 
 import logging
+from sqlalchemy import exc as sa_exc
 import os
 from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse
@@ -36,6 +37,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.dialects.postgresql').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.orm').setLevel(logging.WARNING)
 
 # Apply CORS Middleware
 app.add_middleware(
