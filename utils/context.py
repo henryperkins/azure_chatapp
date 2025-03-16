@@ -100,12 +100,12 @@ async def token_limit_check(chat_id: str, db):
     """
     # Retrieve all messages from DB
     from sqlalchemy import text
-    query = text(\"""
+    query = text("""
     SELECT role, content
     FROM messages
     WHERE chat_id=:chat_id
     ORDER BY timestamp ASC
-    \""")
+    """)
     result = await db.execute(query, {"chat_id": chat_id})
     rows = result.mappings().all()
     messages = [{"role": r["role"], "content": r["content"]} for r in rows]
