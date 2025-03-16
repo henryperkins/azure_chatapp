@@ -165,3 +165,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Expose showNotification globally if needed
   window.showNotification = showNotification;
 });
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    // Implement focus trapping logic
+  }
+});
