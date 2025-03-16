@@ -7,7 +7,7 @@ PyJWT
 pydantic
 requests
 chardet==5.2.0
-tiktoken==0.6.0
+tiktoken
 python-multipart
 python-jose[cryptography]
 aiofiles==23.2.1
