@@ -38,20 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Helper: get JWT from localStorage
-  function getAuthToken() {
-    return (localStorage.getItem("access_token") || "").trim();
-  }
 
   // Helper: create fetch headers
   function getHeaders() {
-    const token = getAuthToken().trim();
-    if (!token) {
-      return { "Content-Type": "application/json" };
-    }
-    return {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
-    };
+    return { "Content-Type": "application/json" };
   }
 
   // Load all user projects
