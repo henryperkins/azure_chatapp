@@ -90,7 +90,6 @@ async def create_conversation(
         model_id=conversation_data.model_id,
         is_deleted=False,
         created_at=datetime.now(),
-        updated_at=datetime.now(),
     )
     db.add(new_chat)
     await db.commit()
