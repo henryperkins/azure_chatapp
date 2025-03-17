@@ -1,6 +1,7 @@
 import logging
 import os
 import jwt
+from fastapi import WebSocket
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, Request
