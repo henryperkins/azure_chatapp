@@ -331,9 +331,25 @@ async def websocket_chat_endpoint(
     async with AsyncSessionLocal() as db:
         try:
             await websocket.accept()
-            from starlette.requests import Request
-            fake_request = Request(websocket.scope)
-            user = await get_current_user_and_token(fake_request)
+            token = websocket.query_params.get("token")
+            if not token:
+                await websocket.close(code=1008)
+                return
+
+            from utils.auth_deps import verify_token
+            decoded = verify_token(token)
+            username = decoded.get("sub")
+            if not username:
+                await websocket.close(code=1008)
+                return
+
+            from models.user import User
+            from sqlalchemy import select
+            result = await db.execute(select(User).where(User.username == username))
+            user = result.scalars().first()
+            if not user or not user.is_active:
+                await websocket.close(code=1008)
+                return
 
             chat = await get_valid_chat(chat_id, user, db)
 
