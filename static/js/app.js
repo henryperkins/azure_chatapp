@@ -45,185 +45,260 @@ document.addEventListener("DOMContentLoaded", () => {
     showNotification("Your session has expired. Please log in again.", "error");
     updateUserSessionState();
   });
-  
-  /**
-   * Load the user's conversation list, relying solely on cookie-based auth.
-   */
-  function loadConversationList() {
-    fetch('/api/chat/conversations', {
-      method: 'GET',
-      credentials: 'include'  // Ensure this is always present
-    })
-    .then(resp => {
-      if (!resp.ok) {
-        return resp.text().then((text) => {
-          throw new Error(`${resp.status}: ${text}`);
-        });
-      }
-      return resp.json();
-    })
-    .then((data) => {
-      const container = document.getElementById('sidebarConversations');
-      if (!container) return;
-      container.innerHTML = '';
-      if (data.conversations && data.conversations.length > 0) {
-        data.conversations.forEach((item) => {
-          const li = document.createElement('li');
-          li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
-          li.textContent = item.title || 'Conversation ' + item.id;
-          li.addEventListener('click', () => {
-            window.history.pushState({}, '', `/?chatId=${item.id}`);
-            // Show chat UI and hide "no chat" message
-            document.getElementById("chatUI").classList.remove("hidden");
-            document.getElementById("noChatSelectedMessage").classList.add("hidden");
-            // Update chat title and load messages
-            document.getElementById("chatTitle").textContent = item.title;
-            window.loadConversation(item.id);
-          });
-          container.appendChild(li);
-        });
-      } else {
-        const li = document.createElement('li');
-        li.className = 'text-gray-500';
-        li.textContent = 'No conversations yet—Begin now!';
-        container.appendChild(li);
-      }
-    })
-    .catch((err) => {
-      console.error('Error loading conversation list:', err);
-    });
-  }
-  
+
   // Automatically load the conversation list if the element is present
   if (document.getElementById('sidebarConversations')) {
     loadConversationList();
   }
 
-  // -----------------------------
-  // Functions
-  // -----------------------------
-
-  function updateUserSessionState() {
-    const authStatus = document.getElementById("authStatus");
-    fetch("/api/auth/verify", {
-      credentials: 'include'
-    })
-    .then(resp => {
-      if(resp.ok) {
-        if(authStatus) {
-          authStatus.textContent = "Authenticated";
-          authStatus.classList.remove("text-red-600");
-          authStatus.classList.add("text-green-600");
-        }
-      } else {
-        if(authStatus) {
-          authStatus.textContent = "Not Authenticated";
-          authStatus.classList.remove("text-green-600");
-          authStatus.classList.add("text-red-600");
-        }
-      }
-    })
-    .catch(err => console.error("Auth check failed:", err));
-  }
-
-  /**
-   * Toggles the main sidebar for mobile or small screens.
-   */
-  function toggleSidebar() {
-    // Typical approach: toggling a 'hidden' or 'translate-x-full' class for Tailwind
-    sidebarEl.classList.toggle("hidden");
-  }
-
-  /**
-   * Adapts layout for mobile or desktop on window resize.
-   */
-  function handleWindowResize() {
-    if (window.innerWidth < 768) {
-      // On mobile breakpoints, automatically hide the sidebar if it’s visible
-      if (sidebarEl && !sidebarEl.classList.contains("hidden")) {
-        sidebarEl.classList.add("hidden");
-      }
-    }
-  }
-
-  /**
-   * Sets up keyboard shortcuts for improved accessibility:
-   *  - Ctrl/Cmd + R => Ask chat.js to regenerate the last message
-   *  - Ctrl/Cmd + C => Copy the last assistant message or selected text
-   */
-  function setupGlobalKeyboardShortcuts() {
-    document.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        // Regenerate
-        if (e.key.toLowerCase() === "r") {
-          e.preventDefault();
-          // Dispatch a custom event "regenerateChat"
-          document.dispatchEvent(new CustomEvent("regenerateChat"));
-        }
-        // Copy
-        if (e.key.toLowerCase() === "c") {
-          e.preventDefault();
-          document.dispatchEvent(new CustomEvent("copyMessage"));
-        }
-      }
-    });
-  }
-
-  /**
-   * Displays ephemeral notifications (toasts) in the notificationArea.
-   * @param {String} msg - The message to display
-   * @param {String} type - "success", "error", or "info"
-   */
-  function showNotification(msg, type = "info") {
-    if (!notificationArea) {
-      console.warn("No notificationArea found in DOM.");
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add(
-      "mb-2",
-      "px-4",
-      "py-2",
-      "rounded",
-      "shadow",
-      "text-white",
-      "transition-opacity",
-      "opacity-0"
-    );
-
-    switch (type) {
-      case "success":
-        toast.classList.add("bg-green-600");
-        break;
-      case "error":
-        toast.classList.add("bg-red-600");
-        break;
-      default:
-        toast.classList.add("bg-gray-700");
-    }
-    toast.textContent = msg;
-
-    notificationArea.appendChild(toast);
-
-    // Fade in
-    requestAnimationFrame(() => {
-      toast.classList.remove("opacity-0");
-    });
-
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-      toast.classList.add("opacity-0");
-      setTimeout(() => {
-        toast.remove();
-      }, 500);
-    }, 3000);
-  }
-
-  // Expose showNotification globally if needed
-  window.showNotification = showNotification;
-  window.loadConversationList = loadConversationList;
+  // Call the improved authentication function after existing setup
+  checkAndHandleAuth();
 });
 
+/**
+ * Load the user's conversation list, relying solely on cookie-based auth.
+ */
+function loadConversationList() {
+  fetch('/api/chat/conversations', {
+    method: 'GET',
+    credentials: 'include'  // Ensure this is always present
+  })
+  .then(resp => {
+    if (!resp.ok) {
+      return resp.text().then((text) => {
+        throw new Error(`${resp.status}: ${text}`);
+      });
+    }
+    return resp.json();
+  })
+  .then((data) => {
+    const container = document.getElementById('sidebarConversations');
+    if (!container) return;
+    container.innerHTML = '';
+    if (data.conversations && data.conversations.length > 0) {
+      data.conversations.forEach((item) => {
+        const li = document.createElement('li');
+        li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
+        li.textContent = item.title || 'Conversation ' + item.id;
+        li.addEventListener('click', () => {
+          window.history.pushState({}, '', `/?chatId=${item.id}`);
+          // Show chat UI and hide "no chat" message
+          const chatUI = document.getElementById("chatUI");
+          const noChatMsg = document.getElementById("noChatSelectedMessage");
+          if (chatUI) chatUI.classList.remove("hidden");
+          if (noChatMsg) noChatMsg.classList.add("hidden");
+          // Update chat title and load messages
+          const chatTitleEl = document.getElementById("chatTitle");
+          if (chatTitleEl) chatTitleEl.textContent = item.title;
+          if (typeof window.loadConversation === 'function') {
+            window.loadConversation(item.id);
+          }
+        });
+        container.appendChild(li);
+      });
+    } else {
+      const li = document.createElement('li');
+      li.className = 'text-gray-500';
+      li.textContent = 'No conversations yet—Begin now!';
+      container.appendChild(li);
+    }
+  })
+  .catch((err) => {
+    console.error('Error loading conversation list:', err);
+  });
+}
+
+// ---------------------------------------------------------------------
+// Improved authentication handling (updated)
+// ---------------------------------------------------------------------
+function checkAndHandleAuth() {
+  fetch("/api/auth/verify", {
+    credentials: 'include'
+  })
+  .then(resp => {
+    if (resp.ok) {
+      // User is authenticated - load data
+      loadConversationList();
+      if (window.CHAT_CONFIG?.chatId) {
+        if (typeof window.loadConversation === 'function') {
+          window.loadConversation(window.CHAT_CONFIG.chatId);
+        }
+      }
+      document.getElementById("userMenu")?.classList.remove("hidden");
+      document.getElementById("authButton")?.classList.add("hidden");
+      
+      // Show chat UI if a chat is selected
+      if (window.CHAT_CONFIG?.chatId) {
+        document.getElementById("chatUI")?.classList.remove("hidden");
+        document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
+      }
+
+      // Hide login required message (if any)
+      const loginRequiredMessage = document.getElementById("loginRequiredMessage");
+      if (loginRequiredMessage) {
+        loginRequiredMessage.classList.add("hidden");
+      }
+    } else {
+      // User is not authenticated - show login dialog
+      document.getElementById("userMenu")?.classList.add("hidden");
+      document.getElementById("authButton")?.classList.remove("hidden");
+      
+      // Show a notification that login is required
+      if (window.showNotification) {
+        window.showNotification("Please log in to use the application", "info");
+      }
+
+      // Show login required message
+      const loginRequiredMessage = document.getElementById("loginRequiredMessage");
+      if (loginRequiredMessage) {
+        loginRequiredMessage.classList.remove("hidden");
+      }
+
+      // Hide content that requires authentication
+      document.getElementById("chatUI")?.classList.add("hidden");
+      document.getElementById("projectManagerPanel")?.classList.add("hidden");
+      document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
+    }
+  })
+  .catch(err => console.error("Auth check failed:", err));
+
+  // Add event listener for the login button
+  const showLoginBtn = document.getElementById("showLoginBtn");
+  if (showLoginBtn) {
+    showLoginBtn.addEventListener("click", () => {
+      document.getElementById("authButton")?.click();
+    });
+  }
+}
+// ---------------------------------------------------------------------
+
+function updateUserSessionState() {
+  const authStatus = document.getElementById("authStatus");
+  fetch("/api/auth/verify", {
+    credentials: 'include'
+  })
+  .then(resp => {
+    if(resp.ok) {
+      if(authStatus) {
+        authStatus.textContent = "Authenticated";
+        authStatus.classList.remove("text-red-600");
+        authStatus.classList.add("text-green-600");
+      }
+    } else {
+      if(authStatus) {
+        authStatus.textContent = "Not Authenticated";
+        authStatus.classList.remove("text-green-600");
+        authStatus.classList.add("text-red-600");
+      }
+    }
+  })
+  .catch(err => console.error("Auth check failed:", err));
+}
+
+/**
+ * Toggles the main sidebar for mobile or small screens.
+ */
+function toggleSidebar() {
+  const sidebarEl = document.getElementById("mainSidebar");
+  if (sidebarEl) {
+    sidebarEl.classList.toggle("hidden");
+  }
+}
+
+/**
+ * Adapts layout for mobile or desktop on window resize.
+ */
+function handleWindowResize() {
+  const sidebarEl = document.getElementById("mainSidebar");
+  if (!sidebarEl) return;
+  if (window.innerWidth < 768) {
+    // On mobile breakpoints, automatically hide the sidebar if it’s visible
+    if (!sidebarEl.classList.contains("hidden")) {
+      sidebarEl.classList.add("hidden");
+    }
+  }
+}
+
+/**
+ * Sets up keyboard shortcuts for improved accessibility:
+ *  - Ctrl/Cmd + R => Ask chat.js to regenerate the last message
+ *  - Ctrl/Cmd + C => Copy the last assistant message or selected text
+ */
+function setupGlobalKeyboardShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      // Regenerate
+      if (e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        // Dispatch a custom event "regenerateChat"
+        document.dispatchEvent(new CustomEvent("regenerateChat"));
+      }
+      // Copy
+      if (e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent("copyMessage"));
+      }
+    }
+  });
+}
+
+/**
+ * Displays ephemeral notifications (toasts) in the notificationArea.
+ * @param {String} msg - The message to display
+ * @param {String} type - "success", "error", or "info"
+ */
+function showNotification(msg, type = "info") {
+  const notificationArea = document.getElementById("notificationArea");
+  if (!notificationArea) {
+    console.warn("No notificationArea found in DOM.");
+    return;
+  }
+  const toast = document.createElement("div");
+  toast.classList.add(
+    "mb-2",
+    "px-4",
+    "py-2",
+    "rounded",
+    "shadow",
+    "text-white",
+    "transition-opacity",
+    "opacity-0"
+  );
+
+  switch (type) {
+    case "success":
+      toast.classList.add("bg-green-600");
+      break;
+    case "error":
+      toast.classList.add("bg-red-600");
+      break;
+    default:
+      toast.classList.add("bg-gray-700");
+  }
+  toast.textContent = msg;
+
+  notificationArea.appendChild(toast);
+
+  // Fade in
+  requestAnimationFrame(() => {
+    toast.classList.remove("opacity-0");
+  });
+
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.add("opacity-0");
+    setTimeout(() => {
+      toast.remove();
+    }, 500);
+  }, 3000);
+}
+
+// Expose showNotification globally if needed
+window.showNotification = showNotification;
+
+/**
+ * Listen to authStateChanged for UI updates
+ */
 document.addEventListener("authStateChanged", (e) => {
   const authStatus = document.getElementById("authStatus");
   const authButton = document.getElementById("authButton");
@@ -244,7 +319,9 @@ document.addEventListener("authStateChanged", (e) => {
     // Load user data
     loadConversationList();
     if (window.CHAT_CONFIG?.chatId) {
-      loadConversation(window.CHAT_CONFIG.chatId);
+      if (typeof window.loadConversation === "function") {
+        window.loadConversation(window.CHAT_CONFIG.chatId);
+      }
     }
   } else {
     // Update UI for unauthenticated user
@@ -261,20 +338,24 @@ document.addEventListener("authStateChanged", (e) => {
     if (conversationArea) conversationArea.innerHTML = "";
   }
 });
+
 window.addEventListener('popstate', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
   if (chatId) {
-    document.getElementById("chatUI").classList.remove("hidden");
-    window.loadConversation(chatId);
+    document.getElementById("chatUI")?.classList.remove("hidden");
+    if (typeof window.loadConversation === 'function') {
+      window.loadConversation(chatId);
+    }
+    document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
   } else {
-    document.getElementById("chatUI").classList.add("hidden");
-    document.getElementById("noChatSelectedMessage").classList.remove("hidden");
+    document.getElementById("chatUI")?.classList.add("hidden");
+    document.getElementById("noChatSelectedMessage")?.classList.remove("hidden");
   }
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
-    // Implement focus trapping logic
+    // Implement focus trapping logic if needed
   }
 });

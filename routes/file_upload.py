@@ -21,7 +21,6 @@ import chardet
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import httpx
-import requests
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,7 +72,7 @@ async def upload_file(
     Returns relevant file info from Azure.
     """
     # Basic local validation
-    if not file.filename.lower().endswith(tuple(ALLOWED_EXTENSIONS)):
+    if not file.filename or not file.filename.lower().endswith(tuple(ALLOWED_EXTENSIONS)):
         raise HTTPException(
             status_code=400,
             detail="Only .txt files allowed."
@@ -122,7 +121,6 @@ async def upload_file(
     }
 
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
             multipart_resp = await client.post(endpoint_url, headers=headers, files=form_data, timeout=60)
         if multipart_resp.status_code != 201:

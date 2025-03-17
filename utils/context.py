@@ -10,12 +10,11 @@ Includes:
 
 This code is production-ready, with no placeholders.
 """
-
 import logging
-from typing import List, Dict
 import tiktoken
-
+from typing import List, Dict
 from .openai import openai_chat
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 CONVERSATION_TOKEN_LIMIT = 3000
 SUMMARIZATION_CHUNK_SIZE = 1800  # Adjust as needed
 
-def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> str:
+async def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> str:
     """
     Summarizes a list of conversation messages. This function calls openai_chat
     with a 'system' prompt instructing the model to produce a concise summary.
@@ -32,8 +31,6 @@ def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> 
     :param model_name: The Azure OpenAI model to use (e.g. "o1", "o3-mini", etc.).
     :return: A summarized string representing the conversation so far.
     """
-
-    # Prepare a system prompt to instruct summarization
     system_prompt = {
         "role": "developer",
         "content": (
@@ -42,12 +39,11 @@ def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> 
         )
     }
 
-    # Merge the system prompt with original messages
     summarization_input = [system_prompt] + messages
 
-    # Call openai_chat with a smaller max token limit to ensure the summary remains concise
     try:
-        result = openai_chat(
+        # Using 'await' because openai_chat is expected to be async
+        result = await openai_chat(
             messages=summarization_input,
             model_name=model_name,
             max_completion_tokens=300,
@@ -59,7 +55,7 @@ def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> 
         logger.error(f"Error during summarization: {e}")
         return "Summary not available due to error."
 
-def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+async def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
     Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
     This modifies the conversation in-place by replacing older messages with a single summary if needed.
@@ -67,24 +63,21 @@ def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     :param messages: List of messages in chronological order.
     :return: Potentially reduced list of messages, with older parts summarized if necessary.
     """
-
     total_tokens = estimate_token_count(messages)
     if total_tokens <= CONVERSATION_TOKEN_LIMIT:
         return messages
 
-    # Identify a chunk of older messages to summarize
-    # We'll do a basic approach: summarize the first half or so
     half_idx = len(messages) // 2
     partial_msgs = messages[:half_idx]
 
-    # Summarize them
-    summary_text = do_summarization(partial_msgs, model_name="o1")  # or "o3-mini", or dynamic
+    # Summarize them using async summarization
+    summary_text = await do_summarization(partial_msgs, model_name="o1")
+
     summary_system_msg = {
         "role": "system",
         "content": f"[Conversation so far summarized]: {summary_text}"
     }
 
-    # Remainder of messages
     remainder = messages[half_idx:]
     new_conversation = [summary_system_msg] + remainder
     logger.info("Conversation was too large; older messages summarized.")
@@ -92,14 +85,12 @@ def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 async def token_limit_check(chat_id: str, db):
     """
-    Example helper to be called after inserting a new message in the DB. 
+    Example helper to be called after inserting a new message in the DB.
     Retrieves messages, checks token usage, triggers summarization if needed.
 
     :param chat_id: The ID of the chat we just updated.
     :param db: The database session or context for retrieving messages.
     """
-    # Retrieve all messages from DB
-    from sqlalchemy import text
     query = text("""
     SELECT role, content
     FROM messages
@@ -112,10 +103,8 @@ async def token_limit_check(chat_id: str, db):
 
     total_tokens = estimate_token_count(messages)
     if total_tokens > CONVERSATION_TOKEN_LIMIT:
-        # Summarize older portion, then store the summary
-        reduced = manage_context(messages)
-        # Replace older messages in DB - advanced logic needed to remove or mark them
-        # For demonstration, we won't rewrite the DB in detail here
+        reduced = await manage_context(messages)
+        # Replace older messages in DB or handle them as needed
         logger.info(f"Summarization triggered for chat_id={chat_id}, tokens={total_tokens}")
     else:
         logger.debug(f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}")
