@@ -14,11 +14,19 @@ from db import Base
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    subtitle = Column(String, nullable=True)
-    description = Column(Text, nullable=True)
-    notes = Column(Text, nullable=True)
+    from sqlalchemy.dialects.postgresql import UUID
+    import uuid
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(200))
+    goals = Column(Text)
+    token_usage = Column(Integer, default=0)
+    max_tokens = Column(Integer, default=200000)
+    custom_instructions = Column(Text)
+    archived = Column(Boolean, default=False)
+    pinned = Column(Boolean, default=False)
+    version = Column(Integer, default=1)
+    knowledge_base_id = Column(String)
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
