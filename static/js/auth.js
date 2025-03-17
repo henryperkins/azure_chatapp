@@ -81,6 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
     })
     .then(checkResponse)
     .then(data => {
+        // We rely solely on the HttpOnly cookie now; remove localStorage usage
         updateAuthStatus();
         document.dispatchEvent(new CustomEvent("authStateChanged", {
             detail: { authenticated: true }
@@ -94,36 +95,28 @@ document.addEventListener("DOMContentLoaded", () => {
   
   
   async function updateAuthStatus() {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      // Show login UI
-      return;
-    }
-
-    try {
-      const resp = await fetch("/api/auth/verify", {
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
-        credentials: "include"
-      });
-      
-      if (resp.ok) {
-        // User is authenticated
-      } else {
-        // Handle expired/invalid token
+      // We rely on the HttpOnly cookie for authorization
+      // Show login UI or fetch user state as needed
+      try {
+          const resp = await fetch("/api/auth/verify", {
+              credentials: "include"
+          });
+          if (resp.ok) {
+              // User is authenticated
+          } else {
+              // Possibly expired or invalid
+          }
+      } catch (err) {
+          console.error("Auth check failed:", err);
       }
-    } catch (err) {
-      console.error("Auth check failed:", err);
-    }
   }
-
+  
   function checkResponse(resp) {
-    if (!resp.ok) {
-      return resp.text().then((text) => {
-        throw new Error(`${resp.status} - ${text}`);
-      });
-    }
-    return resp.json();
+      if (!resp.ok) {
+          return resp.text().then((text) => {
+              throw new Error(`${resp.status} - ${text}`);
+          });
+      }
+      return resp.json();
   }
 });

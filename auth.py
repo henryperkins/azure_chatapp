@@ -28,10 +28,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # JWT Configuration
-JWT_SECRET = os.getenv("JWT_SECRET", "")
-if not JWT_SECRET:
-    logger.warning("Using default JWT secret - insecure for production!")
-# Replace with a secure random key in production
+from typing import cast
+
+# Explicitly typing JWT_SECRET as str to satisfy Pylance
+JWT_SECRET = cast(str, os.getenv("JWT_SECRET"))
+if not JWT_SECRET or JWT_SECRET.strip() == "":
+    raise SystemExit("Error: JWT_SECRET is not set. Please configure a proper secret before running.")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour expiry note
 
@@ -136,12 +138,13 @@ async def login_user(
 
     logger.info(f"User '{user.username}' logged in successfully.")
     secure_cookie = os.getenv("ENV") == "production"
+    # Strengthen cookie security (e.g., samesite=Strict)
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
         secure=secure_cookie,
-        samesite="Lax",
+        samesite="strict",
         max_age=3600
     )
     return {
