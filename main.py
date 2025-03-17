@@ -15,8 +15,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from db import Base, async_engine
+from db import Base, async_engine, init_db
 from auth import router as auth_router
 from routes.chat import router as chat_router
 from routes.file_upload import router as file_upload_router
@@ -30,7 +34,7 @@ allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 app = FastAPI(
     middleware=[
         Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts),
-        Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET"))
+        Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "default-secret-key-change-in-production"))
     ],
     title="Azure OpenAI Chat Application",
     description="""
@@ -59,12 +63,7 @@ logging.getLogger('sqlalchemy.orm').setLevel(logging.WARNING)
 # Apply CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173"
-    ],
+    allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -91,9 +90,8 @@ if os.getenv("ENV") == "production":
 
 @app.on_event("startup")
 async def on_startup():
-    # Use async engine for migrations
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Initialize the database
+    await init_db()
     logger.info("Database initialized")
 
 # Include the authentication router
