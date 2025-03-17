@@ -16,7 +16,7 @@ Production-ready structure with no placeholders.
 import logging
 import json
 from typing import Optional
-from uuid import uuid4
+from uuid import uuid4, UUID
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query
@@ -48,6 +48,7 @@ class ConversationCreate(BaseModel):
     """
     title: str = Field(..., min_length=1, max_length=100, description="A user-friendly title for the new conversation")
     model_id: Optional[str] = Field(None, description="Optional model ID referencing the chosen model deployment")
+    project_id: Optional[UUID] = None
 
 
 class ConversationUpdate(BaseModel):
@@ -91,6 +92,12 @@ async def create_conversation(
         is_deleted=False,
         created_at=datetime.now(),
     )
+    if conversation_data.project_id:
+        project = await db.get(Project, conversation_data.project_id)
+        if not project or project.user_id != current_user.id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid project")
+        new_chat.projects.append(project)
+
     db.add(new_chat)
     await db.commit()
     await db.refresh(new_chat)
@@ -457,3 +464,26 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     timestamp: datetime
+@router.get("/conversations/standalone", response_model=dict)
+async def get_standalone_conversations(
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    result = await db.execute(
+        select(Chat)
+        .where(
+            Chat.user_id == current_user.id,
+            Chat.is_deleted.is_(False),
+            ~Chat.projects.any()  # No project associations
+        )
+    )
+    chats = result.scalars().all()
+    items = [
+        {
+            "id": chat.id,
+            "title": chat.title,
+            "model_id": chat.model_id,
+            "created_at": chat.created_at
+        } for chat in chats
+    ]
+    return {"conversations": items}

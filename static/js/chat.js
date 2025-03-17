@@ -358,13 +358,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function createNewChat() {
+    const projectSelectEl = document.getElementById('projectSelect');
     fetch("/api/chat/conversations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       credentials: "include",
-      body: JSON.stringify({ title: "New Chat" })
+      body: JSON.stringify({
+        title: "New Chat",
+        project_id: projectSelectEl ? projectSelectEl.value : null
+      })
     })
     .then(response => {
       if (!response.ok) {
