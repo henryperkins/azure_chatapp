@@ -147,19 +147,42 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function loadConversation(chatId) {
+    // Clear previous messages
+    const conversationArea = document.getElementById("conversationArea");
+    if (conversationArea) conversationArea.innerHTML = "";
+
+    // Update the global chat ID
+    window.CHAT_CONFIG = { chatId };
+
+    // Show loading state
+    conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
+
     fetch(`/api/chat/conversations/${chatId}/messages`, {
       method: "GET",
       headers: getHeaders(),
-      credentials: "include"  // Add this line
+      credentials: "include"
     })
-      .then(checkResponse)
-      .then((data) => {
-        if (!data.messages) return;
+    .then(checkResponse)
+    .then((data) => {
+      conversationArea.innerHTML = "";
+      if (data.messages && data.messages.length > 0) {
         data.messages.forEach((msg) => {
           appendMessage(msg.role, msg.content);
         });
-      })
-      .catch((err) => console.error("Error loading conversation:", err));
+      } else {
+        appendMessage('system', 'No messages in this conversation yet');
+      }
+
+      // Update chat title
+      const chatTitleEl = document.getElementById("chatTitle");
+      if (chatTitleEl) {
+        chatTitleEl.textContent = data.metadata?.title || "New Chat";
+      }
+    })
+    .catch((err) => {
+      console.error("Error loading conversation:", err);
+      conversationArea.innerHTML = '<div class="text-center text-red-500">Error loading conversation</div>';
+    });
   }
 
   function sendMessage(chatId, userMsg) {
@@ -317,3 +340,4 @@ document.addEventListener("DOMContentLoaded", () => {
     return resp.json();
   }
 });
+window.loadConversation = loadConversation;
