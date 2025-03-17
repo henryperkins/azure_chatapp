@@ -11,15 +11,16 @@ Includes:
 This code is production-ready, with no placeholders.
 """
 
-import os
 import requests
 import logging
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
+from config import settings
+
+AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
+AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
 API_VERSION = "2025-02-01-preview"
 
 import httpx
@@ -48,14 +49,15 @@ async def openai_chat(
     :return: The JSON response from Azure if successful, or raises an HTTPException otherwise.
     """
 
-    if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY:
-        logger.error("Azure OpenAI endpoint or key is not configured.")
+    logger.debug(f"Loaded Azure OpenAI endpoint: '{AZURE_OPENAI_ENDPOINT}', key length: {len(AZURE_OPENAI_API_KEY)}")
+    if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_API_KEY:
+        logger.error("Azure OpenAI endpoint or key is empty or missing.")
         raise ValueError("Azure OpenAI credentials not configured")
 
     url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
     headers = {
         "Content-Type": "application/json",
-        "api-key": AZURE_OPENAI_KEY
+        "api-key": AZURE_OPENAI_API_KEY
     }
 
     payload = {

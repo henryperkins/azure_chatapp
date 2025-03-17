@@ -15,12 +15,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load environment variables
-from dotenv import load_dotenv
+# Ensure Python recognizes config.py as a module
+import sys
 from pathlib import Path
-
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path, override=True)
+sys.path.append(str(Path(__file__).resolve().parent))
+from config import settings
 
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from db import Base, async_engine, init_db
@@ -33,11 +32,11 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 
-allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+allowed_hosts = settings.ALLOWED_HOSTS
 app = FastAPI(
     middleware=[
         Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts),
-        Middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "default-secret-key-change-in-production"))
+        Middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
     ],
     title="Azure OpenAI Chat Application",
     description="""
@@ -49,7 +48,7 @@ file uploads, and more.
     version="1.0.0"
 )
 
-if os.getenv("ENV") == "production":
+if settings.ENV == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -82,7 +81,7 @@ async def root():
 async def index():
     return FileResponse("static/index.html")
 
-if os.getenv("ENV") == "production":
+if settings.ENV == "production":
     @app.middleware("http")
     async def force_https(request, call_next):
         response = await call_next(request)

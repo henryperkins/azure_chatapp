@@ -25,17 +25,18 @@ SessionLocal = sessionmaker(
 
 Base = declarative_base()
 
+from contextlib import asynccontextmanager
 
 async def get_async_session():
     """
     Provides an asynchronous SQLAlchemy session for database operations.
+    This function is intended to be used as a dependency in FastAPI.
 
     Yields:
         AsyncSession: The SQLAlchemy AsyncSession object.
     """
     async with AsyncSessionLocal() as session:
         yield session
-
 
 async def init_db():
     """
