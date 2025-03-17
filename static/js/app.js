@@ -216,6 +216,19 @@ document.addEventListener("DOMContentLoaded", () => {
   window.showNotification = showNotification;
 });
 
+document.addEventListener("authStateChanged", (e) => {
+    const authStatus = document.getElementById("authStatus");
+    if (e.detail.authenticated) {
+        authStatus.textContent = "Authenticated";
+        authStatus.classList.remove("text-red-600");
+        authStatus.classList.add("text-green-600");
+        loadConversationList(); // Refresh protected content
+    } else {
+        authStatus.textContent = "Not Authenticated";
+        authStatus.classList.remove("text-green-600");
+        authStatus.classList.add("text-red-600");
+    }
+});
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     // Implement focus trapping logic
