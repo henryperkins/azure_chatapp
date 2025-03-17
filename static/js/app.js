@@ -47,25 +47,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   
   /**
-   * Load the user's conversation list only if a valid access token is present.
+   * Load the user's conversation list, relying solely on cookie-based auth.
    */
   function loadConversationList() {
-    const token = localStorage.getItem('access_token') || '';
-  
-    // Only attempt to load conversations if we have a token
-    if (!token.trim()) {
-      // Quietly handle the case when not logged in
-      console.log("Not attempting to load conversations - user not logged in");
-      return;
-    }
-    const authHeader = `Bearer ${token.trim()}`;
-    console.log("Authorization header being sent:", authHeader);
     fetch('/api/chat/conversations', {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token.trim()}`,
-        'Content-Type': 'application/json'
-      },
       credentials: 'include'
     })
     .then(resp => {
