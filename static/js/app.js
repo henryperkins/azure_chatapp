@@ -72,8 +72,10 @@ document.addEventListener("DOMContentLoaded", () => {
           li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
           li.textContent = item.title || 'Conversation ' + item.id;
           li.addEventListener('click', () => {
-            // Navigate to the chat page for that conversation
-            window.location.search = 'chatId=' + item.id;
+            // Clear existing chat UI and load new conversation
+            window.location.search = `chatId=${item.id}`;
+            document.getElementById("conversationArea").innerHTML = "";
+            loadConversation(item.id);
           });
           container.appendChild(li);
         });
@@ -255,6 +257,14 @@ document.addEventListener("authStateChanged", (e) => {
     if (conversationArea) conversationArea.innerHTML = "";
   }
 });
+window.addEventListener('popstate', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const chatId = urlParams.get('chatId');
+  if (chatId) {
+    loadConversation(chatId);
+  }
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     // Implement focus trapping logic
