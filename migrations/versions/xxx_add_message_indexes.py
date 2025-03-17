@@ -3,7 +3,7 @@ import sqlalchemy as sa
 
 # These identifiers must be explicitly set
 revision = '57a4c1e6a22a'  # Random unique hash - generate a new one for your file
-down_revision = 'a23456789012'  # REPLACE WITH ACTUAL PREVIOUS MIGRATION HASH
+down_revision = 'YOUR_ACTUAL_PREVIOUS_REVISION_HASH'  # Get this from alembic history
 branch_labels = None
 depends_on = None
 
