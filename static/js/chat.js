@@ -183,7 +183,9 @@ document.addEventListener("DOMContentLoaded", () => {
       content: userMsg,
       model_id: modelName,
       image_data: visionImage || null,
-      vision_detail: window.MODEL_CONFIG?.visionDetail || "auto"
+      vision_detail: window.MODEL_CONFIG?.visionDetail || "auto",
+      max_completion_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
+      reasoning_effort: window.MODEL_CONFIG?.reasoningEffort || "low"
     };
 
     if (visionImage) {
