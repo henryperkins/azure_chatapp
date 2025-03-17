@@ -17,7 +17,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 from dotenv import load_dotenv
-load_dotenv()
+from pathlib import Path
+
+# load_dotenv() # comentado
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from db import Base, async_engine, init_db
