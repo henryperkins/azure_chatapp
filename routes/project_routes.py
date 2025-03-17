@@ -1,32 +1,24 @@
 """
 project_routes.py
 -----------------
-Provides routes for handling Projects within the Azure OpenAI Chat Application.
-
-Includes:
-  - Creating a project owned by the user.
-  - Listing all user's projects.
-  - Retrieving, updating, deleting a project.
-  - Optionally attaching a project to a chat (for contextual usage).
-  - Uploading project-specific files if needed.
-
-All calls enforce JWT-based auth and checks user ownership of each project.
+Enhanced project routes with UUIDs, token tracking, and advanced features.
 """
 
 import logging
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from uuid import UUID
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from pydantic import BaseModel, Field, conint
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import update, and_
 
 from db import get_async_session
 from models.user import User
 from models.project import Project
-from models.chat import Chat
-from models.chat_project import ChatProject
-from sqlalchemy.future import select
+from models.project_file import ProjectFile
 from utils.auth_deps import get_current_user_and_token
+from utils.azure import AzureStorage, CognitiveSearch  # Assume these exist
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,16 +29,29 @@ router = APIRouter()
 # -----------------------------
 
 class ProjectCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=150, description="Project name")
-    subtitle: Optional[str] = Field(None, max_length=150)
-    description: Optional[str] = None
-    notes: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=200)
+    goals: Optional[str] = Field(None, max_length=1000)
+    custom_instructions: Optional[str] = Field(None, max_length=5000)
+    max_tokens: conint(ge=50000, le=500000) = 200000  # 50k-500k range
 
 class ProjectUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=150)
-    subtitle: Optional[str] = Field(None, max_length=150)
-    description: Optional[str] = None
-    notes: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    goals: Optional[str] = Field(None, max_length=1000)
+    custom_instructions: Optional[str] = Field(None, max_length=5000)
+    max_tokens: Optional[conint(ge=50000, le=500000)]
+
+class ProjectResponse(BaseModel):
+    id: UUID
+    name: str
+    goals: Optional[str]
+    token_usage: int
+    max_tokens: int
+    custom_instructions: Optional[str]
+    archived: bool
+    pinned: bool
+    version: int
+    knowledge_base_id: Optional[str]
+    created_at: str
 
 # -----------------------------
 # Project Routes
