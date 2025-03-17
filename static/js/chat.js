@@ -103,6 +103,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       // Also load the new conversation
       loadConversation(data.conversation_id);
+
+      // Muestra la interfaz de chat y oculta el mensaje de "no chat"
+      const chatUI = document.getElementById("chatUI");
+      const noChatMsg = document.getElementById("noChatSelectedMessage");
+      if (chatUI) chatUI.classList.remove("hidden");
+      if (noChatMsg) noChatMsg.classList.add("hidden");
     })
     .catch(err => {
       console.error("Error creating new chat:", err);
