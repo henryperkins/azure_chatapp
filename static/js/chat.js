@@ -87,6 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ...getAuthHeaders(),
         "Content-Type": "application/json"
       },
+      credentials: "include",
       body: JSON.stringify({ title: "New Chat" })
     })
       .then(checkResponse)
