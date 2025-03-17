@@ -9,6 +9,7 @@ from sqlalchemy import select
 from models.user import User
 from db import get_async_session
 from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "")
