@@ -84,20 +84,27 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("/api/chat/conversations", {
       method: "POST",
       headers: {
-        ...getAuthHeaders(),
         "Content-Type": "application/json"
       },
       credentials: "include",
       body: JSON.stringify({ title: "New Chat" })
     })
-      .then(checkResponse)
-      .then(data => {
-        if (data.id) {
-          // Navigate to new chat conversation
-          window.location.href = `/?chatId=${data.id}`;
-        }
-      })
-      .catch(err => console.error("Error creating new chat:", err));
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => { throw new Error(text) });
+      }
+      return response.json();
+    })
+    .then(data => {
+      // Update the URL without full reload
+      window.history.pushState({}, '', `/?chatId=${data.conversation_id}`);
+      // Force reload the conversation list
+      window.dispatchEvent(new Event('popstate'));
+    })
+    .catch(err => {
+      console.error("Error creating new chat:", err);
+      window.showNotification("Failed to create conversation", "error");
+    });
   }
 
   // -----------------------------
