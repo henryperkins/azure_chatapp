@@ -57,35 +57,32 @@ class ProjectResponse(BaseModel):
 # Project Routes
 # -----------------------------
 
-@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(
-    proj_data: ProjectCreate,
+    project_data: ProjectCreate,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Creates a new project for the authenticated user.
-    """
-    # Remove the dummy get_valid_project(...) call for now
-    new_proj = Project(
-        name=proj_data.name.strip(),
-        subtitle=(proj_data.subtitle.strip() if proj_data.subtitle else None),
-        description=proj_data.description.strip() if proj_data.description else None,
-        notes=proj_data.notes.strip() if proj_data.notes else None,
-        user_id=current_user.id
-    )
-    db.add(new_proj)
-    await db.commit()
-    await db.refresh(new_proj)
-    logger.info(f"Project created: {new_proj.name} by user {current_user.id}")
-
-    return {
-        "id": new_proj.id,
-        "name": new_proj.name,
-        "subtitle": new_proj.subtitle,
-        "description": new_proj.description,
-        "notes": new_proj.notes
-    }
+    """Create new project with Azure Cognitive Search integration"""
+    try:
+        # Create Azure Cognitive Search index
+        search = CognitiveSearch()
+        kb_id = await search.create_index(f"project-{project_data.name}")
+        
+        project = Project(
+            **project_data.dict(),
+            user_id=current_user.id,
+            knowledge_base_id=kb_id
+        )
+        
+        db.add(project)
+        await db.commit()
+        await db.refresh(project)
+        return project
+        
+    except Exception as e:
+        logger.error(f"Project creation failed: {str(e)}")
+        raise HTTPException(500, "Project creation failed")
 
 
 @router.get("", response_model=dict)
