@@ -65,7 +65,7 @@ def validate_password(password: str):
 @router.post("/register")
 async def register_user(
     creds: UserCredentials,
-    db: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Registers a new user with hashed password.
@@ -73,33 +73,34 @@ async def register_user(
     """
     lower_username = creds.username.lower()
     validate_password(creds.password)
-    result = await db.execute(select(User).where(User.username == lower_username))
+    result = await session.execute(select(User).where(User.username == lower_username))
     existing_user = result.scalars().first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already taken")
 
     hashed_pw = bcrypt.hashpw(creds.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     user = User(username=lower_username, password_hash=hashed_pw)
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
 
     logger.info(f"User registered successfully: {user.username}")
     return {"message": f"User '{user.username}' registered successfully"}
 
 
+# In the login_user function, update the cookie setting:
+
 @router.post("/login")
 async def login_user(
     response: Response,
     creds: UserCredentials,
-    db: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Authenticates the user and returns a JWT if valid.
     """
-    from fastapi import Response
     lower_username = creds.username.lower()
-    result = await db.execute(select(User).where(User.username == lower_username))
+    result = await session.execute(select(User).where(User.username == lower_username))
     user = result.scalars().first()
     if not user:
         raise HTTPException(
@@ -132,21 +133,33 @@ async def login_user(
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user.username,
-        "exp": expire
+        "exp": expire,
+        "iat": datetime.utcnow()
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
     logger.info(f"User '{user.username}' logged in successfully.")
-    secure_cookie = os.getenv("ENV") == "production"
-    # Strengthen cookie security (e.g., samesite=Strict)
+    
+    # If ENV=production, use secure cookies and samesite=none.
+    # If not production, switch samesite to 'lax' and secure=False to ensure local dev cookies aren't blocked.
+    production_mode = os.getenv("ENV") == "production"
+    if production_mode:
+        samesite_value = "none"   # For cross-site in production (requires HTTPS)
+        secure_cookie = True      # Must be true if samesite=none in prod
+    else:
+        samesite_value = "lax"    # Lax samesite for local dev
+        secure_cookie = False
+    
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
         secure=secure_cookie,
-        samesite="lax",
-        max_age=3600
+        samesite=samesite_value,
+        max_age=3600,
+        path="/"
     )
+    
     return {
         "message": "Login successful",
         "access_token": token,
@@ -184,5 +197,14 @@ async def verify_auth_status(current_user: User = Depends(get_current_user_and_t
 
 @router.post("/logout")
 async def logout_user(response: Response):
-    response.delete_cookie("access_token")
+    """
+    Logs out the user by clearing the access token cookie
+    """
+    # Delete the cookie with the same parameters as when it was set
+    response.delete_cookie(
+        key="access_token", 
+        path="/",
+        httponly=True,
+        secure=os.getenv("ENV") == "production"
+    )
     return {"status": "logged out"}

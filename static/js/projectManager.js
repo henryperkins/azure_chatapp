@@ -39,8 +39,8 @@ autoFillChatIdBtn.addEventListener("click", () => {
 // Scroll to the new conversation if it exists
 const urlParams = new URLSearchParams(window.location.search);
 const currentChatId = urlParams.get('chatId');
-if (currentChatId) {
-  const activeItem = Array.from(container.children).find(li => 
+if (currentChatId && projectListEl) {
+  const activeItem = Array.from(projectListEl.children).find(li =>
     li.textContent.includes(currentChatId)
   );
   if (activeItem) {
