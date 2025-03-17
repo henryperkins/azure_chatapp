@@ -11,7 +11,7 @@ from db import get_async_session
 logger = logging.getLogger(__name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# Removed OAuth2PasswordBearer since we rely solely on cookies now
 
 def verify_token(token: str):
     """
@@ -27,9 +27,11 @@ def verify_token(token: str):
         logger.warning("Invalid token.")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_current_user_and_token(request: Request = Request(), token: str = Depends(oauth2_scheme)):
-    # Unified check
-    token = request.cookies.get("access_token") or token
+async def get_current_user_and_token(request: Request):
+    # Rely solely on the HttpOnly cookie
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No access token provided in cookies")
     return await _get_user_from_token(token)
 
 async def _get_user_from_token(token: str):
