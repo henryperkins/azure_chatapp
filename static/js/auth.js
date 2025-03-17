@@ -95,16 +95,18 @@ document.addEventListener("DOMContentLoaded", () => {
   
   
   async function updateAuthStatus() {
-      // We rely on the HttpOnly cookie for authorization
-      // Show login UI or fetch user state as needed
       try {
           const resp = await fetch("/api/auth/verify", {
               credentials: "include"
           });
           if (resp.ok) {
-              // User is authenticated
+              document.dispatchEvent(new CustomEvent("authStateChanged", {
+                  detail: { authenticated: true }
+              }));
           } else {
-              // Possibly expired or invalid
+              document.dispatchEvent(new CustomEvent("authStateChanged", {
+                  detail: { authenticated: false }
+              }));
           }
       } catch (err) {
           console.error("Auth check failed:", err);
