@@ -15,14 +15,14 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
+    chat_id = Column(String, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
     role = Column(String, nullable=False)        # "user", "assistant", "system"
     content = Column(Text, nullable=False)
     message_metadata = Column(JSON(none_as_null=True), default=dict)
     timestamp = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     # Relationship back to Chat if you want direct ORM usage
-    # chat = relationship("Chat", back_populates="messages")
+    chat = relationship("Chat", back_populates="messages")
 
     def __repr__(self):
         return f"<Message #{self.id} role={self.role}, chat_id={self.chat_id}>"

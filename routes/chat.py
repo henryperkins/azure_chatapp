@@ -232,17 +232,31 @@ async def create_message(
     """
     chat = await get_valid_chat(chat_id, current_user, db)
 
-    message = Message(
-        chat_id=chat_id,
-        role=new_msg.role.lower().strip(),
-        content=new_msg.content.strip(),
-        metadata=None
-    )
-    db.add(message)
-    await db.commit()
-    await db.refresh(message)
+    try:
+        message = Message(
+            chat_id=chat_id,
+            role=new_msg.role.lower().strip(),
+            content=new_msg.content.strip()
+        )
+        db.add(message)
+        await db.commit()
+        await db.refresh(message)
+        logger.info(f"Message {message.id} saved for chat {chat_id}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Message save failed: {str(e)}")
+        raise HTTPException(500, "Failed to save message")
+
     # Fix: the async function token_limit_check should be awaited
     await token_limit_check(chat_id, db)
+
+    # Additional validation
+    result = await db.execute(
+        select(Message).where(Message.id == message.id)
+    )
+    saved_message = result.scalars().first()
+    if not saved_message:
+        raise HTTPException(500, "Message failed to persist in database")
 
     response_payload = {
         "success": True,
