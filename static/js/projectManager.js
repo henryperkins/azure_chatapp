@@ -46,13 +46,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load all user projects
   function loadProjects() {
-    const token = getAuthToken();
-    if (!token) {
-      // Don't show errors in console when simply not logged in
-      console.log("Not attempting to load projects - user not logged in");
-      return;
-    }
-    fetch("/api/projects", { method: "GET", headers: getHeaders(), credentials: "include" })
+    fetch("/api/projects", {
+      method: "GET",
+      headers: getHeaders(),
+      credentials: "include"
+    })
       .then(checkResponse)
       .then((data) => {
         if (data.projects) {
