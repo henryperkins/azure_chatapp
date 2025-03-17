@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -6,7 +11,10 @@ import asyncio
 
 from alembic import context
 from db import async_engine, Base  # Import your actual async engine
-from models import chat, message, project, user  # Import all models
+from models import (
+    chat, message, project, user,
+    chat_project, project_file
+)
 
 config = context.config
 
@@ -14,6 +22,13 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+from models.user import User
+from models.chat import Chat
+from models.message import Message
+from models.project import Project
+from models.chat_project import ChatProject
+from models.project_file import ProjectFile
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
