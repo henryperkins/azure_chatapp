@@ -18,3 +18,17 @@
 :root.dark .vision-indicator {
     color: #d8b4fe;
 }
+
+/* Add these utility classes */
+.opacity-transition {
+  transition: opacity 0.3s ease-in-out;
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

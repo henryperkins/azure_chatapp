@@ -217,17 +217,34 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 document.addEventListener("authStateChanged", (e) => {
-    const authStatus = document.getElementById("authStatus");
-    if (e.detail.authenticated) {
-        authStatus.textContent = "Authenticated";
-        authStatus.classList.remove("text-red-600");
-        authStatus.classList.add("text-green-600");
-        loadConversationList(); // Refresh protected content
-    } else {
-        authStatus.textContent = "Not Authenticated";
-        authStatus.classList.remove("text-green-600");
-        authStatus.classList.add("text-red-600");
+  const authStatus = document.getElementById("authStatus");
+  const loginForm = document.getElementById("loginForm");
+  const registerForm = document.getElementById("registerForm");
+  const chatUI = document.getElementById("chatUI");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const projectManagerPanel = document.getElementById("projectManagerPanel");
+
+  if (e.detail.authenticated) {
+    [loginForm, registerForm].forEach(el => el?.classList.add("hidden"));
+    [chatUI, logoutBtn, projectManagerPanel].forEach(el => el?.classList.remove("hidden"));
+
+    authStatus.textContent = "Authenticated";
+    authStatus.classList.replace("text-red-600", "text-green-600");
+
+    loadConversationList();
+    if (window.CHAT_CONFIG?.chatId) {
+      loadConversation(window.CHAT_CONFIG.chatId);
     }
+  } else {
+    [loginForm, registerForm].forEach(el => el?.classList.remove("hidden"));
+    [chatUI, logoutBtn, projectManagerPanel].forEach(el => el?.classList.add("hidden"));
+
+    authStatus.textContent = "Not Authenticated";
+    authStatus.classList.replace("text-green-600", "text-red-600");
+
+    const conversationArea = document.getElementById("conversationArea");
+    if (conversationArea) conversationArea.innerHTML = "";
+  }
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
