@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
-API_VERSION = "2024-12-01-preview"
+API_VERSION = "2025-02-01-preview"
 
 import httpx
 
