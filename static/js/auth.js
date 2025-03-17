@@ -38,11 +38,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      updateAuthStatus();
-    });
-  }
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include"
+    })
+    .then(() => {
+      showNotification("Logged out successfully", "success");
+      document.dispatchEvent(new CustomEvent("authStateChanged", {
+        detail: { authenticated: false }
+      }));
+    })
+    .catch(err => console.error("Logout error:", err));
+  });
+}
 
   // -----------------------------
   // Functions
