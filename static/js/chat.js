@@ -294,6 +294,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function getHeaders() {
     return { 
       "Content-Type": "application/json",
+      "credentials": "include"
     };
   }
 
