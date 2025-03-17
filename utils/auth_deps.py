@@ -39,13 +39,16 @@ async def get_current_user_and_token(request: Request):
     return await _get_user_from_token(token)
 
 async def _get_user_from_token(token: str):
-    async for session in get_async_session():
-        decoded = verify_token(token)
-        username = decoded.get("sub")
-        result = await session.execute(select(User).where(User.username == username))
-        user = result.scalars().first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        if not user.is_active:
-            raise HTTPException(status_code=403, detail="Account disabled")
-        return user
+    async with get_async_session() as session:
+        try:
+            decoded = verify_token(token)
+            username = decoded.get("sub")
+            result = await session.execute(select(User).where(User.username == username))
+            user = result.scalars().first()
+            if not user:
+                raise HTTPException(status_code=401, detail="User not found")
+            if not user.is_active:
+                raise HTTPException(status_code=403, detail="Account disabled")
+            return user
+        finally:
+            await session.close()
