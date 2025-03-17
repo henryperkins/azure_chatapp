@@ -21,6 +21,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const projNotesInput = document.getElementById("projNotesInput");
   const attachChatIdInput = document.getElementById("attachChatId"); // For attaching to chat
 
+const autoFillChatIdBtn = document.getElementById("autoFillChatIdBtn");
+if (autoFillChatIdBtn) {
+autoFillChatIdBtn.addEventListener("click", () => {
+  const chatId = window.CHAT_CONFIG?.chatId || "";
+  const attachChatIdInput = document.getElementById("attachChatId");
+  if (attachChatIdInput && chatId) {
+    attachChatIdInput.value = chatId;
+  } else if (!chatId) {
+    if (window.showNotification) {
+      window.showNotification("No active chat selected", "error");
+    } else {
+      alert("No active chat selected");
+    }
+  }
+});
+}
   if (projectListEl) {
     loadProjects();
   }
