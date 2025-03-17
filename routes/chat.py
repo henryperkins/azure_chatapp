@@ -315,15 +315,15 @@ async def create_message(
 async def websocket_chat_endpoint(
     websocket: WebSocket,
     chat_id: str,
-    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Real-time chat updates for conversation {chat_id}.
     Must authenticate via query param or cookies.
     """
-    await websocket.accept()
-
+    from db import AsyncSessionLocal, async_engine
+    async with AsyncSessionLocal() as db:
     try:
+        await websocket.accept()
         from utils.auth_deps import get_current_user_and_token
         user = await get_current_user_and_token(websocket)
         if not user:
@@ -350,7 +350,9 @@ async def websocket_chat_endpoint(
                 await websocket.send_json({"error": str(e)})
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for chat_id=%s", chat_id)
-        return
+    finally:
+        await db.close()
+        await async_engine.dispose()
 
 
 async def handle_assistant_response(
