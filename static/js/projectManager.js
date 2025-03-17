@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("Not attempting to load projects - user not logged in");
       return;
     }
-    fetch("/api/projects", { method: "GET", headers: getHeaders() })
+    fetch("/api/projects", { method: "GET", headers: getHeaders(), credentials: "include" })
       .then(checkResponse)
       .then((data) => {
         if (data.projects) {
@@ -71,6 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("/api/projects", {
       method: "POST",
       headers: getHeaders(),
+      credentials: "include",
       body: JSON.stringify(projData)
     })
       .then(checkResponse)
@@ -139,6 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers: getHeaders(),
+      credentials: "include",
       body: JSON.stringify(payload)
     })
       .then(checkResponse)
@@ -152,7 +154,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     fetch(`/api/projects/${projectId}`, {
       method: "DELETE",
-      headers: getHeaders()
+      headers: getHeaders(),
+      credentials: "include"
     })
       .then(checkResponse)
       .then(() => loadProjects())
@@ -163,7 +166,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function attachProjectToChat(projectId, chatId) {
     fetch(`/api/projects/${projectId}/attach_chat/${chatId}`, {
       method: "POST",
-      headers: getHeaders()
+      headers: getHeaders(),
+      credentials: "include"
     })
       .then(checkResponse)
       .then((data) => {
