@@ -29,7 +29,7 @@ class Chat(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     user = relationship("User", back_populates="chats")
-    # messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
     projects = relationship("Project", secondary="chat_projects", back_populates="chats")
 
     def __repr__(self) -> str:
