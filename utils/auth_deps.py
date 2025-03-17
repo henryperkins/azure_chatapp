@@ -28,10 +28,13 @@ def verify_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def get_current_user_and_token(request: Request):
-    # Rely solely on the HttpOnly cookie
-    token = request.cookies.get("access_token")
+    if isinstance(request, WebSocket):
+        token = request.cookies.get("access_token")
+    else:
+        token = request.cookies.get("access_token")
+    
     if not token:
-        raise HTTPException(status_code=401, detail="No access token provided in cookies")
+        raise HTTPException(status_code=401, detail="No access token provided")
     return await _get_user_from_token(token)
 
 async def _get_user_from_token(token: str):
