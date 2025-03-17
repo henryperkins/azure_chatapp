@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadConversationList() {
     fetch('/api/chat/conversations', {
       method: 'GET',
-      credentials: 'include'
+      credentials: 'include'  // Ensure this is always present
     })
     .then(resp => {
       if (!resp.ok) {
@@ -84,7 +84,9 @@ document.addEventListener("DOMContentLoaded", () => {
         container.appendChild(li);
       }
     })
-    .catch((err) => console.error('Error loading conversation list:', err));
+    .catch((err) => {
+      console.error('Error loading conversation list:', err);
+    });
   }
   
   // Automatically load the conversation list if the element is present
@@ -218,30 +220,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.addEventListener("authStateChanged", (e) => {
   const authStatus = document.getElementById("authStatus");
-  const loginForm = document.getElementById("loginForm");
-  const registerForm = document.getElementById("registerForm");
+  const authButton = document.getElementById("authButton");
+  const userMenu = document.getElementById("userMenu");
   const chatUI = document.getElementById("chatUI");
-  const logoutBtn = document.getElementById("logoutBtn");
   const projectManagerPanel = document.getElementById("projectManagerPanel");
 
   if (e.detail.authenticated) {
-    [loginForm, registerForm].forEach(el => el?.classList.add("hidden"));
-    [chatUI, logoutBtn, projectManagerPanel].forEach(el => el?.classList.remove("hidden"));
-
+    // Update UI for authenticated user
+    if (authButton) authButton.classList.add("hidden");
+    if (userMenu) userMenu.classList.remove("hidden");
+    
+    // Show authenticated content
+    [chatUI, projectManagerPanel].forEach(el => el?.classList.remove("hidden"));
     authStatus.textContent = "Authenticated";
     authStatus.classList.replace("text-red-600", "text-green-600");
 
+    // Load user data
     loadConversationList();
     if (window.CHAT_CONFIG?.chatId) {
       loadConversation(window.CHAT_CONFIG.chatId);
     }
   } else {
-    [loginForm, registerForm].forEach(el => el?.classList.remove("hidden"));
-    [chatUI, logoutBtn, projectManagerPanel].forEach(el => el?.classList.add("hidden"));
-
+    // Update UI for unauthenticated user
+    if (authButton) authButton.classList.remove("hidden");
+    if (userMenu) userMenu.classList.add("hidden");
+    
+    // Hide authenticated content
+    [chatUI, projectManagerPanel].forEach(el => el?.classList.add("hidden"));
     authStatus.textContent = "Not Authenticated";
     authStatus.classList.replace("text-green-600", "text-red-600");
 
+    // Clear conversation area
     const conversationArea = document.getElementById("conversationArea");
     if (conversationArea) conversationArea.innerHTML = "";
   }
