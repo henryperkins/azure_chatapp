@@ -43,7 +43,12 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 async def run_migrations_online() -> None:
-    connectable = async_engine
+    """Run migrations in 'online' mode using ASYNC engine."""
+    connectable = create_async_engine(
+        config.get_main_option("sqlalchemy.url"), 
+        future=True,
+        poolclass=pool.NullPool  # Critical for async migrations
+    )
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
