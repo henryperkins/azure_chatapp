@@ -138,7 +138,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadConversation(chatId) {
     fetch(`/api/chat/conversations/${chatId}/messages`, {
       method: "GET",
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
+      credentials: "include"  // Add this line
     })
       .then(checkResponse)
       .then((data) => {
@@ -206,9 +207,10 @@ document.addEventListener("DOMContentLoaded", () => {
       fetch(`/api/chat/conversations/${chatId}/messages`, {
         method: "POST",
         headers: {
-          ...getAuthHeaders(),
+          ...getHeaders(),
           "Content-Type": "application/json"
         },
+        credentials: "include",  // Add this line
         body: JSON.stringify(payload)
       })
         .then(checkResponse)
@@ -287,6 +289,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getAuthHeaders() {
     return {};
+  }
+
+  function getHeaders() {
+    return { 
+      "Content-Type": "application/json",
+    };
   }
 
   function checkResponse(resp) {
