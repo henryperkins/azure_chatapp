@@ -19,6 +19,9 @@ from models.project import Project
 from models.project_file import ProjectFile
 from utils.auth_deps import get_current_user_and_token
 from utils.azure import AzureStorage, CognitiveSearch  # Assume these exist
+from datetime import datetime
+from models.chat import Chat
+from models.chat_project import ChatProject
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
