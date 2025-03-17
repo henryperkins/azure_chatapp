@@ -9,7 +9,8 @@ Includes:
 - Real-time WebSocket endpoint for live chat updates.
 - Summarization logic triggered upon token growth (optional).
 - Proper authentication via JWT (get_current_user).
-- Production-ready structure with no placeholders.
+
+Production-ready structure with no placeholders.
 """
 
 import logging
@@ -41,7 +42,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 # -----------------------------
 # Pydantic Schemas
 # -----------------------------
-
 class ConversationCreate(BaseModel):
     """
     Pydantic model for creating a new conversation.
@@ -69,17 +69,8 @@ class MessageCreate(BaseModel):
 
 
 # -----------------------------
-# Dependency
-# -----------------------------
-
-
-
-
-
-# -----------------------------
 # CRUD Endpoints for Conversations
 # -----------------------------
-
 @router.post("/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     conversation_data: ConversationCreate,
@@ -200,7 +191,6 @@ async def delete_conversation(
 # -----------------------------
 # Message Endpoints
 # -----------------------------
-
 @router.get("/conversations/{chat_id}/messages", response_model=dict)
 async def list_messages(
     chat_id: str,
@@ -248,7 +238,8 @@ async def create_message(
     db.add(message)
     await db.commit()
     await db.refresh(message)
-    token_limit_check(chat_id, db)
+    # Fix: the async function token_limit_check should be awaited
+    await token_limit_check(chat_id, db)
 
     response_payload = {
         "success": True,
@@ -274,7 +265,7 @@ async def create_message(
         message_dicts = [{"role": str(m.role), "content": str(m.content)} for m in conv_messages]
 
         # manage_context expects List[Dict[str, str]]
-        message_dicts = manage_context(message_dicts)
+        message_dicts = await manage_context(message_dicts)
 
         try:
             # If new_msg.image_data is set, use "o1", otherwise use chat.model_id or default fallback
@@ -283,7 +274,7 @@ async def create_message(
             # vision_detail expects a str, coalesce None to "auto"
             chosen_vision = new_msg.vision_detail if new_msg.vision_detail else "auto"
 
-            openai_response = openai_chat(
+            openai_response = await openai_chat(
                 messages=message_dicts,
                 model_name=chosen_model,
                 image_data=new_msg.image_data,
@@ -310,7 +301,6 @@ async def create_message(
 # -----------------------------
 # WebSocket for Real-time Chat
 # -----------------------------
-
 @router.websocket("/ws/{chat_id}")
 async def websocket_chat_endpoint(
     websocket: WebSocket,
@@ -324,7 +314,9 @@ async def websocket_chat_endpoint(
     async with AsyncSessionLocal() as db:
         try:
             await websocket.accept()
-            user = await get_current_user_and_token(websocket)
+            from starlette.requests import Request
+            fake_request = Request(websocket.scope)
+            user = await get_current_user_and_token(fake_request)
 
             chat = await get_valid_chat(chat_id, user, db)
 
@@ -365,7 +357,7 @@ async def handle_assistant_response(
     messages = messages_query.scalars().all()
 
     message_dicts = convert_messages_to_dicts(messages)
-    message_dicts = manage_context(message_dicts)
+    message_dicts = await manage_context(message_dicts)
 
     chat_query = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat_instance = chat_query.scalars().first()
@@ -381,7 +373,7 @@ async def handle_assistant_response(
             await websocket.send_json({"error": "Chat not found after refresh"})
             return
 
-        openai_response = openai_chat(messages=message_dicts, model_name=chosen_model)
+        openai_response = await openai_chat(messages=message_dicts, model_name=chosen_model)
         assistant_content = openai_response["choices"][0]["message"]["content"]
         assistant_msg = await save_assistant_response(chat_id, assistant_content, session)
 
@@ -393,6 +385,7 @@ async def handle_assistant_response(
     except Exception as e:
         logger.error("Error calling Azure OpenAI: %s", e)
         await websocket.send_json({"error": f"Error from OpenAI: {str(e)}"})
+
 from typing import List, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
