@@ -105,7 +105,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function initializeWebSocket() {
     if (!wsUrl) return;
-    socket = new WebSocket(wsUrl);
+    
+    // Get cookie manually
+    const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('access_token='))
+        ?.split('=')[1];
+
+    socket = new WebSocket(`${wsUrl}?token=${encodeURIComponent(cookie || '')}`);
 
     socket.onopen = () => {
       console.log("WebSocket connected.");
