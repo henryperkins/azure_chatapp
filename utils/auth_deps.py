@@ -1,18 +1,18 @@
 import logging
 import os
 import jwt
-from fastapi import WebSocket
+from fastapi import WebSocket, Cookie
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Header
 from sqlalchemy import select
 from models.user import User
 from db import get_async_session
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
-# Removed OAuth2PasswordBearer since we rely solely on cookies now
 
 def verify_token(token: str):
     """
@@ -29,20 +29,48 @@ def verify_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def get_current_user_and_token(request: Request):
+    """
+    Gets the current user from either cookies or Authorization header
+    """
+    # Try to get from cookie first
+    token = None
+    
     if isinstance(request, WebSocket):
-        token = request.cookies.get("access_token")
+        cookies = request.cookies
+        token = cookies.get("access_token")
+        # For WebSocket, also check the query parameters
+        if not token and "token" in request.query_params:
+            token = request.query_params["token"]
     else:
+        # For regular HTTP requests
         token = request.cookies.get("access_token")
+        
+        # Log all cookies for debugging
+        logger.debug(f"All cookies: {request.cookies}")
+        
+        # Fallback to Authorization header if no cookie
+        if not token:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
     
     if not token:
+        logger.warning("No token found in cookies or Authorization header")
         raise HTTPException(status_code=401, detail="No access token provided")
+        
     return await _get_user_from_token(token)
 
 async def _get_user_from_token(token: str):
-    async with get_async_session() as session:
-        try:
+    """
+    Gets user from token
+    """
+    try:
+        async with get_async_session() as session:
             decoded = verify_token(token)
             username = decoded.get("sub")
+            if not username:
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+
             result = await session.execute(select(User).where(User.username == username))
             user = result.scalars().first()
             if not user:
@@ -50,5 +78,6 @@ async def _get_user_from_token(token: str):
             if not user.is_active:
                 raise HTTPException(status_code=403, detail="Account disabled")
             return user
-        finally:
-            await session.close()
+    except Exception as e:
+        logger.error(f"Error authenticating user: {str(e)}")
+        raise HTTPException(status_code=401, detail=str(e))
