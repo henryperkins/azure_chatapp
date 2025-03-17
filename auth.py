@@ -144,7 +144,7 @@ async def login_user(
         value=token,
         httponly=True,
         secure=secure_cookie,
-        samesite="strict",
+        samesite="lax",
         max_age=3600
     )
     return {
