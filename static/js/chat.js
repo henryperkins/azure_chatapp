@@ -192,6 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function sendMessage(chatId, userMsg) {
+    console.log("Sending message to chatId=", chatId, "with message=", userMsg);
     if (!chatId) {
       console.error("Cannot send message: No active conversation");
       if (window.showNotification) {
