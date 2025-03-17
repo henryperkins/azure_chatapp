@@ -96,7 +96,11 @@ async def create_conversation(
     await db.refresh(new_chat)
 
     logger.info("Conversation created with id=%s by user_id=%s", chat_id, current_user.id)
-    return {"conversation_id": chat_id, "title": new_chat.title}
+    return {
+        "conversation_id": chat_id,
+        "title": new_chat.title,
+        "created_at": new_chat.created_at.isoformat()
+    }
 
 
 @router.get("/conversations", response_model=dict)
