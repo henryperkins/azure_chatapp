@@ -39,6 +39,7 @@ class ProjectUpdate(BaseModel):
     goals: Optional[str] = Field(None, max_length=1000)
     custom_instructions: Optional[str] = Field(None, max_length=5000)
     max_tokens: Optional[conint(ge=50000, le=500000)]
+    pinned: Optional[bool]
 
 class ProjectResponse(BaseModel):
     id: UUID
@@ -171,45 +172,32 @@ async def toggle_archive_project(
 # Extra route for attaching the Project to a Chat (optional)
 @router.post("/{project_id}/attach_chat/{chat_id}", response_model=dict)
 async def attach_project_to_chat(
-    project_id: int,
+    project_id: UUID,
     chat_id: str,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Associates a project with a chat if both belong to the user.
-    E.g. storing the link in a bridging table 'chat_projects'.
-    """
-    result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id, Project.user_id == current_user.id)
-    )
-    proj = result.scalars().first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found or access denied")
-
-    result_chat = await db.execute(
+    project = await validate_project_access(project_id, current_user.id, db)
+    chat = await db.execute(
         select(Chat)
-        .where(Chat.id == chat_id, Chat.user_id == current_user.id, Chat.is_deleted == False)
+        .where(Chat.id == chat_id, Chat.user_id == current_user.id)
     )
-    chat = result_chat.scalars().first()
+    chat = chat.scalars().first()
+    
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found or access denied")
-
-    # Insert bridging row into chat_projects table
-    # Example: no duplicates
-    result_existing = await db.execute(
-        select(ChatProject).where(ChatProject.chat_id == chat_id, ChatProject.project_id == project_id)
+        raise HTTPException(404, "Chat not found")
+    
+    existing = await db.execute(
+        select(ChatProject)
+        .where(ChatProject.chat_id == chat_id, ChatProject.project_id == project_id)
     )
-    existing = result_existing.scalars().first()
-    if not existing:
-        association = ChatProject(chat_id=chat_id, project_id=project_id)
-        db.add(association)
-        await db.commit()
-        logger.info(f"Project {project_id} attached to chat {chat_id}")
-        return {"success": True, "attached": True}
-    else:
-        return {"success": True, "attached": False, "message": "Project already attached to chat"}
+    if existing.scalars().first():
+        return {"message": "Already attached"}
+    
+    association = ChatProject(chat_id=chat_id, project_id=project_id)
+    db.add(association)
+    await db.commit()
+    return {"status": "attached"}
 async def get_valid_project(project_id: int, user: User, db: AsyncSession):
     result = await db.execute(
         select(Project).where(Project.id == project_id, Project.user_id == user.id)
