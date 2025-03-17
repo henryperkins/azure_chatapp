@@ -5,7 +5,7 @@ Defines the Project model used to group files, notes, and references
 that can be attached to one or more chats for context.
 """
 
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, text, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, text, ForeignKey, Boolean
 from models.chat_project import ChatProject
 from sqlalchemy.orm import relationship
 
