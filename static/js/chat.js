@@ -253,13 +253,17 @@ document.addEventListener("DOMContentLoaded", () => {
         credentials: "include",  // Add this line
         body: JSON.stringify(payload)
       })
-        .then(checkResponse)
-        .then((resp) => {
-          if (resp.assistant_message) {
-            appendMessage(resp.assistant_message.role, resp.assistant_message.content);
+        .then(resp => {
+          console.log("sendMessage response:", resp);
+          return checkResponse(resp);
+        })
+        .then(respData => {
+          console.log("sendMessage response body:", respData);
+          if (respData.assistant_message) {
+            appendMessage(respData.assistant_message.role, respData.assistant_message.content);
           }
-          if (resp.assistant_error) {
-            console.error("Assistant error:", resp.assistant_error);
+          if (respData.assistant_error) {
+            console.error("Assistant error:", respData.assistant_error);
           }
         })
         .catch((err) => console.error("Error sending message via fetch:", err));
