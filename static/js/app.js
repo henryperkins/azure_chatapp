@@ -73,8 +73,12 @@ document.addEventListener("DOMContentLoaded", () => {
           li.textContent = item.title || 'Conversation ' + item.id;
           li.addEventListener('click', () => {
             window.history.pushState({}, '', `/?chatId=${item.id}`);
-            document.getElementById("conversationArea").innerHTML = "";
-            loadConversation(item.id);
+            // Show chat UI and hide "no chat" message
+            document.getElementById("chatUI").classList.remove("hidden");
+            document.getElementById("noChatSelectedMessage").classList.add("hidden");
+            // Update chat title and load messages
+            document.getElementById("chatTitle").textContent = item.title;
+            window.loadConversation(item.id);
           });
           container.appendChild(li);
         });
@@ -261,7 +265,11 @@ window.addEventListener('popstate', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
   if (chatId) {
-    loadConversation(chatId);
+    document.getElementById("chatUI").classList.remove("hidden");
+    window.loadConversation(chatId);
+  } else {
+    document.getElementById("chatUI").classList.add("hidden");
+    document.getElementById("noChatSelectedMessage").classList.remove("hidden");
   }
 });
 
