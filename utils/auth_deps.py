@@ -39,8 +39,6 @@ async def get_current_user_and_token(request: Request):
     return await _get_user_from_token(token)
 
 async def _get_user_from_token(token: str):
-    if token.startswith("Bearer "):
-        token = token[7:]
     async for session in get_async_session():
         decoded = verify_token(token)
         username = decoded.get("sub")
