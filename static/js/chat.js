@@ -105,7 +105,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function initializeWebSocket() {
     if (!wsUrl) return;
-    socket = new WebSocket(wsUrl);
+    socket = new WebSocket(wsUrl, {
+      headers: {
+        Cookie: document.cookie
+      }
+    });
 
     socket.onopen = () => {
       console.log("WebSocket connected.");
