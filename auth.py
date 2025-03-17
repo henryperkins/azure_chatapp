@@ -181,3 +181,8 @@ async def verify_auth_status(current_user: User = Depends(get_current_user_and_t
     Endpoint for frontend to verify valid auth state
     """
     return {"authenticated": True, "username": current_user.username}
+
+    @router.post("/logout")
+    async def logout_user(response: Response):
+        response.delete_cookie("access_token")
+        return {"status": "logged out"}
