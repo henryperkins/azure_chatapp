@@ -127,26 +127,8 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     socket.onclose = () => {
-      console.warn("WebSocket closed. Attempting to refresh token and reconnect...");
-      const token = localStorage.getItem("access_token");
-      if (token) {
-        fetch("/api/auth/refresh", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` }
-        })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data && data.access_token) {
-              localStorage.setItem("access_token", data.access_token);
-            }
-          })
-          .finally(() => {
-            setTimeout(() => initializeWebSocket(), 1000);
-          });
-      } else {
-        // If no token exists, simply wait a moment then reconnect
-        setTimeout(() => initializeWebSocket(), 1000);
-      }
+      console.warn("WebSocket closed. Reconnecting...");
+      setTimeout(() => initializeWebSocket(), 1000);
     };
   }
 
@@ -301,10 +283,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getAuthHeaders() {
-    const token = (localStorage.getItem("access_token") || "").trim();
-    return {
-      "Authorization": `Bearer ${token}`
-    };
+    return {};
   }
 
   function checkResponse(resp) {
