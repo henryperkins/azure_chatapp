@@ -65,8 +65,9 @@ async def _get_user_from_token(token: str):
     Gets user from token
     """
     try:
-        session = await get_async_session()
-        async with session:
+        # PROPERLY HANDLE ASYNC GENERATOR
+        session_gen = get_async_session()
+        async with session_gen as session:
             decoded = verify_token(token)
             username = decoded.get("sub")
             if not username:
