@@ -28,9 +28,12 @@ def verify_token(token: str):
         logger.warning("Invalid token.")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_current_user_and_token(request: Request):
+async def get_current_user_and_token(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session)
+):
     """
-    Gets the current user from either cookies or Authorization header
+    Updated to inject session properly
     """
     # Try to get from cookie first
     token = None
@@ -58,28 +61,25 @@ async def get_current_user_and_token(request: Request):
         logger.warning("No token found in cookies or Authorization header")
         raise HTTPException(status_code=401, detail="No access token provided")
         
-    return await _get_user_from_token(token)
+    return await _get_user_from_token(token, session)
 
-async def _get_user_from_token(token: str):
+async def _get_user_from_token(token: str, session: AsyncSession):
     """
-    Gets user from token
+    Gets user from token using injected session
     """
     try:
-        # PROPERLY HANDLE ASYNC GENERATOR
-        session_gen = get_async_session()
-        async with session_gen as session:
-            decoded = verify_token(token)
-            username = decoded.get("sub")
-            if not username:
-                raise HTTPException(status_code=401, detail="Invalid token payload")
+        decoded = verify_token(token)
+        username = decoded.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
 
-            result = await session.execute(select(User).where(User.username == username))
-            user = result.scalars().first()
-            if not user:
-                raise HTTPException(status_code=401, detail="User not found")
-            if not user.is_active:
-                raise HTTPException(status_code=403, detail="Account disabled")
-            return user
+        result = await session.execute(select(User).where(User.username == username))
+        user = result.scalars().first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Account disabled")
+        return user
     except Exception as e:
         logger.error(f"Error authenticating user: {str(e)}")
         raise HTTPException(status_code=401, detail=str(e))
