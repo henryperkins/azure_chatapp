@@ -35,7 +35,18 @@ autoFillChatIdBtn.addEventListener("click", () => {
       alert("No active chat selected");
     }
   }
-});
+    });
+// Scroll to the new conversation if it exists
+const urlParams = new URLSearchParams(window.location.search);
+const currentChatId = urlParams.get('chatId');
+if (currentChatId) {
+  const activeItem = Array.from(container.children).find(li => 
+    li.textContent.includes(currentChatId)
+  );
+  if (activeItem) {
+    activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
 }
   if (projectListEl) {
     loadProjects();

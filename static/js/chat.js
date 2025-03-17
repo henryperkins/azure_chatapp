@@ -96,10 +96,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return response.json();
     })
     .then(data => {
-      // Update the URL without full reload
       window.history.pushState({}, '', `/?chatId=${data.conversation_id}`);
       // Force reload the conversation list
-      window.dispatchEvent(new Event('popstate'));
+      if (typeof window.loadConversationList === 'function') {
+        window.loadConversationList();
+      }
+      // Also load the new conversation
+      loadConversation(data.conversation_id);
     })
     .catch(err => {
       console.error("Error creating new chat:", err);

@@ -72,8 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
           li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
           li.textContent = item.title || 'Conversation ' + item.id;
           li.addEventListener('click', () => {
-            // Clear existing chat UI and load new conversation
-            window.location.search = `chatId=${item.id}`;
+            window.history.pushState({}, '', `/?chatId=${item.id}`);
             document.getElementById("conversationArea").innerHTML = "";
             loadConversation(item.id);
           });
@@ -218,6 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Expose showNotification globally if needed
   window.showNotification = showNotification;
+  window.loadConversationList = loadConversationList;
 });
 
 document.addEventListener("authStateChanged", (e) => {
