@@ -116,6 +116,9 @@ if (logoutBtn) {
                   detail: { authenticated: true }
               }));
           } else {
+              if (resp.status === 401) {
+                  document.dispatchEvent(new CustomEvent("sessionExpired"));
+              }
               document.dispatchEvent(new CustomEvent("authStateChanged", {
                   detail: { authenticated: false }
               }));
