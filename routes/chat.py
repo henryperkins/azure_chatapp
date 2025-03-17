@@ -29,6 +29,7 @@ from db import get_async_session
 from models.user import User
 from models.chat import Chat
 from models.message import Message
+from models.project import Project
 from utils.auth_deps import get_current_user_and_token  # Ensure this is correctly defined
 from utils.openai import openai_chat
 from utils.context import manage_context, token_limit_check
