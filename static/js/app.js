@@ -97,36 +97,26 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------
 
   function updateUserSessionState() {
-    const token = localStorage.getItem("access_token");
     const authStatus = document.getElementById("authStatus");
-
-    if (token) {
-        fetch("/api/auth/verify", {
-            headers: { Authorization: `Bearer ${token}` }
-        })
-        .then(resp => {
-            if(resp.ok) {
-                if(authStatus) {
-                    authStatus.textContent = "Authenticated";
-                    authStatus.classList.remove("text-red-600");
-                    authStatus.classList.add("text-green-600");
-                }
-            } else {
-                localStorage.removeItem("access_token");
-                if(authStatus) {
-                    authStatus.textContent = "Not Authenticated";
-                    authStatus.classList.remove("text-green-600");
-                    authStatus.classList.add("text-red-600");
-                }
-            }
-        });
-    } else {
+    fetch("/api/auth/verify", {
+      credentials: 'include'
+    })
+    .then(resp => {
+      if(resp.ok) {
         if(authStatus) {
-            authStatus.textContent = "Not Authenticated";
-            authStatus.classList.remove("text-green-600");
-            authStatus.classList.add("text-red-600");
+          authStatus.textContent = "Authenticated";
+          authStatus.classList.remove("text-red-600");
+          authStatus.classList.add("text-green-600");
         }
-    }
+      } else {
+        if(authStatus) {
+          authStatus.textContent = "Not Authenticated";
+          authStatus.classList.remove("text-green-600");
+          authStatus.classList.add("text-red-600");
+        }
+      }
+    })
+    .catch(err => console.error("Auth check failed:", err));
   }
 
   /**
