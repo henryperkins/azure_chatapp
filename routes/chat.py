@@ -320,39 +320,37 @@ async def websocket_chat_endpoint(
     Real-time chat updates for conversation {chat_id}.
     Must authenticate via query param or cookies.
     """
-    from db import AsyncSessionLocal, async_engine
+    from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
-    try:
-        await websocket.accept()
-        from utils.auth_deps import get_current_user_and_token
-        user = await get_current_user_and_token(websocket)
-        if not user:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
+        try:
+            await websocket.accept()
+            user = await get_current_user_and_token(websocket)
 
-        while True:
-            data = await websocket.receive_text()
-            try:
+            chat = await get_valid_chat(chat_id, user, db)
+
+            while True:
+                data = await websocket.receive_text()
                 data_dict = json.loads(data)
-                message = Message(
-                    chat_id=chat_id,
-                    role=data_dict['role'],
-                    content=data_dict['content'],
-                )
-                db.add(message)
-                await db.commit()
-                await db.refresh(message)
+
+                async with db.begin():
+                    message = Message(
+                        chat_id=chat_id,
+                        role=data_dict['role'],
+                        content=data_dict['content'],
+                    )
+                    db.add(message)
+                    await db.commit()
+                    await db.refresh(message)
+
                 if message.role == "user":
                     await handle_assistant_response(chat_id, db, websocket)
-            except json.JSONDecodeError:
-                await websocket.send_json({"error": "Invalid JSON format"})
-            except Exception as e:
-                await websocket.send_json({"error": str(e)})
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected for chat_id=%s", chat_id)
-    finally:
-        await db.close()
-        await async_engine.dispose()
+
+        except WebSocketDisconnect:
+            logger.info("WebSocket disconnected")
+        except HTTPException as e:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        finally:
+            await db.close()
 
 
 async def handle_assistant_response(
