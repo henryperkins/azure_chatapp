@@ -51,7 +51,12 @@ class ProjectResponse(BaseModel):
     pinned: bool
     version: int
     knowledge_base_id: Optional[str]
-    created_at: str
+    created_at: datetime
+    updated_at: datetime
+    user_id: int
+
+    class Config:
+        orm_mode = True
 
 # -----------------------------
 # Project Routes
@@ -85,36 +90,27 @@ async def create_project(
         raise HTTPException(500, "Project creation failed")
 
 
-@router.get("", response_model=dict)
+@router.get("", response_model=List[ProjectResponse])
 async def list_projects(
+    archived: Optional[bool] = None,
+    pinned: Optional[bool] = None,
+    skip: int = 0,
+    limit: int = 100,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Returns a list of the user's projects, newest first.
-    """
-    results = await db.execute(
-        select(Project)
-        .where(Project.user_id == current_user.id)
-        .order_by(Project.created_at.desc())
-    )
-    projects = results.scalars().all()
-    data = []
-    for proj in projects:
-        data.append({
-            "id": proj.id,
-            "name": proj.name,
-            "subtitle": proj.subtitle,
-            "description": proj.description,
-            "notes": proj.notes,
-            "created_at": proj.created_at
-        })
-    return {"projects": data}
+    query = select(Project).where(Project.user_id == current_user.id)
+    if archived is not None:
+        query = query.where(Project.archived == archived)
+    if pinned is not None:
+        query = query.where(Project.pinned == pinned)
+    result = await db.execute(query.offset(skip).limit(limit))
+    return result.scalars().all()
 
 
-@router.get("/{project_id}", response_model=dict)
+@router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
-    project_id: int,
+    project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
@@ -129,80 +125,47 @@ async def get_project(
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
-    return {
-        "id": proj.id,
-        "name": proj.name,
-        "subtitle": proj.subtitle,
-        "description": proj.description,
-        "notes": proj.notes,
-        "created_at": proj.created_at
-    }
+    project = await validate_project_access(project_id, current_user.id, db)
+    return project
 
 
-@router.patch("/{project_id}", response_model=dict)
+@router.patch("/{project_id}", response_model=ProjectResponse)
 async def update_project(
-    project_id: int,
+    project_id: UUID,
     update_data: ProjectUpdate,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Updates the specified fields of an existing project if user is the owner.
-    """
-    result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id, Project.user_id == current_user.id)
-    )
-    proj = result.scalars().first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found or access denied")
-
-    if update_data.name is not None:
-        proj.name = update_data.name.strip()  # type: ignore[assignment]
-    if update_data.subtitle is not None:
-        proj.subtitle = update_data.subtitle.strip()  # type: ignore[assignment]
-    if update_data.description is not None:
-        proj.description = update_data.description.strip()  # type: ignore[assignment]
-    if update_data.notes is not None:
-        proj.notes = update_data.notes.strip()  # type: ignore[assignment]
-
+    project = await validate_project_access(project_id, current_user.id, db)
+    
+    update_dict = update_data.dict(exclude_unset=True)
+    if 'max_tokens' in update_dict and update_dict['max_tokens'] < project.token_usage:
+        raise HTTPException(400, "New token limit below current usage")
+    
+    for key, value in update_dict.items():
+        setattr(project, key, value)
+    
     await db.commit()
-    await db.refresh(proj)
-    logger.info(f"Project {proj.id} updated by user {current_user.id}")
-
-    return {
-        "id": proj.id,
-        "name": proj.name,
-        "subtitle": proj.subtitle,
-        "description": proj.description,
-        "notes": proj.notes,
-        "created_at": proj.created_at
-    }
+    await db.refresh(project)
+    return project
 
 
-@router.delete("/{project_id}", response_model=dict)
-async def delete_project(
-    project_id: int,
+@router.patch("/{project_id}/archive", response_model=ProjectResponse)
+async def toggle_archive_project(
+    project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Deletes (permanently) a project if owned by the current user.
-    Ensures no further usage in conversation context.
-    """
-    result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id, Project.user_id == current_user.id)
+    project = await validate_project_access(project_id, current_user.id, db)
+    stmt = (
+        update(Project)
+        .where(Project.id == project_id)
+        .values(archived=not project.archived)
     )
-    proj = result.scalars().first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found or access denied")
-
-    await db.delete(proj)
+    await db.execute(stmt)
     await db.commit()
-    logger.info(f"Project {project_id} permanently deleted by user {current_user.id}")
-
-    return {"status": "deleted", "project_id": project_id}
+    await db.refresh(project)
+    return project
 
 
 # Extra route for attaching the Project to a Chat (optional)
@@ -255,3 +218,15 @@ async def get_valid_project(project_id: int, user: User, db: AsyncSession):
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
     return proj
+async def validate_project_access(project_id: UUID, user_id: int, db: AsyncSession) -> Project:
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id, Project.user_id == user_id)
+    )
+    project = result.scalars().first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.archived:
+        raise HTTPException(status_code=400, detail="Project is archived")
+    return project
