@@ -40,11 +40,55 @@
       </div>
 
       <div class="flex items-center space-x-4">
-        <!-- Example user status text, updated in app.js -->
+        <!-- User status (when logged in) -->
         <span id="userStatus" class="transition-colors text-sm font-medium">Offline</span>
-        <span id="authStatus" class="ml-2 text-sm text-red-600">Not Authenticated</span>
-        <!-- Example logout or user menu link, adjust to your logic -->
-        <a id="logoutBtn" href="#" class="text-sm text-blue-600 hover:underline dark:text-blue-400">Logout</a>
+        
+        <!-- Auth Status / Auth Button Group -->
+        <div class="relative" id="authContainer">
+          <!-- When logged out: Auth Button -->
+          <button id="authButton" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700 transition-colors">
+            Login
+          </button>
+          
+          <!-- Auth Dropdown (hidden by default) -->
+          <div id="authDropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded shadow-lg p-3 z-10 hidden slide-in">
+            <div class="flex border-b border-gray-200 dark:border-gray-700 mb-2 justify-center">
+              <button id="loginTab" class="px-2 py-1 text-xs font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">Login</button>
+              <button id="registerTab" class="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">Register</button>
+            </div>
+            <form id="loginForm" method="POST" class="">
+              <div class="flex flex-col space-y-2 mb-2">
+                <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded">
+                <input type="password" name="password" placeholder="Password" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded">
+              </div>
+              <button type="submit" class="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">Log In</button>
+            </form>
+            <form id="registerForm" class="hidden">
+              <div class="flex flex-col space-y-2 mb-2">
+                <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded">
+                <input type="password" name="password" placeholder="Password" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded">
+              </div>
+              <div class="relative mb-2 group">
+                <button type="button" class="text-xs text-gray-500 flex items-center focus:outline-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Password requirements
+                </button>
+                <div class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 w-full z-10">
+                  Password must be 12+ characters with uppercase, lowercase, number, and special character.
+                </div>
+              </div>
+              <button type="submit" class="w-full px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors">Register</button>
+            </form>
+          </div>
+          
+          <!-- When logged in: Show username and logout -->
+          <div id="userMenu" class="hidden">
+            <span id="authStatus" class="ml-2 text-xs text-green-600">Not Authenticated</span>
+            <a id="logoutBtn" href="#" class="text-xs text-blue-600 hover:underline dark:text-blue-400 ml-2">Logout</a>
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -100,24 +144,6 @@
       <!-- Scroll container -->
       <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
 
-      <!-- Authentication Section -->
-      <section id="authSection" class="mb-6 bg-white dark:bg-gray-800 rounded shadow p-4 opacity-transition">
-        <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Authentication</h2>
-        <!-- Login Form -->
-        <form id="loginForm" method="POST" class="mb-4">
-          <input type="text" name="username" placeholder="Username" class="w-full mb-2 px-3 py-2 border rounded">
-          <input type="password" name="password" placeholder="Password" class="w-full mb-2 px-3 py-2 border rounded">
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">Log In</button>
-        </form>
-
-        <!-- Registration Form -->
-        <form id="registerForm" class="hidden">
-          <h3 class="font-medium mb-2">New User?</h3>
-          <input type="text" name="username" placeholder="Username" class="w-full mb-2 px-3 py-2 border rounded">
-          <input type="password" name="password" placeholder="Password" class="w-full mb-2 px-3 py-2 border rounded">
-          <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded">Register</button>
-        </form>
-      </section>
         <!-- Model Selection & Configuration Interface -->
         <section id="modelConfigSection" class="mb-6 bg-white dark:bg-gray-800 rounded shadow p-4">
           <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Model Configuration</h2>
@@ -235,55 +261,60 @@
         <section id="projectManagerPanel"
                  class="bg-white dark:bg-gray-800 rounded shadow p-4">
           <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Project Management</h2>
-          <!-- e.g. listing projects, creating new ones, uploading files. Usually invoked from sidebar or buttons. -->
           <div class="text-sm dark:text-gray-200">
-            <!-- Placeholder content, replaced by project_manager.js logic -->
-            <ul id="projectList" class="mb-4"></ul>
-            <div class="space-y-2">
-              <input
-                type="text"
-                id="projNameInput"
-                class="border border-gray-300 rounded px-2 py-1 w-full"
-                placeholder="Project Name"
-              />
-              <input
-                type="text"
-                id="projSubtitleInput"
-                class="border border-gray-300 rounded px-2 py-1 w-full"
-                placeholder="Subtitle"
-              />
-              <input
-                type="text"
-                id="projDescInput"
-                class="border border-gray-300 rounded px-2 py-1 w-full"
-                placeholder="Description"
-              />
-              <input
-                type="text"
-                id="projNotesInput"
-                class="border border-gray-300 rounded px-2 py-1 w-full"
-                placeholder="Notes"
-              />
-              <button
-                id="createProjectBtn"
-                class="px-3 py-1 bg-blue-600 text-white rounded"
-              >
-                Create Project
-              </button>
+            <!-- Project List -->
+            <h3 class="font-medium mb-2">Your Projects</h3>
+            <ul id="projectList" class="mb-4 max-h-48 overflow-y-auto"></ul>
             
-              <!-- Attach to Chat form -->
-              <div class="mt-2">
-                <input
-                  type="text"
-                  id="attachChatId"
-                  class="border border-gray-300 rounded px-2 py-1 w-full"
-                  placeholder="Chat ID to attach"
-                />
-                <p class="text-sm text-gray-500 mt-1">
-                  Enter a Chat ID and click "Attach" next to a project in the list to link them.
-                </p>
+            <!-- Create New Project Form -->
+            <div class="border-t pt-3 mt-3 border-gray-200 dark:border-gray-700">
+              <h3 class="font-medium mb-2">Create New Project</h3>
+              <div class="space-y-3">
+                <div>
+                  <label for="projNameInput" class="block text-xs mb-1">Project Name*</label>
+                  <input type="text" id="projNameInput" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="e.g. My Web App" required>
+                </div>
+                
+                <div>
+                  <label for="projSubtitleInput" class="block text-xs mb-1">Subtitle</label>
+                  <input type="text" id="projSubtitleInput" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="e.g. A responsive web application">
+                </div>
+                
+                <div>
+                  <label for="projDescInput" class="block text-xs mb-1">Description</label>
+                  <textarea id="projDescInput" rows="2" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="Detailed description of your project"></textarea>
+                </div>
+                
+                <div>
+                  <label for="projNotesInput" class="block text-xs mb-1">Notes</label>
+                  <textarea id="projNotesInput" rows="2" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="Additional notes or reminders"></textarea>
+                </div>
+                
+                <button id="createProjectBtn" class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors">
+                  Create Project
+                </button>
               </div>
             </div>
+            
+            <!-- Attach Project to Chat -->
+            <div class="border-t pt-3 mt-3 border-gray-200 dark:border-gray-700">
+              <h3 class="font-medium mb-2">Attach Project to Chat</h3>
+              <div class="flex space-x-2">
+                <div class="flex-1">
+                  <label for="attachChatId" class="block text-xs mb-1">Chat ID</label>
+                  <input type="text" id="attachChatId" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="Enter chat ID">
+                </div>
+                <div class="self-end">
+                  <button id="autoFillChatIdBtn" class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-2 px-3 rounded hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
+                    Current
+                  </button>
+                </div>
+              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Select a project from the list above and enter a chat ID to attach it.
+              </p>
+            </div>
+          </div>
         </section>
       </div>
     </main>
