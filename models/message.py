@@ -5,9 +5,12 @@ Defines the Message model for storing messages associated with a Chat.
 Tracks role ("user", "assistant", "system"), content, metadata for tokens.
 """
 
-import json
-from sqlalchemy import Column, Integer, String, Text, JSON, TIMESTAMP, text, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy import Integer, String, Text, TIMESTAMP, text, ForeignKey
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from typing import Optional
+import uuid
+from datetime import datetime
 
 from db import Base
 
@@ -17,21 +20,21 @@ class Message(Base):
     from sqlalchemy.dialects.postgresql import UUID
     import uuid
     
-    id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
         index=True
     )
-    conversation_id = Column(
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False
     )
-    role = Column(String, nullable=False)  # "user", "assistant", "system"
-    content = Column(Text, nullable=False)
-    message_metadata = Column(JSON(none_as_null=True), default=dict)
-    timestamp = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    role: Mapped[str] = mapped_column(String, nullable=False)  # "user", "assistant", "system"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_metadata: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
+    timestamp: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     
     conversation = relationship("Conversation", back_populates="messages")
     
