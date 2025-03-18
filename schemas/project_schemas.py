@@ -51,7 +51,7 @@ class ProjectResponse(BaseModel):
     token_usage: int
     max_tokens: int
     version: int
-    knowledge_base_id: Optional[str] = None
+    knowledge_base_id: Optional[UUID] = None
     extra_data: Optional[dict] = None
     created_at: datetime
     updated_at: datetime

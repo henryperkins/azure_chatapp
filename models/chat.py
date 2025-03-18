@@ -42,7 +42,7 @@ class Conversation(Base):
     user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="conversations")
-    artifacts = relationship("Artifact", back_populates="conversation", cascade="all, delete-orphan")
+    artifacts = relationship("Artifact", back_populates="conversation")
 
     def __repr__(self) -> str:
         return f"<Conversation {self.id} (User #{self.user_id}) title={self.title}>"

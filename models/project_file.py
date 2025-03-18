@@ -28,7 +28,7 @@ class ProjectFile(Base):
     file_path: Mapped[str] = mapped_column(String, nullable=False)  # local or S3 path
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_type: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g., "pdf", "docx", "txt"
-    order_index: Mapped[int] = mapped_column(Integer, server_default='0', nullable=False)
+    order_index: Mapped[int] = mapped_column(Integer, server_default=text('0'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     
     # Optional content field for inline content
