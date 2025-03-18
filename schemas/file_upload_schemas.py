@@ -4,7 +4,7 @@ file_upload_schemas.py
 Contains Pydantic models used by file_upload.py for describing upload responses, etc.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 class FileUploadResponse(BaseModel):
