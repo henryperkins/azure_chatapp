@@ -39,7 +39,7 @@ class Project(Base):
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
-    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="SET NULL"), nullable=True)
+    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, comment="Temporary storage until KnowledgeBase model is implemented")
     
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))

@@ -30,11 +30,15 @@ class Conversation(Base):
         server_default=text("gen_random_uuid()")
     )
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    project_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    project_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String, default="New Chat")
     model_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP"),
+        index=True
+    )
 
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
     extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
