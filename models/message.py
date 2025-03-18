@@ -43,3 +43,20 @@ class Message(Base):
     
     def get_metadata_dict(self):
         return self.message_metadata or {}
+
+    from sqlalchemy import event
+    from jsonschema import validate
+
+    message_schema = {
+        "type": "object",
+        "properties": {
+            "tokens": {"type": "number"},
+            "model": {"type": "string"},
+            "summary": {"type": "boolean"}
+        }
+    }
+
+    @event.listens_for(Message.message_metadata, 'set')
+    def validate_message_metadata(target, value, oldvalue, initiator):
+        if value is not None:
+            validate(instance=value, schema=message_schema)

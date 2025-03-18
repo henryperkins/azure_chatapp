@@ -29,7 +29,7 @@ class Artifact(Base):
     content_type: Mapped[str] = mapped_column(String(50), nullable=False)  # code, document, image, etc.
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True, default=None)
 
     project = relationship("Project", back_populates="artifacts")
     conversation = relationship("Conversation", back_populates="artifacts")
