@@ -45,7 +45,7 @@ class Message(Base):
         return self.message_metadata or {}
 
     from sqlalchemy import event
-    from jsonschema import validate
+    from jsonschema import ValidationError, validate
 
     message_schema = {
         "type": "object",
@@ -56,7 +56,11 @@ class Message(Base):
         }
     }
 
-    @event.listens_for(Message.message_metadata, 'set')
+    @event.listens_for(Message.message_metadata, 'set', retval=True)
     def validate_message_metadata(target, value, oldvalue, initiator):
-        if value is not None:
-            validate(instance=value, schema=message_schema)
+        if value:
+            try:
+                validate(instance=value, schema=Message.message_schema)
+            except ValidationError as e:
+                raise ValueError(f"Invalid message metadata: {e.message}") from e
+        return value
