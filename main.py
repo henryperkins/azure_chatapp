@@ -95,6 +95,9 @@ async def on_startup():
     # Initialize the database
     await init_db()
     logger.info("Database initialized")
+    from db import validate_db_schema
+    await validate_db_schema()
+    logger.info("Database schema has been validated.")
 
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])

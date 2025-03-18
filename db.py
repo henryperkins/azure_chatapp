@@ -5,8 +5,8 @@ Sets up the PostgreSQL database connection using SQLAlchemy.
 Defines the async init_db process for migrations or table creation.
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -14,7 +14,11 @@ from sqlalchemy.ext.declarative import declarative_base
 DATABASE_URL = "postgresql+asyncpg://user:pass@localhost:5432/azure_chat"
 
 async_engine = create_async_engine(DATABASE_URL, echo=False)
-AsyncSessionLocal = async_sessionmaker(async_engine, expire_on_commit=False)
+
+AsyncSessionLocal = sessionmaker(
+    expire_on_commit=False,
+    class_=AsyncSession
+) 
 
 sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
 SessionLocal = sessionmaker(
@@ -22,6 +26,7 @@ SessionLocal = sessionmaker(
     autoflush=False,
     bind=sync_engine
 )
+
 
 Base = declarative_base()
 
@@ -45,3 +50,24 @@ async def init_db():
     """
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+async def validate_db_schema():
+    """
+    Validate the current database schema against the ORM models.
+    Raises an exception if any defined table is missing.
+    """
+    import logging
+    from sqlalchemy import MetaData
+    logger = logging.getLogger(__name__)
+
+    meta = MetaData()
+    meta.reflect(bind=sync_engine)
+
+    tables_in_db = set(meta.tables.keys())
+    tables_in_orm = set(Base.metadata.tables.keys())
+
+    missing_tables = tables_in_orm - tables_in_db
+    if missing_tables:
+        raise Exception(f"Database schema mismatch. Missing tables in DB: {missing_tables}")
+
+    logger.info("Database schema validated successfully.")

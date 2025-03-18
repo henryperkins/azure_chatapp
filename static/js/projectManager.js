@@ -85,8 +85,14 @@ if (currentChatId && projectListEl) {
         }
       })
       .catch((err) => {
-        if (!err.message.includes("401")) {
-          console.error("Error loading projects:", err);
+        console.error("Error loading projects:", err);
+        if (err.message.includes("401")) {
+          if (window.showNotification) {
+            window.showNotification("You must be logged in to list projects.", "error");
+          }
+          document.dispatchEvent(new CustomEvent("authStateChanged", {
+            detail: { authenticated: false }
+          }));
         }
       });
   }
