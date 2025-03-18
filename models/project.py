@@ -25,14 +25,14 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     goals: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    token_usage: Mapped[int] = mapped_column(Integer, default=0)
-    max_tokens: Mapped[int] = mapped_column(Integer, default=200000)
+    token_usage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=200000, nullable=False)
     custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
-    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="SET NULL"), nullable=True)
     
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
@@ -41,11 +41,12 @@ class Project(Base):
     extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     
     # Relationship to conversations
-    conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan")
+    conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
     artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
     
     # Relationship to files
     files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="projects")
 
     def __repr__(self):
         return f"<Project {self.name} (#{self.id}) user_id={self.user_id}>"

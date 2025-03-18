@@ -6,7 +6,8 @@ and ownership of chats/projects in the Azure Chat Application.
 """
 
 from sqlalchemy import Column, Integer, String, TIMESTAMP, text, Boolean
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import Base
@@ -14,16 +15,16 @@ from db import Base
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, nullable=False)
-    # Increase the column length for password_hash to ensure the full bcrypt hash is stored
-    password_hash = Column(String(200), nullable=False)
-    role = Column(String, default="user")  # e.g. "admin", "user"
-    created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
-    is_active = Column(Boolean, default=True, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="user")  # e.g. "admin", "user"
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Example relationships:
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
+    projects: Mapped[List["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username} (#{self.id})>"
