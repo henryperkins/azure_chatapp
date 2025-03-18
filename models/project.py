@@ -14,8 +14,15 @@ from typing import Optional
 from datetime import datetime
 import uuid
 
+from sqlalchemy import CheckConstraint
+
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        CheckConstraint('max_tokens >= token_usage', name='check_token_limit'),
+        CheckConstraint('NOT (archived AND pinned)', name='check_archive_pin'),
+        CheckConstraint('NOT (archived AND is_default)', name='check_archive_default'),
+    )
     
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), 
