@@ -19,8 +19,8 @@ from sqlalchemy import CheckConstraint
 class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
-        CheckConstraint('max_tokens >= token_usage', name='check_token_limit'),
-        CheckConstraint('NOT (archived AND pinned)', name='check_archive_pin'),
+        CheckConstraint('max_tokens >= token_usage', name='check_token_limit', comment="Token usage cannot exceed allocated maximum"),
+        CheckConstraint('NOT (archived AND pinned)', name='check_archive_pin', comment="Archived projects cannot be pinned"),
         CheckConstraint('NOT (archived AND is_default)', name='check_archive_default'),
     )
     
@@ -39,20 +39,20 @@ class Project(Base):
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
-    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, comment="Temporary storage until KnowledgeBase model is implemented")
+    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="SET NULL"), nullable=True, comment="References knowledge base assets")
     
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
     
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
     
     # Relationship to conversations
     conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
     artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
     
     # Relationship to files
-    files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan")
+    files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
     user = relationship("User", back_populates="projects")
 
     def __repr__(self):

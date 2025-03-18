@@ -25,7 +25,7 @@ class ProjectFile(Base):
         nullable=False
     )
     filename: Mapped[str] = mapped_column(String, nullable=False)
-    file_path: Mapped[str] = mapped_column(String, nullable=False)  # local or S3 path
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # local or S3 path
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_type: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g., "pdf", "docx", "txt"
     order_index: Mapped[int] = mapped_column(Integer, server_default=text('0'), nullable=False)
@@ -35,7 +35,7 @@ class ProjectFile(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Metadata field for token count and other info
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
     
     # Relationship to project
     project = relationship("Project", back_populates="files")

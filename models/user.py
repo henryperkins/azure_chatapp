@@ -28,7 +28,7 @@ class User(Base):
 
     # Example relationships:
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
-    projects: Mapped[List["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan")
+    projects: Mapped[List["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
 
     def __repr__(self):
         return f"<User {self.username} (#{self.id})>"
