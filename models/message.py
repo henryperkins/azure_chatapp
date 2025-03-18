@@ -12,6 +12,9 @@ from typing import Optional
 import uuid
 from datetime import datetime
 
+from sqlalchemy import event
+from jsonschema import ValidationError, validate
+
 from db import Base
 
 class Message(Base):
@@ -44,8 +47,6 @@ class Message(Base):
     def get_metadata_dict(self):
         return self.message_metadata or {}
 
-    from sqlalchemy import event
-    from jsonschema import ValidationError, validate
 
     message_schema = {
         "type": "object",
@@ -56,7 +57,7 @@ class Message(Base):
         }
     }
 
-    @event.listens_for(Message.message_metadata, 'set', retval=True)
+    @event.listens_for("Message", 'set', retval=True)
     def validate_message_metadata(target, value, oldvalue, initiator):
         if value:
             try:
