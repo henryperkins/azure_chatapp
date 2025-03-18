@@ -1,42 +1,51 @@
 """
 project.py
 ----------
-Defines the Project model used to group files, notes, and references 
+Defines the Project model used to group files, notes, and references
 that can be attached to one or more chats for context.
 """
-
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, text, ForeignKey, Boolean
-from models.chat_project import ChatProject
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+# Removed import as chat_project is no longer used
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from db import Base
+from typing import Optional
+from datetime import datetime
+import uuid
 
 class Project(Base):
     __tablename__ = "projects"
-
-    from sqlalchemy.dialects.postgresql import UUID
-    import uuid
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(200))
-    goals = Column(Text)
-    token_usage = Column(Integer, default=0)
-    max_tokens = Column(Integer, default=200000)
-    custom_instructions = Column(Text)
-    archived = Column(Boolean, default=False)
-    pinned = Column(Boolean, default=False)
-    version = Column(Integer, default=1)
-    knowledge_base_id = Column(String)
-
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
-    updated_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
-
-    # If bridging table chat_projects is used, define association:
-    chats = relationship("Chat", secondary="chat_projects", back_populates="projects")
-
-    # If you track files in the same or separate table:
-    # files = relationship("ProjectFile", back_populates="project.")
+    
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), 
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    goals: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    token_usage: Mapped[int] = mapped_column(Integer, default=0)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=200000)
+    custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
+    
+    extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # Relationship to conversations
+    conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan")
+    artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
+    
+    # Relationship to files
+    files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Project {self.name} (#{self.id}) user_id={self.user_id}>"
