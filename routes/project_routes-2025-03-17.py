@@ -29,6 +29,8 @@ from utils.auth_deps import get_current_user_and_token
 from datetime import datetime
 # Only import the function(s) we actually use
 from services.project_service import validate_project_access
+from models.chat import Chat
+from models.chat_project import ChatProject
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,10 +52,12 @@ async def create_project(
     try:
         # Create Azure Cognitive Search index
         # Comment out or remove references to CognitiveSearch since it's not defined
+        kb_id = None
         
         project = Project(
             **project_data.dict(),
             user_id=current_user.id,
+            knowledge_base_id=kb_id
         )
         
         db.add(project)
@@ -148,6 +152,35 @@ async def toggle_archive_project(
     return project
 
 
+# Extra route for attaching the Project to a Chat (optional)
+@router.post("/{project_id}/attach_chat/{chat_id}", response_model=dict)
+async def attach_project_to_chat(
+    project_id: UUID,
+    chat_id: str,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    project = await validate_project_access(project_id, current_user, db)
+    chat = await db.execute(
+        select(Chat)
+        .where(Chat.id == chat_id, Chat.user_id == current_user.id)
+    )
+    chat = chat.scalars().first()
+    
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    
+    existing = await db.execute(
+        select(ChatProject)
+        .where(ChatProject.chat_id == chat_id, ChatProject.project_id == project_id)
+    )
+    if existing.scalars().first():
+        return {"message": "Already attached"}
+    
+    association = ChatProject(chat_id=chat_id, project_id=project_id)
+    db.add(association)
+    await db.commit()
+    return {"status": "attached"}
 
 # Removed duplicated definitions, we import from services.project_service now
     # removed duplicated knowledge base code

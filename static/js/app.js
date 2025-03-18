@@ -59,7 +59,12 @@ document.addEventListener("DOMContentLoaded", () => {
  * Load the user's conversation list, relying solely on cookie-based auth.
  */
 function loadConversationList() {
-  fetch('/api/chat/conversations', {
+  const selectedProjectId = localStorage.getItem("selectedProjectId");
+  if (!selectedProjectId) {
+    console.error("No project ID selected. Please select a project first.");
+    return;
+  }
+  fetch(`/api/projects/${selectedProjectId}/conversations`, {
     method: 'GET',
     credentials: 'include'  // Ensure this is always present
   })
@@ -118,7 +123,12 @@ function checkAndHandleAuth() {
   .then(resp => {
     if (resp.ok) {
       // User is authenticated - load data
-      loadConversationList();
+      const selectedProjectId = localStorage.getItem("selectedProjectId");
+      if (selectedProjectId) {
+        loadConversationList();
+      } else {
+        console.warn("No selected project ID found in localStorage, skipping conversation list.");
+      }
       if (window.CHAT_CONFIG?.chatId) {
         if (typeof window.loadConversation === 'function') {
           window.loadConversation(window.CHAT_CONFIG.chatId);

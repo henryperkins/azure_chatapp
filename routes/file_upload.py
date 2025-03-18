@@ -24,8 +24,7 @@ import httpx
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
-from typing import Optional
+from schemas.file_upload_schemas import FileUploadResponse
 
 from db import get_async_session
 from utils.auth_deps import get_current_user_and_token
@@ -38,22 +37,14 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
 API_VERSION = "2025-02-01-preview"
 
+from fastapi import HTTPException
+
 # Allowed types and size constraints
 ALLOWED_EXTENSIONS = {".txt"}
 MAX_FILE_BYTES = 1_000_000  # 1 MB
 MIME_TEXT_PLAIN = "text/plain"
 
-class FileUploadResponse(BaseModel):
-    """
-    Response schema for a successful file creation (upload).
-    Mirrors key aspects from Azure's REST response.
-    """
-    file_id: str
-    filename: str
-    purpose: str
-    created_at: int
-    status: str
-    object_type: str
+# Removed local definition of FileUploadResponse, now imported from file_upload_schemas
 
 
 @router.post("/files", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
@@ -216,9 +207,4 @@ async def get_file_content(
             status_code=502,
             detail=f"Failed to connect to Azure for file content: {str(e)}"
         )
-def validate_file_upload(file, contents):
-    if not file.filename.lower().endswith(tuple(ALLOWED_EXTENSIONS)):
-        raise HTTPException(400, "Invalid file type")
-    if len(contents) > MAX_FILE_BYTES:
-        raise HTTPException(400, "File too large")
-    # Additional checks can be placed here
+# Removed duplicated local file upload logic to keep Azure approach only.
