@@ -8,7 +8,7 @@ Defines the Chat model, representing a conversation's metadata:
 - title for display
 """
 from sqlalchemy import Column, String, Integer, Boolean, TIMESTAMP, text, ForeignKey
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import JSONB
 # Removed import as ChatProject is no longer used
 from sqlalchemy.orm import relationship
 
@@ -37,7 +37,7 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
     
     user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
