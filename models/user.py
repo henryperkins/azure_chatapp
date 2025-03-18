@@ -7,10 +7,14 @@ and ownership of chats/projects in the Azure Chat Application.
 
 from sqlalchemy import Column, Integer, String, TIMESTAMP, text, Boolean
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from typing import List
+from typing import List, TYPE_CHECKING
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import Base
+
+if TYPE_CHECKING:
+    from .project import Project
 
 class User(Base):
     __tablename__ = "users"
