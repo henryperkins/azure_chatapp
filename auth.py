@@ -142,13 +142,10 @@ async def login_user(
     
     # If ENV=production, use secure cookies and samesite=none.
     # If not production, switch samesite to 'lax' and secure=False to ensure local dev cookies aren't blocked.
+    # Force same-site=None even in dev for cross-site cookie
     production_mode = os.getenv("ENV") == "production"
-    if production_mode:
-        samesite_value = "none"   # For cross-site in production (requires HTTPS)
-        secure_cookie = True      # Must be true if samesite=none in prod
-    else:
-        samesite_value = "lax"    # Lax samesite for local dev
-        secure_cookie = False
+    samesite_value = "none"
+    secure_cookie = False
     
     response.set_cookie(
         key="access_token",
