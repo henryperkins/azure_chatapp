@@ -19,7 +19,7 @@ from sqlalchemy.future import select
 from db import get_async_session
 from models.user import User
 from models.project import Project
-from models.chat import Conversation
+from models.conversation import Conversation
 from models.message import Message
 from utils.auth_deps import (
     get_current_user_and_token, 
@@ -452,20 +452,22 @@ async def websocket_chat_endpoint(
             await websocket.accept()
             token = websocket.query_params.get("token")
             if not token:
+                logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=1008)
                 return
 
-            from utils.auth_deps import verify_token
-            decoded = verify_token(token)
-            username = decoded.get("sub")
-            if not username:
+            # Use enhanced token validation with proper error handling
+            from utils.auth_deps import _get_user_from_token
+            try:
+                # Directly get the user from the token using the enhanced function
+                user = await _get_user_from_token(token, db, "access")
+            except Exception as e:
+                logger.warning(f"WebSocket authentication failed: {str(e)}")
                 await websocket.close(code=1008)
                 return
-
-            # Get user
-            result = await db.execute(select(User).where(User.username == username))
-            user = result.scalars().first()
+                
             if not user or not user.is_active:
+                logger.warning(f"WebSocket auth failed: inactive or invalid user")
                 await websocket.close(code=1008)
                 return
 

@@ -221,7 +221,7 @@ async def get_project_stats(
     """
     project = await verify_project_access(project_id, current_user, db)
     
-    from models.chat import Conversation
+    from models.conversation import Conversation
     from models.project_file import ProjectFile
     from models.artifact import Artifact
     from sqlalchemy import func

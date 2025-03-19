@@ -15,7 +15,7 @@ from sqlalchemy.future import select
 from sqlalchemy import update, delete, and_, or_, func, desc, asc
 from models.artifact import Artifact
 from models.project import Project
-from models.chat import Conversation
+from models.conversation import Conversation
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
