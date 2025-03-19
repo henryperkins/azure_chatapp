@@ -162,7 +162,7 @@ async def get_all_by_condition(
     """
     query = select(model).where(*conditions)
     
-    if order_by:
+    if order_by is not None:
         query = query.order_by(order_by)
         
     query = query.limit(limit).offset(offset)
