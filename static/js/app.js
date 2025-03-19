@@ -116,6 +116,12 @@ function checkAndHandleAuth() {
       } else {
         console.warn("No selected project ID found in localStorage, skipping conversation list.");
       }
+      
+      // Load projects list
+      if (typeof window.projectManager?.loadProjects === "function") {
+        window.projectManager.loadProjects();
+      }
+      
       if (window.CHAT_CONFIG?.chatId) {
         if (typeof window.loadConversation === 'function') {
           window.loadConversation(window.CHAT_CONFIG.chatId);
@@ -313,6 +319,10 @@ document.addEventListener("authStateChanged", (e) => {
 
     // Load user data
     loadConversationList();
+    // Load projects list
+    if (typeof window.projectManager?.loadProjects === "function") {
+      window.projectManager.loadProjects();
+    }
     if (window.CHAT_CONFIG?.chatId) {
       if (typeof window.loadConversation === "function") {
         window.loadConversation(window.CHAT_CONFIG.chatId);

@@ -156,18 +156,32 @@ async def login_user(
         samesite_value = "none"
     else:
         secure_cookie = False
-        # Force same-site=None for cross-site cookie consistency in dev
-        samesite_value = "none"
+        # Default to same-site='lax' for local development
+        samesite_value = "lax"
 
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite=samesite_value,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert minutes to seconds
-        path="/"
-    )
+    # Only set domain if configured
+    cookie_domain = settings.COOKIE_DOMAIN.strip()
+    if not cookie_domain:
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=secure_cookie,
+            samesite=samesite_value,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/"
+        )
+    else:
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=secure_cookie,
+            samesite=samesite_value,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/",
+            domain=cookie_domain
+        )
 
     return {
         "message": "Login successful",
@@ -211,19 +225,31 @@ async def refresh_token(
         samesite_value = "none"
     else:
         secure_cookie = False
-        # Force same-site=None for cross-site cookie consistency in dev
-        samesite_value = "none"
+        # Default to same-site='lax' for local development
+        samesite_value = "lax"
 
-    # Set the cookie with the new token
-    response.set_cookie(
-        key="access_token",
-        value=new_token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite=samesite_value,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/"
-    )
+    cookie_domain = settings.COOKIE_DOMAIN.strip()
+    if not cookie_domain:
+        response.set_cookie(
+            key="access_token",
+            value=new_token,
+            httponly=True,
+            secure=secure_cookie,
+            samesite=samesite_value,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/"
+        )
+    else:
+        response.set_cookie(
+            key="access_token",
+            value=new_token,
+            httponly=True,
+            secure=secure_cookie,
+            samesite=samesite_value,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/",
+            domain=cookie_domain
+        )
     
     logger.info(f"Token refreshed for user '{current_user.username}'")
     
@@ -255,7 +281,8 @@ async def logout_user(response: Response):
         samesite_value = "none"
     else:
         secure_cookie = False
-        samesite_value = "none"
+        # Default to same-site='lax' for local dev
+        samesite_value = "lax"
 
     delete_params = {
         "key": "access_token",
@@ -265,6 +292,7 @@ async def logout_user(response: Response):
         "samesite": samesite_value
     }
 
+    # Only set domain if configured
     if cookie_domain:
         delete_params["domain"] = cookie_domain
 

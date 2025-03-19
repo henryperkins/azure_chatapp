@@ -123,28 +123,45 @@ function switchProjectTab(tabId) {
 
 /**
  * Load projects with optional filtering
- */
-function loadProjects(filter = "all") {
-  window.apiRequest("/api/projects")
-    .then(response => {
-      let projects = response.data || [];
-      
-      // Apply filter
-      if (filter === "pinned") {
-        projects = projects.filter(p => p.pinned);
-      } else if (filter === "archived") {
-        projects = projects.filter(p => p.archived);
-      } else if (filter === "active") {
-        projects = projects.filter(p => !p.archived);
-      }
-      
-      // Dispatch event for UI to render
-      document.dispatchEvent(new CustomEvent("projectsLoaded", { detail: projects }));
-    })
-    .catch(err => {
-      console.error("Error loading projects:", err);
-      window.showNotification?.("Failed to load projects", "error");
-    });
+ function loadProjects(filter = "all") {
+   console.log("Loading projects with filter:", filter);
+   window.apiRequest("/api/projects")
+     .then(response => {
+       console.log("API Response:", response);
+       
+       // Handle both response formats: direct array or {data: array}
+       let projects = Array.isArray(response) ? response : (response.data || []);
+       
+       console.log("Extracted projects:", projects, "Count:", projects.length);
+       
+       // Apply filter
+       if (filter === "pinned") {
+         projects = projects.filter(p => p.pinned);
+       } else if (filter === "archived") {
+         projects = projects.filter(p => p.archived);
+       } else if (filter === "active") {
+         projects = projects.filter(p => !p.archived);
+       }
+       
+       console.log("Filtered projects:", projects, "Count:", projects.length);
+       
+       // Dispatch event for UI to render
+       document.dispatchEvent(new CustomEvent("projectsLoaded", { detail: projects }));
+       
+       // Force check if event was received
+       setTimeout(() => {
+         const projectList = document.getElementById("projectList");
+         if (projectList && projectList.children.length === 0 && projects.length > 0) {
+           console.warn("Projects were loaded but not rendered. Re-attempting direct render.");
+           renderProjectsList({ detail: projects });
+         }
+       }, 500);
+     })
+     .catch(err => {
+       console.error("Error loading projects:", err);
+       window.showNotification?.("Failed to load projects", "error");
+     });
+ }
 }
 
 /**

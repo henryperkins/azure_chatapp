@@ -7,7 +7,7 @@ Using consolidated auth and database utilities.
 
 import logging
 from uuid import UUID
-from typing import Optional, List
+from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from pydantic import BaseModel, Field
 from schemas.project_schemas import (
@@ -40,8 +40,7 @@ router = APIRouter()
 # -----------------------------
 # Project Routes
 # -----------------------------
-
-@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=Dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
     project_data: ProjectCreate,
     current_user: User = Depends(get_current_user_and_token),
@@ -55,14 +54,15 @@ async def create_project(
             user_id=current_user.id,
         )
         await save_model(db, project)
-        return project
+        logger.info(f"Project created successfully: {project.id} for user {current_user.id}")
+        return await process_standard_response(project, "Project created successfully")
         
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
         raise HTTPException(500, "Project creation failed")
+        raise HTTPException(500, "Project creation failed")
 
-
-@router.get("", response_model=List[ProjectResponse])
+@router.get("", response_model=Dict)
 async def list_projects(
     archived: Optional[bool] = None,
     pinned: Optional[bool] = None,
@@ -80,17 +80,23 @@ async def list_projects(
     
     # Use consolidated function for database query
     projects = await get_all_by_condition(
-        db, 
-        Project, 
-        *conditions, 
-        limit=limit, 
+        db,
+        Project,
+        *conditions,
+        limit=limit,
         offset=skip,
         order_by=Project.created_at.desc()
     )
+    
+    # Log the projects being returned
+    logger.info(f"Retrieved {len(projects)} projects for user {current_user.id}")
+    
+    # Return standardized response format
+    return await process_standard_response(projects)
     return projects
 
 
-@router.get("/{project_id}", response_model=ProjectResponse)
+@router.get("/{project_id}", response_model=Dict)
 async def get_project(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -111,7 +117,7 @@ async def get_project(
     return await process_standard_response(project)
 
 
-@router.patch("/{project_id}", response_model=ProjectResponse)
+@router.patch("/{project_id}", response_model=Dict)
 async def update_project(
     project_id: UUID,
     update_data: ProjectUpdate,

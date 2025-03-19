@@ -138,6 +138,11 @@ document.addEventListener("DOMContentLoaded", () => {
         window.showNotification("Login successful!", "success");
       }
       
+      // Explicitly load project list
+      if (typeof window.projectManager?.loadProjects === "function") {
+        window.projectManager.loadProjects();
+      }
+      
       // Dispatch authStateChanged event so other components can react
       document.dispatchEvent(
         new CustomEvent("authStateChanged", { detail: { authenticated: true } })
@@ -241,15 +246,20 @@ document.addEventListener("DOMContentLoaded", () => {
           userMenu.classList.remove("hidden");
         }
         
-        document.dispatchEvent(new CustomEvent("authStateChanged", {
-          detail: { authenticated: true }
-        }));
-        
         // Get user info and update UI
         const userData = await resp.json();
         if (authStatus && userData.username) {
           authStatus.textContent = userData.username;
         }
+        
+        // Explicitly load project list
+        if (typeof window.projectManager?.loadProjects === "function") {
+          window.projectManager.loadProjects();
+        }
+        
+        document.dispatchEvent(new CustomEvent("authStateChanged", {
+          detail: { authenticated: true }
+        }));
         
         // Setup token refresh mechanism
         setupTokenRefresh();
