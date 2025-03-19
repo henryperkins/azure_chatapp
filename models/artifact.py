@@ -6,8 +6,7 @@ Defines the Artifact model, representing content generated within a project:
 - Documents
 - Visual outputs
 """
-
-from sqlalchemy import Column, String, Text, TIMESTAMP, text, ForeignKey, CheckConstraint
+from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, CheckConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from typing import Optional
@@ -35,7 +34,8 @@ class Artifact(Base):
     content_type: Mapped[str] = mapped_column(String(50), nullable=False)  # code, document, image, etc.
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True, default=None)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
 
     project = relationship("Project", back_populates="artifacts")
     conversation = relationship("Conversation", back_populates="artifacts")
