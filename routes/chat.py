@@ -1,12 +1,8 @@
 """
 chat.py
 -------
-Revised routes to align with single-project association.
-
+Revised routes for conversations with enhanced utility functions.
 Each conversation is tied to exactly one project (project_id).
-The path now includes /api/projects/{project_id}/conversations, with conversation_id in the path.
-Legacy endpoints for /conversations are removed.
-
 """
 
 import logging
@@ -25,9 +21,21 @@ from models.user import User
 from models.project import Project
 from models.chat import Conversation
 from models.message import Message
-from utils.auth_deps import get_current_user_and_token
+from utils.auth_deps import (
+    get_current_user_and_token, 
+    validate_resource_ownership,
+    verify_project_access, 
+    process_standard_response
+)
 from utils.openai import openai_chat
-from utils.context import manage_context, token_limit_check
+from utils.context import (
+    manage_context, 
+    token_limit_check, 
+    get_by_id, 
+    get_all_by_condition,
+    save_model, 
+    create_response
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -79,15 +87,10 @@ async def create_conversation(
     """
     Creates a new conversation under a specific project.
     """
-    # Validate project ownership
-    project = await db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid or unauthorized project")
-        
-        # Check if project is archived
-        if project.archived:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot create conversations in archived projects")
+    # Validate project ownership using enhanced utility
+    project = await verify_project_access(project_id, current_user, db)
 
+    # Create new conversation    
     new_conversation = Conversation(
         user_id=current_user.id,
         project_id=project.id,
@@ -97,16 +100,18 @@ async def create_conversation(
         created_at=datetime.now()
     )
 
-    db.add(new_conversation)
-    await db.commit()
-    await db.refresh(new_conversation)
+    # Save using utility function
+    await save_model(db, new_conversation)
 
-    logger.info("Conversation created with id=%s under project %s by user_id=%s", new_conversation.id, project_id, current_user.id)
-    return {
+    logger.info("Conversation created with id=%s under project %s by user_id=%s", 
+                new_conversation.id, project_id, current_user.id)
+                
+    # Return standardized response
+    return await process_standard_response({
         "conversation_id": str(new_conversation.id),
         "title": new_conversation.title,
         "created_at": new_conversation.created_at.isoformat()
-    }
+    })
 
 
 @router.get("/projects/{project_id}/conversations", response_model=dict)
@@ -118,21 +123,18 @@ async def list_conversations(
     """
     Returns a list of conversations for a specific project, owned by the current user.
     """
-    # Validate project ownership
-    project = await db.get(Project, project_id)
-    if not project or project.user_id != current_user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid or unauthorized project")
+    # Validate project access
+    await verify_project_access(project_id, current_user, db)
 
-    result = await db.execute(
-        select(Conversation)
-        .where(
-            Conversation.project_id == project_id,
-            Conversation.user_id == current_user.id,
-            Conversation.is_deleted.is_(False)
-        )
-        .order_by(Conversation.created_at.desc())
+    # Use enhanced database function
+    conversations = await get_all_by_condition(
+        db,
+        Conversation,
+        Conversation.project_id == project_id,
+        Conversation.user_id == current_user.id,
+        Conversation.is_deleted.is_(False),
+        order_by=Conversation.created_at.desc()
     )
-    conversations = result.scalars().all()
 
     items = [
         {
@@ -143,7 +145,8 @@ async def list_conversations(
         }
         for conv in conversations
     ]
-    return {"conversations": items}
+    
+    return await process_standard_response({"conversations": items})
 
 
 @router.get("/projects/{project_id}/conversations/{conversation_id}", response_model=dict)
@@ -156,13 +159,25 @@ async def get_conversation(
     """
     Retrieve metadata about a specific conversation, verifying ownership and project relationship.
     """
-    conversation = await get_valid_conversation(project_id, conversation_id, current_user, db)
-    return {
+    # Validate resource using enhanced utility
+    conversation = await validate_resource_ownership(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        [
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
+    )
+    
+    return await process_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "model_id": conversation.model_id,
         "created_at": conversation.created_at
-    }
+    })
 
 
 @router.patch("/projects/{project_id}/conversations/{conversation_id}", response_model=dict)
@@ -176,21 +191,35 @@ async def update_conversation(
     """
     Updates the conversation's title or model_id.
     """
-    conversation = await get_valid_conversation(project_id, conversation_id, current_user, db)
+    # Validate conversation ownership
+    conversation = await validate_resource_ownership(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        [
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
+    )
+    
+    # Update fields
     if update_data.title is not None:
         conversation.title = update_data.title.strip()
     if update_data.model_id is not None:
         conversation.model_id = update_data.model_id
 
-    await db.commit()
-    await db.refresh(conversation)
+    # Save using utility function
+    await save_model(db, conversation)
+    
     logger.info(f"Conversation {conversation_id} updated by user {current_user.id}")
 
-    return {
+    return await process_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "model_id": conversation.model_id
-    }
+    })
 
 
 @router.delete("/projects/{project_id}/conversations/{conversation_id}", response_model=dict)
@@ -203,12 +232,28 @@ async def delete_conversation(
     """
     Soft-deletes a conversation by setting is_deleted = True.
     """
-    conversation = await get_valid_conversation(project_id, conversation_id, current_user, db)
+    # Validate conversation ownership
+    conversation = await validate_resource_ownership(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        [
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
+    )
+    
     conversation.is_deleted = True
-    await db.commit()
+    await save_model(db, conversation)
+    
     logger.info(f"Conversation {conversation_id} soft-deleted by user {current_user.id}")
 
-    return {"status": "deleted", "conversation_id": str(conversation.id)}
+    return await process_standard_response(
+        {"conversation_id": str(conversation.id)},
+        message="Conversation deleted successfully"
+    )
 
 
 # ============================
@@ -225,14 +270,27 @@ async def list_messages(
     """
     Retrieves all messages for a conversation, sorted by creation time ascending.
     """
-    conversation = await get_valid_conversation(project_id, conversation_id, current_user, db)
-
-    result = await db.execute(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.asc())
+    # Validate conversation ownership
+    conversation = await validate_resource_ownership(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        [
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
     )
-    msgs = result.scalars().all()
+
+    # Get messages using enhanced function
+    messages = await get_all_by_condition(
+        db,
+        Message,
+        Message.conversation_id == conversation.id,
+        order_by=Message.created_at.asc()
+    )
+    
     output = [
         {
             "id": str(msg.id),
@@ -241,9 +299,10 @@ async def list_messages(
             "metadata": msg.get_metadata_dict(),
             "timestamp": msg.timestamp
         }
-        for msg in msgs
+        for msg in messages
     ]
-    return {"messages": output}
+    
+    return await process_standard_response({"messages": output})
 
 
 @router.post("/projects/{project_id}/conversations/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -258,23 +317,37 @@ async def create_message(
     Adds a new user or system message to the specified conversation,
     optionally triggers an assistant response if role='user'.
     """
-    conversation = await get_valid_conversation(project_id, conversation_id, current_user, db)
+    # Validate conversation ownership
+    conversation = await validate_resource_ownership(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        [
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
+    )
 
     try:
+        # Create user message
         message = Message(
             conversation_id=conversation.id,
             role=new_msg.role.lower().strip(),
             content=new_msg.content.strip()
         )
-        db.add(message)
-        await db.commit()
-        await db.refresh(message)
+        
+        # Save using utility function
+        await save_model(db, message)
+        
         logger.info(f"Message {message.id} saved for conversation {conversation.id}")
     except Exception as e:
         await db.rollback()
         logger.error(f"Message save failed: {str(e)}")
         raise HTTPException(500, "Failed to save message")
 
+    # Check token limit
     await token_limit_check(str(conversation.id), db)
 
     response_payload = {
@@ -284,6 +357,7 @@ async def create_message(
         "content": message.content
     }
 
+    # Handle image data if provided
     if new_msg.image_data:
         from utils.openai import extract_base64_data
         import base64
@@ -291,47 +365,61 @@ async def create_message(
             base64_str = extract_base64_data(new_msg.image_data)
             base64.b64decode(base64_str, validate=True)
         except Exception:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid image data")
+            raise HTTPException(status_code=400, detail="Invalid image data")
 
+    # Generate AI response if user message
     if message.role == "user":
-        # Gather entire conversation messages from DB
-        all_msgs = await db.execute(
-            select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at.asc())
+        # Get all messages using enhanced function
+        conv_messages = await get_all_by_condition(
+            db,
+            Message,
+            Message.conversation_id == conversation.id,
+            order_by=Message.created_at.asc()
         )
-        conv_messages = all_msgs.scalars().all()
 
         msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in conv_messages]
-        project = await db.get(Project, conversation.project_id)
+        
+        # Get project for custom instructions
+        project = await get_by_id(db, Project, conversation.project_id)
+        
         if project and project.custom_instructions:
             msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
+        
+        # Manage context to prevent token overflow
         msg_dicts = await manage_context(msg_dicts)
 
         try:
+            # Determine model and settings
             chosen_model = "o1" if new_msg.image_data else (conversation.model_id or "o1")
             chosen_vision = new_msg.vision_detail if new_msg.vision_detail else "auto"
 
+            # Call OpenAI API
             openai_response = await openai_chat(
                 messages=msg_dicts,
                 model_name=chosen_model,
                 image_data=new_msg.image_data,
                 vision_detail=chosen_vision
             )
+            
             assistant_content = openai_response["choices"][0]["message"]["content"]
+            
+            # Create assistant message
             assistant_msg = Message(
                 conversation_id=conversation.id,
                 role="assistant",
                 content=assistant_content
             )
-            db.add(assistant_msg)
-            await db.commit()
-            project = await db.get(Project, conversation.project_id)
+            
+            # Save using utility function
+            await save_model(db, assistant_msg)
+            
+            # Update project token usage
             if project:
                 token_estimate = len(assistant_content) // 4
                 project.token_usage += token_estimate
-                await db.commit()
-                await db.refresh(project)
-            await db.refresh(assistant_msg)
+                await save_model(db, project)
 
+            # Add assistant message to response
             response_payload["assistant_message"] = {
                 "id": str(assistant_msg.id),
                 "role": assistant_msg.role,
@@ -341,7 +429,7 @@ async def create_message(
             logger.error(f"Error calling OpenAI: {e}")
             response_payload["assistant_error"] = str(e)
 
-    return response_payload
+    return await process_standard_response(response_payload)
 
 
 # ============================
@@ -374,29 +462,37 @@ async def websocket_chat_endpoint(
                 await websocket.close(code=1008)
                 return
 
-            from models.user import User
-            from sqlalchemy import select
+            # Get user
             result = await db.execute(select(User).where(User.username == username))
             user = result.scalars().first()
             if not user or not user.is_active:
                 await websocket.close(code=1008)
                 return
 
-            conversation = await get_valid_conversation(project_id, conversation_id, user, db)
+            # Validate conversation ownership
+            conversation = await validate_resource_ownership(
+                conversation_id,
+                Conversation,
+                user,
+                db,
+                "Conversation",
+                [
+                    Conversation.project_id == project_id,
+                    Conversation.is_deleted.is_(False)
+                ]
+            )
 
             while True:
                 data = await websocket.receive_text()
                 data_dict = json.loads(data)
 
-                async with db.begin():
-                    message = Message(
-                        conversation_id=conversation.id,
-                        role=data_dict["role"],
-                        content=data_dict["content"]
-                    )
-                    db.add(message)
-                    await db.commit()
-                    await db.refresh(message)
+                # Create message
+                message = Message(
+                    conversation_id=conversation.id,
+                    role=data_dict["role"],
+                    content=data_dict["content"]
+                )
+                await save_model(db, message)
 
                 if message.role == "user":
                     from uuid import UUID as StdUUID
@@ -418,33 +514,41 @@ async def handle_assistant_response(
     """
     Handles the assistant response for a given conversation via WebSocket.
     """
-    # Grab conversation
-    conv = await session.get(Conversation, conv_id)
-    if not conv:
+    # Get conversation
+    conversation = await get_by_id(session, Conversation, conv_id)
+    if not conversation:
         await websocket.send_json({"error": "Conversation not found"})
         return
 
-    # gather messages
-    messages_query = await session.execute(
-        select(Message).where(Message.conversation_id == conv.id).order_by(Message.created_at.asc())
+    # Get messages using enhanced function
+    messages = await get_all_by_condition(
+        session,
+        Message,
+        Message.conversation_id == conversation.id,
+        order_by=Message.created_at.asc()
     )
-    all_msgs = messages_query.scalars().all()
-    msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in all_msgs]
+    
+    # Format messages for API
+    msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in messages]
+    
+    # Manage context
     msg_dicts = await manage_context(msg_dicts)
 
-    chosen_model = conv.model_id or "o1"
+    chosen_model = conversation.model_id or "o1"
     try:
+        # Call OpenAI API
         openai_response = await openai_chat(messages=msg_dicts, model_name=chosen_model)
         assistant_content = openai_response["choices"][0]["message"]["content"]
+        
+        # Create assistant message
         assistant_msg = Message(
-            conversation_id=conv.id,
+            conversation_id=conversation.id,
             role="assistant",
             content=assistant_content
         )
-        session.add(assistant_msg)
-        await session.commit()
-        await session.refresh(assistant_msg)
+        await save_model(session, assistant_msg)
 
+        # Send response via WebSocket
         await websocket.send_json({
             "id": str(assistant_msg.id),
             "role": assistant_msg.role,
@@ -453,27 +557,3 @@ async def handle_assistant_response(
     except Exception as e:
         logger.error(f"Error calling OpenAI: {e}")
         await websocket.send_json({"error": f"OpenAI error: {str(e)}"})
-
-
-# ============================
-# Utilities
-# ============================
-
-async def get_valid_conversation(project_id: UUID, conversation_id: UUID, user: User, db: AsyncSession):
-    """
-    Utility to verify that conversation_id belongs to the given project 
-    and is owned by the specified user.
-    """
-    q = await db.execute(
-        select(Conversation)
-        .where(
-            Conversation.id == conversation_id,
-            Conversation.project_id == project_id,
-            Conversation.user_id == user.id,
-            Conversation.is_deleted.is_(False)
-        )
-    )
-    conv = q.scalars().first()
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    return conv

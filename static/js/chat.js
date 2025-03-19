@@ -27,62 +27,35 @@ function loadConversation(chatId) {
   // Show loading state
   conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
 
-  fetch(`/api/chat/conversations/${chatId}/messages`, {
-    method: "GET",
-    headers: getHeaders(),
-    credentials: "include"
-  })
-  .then(checkResponse)
-  .then((data) => {
-    conversationArea.innerHTML = "";
-    if (data.messages && data.messages.length > 0) {
-      data.messages.forEach((msg) => {
-        appendMessage(msg.role, msg.content);
-      });
-    } else {
-      appendMessage("system", "No messages in this conversation yet");
-    }
+  // Use the apiRequest utility function
+  window.apiRequest(`/api/chat/conversations/${chatId}/messages`)
+    .then((data) => {
+      conversationArea.innerHTML = "";
+      if (data.data && data.data.messages && data.data.messages.length > 0) {
+        data.data.messages.forEach((msg) => {
+          appendMessage(msg.role, msg.content);
+        });
+      } else {
+        appendMessage("system", "No messages in this conversation yet");
+      }
 
-    // Update chat title if metadata is present
-    const chatTitleEl = document.getElementById("chatTitle");
-    if (chatTitleEl) {
-      chatTitleEl.textContent = data.metadata?.title || "New Chat";
-    }
-  })
-  .catch((err) => {
-    console.error("Error loading conversation:", err);
-    conversationArea.innerHTML = '<div class="text-center text-red-500">Error loading conversation</div>';
-  });
-}
-
-/**
- * Helper function that provides default headers for fetch calls.
- */
-function getHeaders() {
-  const cookie = document.cookie
-    .split('; ')
-    .find(row => row.startsWith('access_token='))
-    ?.split('=')[1] || '';
-  return {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer " + cookie
-  };
-}
-
-/**
- * Checks if the response is OK; otherwise, throws an error with text.
- */
-function checkResponse(resp) {
-  if (!resp.ok) {
-    return resp.text().then((text) => {
-      throw new Error(`${resp.status}: ${text}`);
+      // Update chat title if metadata is present
+      const chatTitleEl = document.getElementById("chatTitle");
+      if (chatTitleEl && data.data && data.data.metadata) {
+        chatTitleEl.textContent = data.data.metadata?.title || "New Chat";
+      }
+    })
+    .catch((err) => {
+      console.error("Error loading conversation:", err);
+      conversationArea.innerHTML = '<div class="text-center text-red-500">Error loading conversation</div>';
+      
+      // Use the standard notification system
+      if (window.showNotification) {
+        window.showNotification("Error loading conversation", "error");
+      }
     });
-  }
-  return resp.json();
 }
 
-// Expose loadConversation globally
-window.loadConversation = loadConversation;
 function appendMessage(role, content) {
  const conversationArea = document.getElementById("conversationArea");
  if(!conversationArea) return;
@@ -94,22 +67,10 @@ function appendMessage(role, content) {
    conversationArea.appendChild(summaryEl);
  }
 
- const msgDiv = document.createElement("div");
- msgDiv.classList.add("mb-2", "p-2", "rounded");
-
- switch (role) {
-   case "user":
-     msgDiv.classList.add("bg-blue-50", "text-blue-900");
-     break;
-   case "assistant":
-     msgDiv.classList.add("bg-green-50", "text-green-900");
-     break;
-   case "system":
-     msgDiv.classList.add("bg-gray-50", "text-gray-600", "text-sm");
-     break;
-   default:
-     msgDiv.classList.add("bg-white");
- }
+ // Use createDomElement utility function
+ const msgDiv = window.createDomElement("div", {
+   className: `mb-2 p-2 rounded ${getMessageClass(role)}`
+ });
 
  // Safely format text (if window.formatText is defined)
  const safeContent = typeof window.formatText === 'function'
@@ -119,6 +80,23 @@ function appendMessage(role, content) {
  conversationArea.appendChild(msgDiv);
  conversationArea.scrollTop = conversationArea.scrollHeight;
 }
+
+function getMessageClass(role) {
+  switch (role) {
+    case "user":
+      return "bg-blue-50 text-blue-900";
+    case "assistant":
+      return "bg-green-50 text-green-900";
+    case "system":
+      return "bg-gray-50 text-gray-600 text-sm";
+    default:
+      return "bg-white";
+  }
+}
+
+// Expose loadConversation globally
+window.loadConversation = loadConversation;
+
 // ---------------------------------------------------------------------
 // Main DOMContentLoaded Logic
 // ---------------------------------------------------------------------
@@ -149,9 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
     loadConversation(chatId);
     initializeWebSocket();
   }
-
-  // Append a message to the conversation area
-  // [appendMessage moved to global scope]
 
   // ---------------------------------------------------------------------
   // WebSocket Initialization
@@ -224,9 +199,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
       const lastUserDiv = msgDivs[msgDivs.length - 1];
       if (lastUserDiv) {
-        const detailEl = document.createElement('div');
-        detailEl.className = 'text-xs text-gray-500 mt-1';
-        detailEl.textContent = detailText;
+        const detailEl = window.createDomElement("div", {
+          className: "text-xs text-gray-500 mt-1"
+        }, detailText);
         lastUserDiv.appendChild(detailEl);
       }
     }
@@ -244,40 +219,40 @@ document.addEventListener("DOMContentLoaded", () => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(payload));
     } else {
-      // Fallback to a standard POST fetch
-      fetch(`/api/chat/conversations/${chatId}/messages`, {
-        method: "POST",
-        headers: {
-          ...getHeaders(),
-          "Content-Type": "application/json"
-        },
-        credentials: "include",
-        body: JSON.stringify(payload)
-      })
-      .then(resp => {
-        console.log("sendMessage response:", resp);
-        return checkResponse(resp);
-      })
-      .then(respData => {
-        console.log("sendMessage response body:", respData);
-        if (respData.assistant_message) {
-          appendMessage(respData.assistant_message.role, respData.assistant_message.content);
-        }
-        if (respData.assistant_error) {
-          console.error("Assistant error:", respData.assistant_error);
-        }
-      })
-      .catch((err) => console.error("Error sending message via fetch:", err));
+      // Fallback to a standard POST fetch using apiRequest
+      window.apiRequest(`/api/chat/conversations/${chatId}/messages`, "POST", payload)
+        .then(respData => {
+          console.log("sendMessage response body:", respData);
+          if (respData.data && respData.data.assistant_message) {
+            appendMessage(respData.data.assistant_message.role, respData.data.assistant_message.content);
+          }
+          if (respData.data && respData.data.assistant_error) {
+            console.error("Assistant error:", respData.data.assistant_error);
+            
+            // Use the standard notification system
+            if (window.showNotification) {
+              window.showNotification("Error generating response", "error");
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("Error sending message via fetch:", err);
+          
+          // Use the standard notification system
+          if (window.showNotification) {
+            window.showNotification("Error sending message", "error");
+          }
+        });
     }
 
-    // Optional visual indicator in the user’s message if there was an image
+    // Optional visual indicator in the user's message if there was an image
     if (visionImage) {
       const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
       const lastUserDiv = msgDivs[msgDivs.length - 1];
       if (lastUserDiv) {
-        const imgIndicator = document.createElement('div');
-        imgIndicator.className = 'text-sm text-gray-500 mt-1';
-        imgIndicator.textContent = '📷 Image attached';
+        const imgIndicator = window.createDomElement("div", {
+          className: "text-sm text-gray-500 mt-1"
+        }, "📷 Image attached");
         lastUserDiv.appendChild(imgIndicator);
       }
     }
@@ -334,19 +309,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const newTitle = prompt("Enter a new chat title:", chatTitleEl.textContent.trim());
     if (!newTitle) return;
 
-    fetch(`/api/chat/conversations/${chatId}`, {
-      method: "PATCH",
-      headers: {
-        ...getHeaders(),
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ title: newTitle })
-    })
-    .then(checkResponse)
-    .then((data) => {
-      chatTitleEl.textContent = data.title || newTitle;
-    })
-    .catch((err) => console.error("Error updating chat title:", err));
+    // Use apiRequest utility
+    window.apiRequest(`/api/chat/conversations/${chatId}`, "PATCH", { title: newTitle })
+      .then((data) => {
+        chatTitleEl.textContent = data.data?.title || newTitle;
+        
+        // Show notification
+        if (window.showNotification) {
+          window.showNotification("Chat title updated", "success");
+        }
+      })
+      .catch((err) => {
+        console.error("Error updating chat title:", err);
+        
+        // Show error notification
+        if (window.showNotification) {
+          window.showNotification("Error updating chat title", "error");
+        }
+      });
   }
 
   // ---------------------------------------------------------------------
@@ -359,37 +339,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function createNewChat() {
     const projectSelectEl = document.getElementById('projectSelect');
-    fetch("/api/chat/conversations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        title: "New Chat",
-        project_id: projectSelectEl ? projectSelectEl.value : null
-      })
-    })
-    .then(response => {
-      if (!response.ok) {
-        return response.text().then(text => { throw new Error(text); });
+    const projectId = projectSelectEl ? projectSelectEl.value : null;
+    
+    if (!projectId) {
+      if (window.showNotification) {
+        window.showNotification("Please select a project first", "error");
       }
-      return response.json();
+      return;
+    }
+    
+    // Use apiRequest utility
+    window.apiRequest("/api/chat/conversations", "POST", {
+      title: "New Chat",
+      project_id: projectId
     })
     .then(data => {
-      window.history.pushState({}, '', `/?chatId=${data.conversation_id}`);
+      window.history.pushState({}, '', `/?chatId=${data.data.conversation_id}`);
+      
       // Refresh the conversation list (defined in app.js if available)
       if (typeof window.loadConversationList === 'function') {
         window.loadConversationList();
       }
+      
       // Load the new conversation
-      loadConversation(data.conversation_id);
+      loadConversation(data.data.conversation_id);
 
       // Show chat UI, hide "no chat selected" message
       const chatUI = document.getElementById("chatUI");
       const noChatMsg = document.getElementById("noChatSelectedMessage");
       if (chatUI) chatUI.classList.remove("hidden");
       if (noChatMsg) noChatMsg.classList.add("hidden");
+      
+      // Show success notification
+      if (window.showNotification) {
+        window.showNotification("New conversation created", "success");
+      }
     })
     .catch(err => {
       console.error("Error creating new chat:", err);
@@ -398,9 +382,4 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-
-  // Any additional code you may have...
-  // (Focus trapping, custom events, etc.)
-
 });
-// No need to redefine window.loadConversation here (already done above).

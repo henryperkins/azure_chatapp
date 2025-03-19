@@ -13,7 +13,7 @@ This code is production-ready, with no placeholders.
 
 import requests
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union, Any
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,151 @@ async def openai_chat(
     except httpx.RequestError as e:
         logger.error(f"Error calling Azure OpenAI: {e}")
         raise RuntimeError(f"Unable to reach Azure OpenAI endpoint: {str(e)}")
+
 def extract_base64_data(image_data: str) -> str:
     if "base64," in image_data:
         return image_data.split("base64,")[1]
     return image_data
+
+# NEW UTILITY FUNCTIONS FOR REDUCING DUPLICATION
+
+async def azure_api_request(
+    endpoint_path: str, 
+    method: str = "GET",
+    data: Optional[Dict[str, Any]] = None,
+    params: Optional[Dict[str, str]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 30
+) -> Dict[str, Any]:
+    """
+    Standardized Azure API request handler to reduce duplication.
+    
+    Args:
+        endpoint_path: The API path after the base endpoint URL
+        method: HTTP method (GET, POST, PUT, DELETE)
+        data: Request payload for POST/PUT
+        params: URL query parameters
+        headers: Additional headers to include
+        timeout: Request timeout in seconds
+        
+    Returns:
+        JSON response as dict
+        
+    Raises:
+        ValueError: For API errors
+        RuntimeError: For connection errors
+    """
+    url = f"{AZURE_OPENAI_ENDPOINT}/{endpoint_path}"
+    
+    # Prepare headers
+    request_headers = {
+        "api-key": AZURE_OPENAI_API_KEY,
+        "Content-Type": "application/json"
+    }
+    
+    if headers:
+        request_headers.update(headers)
+        
+    # Prepare parameters
+    request_params = {
+        "api-version": API_VERSION
+    }
+    
+    if params:
+        request_params.update(params)
+    
+    # Log the request
+    logger.debug(f"Azure API request: {method} {url}")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            if method == "GET":
+                response = await client.get(
+                    url, 
+                    params=request_params,
+                    headers=request_headers, 
+                    timeout=timeout
+                )
+            elif method == "POST":
+                response = await client.post(
+                    url, 
+                    params=request_params,
+                    json=data, 
+                    headers=request_headers, 
+                    timeout=timeout
+                )
+            elif method == "PUT":
+                response = await client.put(
+                    url, 
+                    params=request_params,
+                    json=data, 
+                    headers=request_headers, 
+                    timeout=timeout
+                )
+            elif method == "DELETE":
+                response = await client.delete(
+                    url, 
+                    params=request_params,
+                    headers=request_headers, 
+                    timeout=timeout
+                )
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+                
+            if response.status_code >= 400:
+                logger.error(f"Azure API error: {response.status_code} => {response.text}")
+                raise ValueError(f"Azure API request failed ({response.status_code}): {response.text}")
+                
+            if not response.content:
+                return {}
+                
+            return response.json()
+            
+    except httpx.RequestError as e:
+        logger.error(f"Error connecting to Azure API: {e}")
+        raise RuntimeError(f"Unable to reach Azure API endpoint: {str(e)}")
+
+async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: int = 500) -> str:
+    """
+    Simple wrapper for text completion to reduce duplication of chat message formatting.
+    
+    Args:
+        prompt: Text prompt to complete
+        model_name: Azure OpenAI model to use
+        max_tokens: Maximum tokens to generate
+        
+    Returns:
+        Generated text content
+    """
+    messages = [{"role": "user", "content": prompt}]
+    
+    try:
+        response = await openai_chat(
+            messages=messages,
+            model_name=model_name,
+            max_completion_tokens=max_tokens
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"Error during text completion: {e}")
+        raise RuntimeError(f"Text completion failed: {str(e)}")
+
+async def get_moderation(text: str) -> Dict[str, Any]:
+    """
+    Call the Azure OpenAI moderation endpoint.
+    
+    Args:
+        text: Text to moderate
+        
+    Returns:
+        Moderation results
+    """
+    try:
+        return await azure_api_request(
+            endpoint_path="openai/moderations",
+            method="POST",
+            data={"input": text}
+        )
+    except Exception as e:
+        logger.error(f"Error during content moderation: {e}")
+        return {"error": str(e), "flagged": False}
