@@ -83,6 +83,10 @@ async def create_conversation(
     project = await db.get(Project, project_id)
     if not project or project.user_id != current_user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid or unauthorized project")
+        
+        # Check if project is archived
+        if project.archived:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot create conversations in archived projects")
 
     new_conversation = Conversation(
         user_id=current_user.id,
@@ -297,6 +301,9 @@ async def create_message(
         conv_messages = all_msgs.scalars().all()
 
         msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in conv_messages]
+        project = await db.get(Project, conversation.project_id)
+        if project and project.custom_instructions:
+            msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
         msg_dicts = await manage_context(msg_dicts)
 
         try:
@@ -317,6 +324,12 @@ async def create_message(
             )
             db.add(assistant_msg)
             await db.commit()
+            project = await db.get(Project, conversation.project_id)
+            if project:
+                token_estimate = len(assistant_content) // 4
+                project.token_usage += token_estimate
+                await db.commit()
+                await db.refresh(project)
             await db.refresh(assistant_msg)
 
             response_payload["assistant_message"] = {

@@ -17,6 +17,7 @@ from schemas.project_schemas import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, and_
+from models.artifact import Artifact
 
 from db import get_async_session
 from models.user import User
@@ -32,9 +33,6 @@ from services.project_service import validate_project_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# Removed local Pydantic schemas; now import them from schemas.project_schemas
-# Remove leftover 'orm_mode = True' line
 
 # -----------------------------
 # Project Routes
@@ -145,10 +143,111 @@ async def toggle_archive_project(
     await db.execute(stmt)
     await db.commit()
     await db.refresh(project)
-    return project
 
+    @router.post("/{project_id}/artifacts", response_model=dict, status_code=status.HTTP_201_CREATED)
+    async def create_artifact(
+        project_id: UUID,
+        artifact_data: dict,  # Replace with proper schema
+        current_user: User = Depends(get_current_user_and_token),
+        db: AsyncSession = Depends(get_async_session)
+    ):
+        """
+        Create a new artifact for the project
+        """
+        project = await validate_project_access(project_id, current_user, db)
+        
+        new_artifact = Artifact(
+            project_id=project_id,
+            conversation_id=artifact_data.get("conversation_id"),
+            name=artifact_data["name"],
+            content_type=artifact_data["content_type"],
+            content=artifact_data["content"]
+        )
+        
+        db.add(new_artifact)
+        await db.commit()
+        await db.refresh(new_artifact)
+        
+        return {
+            "id": str(new_artifact.id),
+            "name": new_artifact.name,
+            "created_at": new_artifact.created_at.isoformat()
+        }
 
+    @router.get("/{project_id}/artifacts", response_model=dict)
+    async def list_artifacts(
+        project_id: UUID,
+        current_user: User = Depends(get_current_user_and_token),
+        db: AsyncSession = Depends(get_async_session)
+    ):
+        """
+        List all artifacts for a project
+        """
+        await validate_project_access(project_id, current_user, db)
+        
+        result = await db.execute(
+            select(Artifact)
+            .where(Artifact.project_id == project_id)
+            .order_by(Artifact.created_at.desc())
+        )
+        artifacts = result.scalars().all()
+        
+        return {
+            "artifacts": [
+                {
+                    "id": str(a.id),
+                    "name": a.name,
+                    "content_type": a.content_type,
+                    "created_at": a.created_at
+                }
+                for a in artifacts
+            ]
+        }
 
-# Removed duplicated definitions, we import from services.project_service now
-    # removed duplicated knowledge base code
-# Remove leftover line
+@router.get("/{project_id}/stats", response_model=dict)
+async def get_project_stats(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    Get statistics for a project including token usage, file count, etc.
+    """
+    project = await validate_project_access(project_id, current_user, db)
+    
+    from models.chat import Conversation
+    from models.project_file import ProjectFile
+    from models.artifact import Artifact
+    from sqlalchemy import func
+    
+    # Get conversation count
+    conv_result = await db.execute(
+        select(func.count()).where(Conversation.project_id == project_id, Conversation.is_deleted.is_(False))
+    )
+    conversation_count = conv_result.scalar() or 0
+    
+    # Get file count and total size
+    files_result = await db.execute(
+        select(func.count(), func.sum(ProjectFile.file_size)).where(ProjectFile.project_id == project_id)
+    )
+    file_count, total_file_size = files_result.first()
+    file_count = file_count or 0
+    total_file_size = total_file_size or 0
+    
+    # Get artifact count
+    artifact_result = await db.execute(
+        select(func.count()).where(Artifact.project_id == project_id)
+    )
+    artifact_count = artifact_result.scalar() or 0
+    
+    usage_percentage = (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
+    
+    return {
+        "token_usage": project.token_usage,
+        "max_tokens": project.max_tokens,
+        "usage_percentage": usage_percentage,
+        "conversation_count": conversation_count,
+        "file_count": file_count,
+        "total_file_size": total_file_size,
+        "artifact_count": artifact_count
+    }
