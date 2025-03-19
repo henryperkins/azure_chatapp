@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 from schemas.project_schemas import (
     ProjectCreate,
     ProjectUpdate,
-    ProjectResponse
+    ProjectResponse,
+    ArtifactCreate,
+    ArtifactResponse
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -143,66 +145,63 @@ async def toggle_archive_project(
     await db.execute(stmt)
     await db.commit()
     await db.refresh(project)
+    return project
 
-    @router.post("/{project_id}/artifacts", response_model=dict, status_code=status.HTTP_201_CREATED)
-    async def create_artifact(
-        project_id: UUID,
-        artifact_data: dict,  # Replace with proper schema
-        current_user: User = Depends(get_current_user_and_token),
-        db: AsyncSession = Depends(get_async_session)
-    ):
-        """
-        Create a new artifact for the project
-        """
-        project = await validate_project_access(project_id, current_user, db)
-        
-        new_artifact = Artifact(
-            project_id=project_id,
-            conversation_id=artifact_data.get("conversation_id"),
-            name=artifact_data["name"],
-            content_type=artifact_data["content_type"],
-            content=artifact_data["content"]
-        )
-        
-        db.add(new_artifact)
-        await db.commit()
-        await db.refresh(new_artifact)
-        
-        return {
-            "id": str(new_artifact.id),
-            "name": new_artifact.name,
-            "created_at": new_artifact.created_at.isoformat()
-        }
+@router.post("/{project_id}/artifacts", response_model=ArtifactResponse, status_code=status.HTTP_201_CREATED)
+async def create_artifact(
+    project_id: UUID,
+    artifact_data: ArtifactCreate,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    Create a new artifact for the project
+    """
+    project = await validate_project_access(project_id, current_user, db)
+    
+    new_artifact = Artifact(
+        project_id=project_id,
+        conversation_id=artifact_data.conversation_id,
+        name=artifact_data.name,
+        content_type=artifact_data.content_type,
+        content=artifact_data.content
+    )
+    
+    db.add(new_artifact)
+    await db.commit()
+    await db.refresh(new_artifact)
+    
+    return new_artifact
 
-    @router.get("/{project_id}/artifacts", response_model=dict)
-    async def list_artifacts(
-        project_id: UUID,
-        current_user: User = Depends(get_current_user_and_token),
-        db: AsyncSession = Depends(get_async_session)
-    ):
-        """
-        List all artifacts for a project
-        """
-        await validate_project_access(project_id, current_user, db)
-        
-        result = await db.execute(
-            select(Artifact)
-            .where(Artifact.project_id == project_id)
-            .order_by(Artifact.created_at.desc())
-        )
-        artifacts = result.scalars().all()
-        
-        return {
-            "artifacts": [
-                {
-                    "id": str(a.id),
-                    "name": a.name,
-                    "content_type": a.content_type,
-                    "created_at": a.created_at
-                }
-                for a in artifacts
-            ]
-        }
+@router.get("/{project_id}/artifacts", response_model=dict)
+async def list_artifacts(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    List all artifacts for a project
+    """
+    await validate_project_access(project_id, current_user, db)
+    
+    result = await db.execute(
+        select(Artifact)
+        .where(Artifact.project_id == project_id)
+        .order_by(Artifact.created_at.desc())
+    )
+    artifacts = result.scalars().all()
+    
+    return {
+        "artifacts": [
+            {
+                "id": str(a.id),
+                "name": a.name,
+                "content_type": a.content_type,
+                "created_at": a.created_at
+            }
+            for a in artifacts
+        ]
+    }
 
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
@@ -251,3 +250,75 @@ async def get_project_stats(
         "total_file_size": total_file_size,
         "artifact_count": artifact_count
     }
+@router.post("/{project_id}/pin", response_model=ProjectResponse)
+async def toggle_pin_project(
+   project_id: UUID,
+   current_user: User = Depends(get_current_user_and_token),
+   db: AsyncSession = Depends(get_async_session)
+):
+   """
+   Pin or unpin a project for quick access.
+   Cannot pin archived projects.
+   """
+   project = await validate_project_access(project_id, current_user, db)
+   
+   if project.archived and not project.pinned:
+       raise HTTPException(status_code=400, detail="Cannot pin an archived project")
+
+   stmt = (
+       update(Project)
+       .where(Project.id == project_id)
+       .values(pinned=not project.pinned)
+   )
+   await db.execute(stmt)
+   await db.commit()
+   await db.refresh(project)
+   return project
+
+
+@router.get("/{project_id}/artifacts/{artifact_id}", response_model=ArtifactResponse)
+async def get_artifact(
+   project_id: UUID,
+   artifact_id: UUID,
+   current_user: User = Depends(get_current_user_and_token),
+   db: AsyncSession = Depends(get_async_session)
+):
+   """
+   Get a specific artifact by ID
+   """
+   await validate_project_access(project_id, current_user, db)
+   result = await db.execute(
+       select(Artifact)
+       .where(Artifact.id == artifact_id, Artifact.project_id == project_id)
+   )
+   artifact = result.scalars().first()
+   
+   if not artifact:
+       raise HTTPException(status_code=404, detail="Artifact not found")
+
+   return artifact
+
+
+@router.delete("/{project_id}/artifacts/{artifact_id}", response_model=dict)
+async def delete_artifact(
+   project_id: UUID,
+   artifact_id: UUID,
+   current_user: User = Depends(get_current_user_and_token),
+   db: AsyncSession = Depends(get_async_session)
+):
+   """
+   Delete an artifact by ID
+   """
+   await validate_project_access(project_id, current_user, db)
+   result = await db.execute(
+       select(Artifact)
+       .where(Artifact.id == artifact_id, Artifact.project_id == project_id)
+   )
+   artifact = result.scalars().first()
+
+   if not artifact:
+       raise HTTPException(status_code=404, detail="Artifact not found")
+
+   await db.delete(artifact)
+   await db.commit()
+   return {"success": True, "message": "Artifact deleted successfully"}
