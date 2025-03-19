@@ -1,9 +1,14 @@
-# Create a new file: models/knowledge_base.py
-from sqlalchemy import Column, String, Text, TIMESTAMP, text, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+"""
+knowledge_base.py
+----------------
+Defines the KnowledgeBase model for managing vector embeddings and semantic search
+capabilities that can be attached to projects.
+"""
+from sqlalchemy import String, Text, TIMESTAMP, text, Boolean
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 
 class KnowledgeBase(Base):
@@ -14,7 +19,7 @@ class KnowledgeBase(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()")
     )
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
