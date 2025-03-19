@@ -144,9 +144,13 @@ async def login_user(
     # If not production, switch samesite to 'lax' and secure=False to ensure local dev cookies aren't blocked.
     # Force same-site=None even in dev for cross-site cookie
     production_mode = os.getenv("ENV") == "production"
-    samesite_value = "none"
-    secure_cookie = False
-    
+    if production_mode:
+        secure_cookie = True
+        samesite_value = "none"
+    else:
+        secure_cookie = False
+        samesite_value = "lax"
+
     response.set_cookie(
         key="access_token",
         value=token,
@@ -197,11 +201,19 @@ async def logout_user(response: Response):
     """
     Logs out the user by clearing the access token cookie
     """
-    # Delete the cookie with the same parameters as when it was set
+    production_mode = os.getenv("ENV") == "production"
+    if production_mode:
+        secure_cookie = True
+        samesite_value = "none"
+    else:
+        secure_cookie = False
+        samesite_value = "lax"
+
     response.delete_cookie(
-        key="access_token", 
+        key="access_token",
         path="/",
         httponly=True,
-        secure=os.getenv("ENV") == "production"
+        secure=secure_cookie,
+        samesite=samesite_value
     )
     return {"status": "logged out"}
