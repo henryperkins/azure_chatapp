@@ -27,6 +27,7 @@ from auth import router as auth_router
 from routes.chat import router as chat_router
 from routes.file_upload import router as file_upload_router
 from routes.project_routes import router as project_router
+from routes.knowledge_base_routes import router as knowledge_base_router
 
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -110,6 +111,10 @@ app.include_router(file_upload_router, prefix="/api/files", tags=["files"])
 
 # Include the project router
 app.include_router(project_router, prefix="/api/projects", tags=["projects"])
+
+# Include the knowledge base router
+app.include_router(knowledge_base_router, prefix="/api/knowledge-bases", tags=["knowledge-bases"])
+
 
 @app.get("/health")
 async def health_check():
