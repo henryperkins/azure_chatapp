@@ -118,15 +118,25 @@ document.addEventListener("DOMContentLoaded", () => {
    * Render projects list
    */
   function renderProjectsList(event) {
+    console.log("renderProjectsList called with event:", event);
     const projects = event.detail;
-    const projectList = document.getElementById("projectList");
-    const noProjectsMessage = document.getElementById("noProjectsMessage");
+    console.log("Projects to render:", projects);
     
-    if (!projectList) return;
+    const projectList = document.getElementById("projectList");
+    console.log("Project list element:", projectList);
+    
+    const noProjectsMessage = document.getElementById("noProjectsMessage");
+    console.log("No projects message element:", noProjectsMessage);
+    
+    if (!projectList) {
+      console.error("Project list element not found in DOM!");
+      return;
+    }
     
     projectList.innerHTML = "";
     
-    if (projects.length === 0) {
+    if (!projects || projects.length === 0) {
+      console.log("No projects to display");
       if (noProjectsMessage) {
         noProjectsMessage.classList.remove("hidden");
       }
@@ -138,10 +148,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     projects.forEach(project => {
+      console.log("Creating card for project:", project);
       const card = createProjectCard(project);
       projectList.appendChild(card);
     });
+    
+    console.log("Projects rendering complete. Cards added:", projectList.children.length);
   }
+  
+  // Expose the function globally for direct access
+  window.renderProjectsList = renderProjectsList;
   
   /**
    * Create a project card element
