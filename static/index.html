@@ -173,11 +173,6 @@
               </select>
             </div>
 
-            <!-- Reasoning Effort Slider UI (replaced checkbox) -->
-            <!-- The slider and its label are now created dynamically by modelConfig.js -->
-            <!-- This block is intentionally left blank to remove the old checkbox approach -->
-
-            <!-- Vision Panel for "o1" (hidden by default) -->
             <!-- Reasoning Effort Panel (for the slider) -->
             <div id="reasoningPanel" class="col-span-1 md:col-span-2 bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2">
               <!-- The slider is injected by modelConfig.js -->
@@ -219,24 +214,26 @@
           </div>
         </section>
 
-      <div class="mb-4">
-        <button id="newChatBtn" class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-          New Chat
-        </button>
-      </div>
-<div id="noChatSelectedMessage" class="">
-  <p>Please start a new conversation first.</p>
-</div>
-<!-- Add after the noChatSelectedMessage div -->
-
-<div id="loginRequiredMessage" class="bg-yellow-50 text-yellow-800 p-4 rounded mb-4 hidden">
-  <h3 class="font-medium">Authentication Required</h3>
-  <p>Please log in using the button in the top-right corner to access the chat functionality.</p>
-  <button id="showLoginBtn" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-    Log In
-  </button>
-</div>
-      <!-- Chat UI (with real-time or fetch-based approach) -->
+        <div class="mb-4">
+          <button id="newChatBtn" class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            New Chat
+          </button>
+        </div>
+        
+        <div id="noChatSelectedMessage" class="">
+          <p>Please start a new conversation first.</p>
+        </div>
+        
+        <!-- Login Required Message -->
+        <div id="loginRequiredMessage" class="bg-yellow-50 text-yellow-800 p-4 rounded mb-4 hidden">
+          <h3 class="font-medium">Authentication Required</h3>
+          <p>Please log in using the button in the top-right corner to access the chat functionality.</p>
+          <button id="showLoginBtn" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Log In
+          </button>
+        </div>
+        
+        <!-- Chat UI (with real-time or fetch-based approach) -->
         <section id="chatUI"
                  class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 hidden">
           <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Chat Interface</h2>
@@ -266,10 +263,306 @@
           </div>
         </section>
 
-        <!-- This snippet replaced by dynamically loaded projectDashboard template -->
-        <div id="projectDashboard"></div>
+        <!-- Project Manager Section -->
+        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
+          <!-- Project List View -->
+          <div id="projectListView">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-xl font-semibold">Projects</h2>
+              <div class="flex space-x-2">
+                <input id="projectSearchInput" type="search" placeholder="Search projects..." 
+                       class="border px-2 py-1 rounded text-sm" />
+                <button id="createProjectBtn" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
+                  New Project
+                </button>
+              </div>
+            </div>
+            
+            <!-- Projects filter tabs -->
+            <div class="flex border-b border-gray-200 mb-4">
+              <button class="project-filter-btn px-3 py-2 text-blue-600 border-b-2 border-blue-600" data-filter="all">
+                All Projects
+              </button>
+              <button class="project-filter-btn px-3 py-2 text-gray-600" data-filter="pinned">
+                Pinned
+              </button>
+              <button class="project-filter-btn px-3 py-2 text-gray-600" data-filter="archived">
+                Archived
+              </button>
+            </div>
+            
+            <!-- Project list container -->
+            <div id="projectList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            
+            <!-- No projects message -->
+            <div id="noProjectsMessage" class="hidden text-center py-8 text-gray-500">
+              No projects found. Create your first project using the "New Project" button.
+            </div>
+          </div>
+          
+          <!-- Project Details View -->
+          <div id="projectDetailsView" class="hidden">
+            <!-- Project header with actions -->
+            <div class="flex justify-between items-center mb-4">
+              <div class="flex items-center">
+                <button id="backToProjectsBtn" class="mr-2 text-gray-500 hover:text-gray-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+                <h2 id="projectTitle" class="text-xl font-semibold">Project Title</h2>
+              </div>
+              <div class="flex space-x-2">
+                <button id="editProjectBtn" class="text-blue-600 hover:text-blue-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button id="pinProjectBtn" class="text-yellow-600 hover:text-yellow-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </button>
+                <button id="archiveProjectBtn" class="text-gray-600 hover:text-gray-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Project stats -->
+            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-4 rounded mb-4">
+              <div class="mb-4">
+                <div class="flex justify-between mb-1">
+                  <span>Token Usage: <span id="tokenUsage">0</span> / <span id="maxTokens">200,000</span></span>
+                  <span id="tokenPercentage">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div id="tokenProgressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-4 text-center">
+                <div class="bg-white p-3 rounded shadow">
+                  <div id="conversationCount" class="text-lg font-semibold">0</div>
+                  <div class="text-xs text-gray-500">Conversations</div>
+                </div>
+                <div class="bg-white p-3 rounded shadow">
+                  <div id="fileCount" class="text-lg font-semibold">0</div>
+                  <div class="text-xs text-gray-500">Files</div>
+                </div>
+                <div class="bg-white p-3 rounded shadow">
+                  <div id="artifactCount" class="text-lg font-semibold">0</div>
+                  <div class="text-xs text-gray-500">Artifacts</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Project tabs -->
+            <div class="border-b border-gray-200 mb-4">
+              <div class="flex">
+                <button class="project-tab-btn px-4 py-2 border-b-2 border-blue-600 text-blue-600" data-tab="details">
+                  Details
+                </button>
+                <button class="project-tab-btn px-4 py-2 text-gray-500" data-tab="files">
+                  Files
+                </button>
+                <button class="project-tab-btn px-4 py-2 text-gray-500" data-tab="conversations">
+                  Conversations
+                </button>
+                <button class="project-tab-btn px-4 py-2 text-gray-500" data-tab="artifacts">
+                  Artifacts
+                </button>
+              </div>
+            </div>
+            
+            <!-- Tab content -->
+            <div id="projectTabContent">
+              <!-- Details tab -->
+              <div id="detailsTab" class="project-tab-content">
+                <div class="mb-4">
+                  <h3 class="font-medium mb-2">Description</h3>
+                  <p id="projectDescription" class="text-gray-700 dark:text-gray-300">
+                    Project description will appear here.
+                  </p>
+                </div>
+                <div class="mb-4">
+                  <h3 class="font-medium mb-2">Goals</h3>
+                  <p id="projectGoals" class="text-gray-700 dark:text-gray-300">
+                    Project goals will appear here.
+                  </p>
+                </div>
+                <div class="mb-4">
+                  <h3 class="font-medium mb-2">Custom Instructions</h3>
+                  <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                    <p id="projectInstructions" class="text-gray-700 dark:text-gray-300">No custom instructions set.</p>
+                    <button id="editInstructionsBtn" class="mt-2 text-sm text-blue-600 hover:underline">
+                      Edit Instructions
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Files tab -->
+              <div id="filesTab" class="project-tab-content hidden">
+                <div class="mb-4 flex justify-between items-center">
+                  <h3 class="font-medium">Project Files</h3>
+                  <div>
+                    <input type="file" id="fileInput" class="hidden" multiple />
+                    <button id="uploadFileBtn" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+                      Upload Files
+                    </button>
+                  </div>
+                </div>
+                <div id="filesUploadProgress" class="hidden mb-4">
+                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="fileProgressBar" class="bg-green-600 h-2.5 rounded-full transition-all" style="width: 0%"></div>
+                  </div>
+                  <p id="uploadStatus" class="text-xs text-gray-500 mt-1">Uploading...</p>
+                </div>
+                <div id="projectFilesList" class="mt-4 space-y-2">
+                  <!-- Files will be populated here -->
+                  <div class="text-gray-500 text-center py-8">No files uploaded yet.</div>
+                </div>
+              </div>
+              
+              <!-- Conversations tab -->
+              <div id="conversationsTab" class="project-tab-content hidden">
+                <div class="mb-4 flex justify-between items-center">
+                  <h3 class="font-medium">Conversations</h3>
+                  <button id="newConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                    New Conversation
+                  </button>
+                </div>
+                <div id="projectConversationsList" class="mt-4 space-y-2">
+                  <!-- Conversations will be populated here -->
+                  <div class="text-gray-500 text-center py-8">No conversations yet.</div>
+                </div>
+              </div>
+              
+              <!-- Artifacts tab -->
+              <div id="artifactsTab" class="project-tab-content hidden">
+                <div class="mb-4">
+                  <h3 class="font-medium">Generated Artifacts</h3>
+                </div>
+                <div id="projectArtifactsList" class="mt-4 space-y-2">
+                  <!-- Artifacts will be populated here -->
+                  <div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
+  </div>
+
+  <!-- Project Creation/Edit Modal -->
+  <div id="projectFormModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="projectFormTitle" class="text-xl font-semibold">Create New Project</h3>
+        <button id="closeProjectFormBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <form id="projectForm">
+        <input type="hidden" id="projectIdInput" name="projectId" value="" />
+        <div class="mb-4">
+          <label for="projectNameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Project Name*
+          </label>
+          <input id="projectNameInput" name="name" type="text" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+        </div>
+        <div class="mb-4">
+          <label for="projectDescInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Description
+          </label>
+          <textarea id="projectDescInput" name="description" rows="3"
+                    class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+        </div>
+        <div class="mb-4">
+          <label for="projectGoalsInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Goals
+          </label>
+          <textarea id="projectGoalsInput" name="goals" rows="3"
+                    class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+        </div>
+        <div class="mb-4">
+          <label for="projectMaxTokensInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Maximum Tokens
+          </label>
+          <input id="projectMaxTokensInput" name="max_tokens" type="number" value="200000" min="50000" max="500000"
+                 class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+          <p class="text-gray-500 text-xs mt-1">
+            Maximum token limit for this project (50,000 - 500,000)
+          </p>
+        </div>
+        <div class="flex justify-end space-x-2 mt-6">
+          <button type="button" id="cancelProjectFormBtn" 
+                  class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button type="submit" id="submitProjectFormBtn"
+                  class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Save Project
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Custom Instructions Modal -->
+  <div id="instructionsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold">Custom Instructions</h3>
+        <button id="closeInstructionsBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="mb-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+          Custom instructions are sent at the beginning of every conversation in this project.
+        </p>
+        <textarea id="customInstructionsInput" rows="8"
+                  class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter instructions for the AI to follow in this project..."></textarea>
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button id="cancelInstructionsBtn" 
+                class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+          Cancel
+        </button>
+        <button id="saveInstructionsBtn"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Save Instructions
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteConfirmModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+      <h3 class="text-xl font-semibold mb-4">Confirm Delete</h3>
+      <p id="deleteConfirmText" class="mb-6">Are you sure you want to delete this item?</p>
+      <div class="flex justify-end space-x-2">
+        <button id="cancelDeleteBtn" 
+                class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+          Cancel
+        </button>
+        <button id="confirmDeleteBtn"
+                class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+          Delete
+        </button>
+      </div>
+    </div>
   </div>
 
   <!--
@@ -289,5 +582,6 @@
   <script src="/static/js/modelConfig.js"></script>
   <script src="/static/js/chat.js"></script>
   <script src="/static/js/projectManager.js"></script>
+  <script src="/static/js/projectDashboard.js"></script>
 </body>
 </html>
