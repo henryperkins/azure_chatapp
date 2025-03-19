@@ -5,14 +5,13 @@ Defines the Message model for storing messages associated with a Chat.
 Tracks role ("user", "assistant", "system"), content, metadata for tokens.
 """
 
-from sqlalchemy import Integer, String, Text, TIMESTAMP, text, ForeignKey
+from sqlalchemy import Integer, String, Text, TIMESTAMP, text, ForeignKey, event
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from typing import Optional
 import uuid
 from datetime import datetime
 
-from sqlalchemy import event
 from jsonschema import ValidationError, validate
 
 from db import Base
@@ -20,9 +19,6 @@ from db import Base
 class Message(Base):
     __tablename__ = "messages"
 
-    from sqlalchemy.dialects.postgresql import UUID
-    import uuid
-    
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -47,7 +43,6 @@ class Message(Base):
     def get_metadata_dict(self):
         return self.message_metadata or {}
 
-
     message_schema = {
         "type": "object",
         "properties": {
@@ -57,11 +52,12 @@ class Message(Base):
         }
     }
 
-    @event.listens_for("Message", 'set', retval=True)
-    def validate_message_metadata(target, value, oldvalue, initiator):
-        if value:
-            try:
-                validate(instance=value, schema=Message.message_schema)
-            except ValidationError as e:
-                raise ValueError(f"Invalid message metadata: {e.message}") from e
-        return value
+# Attach the 'set' event to the Message.message_metadata attribute
+@event.listens_for(Message.message_metadata, 'set', retval=True)
+def validate_message_metadata(target, value, oldvalue, initiator):
+    if value:
+        try:
+            validate(instance=value, schema=Message.message_schema)
+        except ValidationError as e:
+            raise ValueError(f"Invalid message metadata: {e.message}") from e
+    return value
