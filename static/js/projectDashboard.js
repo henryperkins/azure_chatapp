@@ -1,533 +1,570 @@
-// projectDashboard.js
-// ------------------
-// All direct HTML strings have been removed and placed into a template in index.html.
-// This file now only contains the dashboard logic and event handling without inline HTML.
+/**
+ * projectDashboard.js - UI event handlers for project management
+ * Handles rendering and DOM updates based on events
+ */
 
-import { formatBytes, calculateTokenPercentage, getFileTypeIcon, apiRequest } from './formatting.js';
-
-let currentProject = null;
-let projectFiles = [];
-let projectArtifacts = [];
-let projectConversations = [];
-
-// Initialize the dashboard when document is ready
 document.addEventListener("DOMContentLoaded", () => {
-    initProjectDashboard();
-    setupEventListeners();
-});
-
-/**
- * Initialize the project dashboard
- */
-function initProjectDashboard() {
-    const dashboardContainer = document.getElementById("projectDashboard");
-    if (!dashboardContainer) return;
-
-    // Load projects
-    loadProjects();
-
-    // Check if there's a project ID in the URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectId = urlParams.get("project");
+    // Register event listeners for data loading events
+    registerEventListeners();
+  });
+  
+  /**
+   * Register event listeners for data-related events
+   */
+  function registerEventListeners() {
+    // Project data events
+    document.addEventListener("projectsLoaded", renderProjectsList);
+    document.addEventListener("projectLoaded", renderProjectDetails);
+    document.addEventListener("projectStatsLoaded", renderProjectStats);
+    document.addEventListener("projectFilesLoaded", renderProjectFiles);
+    document.addEventListener("projectConversationsLoaded", renderProjectConversations);
+    document.addEventListener("projectArtifactsLoaded", renderProjectArtifacts);
     
-    if (projectId) {
-        loadProjectDetails(projectId);
-    } else {
-        // If no project specified, show the project list view
-        showProjectListView();
+    // Delegate clicks on the project list
+    document.getElementById("projectList")?.addEventListener("click", handleProjectListClicks);
+    
+    // Delegate clicks on other lists
+    document.getElementById("projectFilesList")?.addEventListener("click", handleFilesListClicks);
+    document.getElementById("projectConversationsList")?.addEventListener("click", handleConversationsListClicks);
+    document.getElementById("projectArtifactsList")?.addEventListener("click", handleArtifactsListClicks);
+  }
+  
+  /**
+   * Handle clicks on project list (delegation pattern)
+   */
+  function handleProjectListClicks(e) {
+    // Handle view project button
+    if (e.target.closest(".view-project-btn")) {
+      const btn = e.target.closest(".view-project-btn");
+      const projectId = btn.dataset.projectId;
+      window.projectManager.loadProjectDetails(projectId);
+    } 
+    // Handle delete project button
+    else if (e.target.closest(".delete-project-btn")) {
+      const btn = e.target.closest(".delete-project-btn");
+      const projectId = btn.dataset.projectId;
+      const projectName = btn.dataset.projectName || "this project";
+      window.projectManager.confirmDeleteProject(projectId, projectName);
     }
-}
-
-/**
- * Set up event listeners for dashboard interactions
- */
-function setupEventListeners() {
-    // Project creation
-    const createProjectBtn = document.getElementById("createProjectBtn");
-    if (createProjectBtn) {
-        createProjectBtn.addEventListener("click", () => {
-            // Formerly showed project creation form with HTML;
-            // now delegated to external template or modal logic
-        });
+  }
+  
+  /**
+   * Handle clicks on files list
+   */
+  function handleFilesListClicks(e) {
+    // Handle view file button
+    if (e.target.closest(".view-file-btn")) {
+      const btn = e.target.closest(".view-file-btn");
+      const fileId = btn.dataset.fileId;
+      viewFile(fileId);
+    } 
+    // Handle delete file button
+    else if (e.target.closest(".delete-file-btn")) {
+      const btn = e.target.closest(".delete-file-btn");
+      const fileId = btn.dataset.fileId;
+      const fileName = btn.dataset.filename || "this file";
+      window.projectManager.confirmDeleteFile(fileId, fileName);
     }
-
-    // Project search
-    const projectSearchInput = document.getElementById("projectSearchInput");
-    if (projectSearchInput) {
-        projectSearchInput.addEventListener("input", (e) => {
-            filterProjects(e.target.value);
-        });
+  }
+  
+  /**
+   * Handle clicks on conversations list
+   */
+  function handleConversationsListClicks(e) {
+    // Handle open conversation button
+    if (e.target.closest(".open-conversation-btn")) {
+      const btn = e.target.closest(".open-conversation-btn");
+      const conversationId = btn.dataset.conversationId;
+      window.location.href = `/?chatId=${conversationId}`;
     }
-
-    // Tab switching
-    const tabButtons = document.querySelectorAll(".project-tab-btn");
-    tabButtons.forEach(button => {
-        button.addEventListener("click", () => {
-            const tabId = button.getAttribute("data-tab");
-            switchProjectTab(tabId);
-        });
+  }
+  
+  /**
+   * Handle clicks on artifacts list
+   */
+  function handleArtifactsListClicks(e) {
+    // Handle view artifact button
+    if (e.target.closest(".view-artifact-btn")) {
+      const btn = e.target.closest(".view-artifact-btn");
+      const artifactId = btn.dataset.artifactId;
+      viewArtifact(artifactId);
+    } 
+    // Handle delete artifact button
+    else if (e.target.closest(".delete-artifact-btn")) {
+      const btn = e.target.closest(".delete-artifact-btn");
+      const artifactId = btn.dataset.artifactId;
+      const artifactName = btn.dataset.name || "this artifact";
+      window.projectManager.confirmDeleteArtifact(artifactId, artifactName);
+    }
+  }
+  
+  /**
+   * View file contents
+   */
+  function viewFile(fileId) {
+    // TO DO: Implement file viewer
+    window.showNotification?.("File viewer not implemented yet", "info");
+  }
+  
+  /**
+   * View artifact contents
+   */
+  function viewArtifact(artifactId) {
+    // TO DO: Implement artifact viewer
+    window.showNotification?.("Artifact viewer not implemented yet", "info");
+  }
+  
+  /**
+   * Render projects list
+   */
+  function renderProjectsList(event) {
+    const projects = event.detail;
+    const projectList = document.getElementById("projectList");
+    const noProjectsMessage = document.getElementById("noProjectsMessage");
+    
+    if (!projectList) return;
+    
+    projectList.innerHTML = "";
+    
+    if (projects.length === 0) {
+      if (noProjectsMessage) {
+        noProjectsMessage.classList.remove("hidden");
+      }
+      return;
+    }
+    
+    if (noProjectsMessage) {
+      noProjectsMessage.classList.add("hidden");
+    }
+    
+    projects.forEach(project => {
+      const card = createProjectCard(project);
+      projectList.appendChild(card);
     });
-
-    // Click delegation for dynamic elements
-    document.addEventListener("click", (e) => {
-        // Pin/unpin project
-        if (e.target.classList.contains("pin-project-btn")) {
-            const projectId = e.target.getAttribute("data-project-id");
-            togglePinProject(projectId);
-        }
-        // Archive/unarchive project
-        if (e.target.classList.contains("archive-project-btn")) {
-            const projectId = e.target.getAttribute("data-project-id");
-            toggleArchiveProject(projectId);
-        }
-        // Edit project
-        if (e.target.classList.contains("edit-project-btn")) {
-            const projectId = e.target.getAttribute("data-project-id");
-            // Formerly displayed edit form HTML; now delegated
-        }
-        // Delete project
-        if (e.target.classList.contains("delete-project-btn")) {
-            const projectId = e.target.getAttribute("data-project-id");
-            confirmDeleteProject(projectId);
-        }
-        // View project
-        if (e.target.classList.contains("view-project-btn")) {
-            const projectId = e.target.getAttribute("data-project-id");
-            loadProjectDetails(projectId);
-        }
-        // File upload button
-        if (e.target.classList.contains("upload-file-btn")) {
-            const input = document.getElementById("fileInput");
-            if (input) input.click();
-        }
-        // File deletion
-        if (e.target.classList.contains("delete-file-btn")) {
-            const fileId = e.target.getAttribute("data-file-id");
-            const projectId = currentProject?.id;
-            if (projectId && fileId) {
-                confirmDeleteFile(projectId, fileId);
-            }
-        }
-        // Artifact management
-        if (e.target.classList.contains("view-artifact-btn")) {
-            const artifactId = e.target.getAttribute("data-artifact-id");
-            viewArtifact(artifactId);
-        }
-        if (e.target.classList.contains("export-artifact-btn")) {
-            const artifactId = e.target.getAttribute("data-artifact-id");
-            const format = e.target.getAttribute("data-format") || "text";
-            exportArtifact(artifactId, format);
-        }
-        if (e.target.classList.contains("delete-artifact-btn")) {
-            const artifactId = e.target.getAttribute("data-artifact-id");
-            confirmDeleteArtifact(artifactId);
-        }
+  }
+  
+  /**
+   * Create a project card element
+   */
+  function createProjectCard(project) {
+    // Calculate token usage percentage
+    const usagePercentage = project.max_tokens > 0 
+      ? Math.min(100, (project.token_usage / project.max_tokens) * 100).toFixed(1)
+      : 0;
+    
+    // Create card
+    const card = window.createElement("div", {
+      className: `bg-white dark:bg-gray-700 rounded shadow p-4 border-l-4 
+                  ${project.pinned ? "border-yellow-500" : "border-blue-500"}
+                  ${project.archived ? "opacity-60" : ""}`
     });
-
-    // File upload handler
-    const fileInput = document.getElementById("fileInput");
-    if (fileInput) {
-        fileInput.addEventListener("change", handleFileUpload);
-    }
-
-    // Save custom instructions
-    const saveInstructionsBtn = document.getElementById("saveInstructionsBtn");
-    if (saveInstructionsBtn) {
-        saveInstructionsBtn.addEventListener("click", saveProjectInstructions);
-    }
-}
-
-/**
- * Load the list of projects
- */
-async function loadProjects() {
-    try {
-        const data = await apiRequest("/api/projects", "GET");
-        // Formerly: renderProjectList(data); now delegated to external HTML template
-        // E.g., we might dispatch an event or call a separate function
-        // to handle the new template-based approach
-        const listEvent = new CustomEvent("ProjectsLoaded", { detail: data });
-        document.dispatchEvent(listEvent);
-    } catch (error) {
-        console.error("Error loading projects:", error);
-        if (window.showNotification) {
-            window.showNotification("Failed to load projects", "error");
-        }
-    }
-}
-
-/**
- * Filter projects based on search term
- */
-function filterProjects(searchTerm) {
-    // Formerly updated .innerHTML on the fly; now delegated to external logic or template
-    const event = new CustomEvent("ProjectSearch", { detail: { searchTerm } });
-    document.dispatchEvent(event);
-}
-
-/**
- * Show the project creation form
- */
-function showProjectCreateForm() {
-    // All form HTML removed; presumably we show/hide something from the new template
-}
-
-/**
- * Confirm or show project edit form
- */
-async function showProjectEditForm(projectId) {
-    // No inline HTML any longer
-    // Possibly fetch project data, then display via new template
-    try {
-        const response = await fetch(`/api/projects/${projectId}`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-        const project = await response.json();
-
-        // Fire an event for template rendering
-        const editEvent = new CustomEvent("EditProjectData", { detail: project });
-        document.dispatchEvent(editEvent);
-    } catch (error) {
-        console.error("Error loading project for editing:", error);
-        if (window.showNotification) {
-            window.showNotification("Failed to load project details", "error");
-        }
-    }
-}
-
-/**
- * Load details for a specific project
- */
-async function loadProjectDetails(projectId) {
-    try {
-        // Update URL without reloading the page
-        const url = new URL(window.location);
-        url.searchParams.set("project", projectId);
-        window.history.pushState({}, "", url);
-
-        // Indicate loading
-        const loadingEvent = new CustomEvent("ProjectLoading", { detail: { projectId } });
-        document.dispatchEvent(loadingEvent);
-
-        // Fetch project details
-        const response = await fetch(`/api/projects/${projectId}`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-
-        const project = await response.json();
-        currentProject = project;
-
-        // Formerly rendered a large HTML chunk; now delegated
-        const detailsEvent = new CustomEvent("ProjectLoaded", { detail: project });
-        document.dispatchEvent(detailsEvent);
-
-        // Load associated data
-        loadProjectFiles(projectId);
-        loadProjectArtifacts(projectId);
-        loadProjectConversations(projectId);
-        loadProjectStats(projectId);
-
-        // Switch to details view
-        showProjectDetailsView();
-    } catch (error) {
-        console.error("Error loading project details:", error);
-        if (window.showNotification) {
-            window.showNotification("Failed to load project details", "error");
-        }
-        showProjectListView();
-    }
-}
-
-/**
- * Show/hide UI views
- */
-function showProjectListView() {
-    const listView = document.getElementById("projectListView");
-    const detailsView = document.getElementById("projectDetailsView");
     
-    if (listView && detailsView) {
-        listView.classList.remove("hidden");
-        detailsView.classList.add("hidden");
-    }
-    
-    const url = new URL(window.location);
-    url.searchParams.delete("project");
-    window.history.pushState({}, "", url);
-    currentProject = null;
-}
-
-function showProjectDetailsView() {
-    const listView = document.getElementById("projectListView");
-    const detailsView = document.getElementById("projectDetailsView");
-    
-    if (listView && detailsView) {
-        listView.classList.add("hidden");
-        detailsView.classList.remove("hidden");
-    }
-}
-
-/**
- * Switch project tabs
- */
-function switchProjectTab(tabId) {
-    const tabButtons = document.querySelectorAll(".project-tab-btn");
-    tabButtons.forEach(button => {
-        const buttonTabId = button.getAttribute("data-tab");
-        if (buttonTabId === tabId) {
-            button.classList.add("text-blue-600", "border-b-2", "border-blue-600");
-            button.classList.remove("text-gray-500");
-        } else {
-            button.classList.remove("text-blue-600", "border-b-2", "border-blue-600");
-            button.classList.add("text-gray-500");
-        }
+    // Header with title and badges
+    const header = window.createElement("div", {
+      className: "flex justify-between mb-2"
     });
-
-    // Instead of setting .innerHTML with HTML, dispatch an event
-    const tabEvent = new CustomEvent("ProjectTabChanged", { detail: tabId });
-    document.dispatchEvent(tabEvent);
-}
-
-/**
- * Load project files
- */
-async function loadProjectFiles(projectId) {
-    try {
-        const response = await fetch(`/api/projects/${projectId}/files`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-        const data = await response.json();
-        projectFiles = data;
-
-        // Fire event for external HTML usage
-        const filesEvent = new CustomEvent("ProjectFilesLoaded", { detail: data });
-        document.dispatchEvent(filesEvent);
-    } catch (error) {
-        console.error("Error loading project files:", error);
-    }
-}
-
-/**
- * Handle file upload
- */
-async function handleFileUpload(event) {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
     
-    if (!currentProject) {
-        if (window.showNotification) {
-            window.showNotification("No project selected", "error");
-        }
-        return;
+    header.appendChild(window.createElement("h3", {
+      className: "font-semibold text-md"
+    }, project.name));
+    
+    const badges = window.createElement("div", {
+      className: "text-xs text-gray-500"
+    });
+    
+    if (project.pinned) {
+      badges.appendChild(window.createElement("span", {
+        className: "text-yellow-600 mr-2"
+      }, "📌"));
     }
-    // Formerly used inline HTML for progress; now can dispatch an event or use a separate module
-    const uploadEvent = new CustomEvent("ProjectFilesUploading", { detail: { files } });
-    document.dispatchEvent(uploadEvent);
-
-    let successCount = 0;
-    let failCount = 0;
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        try {
-            // Perform the upload
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', `/api/projects/${currentProject.id}/files`, true);
-
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const percentage = Math.round((e.loaded / e.total) * 100);
-                    const progressInfo = { fileName: file.name, percentage };
-                    const progressEvt = new CustomEvent("FileUploadProgress", { detail: progressInfo });
-                    document.dispatchEvent(progressEvt);
-                }
-            };
-
-            xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    successCount++;
-                } else {
-                    failCount++;
-                }
-                // Check completion
-                if (successCount + failCount === files.length) {
-                    loadProjectFiles(currentProject.id);
-                    loadProjectStats(currentProject.id);
-                    const completeEvt = new CustomEvent("FileUploadComplete", { detail: { successCount, failCount } });
-                    document.dispatchEvent(completeEvt);
-                }
-            };
-
-            xhr.onerror = () => {
-                failCount++;
-                if (successCount + failCount === files.length) {
-                    loadProjectFiles(currentProject.id);
-                    loadProjectStats(currentProject.id);
-                    const errorEvt = new CustomEvent("FileUploadComplete", { detail: { successCount, failCount } });
-                    document.dispatchEvent(errorEvt);
-                }
-            };
-            xhr.send(formData);
-
-        } catch (error) {
-            console.error(`Error uploading file ${file.name}:`, error);
-            failCount++;
-        }
+    
+    if (project.archived) {
+      badges.appendChild(window.createElement("span", {
+        className: "text-gray-600"
+      }, "🗃️"));
     }
-}
-
-/**
- * Confirm file deletion
- */
-function confirmDeleteFile(projectId, fileId) {
-    // No inline HTML; handle externally or in a modal
-    const evt = new CustomEvent("ConfirmDeleteFile", { detail: { projectId, fileId } });
-    document.dispatchEvent(evt);
-}
-
-/**
- * Load project artifacts
- */
-async function loadProjectArtifacts(projectId) {
-    try {
-        const response = await fetch(`/api/projects/${projectId}/artifacts`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-        const data = await response.json();
-        projectArtifacts = data;
-
-        const artifactsEvent = new CustomEvent("ProjectArtifactsLoaded", { detail: data });
-        document.dispatchEvent(artifactsEvent);
-    } catch (error) {
-        console.error("Error loading project artifacts:", error);
+    
+    header.appendChild(badges);
+    card.appendChild(header);
+    
+    // Description
+    card.appendChild(window.createElement("p", {
+      className: "text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2"
+    }, project.description || "No description"));
+    
+    // Token usage bar
+    const tokenWrapper = window.createElement("div", {
+      className: "mb-2"
+    });
+    
+    const tokenHeader = window.createElement("div", {
+      className: "flex justify-between mb-1 text-xs"
+    });
+    
+    tokenHeader.appendChild(window.createElement("span", {}, 
+      `Tokens: ${formatNumber(project.token_usage)} / ${formatNumber(project.max_tokens)}`));
+    
+    tokenHeader.appendChild(window.createElement("span", {}, 
+      `${usagePercentage}%`));
+    
+    tokenWrapper.appendChild(tokenHeader);
+    
+    const progressContainer = window.createElement("div", {
+      className: "w-full bg-gray-200 rounded-full h-1.5"
+    });
+    
+    progressContainer.appendChild(window.createElement("div", {
+      className: "bg-blue-600 h-1.5 rounded-full",
+      style: `width: ${usagePercentage}%`
+    }));
+    
+    tokenWrapper.appendChild(progressContainer);
+    card.appendChild(tokenWrapper);
+    
+    // Footer with date and actions
+    const footer = window.createElement("div", {
+      className: "flex justify-between mt-3"
+    });
+    
+    footer.appendChild(window.createElement("div", {
+      className: "text-xs text-gray-500"
+    }, `Created ${formatDate(project.created_at)}`));
+    
+    const actions = window.createElement("div", {
+      className: "flex space-x-1"
+    });
+    
+    // View button
+    const viewBtn = window.createElement("button", {
+      className: "p-1 text-blue-600 hover:text-blue-800 view-project-btn",
+      dataset: { projectId: project.id }
+    });
+    
+    viewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>`;
+    
+    actions.appendChild(viewBtn);
+    
+    // Delete button
+    const deleteBtn = window.createElement("button", {
+      className: "p-1 text-red-600 hover:text-red-800 delete-project-btn",
+      dataset: { 
+        projectId: project.id,
+        projectName: project.name
+      }
+    });
+    
+    deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>`;
+    
+    actions.appendChild(deleteBtn);
+    footer.appendChild(actions);
+    card.appendChild(footer);
+    
+    return card;
+  }
+  
+  /**
+   * Render project details
+   */
+  function renderProjectDetails(event) {
+    const project = event.detail;
+    
+    // Update title
+    document.getElementById("projectTitle").textContent = project.name;
+    
+    // Update description
+    document.getElementById("projectDescription").textContent = 
+      project.description || "No description provided.";
+    
+    // Update goals
+    document.getElementById("projectGoals").textContent = 
+      project.goals || "No goals defined.";
+    
+    // Update instructions
+    document.getElementById("projectInstructions").textContent = 
+      project.custom_instructions || "No custom instructions set.";
+    
+    // Update pin button
+    const pinBtn = document.getElementById("pinProjectBtn");
+    if (pinBtn) {
+      pinBtn.querySelector("svg").setAttribute("fill", project.pinned ? "currentColor" : "none");
+      pinBtn.classList.toggle("text-yellow-600", project.pinned);
     }
-}
-
-/**
- * View artifact
- */
-function viewArtifact(artifactId) {
-    // No inline HTML
-    const event = new CustomEvent("ViewArtifact", { detail: { artifactId } });
-    document.dispatchEvent(event);
-}
-
-/**
- * Export artifact
- */
-function exportArtifact(artifactId, format) {
-    const event = new CustomEvent("ExportArtifact", { detail: { artifactId, format } });
-    document.dispatchEvent(event);
-}
-
-/**
- * Confirm artifact deletion
- */
-function confirmDeleteArtifact(artifactId) {
-    const evt = new CustomEvent("ConfirmDeleteArtifact", { detail: { artifactId } });
-    document.dispatchEvent(evt);
-}
-
-/**
- * Load project conversations
- */
-async function loadProjectConversations(projectId) {
-    try {
-        const response = await fetch(`/api/projects/${projectId}/conversations`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-        const data = await response.json();
-        projectConversations = data;
-
-        const convEvent = new CustomEvent("ProjectConversationsLoaded", { detail: data });
-        document.dispatchEvent(convEvent);
-    } catch (error) {
-        console.error("Error loading project conversations:", error);
+    
+    // Update archive button
+    const archiveBtn = document.getElementById("archiveProjectBtn");
+    if (archiveBtn) {
+      archiveBtn.querySelector("svg").setAttribute("fill", project.archived ? "currentColor" : "none");
+      archiveBtn.classList.toggle("text-gray-800", project.archived);
     }
-}
-
-/**
- * Load project stats
- */
-async function loadProjectStats(projectId) {
-    try {
-        const response = await fetch(`/api/projects/${projectId}/stats`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-        const data = await response.json();
-        const statsEvent = new CustomEvent("ProjectStatsLoaded", { detail: data });
-        document.dispatchEvent(statsEvent);
-    } catch (error) {
-        console.error("Error loading project stats:", error);
+  }
+  
+  /**
+   * Render project stats
+   */
+  function renderProjectStats(event) {
+    const stats = event.detail;
+    
+    // Update token usage stats
+    document.getElementById("tokenUsage").textContent = formatNumber(stats.token_usage);
+    document.getElementById("maxTokens").textContent = formatNumber(stats.max_tokens);
+    
+    const percentage = stats.max_tokens > 0 
+      ? Math.min(100, (stats.token_usage / stats.max_tokens) * 100).toFixed(1)
+      : 0;
+      
+    document.getElementById("tokenPercentage").textContent = `${percentage}%`;
+    document.getElementById("tokenProgressBar").style.width = `${percentage}%`;
+    
+    // Update counters
+    document.getElementById("conversationCount").textContent = stats.conversation_count;
+    document.getElementById("fileCount").textContent = stats.file_count;
+    document.getElementById("artifactCount").textContent = stats.artifact_count;
+  }
+  
+  /**
+   * Render project files
+   */
+  function renderProjectFiles(event) {
+    const files = event.detail?.files || [];
+    const filesList = document.getElementById("projectFilesList");
+    
+    if (!filesList) return;
+    
+    if (files.length === 0) {
+      filesList.innerHTML = '<div class="text-gray-500 text-center py-8">No files uploaded yet.</div>';
+      return;
     }
-}
-
-/**
- * Render or dispatch for updating project stats (no inline HTML)
- */
-function renderProjectStats(stats) {
-    // Stubbed; replaced by external template usage
-}
-
-/**
- * Save project instructions
- */
-function saveProjectInstructions() {
-    // Stubbed; no inline HTML
-}
-
-/**
- * Toggle the pinned status for a project
- */
-function togglePinProject(projectId) {
-    // Possibly do an API call, then dispatch an event or call loadProjects()
-    console.log("Toggling pin for project ID:", projectId);
-}
-
-/**
- * Toggle the archived status for a project
- */
-function toggleArchiveProject(projectId) {
-    // Possibly do an API call, then dispatch an event or call loadProjects()
-    console.log("Toggling archive for project ID:", projectId);
-}
-
-/**
- * Confirm project deletion
- */
-function confirmDeleteProject(projectId) {
-    // Stubbed; no inline HTML
-    const evt = new CustomEvent("ConfirmDeleteProject", { detail: projectId });
-    document.dispatchEvent(evt);
-}
+    
+    filesList.innerHTML = "";
+    
+    files.forEach(file => {
+      const fileItem = window.createElement("div", {
+        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded"
+      });
+      
+      // File info
+      const infoDiv = window.createElement("div", {
+        className: "flex items-center"
+      });
+      
+      infoDiv.appendChild(window.createElement("span", {
+        className: "text-lg mr-2"
+      }, getFileIcon(file.file_type)));
+      
+      const detailsDiv = window.createElement("div");
+      detailsDiv.appendChild(window.createElement("div", {
+        className: "font-medium"
+      }, file.filename));
+      
+      detailsDiv.appendChild(window.createElement("div", {
+        className: "text-xs text-gray-500"
+      }, `${window.formatBytes(file.file_size)} • ${formatDate(file.created_at)}`));
+      
+      infoDiv.appendChild(detailsDiv);
+      fileItem.appendChild(infoDiv);
+      
+      // Action buttons
+      const buttonsDiv = window.createElement("div", {
+        className: "flex space-x-2"
+      });
+      
+      const viewBtn = window.createElement("button", {
+        className: "text-gray-600 hover:text-gray-800 view-file-btn",
+        dataset: { fileId: file.id }
+      });
+      
+      viewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>`;
+      
+      buttonsDiv.appendChild(viewBtn);
+      
+      const deleteBtn = window.createElement("button", {
+        className: "text-red-600 hover:text-red-800 delete-file-btn",
+        dataset: { 
+          fileId: file.id,
+          filename: file.filename
+        }
+      });
+      
+      deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>`;
+      
+      buttonsDiv.appendChild(deleteBtn);
+      fileItem.appendChild(buttonsDiv);
+      
+      filesList.appendChild(fileItem);
+    });
+  }
+  
+  /**
+   * Render project conversations
+   */
+  function renderProjectConversations(event) {
+    const conversations = event.detail?.conversations || [];
+    const conversationsList = document.getElementById("projectConversationsList");
+    
+    if (!conversationsList) return;
+    
+    if (conversations.length === 0) {
+      conversationsList.innerHTML = '<div class="text-gray-500 text-center py-8">No conversations yet.</div>';
+      return;
+    }
+    
+    conversationsList.innerHTML = "";
+    
+    conversations.forEach(conversation => {
+      const item = window.createElement("div", {
+        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded"
+      });
+      
+      const infoDiv = window.createElement("div");
+      infoDiv.appendChild(window.createElement("div", {
+        className: "font-medium"
+      }, conversation.title));
+      
+      infoDiv.appendChild(window.createElement("div", {
+        className: "text-xs text-gray-500"
+      }, formatDate(conversation.created_at, true)));
+      
+      item.appendChild(infoDiv);
+      
+      const openBtn = window.createElement("button", {
+        className: "px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm open-conversation-btn",
+        dataset: { conversationId: conversation.id }
+      }, "Open");
+      
+      item.appendChild(openBtn);
+      conversationsList.appendChild(item);
+    });
+  }
+  
+  /**
+   * Render project artifacts
+   */
+  function renderProjectArtifacts(event) {
+    const artifacts = event.detail?.artifacts || [];
+    const artifactsList = document.getElementById("projectArtifactsList");
+    
+    if (!artifactsList) return;
+    
+    if (artifacts.length === 0) {
+      artifactsList.innerHTML = '<div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>';
+      return;
+    }
+    
+    artifactsList.innerHTML = "";
+    
+    artifacts.forEach(artifact => {
+      const item = window.createElement("div", {
+        className: "p-3 bg-gray-50 dark:bg-gray-700 rounded"
+      });
+      
+      const header = window.createElement("div", {
+        className: "flex items-center justify-between mb-2"
+      });
+      
+      const titleDiv = window.createElement("div", {
+        className: "flex items-center"
+      });
+      
+      titleDiv.appendChild(window.createElement("span", {
+        className: "text-lg mr-2"
+      }, getArtifactIcon(artifact.content_type)));
+      
+      titleDiv.appendChild(window.createElement("div", {
+        className: "font-medium"
+      }, artifact.name));
+      
+      header.appendChild(titleDiv);
+      
+      header.appendChild(window.createElement("div", {
+        className: "text-xs text-gray-500"
+      }, formatDate(artifact.created_at)));
+      
+      item.appendChild(header);
+      
+      const actions = window.createElement("div", {
+        className: "flex justify-end space-x-2 mt-2"
+      });
+      
+      const viewBtn = window.createElement("button", {
+        className: "px-2 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100 view-artifact-btn",
+        dataset: { artifactId: artifact.id }
+      }, "View");
+      
+      actions.appendChild(viewBtn);
+      
+      const deleteBtn = window.createElement("button", {
+        className: "px-2 py-1 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50 delete-artifact-btn",
+        dataset: { 
+          artifactId: artifact.id,
+          name: artifact.name
+        }
+      }, "Delete");
+      
+      actions.appendChild(deleteBtn);
+      item.appendChild(actions);
+      
+      artifactsList.appendChild(item);
+    });
+  }
+  
+  /**
+   * Utility: Format number with commas
+   */
+  function formatNumber(num) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  
+  /**
+   * Utility: Format date
+   */
+  function formatDate(dateString, showTime = false) {
+    if (!dateString) return "";
+    
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    
+    const options = { year: "numeric", month: "short", day: "numeric" };
+    if (showTime) {
+      options.hour = "2-digit";
+      options.minute = "2-digit";
+    }
+    
+    return date.toLocaleDateString(undefined, options);
+  }
+  
+  /**
+   * Utility: Get icon for file type
+   */
+  function getFileIcon(fileType) {
+    const icons = {
+      "txt": "📄", "pdf": "📑", "doc": "📝", "docx": "📝", 
+      "xlsx": "📊", "xls": "📊", "csv": "📊", 
+      "jpg": "🖼️", "jpeg": "🖼️", "png": "🖼️", "gif": "🖼️", 
+      "mp3": "🎵", "mp4": "🎬", "zip": "📦", 
+      "json": "📋", "md": "📋"
+    };
+    
+    return icons[fileType] || "📄";
+  }
+  
+  /**
+   * Utility: Get icon for artifact type
+   */
+  function getArtifactIcon(contentType) {
+    const icons = {
+      "code": "💻", "document": "📄", "image": "🖼️", 
+      "audio": "🎵", "video": "🎬"
+    };
+    
+    return icons[contentType] || "📄";
+  }

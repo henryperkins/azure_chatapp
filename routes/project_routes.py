@@ -2,6 +2,7 @@
 project_routes.py
 -----------------
 Enhanced project routes with UUIDs, token tracking, and advanced features.
+Using consolidated auth and database utilities.
 """
 
 import logging
@@ -25,13 +26,13 @@ from db import get_async_session
 from models.user import User
 from models.project import Project
 from models.project_file import ProjectFile
-from utils.auth_deps import get_current_user_and_token
-# Commenting out unused or unresolvable utils.azure imports
-# from utils.azure import AzureStorage, CognitiveSearch  # Assume these exist
-
-from datetime import datetime
-# Only import the function(s) we actually use
-from services.project_service import validate_project_access
+from utils.auth_deps import (
+    get_current_user_and_token, 
+    validate_resource_ownership,
+    verify_project_access,
+    process_standard_response
+)
+from utils.context import get_by_id, get_all_by_condition, save_model, create_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -48,17 +49,12 @@ async def create_project(
 ):
     """Create new project with Azure Cognitive Search integration"""
     try:
-        # Create Azure Cognitive Search index
-        # Comment out or remove references to CognitiveSearch since it's not defined
-        
+        # Create project using db utility
         project = Project(
             **project_data.dict(),
             user_id=current_user.id,
         )
-        
-        db.add(project)
-        await db.commit()
-        await db.refresh(project)
+        await save_model(db, project)
         return project
         
     except Exception as e:
@@ -75,13 +71,23 @@ async def list_projects(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    query = select(Project).where(Project.user_id == current_user.id)
+    # Create conditions list based on filters
+    conditions = [Project.user_id == current_user.id]
     if archived is not None:
-        query = query.where(Project.archived == archived)
+        conditions.append(Project.archived == archived)
     if pinned is not None:
-        query = query.where(Project.pinned == pinned)
-    result = await db.execute(query.offset(skip).limit(limit))
-    return result.scalars().all()
+        conditions.append(Project.pinned == pinned)
+    
+    # Use consolidated function for database query
+    projects = await get_all_by_condition(
+        db, 
+        Project, 
+        *conditions, 
+        limit=limit, 
+        offset=skip,
+        order_by=Project.created_at.desc()
+    )
+    return projects
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -93,19 +99,16 @@ async def get_project(
     """
     Retrieves details for a single project. Must belong to the user.
     """
-    result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id, Project.user_id == current_user.id)
+    # Use the enhanced validation function
+    project = await validate_resource_ownership(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [Project.user_id == current_user.id]
     )
-    proj = result.scalars().first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found or access denied")
-
-    # Current user ID is a Column[int] from the model. Convert explicitly to int.
-    # Remove cast usage entirely, rely on user.id being a normal int.
-    # Pass the entire user object rather than user_id
-    project = await validate_project_access(project_id, current_user, db)
-    return project
+    return await process_standard_response(project)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -115,7 +118,8 @@ async def update_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    project = await validate_project_access(project_id, current_user, db)
+    # Verify project ownership
+    project = await verify_project_access(project_id, current_user, db)
     
     update_dict = update_data.dict(exclude_unset=True)
     if 'max_tokens' in update_dict and update_dict['max_tokens'] < project.token_usage:
@@ -124,9 +128,8 @@ async def update_project(
     for key, value in update_dict.items():
         setattr(project, key, value)
     
-    await db.commit()
-    await db.refresh(project)
-    return project
+    await save_model(db, project)
+    return await process_standard_response(project)
 
 
 @router.patch("/{project_id}/archive", response_model=ProjectResponse)
@@ -135,17 +138,20 @@ async def toggle_archive_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    project = await validate_project_access(project_id, current_user, db)
+    project = await verify_project_access(project_id, current_user, db)
     
-    stmt = (
-        update(Project)
-        .where(Project.id == project_id)
-        .values(archived=not project.archived)
+    # Toggle archived status
+    project.archived = not project.archived
+    
+    # If archiving, also remove pin
+    if project.archived and project.pinned:
+        project.pinned = False
+        
+    await save_model(db, project)
+    return await process_standard_response(
+        project, 
+        message=f"Project {'archived' if project.archived else 'unarchived'} successfully"
     )
-    await db.execute(stmt)
-    await db.commit()
-    await db.refresh(project)
-    return project
 
 @router.post("/{project_id}/artifacts", response_model=ArtifactResponse, status_code=status.HTTP_201_CREATED)
 async def create_artifact(
@@ -157,8 +163,10 @@ async def create_artifact(
     """
     Create a new artifact for the project
     """
-    project = await validate_project_access(project_id, current_user, db)
+    # Verify project access first
+    project = await verify_project_access(project_id, current_user, db)
     
+    # Create the artifact
     new_artifact = Artifact(
         project_id=project_id,
         conversation_id=artifact_data.conversation_id,
@@ -167,11 +175,8 @@ async def create_artifact(
         content=artifact_data.content
     )
     
-    db.add(new_artifact)
-    await db.commit()
-    await db.refresh(new_artifact)
-    
-    return new_artifact
+    await save_model(db, new_artifact)
+    return await process_standard_response(new_artifact, "Artifact created successfully")
 
 @router.get("/{project_id}/artifacts", response_model=dict)
 async def list_artifacts(
@@ -182,16 +187,18 @@ async def list_artifacts(
     """
     List all artifacts for a project
     """
-    await validate_project_access(project_id, current_user, db)
+    # Verify project access
+    await verify_project_access(project_id, current_user, db)
     
-    result = await db.execute(
-        select(Artifact)
-        .where(Artifact.project_id == project_id)
-        .order_by(Artifact.created_at.desc())
+    # Get artifacts using enhanced db utility
+    artifacts = await get_all_by_condition(
+        db,
+        Artifact,
+        Artifact.project_id == project_id,
+        order_by=Artifact.created_at.desc()
     )
-    artifacts = result.scalars().all()
     
-    return {
+    return await process_standard_response({
         "artifacts": [
             {
                 "id": str(a.id),
@@ -201,7 +208,7 @@ async def list_artifacts(
             }
             for a in artifacts
         ]
-    }
+    })
 
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
@@ -212,20 +219,23 @@ async def get_project_stats(
     """
     Get statistics for a project including token usage, file count, etc.
     """
-    project = await validate_project_access(project_id, current_user, db)
+    project = await verify_project_access(project_id, current_user, db)
     
     from models.chat import Conversation
     from models.project_file import ProjectFile
     from models.artifact import Artifact
     from sqlalchemy import func
     
-    # Get conversation count
-    conv_result = await db.execute(
-        select(func.count()).where(Conversation.project_id == project_id, Conversation.is_deleted.is_(False))
+    # Get conversation count using db utility
+    conversations = await get_all_by_condition(
+        db,
+        Conversation,
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False)
     )
-    conversation_count = conv_result.scalar() or 0
+    conversation_count = len(conversations)
     
-    # Get file count and total size
+    # Get file count and size
     files_result = await db.execute(
         select(func.count(), func.sum(ProjectFile.file_size)).where(ProjectFile.project_id == project_id)
     )
@@ -234,14 +244,16 @@ async def get_project_stats(
     total_file_size = total_file_size or 0
     
     # Get artifact count
-    artifact_result = await db.execute(
-        select(func.count()).where(Artifact.project_id == project_id)
+    artifacts = await get_all_by_condition(
+        db,
+        Artifact,
+        Artifact.project_id == project_id
     )
-    artifact_count = artifact_result.scalar() or 0
+    artifact_count = len(artifacts)
     
     usage_percentage = (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
     
-    return {
+    return await process_standard_response({
         "token_usage": project.token_usage,
         "max_tokens": project.max_tokens,
         "usage_percentage": usage_percentage,
@@ -249,7 +261,8 @@ async def get_project_stats(
         "file_count": file_count,
         "total_file_size": total_file_size,
         "artifact_count": artifact_count
-    }
+    })
+
 @router.post("/{project_id}/pin", response_model=ProjectResponse)
 async def toggle_pin_project(
    project_id: UUID,
@@ -260,21 +273,18 @@ async def toggle_pin_project(
    Pin or unpin a project for quick access.
    Cannot pin archived projects.
    """
-   project = await validate_project_access(project_id, current_user, db)
+   project = await verify_project_access(project_id, current_user, db)
    
    if project.archived and not project.pinned:
        raise HTTPException(status_code=400, detail="Cannot pin an archived project")
 
-   stmt = (
-       update(Project)
-       .where(Project.id == project_id)
-       .values(pinned=not project.pinned)
+   project.pinned = not project.pinned
+   await save_model(db, project)
+   
+   return await process_standard_response(
+       project,
+       message=f"Project {'pinned' if project.pinned else 'unpinned'} successfully"
    )
-   await db.execute(stmt)
-   await db.commit()
-   await db.refresh(project)
-   return project
-
 
 @router.get("/{project_id}/artifacts/{artifact_id}", response_model=ArtifactResponse)
 async def get_artifact(
@@ -286,18 +296,17 @@ async def get_artifact(
    """
    Get a specific artifact by ID
    """
-   await validate_project_access(project_id, current_user, db)
-   result = await db.execute(
-       select(Artifact)
-       .where(Artifact.id == artifact_id, Artifact.project_id == project_id)
+   # Use validate_resource_ownership to check both project and artifact access
+   artifact = await validate_resource_ownership(
+       artifact_id,
+       Artifact,
+       current_user,
+       db,
+       "Artifact",
+       [Artifact.project_id == project_id]
    )
-   artifact = result.scalars().first()
-   
-   if not artifact:
-       raise HTTPException(status_code=404, detail="Artifact not found")
 
-   return artifact
-
+   return await process_standard_response(artifact)
 
 @router.delete("/{project_id}/artifacts/{artifact_id}", response_model=dict)
 async def delete_artifact(
@@ -309,16 +318,24 @@ async def delete_artifact(
    """
    Delete an artifact by ID
    """
-   await validate_project_access(project_id, current_user, db)
-   result = await db.execute(
-       select(Artifact)
-       .where(Artifact.id == artifact_id, Artifact.project_id == project_id)
+   # Validate project access
+   await verify_project_access(project_id, current_user, db)
+   
+   # Get the artifact
+   artifact = await validate_resource_ownership(
+       artifact_id,
+       Artifact,
+       current_user,
+       db,
+       "Artifact",
+       [Artifact.project_id == project_id]
    )
-   artifact = result.scalars().first()
 
-   if not artifact:
-       raise HTTPException(status_code=404, detail="Artifact not found")
-
+   # Delete the artifact
    await db.delete(artifact)
    await db.commit()
-   return {"success": True, "message": "Artifact deleted successfully"}
+   
+   return await process_standard_response(
+       {"artifact_id": str(artifact_id)},
+       message="Artifact deleted successfully"
+   )

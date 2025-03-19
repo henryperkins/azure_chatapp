@@ -40,7 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Global event: 'projectUpdated' triggered, detail:", e.detail);
   });
 
-  // Example of listening for “sessionExpired” event from auth.js 
+  // Example of listening for "sessionExpired" event from auth.js 
   document.addEventListener("sessionExpired", () => {
     showNotification("Your session has expired. Please log in again.", "error");
     updateUserSessionState();
@@ -64,64 +64,51 @@ function loadConversationList() {
     console.error("No project ID selected. Please select a project first.");
     return;
   }
-  fetch(`/api/projects/${selectedProjectId}/conversations`, {
-    method: 'GET',
-    credentials: 'include'  // Ensure this is always present
-  })
-  .then(resp => {
-    if (!resp.ok) {
-      return resp.text().then((text) => {
-        throw new Error(`${resp.status}: ${text}`);
-      });
-    }
-    return resp.json();
-  })
-  .then((data) => {
-    const container = document.getElementById('sidebarConversations');
-    if (!container) return;
-    container.innerHTML = '';
-    if (data.conversations && data.conversations.length > 0) {
-      data.conversations.forEach((item) => {
-        const li = document.createElement('li');
-        li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
-        li.textContent = item.title || 'Conversation ' + item.id;
-        li.addEventListener('click', () => {
-          window.history.pushState({}, '', `/?chatId=${item.id}`);
-          // Show chat UI and hide "no chat" message
-          const chatUI = document.getElementById("chatUI");
-          const noChatMsg = document.getElementById("noChatSelectedMessage");
-          if (chatUI) chatUI.classList.remove("hidden");
-          if (noChatMsg) noChatMsg.classList.add("hidden");
-          // Update chat title and load messages
-          const chatTitleEl = document.getElementById("chatTitle");
-          if (chatTitleEl) chatTitleEl.textContent = item.title;
-          if (typeof window.loadConversation === 'function') {
-            window.loadConversation(item.id);
-          }
+  
+  apiRequest(`/api/projects/${selectedProjectId}/conversations`)
+    .then((data) => {
+      const container = document.getElementById('sidebarConversations');
+      if (!container) return;
+      container.innerHTML = '';
+      if (data.conversations && data.conversations.length > 0) {
+        data.conversations.forEach((item) => {
+          const li = document.createElement('li');
+          li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
+          li.textContent = item.title || 'Conversation ' + item.id;
+          li.addEventListener('click', () => {
+            window.history.pushState({}, '', `/?chatId=${item.id}`);
+            // Show chat UI and hide "no chat" message
+            const chatUI = document.getElementById("chatUI");
+            const noChatMsg = document.getElementById("noChatSelectedMessage");
+            if (chatUI) chatUI.classList.remove("hidden");
+            if (noChatMsg) noChatMsg.classList.add("hidden");
+            // Update chat title and load messages
+            const chatTitleEl = document.getElementById("chatTitle");
+            if (chatTitleEl) chatTitleEl.textContent = item.title;
+            if (typeof window.loadConversation === 'function') {
+              window.loadConversation(item.id);
+            }
+          });
+          container.appendChild(li);
         });
+      } else {
+        const li = document.createElement('li');
+        li.className = 'text-gray-500';
+        li.textContent = 'No conversations yet—Begin now!';
         container.appendChild(li);
-      });
-    } else {
-      const li = document.createElement('li');
-      li.className = 'text-gray-500';
-      li.textContent = 'No conversations yet—Begin now!';
-      container.appendChild(li);
-    }
-  })
-  .catch((err) => {
-    console.error('Error loading conversation list:', err);
-  });
+      }
+    })
+    .catch((err) => {
+      console.error('Error loading conversation list:', err);
+    });
 }
 
 // ---------------------------------------------------------------------
 // Improved authentication handling (updated)
 // ---------------------------------------------------------------------
 function checkAndHandleAuth() {
-  fetch("/api/auth/verify", {
-    credentials: 'include'
-  })
-  .then(resp => {
-    if (resp.ok) {
+  apiRequest("/api/auth/verify")
+    .then(resp => {
       // User is authenticated - load data
       const selectedProjectId = localStorage.getItem("selectedProjectId");
       if (selectedProjectId) {
@@ -148,7 +135,8 @@ function checkAndHandleAuth() {
       if (loginRequiredMessage) {
         loginRequiredMessage.classList.add("hidden");
       }
-    } else {
+    })
+    .catch(err => {
       // User is not authenticated - show login dialog
       document.getElementById("userMenu")?.classList.add("hidden");
       document.getElementById("authButton")?.classList.remove("hidden");
@@ -168,9 +156,9 @@ function checkAndHandleAuth() {
       document.getElementById("chatUI")?.classList.add("hidden");
       document.getElementById("projectManagerPanel")?.classList.add("hidden");
       document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
-    }
-  })
-  .catch(err => console.error("Auth check failed:", err));
+      
+      console.error("Auth check failed:", err);
+    });
 
   // Add event listener for the login button
   const showLoginBtn = document.getElementById("showLoginBtn");
@@ -184,25 +172,22 @@ function checkAndHandleAuth() {
 
 function updateUserSessionState() {
   const authStatus = document.getElementById("authStatus");
-  fetch("/api/auth/verify", {
-    credentials: 'include'
-  })
-  .then(resp => {
-    if(resp.ok) {
+  apiRequest("/api/auth/verify")
+    .then(resp => {
       if(authStatus) {
         authStatus.textContent = "Authenticated";
         authStatus.classList.remove("text-red-600");
         authStatus.classList.add("text-green-600");
       }
-    } else {
+    })
+    .catch(err => {
       if(authStatus) {
         authStatus.textContent = "Not Authenticated";
         authStatus.classList.remove("text-green-600");
         authStatus.classList.add("text-red-600");
       }
-    }
-  })
-  .catch(err => console.error("Auth check failed:", err));
+      console.error("Auth check failed:", err);
+    });
 }
 
 /**
@@ -222,7 +207,7 @@ function handleWindowResize() {
   const sidebarEl = document.getElementById("mainSidebar");
   if (!sidebarEl) return;
   if (window.innerWidth < 768) {
-    // On mobile breakpoints, automatically hide the sidebar if it’s visible
+    // On mobile breakpoints, automatically hide the sidebar if it's visible
     if (!sidebarEl.classList.contains("hidden")) {
       sidebarEl.classList.add("hidden");
     }
@@ -369,3 +354,144 @@ document.addEventListener('keydown', (e) => {
     // Implement focus trapping logic if needed
   }
 });
+
+// NEW UTILITY FUNCTIONS TO REDUCE DUPLICATION
+
+/**
+ * Standardized API request function to eliminate duplicate fetch code
+ * @param {String} url - The URL to fetch
+ * @param {String} method - HTTP method (GET, POST, etc)
+ * @param {Object} data - Request body for POST/PUT/PATCH
+ * @param {Object} options - Additional fetch options
+ * @returns {Promise} - Resolves to parsed JSON response
+ */
+window.apiRequest = async function(url, method = "GET", data = null, options = {}) {
+  // Default options
+  const fetchOptions = {
+    method,
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    ...options
+  };
+  
+  // Add body if data is provided
+  if (data && ["POST", "PUT", "PATCH"].includes(method)) {
+    fetchOptions.body = JSON.stringify(data);
+  }
+  
+  try {
+    const response = await fetch(url, fetchOptions);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      try {
+        const jsonError = JSON.parse(errorText);
+        throw new Error(jsonError.detail || `Error ${response.status}`);
+      } catch (e) {
+        throw new Error(`${response.status}: ${errorText}`);
+      }
+    }
+    
+    // For no-content responses
+    if (response.status === 204) {
+      return {};
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error(`API request failed: ${url}`, error);
+    throw error;
+  }
+};
+
+/**
+ * Form data serialization helper
+ * @param {HTMLFormElement} form - The form to serialize
+ * @returns {Object} - Form data as key-value pairs
+ */
+window.serializeForm = function(form) {
+  const formData = new FormData(form);
+  const data = {};
+  
+  for (let [key, value] of formData.entries()) {
+    data[key] = value;
+  }
+  
+  return data;
+};
+
+/**
+ * Form validation helper
+ * @param {HTMLFormElement} form - The form to validate
+ * @returns {Object} - Validation result with isValid flag and errors
+ */
+window.validateForm = function(form) {
+  const data = window.serializeForm(form);
+  const errors = {};
+  
+  // Check required fields
+  Array.from(form.elements).forEach(el => {
+    if (el.required && !el.value.trim()) {
+      errors[el.name] = "This field is required";
+    }
+  });
+  
+  return {
+    isValid: Object.keys(errors).length === 0,
+    data,
+    errors
+  };
+};
+
+/**
+ * DOM manipulation helper
+ * @param {String} selector - CSS selector
+ * @param {HTMLElement} context - Context element (optional)
+ * @returns {HTMLElement} - Found element or null
+ */
+window.find = function(selector, context = document) {
+  return context.querySelector(selector);
+};
+
+/**
+ * Create HTML element with attributes and children
+ * @param {String} tag - Element tag name
+ * @param {Object} attrs - Element attributes
+ * @param {Array|String} children - Child elements or text content
+ * @returns {HTMLElement} - Created element
+ */
+window.createElement = function(tag, attrs = {}, children = []) {
+  const el = document.createElement(tag);
+  
+  // Set attributes
+  Object.entries(attrs).forEach(([key, value]) => {
+    if (key === 'className') {
+      el.className = value;
+    } else if (key === 'dataset') {
+      Object.entries(value).forEach(([dataKey, dataValue]) => {
+        el.dataset[dataKey] = dataValue;
+      });
+    } else if (key.startsWith('on') && typeof value === 'function') {
+      el.addEventListener(key.substring(2).toLowerCase(), value);
+    } else {
+      el.setAttribute(key, value);
+    }
+  });
+  
+  // Add children
+  if (typeof children === 'string') {
+    el.textContent = children;
+  } else if (Array.isArray(children)) {
+    children.forEach(child => {
+      if (typeof child === 'string') {
+        el.appendChild(document.createTextNode(child));
+      } else if (child instanceof HTMLElement) {
+        el.appendChild(child);
+      }
+    });
+  }
+  
+  return el;
+};
