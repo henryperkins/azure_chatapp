@@ -6,3 +6,4 @@ from .project import Project
 from .chat import Conversation
 from .message import Message
 from .user import User
+from .knowledge_base import KnowledgeBase
