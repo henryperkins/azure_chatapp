@@ -253,7 +253,7 @@
           <div class="flex space-x-2 items-center">
             <input type="text"
                    id="chatInput"
-                   placeholder="Type your message..."
+                   placeholder="Type your message. .."
                    class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-200 focus:ring-blue-500 focus:outline-none" />
             <button id="sendBtn"
                     class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -266,65 +266,8 @@
           </div>
         </section>
 
-        <!-- Project Manager panel or feature (handled by project_manager.js) -->
-        <section id="projectManagerPanel"
-                 class="bg-white dark:bg-gray-800 rounded shadow p-4">
-          <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Project Management</h2>
-          <div class="text-sm dark:text-gray-200">
-            <!-- Project List -->
-            <h3 class="font-medium mb-2">Your Projects</h3>
-            <ul id="projectList" class="mb-4 max-h-48 overflow-y-auto"></ul>
-            
-            <!-- Create New Project Form -->
-            <div class="border-t pt-3 mt-3 border-gray-200 dark:border-gray-700">
-              <h3 class="font-medium mb-2">Create New Project</h3>
-              <div class="space-y-3">
-                <div>
-                  <label for="projNameInput" class="block text-xs mb-1">Project Name*</label>
-                  <input type="text" id="projNameInput" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="e.g. My Web App" required>
-                </div>
-                
-                <div>
-                  <label for="projSubtitleInput" class="block text-xs mb-1">Subtitle</label>
-                  <input type="text" id="projSubtitleInput" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="e.g. A responsive web application">
-                </div>
-                
-                <div>
-                  <label for="projDescInput" class="block text-xs mb-1">Description</label>
-                  <textarea id="projDescInput" rows="2" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="Detailed description of your project"></textarea>
-                </div>
-                
-                <div>
-                  <label for="projNotesInput" class="block text-xs mb-1">Notes</label>
-                  <textarea id="projNotesInput" rows="2" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="Additional notes or reminders"></textarea>
-                </div>
-                
-                <button id="createProjectBtn" class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors">
-                  Create Project
-                </button>
-              </div>
-            </div>
-            
-            <!-- Attach Project to Chat -->
-            <div class="border-t pt-3 mt-3 border-gray-200 dark:border-gray-700">
-              <h3 class="font-medium mb-2">Attach Project to Chat</h3>
-              <div class="flex space-x-2">
-                <div class="flex-1">
-                  <label for="attachChatId" class="block text-xs mb-1">Chat ID</label>
-                  <input type="text" id="attachChatId" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" placeholder="Enter chat ID">
-                </div>
-                <div class="self-end">
-                  <button id="autoFillChatIdBtn" class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-2 px-3 rounded hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
-                    Current
-                  </button>
-                </div>
-              </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Select a project from the list above and enter a chat ID to attach it.
-              </p>
-            </div>
-          </div>
-        </section>
+        <!-- This snippet replaced by dynamically loaded projectDashboard template -->
+        <div id="projectDashboard"></div>
       </div>
     </main>
   </div>
