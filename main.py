@@ -64,14 +64,30 @@ logging.getLogger('sqlalchemy.dialects.postgresql').setLevel(logging.WARNING)
 logging.getLogger('sqlalchemy.orm').setLevel(logging.WARNING)
 
 # Apply CORS Middleware
+# Get CORS origins from settings
+origins = settings.CORS_ORIGINS if hasattr(settings, 'CORS_ORIGINS') else []
+
+# In development, allow localhost origins if none specified
+if settings.ENV != "production" and not origins:
+    origins = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+# Configure CORS with appropriate security settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Set-Cookie"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["X-Requested-With", "Content-Type", "Accept", "Authorization"],
+    expose_headers=["Set-Cookie", "Content-Disposition"],
+    max_age=600  # Cache preflight requests for 10 minutes
 )
+
+logger.info(f"CORS configured with origins: {origins}")
 
 
 @app.get("/", include_in_schema=False)

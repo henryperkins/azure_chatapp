@@ -19,15 +19,23 @@ class Settings:
     # Allowed hosts
     ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+    # CORS Origins - if left empty, default to localhost origins in development
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+
     # Database
+    # Auth token expiration time in minutes
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./default.db")
-    
-    # JWT secret key
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "defaultsecret")
+
+    # JWT secret key - must match JWT_SECRET in auth_deps.py
+    JWT_SECRET = os.getenv("JWT_SECRET", "")
 
     # Azure OpenAI or OpenAI default keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+
+    # Cookie domain
+    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")
 
 settings = Settings()

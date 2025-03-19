@@ -122,7 +122,7 @@ T = TypeVar('T')
 async def get_by_id(
     db: AsyncSession,
     model: Type[T],
-    id: Union[int, str, UUID]
+    id: Any
 ) -> Optional[T]:
     """
     Get a model instance by ID. Reduces duplicate SELECT queries.
@@ -135,7 +135,7 @@ async def get_by_id(
     Returns:
         Model instance or None if not found
     """
-    result = await db.execute(select(model).where(model.id == id))
+    result = await db.execute(select(model).where(getattr(model, "id") == id))
     return result.scalars().first()
 
 async def get_all_by_condition(
@@ -168,7 +168,7 @@ async def get_all_by_condition(
     query = query.limit(limit).offset(offset)
     
     result = await db.execute(query)
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 async def save_model(db: AsyncSession, model_instance: Any) -> Any:
     """

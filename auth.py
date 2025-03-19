@@ -7,6 +7,7 @@ secure password hashing (bcrypt), and session expiry logic.
 
 import logging
 import os
+import uuid
 from datetime import datetime, timedelta
 
 import bcrypt
@@ -20,6 +21,7 @@ from sqlalchemy import select
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
 from utils.auth_deps import get_current_user_and_token
+from typing import cast
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -28,14 +30,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # JWT Configuration
-from typing import cast
 
-# Explicitly typing JWT_SECRET as str to satisfy Pylance
-JWT_SECRET = cast(str, os.getenv("JWT_SECRET"))
-if not JWT_SECRET or JWT_SECRET.strip() == "":
-    raise SystemExit("Error: JWT_SECRET is not set. Please configure a proper secret before running.")
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour expiry note
+# Import JWT_SECRET and JWT_ALGORITHM from auth_deps to ensure consistency
+from utils.auth_deps import JWT_SECRET, JWT_ALGORITHM
+from config import settings
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 class UserCredentials(BaseModel):
@@ -46,8 +45,6 @@ class UserCredentials(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str
-
-
 
 
 def validate_password(password: str):
@@ -61,6 +58,7 @@ def validate_password(password: str):
         raise ValueError("Password must contain numbers")
     if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?~' for c in password):
         raise ValueError("Password must contain at least one special character")
+
 
 @router.post("/register")
 async def register_user(
@@ -122,34 +120,44 @@ async def login_user(
         )
 
     if not valid_password:
-        # Provide more specific debug logging to distinguish issues
         logger.debug(f"User '{user.username}' tried to login with invalid password.")
         raise HTTPException(
             status_code=401,
             detail="Invalid username or password"
         )
 
-    # Construct payload for JWT
+    if not user.is_active:
+        logger.debug(f"User '{user.username}' attempted login but is not active.")
+        raise HTTPException(
+            status_code=403,
+            detail="Account is disabled or inactive. Contact support."
+        )
+
+    # Generate a unique token ID
+    token_id = str(uuid.uuid4())
+    
+    # Construct enhanced payload for JWT
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user.username,
         "exp": expire,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "jti": token_id,  # Add JWT ID for uniqueness and tracking
+        "type": "access"  # Specify token type for additional validation
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-    logger.info(f"User '{user.username}' logged in successfully.")
-    
-    # If ENV=production, use secure cookies and samesite=none.
-    # If not production, switch samesite to 'lax' and secure=False to ensure local dev cookies aren't blocked.
-    # Force same-site=None even in dev for cross-site cookie
-    production_mode = os.getenv("ENV") == "production"
+    logger.info(f"User '{user.username}' logged in successfully with token ID {token_id}.")
+
+    # Adjust samesite logic to match the comment indicating cross-site usage
+    production_mode = settings.ENV == "production"
     if production_mode:
         secure_cookie = True
         samesite_value = "none"
     else:
         secure_cookie = False
-        samesite_value = "lax"
+        # Force same-site=None for cross-site cookie consistency in dev
+        samesite_value = "none"
 
     response.set_cookie(
         key="access_token",
@@ -157,10 +165,10 @@ async def login_user(
         httponly=True,
         secure=secure_cookie,
         samesite=samesite_value,
-        max_age=3600,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert minutes to seconds
         path="/"
     )
-    
+
     return {
         "message": "Login successful",
         "access_token": token,
@@ -173,21 +181,59 @@ async def login_user(
 # ------------------------------
 
 
-
-
-
-@router.get("/refresh")
-def refresh_token(current_user: User = Depends(get_current_user_and_token)):
+@router.post("/refresh")
+async def refresh_token(
+    response: Response,
+    current_user: User = Depends(get_current_user_and_token)
+):
     """
-    Provides a new token, effectively "refreshing" the session if the user is still valid.
+    Provides a new token with rotation, effectively "refreshing" the session if the user is still valid.
+    Also sets a new cookie for seamless session continuity.
+    Enhanced with token rotation and additional security metadata.
     """
+    # Generate a unique token ID for tracking
+    token_id = str(uuid.uuid4())
+    
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": current_user.username,
-        "exp": expire
+        "exp": expire,
+        "iat": datetime.utcnow(),
+        "jti": token_id,  # Add JWT ID for token uniqueness and tracking
+        "type": "access"  # Specify token type for additional validation
     }
     new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return {"access_token": new_token, "token_type": "bearer"}
+
+    # Match the same cookie settings used in login
+    production_mode = settings.ENV == "production"
+    if production_mode:
+        secure_cookie = True
+        samesite_value = "none"
+    else:
+        secure_cookie = False
+        # Force same-site=None for cross-site cookie consistency in dev
+        samesite_value = "none"
+
+    # Set the cookie with the new token
+    response.set_cookie(
+        key="access_token",
+        value=new_token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite=samesite_value,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+    
+    logger.info(f"Token refreshed for user '{current_user.username}'")
+    
+    return {
+        "message": "Token refreshed",
+        "access_token": new_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
+
 
 @router.get("/verify")
 async def verify_auth_status(current_user: User = Depends(get_current_user_and_token)):
@@ -196,24 +242,31 @@ async def verify_auth_status(current_user: User = Depends(get_current_user_and_t
     """
     return {"authenticated": True, "username": current_user.username, "user_id": current_user.id}
 
+
 @router.post("/logout")
 async def logout_user(response: Response):
     """
     Logs out the user by clearing the access token cookie
     """
-    production_mode = os.getenv("ENV") == "production"
+    production_mode = settings.ENV == "production"
+    cookie_domain = settings.COOKIE_DOMAIN.strip()
     if production_mode:
         secure_cookie = True
         samesite_value = "none"
     else:
         secure_cookie = False
-        samesite_value = "lax"
+        samesite_value = "none"
 
-    response.delete_cookie(
-        key="access_token",
-        path="/",
-        httponly=True,
-        secure=secure_cookie,
-        samesite=samesite_value
-    )
+    delete_params = {
+        "key": "access_token",
+        "path": "/",
+        "httponly": True,
+        "secure": secure_cookie,
+        "samesite": samesite_value
+    }
+
+    if cookie_domain:
+        delete_params["domain"] = cookie_domain
+
+    response.delete_cookie(**delete_params)
     return {"status": "logged out"}
