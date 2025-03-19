@@ -4,7 +4,6 @@
  * Production-ready user authentication logic for the Azure Chat Application.
  * - Registers new users (stores hashed passwords in DB).
  * - Logs in existing users (retrieves JWT).
- * - Saves the JWT to localStorage for subsequent requests.
  * - Optionally provides logout functionality.
  */
 
@@ -163,8 +162,6 @@ document.addEventListener("DOMContentLoaded", () => {
     .then(checkResponse)
     .then(() => {
       // Clear localStorage token
-      localStorage.removeItem("accessToken");
-      
       // Update UI
       document.dispatchEvent(new CustomEvent("authStateChanged", {
         detail: { authenticated: false }

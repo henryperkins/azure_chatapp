@@ -49,7 +49,7 @@ class Project(Base):
     
     # Relationship to conversations
     conversations = relationship("Conversation", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
-    artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
+    artifacts = relationship("models.artifact.Artifact", back_populates="project", cascade="all, delete-orphan")
     
     # Relationship to files
     files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
