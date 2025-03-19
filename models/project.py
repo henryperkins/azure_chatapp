@@ -8,12 +8,10 @@ from sqlalchemy import Column, String, Integer, Text, TIMESTAMP, text, ForeignKe
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 # Removed import as chat_project is no longer used
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-
 from db import Base
 from typing import Optional
 from datetime import datetime
 import uuid
-
 from sqlalchemy import CheckConstraint
 
 class Project(Base):
