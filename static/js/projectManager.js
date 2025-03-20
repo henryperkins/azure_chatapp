@@ -524,7 +524,7 @@ function startNewConversation() {
     project_id: currentProject.id
   })
     .then(response => {
-      window.location.href = `/?chatId=${response.data.conversation_id}`;
+      window.location.href = `/?chatId=${response.data.id}`;
     })
     .catch(err => {
       console.error("Error creating conversation:", err);
