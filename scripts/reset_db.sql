@@ -59,10 +59,10 @@ CREATE TABLE projects (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     extra_data JSONB,
     CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)),
+    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)) COMMENT "Archived projects cannot be pinned",
     CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
 );
-CREATE INDEX ix_projects_user_id ON projects(user_id);
+CREATE INDEX ix_projects_user_id ON projects (user_id);
 CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
 
 -- Conversations table
