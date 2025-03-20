@@ -15,6 +15,7 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+import services
 
 from db import get_async_session
 from models.user import User
