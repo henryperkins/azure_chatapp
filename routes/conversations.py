@@ -424,8 +424,17 @@ async def websocket_chat_endpoint(
             )
 
             while True:
-                data = await websocket.receive_text()
-                data_dict = json.loads(data)
+                raw_data = await websocket.receive_text()
+                try:
+                    data_dict = json.loads(raw_data)
+                    if data_dict.get("type") == "auth" and "cookies" in data_dict:
+                        for c in data_dict["cookies"].split("; "):
+                            if "=" in c:
+                                k, v = c.split("=", 1)
+                                websocket.headers.__dict__["_list"].append((b"cookie", f"{k.strip()}={v.strip()}".encode()))
+                        continue
+                except:
+                    data_dict = {"content": raw_data, "role": "user"}
 
                 # Use message service
                 message = await services.message_service.create_websocket_message(
