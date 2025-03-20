@@ -77,9 +77,41 @@
     width: 100%;
     text-align: center;
   }
-}
 
 /* Ensure mobile menu stays on top */
 #mainSidebar {
   z-index: 9999;
+}
+/* Dark mode support for project details */
+.dark .file-item,
+.dark .artifact-item,
+.dark .conversation-item {
+  background-color: #374151;
+  color: #f3f4f6;
+}
+
+/* Animation for counting up */
+@keyframes countUp {
+  from { opacity: 0.5; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.count-animation {
+  animation: countUp 0.3s ease-out;
+}
+
+/* Drag and drop zone styles */
+#dragDropZone {
+  transition: all 0.2s ease-in-out;
+}
+
+#dragDropZone:hover {
+  border-color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Pagination for artifacts */
+.pagination-hidden {
+  display: none !important;
+}
 }
