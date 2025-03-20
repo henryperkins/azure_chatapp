@@ -96,7 +96,7 @@ async def register_user(
 
 # In the login_user function, update the cookie setting:
 
-@router.post("/login")
+@router.post("/login", response_model=LoginResponse)
 async def login_user(
     response: Response,
     creds: UserCredentials,
