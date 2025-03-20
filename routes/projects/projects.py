@@ -1,5 +1,5 @@
 """
-p_main.py
+projects.py
 ---------
 Core project management routes with CRUD operations,
 statistics, and project-level actions.
@@ -7,13 +7,12 @@ statistics, and project-level actions.
 
 import logging
 from uuid import UUID
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from db import get_async_session
 from models.user import User
@@ -27,10 +26,10 @@ from utils.auth_deps import (
     process_standard_response
 )
 from utils.context import (
-    get_by_id,
     get_all_by_condition,
     save_model
 )
+from utils.serializers import serialize_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -78,7 +77,7 @@ async def create_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Create new project with Azure Cognitive Search integration"""
+    """Create new project"""
     try:
         # Create project using db utility
         project = Project(
@@ -89,24 +88,7 @@ async def create_project(
         logger.info(f"Project created successfully: {project.id} for user {current_user.id}")
         
         # Serialize project for response
-        serialized_project = {
-            "id": str(project.id),
-            "name": project.name,
-            "description": project.description,
-            "goals": project.goals,
-            "custom_instructions": project.custom_instructions,
-            "token_usage": project.token_usage,
-            "max_tokens": project.max_tokens,
-            "version": project.version,
-            "archived": project.archived,
-            "pinned": project.pinned,
-            "is_default": project.is_default,
-            "user_id": project.user_id,
-            "created_at": project.created_at,
-            "updated_at": project.updated_at,
-            "knowledge_base_id": str(project.knowledge_base_id) if project.knowledge_base_id else None,
-            "extra_data": project.extra_data
-        }
+        serialized_project = serialize_project(project)
         
         return await process_standard_response(serialized_project, "Project created successfully")
         
@@ -146,26 +128,7 @@ async def list_projects(
     logger.info(f"Retrieved {len(projects)} projects for user {current_user.id}")
     
     # Serialize projects to dict for JSON response
-    serialized_projects = []
-    for project in projects:
-        serialized_projects.append({
-            "id": str(project.id),
-            "name": project.name,
-            "description": project.description,
-            "goals": project.goals,
-            "custom_instructions": project.custom_instructions,
-            "token_usage": project.token_usage,
-            "max_tokens": project.max_tokens,
-            "version": project.version,
-            "archived": project.archived,
-            "pinned": project.pinned,
-            "is_default": project.is_default,
-            "user_id": project.user_id,
-            "created_at": project.created_at.isoformat() if project.created_at else None,
-            "updated_at": project.updated_at.isoformat() if project.updated_at else None,
-            "knowledge_base_id": str(project.knowledge_base_id) if project.knowledge_base_id else None,
-            "extra_data": project.extra_data
-        })
+    serialized_projects = [serialize_project(project) for project in projects]
     
     # Return standardized response format
     return await process_standard_response(serialized_projects)
@@ -191,24 +154,7 @@ async def get_project(
     )
     
     # Serialize project to dict for JSON response
-    serialized_project = {
-        "id": str(project.id),
-        "name": project.name,
-        "description": project.description,
-        "goals": project.goals,
-        "custom_instructions": project.custom_instructions,
-        "token_usage": project.token_usage,
-        "max_tokens": project.max_tokens,
-        "version": project.version,
-        "archived": project.archived,
-        "pinned": project.pinned,
-        "is_default": project.is_default,
-        "user_id": project.user_id,
-        "created_at": project.created_at.isoformat() if project.created_at else None,
-        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
-        "knowledge_base_id": str(project.knowledge_base_id) if project.knowledge_base_id else None,
-        "extra_data": project.extra_data
-    }
+    serialized_project = serialize_project(project)
     
     return await process_standard_response(serialized_project)
 
@@ -241,24 +187,7 @@ async def update_project(
     await save_model(db, project)
     
     # Serialize project for response
-    serialized_project = {
-        "id": str(project.id),
-        "name": project.name,
-        "description": project.description,
-        "goals": project.goals,
-        "custom_instructions": project.custom_instructions,
-        "token_usage": project.token_usage,
-        "max_tokens": project.max_tokens,
-        "version": project.version,
-        "archived": project.archived,
-        "pinned": project.pinned,
-        "is_default": project.is_default,
-        "user_id": project.user_id,
-        "created_at": project.created_at.isoformat() if project.created_at else None,
-        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
-        "knowledge_base_id": str(project.knowledge_base_id) if project.knowledge_base_id else None,
-        "extra_data": project.extra_data
-    }
+    serialized_project = serialize_project(project)
     
     return await process_standard_response(serialized_project, "Project updated successfully")
 
@@ -322,16 +251,8 @@ async def toggle_archive_project(
         
     await save_model(db, project)
     
-    # Serialize project for response
-    serialized_project = {
-        "id": str(project.id),
-        "name": project.name,
-        "archived": project.archived,
-        "pinned": project.pinned
-    }
-    
     return await process_standard_response(
-        serialized_project, 
+        serialize_project(project), 
         message=f"Project {'archived' if project.archived else 'unarchived'} successfully"
     )
 
@@ -361,15 +282,8 @@ async def toggle_pin_project(
    project.pinned = not project.pinned
    await save_model(db, project)
    
-   # Serialize project for response
-   serialized_project = {
-       "id": str(project.id),
-       "name": project.name,
-       "pinned": project.pinned
-   }
-   
    return await process_standard_response(
-       serialized_project,
+       serialize_project(project),
        message=f"Project {'pinned' if project.pinned else 'unpinned'} successfully"
    )
 
