@@ -19,10 +19,8 @@ def upgrade():
     # Avoid duplicating indexes already created in "20250318_add_performance_indexes"
     # Keep only those that are unique to this migration:
     op.create_index('ix_projects_updated_at', 'projects', ['updated_at'])
-    op.create_index('ix_messages_timestamp', 'messages', ['timestamp'])
     op.create_index('ix_users_username', 'users', ['username'], unique=True)
 
 def downgrade():
     op.drop_index('ix_projects_updated_at', table_name='projects')
-    op.drop_index('ix_messages_timestamp', table_name='messages')
     op.drop_index('ix_users_username', table_name='users')
