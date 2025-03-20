@@ -196,6 +196,12 @@ function loadConversationList() {
      })
      .catch((err) => {
        console.error("Error verifying project or loading conversations:", err);
+       if (err.message.includes("404")) {
+         localStorage.removeItem("selectedProjectId");
+         showNotification("Selected project not found or inaccessible. It has been deselected.", "error");
+         loadSidebarProjects(); // refresh project list to reflect current state
+         loadConversationList(); // reload without project, avoid further erroneous calls
+       }
      });
  }
  window.loadConversationList = loadConversationList;

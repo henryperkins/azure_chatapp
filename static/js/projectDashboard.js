@@ -691,7 +691,7 @@ function renderProjectConversations(event) {
     const infoDiv = window.createElement("div");
     infoDiv.appendChild(window.createElement("div", {
       className: "font-medium"
-    }, conversation.name || `Conversation ${conversation.id}`));
+    }, conversation.title || `Conversation ${conversation.id}`));
     
     infoDiv.appendChild(window.createElement("div", {
       className: "text-xs text-gray-500"
