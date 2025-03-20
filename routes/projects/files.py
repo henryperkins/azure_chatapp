@@ -136,78 +136,15 @@ async def get_project_file(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Get file details and content
-    """
-    # Verify project access
-    await validate_resource_ownership(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+    """Get file details and content using knowledge base service"""
+    file_data = await services.knowledgebase_service.get_project_file(
+        project_id=project_id,
+        file_id=file_id,
+        db=db,
+        user_id=current_user.id,
+        include_content=True
     )
-    
-    # Get the file
-    project_file = await validate_resource_ownership(
-        file_id,
-        ProjectFile,
-        current_user,
-        db,
-        "File",
-        [ProjectFile.project_id == project_id]
-    )
-    
-    # If the file has inline content, return it directly
-    if project_file.content:
-        return await process_standard_response({
-            "id": str(project_file.id),
-            "filename": project_file.filename,
-            "file_type": project_file.file_type,
-            "file_size": project_file.file_size,
-            "content": project_file.content,
-            "created_at": project_file.created_at.isoformat() if project_file.created_at else None
-        })
-    
-    # Otherwise, check if the file exists in storage
-    file_path = f"./uploads/{project_file.file_path}"
-    if not os.path.exists(file_path):
-        return await process_standard_response({
-            "id": str(project_file.id),
-            "filename": project_file.filename,
-            "file_type": project_file.file_type,
-            "file_size": project_file.file_size,
-            "content": None,
-            "created_at": project_file.created_at.isoformat() if project_file.created_at else None,
-            "error": "File content not available"
-        })
-    
-    # Read the file content if it's a text file and not too large
-    if project_file.file_type in ["txt", "md", "csv", "json"] and project_file.file_size < 1_000_000:
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            return await process_standard_response({
-                "id": str(project_file.id),
-                "filename": project_file.filename,
-                "file_type": project_file.file_type,
-                "file_size": project_file.file_size,
-                "content": content,
-                "created_at": project_file.created_at.isoformat() if project_file.created_at else None
-            })
-        except Exception as e:
-            logger.error(f"Error reading file: {str(e)}")
-    
-    # For non-text or large files, just return metadata
-    return await process_standard_response({
-        "id": str(project_file.id),
-        "filename": project_file.filename,
-        "file_type": project_file.file_type,
-        "file_size": project_file.file_size,
-        "content": None,
-        "created_at": project_file.created_at.isoformat() if project_file.created_at else None
-    })
+    return await process_standard_response(file_data)
 
 
 @router.delete("/{project_id}/files/{file_id}", response_model=dict)
@@ -217,46 +154,11 @@ async def delete_project_file(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Delete a file from a project
-    """
-    # Verify project access
-    project = await validate_resource_ownership(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [
-            Project.user_id == current_user.id,
-            Project.archived.is_(False)  # Cannot modify archived projects
-        ]
+    """Delete a file using knowledge base service"""
+    result = await services.knowledgebase_service.delete_project_file(
+        project_id=project_id,
+        file_id=file_id,
+        db=db,
+        user_id=current_user.id
     )
-    
-    # Get the file
-    project_file = await validate_resource_ownership(
-        file_id,
-        ProjectFile,
-        current_user,
-        db,
-        "File",
-        [ProjectFile.project_id == project_id]
-    )
-    
-    # Try to delete the actual file from storage
-    try:
-        file_path = f"./uploads/{project_file.file_path}"
-        if os.path.exists(file_path):
-            os.remove(file_path)
-    except Exception as e:
-        logger.error(f"Error deleting file from storage: {str(e)}")
-        # Continue with deletion even if physical file removal fails
-    
-    # Delete the file record
-    await db.delete(project_file)
-    await db.commit()
-    
-    return await process_standard_response(
-        {"file_id": str(file_id)},
-        message="File deleted successfully"
-    )
+    return await process_standard_response(result)
