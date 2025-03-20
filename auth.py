@@ -51,6 +51,7 @@ class LoginResponse(BaseModel):
     token_type: str
 
 
+
 def validate_password(password: str):
     if len(password) < 12:
         raise ValueError("Password must be at least 12 characters")
