@@ -8,6 +8,7 @@ Contains logic for managing ProjectFile entries (knowledge base files) in a dedi
  - Token calculation and usage tracking
  - Database interactions for ProjectFile (create, read, delete)
 """
+
 import os
 import io
 import logging
@@ -24,6 +25,15 @@ from models.project_file import ProjectFile
 from models.project import Project
 from services.file_storage import get_file_storage, FileStorage
 from services.text_extraction import get_text_extractor, TextExtractor, TextExtractionError
+
+# Add tiktoken import
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+    print("Warning: tiktoken not installed.  Token counts will be estimates.  `pip install tiktoken` for accurate counts.")
+
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +88,15 @@ async def estimate_tokens_from_file(
         
         # Extract text content and metadata
         text, metadata = await text_extractor.extract_text(content, filename)
-        
-        # Basic token estimation (1 token ≈ 4 chars for English)
-        # For more accuracy, we would use tiktoken library here
-        char_count = metadata.get("char_count", len(text))
-        token_count = char_count // 4
-        
-        # Adjust based on content type
-        file_type = metadata.get("extension", "").lower()
+
+        # Use tiktoken if available
+        if TIKTOKEN_AVAILABLE:
+            encoding = tiktoken.get_encoding("cl100k_base")  # Or another appropriate encoding
+            token_count = len(encoding.encode(text))
+        else:
+            # Basic token estimation (1 token ≈ 4 chars for English)
+            char_count = metadata.get("char_count", len(text))
+            token_count = char_count // 4
         
         # Add token count to metadata
         metadata["token_count"] = token_count
@@ -462,3 +473,16 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
         "token_usage": project.token_usage if project else 0,
         "max_tokens": project.max_tokens if project else 0,
     }
+
+
+
+
+
+
+
+
+
+
+
+
+

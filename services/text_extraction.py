@@ -35,6 +35,14 @@ except ImportError:
     except ImportError:
         PDF_AVAILABLE = False
 
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+    print("Warning: tiktoken not installed. Token counts will be estimates. `pip install tiktoken` for accurate counts.")
+
+
 # File type mapping with extension to mimetype and metadata
 FILE_TYPE_MAP = {
     # Text files
@@ -71,6 +79,8 @@ class TextExtractor:
             logger.warning("PDF extraction features limited: pypdf or PyPDF2 not installed. Install with 'pip install pypdf'")
         if not DOCX_AVAILABLE:
             logger.warning("DOCX extraction features limited: python-docx not installed. Install with 'pip install python-docx'")
+        if not TIKTOKEN_AVAILABLE:
+            logger.warning("Token counting will be approximate: tiktoken not installed. Install with 'pip install tiktoken'")
 
     def get_file_info(self, filename: str) -> Dict[str, Any]:
         """
@@ -115,6 +125,19 @@ class TextExtractor:
             "category": category,
             "extension": ext
         }
+
+    def _count_tokens(self, text: str) -> int:
+        """Counts tokens using tiktoken if available, otherwise estimates."""
+        if TIKTOKEN_AVAILABLE:
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")  # Adjust encoding as needed
+                return len(encoding.encode(text))
+            except Exception as e:
+                logger.error(f"tiktoken encoding error: {e}. Falling back to character estimate.")
+                return len(text) // 4  # Fallback to char estimation
+        else:
+            return len(text) // 4 # Char estimation
+
     
     async def extract_text(
         self, 
@@ -247,13 +270,15 @@ class TextExtractor:
         # Count lines and words for metadata
         line_count = text.count('\n') + 1
         word_count = len(re.findall(r'\b\w+\b', text))
+        token_count = self._count_tokens(text) # Use the token counter
         
         metadata = {
             **file_info,
             "line_count": line_count,
             "word_count": word_count,
             "char_count": len(text),
-            "encoding": encoding
+            "encoding": encoding,
+            "token_count": token_count, # Add token count
         }
         
         return text, metadata
@@ -279,12 +304,15 @@ class TextExtractor:
                 
             # Cleanup any excessive whitespace
             text = re.sub(r'\s+', ' ', text).strip()
+
+            token_count = self._count_tokens(text) # Use the token counter
             
             metadata = {
                 **file_info,
                 "page_count": page_count,
                 "word_count": len(re.findall(r'\b\w+\b', text)),
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count, # Add token count
             }
             
             return text, metadata
@@ -306,11 +334,15 @@ class TextExtractor:
             paragraphs = [p.text for p in doc.paragraphs]
             text = "\n".join(paragraphs)
             
+            token_count = self._count_tokens(text) # Use the token counter
+
             metadata = {
                 **file_info,
                 "paragraph_count": len(paragraphs),
                 "word_count": len(re.findall(r'\b\w+\b', text)),
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count,  # Add token count
+
             }
             
             return text, metadata
@@ -350,23 +382,29 @@ class TextExtractor:
                 formatted_text = json.dumps(json_data, indent=2)
             else:
                 formatted_text = text
+
+            token_count = self._count_tokens(formatted_text) # Use the token counter
                 
             metadata = {
                 **file_info,
                 "json_structure": structure,
                 "top_level_count": top_level_count,
                 "keys": keys[:10],  # First 10 keys for reference
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count, # Add token count
             }
             
             return formatted_text, metadata
             
         except json.JSONDecodeError:
             # If JSON parsing fails, just return the text
+
+            token_count = self._count_tokens(text)  # Token count on raw text
             return text, {
                 **file_info,
                 "parsing_error": "Invalid JSON",
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count, # Add token count
             }
     
     def _extract_from_csv(self, content: bytes, file_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
@@ -392,20 +430,24 @@ class TextExtractor:
             rows = list(csv_reader)
             
             if not rows:
-                return text, {**file_info, "char_count": len(text)}
+                token_count = self._count_tokens(text) # Use the token counter
+                return text, {**file_info, "char_count": len(text), "token_count":token_count}
                 
             headers = rows[0] if rows else []
             row_count = len(rows)
             
             # Format as text with headers and sample data
             formatted_text = text
+
+            token_count = self._count_tokens(formatted_text) # Use the token counter
             
             metadata = {
                 **file_info,
                 "row_count": row_count,
                 "column_count": len(headers),
                 "headers": headers,
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count, # Add token count
             }
             
             return formatted_text, metadata
@@ -416,11 +458,13 @@ class TextExtractor:
                 text = content.decode('utf-8', errors='replace')
             except Exception:
                 text = str(content)
+            token_count = self._count_tokens(text) # Use the token counter
                 
             return text, {
                 **file_info,
                 "parsing_error": f"CSV extraction error: {str(e)}",
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count, # Add token count
             }
     
     def _extract_from_code(self, content: bytes, file_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
@@ -440,7 +484,9 @@ class TextExtractor:
             ext = file_info.get("extension", "")
             
             # Basic code structure analysis
-            metadata = {**file_info, "line_count": line_count, "char_count": len(text)}
+            token_count = self._count_tokens(text) # Use the token counter
+
+            metadata = {**file_info, "line_count": line_count, "char_count": len(text), "token_count": token_count,}
             
             # Language-specific parsing
             if ext == "py":
@@ -502,11 +548,14 @@ class TextExtractor:
                 text = content.decode('utf-8', errors='replace')
             except Exception:
                 text = str(content)
+
+            token_count = self._count_tokens(text)  # Token count
                 
             return text, {
                 **file_info,
                 "parsing_error": f"Code extraction error: {str(e)}",
-                "char_count": len(text)
+                "char_count": len(text),
+                "token_count": token_count, # Add token count
             }
 
 # Factory function to create a TextExtractor instance
