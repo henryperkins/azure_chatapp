@@ -20,7 +20,7 @@ router.include_router(
 )
 router.include_router(
     files.router, 
-    prefix="/{project_id}/files", 
+    prefix="/{project_id}/files",
     tags=["project-files"]
 )
 router.include_router(
