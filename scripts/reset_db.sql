@@ -54,7 +54,7 @@ CREATE TABLE projects (
     version INTEGER DEFAULT 1 NOT NULL,
     knowledge_base_id UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,
     default_model VARCHAR(50) DEFAULT 'o1' NOT NULL,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     extra_data JSONB,
