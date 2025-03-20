@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 import bcrypt
 import jwt
+from jwt.exceptions import JWTError
 from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
