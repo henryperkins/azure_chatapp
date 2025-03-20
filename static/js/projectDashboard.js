@@ -528,16 +528,42 @@ document.addEventListener("DOMContentLoaded", () => {
   /**
    * Render project files
    */
-  function renderProjectFiles(event) {
-    const files = event.detail?.files || [];
-    const filesList = document.getElementById("projectFilesList");
-    
-    if (!filesList) return;
-    
-    if (files.length === 0) {
-      filesList.innerHTML = '<div class="text-gray-500 text-center py-8">No files uploaded yet.</div>';
-      return;
-    }
+  function renderProjectFiles(files) {
+    const container = document.getElementById("projectFilesList");
+    if (!container) return;
+
+    container.innerHTML = files.length > 0 ? '' : 
+      '<div class="text-gray-500 text-center py-8">No files uploaded yet</div>';
+
+    files.forEach(file => {
+      const fileItem = document.createElement('div');
+      fileItem.className = 'flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2';
+      fileItem.innerHTML = `
+        <div class="flex items-center">
+          <span class="text-lg mr-2">${window.getFileTypeIcon(file.file_type)}</span>
+          <div>
+            <div class="font-medium">${file.filename}</div>
+            <div class="text-xs text-gray-500">
+              ${file.file_size ? window.formatBytes(file.file_size) : 'Unknown size'} • 
+              ${file.created_at ? new Date(file.created_at).toLocaleDateString() : 'No date'}
+            </div>
+          </div>
+        </div>
+        <div class="flex space-x-2">
+          <button class="view-file-btn text-blue-600 hover:text-blue-800" data-file-id="${file.id}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+          </button>
+          <button class="delete-file-btn text-red-600 hover:text-red-800" data-file-id="${file.id}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </div>
+      `;
+      container.appendChild(fileItem);
+    });
     
     filesList.innerHTML = "";
     
