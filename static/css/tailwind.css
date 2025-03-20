@@ -56,3 +56,30 @@
     width: auto;
   }
 }
+
+/* Add mobile-specific styles */
+@media (max-width: 767px) {
+  #projectManagerPanel {
+    padding: 1rem;
+  }
+
+  .project-filter-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  #projectSearchInput {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+
+  #createProjectBtn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* Ensure mobile menu stays on top */
+#mainSidebar {
+  z-index: 9999;
+}
