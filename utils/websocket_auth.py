@@ -29,7 +29,11 @@ async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
     
     if cookie_header:
         try:
-            cookies = dict(cookie.split("=") for cookie in cookie_header.split("; "))
+            cookies = {}
+            for c in cookie_header.split("; "):
+                if '=' in c:
+                    k, v = c.split('=', 1)
+                    cookies[k.strip()] = v.strip()
             token = cookies.get("access_token")
         except Exception as e:
             logger.error(f"Failed to parse cookies: {str(e)}")
