@@ -488,29 +488,56 @@ document.addEventListener('keydown', (e) => {
 /**
  * Standardized API request function to eliminate duplicate fetch code
  * @param {String} url - The URL to fetch
- * @param {String} method - HTTP method (GET, POST, etc)
+ * @param {String|Object} methodOrOptions - HTTP method (GET, POST, etc) or options object
  * @param {Object} data - Request body for POST/PUT/PATCH
- * @param {Object} options - Additional fetch options
+ * @param {Object} additionalOptions - Additional fetch options
  * @returns {Promise} - Resolves to parsed JSON response
  */
-window.apiRequest = async function(url, method = "GET", data = null, options = {}) {
+window.apiRequest = async function(url, methodOrOptions = "GET", data = null, additionalOptions = {}) {
   // Default options
-  const fetchOptions = {
-    method,
+  let fetchOptions = {
+    method: "GET",
     headers: {
       "Content-Type": "application/json"
     },
-    credentials: "include",
-    ...options
+    credentials: "include"
   };
   
-  // Add body if data is provided
-  if (data && ["POST", "PUT", "PATCH"].includes(method)) {
-    fetchOptions.body = JSON.stringify(data);
+  // Handle case where second parameter is an options object
+  if (typeof methodOrOptions === 'object' && methodOrOptions !== null) {
+    // Extract method, body and other options from the object
+    const { method, body, ...otherOptions } = methodOrOptions;
+    fetchOptions.method = method || "GET";
+    
+    // If body is provided in the options object, use it
+    if (body) {
+      fetchOptions.body = body;
+    }
+    
+    // Merge other options
+    Object.assign(fetchOptions, otherOptions);
+  } else {
+    // Handle traditional parameters
+    fetchOptions.method = methodOrOptions;
+    
+    // Merge additional options
+    fetchOptions = { ...fetchOptions, ...additionalOptions };
+    
+    // Add body if data is provided
+    if (data && ["POST", "PUT", "PATCH"].includes(fetchOptions.method)) {
+      fetchOptions.body = JSON.stringify(data);
+    }
+  }
+  
+  // Ensure all API requests use the correct endpoint format
+  // Standardize project conversation endpoints
+  if (url.includes('/projects/') && url.includes('/conversations') && !url.includes('/api/chat')) {
+    // Convert to the correct endpoint format if needed
+    url = url.replace('/conversations', '/chat/conversations');
   }
   
   try {
-    console.log(`API ${method} request to ${url}`, data ? { data } : '');
+    console.log(`API ${fetchOptions.method} request to ${url}`, fetchOptions.body ? 'with data' : '');
     const response = await fetch(url, fetchOptions);
     
     if (!response.ok) {
@@ -531,7 +558,6 @@ window.apiRequest = async function(url, method = "GET", data = null, options = {
     
     // Parse JSON response
     const responseData = await response.json();
-    console.log(`API response from ${url}:`, responseData);
     
     // Handle our standard { data: ..., success: true } format
     if (responseData && responseData.data !== undefined) {

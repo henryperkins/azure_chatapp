@@ -340,26 +340,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------
   const newChatBtn = document.getElementById("newChatBtn");
   if (newChatBtn) {
-    newChatBtn.addEventListener("click", createNewChat);
-  }
-
-  window.createNewChat = async function createNewChat() {
-    localStorage.removeItem("selectedProjectId");
-    try {
+    // Define the function first
+    window.createNewChat = async function() {
+      try {
         // Show project selection modal
         const projectId = await window.showProjectSelection();
         
         // Create payload with optional project_id
         const payload = {
-            title: "New Chat",
-            project_id: projectId || null
+          title: "New Chat",
+          project_id: projectId || null
         };
 
         // Create conversation through API
         const { data: conversation } = await window.apiRequest(
-            "/api/chat/conversations",
-            "POST",
-            payload
+          "/api/chat/conversations",
+          "POST",
+          payload
         );
 
         // Update UI state
@@ -371,45 +368,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const conversationArea = document.getElementById("conversationArea");
         if (conversationArea) conversationArea.innerHTML = "";
         window.loadConversation(conversation.id);
-    } catch (error) {
+      } catch (error) {
         console.error("Error creating new chat:", error);
-        window.showNotification(`Failed to create new chat: ${error.message}`, "error");
-    }
-};
+        if (window.showNotification) {
+          window.showNotification(`Failed to create new chat: ${error.message}`, "error");
+        }
+      }
+    };
     
-    // If a project is selected and not empty/null, add it to the payload
-    if (projectId && projectId !== "" && projectId !== "null") {
-      payload.project_id = projectId;
-    }
-    
-    // Use apiRequest utility to create a standalone conversation
-    window.apiRequest("/api/chat/conversations", "POST", payload)
-    .then(data => {
-      window.history.pushState({}, '', `/?chatId=${data.data.conversation_id}`);
-      
-      // Refresh the conversation list (defined in app.js if available)
-      if (typeof window.loadConversationList === 'function') {
-        window.loadConversationList();
-      }
-      
-      // Load the new conversation
-      loadConversation(data.data.conversation_id);
-
-      // Show chat UI, hide "no chat selected" message
-      const chatUI = document.getElementById("chatUI");
-      const noChatMsg = document.getElementById("noChatSelectedMessage");
-      if (chatUI) chatUI.classList.remove("hidden");
-      if (noChatMsg) noChatMsg.classList.add("hidden");
-      
-      // Show success notification
-      if (window.showNotification) {
-        window.showNotification("New conversation created", "success");
-      }
-    })
-    .catch(err => {
-      console.error("Error creating new chat:", err);
-      if (typeof window.showNotification === "function") {
-        window.showNotification("Failed to create conversation", "error");
-      }
-    });
+    // Now add the event listener
+    newChatBtn.addEventListener("click", window.createNewChat);
+  }
 });
