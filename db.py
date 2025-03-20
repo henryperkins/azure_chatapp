@@ -5,7 +5,7 @@ Sets up the PostgreSQL database connection using SQLAlchemy.
 Defines the async init_db process for migrations or table creation.
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -15,11 +15,11 @@ DATABASE_URL = "postgresql+asyncpg://user:pass@localhost:5432/azure_chat"
 
 async_engine = create_async_engine(DATABASE_URL, echo=False)
 
-AsyncSessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
+AsyncSessionLocal = async_sessionmaker(
+    async_engine,
     expire_on_commit=False,
-    class_=AsyncSession
+    autocommit=False,
+    autoflush=False
 )
 
 sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
@@ -29,12 +29,13 @@ SessionLocal = sessionmaker(
     bind=sync_engine
 )
 
+
 Base = declarative_base()
 
 from contextlib import asynccontextmanager
 
 async def get_async_session():
-    async with AsyncSessionLocal(bind=async_engine) as session:
+    async with AsyncSessionLocal() as session:
         yield session
 
 async def init_db():
@@ -44,7 +45,6 @@ async def init_db():
     """
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    await validate_db_schema()
 
 async def validate_db_schema():
     """

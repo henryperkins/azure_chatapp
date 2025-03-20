@@ -96,8 +96,8 @@ async def token_limit_check(chat_id: str, db):
     query = text("""
     SELECT role, content
     FROM messages
-    WHERE chat_id=:chat_id
-    ORDER BY timestamp ASC
+    WHERE conversation_id=:chat_id
+    ORDER BY created_at ASC
     """)
     result = await db.execute(query, {"chat_id": chat_id})
     rows = result.mappings().all()

@@ -7,9 +7,14 @@ if ! command -v psql &> /dev/null; then
     exit 1
 fi
 
-echo "WARNING: This will DELETE ALL EXISTING DATA in the database!"
-echo "Are you sure you want to continue? (yes/no)"
-read confirmation
+# Check for auto-confirmation env var (useful for automation)
+if [ -z "$USER_CONFIRMATION" ]; then
+    echo "WARNING: This will DELETE ALL EXISTING DATA in the database!"
+    echo "Are you sure you want to continue? (yes/no)"
+    read confirmation
+else
+    confirmation="$USER_CONFIRMATION"
+fi
 
 if [ "$confirmation" != "yes" ]; then
     echo "Operation cancelled."
