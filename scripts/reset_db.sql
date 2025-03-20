@@ -24,6 +24,9 @@ CREATE TABLE users (
     is_active BOOLEAN DEFAULT TRUE NOT NULL
 );
 
+CREATE INDEX ix_users_username ON users(username);
+CREATE INDEX ix_users_role ON users(role);
+
 -- Knowledge bases table
 CREATE TABLE knowledge_bases (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -66,7 +69,7 @@ CREATE TABLE conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-    name VARCHAR DEFAULT 'New Chat' NOT NULL,
+    title VARCHAR DEFAULT 'New Chat' NOT NULL,
     model_id VARCHAR,
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     message_count INTEGER DEFAULT 0 NOT NULL,
@@ -91,6 +94,7 @@ CREATE TABLE messages (
 );
 CREATE INDEX ix_messages_id ON messages(id);
 CREATE INDEX ix_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX ix_messages_role ON messages(role);
 
 -- Project Files table
 CREATE TABLE project_files (
@@ -119,6 +123,6 @@ CREATE TABLE artifacts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     extra_data JSONB,
-    CONSTRAINT valid_content_type CHECK (content_type IN ('code', 'document', 'image', 'audio', 'video'))
+    CONSTRAINT valid_content_types CHECK (content_type IN ('code', 'document', 'image', 'audio', 'video'))
 );
 CREATE INDEX ix_artifacts_project_id ON artifacts(project_id);
