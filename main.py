@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 os.environ['AZUREML_ENVIRONMENT_UPDATE'] = 'false'  # Suppress conda warnings
 
-from fastapi import FastAPI, Response, HTTPException, Depends
+from fastapi import FastAPI, Response, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
 import jwt
@@ -127,7 +127,7 @@ logger.info(f"CORS configured with origins: {origins}")
 @app.middleware("http")
 async def websocket_cors_fix(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/ws/"):
+    if request.scope.get("path", "").startswith("/ws/"):
         response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
