@@ -17,7 +17,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("projectLoaded", (e) => {
       document.getElementById("projectTitle").textContent = e.detail.name;
       document.getElementById("projectDescription").textContent = e.detail.description || "No description";
-      renderProjectDetails(e);
     });
     document.addEventListener("projectStatsLoaded", renderProjectStats);
     document.addEventListener("projectFilesLoaded", (e) => renderProjectFiles(e.detail));
