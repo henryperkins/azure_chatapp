@@ -18,7 +18,7 @@ CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(150) NOT NULL UNIQUE,
     password_hash VARCHAR(200) NOT NULL,
-    role VARCHAR(50) DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    role VARCHAR(50) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
