@@ -23,7 +23,10 @@ import services
 from utils.auth_deps import (
     get_current_user_and_token, 
     validate_resource_ownership,
-    process_standard_response
+    process_standard_response,
+    JWT_SECRET,
+    JWT_ALGORITHM,
+    create_access_token
 )
 from utils.openai import openai_chat
 from utils.context import (
