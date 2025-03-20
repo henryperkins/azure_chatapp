@@ -99,12 +99,17 @@ async def create_conversation(
         project_id, current_user, db
     )
     
-    # Create conversation using service
+    # Get project for model validation
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Create conversation using service with model validation
     conversation = await services.conversation_service.create_conversation(
         project_id=project_id,
         user_id=current_user.id,
         title=conversation_data.title,
-        model_id=conversation_data.model_id or "o1",  # Default model
+        model_id=conversation_data.model_id or project.default_model,
         db=db
     )
     
