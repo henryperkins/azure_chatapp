@@ -45,7 +45,11 @@ allowed_hosts = settings.ALLOWED_HOSTS if settings.ALLOWED_HOSTS else ["*"]  # T
 app = FastAPI(
     middleware=[
         Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts),
-        Middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
+        Middleware(SessionMiddleware, 
+                  secret_key=settings.SESSION_SECRET,
+                  session_cookie="session",
+                  same_site="none",
+                  https_only=False)
     ],
     title="Azure OpenAI Chat Application",
     description="""
