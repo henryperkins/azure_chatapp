@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers
 revision = "20250320_reset_database_structure"
-down_revision = "20250319_add_extra_data_to_projects"
+down_revision = "0cc7d9e46f7b"
 branch_labels = None
 depends_on = None
 
