@@ -50,7 +50,7 @@
                   </div>
                   <div>
                     <div class="font-medium">${file.filename}</div>
-                    <div class="text-xs text-gray-500">${new Date(file.created_at).toLocaleString()} · ${formatFileSize(file.size || 0)}</div>
+                    <div class="text-xs text-gray-500">${new Date(file.created_at).toLocaleString()} · ${formatFileSize(file.file_size || 0)}</div>
                   </div>
                 </div>
                 <div class="flex space-x-2">
