@@ -58,33 +58,24 @@ async def create_knowledge_base(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Creates a new knowledge base owned by the current user.
-    """
-    # Create the knowledge base
-    knowledge_base = KnowledgeBase(
+    """Create a new knowledge base using the knowledge base service"""
+    # Use knowledge base service
+    kb = await services.knowledgebase_service.create_knowledge_base(
         name=data.name,
         description=data.description,
         embedding_model=data.embedding_model,
-        is_active=True,
+        user_id=current_user.id,
+        db=db
     )
     
-    # Save using utility function
-    await save_model(db, knowledge_base)
-    
-    logger.info(f"Knowledge base created with id={knowledge_base.id} by user {current_user.id}")
-    
-    return await process_standard_response(
-        {
-            "id": str(knowledge_base.id),
-            "name": knowledge_base.name,
-            "description": knowledge_base.description,
-            "embedding_model": knowledge_base.embedding_model,
-            "is_active": knowledge_base.is_active,
-            "created_at": knowledge_base.created_at
-        },
-        "Knowledge base created successfully"
-    )
+    return await process_standard_response({
+        "id": str(kb.id),
+        "name": kb.name,
+        "description": kb.description,
+        "embedding_model": kb.embedding_model,
+        "is_active": kb.is_active,
+        "created_at": kb.created_at.isoformat()
+    }, "Knowledge base created successfully")
 
 
 @router.get("", response_model=Dict)
