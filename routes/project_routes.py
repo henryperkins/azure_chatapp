@@ -376,6 +376,7 @@ async def get_project_stats(
     
     usage_percentage = (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
     
+    logger.info(f"Returning stats for project {project_id}: {conversation_count} conversations, {file_count} files")
     return await process_standard_response({
         "token_usage": project.token_usage,
         "max_tokens": project.max_tokens,
