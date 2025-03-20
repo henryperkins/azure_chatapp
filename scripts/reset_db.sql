@@ -60,7 +60,7 @@ CREATE TABLE projects (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     extra_data JSONB,
     CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)), -- Archived projects cannot be pinned
+    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)) NOT VALID, -- Archived projects cannot be pinned
     CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default)),
     INDEX ix_projects_user_id (user_id)
 );
