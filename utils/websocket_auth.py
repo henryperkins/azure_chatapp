@@ -37,7 +37,8 @@ async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
     # If no token in cookies, try query parameters
     if not token and "token" in websocket.query_params:
         token = websocket.query_params["token"]
-    
+
+    logger.debug(f"Extracted token: {token}")
     return token
 
 async def authenticate_websocket(
