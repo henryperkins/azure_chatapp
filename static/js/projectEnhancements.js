@@ -93,8 +93,8 @@
       
       // Try different endpoints with fallbacks
       const endpoints = [
-        '/api/projects/' + projectId + '/conversations',
-        '/api/projects/' + projectId + '/chats'
+        '/api/projects/' + projectId + '/conversations?include_archived=true',
+        '/api/projects/' + projectId + '/chats?include_archived=true'
       ];
       
       function tryNextEndpoint(index = 0) {
@@ -117,7 +117,7 @@
                 var timeAgo = formatTimeAgo(date);
                 
                 conversationElement.innerHTML = ''
-                  + '<div>'
+                    + '<div>'
                   + '  <div class="font-medium">' + (conversation.title || conversation.name || 'Untitled Conversation') + '</div>'
                   + '  <div class="text-xs text-gray-500">' + timeAgo + ' · ' + (conversation.message_count || (conversation.messages && conversation.messages.length) || 0) + ' messages</div>'
                   + '</div>'
@@ -138,6 +138,7 @@
               });
               
               addConversationActionListeners();
+              document.dispatchEvent(new CustomEvent('projectConversationsLoaded', { detail: conversations }));
             } else {
               conversationsList.innerHTML = '<div class="text-gray-500 text-center py-8">No conversations yet.</div>';
             }

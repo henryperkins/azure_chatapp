@@ -1,9 +1,9 @@
 """
-p_conversations.py
------------------
+conversations.py
+--------------
 Routes for managing conversations within a project.
-These endpoints handle the creation, retrieval, and deletion of conversations
-that belong to a specific project, along with their messages.
+Provides endpoints for creating, retrieving, updating and deleting conversations
+and their messages that belong to a specific project.
 """
 
 import logging
@@ -15,7 +15,6 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from db import get_async_session
 from models.user import User
@@ -28,12 +27,20 @@ from utils.auth_deps import (
     validate_resource_ownership,
     process_standard_response
 )
-from utils.openai import openai_chat
+from utils.message_handlers import (
+    create_user_message,
+    get_conversation_messages,
+    validate_image_data,
+    update_project_token_usage
+)
+from utils.ai_response import (
+    generate_ai_response,
+    handle_websocket_response
+)
+from utils.websocket_auth import authenticate_websocket
 from utils.context import (
-    manage_context,
-    token_limit_check,
-    get_by_id,
     get_all_by_condition,
+    get_by_id,
     save_model
 )
 
@@ -78,7 +85,7 @@ class MessageCreate(BaseModel):
 # Conversation Endpoints
 # ============================
 
-@router.post("/{project_id}/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     project_id: UUID,
     conversation_data: ConversationCreate,
@@ -95,7 +102,10 @@ async def create_conversation(
         current_user,
         db,
         "Project",
-        [Project.user_id == current_user.id]
+        [
+            Project.user_id == current_user.id,
+            Project.archived.is_(False)  # Cannot modify archived projects
+        ]
     )
     
     # Add default model if none provided
@@ -128,7 +138,7 @@ async def create_conversation(
     }, "Conversation created successfully")
 
 
-@router.get("/{project_id}/conversations", response_model=dict)
+@router.get("", response_model=dict)
 async def list_conversations(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -175,7 +185,7 @@ async def list_conversations(
     return await process_standard_response({"conversations": items})
 
 
-@router.get("/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.get("/{conversation_id}", response_model=dict)
 async def get_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -207,7 +217,7 @@ async def get_conversation(
     })
 
 
-@router.patch("/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.patch("/{conversation_id}", response_model=dict)
 async def update_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -218,6 +228,19 @@ async def update_conversation(
     """
     Updates the conversation's title or model_id.
     """
+    # Validate project is not archived
+    project = await validate_resource_ownership(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [
+            Project.user_id == current_user.id,
+            Project.archived.is_(False)  # Cannot modify archived projects
+        ]
+    )
+    
     # Validate conversation ownership
     conversation = await validate_resource_ownership(
         conversation_id,
@@ -250,7 +273,7 @@ async def update_conversation(
     }, "Conversation updated successfully")
 
 
-@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.delete("/{conversation_id}", response_model=dict)
 async def delete_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -260,6 +283,19 @@ async def delete_conversation(
     """
     Soft-deletes a conversation by setting is_deleted = True.
     """
+    # Validate project is not archived
+    project = await validate_resource_ownership(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [
+            Project.user_id == current_user.id,
+            Project.archived.is_(False)  # Cannot modify archived projects
+        ]
+    )
+    
     # Validate conversation ownership
     conversation = await validate_resource_ownership(
         conversation_id,
@@ -288,7 +324,7 @@ async def delete_conversation(
 # Message Endpoints
 # ============================
 
-@router.get("/{project_id}/conversations/{conversation_id}/messages", response_model=dict)
+@router.get("/{conversation_id}/messages", response_model=dict)
 async def list_messages(
     project_id: UUID,
     conversation_id: UUID,
@@ -337,7 +373,7 @@ async def list_messages(
     return await process_standard_response({"messages": output})
 
 
-@router.post("/{project_id}/conversations/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_message(
     project_id: UUID,
     conversation_id: UUID,
@@ -349,6 +385,19 @@ async def create_message(
     Adds a new user or system message to the specified conversation,
     optionally triggers an assistant response if role='user'.
     """
+    # Validate project is not archived
+    project = await validate_resource_ownership(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [
+            Project.user_id == current_user.id,
+            Project.archived.is_(False)  # Cannot modify archived projects
+        ]
+    )
+    
     # Validate conversation ownership
     conversation = await validate_resource_ownership(
         conversation_id,
@@ -362,25 +411,17 @@ async def create_message(
         ]
     )
 
-    try:
-        # Create user message
-        message = Message(
-            conversation_id=conversation.id,
-            role=new_msg.role.lower().strip(),
-            content=new_msg.content.strip()
-        )
-        
-        # Save using utility function
-        await save_model(db, message)
-        
-        logger.info(f"Message {message.id} saved for conversation {conversation.id}")
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Message save failed: {str(e)}")
-        raise HTTPException(500, "Failed to save message")
+    # Validate image data if provided
+    if new_msg.image_data:
+        await validate_image_data(new_msg.image_data)
 
-    # Check token limit
-    await token_limit_check(str(conversation.id), db)
+    # Create user message
+    message = await create_user_message(
+        conversation_id=conversation.id,
+        content=new_msg.content.strip(),
+        role=new_msg.role.lower().strip(),
+        db=db
+    )
 
     response_payload = {
         "message_id": str(message.id),
@@ -388,75 +429,37 @@ async def create_message(
         "content": message.content
     }
 
-    # Handle image data if provided
-    if new_msg.image_data:
-        from utils.openai import extract_base64_data
-        import base64
-        try:
-            base64_str = extract_base64_data(new_msg.image_data)
-            base64.b64decode(base64_str, validate=True)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid image data")
-
     # Generate AI response if user message
     if message.role == "user":
-        # Get all messages using enhanced function
-        conv_messages = await get_all_by_condition(
-            db,
-            Message,
-            Message.conversation_id == conversation.id,
-            order_by=Message.created_at.asc()
-        )
-
-        msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in conv_messages]
-        
-        # Get project for custom instructions
-        project = await get_by_id(db, Project, conversation.project_id)
-        
-        if project and project.custom_instructions:
-            msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
-        
-        # Manage context to prevent token overflow
-        msg_dicts = await manage_context(msg_dicts)
+        # Get formatted messages for API
+        msg_dicts = await get_conversation_messages(conversation_id, db, include_system_prompt=True)
 
         try:
-            # Determine model and settings
-            chosen_model = "o1" if new_msg.image_data else (conversation.model_id or "o1")
-            chosen_vision = new_msg.vision_detail if new_msg.vision_detail else "auto"
-
-            # Call OpenAI API
-            openai_response = await openai_chat(
-                messages=msg_dicts,
-                model_name=chosen_model,
-                image_data=new_msg.image_data,
-                vision_detail=chosen_vision
-            )
-            
-            assistant_content = openai_response["choices"][0]["message"]["content"]
-            
-            # Create assistant message
-            assistant_msg = Message(
+            # Generate AI response
+            assistant_msg = await generate_ai_response(
                 conversation_id=conversation.id,
-                role="assistant",
-                content=assistant_content
+                messages=msg_dicts,
+                model_id=conversation.model_id,
+                image_data=new_msg.image_data,
+                vision_detail=new_msg.vision_detail,
+                db=db
             )
-            
-            # Save using utility function
-            await save_model(db, assistant_msg)
-            
-            # Update project token usage
-            token_estimate = len(assistant_content) // 4
-            project.token_usage += token_estimate
-            await save_model(db, project)
 
-            # Add assistant message to response
-            response_payload["assistant_message"] = {
-                "id": str(assistant_msg.id),
-                "role": assistant_msg.role,
-                "content": assistant_msg.content
-            }
+            if assistant_msg:
+                # Add assistant message to response
+                response_payload["assistant_message"] = {
+                    "id": str(assistant_msg.id),
+                    "role": assistant_msg.role,
+                    "content": assistant_msg.content
+                }
+                
+                # Update project token usage
+                token_estimate = len(assistant_msg.content) // 4
+                await update_project_token_usage(conversation, token_estimate, db)
+            else:
+                response_payload["assistant_error"] = "Failed to generate response"
         except Exception as e:
-            logger.error(f"Error calling OpenAI: {e}")
+            logger.error(f"Error generating AI response: {e}")
             response_payload["assistant_error"] = str(e)
 
     return await process_standard_response(response_payload)
@@ -466,7 +469,7 @@ async def create_message(
 # WebSocket for Real-time Chat
 # ============================
 
-@router.websocket("/ws/{project_id}/conversations/{conversation_id}")
+@router.websocket("/ws/{conversation_id}")
 async def websocket_chat_endpoint(
     websocket: WebSocket,
     project_id: UUID,
@@ -479,33 +482,24 @@ async def websocket_chat_endpoint(
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
-            await websocket.accept()
-            # Get token from cookies instead of query params
-            cookie_header = websocket.headers.get("cookie")
-            token = None
-            if cookie_header:
-                cookies = dict(cookie.split("=") for cookie in cookie_header.split("; "))
-                token = cookies.get("access_token")
-            if not token:
-                logger.warning("WebSocket connection rejected: No token provided")
-                await websocket.close(code=1008)
+            # Authenticate user
+            success, user = await authenticate_websocket(websocket, db)
+            if not success or not user:
                 return
 
-            # Use enhanced token validation with proper error handling
-            from utils.auth_deps import _get_user_from_token
-            try:
-                # Directly get the user from the token using the enhanced function
-                user = await _get_user_from_token(token, db, "access")
-            except Exception as e:
-                logger.warning(f"WebSocket authentication failed: {str(e)}")
-                await websocket.close(code=1008)
-                return
+            # Validate project is not archived
+            await validate_resource_ownership(
+                project_id,
+                Project,
+                user,
+                db,
+                "Project",
+                [
+                    Project.user_id == user.id,
+                    Project.archived.is_(False)  # Cannot modify archived projects
+                ]
+            )
                 
-            if not user or not user.is_active:
-                logger.warning(f"WebSocket auth failed: inactive or invalid user")
-                await websocket.close(code=1008)
-                return
-
             # Validate conversation ownership
             conversation = await validate_resource_ownership(
                 conversation_id,
@@ -524,16 +518,15 @@ async def websocket_chat_endpoint(
                 data_dict = json.loads(data)
 
                 # Create message
-                message = Message(
+                message = await create_user_message(
                     conversation_id=conversation.id,
+                    content=data_dict["content"],
                     role=data_dict["role"],
-                    content=data_dict["content"]
+                    db=db
                 )
-                await save_model(db, message)
 
                 if message.role == "user":
-                    from uuid import UUID as StdUUID
-                    await handle_assistant_response(StdUUID(str(conversation.id)), db, websocket)
+                    await handle_websocket_response(conversation.id, db, websocket)
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
@@ -541,70 +534,3 @@ async def websocket_chat_endpoint(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         finally:
             await db.close()
-
-
-async def handle_assistant_response(
-    conv_id: UUID,
-    session: AsyncSession,
-    websocket: WebSocket
-):
-    """
-    Handles the assistant response for a given conversation via WebSocket.
-    """
-    # Get conversation
-    conversation = await get_by_id(session, Conversation, conv_id)
-    if not conversation:
-        await websocket.send_json({"error": "Conversation not found"})
-        return
-
-    # Get messages using enhanced function
-    messages = await get_all_by_condition(
-        session,
-        Message,
-        Message.conversation_id == conversation.id,
-        order_by=Message.created_at.asc()
-    )
-    
-    # Format messages for API
-    msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in messages]
-    
-    # Get project for custom instructions if the conversation has a project
-    if conversation.project_id:
-        project = await get_by_id(session, Project, conversation.project_id)
-        if project and project.custom_instructions:
-            msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
-    
-    # Manage context
-    msg_dicts = await manage_context(msg_dicts)
-
-    chosen_model = conversation.model_id or "o1"
-    try:
-        # Call OpenAI API
-        openai_response = await openai_chat(messages=msg_dicts, model_name=chosen_model)
-        assistant_content = openai_response["choices"][0]["message"]["content"]
-        
-        # Create assistant message
-        assistant_msg = Message(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=assistant_content
-        )
-        await save_model(session, assistant_msg)
-
-        # Update project token usage if conversation has a project
-        if conversation.project_id:
-            project = await get_by_id(session, Project, conversation.project_id)
-            if project:
-                token_estimate = len(assistant_content) // 4
-                project.token_usage += token_estimate
-                await save_model(session, project)
-
-        # Send response via WebSocket
-        await websocket.send_json({
-            "id": str(assistant_msg.id),
-            "role": assistant_msg.role,
-            "content": assistant_msg.content
-        })
-    except Exception as e:
-        logger.error(f"Error calling OpenAI: {e}")
-        await websocket.send_json({"error": f"OpenAI error: {str(e)}"})
