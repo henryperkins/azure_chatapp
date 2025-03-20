@@ -127,11 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const wsUrl = chatId ? 
-    (selectedProjectId && selectedProjectId !== "" && selectedProjectId !== "null") ?
-      `${protocol}${window.location.host}/api/projects/${selectedProjectId}/chat/conversations/${chatId}/ws` :
-      `${protocol}${window.location.host}/api/chat/${chatId}/ws`
-    : null;
+  const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}`;
   let socket = null;
 
   // Toggle display of "no chat selected" message

@@ -560,7 +560,12 @@ async def websocket_chat_endpoint(
     async with AsyncSessionLocal() as db:
         try:
             await websocket.accept()
-            token = websocket.query_params.get("token")
+            # Get token from cookies instead of query params
+            cookie_header = websocket.headers.get("cookie")
+            token = None
+            if cookie_header:
+                cookies = dict(cookie.split("=") for cookie in cookie_header.split("; "))
+                token = cookies.get("access_token")
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=1008)
