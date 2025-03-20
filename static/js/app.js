@@ -529,10 +529,17 @@ window.apiRequest = async function(url, methodOrOptions = "GET", data = null, ad
     }
   }
   
-  // Ensure all API requests use the correct endpoint format
-  // Standardize project conversation endpoints
-  if (url.includes('/projects/') && url.includes('/conversations') && !url.includes('/chat/conversations')) {
-    url = url.replace('/conversations', '/chat/conversations');
+  // Validate UUID format for conversation IDs
+  if (url.includes('/conversations/')) {
+    const parts = url.split('/');
+    const idIndex = parts.findIndex(p => p === 'conversations') + 1;
+    if (idIndex > 0 && idIndex < parts.length && !isValidUUID(parts[idIndex])) {
+      throw new Error(`Invalid UUID format: ${parts[idIndex]}`);
+    }
+  }
+
+  function isValidUUID(str) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   }
   
   try {
