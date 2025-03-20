@@ -163,6 +163,27 @@ async def _get_user_from_token(token: str, session: AsyncSession, expected_type:
         logger.error(f"Error authenticating user: {str(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+async def websocket_auth(websocket: WebSocket):
+    """WebSocket authentication using cookies"""
+    await websocket.accept()
+    
+    # Extract token from cookies
+    token = None
+    if "cookie" in websocket.headers:
+        cookies = dict(cookie.split("=") for cookie in websocket.headers["cookie"].split("; "))
+        token = cookies.get("access_token")
+    
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
+    try:
+        user = await _get_user_from_token(token, websocket.app.state.db, "access")
+        return user
+    except Exception as e:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
 # Fixed and enhanced utility functions
 
 async def validate_resource_ownership(
