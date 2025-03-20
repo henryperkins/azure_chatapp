@@ -412,5 +412,4 @@ document.addEventListener("DOMContentLoaded", () => {
         window.showNotification("Failed to create conversation", "error");
       }
     });
-  }
 });
