@@ -1,6 +1,7 @@
 import logging
 import os
 import jwt
+from starlette import status
 from fastapi import WebSocket, Cookie
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -17,6 +18,16 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# Basic in-memory revocation list. In production, consider a DB or Redis.
+REVOCATION_LIST = set()
+
+def revoke_token_id(token_id: str):
+    """
+    Add token_id (jti) to revocation list.
+    """
+    REVOCATION_LIST.add(token_id)
+    logger.info(f"Token ID '{token_id}' has been revoked and cannot be used.")
+
 # Use JWT_SECRET from centralized config
 JWT_SECRET: str = settings.JWT_SECRET
 if not JWT_SECRET or JWT_SECRET.strip() == "":
@@ -29,27 +40,34 @@ T = TypeVar('T')
 
 def verify_token(token: str, expected_type: Optional[str] = None):
     """
-    Verifies and decodes a JWT token.
-    
+    Verifies and decodes a JWT token, also validating against the revocation list if present.
+
     Args:
         token: The JWT token to verify
         expected_type: Optional token type to validate (e.g., "access")
-        
+
     Returns:
         The decoded token payload
-        
+
     Raises:
         HTTPException: If token validation fails
     """
     try:
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        
-        # Optionally validate token type if specified
+
+        # Optionally validate token type
         if expected_type and decoded.get("type") != expected_type:
             logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}")
             raise HTTPException(status_code=401, detail="Invalid token type")
-            
+
+        # Check if token ID is flagged as revoked
+        token_id = decoded.get("jti")
+        if token_id in REVOCATION_LIST:
+            logger.warning(f"Token ID '{token_id}' is revoked")
+            raise HTTPException(status_code=401, detail="Token is revoked")
+
         return decoded
+
     except jwt.ExpiredSignatureError:
         logger.warning("Token has expired.")
         raise HTTPException(status_code=401, detail="Token has expired")
