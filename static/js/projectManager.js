@@ -266,7 +266,7 @@ function loadProjectFiles(projectId) {
 function loadProjectConversations(projectId) {
   window.apiRequest(`/api/projects/${projectId}/conversations`)
     .then(response => {
-      const conversations = response.data?.conversations || response.data || [];
+      const conversations = response.data || [];
       document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: conversations }));
     })
     .catch(err => console.error("Error loading conversations:", err));

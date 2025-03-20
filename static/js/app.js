@@ -531,6 +531,9 @@ window.apiRequest = async function(url, methodOrOptions = "GET", data = null, ad
   
   // Ensure all API requests use the correct endpoint format
   // Standardize project conversation endpoints
+  if (url.includes('/projects/') && url.includes('/conversations') && !url.includes('/chat/conversations')) {
+    url = url.replace('/conversations', '/chat/conversations');
+  }
   if (url.includes('/projects/') && url.includes('/conversations') && !url.includes('/api/chat')) {
     // Convert to the correct endpoint format if needed
     url = url.replace('/conversations', '/chat/conversations');

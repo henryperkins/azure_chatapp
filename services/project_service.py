@@ -124,6 +124,14 @@ async def validate_resource_access(
 
     return resource
 
+async def get_project_conversations(project_id: UUID, db: AsyncSession):
+    from models.conversation import Conversation
+    result = await db.execute(
+        select(Conversation)
+        .where(Conversation.project_id == project_id)
+    )
+    return result.scalars().all()
+
 async def get_paginated_resources(
     db: AsyncSession,
     model_class,

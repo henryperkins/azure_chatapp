@@ -145,8 +145,13 @@ document.addEventListener("DOMContentLoaded", () => {
       .split('; ')
       .find(row => row.startsWith('access_token='))
       ?.split('=')[1];
+      
+    if (!cookie) {
+      window.location.href = '/login';
+      return;
+    }
 
-    socket = new WebSocket(`${wsUrl}?token=${encodeURIComponent(cookie || '')}`);
+    socket = new WebSocket(`${wsUrl}?token=${encodeURIComponent(cookie)}`);
 
     socket.onopen = () => {
       console.log("WebSocket connected.");
