@@ -333,6 +333,28 @@ async def list_artifacts(
         ]
     })
 
+@router.get("/{project_id}/conversations", response_model=dict)
+async def get_project_conversations(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Get conversations for a project"""
+    await verify_project_access(project_id, current_user, db)
+    from models.conversation import Conversation
+    conversations = await get_all_by_condition(
+        db,
+        Conversation,
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False),
+        order_by=Conversation.created_at.desc()
+    )
+    return await process_standard_response([{
+        "id": str(c.id),
+        "title": c.title,
+        "created_at": c.created_at
+    } for c in conversations])
+
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
     project_id: UUID,

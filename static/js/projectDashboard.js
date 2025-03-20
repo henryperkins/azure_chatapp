@@ -860,6 +860,7 @@ function switchProjectTab(tabId) {
         break;
       case 'conversations':
         window.projectManager.loadProjectConversations(projectId);
+        window.projectManager.loadProjectArtifacts(projectId);
         break;
       case 'artifacts':
         window.projectManager.loadProjectArtifacts(projectId);
