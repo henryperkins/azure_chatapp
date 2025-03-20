@@ -548,9 +548,8 @@ function startNewConversation() {
   localStorage.setItem("selectedProjectId", currentProject.id);
   
   // Create conversation
-  window.apiRequest("/api/chat/conversations", "POST", {
-    title: "New Conversation",
-    project_id: currentProject.id
+  window.apiRequest(`/api/projects/${currentProject.id}/conversations`, "POST", {
+    title: "New Conversation"
   })
     .then(response => {
       window.location.href = `/?chatId=${response.data.id}`;
