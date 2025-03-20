@@ -54,6 +54,7 @@ async def validate_db_schema():
     Validate the current database schema against the ORM models.
     Now checks tables, columns, and indexes.
     """
+    import logging
     from sqlalchemy import MetaData, inspect
     logger = logging.getLogger(__name__)
 
