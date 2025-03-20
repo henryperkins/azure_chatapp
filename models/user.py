@@ -4,7 +4,7 @@ user.py
 Defines the User model responsible for authentication identity, roles, 
 and ownership of conversations/projects in the Azure Chat Application.
 """
-from sqlalchemy import Integer, String, TIMESTAMP, text, Boolean, CheckConstraint, Enum
+from sqlalchemy import Integer, String, TIMESTAMP, text, Boolean, CheckConstraint, Enum, Index
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import List, TYPE_CHECKING
 from datetime import datetime
