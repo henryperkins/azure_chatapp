@@ -25,7 +25,8 @@ class KnowledgeBase(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, 
-        server_default=text("CURRENT_TIMESTAMP")
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, 

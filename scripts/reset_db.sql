@@ -35,7 +35,7 @@ CREATE TABLE knowledge_bases (
     description TEXT,
     embedding_model VARCHAR(100),
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX ix_knowledge_bases_name ON knowledge_bases(name);
@@ -77,8 +77,8 @@ CREATE TABLE conversations (
     model_id VARCHAR,
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     message_count INTEGER DEFAULT 0 NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB DEFAULT '{}'
 );
 CREATE INDEX ix_conversations_user_id ON conversations(user_id);
