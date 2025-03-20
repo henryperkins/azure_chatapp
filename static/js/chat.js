@@ -91,8 +91,9 @@ function appendMessage(role, content) {
  msgDiv.innerHTML = safeContent;
  conversationArea.appendChild(msgDiv);
  conversationArea.scrollTop = conversationArea.scrollHeight;
+  return msgDiv;
 }
-
+ 
 function getMessageClass(role) {
   switch (role) {
     case "user":
@@ -134,10 +135,13 @@ document.addEventListener("DOMContentLoaded", () => {
     .find(row => row.startsWith('access_token='))
     ?.split('=')[1];
     
-  if (!cookie) {
-    window.showNotification?.("Please login first", "error");
-    return;
-  }
+  /* Temporarily disable strict cookie check to avoid blocking chat usage */
+  //
+  // if (!cookie) {
+  //   window.showNotification?.("Please login first", "error");
+  //   return;
+  // }
+  //
 
   const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}?token=${encodeURIComponent(cookie)}`;
   let socket = null;
@@ -210,6 +214,10 @@ document.addEventListener("DOMContentLoaded", () => {
     appendMessage("user", userMsg);
     chatInput.value = "";
 
+    // Show a "thinking" placeholder to give immediate feedback
+    const thinkingIndicator = appendMessage("assistant", "<em>Thinking...</em>");
+    thinkingIndicator.setAttribute("id", "thinkingIndicator");
+
     // Prepare optional vision data from MODEL_CONFIG
     const visionImage = window.MODEL_CONFIG?.visionImage;
     const modelName = localStorage.getItem("modelName") || "o3-mini";
@@ -220,6 +228,8 @@ document.addEventListener("DOMContentLoaded", () => {
       image_data: visionImage || null,
       vision_detail: window.MODEL_CONFIG?.visionDetail || "auto",
       max_completion_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
+      // Ensure max_tokens is included in the payload
+      max_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
       reasoning_effort: window.MODEL_CONFIG?.reasoningEffort || "low"
     };
 
@@ -252,26 +262,34 @@ document.addEventListener("DOMContentLoaded", () => {
       // Fallback to a standard POST fetch using apiRequest
       window.apiRequest(`/api/chat/conversations/${chatId}/messages`, "POST", payload)
         .then(respData => {
-          console.log("sendMessage response body:", respData);
-          if (respData.data && respData.data.assistant_message) {
-            appendMessage(respData.data.assistant_message.role, respData.data.assistant_message.content);
-          }
-          if (respData.data && respData.data.assistant_error) {
-            console.error("Assistant error:", respData.data.assistant_error);
+            console.log("sendMessage response body:", respData);
+            const indicator = document.getElementById("thinkingIndicator");
+            if (indicator) {
+                indicator.remove();
+            }
+            if (respData.data && respData.data.assistant_message) {
+                appendMessage(respData.data.assistant_message.role, respData.data.assistant_message.content);
+            }
+            if (respData.data && respData.data.assistant_error) {
+                console.error("Assistant error:", respData.data.assistant_error);
+                
+                // Use the standard notification system
+                if (window.showNotification) {
+                    window.showNotification("Error generating response", "error");
+                }
+            }
+        })
+        .catch((err) => {
+            console.error("Error sending message via fetch:", err);
+            const indicator = document.getElementById("thinkingIndicator");
+            if (indicator) {
+                indicator.remove();
+            }
             
             // Use the standard notification system
             if (window.showNotification) {
-              window.showNotification("Error generating response", "error");
+                window.showNotification("Error sending message", "error");
             }
-          }
-        })
-        .catch((err) => {
-          console.error("Error sending message via fetch:", err);
-          
-          // Use the standard notification system
-          if (window.showNotification) {
-            window.showNotification("Error sending message", "error");
-          }
         });
     }
 

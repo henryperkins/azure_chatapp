@@ -598,10 +598,10 @@ function renderProjectFiles(event) {
     }, 1000);
   }
   
-  if (files.length === 0) {
-    filesList.innerHTML = '<div class="text-gray-500 text-center py-8">No files uploaded yet.</div>';
-    return;
-  }
+    if (files.length === 0) {
+        filesList.innerHTML = '<div class="text-gray-500 text-center py-8">No files uploaded yet.</div>';
+        return;
+    }
   
   filesList.innerHTML = "";
   

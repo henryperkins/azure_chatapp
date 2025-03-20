@@ -222,7 +222,7 @@ async def update_project(
     return await process_standard_response(serialized_project)
 
 
-@router.patch("/{project_id}/archive", response_model=ProjectResponse)
+@router.patch("/{project_id}/archive")
 async def toggle_archive_project(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -409,7 +409,7 @@ async def get_project_stats(
         "artifact_count": artifact_count
     })
 
-@router.post("/{project_id}/pin", response_model=ProjectResponse)
+@router.post("/{project_id}/pin")
 async def toggle_pin_project(
    project_id: UUID,
    current_user: User = Depends(get_current_user_and_token),

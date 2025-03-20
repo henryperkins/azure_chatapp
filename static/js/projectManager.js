@@ -224,11 +224,16 @@ function loadProjectDetails(projectId) {
       currentProject = response.data;
       document.dispatchEvent(new CustomEvent("projectLoaded", { detail: currentProject }));
       
-      // Load related data
-      loadProjectStats(projectId);
-      loadProjectFiles(projectId);
-      loadProjectConversations(projectId);
-      loadProjectArtifacts(projectId);
+      // If project is archived, display a message and skip loads
+      if (currentProject.archived) {
+        console.warn("Project is archived: skipping related data loads");
+        window.showNotification?.("This project is archived and cannot be modified", "warning");
+      } else {
+        loadProjectStats(projectId);
+        loadProjectFiles(projectId);
+        loadProjectConversations(projectId);
+        loadProjectArtifacts(projectId);
+      }
     })
     .catch(err => {
       console.error("Error loading project:", err);
@@ -254,22 +259,40 @@ function loadProjectStats(projectId) {
 function loadProjectFiles(projectId) {
   window.apiRequest(`/api/projects/${projectId}/files`)
     .then(response => {
+      // Fix: Pass the files array directly to the event detail
       const files = response.data?.files || response.data || [];
-      document.dispatchEvent(new CustomEvent("projectFilesLoaded", { detail: files }));
+      document.dispatchEvent(new CustomEvent("projectFilesLoaded", { detail: { files } }));
     })
-    .catch(err => console.error("Error loading project files:", err));
+    .catch(err => {
+      console.error("Error loading project files:", err);
+      // Add error notification
+      window.showNotification?.("Failed to load files", "error");
+    });
 }
 
 /**
  * Load project conversations
  */
 function loadProjectConversations(projectId) {
-  window.apiRequest(`/api/projects/${projectId}/chat/conversations`)
+  window.apiRequest(`/api/projects/${projectId}/conversations`)
     .then(response => {
-      const conversations = response.data?.conversations || [];
+      // Fix: Use consistent endpoint and error handling
+      const conversations = response.data?.conversations || response.data || [];
       document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: conversations }));
     })
-    .catch(err => console.error("Error loading conversations:", err));
+    .catch(err => {
+      console.error("Error loading conversations:", err);
+      // Fallback to alternative endpoint
+      window.apiRequest(`/api/projects/${projectId}/chat/conversations`)
+        .then(response => {
+          const conversations = response.data?.conversations || response.data || [];
+          document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: conversations }));
+        })
+        .catch(fallbackErr => {
+          console.error("Error loading conversations (fallback attempt):", fallbackErr);
+          window.showNotification?.("Failed to load conversations", "error");
+        });
+    });
 }
 
 /**
@@ -278,10 +301,15 @@ function loadProjectConversations(projectId) {
 function loadProjectArtifacts(projectId) {
   window.apiRequest(`/api/projects/${projectId}/artifacts`)
     .then(response => {
+      // Fix: Pass the artifacts array directly to the event detail
       const artifacts = response.data?.artifacts || response.data || [];
-      document.dispatchEvent(new CustomEvent("projectArtifactsLoaded", { detail: artifacts }));
+      document.dispatchEvent(new CustomEvent("projectArtifactsLoaded", { detail: { artifacts } }));
     })
-    .catch(err => console.error("Error loading artifacts:", err));
+    .catch(err => {
+      console.error("Error loading artifacts:", err);
+      // Add error notification
+      window.showNotification?.("Failed to load artifacts", "error");
+    });
 }
 
 /**
@@ -298,7 +326,8 @@ function handleProjectFormSubmit(e) {
     name: document.getElementById("projectNameInput").value.trim(),
     description: document.getElementById("projectDescInput").value.trim(),
     goals: document.getElementById("projectGoalsInput").value.trim(),
-    max_tokens: parseInt(document.getElementById("projectMaxTokensInput").value)
+    max_tokens: parseInt(document.getElementById("projectMaxTokensInput").value),
+    // Add other form fields as needed
   };
   
   // Validate

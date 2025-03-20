@@ -8,8 +8,74 @@
 document.addEventListener("DOMContentLoaded", () => {
   // DOM references
   const modelSelect = document.getElementById("modelSelect");
-  const maxTokensSelect = document.getElementById("maxTokensSelect");
+  // Replace dropdown with slider for max tokens
+  // Max Tokens Input Group
+  const maxTokensGroup = document.createElement("div");
+  maxTokensGroup.className = "flex items-center gap-4";
+  
+  // Slider
+  const maxTokensSlider = document.createElement("input");
+  maxTokensSlider.type = "range";
+  maxTokensSlider.id = "maxTokensSlider";
+  maxTokensSlider.min = "100";
+  maxTokensSlider.max = "100000";
+  maxTokensSlider.value = "500";
+  maxTokensSlider.step = "100";
+  maxTokensSlider.className = "mt-2 flex-1";
+
+  // Number Input
+  const maxTokensInput = document.createElement("input");
+  maxTokensInput.type = "number";
+  maxTokensInput.id = "maxTokensInput";
+  maxTokensInput.min = "100";
+  maxTokensInput.max = "100000";
+  maxTokensInput.value = "500";
+  maxTokensInput.className = "w-24 px-2 py-1 border rounded";
+
+  // Sync slider and input
+  const syncMaxTokens = (value) => {
+    const clamped = Math.max(100, Math.min(100000, value));
+    maxTokensSlider.value = clamped;
+    maxTokensInput.value = clamped;
+    persistSettings();
+  };
+
+  maxTokensSlider.addEventListener("input", () => {
+    syncMaxTokens(maxTokensSlider.value);
+  });
+
+  maxTokensInput.addEventListener("change", () => {
+    syncMaxTokens(maxTokensInput.value);
+  });
+
+  const maxTokensContainer = document.getElementById("maxTokensContainer");
+  maxTokensContainer.innerHTML = '';
+  maxTokensGroup.appendChild(maxTokensSlider);
+  maxTokensGroup.appendChild(maxTokensInput);
+  maxTokensContainer.appendChild(maxTokensGroup);
+
+  // Keep hidden input for form submission
+  const maxTokensHidden = document.createElement("input");
+  maxTokensHidden.type = "hidden";
+  maxTokensHidden.id = "maxTokensHidden";
   const visionToggle = document.getElementById("visionToggle");
+  
+  // Create or reference API Version input
+  let apiVersionInput = document.getElementById("apiVersionInput");
+  if (!apiVersionInput) {
+    // If no element found, create it programmatically and insert into DOM for demonstration
+    const container = document.getElementById("apiConfigPanel") || document.body;
+    const label = document.createElement("label");
+    label.textContent = "API Version (YYYY-MM-DD or YYYY-MM-DD-preview):";
+    label.className = "block text-sm font-medium mt-4";
+    apiVersionInput = document.createElement("input");
+    apiVersionInput.id = "apiVersionInput";
+    apiVersionInput.type = "text";
+    apiVersionInput.className = "mt-1 block border rounded p-1 w-60 text-sm";
+    apiVersionInput.placeholder = "2023-05-01-preview";
+    container.appendChild(label);
+    container.appendChild(apiVersionInput);
+  }
   
   // Safely handle the possibility that the 'reasoningPanel' doesn't exist
   const reasoningPanel = document.getElementById("reasoningPanel");
@@ -31,7 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const sliderOutput = document.createElement("span");
     sliderOutput.className = "ml-2";
 
-    function updateSliderOutput(value) {
+    const updateSliderOutput = (value) => {
       if (value === "1") {
         sliderOutput.textContent = "Low";
       } else if (value === "2") {
@@ -39,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         sliderOutput.textContent = "High";
       }
-    }
+    };
 
     updateSliderOutput(slider.value);
 
@@ -76,13 +142,22 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load existing settings from localStorage (or defaults)
   const storedModel = localStorage.getItem("modelName") || "o3-mini";
   const storedMaxTokens = localStorage.getItem("maxTokens") || "500";
+  const storedApiVersion = localStorage.getItem("apiVersion") || "2023-05-01-preview";
   const storedReasoning = localStorage.getItem("reasoningEffort") || "";
   const storedVision = localStorage.getItem("visionEnabled") === "true";
   
   // Initialize UI
   if (modelSelect) modelSelect.value = storedModel;
-  if (maxTokensSelect) maxTokensSelect.value = storedMaxTokens;
-  
+  if (maxTokensInput) {
+    maxTokensInput.value = storedMaxTokens;
+    maxTokensInput.type = "number";
+    maxTokensInput.min = "1";
+    maxTokensInput.max = "100000";
+  }
+  // If we found an API version input, set it
+  if (apiVersionInput) {
+    apiVersionInput.value = storedApiVersion;
+  }
   // Set the reasoningEffortSelect if there's a saved value
   if (storedReasoning) {
     const reasoningEffortSelectEl = document.getElementById("reasoningEffortSelect");
@@ -96,18 +171,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Save changes to localStorage and (optionally) to a global object
   function persistSettings() {
+    // API Version
+    if (apiVersionInput) {
+      let userVal = apiVersionInput.value.trim();
+      if (!userVal) {
+        userVal = "2023-05-01-preview";
+        apiVersionInput.value = userVal;
+      }
+      localStorage.setItem("apiVersion", userVal);
+      window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+      window.MODEL_CONFIG.apiVersion = userVal;
+    }
+
     // Model
     if (modelSelect) {
       localStorage.setItem("modelName", modelSelect.value);
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
       window.MODEL_CONFIG.modelName = modelSelect.value;
     }
+
     // Max tokens
-    if (maxTokensSelect) {
-      localStorage.setItem("maxTokens", maxTokensSelect.value);
+    if (maxTokensHidden) {
+      const tokensVal = Number(maxTokensHidden.value);
+      const clampedVal = Math.min(Math.max(tokensVal, 100), 100000); // clamp range 100..100000
+      maxTokensHidden.value = clampedVal.toString();
+
+      localStorage.setItem("maxTokens", clampedVal.toString());
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-      window.MODEL_CONFIG.maxTokens = Number(maxTokensSelect.value);
+      window.MODEL_CONFIG.maxTokens = clampedVal;
     }
+
     // Reasoning effort
     const reasoningEffortRange = document.getElementById("reasoningEffortRange");
     if (reasoningEffortRange) {
@@ -120,13 +213,14 @@ document.addEventListener("DOMContentLoaded", () => {
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
       window.MODEL_CONFIG.reasoningEffort = effort;
     }
+
     // Vision toggle
     if (visionToggle) {
       localStorage.setItem("visionEnabled", String(visionToggle.checked));
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
       window.MODEL_CONFIG.visionEnabled = visionToggle.checked;
     }
-    updateModelConfigDisplay();
+
     updateModelConfigDisplay();
   }
   
@@ -135,7 +229,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentMaxTokensEl = document.getElementById("currentMaxTokens");
     const currentReasoningEl = document.getElementById("currentReasoning");
     const visionEnabledStatusEl = document.getElementById("visionEnabledStatus");
-  
+    
     // Model
     if (currentModelNameEl) {
       currentModelNameEl.textContent = window.MODEL_CONFIG?.modelName || "N/A";
@@ -143,7 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
     // Max Tokens
     if (currentMaxTokensEl) {
-      currentMaxTokensEl.textContent = window.MODEL_CONFIG?.maxTokens?.toString() || "N/A";
+      currentMaxTokensEl.textContent = `${window.MODEL_CONFIG?.maxTokens?.toString() || "N/A"} tokens`;
     }
   
     // Reasoning
@@ -163,7 +257,10 @@ document.addEventListener("DOMContentLoaded", () => {
       persistSettings();
       const isVisionModel = modelSelect.value === "o1";
       const reasoningEffortSelectEl = document.getElementById("reasoningEffortSelect");
-      document.getElementById("visionPanel").classList.toggle("hidden", !isVisionModel);
+      const visionPanelEl = document.getElementById("visionPanel");
+      if (visionPanelEl) {
+        visionPanelEl.classList.toggle("hidden", !isVisionModel);
+      }
   
       // Enable/disable the reasoning dropdown only for certain models
       if (reasoningEffortSelectEl) {
@@ -177,8 +274,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-  if (maxTokensSelect) {
-    maxTokensSelect.addEventListener("change", persistSettings);
+  if (maxTokensInput) {
+    maxTokensInput.addEventListener("change", persistSettings);
   }
   // Removed references to reasoningToggle since it's no longer used (replaced by the new slider)
   if (visionToggle) {

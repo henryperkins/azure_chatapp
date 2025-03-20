@@ -18,12 +18,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-AsyncSessionLocal = sessionmaker(
+AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
     autocommit=False,
     autoflush=False,
-    expire_on_commit=False,
-    class_=AsyncSession
+    expire_on_commit=False
 )
 
 sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
