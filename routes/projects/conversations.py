@@ -15,7 +15,7 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-import services
+from services import conversation_service, project_service
 
 from db import get_async_session
 from models.user import User
@@ -95,7 +95,7 @@ async def create_conversation(
 ):
     """Create a new conversation using the conversation service"""
     # Validate project access using service
-    project = await services.project_service.validate_project_access(
+    project = await project_service.validate_project_access(
         project_id, current_user, db
     )
     
@@ -105,7 +105,7 @@ async def create_conversation(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Create conversation using service with model validation
-    conversation = await services.conversation_service.create_conversation(
+    conversation = await conversation_service.create_conversation(
         project_id=project_id,
         user_id=current_user.id,
         title=conversation_data.title,
@@ -131,14 +131,24 @@ async def list_conversations(
     limit: int = 100
 ):
     """List project conversations using conversation service"""
-    conversations = await services.conversation_service.list_project_conversations(
+    conversations = await conversation_service.list_project_conversations(
         project_id=project_id,
         db=db,
         user_id=current_user.id,
         skip=skip,
         limit=limit
     )
-    return await process_standard_response({"conversations": conversations})
+    # Convert raw SQLAlchemy conversation objects to dicts
+    conv_list = []
+    for conv in conversations:
+        conv_list.append({
+            "id": str(conv.id),
+            "title": conv.title,
+            "model_id": conv.model_id,
+            "created_at": conv.created_at.isoformat() if conv.created_at else None
+        })
+
+    return await process_standard_response({"conversations": conv_list})
 
 
 @router.get("/{conversation_id}", response_model=dict)
@@ -373,7 +383,7 @@ async def create_message(
 
     # Create user message
     message = await create_user_message(
-        conversation_id=conversation.id,
+        conversation_id=str(conversation.id),  # type: ignore
         content=new_msg.content.strip(),
         role=new_msg.role.lower().strip(),
         db=db
@@ -393,17 +403,17 @@ async def create_message(
         try:
             # Generate AI response
             assistant_msg = await generate_ai_response(
-                conversation_id=conversation.id,
+                conversation_id=str(conversation.id),  # type: ignore
                 messages=msg_dicts,
                 model_id=conversation.model_id,
                 image_data=new_msg.image_data,
-                vision_detail=new_msg.vision_detail,
+                vision_detail=new_msg.vision_detail or "auto",
                 db=db
             )
 
             if assistant_msg:
                 # Add assistant message to response
-                response_payload["assistant_message"] = {
+                response_payload["assistant_message"] = {  # type: ignore
                     "id": str(assistant_msg.id),
                     "role": assistant_msg.role,
                     "content": assistant_msg.content
@@ -475,14 +485,14 @@ async def websocket_chat_endpoint(
 
                 # Create message
                 message = await create_user_message(
-                    conversation_id=conversation.id,
+                    conversation_id=str(conversation.id),  # type: ignore
                     content=data_dict["content"],
                     role=data_dict["role"],
                     db=db
                 )
 
                 if message.role == "user":
-                    await handle_websocket_response(conversation.id, db, websocket)
+                    await handle_websocket_response(str(conversation.id), db, websocket)  # type: ignore
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
