@@ -490,7 +490,6 @@ document.addEventListener('keydown', (e) => {
  * @param {String} url - The URL to fetch
  * @param {String|Object} methodOrOptions - HTTP method (GET, POST, etc) or options object
  * @param {Object} data - Request body for POST/PUT/PATCH
- * @param {Object} additionalOptions - Additional fetch options
  * @returns {Promise} - Resolves to parsed JSON response
  */
 window.apiRequest = async function(url, methodOrOptions = "GET", data = null) {
@@ -523,8 +522,9 @@ window.apiRequest = async function(url, methodOrOptions = "GET", data = null) {
   }
   
   try {
-    console.log(`API ${fetchOptions.method} request to ${url}`, fetchOptions.body ? 'with data' : '');
-    const response = await fetch(url, fetchOptions);
+    // Fix: Changed fetchOptions to options to match the variable name above
+    console.log(`API ${options.method} request to ${url}`, options.body ? 'with data' : '');
+    const response = await fetch(url, options);
     
     if (!response.ok) {
       const errorText = await response.text();

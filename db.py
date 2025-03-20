@@ -5,21 +5,25 @@ Sets up the PostgreSQL database connection using SQLAlchemy.
 Defines the async init_db process for migrations or table creation.
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-# Example: 'postgresql+asyncpg://user:pass@localhost:5432/azure_chat'
 DATABASE_URL = "postgresql+asyncpg://user:pass@localhost:5432/azure_chat"
 
 async_engine = create_async_engine(DATABASE_URL, echo=False)
 
-AsyncSessionLocal = async_sessionmaker(
-    async_engine,
-    expire_on_commit=False,
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+AsyncSessionLocal = sessionmaker(
+    bind=async_engine,
     autocommit=False,
-    autoflush=False
+    autoflush=False,
+    expire_on_commit=False,
+    class_=AsyncSession
 )
 
 sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
