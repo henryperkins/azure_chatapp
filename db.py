@@ -44,6 +44,7 @@ async def init_db():
     """
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await validate_db_schema()
 
 async def validate_db_schema():
     """
