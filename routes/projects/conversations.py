@@ -92,49 +92,27 @@ async def create_conversation(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Creates a new conversation within a specific project.
-    """
-    # Validate project ownership
-    project = await validate_resource_ownership(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [
-            Project.user_id == current_user.id,
-            Project.archived.is_(False)  # Cannot modify archived projects
-        ]
+    """Create a new conversation using the conversation service"""
+    # Validate project access using service
+    project = await services.project_service.validate_project_access(
+        project_id, current_user, db
     )
     
-    # Add default model if none provided
-    if not conversation_data.model_id:
-        conversation_data.model_id = "o1"  # Default model
-    
-    # Create conversation with default title if empty
-    title = conversation_data.title.strip() or f"Chat {datetime.now().strftime('%Y-%m-%d')}"
-    
-    new_conversation = Conversation(
+    # Create conversation using service
+    conversation = await services.conversation_service.create_conversation(
+        project_id=project_id,
         user_id=current_user.id,
-        project_id=project.id,
-        title=title,
-        model_id=conversation_data.model_id,
-        is_deleted=False,
-        created_at=datetime.now()
+        title=conversation_data.title,
+        model_id=conversation_data.model_id or "o1",  # Default model
+        db=db
     )
-
-    # Save using utility function
-    await save_model(db, new_conversation)
-
-    logger.info(f"Conversation created with id={new_conversation.id} under project {project_id} by user_id={current_user.id}")
-                
-    # Return standardized response
+    
     return await process_standard_response({
-        "id": str(new_conversation.id),
-        "title": new_conversation.title,
-        "created_at": new_conversation.created_at.isoformat(),
-        "project_id": str(project_id)
+        "id": str(conversation.id),
+        "title": conversation.title,
+        "created_at": conversation.created_at.isoformat(),
+        "project_id": str(project_id),
+        "model_id": conversation.model_id
     }, "Conversation created successfully")
 
 
