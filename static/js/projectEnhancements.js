@@ -88,6 +88,11 @@
      * @param {string} projectId - The ID of the project
      */
     window.projectManager.loadProjectConversations = function(projectId) {
+      if (!projectId) {
+        console.error('Project ID is required to load conversations');
+        window.showNotification?.("Invalid project ID", "error");
+        return;
+      }
       const conversationsList = document.getElementById('projectConversationsList');
       
       if (!projectId) {

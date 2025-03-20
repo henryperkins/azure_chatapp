@@ -147,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ?.split('=')[1];
       
     if (!cookie) {
-      window.location.href = '/login';
+      window.showNotification?.("Please login first", "error");
       return;
     }
 
