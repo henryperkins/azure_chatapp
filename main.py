@@ -41,7 +41,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 
-allowed_hosts = settings.ALLOWED_HOSTS
+allowed_hosts = settings.ALLOWED_HOSTS if settings.ALLOWED_HOSTS else ["*"]  # Temporary development setting
 app = FastAPI(
     middleware=[
         Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts),
@@ -85,8 +85,9 @@ file uploads, and more.
     redoc_url=None
 )
 
-if settings.ENV == "production":
-    app.add_middleware(HTTPSRedirectMiddleware)
+# Temporarily disable HTTPS redirect for development
+# if settings.ENV == "production":
+#     app.add_middleware(HTTPSRedirectMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
