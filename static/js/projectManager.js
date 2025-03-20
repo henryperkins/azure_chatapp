@@ -264,7 +264,7 @@ function loadProjectFiles(projectId) {
  * Load project conversations
  */
 function loadProjectConversations(projectId) {
-  window.apiRequest(`/api/projects/${projectId}/conversations`)
+  window.apiRequest(`/api/projects/${projectId}/chat/conversations`)
     .then(response => {
       const conversations = response.data || [];
       document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: conversations }));
