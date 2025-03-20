@@ -71,7 +71,7 @@ class ProjectUpdate(BaseModel):
 # Project CRUD Operations
 # ============================
 
-@router.post("", response_model=Dict, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=Dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
     project_data: ProjectCreate,
     current_user: User = Depends(get_current_user_and_token),
@@ -97,7 +97,7 @@ async def create_project(
         raise HTTPException(500, "Project creation failed")
 
 
-@router.get("", response_model=Dict)
+@router.get("/", response_model=Dict)
 async def list_projects(
     archived: Optional[bool] = None,
     pinned: Optional[bool] = None,
