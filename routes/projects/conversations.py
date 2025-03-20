@@ -124,43 +124,15 @@ async def list_conversations(
     skip: int = 0,
     limit: int = 100
 ):
-    """
-    Returns a list of conversations for a specific project, owned by the current user.
-    """
-    # Validate project access
-    project = await validate_resource_ownership(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+    """List project conversations using conversation service"""
+    conversations = await services.conversation_service.list_project_conversations(
+        project_id=project_id,
+        db=db,
+        user_id=current_user.id,
+        skip=skip,
+        limit=limit
     )
-
-    # Use enhanced database function
-    conversations = await get_all_by_condition(
-        db,
-        Conversation,
-        Conversation.project_id == project_id,
-        Conversation.user_id == current_user.id,
-        Conversation.is_deleted.is_(False),
-        order_by=Conversation.created_at.desc(),
-        limit=limit,
-        offset=skip
-    )
-
-    items = [
-        {
-            "id": str(conv.id),
-            "title": conv.title,
-            "model_id": conv.model_id,
-            "created_at": conv.created_at,
-            "project_id": str(conv.project_id)
-        }
-        for conv in conversations
-    ]
-    
-    return await process_standard_response({"conversations": items})
+    return await process_standard_response({"conversations": conversations})
 
 
 @router.get("/{conversation_id}", response_model=dict)
