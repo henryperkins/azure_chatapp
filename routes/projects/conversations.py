@@ -447,10 +447,6 @@ async def websocket_chat_endpoint(
     """
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
-        token = websocket.query_params.get("token")
-        if not token or token == "undefined":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
         try:
             # Authenticate user
             success, user = await authenticate_websocket(websocket, db)
