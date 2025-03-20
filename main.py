@@ -3,12 +3,11 @@ main.py
 --------
 The FastAPI entrypoint for the Azure OpenAI Chat Application.
 - Initializes the app with middleware (CORS, logging).
-- Includes routers (auth, chat, file_upload, and any others).
+- Includes routers (auth, conversations, projects, etc.).
 - Runs database init or migrations on startup.
 """
 
 import logging
-from sqlalchemy import exc as sa_exc
 import os
 from pathlib import Path
 os.environ['AZUREML_ENVIRONMENT_UPDATE'] = 'false'  # Suppress conda warnings
@@ -27,9 +26,9 @@ from config import settings
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from db import Base, async_engine, init_db
 from auth import router as auth_router
-from routes.chat import router as chat_router
+from routes.conversations import router as conversations_router
 from routes.file_upload import router as file_upload_router
-from routes.project_routes import router as project_router
+from routes.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
 
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -52,8 +51,28 @@ file uploads, and more.
     version="1.0.0",
     openapi_tags=[
         {
+            "name": "conversations",
+            "description": "Operations with standalone conversations",
+        },
+        {
             "name": "projects",
-            "description": "Operations with projects requiring valid UUIDs",
+            "description": "Core project management operations",
+        },
+        {
+            "name": "project-conversations", 
+            "description": "Operations with project-specific conversations"
+        },
+        {
+            "name": "project-files",
+            "description": "Operations with project files",
+        },
+        {
+            "name": "project-artifacts",
+            "description": "Operations with project artifacts",
+        },
+        {
+            "name": "knowledge-bases",
+            "description": "Operations with knowledge bases",
         }
     ],
     docs_url="/docs",
@@ -69,14 +88,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
-logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
-logging.getLogger('sqlalchemy.dialects.postgresql').setLevel(logging.WARNING)
-logging.getLogger('sqlalchemy.orm').setLevel(logging.WARNING)
-
 # Apply CORS Middleware
-# Get CORS origins from settings
-origins = settings.CORS_ORIGINS if hasattr(settings, 'CORS_ORIGINS') else []
+origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else []
 
 # In development, allow localhost origins if none specified
 if settings.ENV != "production" and not origins:
@@ -87,7 +100,6 @@ if settings.ENV != "production" and not origins:
         "http://127.0.0.1:3000",
     ]
 
-# Configure CORS with appropriate security settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -141,14 +153,14 @@ async def on_startup():
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
-# Include the chat router
-app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+# Include the conversations router (was chat router)
+app.include_router(conversations_router, prefix="/api/conversations", tags=["conversations"])
 
-# Include the file upload router
+# Include the legacy file upload router (with deprecation notices)
 app.include_router(file_upload_router, prefix="/api/files", tags=["files"])
 
-# Include the project router
-app.include_router(project_router, prefix="/api/projects", tags=["projects"])
+# Include the projects router with nested resources
+app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 
 # Include the knowledge base router
 app.include_router(knowledge_base_router, prefix="/api/knowledge-bases", tags=["knowledge-bases"])
