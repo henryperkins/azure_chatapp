@@ -15,7 +15,7 @@ os.environ['AZUREML_ENVIRONMENT_UPDATE'] = 'false'  # Suppress conda warnings
 from fastapi import FastAPI, Response, HTTPException
 from fastapi.responses import JSONResponse
 import jwt
-from jwt import JWTError
+from jwt.exceptions import JWTError
 from schemas.token import Token
 from services.user_service import get_user_by_username
 from utils.auth_deps import get_refresh_token
