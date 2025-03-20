@@ -520,64 +520,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return card;
   }
   
-  /**
-   * Render project details
-   */
-  function renderProjectDetails(event) {
-    const project = event.detail;
-    
-    // Update title
-    document.getElementById("projectTitle").textContent = project.name;
-    
-    // Update description
-    document.getElementById("projectDescription").textContent = 
-      project.description || "No description provided.";
-    
-    // Update goals
-    document.getElementById("projectGoals").textContent = 
-      project.goals || "No goals defined.";
-    
-    // Update instructions
-    document.getElementById("projectInstructions").textContent = 
-      project.custom_instructions || "No custom instructions set.";
-    
-    // Update pin button
-    const pinBtn = document.getElementById("pinProjectBtn");
-    if (pinBtn) {
-      pinBtn.querySelector("svg").setAttribute("fill", project.pinned ? "currentColor" : "none");
-      pinBtn.classList.toggle("text-yellow-600", project.pinned);
-    }
-    
-    // Update archive button
-    const archiveBtn = document.getElementById("archiveProjectBtn");
-    if (archiveBtn) {
-      archiveBtn.querySelector("svg").setAttribute("fill", project.archived ? "currentColor" : "none");
-      archiveBtn.classList.toggle("text-gray-800", project.archived);
-    }
-  }
-  
-  /**
-   * Render project stats
-   */
-  function renderProjectStats(event) {
-    const stats = event.detail;
-    
-    // Update token usage stats
-    document.getElementById("tokenUsage").textContent = formatNumber(stats.token_usage);
-    document.getElementById("maxTokens").textContent = formatNumber(stats.max_tokens);
-    
-    const percentage = stats.max_tokens > 0 
-      ? Math.min(100, (stats.token_usage / stats.max_tokens) * 100).toFixed(1)
-      : 0;
-      
-    document.getElementById("tokenPercentage").textContent = `${percentage}%`;
-    document.getElementById("tokenProgressBar").style.width = `${percentage}%`;
-    
-    // Update counters
-    document.getElementById("conversationCount").textContent = stats.conversation_count;
-    document.getElementById("fileCount").textContent = stats.file_count;
-    document.getElementById("artifactCount").textContent = stats.artifact_count;
-  }
   
   /**
    * Render project files
@@ -845,4 +787,218 @@ document.addEventListener("DOMContentLoaded", () => {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+    // Add these functions to the end of the file, before the last closing brace
+  window.renderProjectDetails = function(event) {
+    const project = event.detail;
+    
+    // Update title with indicator for archived projects
+    document.getElementById("projectTitle").innerHTML = project.name + 
+      (project.archived ? ' <span class="ml-2 px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">Archived</span>' : '');
+    
+    // Update description with proper fallback
+    const descEl = document.getElementById("projectDescription");
+    if (descEl) {
+      if (project.description) {
+        descEl.textContent = project.description;
+      } else {
+        descEl.innerHTML = '<em class="text-gray-400">No description provided.</em>';
+      }
+    }
+    
+    // Update goals with proper fallback and formatting
+    const goalsEl = document.getElementById("projectGoals");
+    if (goalsEl) {
+      if (project.goals) {
+        // Format goals as bullet points if they contain line breaks
+        if (project.goals.includes('\n')) {
+          const goalsList = project.goals.split('\n').filter(g => g.trim());
+          goalsEl.innerHTML = goalsList.map(goal => 
+            `<div class="mb-1">• ${goal.trim()}</div>`
+          ).join('');
+        } else {
+          goalsEl.textContent = project.goals;
+        }
+      } else {
+        goalsEl.innerHTML = '<em class="text-gray-400">No goals defined.</em>';
+      }
+    }
+    
+    // Update instructions with proper fallback
+    const instructionsEl = document.getElementById("projectInstructions");
+    if (instructionsEl) {
+      if (project.custom_instructions) {
+        instructionsEl.textContent = project.custom_instructions;
+      } else {
+        instructionsEl.innerHTML = '<em class="text-gray-400">No custom instructions set.</em>';
+      }
+    }
+    
+    // Update pin button
+    const pinBtn = document.getElementById("pinProjectBtn");
+    if (pinBtn) {
+      pinBtn.querySelector("svg").setAttribute("fill", project.pinned ? "currentColor" : "none");
+      pinBtn.classList.toggle("text-yellow-600", project.pinned);
+      // Add tooltip
+      pinBtn.setAttribute("title", project.pinned ? "Unpin project" : "Pin project");
+    }
+    
+    // Update archive button
+    const archiveBtn = document.getElementById("archiveProjectBtn");
+    if (archiveBtn) {
+      archiveBtn.querySelector("svg").setAttribute("fill", project.archived ? "currentColor" : "none");
+      archiveBtn.classList.toggle("text-gray-800", project.archived);
+      // Add tooltip
+      archiveBtn.setAttribute("title", project.archived ? "Unarchive project" : "Archive project");
+    }
+    
+    // Disable pin button if project is archived
+    if (pinBtn && project.archived) {
+      pinBtn.disabled = true;
+      pinBtn.classList.add("opacity-50", "cursor-not-allowed");
+    } else if (pinBtn) {
+      pinBtn.disabled = false;
+      pinBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    }
+  };
+
+  window.renderProjectStats = function(event) {
+    const stats = event.detail;
+    
+    // Format numbers for better readability
+    document.getElementById("tokenUsage").textContent = formatNumber(stats.token_usage);
+    document.getElementById("maxTokens").textContent = formatNumber(stats.max_tokens);
+    
+    const percentage = stats.max_tokens > 0 
+      ? Math.min(100, (stats.token_usage / stats.max_tokens) * 100).toFixed(1)
+      : 0;
+      
+    document.getElementById("tokenPercentage").textContent = `${percentage}%`;
+    
+    // Set progress bar with color indication based on usage
+    const progressBar = document.getElementById("tokenProgressBar");
+    progressBar.style.width = `${percentage}%`;
+    
+    // Apply color based on usage level
+    if (percentage > 90) {
+      progressBar.classList.remove("bg-blue-600", "bg-yellow-500");
+      progressBar.classList.add("bg-red-600");
+    } else if (percentage > 70) {
+      progressBar.classList.remove("bg-blue-600", "bg-red-600");
+      progressBar.classList.add("bg-yellow-500");
+    } else {
+      progressBar.classList.remove("bg-yellow-500", "bg-red-600");
+      progressBar.classList.add("bg-blue-600");
+    }
+    
+    // Update counters with animations for better feedback
+    animateCounter("conversationCount", stats.conversation_count);
+    animateCounter("fileCount", stats.file_count);
+    animateCounter("artifactCount", stats.artifact_count);
+  };
+
+  // Helper function to animate counter values
+  window.animateCounter = function(id, targetValue) {
+    const element = document.getElementById(id);
+    if (!element) return;
+    
+    const currentValue = parseInt(element.textContent) || 0;
+    const diff = targetValue - currentValue;
+    
+    if (diff === 0) return;
+    
+    // For small differences, just update the value
+    if (Math.abs(diff) <= 5) {
+      element.textContent = targetValue;
+      return;
+    }
+    
+    // For larger differences, animate the change
+    let step = diff > 0 ? 1 : -1;
+    let current = currentValue;
+    
+    const interval = setInterval(() => {
+      current += step;
+      element.textContent = current;
+      
+      if ((diff > 0 && current >= targetValue) || (diff < 0 && current <= targetValue)) {
+        clearInterval(interval);
+        element.textContent = targetValue;
+      }
+    }, 50);
+  };
+
+  // File uploads related functions
+  window.renderProjectFiles = function(event) {
+    // [Paste the full content of the renderProjectFiles function here]
+  };
+
+  window.updateUploadProgress = function(completed, errors, total) {
+    // [Paste the full content of the updateUploadProgress function here]
+  };
+
+  window.handleFileUpload = function(e) {
+    // [Paste the full content of the handleFileUpload function here]
+  };
+
+  // Conversations related functions
+  window.renderProjectConversations = function(event) {
+    // [Paste the full content of the renderProjectConversations function here]
+  };
+
+  window.startNewConversation = function() {
+    // [Paste the full content of the startNewConversation function here]
+  };
+
+  // Artifacts related functions
+  window.renderProjectArtifacts = function(event) {
+    // [Paste the full content of the renderProjectArtifacts function here]
+  };
+
+  window.viewArtifact = function(artifactId) {
+    // [Paste the full content of the viewArtifact function here]
+  };
+
+  // Additional utility functions
+  function formatRelativeTime(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) {
+      return "Just now";
+    } else if (diffMin < 60) {
+      return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`;
+    } else if (diffHour < 24) {
+      return `${diffHour} hour${diffHour === 1 ? '' : 's'} ago`;
+    } else if (diffDay < 7) {
+      return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+    } else {
+      return formatDate(date, false);
+    }
+  }
+
+  function formatDocumentContent(content) {
+    if (!content) return '';
+    
+    // Simple markdown-like formatting
+    const formatted = content
+      // Headers
+      .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mb-2">$1</h1>')
+      .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold mb-2">$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold mb-2">$1</h3>')
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Lists
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      // Line breaks
+      .replace(/\n/g, '<br>');
+    
+    return formatted;
   }
