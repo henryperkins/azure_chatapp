@@ -493,41 +493,21 @@ document.addEventListener('keydown', (e) => {
  * @param {Object} additionalOptions - Additional fetch options
  * @returns {Promise} - Resolves to parsed JSON response
  */
-window.apiRequest = async function(url, methodOrOptions = "GET", data = null, additionalOptions = {}) {
-  // Default options
-  let fetchOptions = {
-    method: "GET",
+window.apiRequest = async function(url, methodOrOptions = "GET", data = null) {
+  const token = document.cookie.split('; ')
+    .find(row => row.startsWith('access_token='))
+    ?.split('=')[1];
+
+  const options = {
+    method: typeof methodOrOptions === 'string' ? methodOrOptions : 'GET',
     headers: {
-      "Content-Type": "application/json"
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
     },
-    credentials: "include"
+    credentials: 'include'
   };
-  
-  // Handle case where second parameter is an options object
-  if (typeof methodOrOptions === 'object' && methodOrOptions !== null) {
-    // Extract method, body and other options from the object
-    const { method, body, ...otherOptions } = methodOrOptions;
-    fetchOptions.method = method || "GET";
-    
-    // If body is provided in the options object, use it
-    if (body) {
-      fetchOptions.body = body;
-    }
-    
-    // Merge other options
-    Object.assign(fetchOptions, otherOptions);
-  } else {
-    // Handle traditional parameters
-    fetchOptions.method = methodOrOptions;
-    
-    // Merge additional options
-    fetchOptions = { ...fetchOptions, ...additionalOptions };
-    
-    // Add body if data is provided
-    if (data && ["POST", "PUT", "PATCH"].includes(fetchOptions.method)) {
-      fetchOptions.body = JSON.stringify(data);
-    }
-  }
+
+  if (data) options.body = JSON.stringify(data);
   
   // Validate UUID format for conversation IDs
   if (url.includes('/conversations/')) {
