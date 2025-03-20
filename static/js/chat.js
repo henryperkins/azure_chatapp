@@ -17,12 +17,24 @@
  * Updates the chat title from metadata if present.
  */
 function loadConversation(chatId) {
+  // Validate chat ID
+  if (!chatId || !isValidUUID(chatId)) {
+    if (window.showNotification) {
+      window.showNotification('Invalid conversation ID', 'error');
+    }
+    return;
+  }
+
   // Clear previous messages
   const conversationArea = document.getElementById("conversationArea");
   if (conversationArea) conversationArea.innerHTML = "";
 
   // Update the global chat ID
   window.CHAT_CONFIG = { chatId };
+
+  function isValidUUID(str) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  }
 
   // Show loading state
   conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
