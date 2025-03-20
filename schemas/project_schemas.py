@@ -74,6 +74,10 @@ class ProjectResponse(BaseModel):
     user_id: int
 
     class Config:
-        from_attributes = True
+        from_attributes = True  # Enables ORM mode for SQLAlchemy compatibility
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),  # Ensure proper datetime serialization
+            UUID: lambda v: str(v)  # Convert UUID to string in responses
+        }
 
 # endregion
