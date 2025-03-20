@@ -32,7 +32,7 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)  # "user", "assistant", "system"
     content: Mapped[str] = mapped_column(Text, nullable=False)
     extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
     
     conversation = relationship("Conversation", back_populates="messages")
