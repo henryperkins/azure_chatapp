@@ -21,7 +21,10 @@ from sqlalchemy import select
 
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
-from utils.auth_deps import get_current_user_and_token, revoke_token_id, verify_token
+from utils.auth_deps import (
+    get_current_user_and_token, revoke_token_id, verify_token,
+    JWT_SECRET, JWT_ALGORITHM, create_access_token
+)
 from typing import cast
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

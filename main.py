@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 os.environ['AZUREML_ENVIRONMENT_UPDATE'] = 'false'  # Suppress conda warnings
 
-from fastapi import FastAPI, Response, HTTPException
+from fastapi import FastAPI, Response, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import jwt
 from jwt.exceptions import JWTError
@@ -30,7 +30,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from config import settings
 
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from db import Base, async_engine, init_db
+from db import Base, async_engine, init_db, get_async_session
 from auth import router as auth_router
 from routes.conversations import router as conversations_router
 from routes.file_upload import router as file_upload_router
