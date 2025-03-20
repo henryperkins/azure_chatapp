@@ -116,10 +116,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
   // Determine if this is a project-specific or standalone chat
   const selectedProjectId = localStorage.getItem("selectedProjectId");
+  // Get JWT token from cookies
+  const cookie = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('access_token='))
+    ?.split('=')[1];
+    
+  if (!cookie) {
+    window.showNotification?.("Please login first", "error");
+    return;
+  }
+
   const wsUrl = chatId ? 
     (selectedProjectId && selectedProjectId !== "" && selectedProjectId !== "null") ?
-      `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}` :
-      `${protocol}${window.location.host}/api/chat/ws/${chatId}`
+      `${protocol}${window.location.host}/api/projects/${selectedProjectId}/chat/conversations/${chatId}/ws` :
+      `${protocol}${window.location.host}/api/chat/${chatId}/ws`
     : null;
   let socket = null;
 
