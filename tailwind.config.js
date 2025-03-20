@@ -18,27 +18,62 @@ module.exports = {
   ],
 
   theme: {
-    // Extend or override the default Tailwind theme here.
     extend: {
-      // Example: custom breakpoints, or additional brand colors, etc.
-      screens: {
-        // Already in Tailwind by default, but you can add new ones:
-        'xs': '320px',
-        '2xl': '1536px',
-        '3xl': '1920px', // Potential custom breakpoint
-        '4xl': '2560px',
-      },
-      // Example: brand-specific colors
       colors: {
-          brandBlue: '#1E40AF',
-          brandLightBlue: '#60A5FA',
-          purple: colors.purple
+        // Primary color palette
+        primary: {
+          DEFAULT: '#1E40AF',
+          light: '#60A5FA',
+          dark: '#1E3A8A',
+        },
+        // Secondary color palette
+        secondary: {
+          DEFAULT: '#4F46E5',
+          light: '#818CF8',
+          dark: '#3730A3',
+        },
+        // State colors
+        success: colors.green,
+        warning: colors.amber,
+        danger: colors.rose,
+        // Dark mode surface colors
+        surface: {
+          DEFAULT: colors.white,
+          dark: '#111827', // Changed to match existing dark bg-gray-900
+        },
+        border: {
+          DEFAULT: '#e5e7eb', // Existing border-gray-200
+          dark: '#374151', // Existing dark:border-gray-700
+        },
+        skeleton: {
+          DEFAULT: '#f3f4f6', // bg-gray-100
+          dark: '#4b5563', // dark:bg-gray-700
+        }
       },
-      // Example: custom spacing or font families
       spacing: {
-        '128': '32rem',
+        'card-padding': '1rem',
+        'card-spacing': '1rem',
         'touch-min': '44px',
       },
+      screens: {
+        'xs': '320px',
+        '3xl': '1920px',
+        '4xl': '2560px',
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      boxShadow: {
+        card: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+        'card-hover': '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+      },
+      borderWidth: {
+        card: '1px',
+      },
+      borderRadius: {
+        card: '0.5rem',
+        'empty-state': '0.75rem',
+      }
     },
   },
 

@@ -14,79 +14,72 @@
       return;
     }
 
-    // Add missing methods to projectManager
-    
-    /**
-     * Load project files list
-     * @param {string} projectId - The ID of the project
-     */
-    window.projectManager.loadProjectFiles = function(projectId) {
-      const projectFilesList = document.getElementById('projectFilesList');
-      
-      if (!projectId) {
-        console.error('Project ID is required to load files');
-        return;
-      }
-      
-      // Show loading state
-      projectFilesList.innerHTML = '<div class="text-center py-4"><div class="spinner"></div><p class="text-sm text-gray-500 mt-2">Loading files...</p></div>';
-      
-      // Fetch project files
-      window.apiRequest(`/api/projects/${projectId}/files`)
-        .then(files => {
-          if (files && files.length > 0) {
-            projectFilesList.innerHTML = '';
-            
-            // Render each file
-            files.forEach(file => {
-              const fileElement = document.createElement('div');
-              fileElement.className = 'bg-white dark:bg-gray-800 p-3 rounded shadow-sm flex items-center justify-between transition-all hover:shadow-md';
-              fileElement.innerHTML = `
-                <div class="flex items-center">
-                  <div class="mr-3 text-blue-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div class="font-medium">${file.filename}</div>
-                    <div class="text-xs text-gray-500">${new Date(file.created_at).toLocaleString()} · ${formatFileSize(file.file_size || 0)}</div>
-                  </div>
-                </div>
-                <div class="flex space-x-2">
-                  <button class="text-blue-600 hover:text-blue-800 p-1" title="View file" data-file-id="${file.id}" data-action="view">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </button>
-                  <button class="text-red-600 hover:text-red-800 p-1" title="Delete file" data-file-id="${file.id}" data-action="delete">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              `;
+    // Only define these methods if they don't already exist
+    if (!window.projectManager.loadProjectFiles) {
+      window.projectManager.loadProjectFiles = function(projectId) {
+        const projectFilesList = document.getElementById('projectFilesList');
+        
+        if (!projectId) {
+          console.error('Project ID is required to load files');
+          return;
+        }
+        
+        // Show loading state
+        projectFilesList.innerHTML = '<div class="text-center py-4"><div class="spinner"></div><p class="text-sm text-gray-500 mt-2">Loading files...</p></div>';
+        
+        // Fetch project files
+        window.apiRequest(`/api/projects/${projectId}/files`)
+          .then(files => {
+            if (files && files.length > 0) {
+              projectFilesList.innerHTML = '';
               
-              projectFilesList.appendChild(fileElement);
-            });
-            
-            // Add event listeners for file actions
-            addFileActionListeners();
-          } else {
-            projectFilesList.innerHTML = '<div class="text-gray-500 text-center py-8">No files uploaded yet</div>';
-          }
-        })
-        .catch(error => {
-          console.error('Error loading project files:', error);
-          projectFilesList.innerHTML = '<div class="text-red-500 text-center py-4">Error loading files. Please try again.</div>';
-        });
-    };
-    
-    /**
-     * Load project conversations with improved error handling
-     * @param {string} projectId - The ID of the project
-     */
+              // Render each file
+              files.forEach(file => {
+                const fileElement = document.createElement('div');
+                fileElement.className = 'bg-white dark:bg-gray-800 p-3 rounded shadow-sm flex items-center justify-between transition-all hover:shadow-md';
+                fileElement.innerHTML = `
+                  <div class="flex items-center">
+                    <div class="mr-3 text-blue-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="font-medium">${file.filename}</div>
+                      <div class="text-xs text-gray-500">${new Date(file.created_at).toLocaleString()} · ${formatFileSize(file.file_size || 0)}</div>
+                    </div>
+                  </div>
+                  <div class="flex space-x-2">
+                    <button class="text-blue-600 hover:text-blue-800 p-1" title="View file" data-file-id="${file.id}" data-action="view">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
+                    <button class="text-red-600 hover:text-red-800 p-1" title="Delete file" data-file-id="${file.id}" data-action="delete">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                `;
+                
+                projectFilesList.appendChild(fileElement);
+              });
+              
+              // Add event listeners for file actions
+              addFileActionListeners();
+            } else {
+              projectFilesList.innerHTML = '<div class="text-gray-500 text-center py-8">No files uploaded yet</div>';
+            }
+          })
+          .catch(error => {
+            console.error('Error loading project files:', error);
+            projectFilesList.innerHTML = '<div class="text-red-500 text-center py-4">Error loading files. Please try again.</div>';
+          });
+      };
+    }
+
     window.projectManager.loadProjectConversations = function(projectId) {
       if (!projectId) {
         console.error('Project ID is required to load conversations');
@@ -95,143 +88,129 @@
       }
       const conversationsList = document.getElementById('projectConversationsList');
       
-      if (!projectId) {
-        console.error('Project ID is required to load conversations');
-        return;
-      }
-      
       // Show loading state
       conversationsList.innerHTML = '<div class="text-center py-4"><div class="spinner"></div><p class="text-sm text-gray-500 mt-2">Loading conversations...</p></div>';
       
       // Try different endpoints with fallbacks
       const endpoints = [
-        `/api/projects/${projectId}/conversations`,
-        `/api/projects/${projectId}/chats`
+        '/api/projects/' + projectId + '/conversations',
+        '/api/projects/' + projectId + '/chats'
       ];
       
-      // Function to try the next endpoint
       function tryNextEndpoint(index = 0) {
         if (index >= endpoints.length) {
-          // All endpoints failed, show empty state
           console.warn('All conversation endpoints failed, showing empty state');
           conversationsList.innerHTML = '<div class="text-gray-500 text-center py-8">No conversations available. Try creating a new one.</div>';
           return;
         }
         
         window.apiRequest(endpoints[index])
-          .then(conversations => {
+          .then(function(conversations) {
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
               conversationsList.innerHTML = '';
               
-              // Render each conversation
-              conversations.forEach(conversation => {
-                const conversationElement = document.createElement('div');
+              conversations.forEach(function(conversation) {
+                var conversationElement = document.createElement('div');
                 conversationElement.className = 'bg-white dark:bg-gray-800 p-3 rounded shadow-sm flex items-center justify-between mb-2 transition-all hover:shadow-md';
                 
-                const date = new Date(conversation.created_at || conversation.timestamp || Date.now());
-                const timeAgo = formatTimeAgo(date);
+                var date = new Date(conversation.created_at || conversation.timestamp || Date.now());
+                var timeAgo = formatTimeAgo(date);
                 
-                conversationElement.innerHTML = `
-                  <div>
-                    <div class="font-medium">${conversation.title || conversation.name || 'Untitled Conversation'}</div>
-                    <div class="text-xs text-gray-500">${timeAgo} · ${conversation.message_count || conversation.messages?.length || 0} messages</div>
-                  </div>
-                  <div class="flex space-x-2">
-                    <button class="text-blue-600 hover:text-blue-800 p-1" title="Open conversation" data-conversation-id="${conversation.id}" data-action="open">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                    </button>
-                    <button class="text-red-600 hover:text-red-800 p-1" title="Delete conversation" data-conversation-id="${conversation.id}" data-action="delete">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                `;
+                conversationElement.innerHTML = ''
+                  + '<div>'
+                  + '  <div class="font-medium">' + (conversation.title || conversation.name || 'Untitled Conversation') + '</div>'
+                  + '  <div class="text-xs text-gray-500">' + timeAgo + ' · ' + (conversation.message_count || (conversation.messages && conversation.messages.length) || 0) + ' messages</div>'
+                  + '</div>'
+                  + '<div class="flex space-x-2">'
+                  + '  <button class="text-blue-600 hover:text-blue-800 p-1" title="Open conversation" data-conversation-id="' + conversation.id + '" data-action="open">'
+                  + '    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">'
+                  + '      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />'
+                  + '    </svg>'
+                  + '  </button>'
+                  + '  <button class="text-red-600 hover:text-red-800 p-1" title="Delete conversation" data-conversation-id="' + conversation.id + '" data-action="delete">'
+                  + '    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">'
+                  + '      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />'
+                  + '    </svg>'
+                  + '  </button>'
+                  + '</div>';
                 
                 conversationsList.appendChild(conversationElement);
               });
               
-              // Add event listeners for conversation actions
               addConversationActionListeners();
             } else {
               conversationsList.innerHTML = '<div class="text-gray-500 text-center py-8">No conversations yet.</div>';
             }
           })
-          .catch(error => {
-            console.warn(`Error loading conversations from ${endpoints[index]}:`, error);
-            // Try the next endpoint
+          .catch(function(error) {
+            console.warn('Error loading conversations from ' + endpoints[index] + ':', error);
             tryNextEndpoint(index + 1);
           });
       }
       
-      // Start trying endpoints
       tryNextEndpoint();
     };
-    
-    /**
-     * Load project artifacts
-     * @param {string} projectId - The ID of the project
-     */
-    window.projectManager.loadProjectArtifacts = function(projectId) {
-      const artifactsList = document.getElementById('projectArtifactsList');
-      
-      if (!projectId) {
-        console.error('Project ID is required to load artifacts');
-        return;
-      }
-      
-      // Show loading state
-      artifactsList.innerHTML = '<div class="text-center py-4"><div class="spinner"></div><p class="text-sm text-gray-500 mt-2">Loading artifacts...</p></div>';
-      
-      // Fetch project artifacts
-      window.apiRequest(`/api/projects/${projectId}/artifacts`)
-        .then(artifacts => {
-          if (artifacts && artifacts.length > 0) {
-            artifactsList.innerHTML = '';
-            
-            // Render each artifact
-            artifacts.forEach(artifact => {
-              const artifactElement = document.createElement('div');
-              artifactElement.className = 'bg-white dark:bg-gray-800 p-3 rounded shadow-sm mb-3 transition-all hover:shadow-md';
+
+    if (!window.projectManager.loadProjectArtifacts) {
+      window.projectManager.loadProjectArtifacts = function(projectId) {
+        const artifactsList = document.getElementById('projectArtifactsList');
+        
+        if (!projectId) {
+          console.error('Project ID is required to load artifacts');
+          return;
+        }
+        
+        // Show loading state
+        artifactsList.innerHTML = '<div class="text-center py-4"><div class="spinner"></div><p class="text-sm text-gray-500 mt-2">Loading artifacts...</p></div>';
+        
+        // Fetch project artifacts
+        window.apiRequest(`/api/projects/${projectId}/artifacts`)
+          .then(artifacts => {
+            if (artifacts && artifacts.length > 0) {
+              artifactsList.innerHTML = '';
               
-              const date = new Date(artifact.created_at);
-              const timeAgo = formatTimeAgo(date);
+              // Render each artifact
+              artifacts.forEach(artifact => {
+                const artifactElement = document.createElement('div');
+                artifactElement.className = 'bg-white dark:bg-gray-800 p-3 rounded shadow-sm mb-3 transition-all hover:shadow-md';
+                
+                const date = new Date(artifact.created_at);
+                const timeAgo = formatTimeAgo(date);
+                
+                artifactElement.innerHTML = `
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="font-medium">${artifact.title || 'Unnamed Artifact'}</div>
+                    <div class="text-xs text-gray-500">${timeAgo}</div>
+                  </div>
+                  <div class="text-sm text-gray-700 dark:text-gray-300 mb-2 line-clamp-2">
+                    ${artifact.description || 'No description provided'}
+                  </div>
+                  <div class="flex justify-end space-x-2">
+                    <button class="text-blue-600 hover:text-blue-800 text-xs font-medium" data-artifact-id="${artifact.id}" data-action="view">
+                      View Details
+                    </button>
+                    <button class="text-red-600 hover:text-red-800 text-xs font-medium" data-artifact-id="${artifact.id}" data-action="delete">
+                      Delete
+                    </button>
+                  </div>
+                `;
+                
+                artifactsList.appendChild(artifactElement);
+              });
               
-              artifactElement.innerHTML = `
-                <div class="flex items-center justify-between mb-2">
-                  <div class="font-medium">${artifact.title || 'Unnamed Artifact'}</div>
-                  <div class="text-xs text-gray-500">${timeAgo}</div>
-                </div>
-                <div class="text-sm text-gray-700 dark:text-gray-300 mb-2 line-clamp-2">
-                  ${artifact.description || 'No description provided'}
-                </div>
-                <div class="flex justify-end space-x-2">
-                  <button class="text-blue-600 hover:text-blue-800 text-xs font-medium" data-artifact-id="${artifact.id}" data-action="view">
-                    View Details
-                  </button>
-                  <button class="text-red-600 hover:text-red-800 text-xs font-medium" data-artifact-id="${artifact.id}" data-action="delete">
-                    Delete
-                  </button>
-                </div>
-              `;
-              
-              artifactsList.appendChild(artifactElement);
-            });
-            
-            // Add event listeners for artifact actions
-            addArtifactActionListeners();
-          } else {
-            artifactsList.innerHTML = '<div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>';
-          }
-        })
-        .catch(error => {
-          console.error('Error loading artifacts:', error);
-          artifactsList.innerHTML = '<div class="text-red-500 text-center py-4">Error loading artifacts. Please try again.</div>';
-        });
-    };
-    
+              // Add event listeners for artifact actions
+              addArtifactActionListeners();
+            } else {
+              artifactsList.innerHTML = '<div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>';
+            }
+          })
+          .catch(error => {
+            console.error('Error loading artifacts:', error);
+            artifactsList.innerHTML = '<div class="text-red-500 text-center py-4">Error loading artifacts. Please try again.</div>';
+          });
+      };
+    }
+
     /**
      * Update project with all required fields to avoid 422 errors
      * @param {string} projectId - The ID of the project
@@ -268,33 +247,27 @@
     };
     
     // Add the missing createNewChat function to the window
-    window.createNewChat = function(projectId = null) {
-      // Get current auth token from cookies
-      const token = document.cookie.split('; ')
-        .find(row => row.startsWith('access_token='))
-        ?.split('=')[1];
-
-      if (!token) {
-        window.showNotification?.("Please login first", "error");
-        return Promise.reject("Not authenticated");
+    window.createNewChat = function(projectId) {
+      projectId = projectId || null;
+      var payload;
+      if (projectId) {
+        payload = { project_id: projectId, title: "New Conversation" };
+      } else {
+        payload = { title: "New Conversation" };
       }
 
       return window.apiRequest('/api/chat/conversations', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          project_id: projectId,
-          title: "New Conversation"
-        })
+        body: JSON.stringify(payload)
       })
-      .then(chatData => {
-        window.location.href = `/?chatId=${chatData.data.id}`;
+      .then(function(chatData) {
+        window.location.href = '/?chatId=' + chatData.data.id;
         return chatData;
       })
-      .catch(error => {
+      .catch(function(error) {
         console.error('Error creating conversation:', error);
         throw error;
       });
@@ -510,5 +483,8 @@
     });
     
     console.log('Project Enhancements loaded');
+    if (window.projectManager && window.projectManager.currentProjectId) {
+      window.projectManager.loadProjectConversations(window.projectManager.currentProjectId);
+    }
   });
 })();

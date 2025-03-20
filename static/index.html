@@ -164,16 +164,10 @@
               </select>
             </div>
 
-            <!-- Max Tokens Selection -->
-            <div>
-              <label for="maxTokens" class="block font-medium dark:text-gray-200">Max Completion Tokens</label>
-              <select id="maxTokens"
-                      class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="500">500</option>
-                <option value="1000">1000</option>
-                <option value="1500">1500</option>
-                <option value="2000">2000</option>
-              </select>
+            <!-- Max Tokens Input Group -->
+            <div id="maxTokensContainer" class="col-span-1 md:col-span-2">
+              <label class="block font-medium dark:text-gray-200">Max Completion Tokens</label>
+              <!-- Slider and input will be injected by modelConfig.js -->
             </div>
 
             <!-- Reasoning Effort Panel (for the slider) -->
@@ -337,7 +331,7 @@
             </div>
             
             <!-- Enhanced project stats panel with animations -->
-            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6 shadow-sm">
+            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6 shadow-sm" data-testid="project-stats">
               <div class="mb-4">
                 <div class="flex justify-between mb-1">
                   <span class="text-sm font-medium">Token Usage: <span id="tokenUsage" class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
@@ -521,8 +515,10 @@
           <label for="projectMaxTokensInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Maximum Tokens
           </label>
-          <input id="projectMaxTokensInput" name="max_tokens" type="number" value="200000" min="50000" max="500000"
-                 class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+          <div id="projectMaxTokensContainer" class="mt-2">
+            <!-- Slider and input will be injected by projectManager.js -->
+          </div>
+          <input type="hidden" id="projectMaxTokensInput" name="max_tokens" value="200000" />
           <p class="text-gray-500 text-xs mt-1">
             Maximum token limit for this project (50,000 - 500,000)
           </p>
