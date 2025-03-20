@@ -23,7 +23,7 @@ def upgrade():
     
     if 'last_login' not in columns:
         op.add_column('users',
-            sa.Column('last_login', sa.DateTime(timetimezone=True), nullable=True)
+            sa.Column('last_login', sa.DateTime(timezone=True), nullable=True)
         )
 
 def downgrade():
