@@ -201,8 +201,17 @@ function updateUserSessionState() {
  */
 function toggleSidebar() {
   const sidebarEl = document.getElementById("mainSidebar");
-  if (sidebarEl) {
+  const toggleBtn = document.getElementById("navToggleBtn");
+  if (sidebarEl && toggleBtn) {
+    const isExpanded = toggleBtn.getAttribute("aria-expanded") === "true";
+    toggleBtn.setAttribute("aria-expanded", !isExpanded);
     sidebarEl.classList.toggle("hidden");
+    // Add mobile-specific positioning
+    if (window.innerWidth < 768) {
+      sidebarEl.classList.toggle("fixed");
+      sidebarEl.classList.toggle("inset-0");
+      sidebarEl.classList.toggle("z-50");
+    }
   }
 }
 
