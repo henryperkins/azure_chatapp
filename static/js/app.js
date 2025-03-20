@@ -213,6 +213,7 @@ function loadConversationList() {
        li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
        li.innerHTML = `
          <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
+         <span class="text-xs text-gray-500 ml-2">(${item.model_id})</span>
          ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
        `;
        li.addEventListener('click', () => {
@@ -518,6 +519,19 @@ document.addEventListener('keydown', (e) => {
  * @returns {Promise} - Resolves to parsed JSON response
  */
 window.apiRequest = async function(url, methodOrOptions = "GET", data = null) {
+  // Validate UUID format for conversation IDs
+  function isValidUUID(str) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  }
+
+  if (url.includes('/conversations/')) {
+    const parts = url.split('/');
+    const idIndex = parts.findIndex(p => p === 'conversations') + 1;
+    if (idIndex > 0 && idIndex < parts.length && !isValidUUID(parts[idIndex])) {
+      throw new Error(`Invalid UUID format: ${parts[idIndex]}`);
+    }
+  }
+
   const token = document.cookie.split('; ')
     .find(row => row.startsWith('access_token='))
     ?.split('=')[1];

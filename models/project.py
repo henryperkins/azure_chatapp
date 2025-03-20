@@ -42,6 +42,7 @@ class Project(Base):
         index=True,
         comment="References knowledge base assets"
     )
+    default_model: Mapped[str] = mapped_column(String(50), default="o1", nullable=False, server_default="o1")
     
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
