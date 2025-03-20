@@ -15,7 +15,7 @@ Routes include:
 import logging
 import os
 import chardet
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status, deprecated
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.file_upload_schemas import FileUploadResponse
 
