@@ -19,6 +19,7 @@ from db import get_async_session
 from models.user import User
 from models.conversation import Conversation
 from models.message import Message
+import services
 from utils.auth_deps import (
     get_current_user_and_token, 
     validate_resource_ownership,
