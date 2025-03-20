@@ -181,8 +181,11 @@ function loadConversationList() {
       if (data.conversations && data.conversations.length > 0) {
         data.conversations.forEach((item) => {
           const li = document.createElement('li');
-          li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
-          li.textContent = item.title || 'Conversation ' + item.id;
+          li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
+          li.innerHTML = `
+            <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
+            ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
+          `;
           li.addEventListener('click', () => {
             window.history.pushState({}, '', `/?chatId=${item.id}`);
             // Show chat UI and hide "no chat" message

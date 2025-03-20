@@ -343,16 +343,39 @@ document.addEventListener("DOMContentLoaded", () => {
     newChatBtn.addEventListener("click", createNewChat);
   }
 
-  window.createNewChat = function createNewChat() {
-    // Get project ID from localStorage or select element
-    const selectedProjectId = localStorage.getItem("selectedProjectId");
-    const projectSelectEl = document.getElementById('projectSelect');
-    const projectId = projectSelectEl ? projectSelectEl.value : selectedProjectId;
-    
-    // Create a payload with just the title (project_id is optional)
-    const payload = {
-      title: "New Chat"
-    };
+  window.createNewChat = async function createNewChat() {
+    localStorage.removeItem("selectedProjectId");
+    try {
+        // Show project selection modal
+        const projectId = await window.showProjectSelection();
+        
+        // Create payload with optional project_id
+        const payload = {
+            title: "New Chat",
+            project_id: projectId || null
+        };
+
+        // Create conversation through API
+        const { data: conversation } = await window.apiRequest(
+            "/api/chat/conversations",
+            "POST",
+            payload
+        );
+
+        // Update UI state
+        localStorage.setItem("selectedConversationId", conversation.id);
+        document.getElementById("chatTitle").textContent = conversation.title;
+        window.history.pushState({}, "", `/?chatId=${conversation.id}`);
+
+        // Clear previous messages and load new conversation
+        const conversationArea = document.getElementById("conversationArea");
+        if (conversationArea) conversationArea.innerHTML = "";
+        window.loadConversation(conversation.id);
+    } catch (error) {
+        console.error("Error creating new chat:", error);
+        window.showNotification(`Failed to create new chat: ${error.message}`, "error");
+    }
+};
     
     // If a project is selected and not empty/null, add it to the payload
     if (projectId && projectId !== "" && projectId !== "null") {
