@@ -7,6 +7,19 @@
  * - Optionally provides logout functionality.
  */
 
+// Add this function to check auth status before critical operations
+function ensureAuthenticated() {
+  return new Promise((resolve) => {
+    window.apiRequest('/api/auth/verify')
+      .then(() => resolve(true))
+      .catch(() => {
+        window.showNotification('Please login to continue', 'error');
+        window.location.href = '/login';
+        resolve(false);
+      });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // DOM Elements
   const registerForm = document.getElementById("registerForm");
