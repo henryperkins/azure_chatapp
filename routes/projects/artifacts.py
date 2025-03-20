@@ -10,6 +10,7 @@ from uuid import UUID
 from typing import Optional, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+import services.artifact_service
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -59,78 +60,17 @@ async def create_artifact(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Create a new artifact for the project
-    """
-    # Verify project access first
-    project = await validate_resource_ownership(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [
-            Project.user_id == current_user.id,
-            Project.archived.is_(False)  # Cannot modify archived projects
-        ]
-    )
-    
-    # If conversation_id is provided, validate it belongs to this project
-    if artifact_data.conversation_id:
-        conversation = await validate_resource_ownership(
-            artifact_data.conversation_id,
-            Conversation,
-            current_user,
-            db,
-            "Conversation",
-            [
-                Conversation.project_id == project_id,
-                Conversation.is_deleted.is_(False)
-            ]
-        )
-    
-    # Validate content type
-    content_type = artifact_data.content_type.lower()
-    valid_types = ["code", "document", "image", "audio", "video"]
-    if content_type not in valid_types:
-        logger.warning(f"Non-standard content type provided: {content_type}")
-    
-    # Create the artifact
-    new_artifact = Artifact(
+    """Create a new artifact for the project"""
+    artifact = await services.artifact_service.create_artifact(
+        db=db,
         project_id=project_id,
-        conversation_id=artifact_data.conversation_id,
         name=artifact_data.name,
-        content_type=content_type,
-        content=artifact_data.content
+        content_type=artifact_data.content_type,
+        content=artifact_data.content,
+        conversation_id=artifact_data.conversation_id,
+        user_id=current_user.id
     )
-    
-    # Add extra metadata
-    char_count = len(artifact_data.content)
-    line_count = artifact_data.content.count('\n') + 1
-    token_estimate = char_count // 4  # Rough token estimation
-    
-    new_artifact.extra_data = {
-        "char_count": char_count,
-        "line_count": line_count,
-        "token_estimate": token_estimate,
-        "created_from_conversation": artifact_data.conversation_id is not None
-    }
-    
-    await save_model(db, new_artifact)
-    
-    # Serialize artifact for response
-    serialized_artifact = {
-        "id": str(new_artifact.id),
-        "project_id": str(new_artifact.project_id),
-        "conversation_id": str(new_artifact.conversation_id) if new_artifact.conversation_id else None,
-        "name": new_artifact.name,
-        "content_type": new_artifact.content_type,
-        "content": new_artifact.content,
-        "created_at": new_artifact.created_at.isoformat() if new_artifact.created_at else None,
-        "extra_data": new_artifact.extra_data
-    }
-    
-    return await process_standard_response(serialized_artifact, "Artifact created successfully")
+    return await process_standard_response(artifact, "Artifact created successfully")
 
 
 @router.get("/{project_id}/artifacts", response_model=dict)
@@ -143,54 +83,17 @@ async def list_artifacts(
     skip: int = 0,
     limit: int = 100
 ):
-    """
-    List all artifacts for a project with optional filtering
-    """
-    # Verify project access
-    project = await validate_resource_ownership(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
-    )
-    
-    # Build conditions for the query
-    conditions = [Artifact.project_id == project_id]
-    
-    if conversation_id:
-        conditions.append(Artifact.conversation_id == conversation_id)
-    
-    if content_type:
-        conditions.append(Artifact.content_type == content_type.lower())
-    
-    # Get artifacts using enhanced function
-    artifacts = await get_all_by_condition(
-        db,
-        Artifact,
-        *conditions,
-        order_by=Artifact.created_at.desc(),
+    """List all artifacts for a project with optional filtering"""
+    artifacts = await services.artifact_service.list_artifacts(
+        project_id=project_id,
+        db=db,
+        conversation_id=conversation_id,
+        content_type=content_type,
+        skip=skip,
         limit=limit,
-        offset=skip
+        user_id=current_user.id
     )
-    
-    # Create a preview for each artifact (first 150 chars)
-    artifact_list = []
-    for artifact in artifacts:
-        artifact_dict = {
-            "id": str(artifact.id),
-            "project_id": str(artifact.project_id),
-            "conversation_id": str(artifact.conversation_id) if artifact.conversation_id else None,
-            "name": artifact.name,
-            "content_type": artifact.content_type,
-            "created_at": artifact.created_at,
-            "metadata": artifact.extra_data,
-            "content_preview": artifact.content[:150] + "..." if len(artifact.content) > 150 else artifact.content
-        }
-        artifact_list.append(artifact_dict)
-    
-    return await process_standard_response({"artifacts": artifact_list})
+    return await process_standard_response({"artifacts": artifacts})
 
 
 @router.get("/{project_id}/artifacts/{artifact_id}", response_model=dict)
@@ -200,42 +103,14 @@ async def get_artifact(
    current_user: User = Depends(get_current_user_and_token),
    db: AsyncSession = Depends(get_async_session)
 ):
-   """
-   Get a specific artifact by ID
-   """
-   # Verify project access
-   project = await validate_resource_ownership(
-       project_id,
-       Project,
-       current_user,
-       db,
-       "Project",
-       [Project.user_id == current_user.id]
-   )
-   
-   # Get the artifact
-   artifact = await validate_resource_ownership(
-       artifact_id,
-       Artifact,
-       current_user,
-       db,
-       "Artifact",
-       [Artifact.project_id == project_id]
-   )
-
-   # Serialize artifact for response
-   serialized_artifact = {
-       "id": str(artifact.id),
-       "project_id": str(artifact.project_id),
-       "conversation_id": str(artifact.conversation_id) if artifact.conversation_id else None,
-       "name": artifact.name,
-       "content_type": artifact.content_type,
-       "content": artifact.content,
-       "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
-       "extra_data": artifact.extra_data
-   }
-   
-   return await process_standard_response(serialized_artifact)
+    """Get a specific artifact by ID"""
+    artifact = await services.artifact_service.get_artifact(
+        db=db,
+        artifact_id=artifact_id,
+        project_id=project_id,
+        user_id=current_user.id
+    )
+    return await process_standard_response(artifact)
 
 
 @router.delete("/{project_id}/artifacts/{artifact_id}", response_model=dict)
@@ -245,37 +120,11 @@ async def delete_artifact(
    current_user: User = Depends(get_current_user_and_token),
    db: AsyncSession = Depends(get_async_session)
 ):
-   """
-   Delete an artifact by ID
-   """
-   # Verify project access
-   project = await validate_resource_ownership(
-       project_id,
-       Project,
-       current_user,
-       db,
-       "Project",
-       [
-           Project.user_id == current_user.id,
-           Project.archived.is_(False)  # Cannot modify archived projects
-       ]
-   )
-   
-   # Get the artifact
-   artifact = await validate_resource_ownership(
-       artifact_id,
-       Artifact,
-       current_user,
-       db,
-       "Artifact",
-       [Artifact.project_id == project_id]
-   )
-
-   # Delete the artifact
-   await db.delete(artifact)
-   await db.commit()
-   
-   return await process_standard_response(
-       {"artifact_id": str(artifact_id)},
-       message="Artifact deleted successfully"
-   )
+    """Delete an artifact by ID"""
+    result = await services.artifact_service.delete_artifact(
+        db=db,
+        artifact_id=artifact_id,
+        project_id=project_id,
+        user_id=current_user.id
+    )
+    return await process_standard_response(result)
