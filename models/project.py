@@ -4,7 +4,7 @@ project.py
 Defines the Project model used to group files, notes, and references
 that can be attached to one or more conversations for context.
 """
-from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint
+from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
