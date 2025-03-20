@@ -160,17 +160,10 @@ async def login_user(
     session.add(user)
     await session.commit()
 
-    # Adjust samesite logic to match the comment indicating cross-site usage
-    production_mode = settings.ENV == "production"
-    if production_mode:
-        secure_cookie = True
-        samesite_value = "none"
-    else:
-        secure_cookie = False
-        # Default to same-site='lax' for local development
-        samesite_value = "lax"
+    # Force SameSite=None, secure cookie
+    secure_cookie = True
+    samesite_value = "none"
 
-    # Only set domain if configured
     cookie_domain = settings.COOKIE_DOMAIN.strip()
     if not cookie_domain:
         response.set_cookie(

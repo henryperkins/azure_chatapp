@@ -182,6 +182,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     socket.onopen = () => {
       console.log("WebSocket connected.");
+      const cookies = document.cookie;
+      socket.send(JSON.stringify({ type: 'auth', cookies }));
     };
 
     socket.onmessage = (event) => {
