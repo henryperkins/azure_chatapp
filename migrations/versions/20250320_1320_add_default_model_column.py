@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic
 revision = '20250320_1320'
-down_revision = None
+down_revision = '17e150e67f1c'  # Points to initial migration
 branch_labels = None
 depends_on = None
 

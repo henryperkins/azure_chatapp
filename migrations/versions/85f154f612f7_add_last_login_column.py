@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic
 revision = '85f154f612f7'
-down_revision = '17e150e67f1c'
+down_revision = '20250320_1320'  # Chains after default model migration
 branch_labels = None
 depends_on = None
 
