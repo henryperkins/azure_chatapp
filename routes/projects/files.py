@@ -47,7 +47,7 @@ def validate_file_extension(filename: str) -> bool:
 # File Endpoints
 # ============================
 
-@router.get("/{project_id}/files", response_model=dict)
+@router.get("", response_model=dict)
 async def list_project_files(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -98,7 +98,7 @@ async def list_project_files(
     })
 
 
-@router.post("/{project_id}/files", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def upload_project_file(
     project_id: UUID,
     file: UploadFile = File(...),
@@ -130,7 +130,7 @@ async def upload_project_file(
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 
-@router.get("/{project_id}/files/{file_id}", response_model=dict)
+@router.get("/{file_id}", response_model=dict)
 async def get_project_file(
     project_id: UUID,
     file_id: UUID,
@@ -148,7 +148,7 @@ async def get_project_file(
     return await process_standard_response(file_data)
 
 
-@router.delete("/{project_id}/files/{file_id}", response_model=dict)
+@router.delete("/{file_id}", response_model=dict)
 async def delete_project_file(
     project_id: UUID,
     file_id: UUID,
