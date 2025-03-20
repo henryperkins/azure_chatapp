@@ -117,12 +117,20 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
+    expose_headers=["*"],  # Allow frontend to access all headers
     max_age=600  # Cache preflight requests for 10 minutes
 )
 
 logger.info(f"CORS configured with origins: {origins}")
 
+# WebSocket CORS fix middleware
+@app.middleware("http")
+async def websocket_cors_fix(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/ws/"):
+        response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 @app.get("/", include_in_schema=False)
 async def root():
