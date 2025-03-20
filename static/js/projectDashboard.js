@@ -626,7 +626,7 @@ function renderProjectFiles(event) {
     
     detailsDiv.appendChild(window.createElement("div", {
       className: "text-xs text-gray-500"
-    }, `${window.formatBytes(file.file_size)} • ${formatDate(file.created_at)}`));
+    }, `${window.formatBytes(file.file_size || 0)} • ${formatDate(file.created_at)}`));
     
     infoDiv.appendChild(detailsDiv);
     fileItem.appendChild(infoDiv);
