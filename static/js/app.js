@@ -534,10 +534,6 @@ window.apiRequest = async function(url, methodOrOptions = "GET", data = null, ad
   if (url.includes('/projects/') && url.includes('/conversations') && !url.includes('/chat/conversations')) {
     url = url.replace('/conversations', '/chat/conversations');
   }
-  if (url.includes('/projects/') && url.includes('/conversations') && !url.includes('/api/chat')) {
-    // Convert to the correct endpoint format if needed
-    url = url.replace('/conversations', '/chat/conversations');
-  }
   
   try {
     console.log(`API ${fetchOptions.method} request to ${url}`, fetchOptions.body ? 'with data' : '');
