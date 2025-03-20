@@ -63,8 +63,6 @@ CREATE TABLE projects (
     CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)), -- Archived projects cannot be pinned
     CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
 );
-CREATE INDEX ix_projects_created_at ON projects(created_at);
-CREATE INDEX ix_projects_updated_at ON projects(updated_at);
 CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
 CREATE INDEX ix_projects_user_id ON projects(user_id);
 
