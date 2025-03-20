@@ -65,10 +65,11 @@ CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
 CREATE TABLE conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    title VARCHAR DEFAULT 'New Chat' NOT NULL,
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    name VARCHAR DEFAULT 'New Chat' NOT NULL,
     model_id VARCHAR,
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
+    message_count INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     extra_data JSONB DEFAULT '{}'

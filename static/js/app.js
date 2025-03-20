@@ -46,11 +46,118 @@ document.addEventListener("DOMContentLoaded", () => {
     updateUserSessionState();
   });
 
+  // Set up sidebar project search
+  const sidebarProjectSearch = document.getElementById("sidebarProjectSearch");
+  if (sidebarProjectSearch) {
+    sidebarProjectSearch.addEventListener("input", (e) => {
+      searchSidebarProjects(e.target.value);
+    });
+  }
+  
+  // Functions for sidebar projects
+  window.loadSidebarProjects = function() {
+    apiRequest("/api/projects")
+      .then(response => {
+        const projects = Array.isArray(response.data) ? response.data : [];
+        const sidebarProjects = document.getElementById("sidebarProjects");
+        if (!sidebarProjects) return;
+        
+        sidebarProjects.innerHTML = "";
+        
+        if (projects.length === 0) {
+          const li = document.createElement("li");
+          li.className = "text-gray-500 text-center";
+          li.textContent = "No projects found";
+          sidebarProjects.appendChild(li);
+          return;
+        }
+        
+        projects.forEach(project => {
+          const li = document.createElement("li");
+          li.className = "p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center";
+          li.dataset.projectId = project.id;
+          
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = project.name;
+          nameSpan.className = "flex-1 truncate";
+          
+          li.appendChild(nameSpan);
+          
+          if (project.pinned) {
+            const pinIcon = document.createElement("span");
+            pinIcon.textContent = "📌";
+            pinIcon.className = "ml-1 text-yellow-600";
+            li.appendChild(pinIcon);
+          }
+          
+          li.addEventListener("click", () => {
+            localStorage.setItem("selectedProjectId", project.id);
+            if (typeof window.projectManager?.loadProjectDetails === "function") {
+              window.projectManager.loadProjectDetails(project.id);
+            }
+          });
+          
+          sidebarProjects.appendChild(li);
+        });
+      })
+      .catch(err => {
+        console.error("Error loading sidebar projects:", err);
+      });
+  };
+  
+  window.searchSidebarProjects = function(term) {
+    if (!term) {
+      // If search is cleared, reload all projects
+      document.querySelectorAll("#sidebarProjects li").forEach(li => {
+        li.classList.remove("hidden");
+      });
+      return;
+    }
+    
+    term = term.toLowerCase();
+    document.querySelectorAll("#sidebarProjects li").forEach(li => {
+      const projectName = li.querySelector("span")?.textContent?.toLowerCase() || "";
+      const isMatch = projectName.includes(term);
+      li.classList.toggle("hidden", !isMatch);
+    });
+  };
+  
+  // Set up sidebar new project button
+  const sidebarNewProjectBtn = document.getElementById("sidebarNewProjectBtn");
+  if (sidebarNewProjectBtn) {
+    sidebarNewProjectBtn.addEventListener("click", () => {
+      if (typeof window.projectManager?.showProjectCreateForm === "function") {
+        window.projectManager.showProjectCreateForm();
+      } else {
+        document.getElementById("createProjectBtn")?.click();
+      }
+    });
+  }
+
   // Automatically load the conversation list if the element is present
   if (document.getElementById('sidebarConversations')) {
     loadConversationList();
   }
 
+  // Add a "New Standalone Chat" button to the sidebar
+  const sidebarNewChatBtn = document.createElement('button');
+  sidebarNewChatBtn.id = "sidebarNewChatBtn";
+  sidebarNewChatBtn.className = "w-full text-left p-2 bg-blue-500 hover:bg-blue-600 text-white rounded mt-2 flex items-center";
+  sidebarNewChatBtn.innerHTML = '<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> New Standalone Chat';
+  sidebarNewChatBtn.addEventListener('click', () => {
+    // Clear selected project to create a standalone chat
+    localStorage.removeItem("selectedProjectId");
+    // Trigger new chat creation
+    if (typeof window.createNewChat === 'function') {
+      window.createNewChat();
+    }
+  });
+  
+  const sidebarActions = document.querySelector('#sidebarActions') || document.querySelector('#mainSidebar');
+  if (sidebarActions) {
+    sidebarActions.appendChild(sidebarNewChatBtn);
+  }
+  
   // Call the improved authentication function after existing setup
   checkAndHandleAuth();
 });
@@ -60,12 +167,13 @@ document.addEventListener("DOMContentLoaded", () => {
  */
 function loadConversationList() {
   const selectedProjectId = localStorage.getItem("selectedProjectId");
-  if (!selectedProjectId) {
-    console.error("No project ID selected. Please select a project first.");
-    return;
-  }
   
-  apiRequest(`/api/projects/${selectedProjectId}/conversations`)
+  // Use standalone endpoint if no project is selected
+  const endpoint = selectedProjectId 
+    ? `/api/projects/${selectedProjectId}/conversations`
+    : `/api/chat/conversations`;
+  
+  apiRequest(endpoint)
     .then((data) => {
       const container = document.getElementById('sidebarConversations');
       if (!container) return;
@@ -111,15 +219,13 @@ function checkAndHandleAuth() {
     .then(resp => {
       // User is authenticated - load data
       const selectedProjectId = localStorage.getItem("selectedProjectId");
-      if (selectedProjectId) {
-        loadConversationList();
-      } else {
-        console.warn("No selected project ID found in localStorage, skipping conversation list.");
-      }
+      // Always load conversations (either project-specific or standalone)
+      loadConversationList();
       
       // Load projects list
       if (typeof window.projectManager?.loadProjects === "function") {
         window.projectManager.loadProjects();
+        loadSidebarProjects();
       }
       
       if (window.CHAT_CONFIG?.chatId) {
@@ -330,6 +436,7 @@ document.addEventListener("authStateChanged", (e) => {
     // Load projects list
     if (typeof window.projectManager?.loadProjects === "function") {
       window.projectManager.loadProjects();
+      loadSidebarProjects();
     }
     if (window.CHAT_CONFIG?.chatId) {
       if (typeof window.loadConversation === "function") {
@@ -400,13 +507,15 @@ window.apiRequest = async function(url, method = "GET", data = null, options = {
   }
   
   try {
+    console.log(`API ${method} request to ${url}`, data ? { data } : '');
     const response = await fetch(url, fetchOptions);
     
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`API error response (${response.status}):`, errorText);
       try {
         const jsonError = JSON.parse(errorText);
-        throw new Error(jsonError.detail || `Error ${response.status}`);
+        throw new Error(jsonError.detail || jsonError.message || `Error ${response.status}`);
       } catch (e) {
         throw new Error(`${response.status}: ${errorText}`);
       }
@@ -417,7 +526,20 @@ window.apiRequest = async function(url, method = "GET", data = null, options = {
       return {};
     }
     
-    return await response.json();
+    // Parse JSON response
+    const responseData = await response.json();
+    console.log(`API response from ${url}:`, responseData);
+    
+    // Handle our standard { data: ..., success: true } format
+    if (responseData && responseData.data !== undefined) {
+      return responseData;
+    }
+    
+    // For other formats, wrap in our standard format
+    return { 
+      data: responseData, 
+      success: true 
+    };
   } catch (error) {
     console.error(`API request failed: ${url}`, error);
     throw error;
