@@ -130,7 +130,7 @@ async def create_conversation(
     })
 
 
-@router.get("/projects/{project_id}/conversations", response_model=dict)
+@router.get("/projects/{project_id}/chat/conversations", response_model=dict)
 async def list_conversations(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
