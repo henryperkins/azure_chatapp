@@ -190,7 +190,7 @@ async def refresh_token(
         
         return response
         
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 # Include the conversations router with updated prefix
