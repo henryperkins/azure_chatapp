@@ -243,11 +243,11 @@ async def refresh_token(
     }
     new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-    production_mode = settings.ENV == "production"
-    secure_cookie = True if production_mode else False
-    samesite_value = "none" if production_mode else "lax"
-
-    cookie_domain = settings.COOKIE_DOMAIN.strip()
+    # Force local dev cookie settings
+    production_mode = False
+    secure_cookie = False
+    samesite_value = "lax"
+    
     cookie_params = {
         "key": "access_token",
         "value": new_token,
@@ -257,9 +257,7 @@ async def refresh_token(
         "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         "path": "/",
     }
-    if cookie_domain:
-        cookie_params["domain"] = cookie_domain
-
+    
     response.set_cookie(**cookie_params)
     logger.info(f"Refreshed token for user '{current_user.username}', previous token revoked if valid.")
 
