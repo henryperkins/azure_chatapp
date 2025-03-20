@@ -70,8 +70,8 @@ async def create_project(
             "pinned": project.pinned,
             "is_default": project.is_default,
             "user_id": project.user_id,
-            "created_at": project.created_at.isoformat() if project.created_at else None,
-            "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+            "created_at": project.created_at,
+            "updated_at": project.updated_at,
             "knowledge_base_id": str(project.knowledge_base_id) if project.knowledge_base_id else None,
             "extra_data": project.extra_data
         }
