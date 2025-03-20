@@ -56,8 +56,8 @@ CREATE TABLE projects (
     knowledge_base_id UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,
     default_model VARCHAR(50) DEFAULT 'o1' NOT NULL,  -- This matches the model definition
     user_id INTEGER NOT NULL REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
     CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
     CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)), -- Archived projects cannot be pinned
