@@ -172,7 +172,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const card = window.createElement("div", {
       className: `bg-white dark:bg-gray-700 rounded shadow p-4 border-l-4 
                   ${project.pinned ? "border-yellow-500" : "border-blue-500"}
-                  ${project.archived ? "opacity-60" : ""}`
+                  ${project.archived ? "opacity-60" : ""}
+                  w-full md:w-auto`
     });
     
     // Header with title and badges
