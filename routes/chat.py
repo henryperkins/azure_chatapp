@@ -95,10 +95,17 @@ async def create_conversation(
         project = await verify_project_access(project_id, current_user, db)
     
     # Create new conversation
+    # Add default model if none provided
+    if not conversation_data.model_id:
+        conversation_data.model_id = "o1"  # Default model
+    
+    # Create conversation with default title if empty
+    title = conversation_data.title.strip() or f"Chat {datetime.now().strftime('%Y-%m-%d')}"
+    
     new_conversation = Conversation(
         user_id=current_user.id,
         project_id=project.id if project else None,
-        title=conversation_data.title.strip(),
+        title=title,
         model_id=conversation_data.model_id,
         is_deleted=False,
         created_at=datetime.now()
