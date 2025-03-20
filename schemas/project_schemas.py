@@ -59,7 +59,7 @@ class ProjectResponse(BaseModel):
     id: UUID
     name: str
     description: Optional[str] = None
-    goals: Optional[str]
+    goals: Optional[str] = None
     custom_instructions: Optional[str] = None
     is_default: bool
     pinned: bool
