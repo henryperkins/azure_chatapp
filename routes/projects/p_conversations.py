@@ -1,15 +1,16 @@
 """
-chat.py
--------
-Routes for standalone conversations (not associated with projects).
-Provides endpoints for managing conversations and their messages.
+p_conversations.py
+-----------------
+Routes for managing conversations within a project.
+These endpoints handle the creation, retrieval, and deletion of conversations
+that belong to a specific project, along with their messages.
 """
 
 import logging
 import json
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
@@ -18,25 +19,27 @@ from sqlalchemy.future import select
 
 from db import get_async_session
 from models.user import User
+from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
+
 from utils.auth_deps import (
-    get_current_user_and_token, 
+    get_current_user_and_token,
     validate_resource_ownership,
     process_standard_response
 )
 from utils.openai import openai_chat
 from utils.context import (
-    manage_context, 
-    token_limit_check, 
-    get_by_id, 
+    manage_context,
+    token_limit_check,
+    get_by_id,
     get_all_by_condition,
-    save_model, 
-    create_response
+    save_model
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 # ============================
 # Pydantic Schemas
@@ -44,7 +47,7 @@ router = APIRouter()
 
 class ConversationCreate(BaseModel):
     """
-    Pydantic model for creating a new standalone conversation.
+    Pydantic model for creating a new conversation within a project.
     """
     title: str = Field(..., min_length=1, max_length=100, description="A user-friendly title for the new conversation")
     model_id: Optional[str] = Field(None, description="Optional model ID referencing the chosen model deployment")
@@ -75,15 +78,26 @@ class MessageCreate(BaseModel):
 # Conversation Endpoints
 # ============================
 
-@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/{project_id}/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
+    project_id: UUID,
     conversation_data: ConversationCreate,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Creates a new standalone conversation (not associated with a project).
+    Creates a new conversation within a specific project.
     """
+    # Validate project ownership
+    project = await validate_resource_ownership(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [Project.user_id == current_user.id]
+    )
+    
     # Add default model if none provided
     if not conversation_data.model_id:
         conversation_data.model_id = "o1"  # Default model
@@ -93,7 +107,7 @@ async def create_conversation(
     
     new_conversation = Conversation(
         user_id=current_user.id,
-        project_id=None,  # Explicitly set to None to indicate standalone
+        project_id=project.id,
         title=title,
         model_id=conversation_data.model_id,
         is_deleted=False,
@@ -103,32 +117,43 @@ async def create_conversation(
     # Save using utility function
     await save_model(db, new_conversation)
 
-    logger.info("Standalone conversation created with id=%s by user_id=%s", 
-                new_conversation.id, current_user.id)
+    logger.info(f"Conversation created with id={new_conversation.id} under project {project_id} by user_id={current_user.id}")
                 
     # Return standardized response
     return await process_standard_response({
         "id": str(new_conversation.id),
         "title": new_conversation.title,
         "created_at": new_conversation.created_at.isoformat(),
-        "project_id": None
+        "project_id": str(project_id)
     }, "Conversation created successfully")
 
 
-@router.get("", response_model=dict)
+@router.get("/{project_id}/conversations", response_model=dict)
 async def list_conversations(
+    project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     skip: int = 0,
     limit: int = 100
 ):
     """
-    Returns all conversations for the current user, including both standalone and project-associated.
+    Returns a list of conversations for a specific project, owned by the current user.
     """
-    # Use enhanced database function to get all conversations
+    # Validate project access
+    project = await validate_resource_ownership(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [Project.user_id == current_user.id]
+    )
+
+    # Use enhanced database function
     conversations = await get_all_by_condition(
         db,
         Conversation,
+        Conversation.project_id == project_id,
         Conversation.user_id == current_user.id,
         Conversation.is_deleted.is_(False),
         order_by=Conversation.created_at.desc(),
@@ -142,7 +167,7 @@ async def list_conversations(
             "title": conv.title,
             "model_id": conv.model_id,
             "created_at": conv.created_at,
-            "project_id": str(conv.project_id) if conv.project_id else None
+            "project_id": str(conv.project_id)
         }
         for conv in conversations
     ]
@@ -150,16 +175,17 @@ async def list_conversations(
     return await process_standard_response({"conversations": items})
 
 
-@router.get("/{conversation_id}", response_model=dict)
+@router.get("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def get_conversation(
+    project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Retrieve metadata about a specific standalone conversation.
+    Retrieve metadata about a specific conversation, verifying ownership and project relationship.
     """
-    # Validate resource without requiring project relationship
+    # Validate resource using enhanced utility
     conversation = await validate_resource_ownership(
         conversation_id,
         Conversation,
@@ -167,6 +193,7 @@ async def get_conversation(
         db,
         "Conversation",
         [
+            Conversation.project_id == project_id,
             Conversation.is_deleted.is_(False)
         ]
     )
@@ -176,19 +203,20 @@ async def get_conversation(
         "title": conversation.title,
         "model_id": conversation.model_id,
         "created_at": conversation.created_at,
-        "project_id": str(conversation.project_id) if conversation.project_id else None
+        "project_id": str(conversation.project_id)
     })
 
 
-@router.patch("/{conversation_id}", response_model=dict)
+@router.patch("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def update_conversation(
+    project_id: UUID,
     conversation_id: UUID,
     update_data: ConversationUpdate,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Updates a conversation's title or model_id.
+    Updates the conversation's title or model_id.
     """
     # Validate conversation ownership
     conversation = await validate_resource_ownership(
@@ -198,6 +226,7 @@ async def update_conversation(
         db,
         "Conversation",
         [
+            Conversation.project_id == project_id,
             Conversation.is_deleted.is_(False)
         ]
     )
@@ -216,12 +245,14 @@ async def update_conversation(
     return await process_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
-        "model_id": conversation.model_id
+        "model_id": conversation.model_id,
+        "project_id": str(conversation.project_id)
     }, "Conversation updated successfully")
 
 
-@router.delete("/{conversation_id}", response_model=dict)
+@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def delete_conversation(
+    project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
@@ -237,6 +268,7 @@ async def delete_conversation(
         db,
         "Conversation",
         [
+            Conversation.project_id == project_id,
             Conversation.is_deleted.is_(False)
         ]
     )
@@ -256,8 +288,9 @@ async def delete_conversation(
 # Message Endpoints
 # ============================
 
-@router.get("/{conversation_id}/messages", response_model=dict)
+@router.get("/{project_id}/conversations/{conversation_id}/messages", response_model=dict)
 async def list_messages(
+    project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
@@ -275,6 +308,7 @@ async def list_messages(
         db,
         "Conversation",
         [
+            Conversation.project_id == project_id,
             Conversation.is_deleted.is_(False)
         ]
     )
@@ -300,14 +334,12 @@ async def list_messages(
         for msg in messages
     ]
     
-    return await process_standard_response({
-        "messages": output,
-        "metadata": {"title": conversation.title}
-    })
+    return await process_standard_response({"messages": output})
 
 
-@router.post("/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/{project_id}/conversations/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_message(
+    project_id: UUID,
     conversation_id: UUID,
     new_msg: MessageCreate,
     current_user: User = Depends(get_current_user_and_token),
@@ -325,6 +357,7 @@ async def create_message(
         db,
         "Conversation",
         [
+            Conversation.project_id == project_id,
             Conversation.is_deleted.is_(False)
         ]
     )
@@ -377,12 +410,11 @@ async def create_message(
 
         msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in conv_messages]
         
-        # Get project for custom instructions if the conversation has a project
-        if conversation.project_id:
-            from models.project import Project
-            project = await get_by_id(db, Project, conversation.project_id)
-            if project and project.custom_instructions:
-                msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
+        # Get project for custom instructions
+        project = await get_by_id(db, Project, conversation.project_id)
+        
+        if project and project.custom_instructions:
+            msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
         
         # Manage context to prevent token overflow
         msg_dicts = await manage_context(msg_dicts)
@@ -412,14 +444,10 @@ async def create_message(
             # Save using utility function
             await save_model(db, assistant_msg)
             
-            # Update project token usage if conversation has a project
-            if conversation.project_id:
-                from models.project import Project
-                project = await get_by_id(db, Project, conversation.project_id)
-                if project:
-                    token_estimate = len(assistant_content) // 4
-                    project.token_usage += token_estimate
-                    await save_model(db, project)
+            # Update project token usage
+            token_estimate = len(assistant_content) // 4
+            project.token_usage += token_estimate
+            await save_model(db, project)
 
             # Add assistant message to response
             response_payload["assistant_message"] = {
@@ -438,19 +466,21 @@ async def create_message(
 # WebSocket for Real-time Chat
 # ============================
 
-@router.websocket("/ws/{conversation_id}")
+@router.websocket("/ws/{project_id}/conversations/{conversation_id}")
 async def websocket_chat_endpoint(
     websocket: WebSocket,
+    project_id: UUID,
     conversation_id: UUID
 ):
     """
-    Real-time chat updates for a standalone conversation.
+    Real-time chat updates for the specified conversation.
     Must authenticate via query param or cookies (token).
     """
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
             await websocket.accept()
+            # Get token from cookies instead of query params
             cookie_header = websocket.headers.get("cookie")
             token = None
             if cookie_header:
@@ -484,6 +514,7 @@ async def websocket_chat_endpoint(
                 db,
                 "Conversation",
                 [
+                    Conversation.project_id == project_id,
                     Conversation.is_deleted.is_(False)
                 ]
             )
@@ -539,7 +570,6 @@ async def handle_assistant_response(
     
     # Get project for custom instructions if the conversation has a project
     if conversation.project_id:
-        from models.project import Project
         project = await get_by_id(session, Project, conversation.project_id)
         if project and project.custom_instructions:
             msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
@@ -563,7 +593,6 @@ async def handle_assistant_response(
 
         # Update project token usage if conversation has a project
         if conversation.project_id:
-            from models.project import Project
             project = await get_by_id(session, Project, conversation.project_id)
             if project:
                 token_estimate = len(assistant_content) // 4
