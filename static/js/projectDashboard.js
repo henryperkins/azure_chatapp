@@ -14,11 +14,15 @@ document.addEventListener("DOMContentLoaded", () => {
   function registerEventListeners() {
     // Project data events
     document.addEventListener("projectsLoaded", renderProjectsList);
-    document.addEventListener("projectLoaded", renderProjectDetails);
+    document.addEventListener("projectLoaded", (e) => {
+      document.getElementById("projectTitle").textContent = e.detail.name;
+      document.getElementById("projectDescription").textContent = e.detail.description || "No description";
+      renderProjectDetails(e);
+    });
     document.addEventListener("projectStatsLoaded", renderProjectStats);
-    document.addEventListener("projectFilesLoaded", renderProjectFiles);
-    document.addEventListener("projectConversationsLoaded", renderProjectConversations);
-    document.addEventListener("projectArtifactsLoaded", renderProjectArtifacts);
+    document.addEventListener("projectFilesLoaded", (e) => renderProjectFiles(e.detail));
+    document.addEventListener("projectConversationsLoaded", (e) => renderProjectConversations(e.detail));
+    document.addEventListener("projectArtifactsLoaded", (e) => renderProjectArtifacts(e.detail));
     
     // Delegate clicks on the project list
     document.getElementById("projectList")?.addEventListener("click", handleProjectListClicks);
@@ -602,113 +606,62 @@ document.addEventListener("DOMContentLoaded", () => {
   /**
    * Render project conversations
    */
-  function renderProjectConversations(event) {
-    const conversations = event.detail || [];
-    const conversationsList = document.getElementById("projectConversationsList");
-    
-    if (!conversationsList) return;
-    
-    if (conversations.length === 0) {
-      conversationsList.innerHTML = '<div class="text-gray-500 text-center py-8">No conversations yet.</div>';
-      return;
-    }
-    
-    conversationsList.innerHTML = "";
-    
-    conversations.forEach(conversation => {
-      const item = window.createElement("div", {
-        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded"
-      });
-      
-      const infoDiv = window.createElement("div");
-      infoDiv.appendChild(window.createElement("div", {
-        className: "font-medium"
-      }, conversation.name || `Conversation ${conversation.id}`));
-      
-      infoDiv.appendChild(window.createElement("div", {
-        className: "text-xs text-gray-500"
-      }, formatDate(conversation.created_at, true)));
-      
-      item.appendChild(infoDiv);
-      
-      const openBtn = window.createElement("button", {
-        className: "px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm open-conversation-btn",
-        dataset: { conversationId: conversation.id }
-      }, "Open");
-      
-      item.appendChild(openBtn);
-      conversationsList.appendChild(item);
+  function renderProjectConversations(conversations) {
+    const container = document.getElementById("projectConversationsList");
+    if (!container) return;
+
+    container.innerHTML = conversations.length > 0 ? '' : 
+      '<div class="text-gray-500 text-center py-8">No conversations yet</div>';
+
+    conversations.forEach(convo => {
+      const item = document.createElement('div');
+      item.className = 'flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 project-conversation-item';
+      item.innerHTML = `
+        <div>
+          <div class="font-medium">${convo.title}</div>
+          <div class="text-xs text-gray-500">${new Date(convo.created_at).toLocaleDateString()}</div>
+        </div>
+        <button class="open-conversation-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                data-conversation-id="${convo.id}">
+          Open
+        </button>
+      `;
+      container.appendChild(item);
     });
   }
   
   /**
    * Render project artifacts
    */
-  function renderProjectArtifacts(event) {
-    const artifacts = event.detail?.artifacts || [];
-    const artifactsList = document.getElementById("projectArtifactsList");
-    
-    if (!artifactsList) return;
-    
-    if (artifacts.length === 0) {
-      artifactsList.innerHTML = '<div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>';
-      return;
-    }
-    
-    artifactsList.innerHTML = "";
-    
+  function renderProjectArtifacts(artifacts) {
+    const container = document.getElementById("projectArtifactsList");
+    if (!container) return;
+
+    container.innerHTML = artifacts.length > 0 ? '' : 
+      '<div class="text-gray-500 text-center py-8">No artifacts generated yet</div>';
+
     artifacts.forEach(artifact => {
-      const item = window.createElement("div", {
-        className: "p-3 bg-gray-50 dark:bg-gray-700 rounded"
-      });
-      
-      const header = window.createElement("div", {
-        className: "flex items-center justify-between mb-2"
-      });
-      
-      const titleDiv = window.createElement("div", {
-        className: "flex items-center"
-      });
-      
-      titleDiv.appendChild(window.createElement("span", {
-        className: "text-lg mr-2"
-      }, getArtifactIcon(artifact.content_type)));
-      
-      titleDiv.appendChild(window.createElement("div", {
-        className: "font-medium"
-      }, artifact.name));
-      
-      header.appendChild(titleDiv);
-      
-      header.appendChild(window.createElement("div", {
-        className: "text-xs text-gray-500"
-      }, formatDate(artifact.created_at)));
-      
-      item.appendChild(header);
-      
-      const actions = window.createElement("div", {
-        className: "flex justify-end space-x-2 mt-2"
-      });
-      
-      const viewBtn = window.createElement("button", {
-        className: "px-2 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100 view-artifact-btn",
-        dataset: { artifactId: artifact.id }
-      }, "View");
-      
-      actions.appendChild(viewBtn);
-      
-      const deleteBtn = window.createElement("button", {
-        className: "px-2 py-1 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50 delete-artifact-btn",
-        dataset: { 
-          artifactId: artifact.id,
-          name: artifact.name
-        }
-      }, "Delete");
-      
-      actions.appendChild(deleteBtn);
-      item.appendChild(actions);
-      
-      artifactsList.appendChild(item);
+      const card = document.createElement('div');
+      card.className = 'bg-white dark:bg-gray-700 p-4 rounded shadow mb-2 artifact-card';
+      card.innerHTML = `
+        <div class="flex justify-between items-center">
+          <div>
+            <h4 class="font-medium">${artifact.name}</h4>
+            <p class="text-sm text-gray-500">${artifact.content_type}</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="view-artifact-btn text-blue-600 hover:text-blue-800"
+                    data-artifact-id="${artifact.id}">
+              View
+            </button>
+            <button class="delete-artifact-btn text-red-600 hover:text-red-800"
+                    data-artifact-id="${artifact.id}">
+              Delete
+            </button>
+          </div>
+        </div>
+      `;
+      container.appendChild(card);
     });
   }
   

@@ -422,9 +422,15 @@ function saveCustomInstructions() {
  */
 function handleFileUpload(e) {
   if (!currentProject) return;
-  
+
   const files = e.target.files;
   if (!files || files.length === 0) return;
+
+  // Add visual feedback
+  const uploadSection = document.getElementById('filesTab');
+  if (uploadSection) {
+    uploadSection.classList.add('upload-active');
+  }
   
   // Show upload progress
   document.getElementById("filesUploadProgress")?.classList.remove("hidden");
