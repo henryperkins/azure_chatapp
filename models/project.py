@@ -18,6 +18,8 @@ class Project(Base):
         CheckConstraint('max_tokens >= token_usage', name='check_token_limit', comment="Token usage cannot exceed allocated maximum"),
         CheckConstraint('NOT (archived AND pinned)', name='check_archive_pin', comment="Archived projects cannot be pinned"),
         CheckConstraint('NOT (archived AND is_default)', name='check_archive_default'),
+        Index('ix_projects_created_at', 'created_at'),
+        Index('ix_projects_updated_at', 'updated_at')
     )
     
     id: Mapped[UUID] = mapped_column(
