@@ -177,8 +177,8 @@ async def login_user(
             key="access_token",
             value=token,
             httponly=True,
-            secure=secure_cookie,
-            samesite=samesite_value,
+            secure=True,
+            samesite="none",
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/"
         )
@@ -187,8 +187,8 @@ async def login_user(
             key="access_token",
             value=token,
             httponly=True,
-            secure=secure_cookie,
-            samesite=samesite_value,
+            secure=True,
+            samesite="none",
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
             domain=cookie_domain
@@ -243,17 +243,16 @@ async def refresh_token(
     }
     new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-    # Force local dev cookie settings
-    production_mode = False
-    secure_cookie = False
-    samesite_value = "lax"
+    # Force SameSite=None, secure cookie for refresh
+    secure_cookie = True
+    samesite_value = "none"
     
     cookie_params = {
         "key": "access_token",
         "value": new_token,
         "httponly": True,
-        "secure": secure_cookie,
-        "samesite": samesite_value,
+        "secure": True,
+        "samesite": "none",
         "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         "path": "/",
     }

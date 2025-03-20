@@ -6,6 +6,7 @@ Standardizes token extraction, validation, and user verification.
 """
 import logging
 from typing import Optional, Dict, Tuple, Any
+from urllib.parse import unquote
 from fastapi import WebSocket, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.user import User
@@ -33,7 +34,7 @@ async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
             for c in cookie_header.split("; "):
                 if '=' in c:
                     k, v = c.split('=', 1)
-                    cookies[k.strip()] = v.strip()
+                    cookies[k.strip()] = unquote(v.strip())
             token = cookies.get("access_token")
         except Exception as e:
             logger.error(f"Failed to parse cookies: {str(e)}")
