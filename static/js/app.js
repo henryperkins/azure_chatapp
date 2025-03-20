@@ -166,53 +166,78 @@ document.addEventListener("DOMContentLoaded", () => {
  * Load the user's conversation list, relying solely on cookie-based auth.
  */
 function loadConversationList() {
-  const selectedProjectId = localStorage.getItem("selectedProjectId");
-  
-  // Use standalone endpoint if no project is selected
-  const endpoint = selectedProjectId 
-    ? `/api/projects/${selectedProjectId}/conversations`
-    : `/api/chat/conversations`;
-  
-  apiRequest(endpoint)
-    .then((data) => {
-      const container = document.getElementById('sidebarConversations');
-      if (!container) return;
-      container.innerHTML = '';
-      if (data.conversations && data.conversations.length > 0) {
-        data.conversations.forEach((item) => {
-          const li = document.createElement('li');
-          li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
-          li.innerHTML = `
-            <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
-            ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
-          `;
-          li.addEventListener('click', () => {
-            window.history.pushState({}, '', `/?chatId=${item.id}`);
-            // Show chat UI and hide "no chat" message
-            const chatUI = document.getElementById("chatUI");
-            const noChatMsg = document.getElementById("noChatSelectedMessage");
-            if (chatUI) chatUI.classList.remove("hidden");
-            if (noChatMsg) noChatMsg.classList.add("hidden");
-            // Update chat title and load messages
-            const chatTitleEl = document.getElementById("chatTitle");
-            if (chatTitleEl) chatTitleEl.textContent = item.title;
-            if (typeof window.loadConversation === 'function') {
-              window.loadConversation(item.id);
-            }
-          });
-          container.appendChild(li);
-        });
-      } else {
-        const li = document.createElement('li');
-        li.className = 'text-gray-500';
-        li.textContent = 'No conversations yet—Begin now!';
-        container.appendChild(li);
-      }
-    })
-    .catch((err) => {
-      console.error('Error loading conversation list:', err);
-    });
-}
+   const selectedProjectId = localStorage.getItem("selectedProjectId");
+ 
+   // If no project is selected, use the standalone endpoint for conversations
+   if (!selectedProjectId) {
+     const endpoint = `/api/chat/conversations`;
+     apiRequest(endpoint)
+       .then((data) => {
+         renderConversationList(data);
+       })
+       .catch((err) => {
+         console.error('Error loading conversation list:', err);
+       });
+     return;
+   }
+ 
+   // If a project is selected, first check if it's archived
+   apiRequest(`/api/projects/${selectedProjectId}`)
+     .then((projectResp) => {
+       const project = projectResp.data;
+       
+       // If not archived, load the project's conversations
+       const endpoint = `/api/projects/${selectedProjectId}/conversations`;
+       return apiRequest(endpoint);
+     })
+     .then((data) => {
+       if (!data) return; // if archived or error, skip
+       renderConversationList(data);
+     })
+     .catch((err) => {
+       console.error("Error verifying project or loading conversations:", err);
+     });
+ }
+ window.loadConversationList = loadConversationList;
+ 
+ /**
+  * Helper function to render conversation list items
+  */
+ function renderConversationList(data) {
+   const container = document.getElementById('sidebarConversations');
+   if (!container) return;
+   container.innerHTML = '';
+   if (data.conversations && data.conversations.length > 0) {
+     data.conversations.forEach((item) => {
+       const li = document.createElement('li');
+       li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
+       li.innerHTML = `
+         <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
+         ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
+       `;
+       li.addEventListener('click', () => {
+         window.history.pushState({}, '', `/?chatId=${item.id}`);
+         // Show chat UI and hide "no chat" message
+         const chatUI = document.getElementById("chatUI");
+         const noChatMsg = document.getElementById("noChatSelectedMessage");
+         if (chatUI) chatUI.classList.remove("hidden");
+         if (noChatMsg) noChatMsg.classList.add("hidden");
+         // Update chat title and load messages
+         const chatTitleEl = document.getElementById("chatTitle");
+         if (chatTitleEl) chatTitleEl.textContent = item.title;
+         if (typeof window.loadConversation === 'function') {
+           window.loadConversation(item.id);
+         }
+       });
+       container.appendChild(li);
+     });
+   } else {
+     const li = document.createElement('li');
+     li.className = 'text-gray-500';
+     li.textContent = 'No conversations yet—Begin now!';
+     container.appendChild(li);
+   }
+ }
 
 // ---------------------------------------------------------------------
 // Improved authentication handling (updated)
@@ -500,8 +525,7 @@ window.apiRequest = async function(url, methodOrOptions = "GET", data = null) {
   const options = {
     method: typeof methodOrOptions === 'string' ? methodOrOptions : 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Content-Type': 'application/json'
     },
     credentials: 'include'
   };
