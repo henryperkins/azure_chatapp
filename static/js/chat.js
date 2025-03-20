@@ -178,7 +178,7 @@ document.addEventListener("DOMContentLoaded", () => {
     //   return;
     // }
 
-    socket = new WebSocket(`${wsUrl}?token=${encodeURIComponent(cookie)}`);
+    socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
       console.log("WebSocket connected.");
