@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
 import jwt
 from jwt.exceptions import PyJWTError
-from schemas.token import Token
 from services.user_service import get_user_by_username
 from utils.auth_deps import JWT_SECRET, JWT_ALGORITHM, create_access_token, get_refresh_token
 from fastapi.responses import FileResponse
