@@ -61,7 +61,16 @@ function setupEventListeners() {
   });
   
   // Custom instructions
-  document.getElementById("editInstructionsBtn")?.addEventListener("click", () => showModal("instructionsModal"));
+  document.getElementById("editInstructionsBtn")?.addEventListener("click", () => {
+    // Initialize the modal with the current project's instructions
+    if (currentProject) {
+      document.getElementById("customInstructionsInput").value = currentProject.custom_instructions || "";
+      showModal("instructionsModal");
+    } else {
+      console.error("Cannot edit instructions: No current project");
+      window.showNotification?.("Error: No project selected", "error");
+    }
+  });
   document.getElementById("closeInstructionsBtn")?.addEventListener("click", () => hideModal("instructionsModal"));
   document.getElementById("cancelInstructionsBtn")?.addEventListener("click", () => hideModal("instructionsModal"));
   document.getElementById("saveInstructionsBtn")?.addEventListener("click", saveCustomInstructions);
@@ -121,6 +130,40 @@ function switchProjectTab(tabId) {
   });
 }
 
+
+/**
+ * Load projects with optional filtering
+ */
+function loadProjects(filter = "all") {
+  console.log("Loading projects with filter:", filter);
+  window.apiRequest("/api/projects")
+    .then(response => {
+      console.log("API Response:", response);
+      
+      // Handle both response formats: direct array or {data: array}
+      let projects = Array.isArray(response) ? response : (response.data || []);
+      
+      console.log("Extracted projects:", projects, "Count:", projects.length);
+      
+      // Apply filter
+      if (filter === "pinned") {
+        projects = projects.filter(p => p.pinned);
+      } else if (filter === "archived") {
+        projects = projects.filter(p => p.archived);
+      } else if (filter === "active") {
+        projects = projects.filter(p => !p.archived);
+      }
+      
+      console.log("Filtered projects:", projects, "Count:", projects.length);
+      
+      // Dispatch event for UI to render
+      document.dispatchEvent(new CustomEvent("projectsLoaded", { detail: projects }));
+    })
+    .catch(err => {
+      console.error("Error loading projects:", err);
+      window.showNotification?.("Failed to load projects", "error");
+    });
+}
 
 /**
  * Filter projects by criteria
@@ -222,7 +265,9 @@ function loadProjectFiles(projectId) {
 function loadProjectConversations(projectId) {
   window.apiRequest(`/api/projects/${projectId}/conversations`)
     .then(response => {
-      document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: response.data }));
+      // Adjust for standard response shape: { success, data, message }
+      // We only need the actual data payload
+      document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: response.data.conversations }));
     })
     .catch(err => console.error("Error loading conversations:", err));
 }
@@ -343,14 +388,21 @@ function toggleArchiveProject(projectId) {
  * Save custom instructions
  */
 function saveCustomInstructions() {
-  if (!currentProject) return;
+  if (!currentProject) {
+    console.error("Cannot save instructions: No current project");
+    window.showNotification?.("Error: No project selected", "error");
+    return;
+  }
   
+  console.log("Current project:", currentProject);
   const instructions = document.getElementById("customInstructionsInput").value;
+  console.log("Saving instructions:", instructions);
   
   window.apiRequest(`/api/projects/${currentProject.id}`, "PATCH", {
     custom_instructions: instructions
   })
     .then(response => {
+      console.log("Save instructions response:", response);
       hideModal("instructionsModal");
       window.showNotification?.("Custom instructions saved", "success");
       
@@ -477,6 +529,10 @@ function startNewConversation() {
 window.projectManager = {
   loadProjects,
   loadProjectDetails,
+  // Export the currentProject for other modules to access
+  get currentProject() {
+    return currentProject;
+  },
   confirmDeleteProject: (projectId, name) => {
     document.getElementById("deleteConfirmText").textContent = 
       `Are you sure you want to delete the project "${name}"? This cannot be undone.`;

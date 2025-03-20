@@ -365,3 +365,27 @@ def get_file_storage(config: Dict[str, Any]) -> FileStorage:
         )
     else:
         raise ValueError(f"Unsupported storage type: {storage_type}")
+
+
+# Simple helper functions for direct use in routes
+async def save_file_to_storage(file_content, filename, project_id=None):
+    """
+    Simplified function to save a file to storage.
+    Uses the local storage option by default.
+    """
+    storage = FileStorage(storage_type="local")
+    return await storage.save_file(file_content, filename, project_id=project_id)
+
+async def get_file_from_storage(file_path):
+    """
+    Simplified function to retrieve a file from storage.
+    """
+    storage = FileStorage(storage_type="local")
+    return await storage.get_file(file_path)
+
+async def delete_file_from_storage(file_path):
+    """
+    Simplified function to delete a file from storage.
+    """
+    storage = FileStorage(storage_type="local")
+    return await storage.delete_file(file_path)

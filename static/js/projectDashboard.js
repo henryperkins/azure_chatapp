@@ -102,16 +102,252 @@ document.addEventListener("DOMContentLoaded", () => {
    * View file contents
    */
   function viewFile(fileId) {
-    // TO DO: Implement file viewer
-    window.showNotification?.("File viewer not implemented yet", "info");
+    if (!window.projectManager || !window.projectManager.currentProject) {
+      window.showNotification?.("No project selected", "error");
+      return;
+    }
+    
+    const currentProject = window.projectManager.currentProject;
+    
+    // Create a modal for viewing the file
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
+    modal.id = 'fileViewerModal';
+    
+    const modalContent = document.createElement('div');
+    modalContent.className = 'bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto';
+    
+    // Loading state
+    modalContent.innerHTML = `
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold">Loading file...</h3>
+        <button id="closeFileViewerBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex justify-center items-center h-32">
+        <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+      </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Add event listener to close button
+    document.getElementById('closeFileViewerBtn').addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
+    
+    // Fetch the file content
+    window.apiRequest(`/api/projects/${currentProject.id}/files/${fileId}`)
+      .then(response => {
+        const file = response.data;
+        
+        // Update modal title
+        modalContent.querySelector('h3').textContent = file.filename;
+        
+        // Clear loading indicator
+        modalContent.querySelector('.flex.justify-center').remove();
+        
+        // Create file content display
+        const contentDisplay = document.createElement('div');
+        contentDisplay.className = 'mt-4';
+        
+        if (file.content === null) {
+          // File content not available
+          contentDisplay.innerHTML = `
+            <div class="bg-yellow-50 p-4 rounded">
+              <p class="text-yellow-700">File content cannot be displayed. The file may be binary or too large.</p>
+              <p class="text-yellow-600 mt-2">File type: ${file.file_type}, Size: ${formatBytes(file.file_size)}</p>
+            </div>
+          `;
+        } else {
+          // Display text content
+          contentDisplay.innerHTML = `
+            <div class="flex justify-between items-center mb-2">
+              <div>
+                <span class="text-gray-500 text-sm">Type: ${file.file_type}</span>
+                <span class="text-gray-500 text-sm ml-4">Size: ${formatBytes(file.file_size)}</span>
+              </div>
+              <button id="copyFileContentBtn" class="text-blue-600 hover:text-blue-800 text-sm">Copy Content</button>
+            </div>
+            <pre class="bg-gray-50 dark:bg-gray-700 p-4 rounded overflow-x-auto whitespace-pre-wrap"><code>${escapeHtml(file.content)}</code></pre>
+          `;
+        }
+        
+        modalContent.appendChild(contentDisplay);
+        
+        // Add copy functionality if content is available
+        if (file.content) {
+          document.getElementById('copyFileContentBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(file.content)
+              .then(() => {
+                window.showNotification?.('File content copied to clipboard', 'success');
+              })
+              .catch(err => {
+                console.error('Failed to copy: ', err);
+                window.showNotification?.('Failed to copy to clipboard', 'error');
+              });
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching file:', error);
+        modalContent.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold">Error</h3>
+            <button id="closeFileViewerBtn" class="text-gray-500 hover:text-gray-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="bg-red-50 p-4 rounded">
+            <p class="text-red-700">Failed to load file. Please try again later.</p>
+          </div>
+        `;
+        
+        // Reattach close button event
+        document.getElementById('closeFileViewerBtn').addEventListener('click', () => {
+          document.body.removeChild(modal);
+        });
+      });
   }
   
   /**
    * View artifact contents
    */
   function viewArtifact(artifactId) {
-    // TO DO: Implement artifact viewer
-    window.showNotification?.("Artifact viewer not implemented yet", "info");
+    if (!window.projectManager || !window.projectManager.currentProject) {
+      window.showNotification?.("No project selected", "error");
+      return;
+    }
+    
+    const currentProject = window.projectManager.currentProject;
+    
+    // Create a modal for viewing the artifact
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
+    modal.id = 'artifactViewerModal';
+    
+    const modalContent = document.createElement('div');
+    modalContent.className = 'bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto';
+    
+    // Loading state
+    modalContent.innerHTML = `
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold">Loading artifact...</h3>
+        <button id="closeArtifactViewerBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex justify-center items-center h-32">
+        <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+      </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Add event listener to close button
+    document.getElementById('closeArtifactViewerBtn').addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
+    
+    // Fetch the artifact content
+    window.apiRequest(`/api/projects/${currentProject.id}/artifacts/${artifactId}`)
+      .then(response => {
+        const artifact = response.data;
+        
+        // Update modal title
+        modalContent.querySelector('h3').textContent = artifact.name;
+        
+        // Clear loading indicator
+        modalContent.querySelector('.flex.justify-center').remove();
+        
+        // Create artifact content display
+        const contentDisplay = document.createElement('div');
+        contentDisplay.className = 'mt-4';
+        
+        // Display content based on content type
+        switch (artifact.content_type) {
+          case 'code':
+            contentDisplay.innerHTML = `
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-500 text-sm">Code Artifact</span>
+                <button id="copyArtifactContentBtn" class="text-blue-600 hover:text-blue-800 text-sm">Copy Content</button>
+              </div>
+              <pre class="bg-gray-50 dark:bg-gray-700 p-4 rounded overflow-x-auto whitespace-pre-wrap"><code>${escapeHtml(artifact.content)}</code></pre>
+            `;
+            break;
+            
+          case 'document':
+            contentDisplay.innerHTML = `
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-500 text-sm">Document</span>
+                <button id="copyArtifactContentBtn" class="text-blue-600 hover:text-blue-800 text-sm">Copy Content</button>
+              </div>
+              <div class="bg-white dark:bg-gray-700 p-4 rounded border dark:border-gray-600">
+                ${escapeHtml(artifact.content)}
+              </div>
+            `;
+            break;
+            
+          default:
+            contentDisplay.innerHTML = `
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-500 text-sm">Content Type: ${artifact.content_type}</span>
+                <button id="copyArtifactContentBtn" class="text-blue-600 hover:text-blue-800 text-sm">Copy Content</button>
+              </div>
+              <pre class="bg-gray-50 dark:bg-gray-700 p-4 rounded overflow-x-auto whitespace-pre-wrap">${escapeHtml(artifact.content)}</pre>
+            `;
+        }
+        
+        modalContent.appendChild(contentDisplay);
+        
+        // Add copy functionality
+        document.getElementById('copyArtifactContentBtn')?.addEventListener('click', () => {
+          navigator.clipboard.writeText(artifact.content)
+            .then(() => {
+              window.showNotification?.('Artifact content copied to clipboard', 'success');
+            })
+            .catch(err => {
+              console.error('Failed to copy: ', err);
+              window.showNotification?.('Failed to copy to clipboard', 'error');
+            });
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching artifact:', error);
+        modalContent.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold">Error</h3>
+            <button id="closeArtifactViewerBtn" class="text-gray-500 hover:text-gray-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="bg-red-50 p-4 rounded">
+            <p class="text-red-700">Failed to load artifact. Please try again later.</p>
+          </div>
+        `;
+        
+        // Reattach close button event
+        document.getElementById('closeArtifactViewerBtn').addEventListener('click', () => {
+          document.body.removeChild(modal);
+        });
+      });
   }
   
   /**
@@ -425,7 +661,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Render project conversations
    */
   function renderProjectConversations(event) {
-    const conversations = event.detail?.conversations || [];
+    const conversations = event.detail || [];
     const conversationsList = document.getElementById("projectConversationsList");
     
     if (!conversationsList) return;
@@ -445,7 +681,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const infoDiv = window.createElement("div");
       infoDiv.appendChild(window.createElement("div", {
         className: "font-medium"
-      }, conversation.title));
+      }, conversation.name || `Conversation ${conversation.id}`));
       
       infoDiv.appendChild(window.createElement("div", {
         className: "text-xs text-gray-500"
@@ -584,4 +820,29 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     
     return icons[contentType] || "📄";
+  }
+  
+  /**
+   * Helper function to format bytes to human-readable format
+   */
+  function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  }
+  
+  /**
+   * Helper function to escape HTML in strings
+   */
+  function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }

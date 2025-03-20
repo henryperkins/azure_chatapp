@@ -27,7 +27,7 @@ function loadConversation(chatId) {
   // Show loading state
   conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
 
-  // Use the apiRequest utility function
+  // Use the apiRequest utility function with the right endpoint path
   window.apiRequest(`/api/chat/conversations/${chatId}/messages`)
     .then((data) => {
       conversationArea.innerHTML = "";
@@ -114,7 +114,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // WebSocket URL (only if chatId is defined)
   const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-  const wsUrl = chatId ? `${protocol}${window.location.host}/api/chat/ws/${chatId}` : null;
+  // Determine if this is a project-specific or standalone chat
+  const selectedProjectId = localStorage.getItem("selectedProjectId");
+  const wsUrl = chatId ? 
+    (selectedProjectId && selectedProjectId !== "" && selectedProjectId !== "null") ?
+      `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}` :
+      `${protocol}${window.location.host}/api/chat/ws/${chatId}`
+    : null;
   let socket = null;
 
   // Toggle display of "no chat selected" message
@@ -309,7 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const newTitle = prompt("Enter a new chat title:", chatTitleEl.textContent.trim());
     if (!newTitle) return;
 
-    // Use apiRequest utility
+    // Use apiRequest utility (standalone endpoint, doesn't require project)
     window.apiRequest(`/api/chat/conversations/${chatId}`, "PATCH", { title: newTitle })
       .then((data) => {
         chatTitleEl.textContent = data.data?.title || newTitle;
@@ -337,22 +343,24 @@ document.addEventListener("DOMContentLoaded", () => {
     newChatBtn.addEventListener("click", createNewChat);
   }
 
-  function createNewChat() {
+  window.createNewChat = function createNewChat() {
+    // Get project ID from localStorage or select element
+    const selectedProjectId = localStorage.getItem("selectedProjectId");
     const projectSelectEl = document.getElementById('projectSelect');
-    const projectId = projectSelectEl ? projectSelectEl.value : null;
+    const projectId = projectSelectEl ? projectSelectEl.value : selectedProjectId;
     
-    if (!projectId) {
-      if (window.showNotification) {
-        window.showNotification("Please select a project first", "error");
-      }
-      return;
+    // Create a payload with just the title (project_id is optional)
+    const payload = {
+      title: "New Chat"
+    };
+    
+    // If a project is selected and not empty/null, add it to the payload
+    if (projectId && projectId !== "" && projectId !== "null") {
+      payload.project_id = projectId;
     }
     
-    // Use apiRequest utility
-    window.apiRequest("/api/chat/conversations", "POST", {
-      title: "New Chat",
-      project_id: projectId
-    })
+    // Use apiRequest utility to create a standalone conversation
+    window.apiRequest("/api/chat/conversations", "POST", payload)
     .then(data => {
       window.history.pushState({}, '', `/?chatId=${data.data.conversation_id}`);
       

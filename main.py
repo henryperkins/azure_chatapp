@@ -115,6 +115,11 @@ async def on_startup():
     from db import validate_db_schema
     await validate_db_schema()
     logger.info("Database schema has been validated.")
+    
+    # Ensure uploads directory exists
+    os.makedirs("./uploads", exist_ok=True)
+    os.makedirs("./uploads/project_files", exist_ok=True)
+    logger.info("Upload directories initialized")
 
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
