@@ -127,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}`;
+  const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}?token=${encodeURIComponent(cookie)}`;
   let socket = null;
 
   // Toggle display of "no chat selected" message
