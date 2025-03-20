@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import AsyncSessionLocal, get_async_session
@@ -20,7 +20,7 @@ from sqlalchemy import select
 
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
-from utils.auth_deps import get_current_user_and_token
+from utils.auth_deps import get_current_user_and_token, revoke_token_id, verify_token
 from typing import cast
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -34,7 +34,7 @@ router = APIRouter()
 # Import JWT_SECRET and JWT_ALGORITHM from auth_deps to ensure consistency
 from utils.auth_deps import JWT_SECRET, JWT_ALGORITHM
 from config import settings
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+ACCESS_TOKEN_EXPIRE_MINUTES = int(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
 
 class UserCredentials(BaseModel):
@@ -83,6 +83,9 @@ async def register_user(
     await session.refresh(user)
 
     logger.info(f"User registered successfully: {user.username}")
+    user.last_login = datetime.utcnow()
+    session.add(user)
+    await session.commit()
     return {"message": f"User '{user.username}' registered successfully"}
 
 
@@ -148,6 +151,9 @@ async def login_user(
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
     logger.info(f"User '{user.username}' logged in successfully with token ID {token_id}.")
+    user.last_login = datetime.utcnow()
+    session.add(user)
+    await session.commit()
 
     # Adjust samesite logic to match the comment indicating cross-site usage
     production_mode = settings.ENV == "production"
@@ -197,6 +203,7 @@ async def login_user(
 
 @router.post("/refresh")
 async def refresh_token(
+    request: Request,
     response: Response,
     current_user: User = Depends(get_current_user_and_token)
 ):
@@ -205,54 +212,52 @@ async def refresh_token(
     Also sets a new cookie for seamless session continuity.
     Enhanced with token rotation and additional security metadata.
     """
-    # Generate a unique token ID for tracking
+
+    # Obtain old token from cookie/header to revoke it if present
+    old_token = request.cookies.get("access_token") or request.headers.get("Authorization", "").replace("Bearer ", "")
+    if old_token:
+        # If old token is valid, revoke its jti
+        try:
+            old_payload = verify_token(old_token)
+            old_jti = old_payload.get("jti")
+            if old_jti:
+                revoke_token_id(old_jti)
+        except:
+            # If old token can't be verified, just proceed
+            pass
+
+    # Generate a unique token ID for new access token
     token_id = str(uuid.uuid4())
-    
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
-        "sub": current_user.username,
+        "sub": current_user.username, 
         "exp": expire,
         "iat": datetime.utcnow(),
-        "jti": token_id,  # Add JWT ID for token uniqueness and tracking
-        "type": "access"  # Specify token type for additional validation
+        "jti": token_id,  # Add JWT ID
+        "type": "access"
     }
     new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-    # Match the same cookie settings used in login
     production_mode = settings.ENV == "production"
-    if production_mode:
-        secure_cookie = True
-        samesite_value = "none"
-    else:
-        secure_cookie = False
-        # Default to same-site='lax' for local development
-        samesite_value = "lax"
+    secure_cookie = True if production_mode else False
+    samesite_value = "none" if production_mode else "lax"
 
     cookie_domain = settings.COOKIE_DOMAIN.strip()
-    if not cookie_domain:
-        response.set_cookie(
-            key="access_token",
-            value=new_token,
-            httponly=True,
-            secure=secure_cookie,
-            samesite=samesite_value,
-            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            path="/"
-        )
-    else:
-        response.set_cookie(
-            key="access_token",
-            value=new_token,
-            httponly=True,
-            secure=secure_cookie,
-            samesite=samesite_value,
-            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            path="/",
-            domain=cookie_domain
-        )
-    
-    logger.info(f"Token refreshed for user '{current_user.username}'")
-    
+    cookie_params = {
+        "key": "access_token",
+        "value": new_token,
+        "httponly": True,
+        "secure": secure_cookie,
+        "samesite": samesite_value,
+        "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "path": "/",
+    }
+    if cookie_domain:
+        cookie_params["domain"] = cookie_domain
+
+    response.set_cookie(**cookie_params)
+    logger.info(f"Refreshed token for user '{current_user.username}', previous token revoked if valid.")
+
     return {
         "message": "Token refreshed",
         "access_token": new_token,
