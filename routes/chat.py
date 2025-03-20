@@ -123,7 +123,7 @@ async def create_conversation(
                 
     # Return standardized response
     return await process_standard_response({
-        "conversation_id": str(new_conversation.id),
+        "id": str(new_conversation.id),
         "title": new_conversation.title,
         "created_at": new_conversation.created_at.isoformat(),
         "project_id": str(project_id) if project_id else None
