@@ -28,9 +28,9 @@ CREATE TABLE users (
 CREATE INDEX ix_users_username ON users(username);
 CREATE INDEX ix_users_role ON users(role);
 
--- Knowledge bases table
+-- Knowledge Bases table
 CREATE TABLE knowledge_bases (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(200) NOT NULL,
     description TEXT,
     embedding_model VARCHAR(100),
@@ -42,7 +42,7 @@ CREATE INDEX ix_knowledge_bases_name ON knowledge_bases(name);
 
 -- Projects table
 CREATE TABLE projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(200) NOT NULL,
     goals TEXT,
     description TEXT,
@@ -54,21 +54,21 @@ CREATE TABLE projects (
     is_default BOOLEAN DEFAULT FALSE NOT NULL,
     version INTEGER DEFAULT 1 NOT NULL,
     knowledge_base_id UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,
-    default_model VARCHAR(50) DEFAULT 'o1' NOT NULL,  -- This matches the model definition
+    default_model VARCHAR(50) DEFAULT 'o1' NOT NULL,
     user_id INTEGER NOT NULL REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
     CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)), -- Archived projects cannot be pinned
-    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default)),
+    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)),
+    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
 );
 -- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
 CREATE INDEX ix_projects_user_id ON projects(user_id);
 
 -- Conversations table
 CREATE TABLE conversations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
     title VARCHAR DEFAULT 'New Chat' NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE conversations (
     message_count INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    extra_data JSONB DEFAULT '{}'
+    extra_data JSONB DEFAULT '{selectedText}'
 );
 CREATE INDEX ix_conversations_user_id ON conversations(user_id);
 CREATE INDEX ix_conversations_project_id ON conversations(project_id);
@@ -86,11 +86,11 @@ CREATE INDEX ix_conversations_is_deleted ON conversations(is_deleted);
 
 -- Messages table
 CREATE TABLE messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     role VARCHAR NOT NULL,
     content TEXT NOT NULL,
-    extra_data JSONB DEFAULT '{}',
+    extra_data JSONB DEFAULT '{selectedText}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -100,7 +100,7 @@ CREATE INDEX ix_messages_role ON messages(role);
 
 -- Project Files table
 CREATE TABLE project_files (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     filename VARCHAR NOT NULL,
     file_path VARCHAR(500) NOT NULL,
@@ -116,7 +116,7 @@ CREATE INDEX ix_project_files_project_id ON project_files(project_id);
 
 -- Artifacts table
 CREATE TABLE artifacts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
     name VARCHAR(200) NOT NULL,
