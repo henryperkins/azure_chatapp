@@ -221,11 +221,10 @@ function toggleSidebar() {
 function handleWindowResize() {
   const sidebarEl = document.getElementById("mainSidebar");
   if (!sidebarEl) return;
-  if (window.innerWidth < 768) {
-    // On mobile breakpoints, automatically hide the sidebar if it's visible
-    if (!sidebarEl.classList.contains("hidden")) {
-      sidebarEl.classList.add("hidden");
-    }
+
+  // Remove mobile-specific classes on desktop
+  if (window.innerWidth >= 768) {
+    sidebarEl.classList.remove("fixed", "inset-0", "z-50");
   }
 }
 
