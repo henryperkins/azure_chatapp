@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 import jwt
 from jwt.exceptions import PyJWTError
 from services.user_service import get_user_by_username
-from utils.auth_deps import JWT_SECRET, JWT_ALGORITHM, create_access_token, get_refresh_token
+from utils.auth_deps import JWT_SECRET, JWT_ALGORITHM, create_access_token
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -156,42 +156,8 @@ async def on_startup():
     upload_path.chmod(0o755)  # Ensure proper permissions
     logger.info("Upload directories initialized with secure permissions")
 
-# Include the authentication router with refresh endpoint
+# Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-
-@auth_router.post("/refresh", response_model=Token)
-async def refresh_token(
-    refresh_token: str = Depends(get_refresh_token),
-    db: AsyncSession = Depends(get_async_session)
-):
-    try:
-        payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        username: str = payload.get("sub")
-        if not username:
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
-        
-        user = await get_user_by_username(db, username=username)
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        
-        # Create new access token
-        access_token = create_access_token(data={"sub": user.username})
-        
-        # Set the new access token in cookies
-        response = JSONResponse(content={"access_token": access_token})
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            max_age=3600,  # 1 hour
-            secure=settings.ENV == "production",
-            samesite="Lax"
-        )
-        
-        return response
-        
-    except PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 # Include the conversations router with updated prefix
 app.include_router(conversations_router, prefix="/api/chat", tags=["conversations"])
