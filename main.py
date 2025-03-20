@@ -154,14 +154,12 @@ async def on_startup():
     # Clean environment first
     os.environ.pop('AZUREML_ENVIRONMENT_UPDATE', None)
     
-    # Initialize database
-    await init_db()
-    logger.info("Database initialized")
-    
-    # Add critical schema validation
-    from db import validate_db_schema
-    await validate_db_schema()
-    logger.info("Database schema has been validated.")
+    try:
+        # Initialize database and run migrations
+        from db import init_db, validate_db_schema
+        await init_db()
+        await validate_db_schema()
+        logger.info("Database schema validated and migrations applied")
     
     # Create uploads directory with proper permissions
     upload_path = Path("./uploads/project_files")
