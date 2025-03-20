@@ -160,12 +160,12 @@ async def on_startup():
         await init_db()
         await validate_db_schema()
         logger.info("Database schema validated and migrations applied")
-    
-    # Create uploads directory with proper permissions
-    upload_path = Path("./uploads/project_files")
-    upload_path.mkdir(parents=True, exist_ok=True)
-    upload_path.chmod(0o755)  # Ensure proper permissions
-    logger.info("Upload directories initialized with secure permissions")
+
+        # Create uploads directory with proper permissions
+        upload_path = Path("./uploads/project_files")
+        upload_path.mkdir(parents=True, exist_ok=True)
+        upload_path.chmod(0o755)  # Ensure proper permissions
+        logger.info("Upload directories initialized with secure permissions")
 
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
