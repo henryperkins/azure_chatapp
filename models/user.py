@@ -26,6 +26,8 @@ class User(Base):
             "role IN ('user', 'admin')",
             name="valid_role_types"
         ),
+        Index('ix_users_last_login', 'last_login'),
+        Index('ix_users_created_at', 'created_at')
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
