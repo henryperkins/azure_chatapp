@@ -95,31 +95,18 @@ async def get_current_user_and_token(
     # Extract token from appropriate source based on request type
     token = None
     
-    if isinstance(request, WebSocket):
-        # Handle WebSocket authentication
-        cookies = request.cookies
-        token = cookies.get("access_token")
-        
-        # For WebSocket, also check the query parameters
-        if not token and "token" in request.query_params:
-            token = request.query_params["token"]
-            logger.debug("Using token from WebSocket query parameters")
-    else:
-        # For regular HTTP requests
-        token = request.cookies.get("access_token")
-        
-        # Log cookies at debug level
-        logger.debug(f"Request cookies: {request.cookies}")
-        
-        # Fallback to Authorization header if no cookie
-        if not token:
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.replace("Bearer ", "")
-                logger.debug("Using token from Authorization header")
+    # Extract token from cookies first
+    token = request.cookies.get("access_token")
+    
+    # Fallback to Authorization header if no cookie
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split("Bearer ")[1]
+            logger.debug("Using token from Authorization header")
     
     if not token:
-        logger.warning("Authentication failed: No token provided in cookies, headers, or query params")
+        logger.debug("No token found in cookies or headers")
         raise HTTPException(
             status_code=401,
             detail="Authentication required",
