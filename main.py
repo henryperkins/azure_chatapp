@@ -10,6 +10,9 @@ The FastAPI entrypoint for the Azure OpenAI Chat Application.
 import logging
 from sqlalchemy import exc as sa_exc
 import os
+from pathlib import Path
+os.environ['AZUREML_ENVIRONMENT_UPDATE'] = 'false'  # Suppress conda warnings
+
 from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,7 +49,15 @@ leveraging Azure OpenAI's o1-series models with advanced features
 like context summarization, vision support (for 'o1'), JWT-based auth, 
 file uploads, and more.
 """,
-    version="1.0.0"
+    version="1.0.0",
+    openapi_tags=[
+        {
+            "name": "projects",
+            "description": "Operations with projects requiring valid UUIDs",
+        }
+    ],
+    docs_url="/docs",
+    redoc_url=None
 )
 
 if settings.ENV == "production":
@@ -109,17 +120,23 @@ if settings.ENV == "production":
 
 @app.on_event("startup")
 async def on_startup():
-    # Initialize the database
+    # Clean environment first
+    os.environ.pop('AZUREML_ENVIRONMENT_UPDATE', None)
+    
+    # Initialize database
     await init_db()
     logger.info("Database initialized")
+    
+    # Add critical schema validation
     from db import validate_db_schema
     await validate_db_schema()
     logger.info("Database schema has been validated.")
     
-    # Ensure uploads directory exists
-    os.makedirs("./uploads", exist_ok=True)
-    os.makedirs("./uploads/project_files", exist_ok=True)
-    logger.info("Upload directories initialized")
+    # Create uploads directory with proper permissions
+    upload_path = Path("./uploads/project_files")
+    upload_path.mkdir(parents=True, exist_ok=True)
+    upload_path.chmod(0o755)  # Ensure proper permissions
+    logger.info("Upload directories initialized with secure permissions")
 
 # Include the authentication router
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
@@ -144,3 +161,13 @@ async def health_check():
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return FileResponse("static/favicon.ico")
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid UUID format", "errors": exc.errors()},
+    )
