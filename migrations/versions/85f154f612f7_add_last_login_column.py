@@ -15,9 +15,16 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    op.add_column('users',
-        sa.Column('last_login', sa.DateTime(timezone=True), nullable=True)
-    )
+    from alembic import op
+    from sqlalchemy import inspect
+
+    inspector = inspect(op.get_bind())
+    columns = [col['name'] for col in inspector.get_columns('users')]
+    
+    if 'last_login' not in columns:
+        op.add_column('users',
+            sa.Column('last_login', sa.DateTime(timetimezone=True), nullable=True)
+        )
 
 def downgrade():
     op.drop_column('users', 'last_login')
