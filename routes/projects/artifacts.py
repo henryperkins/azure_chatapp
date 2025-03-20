@@ -53,7 +53,7 @@ class ArtifactCreate(BaseModel):
 # Artifact Endpoints
 # ============================
 
-@router.post("/{project_id}/artifacts", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_artifact(
     project_id: UUID,
     artifact_data: ArtifactCreate,
@@ -73,7 +73,7 @@ async def create_artifact(
     return await process_standard_response(artifact, "Artifact created successfully")
 
 
-@router.get("/{project_id}/artifacts", response_model=dict)
+@router.get("", response_model=dict)
 async def list_artifacts(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -96,7 +96,7 @@ async def list_artifacts(
     return await process_standard_response({"artifacts": artifacts})
 
 
-@router.get("/{project_id}/artifacts/{artifact_id}", response_model=dict)
+@router.get("/{artifact_id}", response_model=dict)
 async def get_artifact(
    project_id: UUID,
    artifact_id: UUID,
@@ -113,7 +113,7 @@ async def get_artifact(
     return await process_standard_response(artifact)
 
 
-@router.delete("/{project_id}/artifacts/{artifact_id}", response_model=dict)
+@router.delete("/{artifact_id}", response_model=dict)
 async def delete_artifact(
    project_id: UUID,
    artifact_id: UUID,
