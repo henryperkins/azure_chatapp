@@ -93,7 +93,7 @@ CREATE TABLE messages (
     role VARCHAR NOT NULL,
     content TEXT NOT NULL,
     extra_data JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX ix_messages_id ON messages(id);
