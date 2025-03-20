@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "20250319_add_extra_data_to_projects"
-down_revision = "20250319_merge_heads"
+down_revision = "0cc7d9e46f7b"
 branch_labels = None
 depends_on = None
 
