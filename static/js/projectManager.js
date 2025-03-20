@@ -254,7 +254,8 @@ function loadProjectStats(projectId) {
 function loadProjectFiles(projectId) {
   window.apiRequest(`/api/projects/${projectId}/files`)
     .then(response => {
-      document.dispatchEvent(new CustomEvent("projectFilesLoaded", { detail: response.data }));
+      const files = response.data?.files || response.data || [];
+      document.dispatchEvent(new CustomEvent("projectFilesLoaded", { detail: files }));
     })
     .catch(err => console.error("Error loading project files:", err));
 }
@@ -265,9 +266,8 @@ function loadProjectFiles(projectId) {
 function loadProjectConversations(projectId) {
   window.apiRequest(`/api/projects/${projectId}/conversations`)
     .then(response => {
-      // Adjust for standard response shape: { success, data, message }
-      // We only need the actual data payload
-      document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: response.data.conversations }));
+      const conversations = response.data?.conversations || response.data || [];
+      document.dispatchEvent(new CustomEvent("projectConversationsLoaded", { detail: conversations }));
     })
     .catch(err => console.error("Error loading conversations:", err));
 }
@@ -278,7 +278,8 @@ function loadProjectConversations(projectId) {
 function loadProjectArtifacts(projectId) {
   window.apiRequest(`/api/projects/${projectId}/artifacts`)
     .then(response => {
-      document.dispatchEvent(new CustomEvent("projectArtifactsLoaded", { detail: response.data }));
+      const artifacts = response.data?.artifacts || response.data || [];
+      document.dispatchEvent(new CustomEvent("projectArtifactsLoaded", { detail: artifacts }));
     })
     .catch(err => console.error("Error loading artifacts:", err));
 }
