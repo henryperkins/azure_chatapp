@@ -635,3 +635,59 @@ window.createElement = function(tag, attrs = {}, children = []) {
   
   return el;
 };
+window.showProjectSelection = function() {
+    return new Promise(async (resolve) => {
+        // Fetch available projects
+        const { data: projects } = await window.apiRequest("/api/projects?filter=active");
+        
+        // Create modal elements
+        const modal = document.createElement("div");
+        modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50";
+        
+        const modalContent = document.createElement("div");
+        modalContent.className = "bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md";
+        
+        // Build project selection UI
+        modalContent.innerHTML = `
+          <h3 class="text-lg font-medium mb-4">Select a Project</h3>
+          <div class="space-y-2" id="projectSelectionList"></div>
+          <div class="mt-6 flex justify-end space-x-2">
+            <button 
+              type="button" 
+              class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              onclick="this.closest('.fixed').remove(); resolve(null)"
+            >
+              Skip
+            </button>
+          </div>
+        `;
+    
+        // Populate project list
+        const projectList = modalContent.querySelector("#projectSelectionList");
+        
+        if (projects.length === 0) {
+          projectList.innerHTML = `
+            <div class="text-center p-4 text-gray-500">
+              No projects found. <a href="/projects" class="text-blue-600 hover:underline">Create one first?</a>
+            </div>
+          `;
+        } else {
+          projects.forEach(project => {
+            const projectButton = document.createElement("button");
+            projectButton.className = "w-full text-left p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors";
+            projectButton.innerHTML = `
+              <span class="font-medium">${project.name}</span>
+              ${project.description ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${project.description}</p>` : ''}
+            `;
+            projectButton.onclick = () => {
+              modal.remove();
+              resolve(project.id);
+            };
+            projectList.appendChild(projectButton);
+          });
+        }
+    
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+    });
+};
