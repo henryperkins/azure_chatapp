@@ -409,30 +409,22 @@ async def websocket_chat_endpoint(
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
-            # Authenticate user
+            # Use standardized auth utility
             success, user = await authenticate_websocket(websocket, db)
-            if not success or not user:
+            if not success:
                 return
 
-            # Validate conversation ownership
-            conversation = await validate_resource_ownership(
-                conversation_id,
-                Conversation,
-                user,
-                db,
-                "Conversation",
-                [
-                    Conversation.project_id.is_(None),  # Must be standalone
-                    Conversation.is_deleted.is_(False)
-                ]
+            # Validate using service layer
+            conversation = await services.conversation_service.validate_conversation_access(
+                conversation_id, user.id, db
             )
 
             while True:
                 data = await websocket.receive_text()
                 data_dict = json.loads(data)
 
-                # Create message
-                message = await create_user_message(
+                # Use message service
+                message = await services.message_service.create_websocket_message(
                     conversation_id=conversation.id,
                     content=data_dict["content"],
                     role=data_dict["role"],
@@ -440,11 +432,13 @@ async def websocket_chat_endpoint(
                 )
 
                 if message.role == "user":
-                    await handle_websocket_response(conversation.id, db, websocket)
+                    await services.ai_response_service.handle_websocket_response(
+                        conversation.id, db, websocket
+                    )
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
-        except HTTPException:
+        except HTTPException as he:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         finally:
             await db.close()
