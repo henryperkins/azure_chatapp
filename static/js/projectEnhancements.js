@@ -269,28 +269,33 @@
     
     // Add the missing createNewChat function to the window
     window.createNewChat = function(projectId = null) {
-      // Show loading state
-      showNotification('Creating new conversation...', 'info');
-      
-      const payload = {};
-      if (projectId) {
-        payload.project_id = projectId;
+      // Get current auth token from cookies
+      const token = document.cookie.split('; ')
+        .find(row => row.startsWith('access_token='))
+        ?.split('=')[1];
+
+      if (!token) {
+        window.showNotification?.("Please login first", "error");
+        return Promise.reject("Not authenticated");
       }
-      
-      return window.apiRequest('/api/chat', {
+
+      return window.apiRequest('/api/chat/conversations', {
         method: 'POST',
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          project_id: projectId,
+          title: "New Conversation"
+        })
       })
       .then(chatData => {
-        showNotification('Conversation created successfully', 'success');
-        
-        // Redirect to the chat with the new ID
-        window.location.href = `/?chatId=${chatData.id}`;
+        window.location.href = `/?chatId=${chatData.data.id}`;
         return chatData;
       })
       .catch(error => {
-        console.error('Error creating new chat:', error);
-        showNotification('Failed to create new conversation', 'error');
+        console.error('Error creating conversation:', error);
         throw error;
       });
     };
