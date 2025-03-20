@@ -40,7 +40,11 @@ function loadConversation(chatId) {
   conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
 
   // Use the apiRequest utility function with the right endpoint path
-  window.apiRequest(`/api/chat/conversations/${chatId}/messages`)
+  const projectId = localStorage.getItem("selectedProjectId");
+  if (!projectId) {
+      throw new Error("No project selected - cannot load conversation messages");
+  }
+  window.apiRequest(`/api/projects/${projectId}/conversations/${chatId}/messages`)
     .then((data) => {
       conversationArea.innerHTML = "";
       if (data.data && data.data.messages && data.data.messages.length > 0) {
@@ -143,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // }
   //
 
-  const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}?token=${encodeURIComponent(cookie)}`;
+  const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}`;
   let socket = null;
 
   // Toggle display of "no chat selected" message
@@ -169,10 +173,10 @@ document.addEventListener("DOMContentLoaded", () => {
       .find(row => row.startsWith('access_token='))
       ?.split('=')[1];
       
-    if (!cookie) {
-      window.showNotification?.("Please login first", "error");
-      return;
-    }
+    // if (!cookie) {
+    //   window.showNotification?.("Please login first", "error");
+    //   return;
+    // }
 
     socket = new WebSocket(`${wsUrl}?token=${encodeURIComponent(cookie)}`);
 
@@ -260,7 +264,15 @@ document.addEventListener("DOMContentLoaded", () => {
       socket.send(JSON.stringify(payload));
     } else {
       // Fallback to a standard POST fetch using apiRequest
-      window.apiRequest(`/api/chat/conversations/${chatId}/messages`, "POST", payload)
+      const projectId = localStorage.getItem("selectedProjectId");
+      if(!projectId){
+        console.error("Cannot send message: No active project ID");
+        if (window.showNotification) {
+          window.showNotification("No project selected while sending message", "error");
+        }
+        return;
+      }
+      window.apiRequest(`/api/projects/${projectId}/conversations/${chatId}/messages`, "POST", payload)
         .then(respData => {
             console.log("sendMessage response body:", respData);
             const indicator = document.getElementById("thinkingIndicator");
@@ -386,8 +398,13 @@ document.addEventListener("DOMContentLoaded", () => {
     window.createNewChat = async function() {
       try {
         // Show project selection modal
-        const projectId = await window.showProjectSelection();
-        
+        const selectedProjectId = localStorage.getItem("selectedProjectId");
+        const projectId = selectedProjectId || await window.showProjectSelection();
+        if (!projectId) {
+            window.showNotification?.("You must select a project to start a new chat.", "error");
+            return;
+        }
+
         // Create payload with optional project_id
         const payload = {
           title: "New Chat",
@@ -395,10 +412,14 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         // Create conversation through API
+        const url = projectId
+          ? `/api/chat/projects/${projectId}/conversations`
+          : "/api/chat/conversations";
+
         const { data: conversation } = await window.apiRequest(
-          "/api/chat/conversations",
+          url,
           "POST",
-          payload
+          { title: "New Chat" }
         );
 
         // Update UI state
