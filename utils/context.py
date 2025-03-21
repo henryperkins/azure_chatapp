@@ -8,15 +8,17 @@ Includes:
   2. manage_context(...)   - Ensures the conversation stays within token thresholds.
   3. token_limit_check(...) - Helper to trigger do_summarization() when near token limits.
 
-This code is production-ready, with no placeholders.
+This code has been trimmed to remove DB functions and response formatting that are now in db_utils.py
+and response_utils.py.
 """
 import logging
 import tiktoken
-from typing import List, Dict, Any, Optional, TypeVar, Type, Union
-from .openai import openai_chat
-from sqlalchemy import text, select, update, and_, or_
+from typing import List, Dict, Any, Optional
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
+
+from .openai import openai_chat
+from utils.db_utils import get_by_id, get_all_by_condition
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +87,9 @@ async def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]
     logger.info("Conversation was too large; older messages summarized.")
     return new_conversation
 
-async def token_limit_check(chat_id: str, db):
+async def token_limit_check(chat_id: str, db: AsyncSession):
     """
-    Example helper to be called after inserting a new message in the DB.
+    Helper to be called after inserting a new message in the DB.
     Retrieves messages, checks token usage, triggers summarization if needed.
 
     :param chat_id: The ID of the chat we just updated.
@@ -112,92 +114,14 @@ async def token_limit_check(chat_id: str, db):
         logger.debug(f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}")
 
 def estimate_token_count(messages: List[Dict[str, str]]) -> int:
+    """
+    Estimate the token count for a list of messages.
+    
+    Args:
+        messages: List of message dictionaries
+        
+    Returns:
+        Estimated token count
+    """
     encoder = tiktoken.encoding_for_model("gpt-4")
     return sum(len(encoder.encode(msg["content"])) for msg in messages)
-
-# NEW HELPER FUNCTIONS TO REDUCE DUPLICATION
-
-T = TypeVar('T')
-
-async def get_by_id(
-    db: AsyncSession,
-    model: Type[T],
-    id: Any
-) -> Optional[T]:
-    """
-    Get a model instance by ID. Reduces duplicate SELECT queries.
-    
-    Args:
-        db: AsyncSession instance
-        model: SQLAlchemy model class
-        id: Primary key ID
-        
-    Returns:
-        Model instance or None if not found
-    """
-    result = await db.execute(select(model).where(getattr(model, "id") == id))
-    return result.scalars().first()
-
-async def get_all_by_condition(
-    db: AsyncSession, 
-    model: Type[T], 
-    *conditions, 
-    limit: int = 100,
-    offset: int = 0,
-    order_by: Any = None
-) -> List[T]:
-    """
-    Get all model instances matching conditions. Reduces duplicate query patterns.
-    
-    Args:
-        db: AsyncSession instance
-        model: SQLAlchemy model class
-        conditions: SQLAlchemy filter conditions
-        limit: Maximum records to return
-        offset: Number of records to skip (pagination)
-        order_by: Column to order by
-        
-    Returns:
-        List of model instances
-    """
-    query = select(model).where(*conditions)
-    
-    if order_by is not None:
-        query = query.order_by(order_by)
-        
-    query = query.limit(limit).offset(offset)
-    
-    result = await db.execute(query)
-    return list(result.scalars().all())
-
-async def save_model(db: AsyncSession, model_instance: Any) -> Any:
-    """
-    Standardized model save/update function to reduce duplicate patterns.
-    
-    Args:
-        db: AsyncSession instance
-        model_instance: SQLAlchemy model instance to save
-        
-    Returns:
-        Updated model instance
-    """
-    db.add(model_instance)
-    await db.commit()
-    await db.refresh(model_instance)
-    return model_instance
-
-async def create_response(data: Any, message: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Creates a standardized API response to reduce repetitive formatting.
-    
-    Args:
-        data: Main response data
-        message: Optional message
-        
-    Returns:
-        Formatted response dictionary
-    """
-    response = {"data": data}
-    if message:
-        response["message"] = message
-    return response

@@ -3,6 +3,8 @@ ai_response.py
 ------------
 Handles AI response generation logic for chat conversations.
 Centralizes OpenAI API calls and response processing.
+
+This version uses db_utils.py and response_utils.py to reduce duplication.
 """
 import logging
 from typing import Dict, Any, Optional, List
@@ -14,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.conversation import Conversation
 from models.message import Message
 from utils.openai import openai_chat
-from utils.context import get_by_id, save_model
+from utils.db_utils import get_by_id, save_model
+from utils.response_utils import create_standard_response
 from utils.message_handlers import (
     get_conversation_messages,
     update_project_token_usage
@@ -99,7 +102,9 @@ async def handle_websocket_response(
         # Get conversation
         conversation = await get_by_id(db, Conversation, conversation_id)
         if not conversation:
-            await websocket.send_json({"error": "Conversation not found"})
+            await websocket.send_json(
+                await create_standard_response(None, "Conversation not found", False)
+            )
             return
             
         # Get formatted messages for API
@@ -121,7 +126,11 @@ async def handle_websocket_response(
                 "content": assistant_msg.content
             })
         else:
-            await websocket.send_json({"error": "Failed to generate AI response"})
+            await websocket.send_json(
+                await create_standard_response(None, "Failed to generate AI response", False)
+            )
     except Exception as e:
         logger.error(f"WebSocket AI response error: {e}")
-        await websocket.send_json({"error": f"Error generating response: {str(e)}"})
+        await websocket.send_json(
+            await create_standard_response(None, f"Error generating response: {str(e)}", False)
+        )
