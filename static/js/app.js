@@ -1,6 +1,7 @@
-// app.js
+ // app.js
 
-const SELECTORS = {
+// Define and expose selectors globally
+window.SELECTORS = {
   MAIN_SIDEBAR: '#mainSidebar',
   NAV_TOGGLE_BTN: '#navToggleBtn',
   USER_STATUS: '#userStatus',
@@ -49,33 +50,26 @@ function addEventListener(element, event, handler) {
     console.warn(`Cannot add ${event} listener to non-existent element: ${selector}`);
   }
 }
-
 function apiRequest(url, method = 'GET', data = null) {
-  const token = document.cookie.split('; ')
-    .find(row => row.startsWith('access_token='))
-    ?.split('=')[1];
-
   const options = {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     },
-    credentials: 'include'
+    credentials: 'include' // This ensures cookies are sent with requests
   };
 
-  // Only add Authorization header if token exists
-  if (token) {
-    options.headers['Authorization'] = `Bearer ${token}`;
+  if (data) {
+    options.body = JSON.stringify(data);
   }
-
   if (data) options.body = JSON.stringify(data);
 
   return fetch(url, options)
     .then(response => {
       if (response.status === 401 || response.status === 403) {
         // Handle authentication errors consistently
-        document.dispatchEvent(new CustomEvent("authStateChanged", { 
-          detail: { authenticated: false } 
+        document.dispatchEvent(new CustomEvent("authStateChanged", {
+          detail: { authenticated: false }
         }));
         throw new Error('Authentication required');
       }
@@ -185,13 +179,21 @@ function setupGlobalKeyboardShortcuts() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  handleWindowResize();
-  window.addEventListener('resize', handleWindowResize);
+  // Initialize UI elements
+  const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
+  const navToggleBtn = getElement(SELECTORS.NAV_TOGGLE_BTN);
+
+  // Only set up resize handler if sidebar exists
+  if (sidebarEl) {
+    handleWindowResize();
+    window.addEventListener('resize', handleWindowResize);
+  }
 
   updateUserSessionState();
   setupGlobalKeyboardShortcuts();
 
-  addEventListener(getElement(SELECTORS.NAV_TOGGLE_BTN), 'click', toggleSidebar);
+  // Add click handler only if button exists
+  addEventListener(navToggleBtn, 'click', toggleSidebar);
 
   document.addEventListener('projectUpdated', (e) => {
     console.log("Global event: 'projectUpdated' triggered, detail:", e.detail);
@@ -202,11 +204,13 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUserSessionState();
   });
 
-  addEventListener(getElement(SELECTORS.SIDEBAR_PROJECT_SEARCH), 'input', (e) => {
+  const sidebarProjectSearchEl = getElement(SELECTORS.SIDEBAR_PROJECT_SEARCH);
+  addEventListener(sidebarProjectSearchEl, 'input', (e) => {
     searchSidebarProjects(e.target.value);
   });
 
-  addEventListener(getElement(SELECTORS.SIDEBAR_NEW_PROJECT_BTN), 'click', () => {
+  const sidebarNewProjectBtnEl = getElement(SELECTORS.SIDEBAR_NEW_PROJECT_BTN);
+  addEventListener(sidebarNewProjectBtnEl, 'click', () => {
     if (typeof window.projectManager?.showProjectCreateForm === 'function') {
       window.projectManager.showProjectCreateForm();
     } else {
@@ -214,7 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  if (getElement(SELECTORS.SIDEBAR_CONVERSATIONS)) {
+  const sidebarConversationsEl = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
+  if (sidebarConversationsEl) {
     loadConversationList();
   }
 
@@ -391,35 +396,42 @@ function checkAndHandleAuth() {
         }
       }
 
-      getElement(SELECTORS.USER_MENU)?.classList.remove('hidden');
-      getElement(SELECTORS.AUTH_BUTTON)?.classList.add('hidden');
+      const userMenu = getElement(SELECTORS.USER_MENU);
+      const authButton = getElement(SELECTORS.AUTH_BUTTON);
+      const chatUI = getElement(SELECTORS.CHAT_UI);
+      const noChatMsg = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
+      const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+
+      userMenu?.classList?.remove('hidden');
+      authButton?.classList?.add('hidden');
 
       if (window.CHAT_CONFIG?.chatId) {
-        getElement(SELECTORS.CHAT_UI)?.classList.remove('hidden');
-        getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.add('hidden');
+        chatUI?.classList?.remove('hidden');
+        noChatMsg?.classList?.add('hidden');
       }
 
-      const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
-      if (loginRequiredMessage) {
-        loginRequiredMessage.classList.add('hidden');
-      }
+      loginRequiredMessage?.classList?.add('hidden');
     })
     .catch(() => {
-      getElement(SELECTORS.USER_MENU)?.classList.add('hidden');
-      getElement(SELECTORS.AUTH_BUTTON)?.classList.remove('hidden');
+      const userMenu = getElement(SELECTORS.USER_MENU);
+      const authButton = getElement(SELECTORS.AUTH_BUTTON);
+      const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+      const chatUI = getElement(SELECTORS.CHAT_UI);
+      const projectManager = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
+      const noChatMsg = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
 
-      if (window.showNotification) {
+      userMenu?.classList?.add('hidden');
+      authButton?.classList?.remove('hidden');
+
+      if (typeof window.showNotification === 'function') {
         window.showNotification(MESSAGES.LOGIN_REQUIRED, 'info');
       }
 
-      const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
-      if (loginRequiredMessage) {
-        loginRequiredMessage.classList.remove('hidden');
-      }
+      loginRequiredMessage?.classList?.remove('hidden');
 
-      getElement(SELECTORS.CHAT_UI)?.classList.add('hidden');
-      getElement(SELECTORS.PROJECT_MANAGER_PANEL)?.classList.add('hidden');
-      getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.add('hidden');
+      chatUI?.classList?.add('hidden');
+      projectManager?.classList?.add('hidden');
+      noChatMsg?.classList?.add('hidden');
     });
 
   addEventListener(getElement(SELECTORS.SHOW_LOGIN_BTN), 'click', () => {
@@ -438,11 +450,20 @@ document.addEventListener('authStateChanged', (e) => {
     if (authButton) authButton.classList.add('hidden');
     if (userMenu) userMenu.classList.remove('hidden');
 
-    [chatUI, projectManagerPanel].forEach(el => el?.classList.remove('hidden'));
-    authStatus.textContent = 'Authenticated';
-    authStatus.classList.replace('text-red-600', 'text-green-600');
+    const authStatusEl = getElement(SELECTORS.AUTH_STATUS);
+    const chatUI = getElement(SELECTORS.CHAT_UI);
+    const projectManagerPanel = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
 
-    loadConversationList();
+    [chatUI, projectManagerPanel].forEach(el => el?.classList?.remove('hidden'));
+
+    if (authStatusEl) {
+      authStatusEl.textContent = 'Authenticated';
+      authStatusEl.classList.replace('text-red-600', 'text-green-600');
+    }
+
+    if (typeof loadConversationList === 'function') {
+      loadConversationList();
+    }
     if (typeof window.projectManager?.loadProjects === 'function') {
       window.projectManager.loadProjects();
       loadSidebarProjects();
@@ -456,27 +477,51 @@ document.addEventListener('authStateChanged', (e) => {
     if (authButton) authButton.classList.remove('hidden');
     if (userMenu) userMenu.classList.add('hidden');
 
-    [chatUI, projectManagerPanel].forEach(el => el?.classList.add('hidden'));
-    authStatus.textContent = 'Not Authenticated';
-    authStatus.classList.replace('text-green-600', 'text-red-600');
-
+    const authStatusEl = getElement(SELECTORS.AUTH_STATUS);
+    const chatUI = getElement(SELECTORS.CHAT_UI);
+    const projectManagerPanel = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
     const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
-    if (conversationArea) conversationArea.innerHTML = '';
+
+    [chatUI, projectManagerPanel].forEach(el => el?.classList?.add('hidden'));
+
+    if (authStatusEl) {
+      authStatusEl.textContent = 'Not Authenticated';
+      authStatusEl.classList.replace('text-green-600', 'text-red-600');
+    }
+
+    if (conversationArea) {
+      conversationArea.innerHTML = '';
+    }
   }
 });
 
 window.addEventListener('popstate', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
+
+  // Cache element references
+  const chatUI = getElement(SELECTORS.CHAT_UI);
+  const noChatMessage = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
+
   if (chatId) {
-    getElement(SELECTORS.CHAT_UI)?.classList.remove('hidden');
+    // Show chat UI and load conversation
+    chatUI?.classList?.remove('hidden');
+    noChatMessage?.classList?.add('hidden');
+
     if (typeof window.loadConversation === 'function') {
-      window.loadConversation(chatId);
+      try {
+        window.loadConversation(chatId);
+      } catch (error) {
+        console.error('Error loading conversation:', error);
+        if (window.showNotification) {
+          window.showNotification('Error loading conversation', 'error');
+        }
+      }
     }
-    getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.add('hidden');
   } else {
-    getElement(SELECTORS.CHAT_UI)?.classList.add('hidden');
-    getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.remove('hidden');
+    // Hide chat UI and show no chat message
+    chatUI?.classList?.add('hidden');
+    noChatMessage?.classList?.remove('hidden');
   }
 });
 
@@ -500,23 +545,23 @@ window.checkAndHandleAuth = checkAndHandleAuth;
 function safeInitialize() {
   // Safely bind events only to elements that actually exist
   const elementMap = {};
-  
+
   // Build element map of what actually exists in the DOM
   Object.entries(SELECTORS).forEach(([key, selector]) => {
     elementMap[key] = document.querySelector(selector);
   });
-  
+
   // Only bind events to elements that exist
   if (elementMap.NAV_TOGGLE_BTN) {
     elementMap.NAV_TOGGLE_BTN.addEventListener('click', toggleSidebar);
   }
-  
+
   if (elementMap.SIDEBAR_PROJECT_SEARCH) {
     elementMap.SIDEBAR_PROJECT_SEARCH.addEventListener('input', (e) => {
       searchSidebarProjects(e.target.value);
     });
   }
-  
+
   if (elementMap.SIDEBAR_NEW_PROJECT_BTN) {
     elementMap.SIDEBAR_NEW_PROJECT_BTN.addEventListener('click', () => {
       if (typeof window.projectManager?.showProjectCreateForm === 'function') {
@@ -527,13 +572,13 @@ function safeInitialize() {
       }
     });
   }
-  
+
   if (elementMap.SHOW_LOGIN_BTN && elementMap.AUTH_BUTTON) {
     elementMap.SHOW_LOGIN_BTN.addEventListener('click', () => {
       elementMap.AUTH_BUTTON.click();
     });
   }
-  
-  // Add this line to the DOMContentLoaded event 
-  document.addEventListener('DOMContentLoaded', safeInitialize);
 }
+
+// DOMContentLoaded listener outside of safeInitialize
+document.addEventListener('DOMContentLoaded', safeInitialize);

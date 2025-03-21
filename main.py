@@ -182,9 +182,9 @@ async def validation_exception_handler(request: Request, exc):
 
 # Register routers
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
-app.include_router(conversations_router, prefix="/api/chat", tags=["conversations"])
+app.include_router(conversations_router, prefix="/api/chat/conversations", tags=["conversations"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
-app.include_router(projects_router, prefix="/api", tags=["projects"])
+app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(knowledge_base_router, prefix="/api/kb", tags=["knowledge-bases"])
 
 

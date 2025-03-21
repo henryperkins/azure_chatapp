@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from config import settings
 
-DATABASE_URL = "postgresql+asyncpg://postgres:Twiohmld1!@localhost:5433/azure_chat"
+# Use the DATABASE_URL from config settings
+DATABASE_URL = settings.DATABASE_URL
 
 async_engine = create_async_engine(DATABASE_URL, echo=False)
 
@@ -18,6 +20,7 @@ AsyncSessionLocal = async_sessionmaker(
     bind=async_engine, autocommit=False, autoflush=False, expire_on_commit=False
 )
 
+# Create sync engine for migrations and schema validation
 sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 

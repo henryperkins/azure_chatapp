@@ -192,4 +192,47 @@ async def validate_resource_access(
             detail=f"{resource_name} not found or you don't have access to it"
         )
     
+    
     return resource
+
+
+async def get_by_id(
+    db: AsyncSession,
+    model_class: Type[T],
+    model_id: UUID
+) -> Optional[T]:
+    """
+    Generic function to retrieve a model instance by its ID.
+
+    Args:
+        db: Database session
+        model_class: SQLAlchemy model class to query
+        model_id: ID of the model instance to retrieve
+
+    Returns:
+        The model instance if found, otherwise None
+    """
+    query = select(model_class).where(model_class.id == model_id)
+    result = await db.execute(query)
+    return result.scalars().first()
+
+
+async def get_by_id(
+    db: AsyncSession,
+    model_class: Type[T],
+    model_id: UUID
+) -> Optional[T]:
+    """
+    Generic function to retrieve a model instance by its ID.
+
+    Args:
+        db: Database session
+        model_class: SQLAlchemy model class to query
+        model_id: ID of the model instance to retrieve
+
+    Returns:
+        The model instance if found, otherwise None
+    """
+    query = select(model_class).where(model_class.id == model_id)
+    result = await db.execute(query)
+    return result.scalars().first()
