@@ -285,23 +285,25 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   async function updateAuthStatus() {
     try {
-      const authStatus = getElement(SELECTORS.AUTH_STATUS);
+      // Get UI elements
+      const authButton = document.getElementById("authButton");
+      const userMenu = document.getElementById("userMenu");
+      const authStatus = document.getElementById("authStatus");
+
       const resp = await fetch("/api/auth/verify", {
+        method: 'GET',
         credentials: "include"  // Include cookies in the request
       });
       
       if (resp.ok) {
         // User is authenticated
-        const authButton = getElement(SELECTORS.AUTH_BUTTON);
-        const userMenu = getElement(SELECTORS.USER_MENU);
-        
-        if (authButton) authButton.classList.add("hidden");
-        if (userMenu) userMenu.classList.remove("hidden");
+        authButton?.classList?.add("hidden");
+        userMenu?.classList?.remove("hidden");
         
         if (authStatus) {
           authStatus.textContent = "Authenticated";
-          authStatus.classList.remove("text-red-600");
-          authStatus.classList.add("text-green-600");
+          authStatus.classList?.remove("text-red-600");
+          authStatus.classList?.add("text-green-600");
         }
         
         // Get user info and update UI
@@ -344,19 +346,19 @@ document.addEventListener("DOMContentLoaded", () => {
       tokenRefreshTimeout = null;
     }
     
-    // Get UI elements using SELECTORS
-    const authButton = getElement(SELECTORS.AUTH_BUTTON);
-    const userMenu = getElement(SELECTORS.USER_MENU);
-    const authStatus = getElement(SELECTORS.AUTH_STATUS);
+    // Get UI elements
+    const authButton = document.getElementById("authButton");
+    const userMenu = document.getElementById("userMenu");
+    const authStatus = document.getElementById("authStatus");
     
-    // Update UI for unauthenticated state
-    if (authButton) authButton.classList.remove("hidden");
-    if (userMenu) userMenu.classList.add("hidden");
+    // Update UI for unauthenticated state with safe access
+    authButton?.classList?.remove("hidden");
+    userMenu?.classList?.add("hidden");
     
     if (authStatus) {
       authStatus.textContent = "Not Authenticated";
-      authStatus.classList.remove("text-green-600");
-      authStatus.classList.add("text-red-600");
+      authStatus.classList?.remove("text-green-600");
+      authStatus.classList?.add("text-red-600");
     }
     
     // Show notification
