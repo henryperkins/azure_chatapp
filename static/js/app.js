@@ -1,496 +1,467 @@
-/**
- * app.js
- * ----------------------------------------------------------------------------
- * A production-ready, high-level orchestrator for the Azure OpenAI Chat Application.
- * - Manages global UI elements (sidebar, modals, top nav).
- * - Checks user session state (JWT) for offline/online status.
- * - Implements ephemeral notifications for successes/errors.
- * - Handles keyboard shortcuts for re-generating chat messages, copying content, etc.
- * - Supports mobile device optimizations (responsive toggles, orientation handling).
- * - Ensures advanced accessibility (keyboard nav, ARIA attributes, etc.).
- */
+// app.js
 
-document.addEventListener("DOMContentLoaded", () => {
-  // -----------------------------
-  // DOM References
-  // -----------------------------
-  const sidebarEl = document.getElementById("mainSidebar");
-  const navToggleBtn = document.getElementById("navToggleBtn");
-  const userStatusEl = document.getElementById("userStatus"); // e.g. a <span> that shows "Online" or "Offline"
-  const notificationArea = document.getElementById("notificationArea"); // a container for ephemeral toasts
+const SELECTORS = {
+  MAIN_SIDEBAR: '#mainSidebar',
+  NAV_TOGGLE_BTN: '#navToggleBtn',
+  USER_STATUS: '#userStatus',
+  NOTIFICATION_AREA: '#notificationArea',
+  SIDEBAR_PROJECT_SEARCH: '#sidebarProjectSearch',
+  SIDEBAR_PROJECTS: '#sidebarProjects',
+  SIDEBAR_NEW_PROJECT_BTN: '#sidebarNewProjectBtn',
+  SIDEBAR_CONVERSATIONS: '#sidebarConversations',
+  SIDEBAR_ACTIONS: '#sidebarActions',
+  AUTH_STATUS: '#authStatus',
+  USER_MENU: '#userMenu',
+  AUTH_BUTTON: '#authButton',
+  CHAT_UI: '#chatUI',
+  NO_CHAT_SELECTED_MESSAGE: '#noChatSelectedMessage',
+  LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
+  PROJECT_MANAGER_PANEL: '#projectManagerPanel',
+  CONVERSATION_AREA: '#conversationArea',
+  CHAT_TITLE: '#chatTitle',
+  CREATE_PROJECT_BTN: '#createProjectBtn',
+  SHOW_LOGIN_BTN: '#showLoginBtn'
+};
 
-  // For advanced mobile device handling
-  handleWindowResize();
-  window.addEventListener("resize", handleWindowResize);
+const MESSAGES = {
+  NO_PROJECTS: 'No projects found',
+  NO_CONVERSATIONS: 'No conversations yet—Begin now!',
+  SESSION_EXPIRED: 'Your session has expired. Please log in again.',
+  LOGIN_REQUIRED: 'Please log in to use the application',
+  PROJECT_NOT_FOUND: 'Selected project not found or inaccessible. It has been deselected.'
+};
 
-  // Session check on load
-  updateUserSessionState();
+const API_ENDPOINTS = {
+  AUTH_VERIFY: '/api/auth/verify',
+  PROJECTS: '/api/projects',
+  CONVERSATIONS: '/api/chat/conversations',
+  PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations'
+};
 
-  // Keyboard shortcuts
-  setupGlobalKeyboardShortcuts();
+function getElement(selector) {
+  return document.querySelector(selector);
+}
 
-  // Event Listeners
-  if (navToggleBtn && sidebarEl) {
-    navToggleBtn.addEventListener("click", toggleSidebar);
+function addEventListener(element, event, handler) {
+  if (element) {
+    element.addEventListener(event, handler);
+  } else {
+    console.warn(`Cannot add ${event} listener to non-existent element: ${selector}`);
   }
+}
 
-  // Example of listening for project updates globally
-  document.addEventListener("projectUpdated", (e) => {
-    // e.detail might contain project info, refresh UI accordingly
-    console.log("Global event: 'projectUpdated' triggered, detail:", e.detail);
-  });
+function apiRequest(url, method = 'GET', data = null) {
+  const token = document.cookie.split('; ')
+    .find(row => row.startsWith('access_token='))
+    ?.split('=')[1];
 
-  // Example of listening for "sessionExpired" event from auth.js 
-  document.addEventListener("sessionExpired", () => {
-    showNotification("Your session has expired. Please log in again.", "error");
-    updateUserSessionState();
-  });
-
-  // Set up sidebar project search
-  const sidebarProjectSearch = document.getElementById("sidebarProjectSearch");
-  if (sidebarProjectSearch) {
-    sidebarProjectSearch.addEventListener("input", (e) => {
-      searchSidebarProjects(e.target.value);
-    });
-  }
-  
-  // Functions for sidebar projects
-  window.loadSidebarProjects = function() {
-    apiRequest("/api/projects")
-      .then(response => {
-        const projects = Array.isArray(response.data) ? response.data : [];
-        const sidebarProjects = document.getElementById("sidebarProjects");
-        if (!sidebarProjects) return;
-        
-        sidebarProjects.innerHTML = "";
-        
-        if (projects.length === 0) {
-          const li = document.createElement("li");
-          li.className = "text-gray-500 text-center";
-          li.textContent = "No projects found";
-          sidebarProjects.appendChild(li);
-          return;
-        }
-        
-        projects.forEach(project => {
-          const li = document.createElement("li");
-          li.className = "p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center";
-          li.dataset.projectId = project.id;
-          
-          const nameSpan = document.createElement("span");
-          nameSpan.textContent = project.name;
-          nameSpan.className = "flex-1 truncate";
-          
-          li.appendChild(nameSpan);
-          
-          if (project.pinned) {
-            const pinIcon = document.createElement("span");
-            pinIcon.textContent = "📌";
-            pinIcon.className = "ml-1 text-yellow-600";
-            li.appendChild(pinIcon);
-          }
-          
-          li.addEventListener("click", () => {
-            localStorage.setItem("selectedProjectId", project.id);
-            if (typeof window.projectManager?.loadProjectDetails === "function") {
-              window.projectManager.loadProjectDetails(project.id);
-            }
-          });
-          
-          sidebarProjects.appendChild(li);
-        });
-      })
-      .catch(err => {
-        console.error("Error loading sidebar projects:", err);
-      });
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include'
   };
-  
-  window.searchSidebarProjects = function(term) {
-    if (!term) {
-      // If search is cleared, reload all projects
-      document.querySelectorAll("#sidebarProjects li").forEach(li => {
-        li.classList.remove("hidden");
-      });
-      return;
-    }
-    
-    term = term.toLowerCase();
-    document.querySelectorAll("#sidebarProjects li").forEach(li => {
-      const projectName = li.querySelector("span")?.textContent?.toLowerCase() || "";
-      const isMatch = projectName.includes(term);
-      li.classList.toggle("hidden", !isMatch);
-    });
-  };
-  
-  // Set up sidebar new project button
-  const sidebarNewProjectBtn = document.getElementById("sidebarNewProjectBtn");
-  if (sidebarNewProjectBtn) {
-    sidebarNewProjectBtn.addEventListener("click", () => {
-      if (typeof window.projectManager?.showProjectCreateForm === "function") {
-        window.projectManager.showProjectCreateForm();
-      } else {
-        document.getElementById("createProjectBtn")?.click();
-      }
-    });
+
+  // Only add Authorization header if token exists
+  if (token) {
+    options.headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Automatically load the conversation list if the element is present
-  if (document.getElementById('sidebarConversations')) {
-    loadConversationList();
-  }
+  if (data) options.body = JSON.stringify(data);
 
-  // Add a "New Standalone Chat" button to the sidebar
-  const sidebarNewChatBtn = document.createElement('button');
-  sidebarNewChatBtn.id = "sidebarNewChatBtn";
-  sidebarNewChatBtn.className = "w-full text-left p-2 bg-blue-500 hover:bg-blue-600 text-white rounded mt-2 flex items-center";
-  sidebarNewChatBtn.innerHTML = '<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> New Standalone Chat';
-  sidebarNewChatBtn.addEventListener('click', () => {
-    // Clear selected project to create a standalone chat
-    localStorage.removeItem("selectedProjectId");
-    // Trigger new chat creation
-    if (typeof window.createNewChat === 'function') {
-      window.createNewChat();
-    }
-  });
-  
-  const sidebarActions = document.querySelector('#sidebarActions') || document.querySelector('#mainSidebar');
-  if (sidebarActions) {
-    sidebarActions.appendChild(sidebarNewChatBtn);
-  }
-  
-  // Call the improved authentication function after existing setup
-  checkAndHandleAuth();
-});
-
-/**
- * Load the user's conversation list, relying solely on cookie-based auth.
- */
-function loadConversationList() {
-   const selectedProjectId = localStorage.getItem("selectedProjectId");
- 
-   // If no project is selected, use the standalone endpoint for conversations
-   if (!selectedProjectId) {
-     const endpoint = `/api/chat/conversations`;
-     apiRequest(endpoint)
-       .then((data) => {
-         renderConversationList(data);
-       })
-       .catch((err) => {
-         console.error('Error loading conversation list:', err);
-       });
-     return;
-   }
- 
-   // If a project is selected, first check if it's archived
-   apiRequest(`/api/projects/${selectedProjectId}`)
-     .then((projectResp) => {
-       const project = projectResp.data;
-       
-       // If not archived, load the project's conversations
-       const endpoint = `/api/projects/${selectedProjectId}/conversations`;
-       return apiRequest(endpoint);
-     })
-     .then((data) => {
-       if (!data) return; // if archived or error, skip
-       renderConversationList(data);
-     })
-     .catch((err) => {
-       console.error("Error verifying project or loading conversations:", err);
-       if (err.message.includes("404")) {
-         localStorage.removeItem("selectedProjectId");
-         showNotification("Selected project not found or inaccessible. It has been deselected.", "error");
-         loadSidebarProjects(); // refresh project list to reflect current state
-         loadConversationList(); // reload without project, avoid further erroneous calls
-       }
-     });
- }
- window.loadConversationList = loadConversationList;
- 
- /**
-  * Helper function to render conversation list items
-  */
- function renderConversationList(data) {
-   const container = document.getElementById('sidebarConversations');
-   if (!container) return;
-   container.innerHTML = '';
-   if (data.conversations && data.conversations.length > 0) {
-     data.conversations.forEach((item) => {
-       const li = document.createElement('li');
-       li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
-       li.innerHTML = `
-         <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
-         <span class="text-xs text-gray-500 ml-2">(${item.model_id})</span>
-         ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
-       `;
-       li.addEventListener('click', () => {
-         window.history.pushState({}, '', `/?chatId=${item.id}`);
-         // Show chat UI and hide "no chat" message
-         const chatUI = document.getElementById("chatUI");
-         const noChatMsg = document.getElementById("noChatSelectedMessage");
-         if (chatUI) chatUI.classList.remove("hidden");
-         if (noChatMsg) noChatMsg.classList.add("hidden");
-         // Update chat title and load messages
-         const chatTitleEl = document.getElementById("chatTitle");
-         if (chatTitleEl) chatTitleEl.textContent = item.title;
-         if (typeof window.loadConversation === 'function') {
-           window.loadConversation(item.id);
-         }
-       });
-       container.appendChild(li);
-     });
-   } else {
-     const li = document.createElement('li');
-     li.className = 'text-gray-500';
-     li.textContent = 'No conversations yet—Begin now!';
-     container.appendChild(li);
-   }
- }
-
-// ---------------------------------------------------------------------
-// Improved authentication handling (updated)
-// ---------------------------------------------------------------------
-function checkAndHandleAuth() {
-  apiRequest("/api/auth/verify")
-    .then(resp => {
-      // User is authenticated - load data
-      const selectedProjectId = localStorage.getItem("selectedProjectId");
-      // Always load conversations (either project-specific or standalone)
-      loadConversationList();
-      
-      // Load projects list
-      if (typeof window.projectManager?.loadProjects === "function") {
-        window.projectManager.loadProjects();
-        loadSidebarProjects();
+  return fetch(url, options)
+    .then(response => {
+      if (response.status === 401 || response.status === 403) {
+        // Handle authentication errors consistently
+        document.dispatchEvent(new CustomEvent("authStateChanged", { 
+          detail: { authenticated: false } 
+        }));
+        throw new Error('Authentication required');
       }
-      
-      if (window.CHAT_CONFIG?.chatId) {
-        if (typeof window.loadConversation === 'function') {
-          window.loadConversation(window.CHAT_CONFIG.chatId);
-        }
+      if (!response.ok) {
+        throw new Error(`API error response (${response.status}): ${response.statusText}`);
       }
-      document.getElementById("userMenu")?.classList.remove("hidden");
-      document.getElementById("authButton")?.classList.add("hidden");
-      
-      // Show chat UI if a chat is selected
-      if (window.CHAT_CONFIG?.chatId) {
-        document.getElementById("chatUI")?.classList.remove("hidden");
-        document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
-      }
-
-      // Hide login required message (if any)
-      const loginRequiredMessage = document.getElementById("loginRequiredMessage");
-      if (loginRequiredMessage) {
-        loginRequiredMessage.classList.add("hidden");
-      }
+      return response.json();
     })
-    .catch(err => {
-      // User is not authenticated - show login dialog
-      document.getElementById("userMenu")?.classList.add("hidden");
-      document.getElementById("authButton")?.classList.remove("hidden");
-      
-      // Show a notification that login is required
-      if (window.showNotification) {
-        window.showNotification("Please log in to use the application", "info");
-      }
-
-      // Show login required message
-      const loginRequiredMessage = document.getElementById("loginRequiredMessage");
-      if (loginRequiredMessage) {
-        loginRequiredMessage.classList.remove("hidden");
-      }
-
-      // Hide content that requires authentication
-      document.getElementById("chatUI")?.classList.add("hidden");
-      document.getElementById("projectManagerPanel")?.classList.add("hidden");
-      document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
-      
-      console.error("Auth check failed:", err);
-    });
-
-  // Add event listener for the login button
-  const showLoginBtn = document.getElementById("showLoginBtn");
-  if (showLoginBtn) {
-    showLoginBtn.addEventListener("click", () => {
-      document.getElementById("authButton")?.click();
-    });
-  }
-}
-// ---------------------------------------------------------------------
-
-function updateUserSessionState() {
-  const authStatus = document.getElementById("authStatus");
-  apiRequest("/api/auth/verify")
-    .then(resp => {
-      if(authStatus) {
-        authStatus.textContent = "Authenticated";
-        authStatus.classList.remove("text-red-600");
-        authStatus.classList.add("text-green-600");
-      }
-    })
-    .catch(err => {
-      if(authStatus) {
-        authStatus.textContent = "Not Authenticated";
-        authStatus.classList.remove("text-green-600");
-        authStatus.classList.add("text-red-600");
-      }
-      console.error("Auth check failed:", err);
+    .catch(error => {
+      console.error(`API request failed: ${url}`, error);
+      throw error;
     });
 }
 
-/**
- * Toggles the main sidebar for mobile or small screens.
- */
-function toggleSidebar() {
-  const sidebarEl = document.getElementById("mainSidebar");
-  const toggleBtn = document.getElementById("navToggleBtn");
-  if (sidebarEl && toggleBtn) {
-    const isExpanded = toggleBtn.getAttribute("aria-expanded") === "true";
-    toggleBtn.setAttribute("aria-expanded", !isExpanded);
-    sidebarEl.classList.toggle("hidden");
-    // Add mobile-specific positioning
-    if (window.innerWidth < 768) {
-      sidebarEl.classList.toggle("fixed");
-      sidebarEl.classList.toggle("inset-0");
-      sidebarEl.classList.toggle("z-50");
-    }
-  }
-}
-
-/**
- * Adapts layout for mobile or desktop on window resize.
- */
-function handleWindowResize() {
-  const sidebarEl = document.getElementById("mainSidebar");
-  if (!sidebarEl) return;
-
-  // Remove mobile-specific classes on desktop
-  if (window.innerWidth >= 768) {
-    sidebarEl.classList.remove("fixed", "inset-0", "z-50");
-  }
-}
-
-/**
- * Sets up keyboard shortcuts for improved accessibility:
- *  - Ctrl/Cmd + R => Ask chat.js to regenerate the last message
- *  - Ctrl/Cmd + C => Copy the last assistant message or selected text
- */
-function setupGlobalKeyboardShortcuts() {
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-      // Regenerate
-      if (e.key.toLowerCase() === "r") {
-        e.preventDefault();
-        // Dispatch a custom event "regenerateChat"
-        document.dispatchEvent(new CustomEvent("regenerateChat"));
-      }
-      // Copy
-      if (e.key.toLowerCase() === "c") {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent("copyMessage"));
-      }
-    }
-  });
-}
-
-/**
- * Displays ephemeral notifications (toasts) in the notificationArea.
- * @param {String} msg - The message to display
- * @param {String} type - "success", "error", or "info"
- */
-function showNotification(msg, type = "info") {
-  const notificationArea = document.getElementById("notificationArea");
+function showNotification(msg, type = 'info') {
+  const notificationArea = getElement(SELECTORS.NOTIFICATION_AREA);
   if (!notificationArea) {
-    console.warn("No notificationArea found in DOM.");
+    console.warn('No notificationArea found in DOM.');
     return;
   }
-  const toast = document.createElement("div");
-  toast.classList.add(
-    "mb-2",
-    "px-4",
-    "py-2",
-    "rounded",
-    "shadow",
-    "text-white",
-    "transition-opacity",
-    "opacity-0"
-  );
+
+  const toast = document.createElement('div');
+  toast.classList.add('mb-2', 'px-4', 'py-2', 'rounded', 'shadow', 'text-white', 'transition-opacity', 'opacity-0');
 
   switch (type) {
-    case "success":
-      toast.classList.add("bg-green-600");
+    case 'success':
+      toast.classList.add('bg-green-600');
       break;
-    case "error":
-      toast.classList.add("bg-red-600");
+    case 'error':
+      toast.classList.add('bg-red-600');
       break;
     default:
-      toast.classList.add("bg-gray-700");
+      toast.classList.add('bg-gray-700');
   }
-  toast.textContent = msg;
 
+  toast.textContent = msg;
   notificationArea.appendChild(toast);
 
-  // Fade in
   requestAnimationFrame(() => {
-    toast.classList.remove("opacity-0");
+    toast.classList.remove('opacity-0');
   });
 
-  // Auto-remove after 3 seconds
   setTimeout(() => {
-    toast.classList.add("opacity-0");
+    toast.classList.add('opacity-0');
     setTimeout(() => {
       toast.remove();
     }, 500);
   }, 3000);
 }
 
-// Expose showNotification globally if needed
-window.showNotification = showNotification;
+function updateUserSessionState() {
+  const authStatus = getElement(SELECTORS.AUTH_STATUS);
+  apiRequest(API_ENDPOINTS.AUTH_VERIFY)
+    .then(() => {
+      if (authStatus) {
+        authStatus.textContent = 'Authenticated';
+        authStatus.classList.remove('text-red-600');
+        authStatus.classList.add('text-green-600');
+      }
+    })
+    .catch(() => {
+      if (authStatus) {
+        authStatus.textContent = 'Not Authenticated';
+        authStatus.classList.remove('text-green-600');
+        authStatus.classList.add('text-red-600');
+      }
+    });
+}
 
-/**
- * Listen to authStateChanged for UI updates
- */
-document.addEventListener("authStateChanged", (e) => {
-  const authStatus = document.getElementById("authStatus");
-  const authButton = document.getElementById("authButton");
-  const userMenu = document.getElementById("userMenu");
-  const chatUI = document.getElementById("chatUI");
-  const projectManagerPanel = document.getElementById("projectManagerPanel");
+function toggleSidebar() {
+  const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
+  const toggleBtn = getElement(SELECTORS.NAV_TOGGLE_BTN);
+  if (sidebarEl && toggleBtn) {
+    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+    toggleBtn.setAttribute('aria-expanded', !isExpanded);
+    sidebarEl.classList.toggle('hidden');
+    if (window.innerWidth < 768) {
+      sidebarEl.classList.toggle('fixed');
+      sidebarEl.classList.toggle('inset-0');
+      sidebarEl.classList.toggle('z-50');
+    }
+  }
+}
+
+function handleWindowResize() {
+  const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
+  if (!sidebarEl) return;
+
+  if (window.innerWidth >= 768) {
+    sidebarEl.classList.remove('fixed', 'inset-0', 'z-50');
+  }
+}
+
+function setupGlobalKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent('regenerateChat'));
+      }
+      if (e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent('copyMessage'));
+      }
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  handleWindowResize();
+  window.addEventListener('resize', handleWindowResize);
+
+  updateUserSessionState();
+  setupGlobalKeyboardShortcuts();
+
+  addEventListener(getElement(SELECTORS.NAV_TOGGLE_BTN), 'click', toggleSidebar);
+
+  document.addEventListener('projectUpdated', (e) => {
+    console.log("Global event: 'projectUpdated' triggered, detail:", e.detail);
+  });
+
+  document.addEventListener('sessionExpired', () => {
+    showNotification(MESSAGES.SESSION_EXPIRED, 'error');
+    updateUserSessionState();
+  });
+
+  addEventListener(getElement(SELECTORS.SIDEBAR_PROJECT_SEARCH), 'input', (e) => {
+    searchSidebarProjects(e.target.value);
+  });
+
+  addEventListener(getElement(SELECTORS.SIDEBAR_NEW_PROJECT_BTN), 'click', () => {
+    if (typeof window.projectManager?.showProjectCreateForm === 'function') {
+      window.projectManager.showProjectCreateForm();
+    } else {
+      getElement(SELECTORS.CREATE_PROJECT_BTN)?.click();
+    }
+  });
+
+  if (getElement(SELECTORS.SIDEBAR_CONVERSATIONS)) {
+    loadConversationList();
+  }
+
+  const sidebarNewChatBtn = document.createElement('button');
+  sidebarNewChatBtn.id = 'sidebarNewChatBtn';
+  sidebarNewChatBtn.className = 'w-full text-left p-2 bg-blue-500 hover:bg-blue-600 text-white rounded mt-2 flex items-center';
+  sidebarNewChatBtn.innerHTML = '<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> New Standalone Chat';
+  sidebarNewChatBtn.addEventListener('click', () => {
+    localStorage.removeItem('selectedProjectId');
+    if (typeof window.createNewChat === 'function') {
+      window.createNewChat();
+    }
+  });
+
+  const sidebarActions = getElement(SELECTORS.SIDEBAR_ACTIONS) || getElement(SELECTORS.MAIN_SIDEBAR);
+  if (sidebarActions) {
+    sidebarActions.appendChild(sidebarNewChatBtn);
+  }
+
+  checkAndHandleAuth();
+});
+
+function loadSidebarProjects() {
+  apiRequest(API_ENDPOINTS.PROJECTS)
+    .then(response => {
+      const projects = Array.isArray(response.data) ? response.data : [];
+      const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
+      if (!sidebarProjects) return;
+
+      sidebarProjects.innerHTML = '';
+
+      if (projects.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'text-gray-500 text-center';
+        li.textContent = MESSAGES.NO_PROJECTS;
+        sidebarProjects.appendChild(li);
+        return;
+      }
+
+      projects.forEach(project => {
+        const li = document.createElement('li');
+        li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
+        li.dataset.projectId = project.id;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = project.name;
+        nameSpan.className = 'flex-1 truncate';
+
+        li.appendChild(nameSpan);
+
+        if (project.pinned) {
+          const pinIcon = document.createElement('span');
+          pinIcon.textContent = '📌';
+          pinIcon.className = 'ml-1 text-yellow-600';
+          li.appendChild(pinIcon);
+        }
+
+        li.addEventListener('click', () => {
+          localStorage.setItem('selectedProjectId', project.id);
+          if (typeof window.projectManager?.loadProjectDetails === 'function') {
+            window.projectManager.loadProjectDetails(project.id);
+          }
+        });
+
+        sidebarProjects.appendChild(li);
+      });
+    })
+    .catch(err => {
+      console.error('Error loading sidebar projects:', err);
+    });
+}
+
+function searchSidebarProjects(term) {
+  if (!term) {
+    document.querySelectorAll(`${SELECTORS.SIDEBAR_PROJECTS} li`).forEach(li => {
+      li.classList.remove('hidden');
+    });
+    return;
+  }
+
+  term = term.toLowerCase();
+  document.querySelectorAll(`${SELECTORS.SIDEBAR_PROJECTS} li`).forEach(li => {
+    const projectName = li.querySelector('span')?.textContent?.toLowerCase() || '';
+    const isMatch = projectName.includes(term);
+    li.classList.toggle('hidden', !isMatch);
+  });
+}
+
+function loadConversationList() {
+  const selectedProjectId = localStorage.getItem('selectedProjectId');
+
+  if (!selectedProjectId) {
+    apiRequest(API_ENDPOINTS.CONVERSATIONS)
+      .then(data => {
+        renderConversationList(data);
+      })
+      .catch(err => {
+        console.error('Error loading conversation list:', err);
+      });
+    return;
+  }
+
+  apiRequest(API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', selectedProjectId))
+    .then(projectResp => {
+      const project = projectResp.data;
+      const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', selectedProjectId);
+      return apiRequest(endpoint);
+    })
+    .then(data => {
+      if (!data) return;
+      renderConversationList(data);
+    })
+    .catch(err => {
+      console.error('Error verifying project or loading conversations:', err);
+      if (err.message.includes('404')) {
+        localStorage.removeItem('selectedProjectId');
+        showNotification(MESSAGES.PROJECT_NOT_FOUND, 'error');
+        loadSidebarProjects();
+        loadConversationList();
+      }
+    });
+}
+
+function renderConversationList(data) {
+  const container = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (data.conversations && data.conversations.length > 0) {
+    data.conversations.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
+      li.innerHTML = `
+        <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
+        <span class="text-xs text-gray-500 ml-2">(${item.model_id})</span>
+        ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
+      `;
+      li.addEventListener('click', () => {
+        window.history.pushState({}, '', `/?chatId=${item.id}`);
+        const chatUI = getElement(SELECTORS.CHAT_UI);
+        const noChatMsg = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
+        if (chatUI) chatUI.classList.remove('hidden');
+        if (noChatMsg) noChatMsg.classList.add('hidden');
+        const chatTitleEl = getElement(SELECTORS.CHAT_TITLE);
+        if (chatTitleEl) chatTitleEl.textContent = item.title;
+        if (typeof window.loadConversation === 'function') {
+          window.loadConversation(item.id);
+        }
+      });
+      container.appendChild(li);
+    });
+  } else {
+    const li = document.createElement('li');
+    li.className = 'text-gray-500';
+    li.textContent = MESSAGES.NO_CONVERSATIONS;
+    container.appendChild(li);
+  }
+}
+
+function checkAndHandleAuth() {
+  apiRequest(API_ENDPOINTS.AUTH_VERIFY)
+    .then(() => {
+      const selectedProjectId = localStorage.getItem('selectedProjectId');
+      loadConversationList();
+
+      if (typeof window.projectManager?.loadProjects === 'function') {
+        window.projectManager.loadProjects();
+        loadSidebarProjects();
+      }
+
+      if (window.CHAT_CONFIG?.chatId) {
+        if (typeof window.loadConversation === 'function') {
+          window.loadConversation(window.CHAT_CONFIG.chatId);
+        }
+      }
+
+      getElement(SELECTORS.USER_MENU)?.classList.remove('hidden');
+      getElement(SELECTORS.AUTH_BUTTON)?.classList.add('hidden');
+
+      if (window.CHAT_CONFIG?.chatId) {
+        getElement(SELECTORS.CHAT_UI)?.classList.remove('hidden');
+        getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.add('hidden');
+      }
+
+      const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+      if (loginRequiredMessage) {
+        loginRequiredMessage.classList.add('hidden');
+      }
+    })
+    .catch(() => {
+      getElement(SELECTORS.USER_MENU)?.classList.add('hidden');
+      getElement(SELECTORS.AUTH_BUTTON)?.classList.remove('hidden');
+
+      if (window.showNotification) {
+        window.showNotification(MESSAGES.LOGIN_REQUIRED, 'info');
+      }
+
+      const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+      if (loginRequiredMessage) {
+        loginRequiredMessage.classList.remove('hidden');
+      }
+
+      getElement(SELECTORS.CHAT_UI)?.classList.add('hidden');
+      getElement(SELECTORS.PROJECT_MANAGER_PANEL)?.classList.add('hidden');
+      getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.add('hidden');
+    });
+
+  addEventListener(getElement(SELECTORS.SHOW_LOGIN_BTN), 'click', () => {
+    getElement(SELECTORS.AUTH_BUTTON)?.click();
+  });
+}
+
+document.addEventListener('authStateChanged', (e) => {
+  const authStatus = getElement(SELECTORS.AUTH_STATUS);
+  const authButton = getElement(SELECTORS.AUTH_BUTTON);
+  const userMenu = getElement(SELECTORS.USER_MENU);
+  const chatUI = getElement(SELECTORS.CHAT_UI);
+  const projectManagerPanel = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
 
   if (e.detail.authenticated) {
-    // Update UI for authenticated user
-    if (authButton) authButton.classList.add("hidden");
-    if (userMenu) userMenu.classList.remove("hidden");
-    
-    // Show authenticated content
-    [chatUI, projectManagerPanel].forEach(el => el?.classList.remove("hidden"));
-    authStatus.textContent = "Authenticated";
-    authStatus.classList.replace("text-red-600", "text-green-600");
+    if (authButton) authButton.classList.add('hidden');
+    if (userMenu) userMenu.classList.remove('hidden');
 
-    // Load user data
+    [chatUI, projectManagerPanel].forEach(el => el?.classList.remove('hidden'));
+    authStatus.textContent = 'Authenticated';
+    authStatus.classList.replace('text-red-600', 'text-green-600');
+
     loadConversationList();
-    // Load projects list
-    if (typeof window.projectManager?.loadProjects === "function") {
+    if (typeof window.projectManager?.loadProjects === 'function') {
       window.projectManager.loadProjects();
       loadSidebarProjects();
     }
     if (window.CHAT_CONFIG?.chatId) {
-      if (typeof window.loadConversation === "function") {
+      if (typeof window.loadConversation === 'function') {
         window.loadConversation(window.CHAT_CONFIG.chatId);
       }
     }
   } else {
-    // Update UI for unauthenticated user
-    if (authButton) authButton.classList.remove("hidden");
-    if (userMenu) userMenu.classList.add("hidden");
-    
-    // Hide authenticated content
-    [chatUI, projectManagerPanel].forEach(el => el?.classList.add("hidden"));
-    authStatus.textContent = "Not Authenticated";
-    authStatus.classList.replace("text-green-600", "text-red-600");
+    if (authButton) authButton.classList.remove('hidden');
+    if (userMenu) userMenu.classList.add('hidden');
 
-    // Clear conversation area
-    const conversationArea = document.getElementById("conversationArea");
-    if (conversationArea) conversationArea.innerHTML = "";
+    [chatUI, projectManagerPanel].forEach(el => el?.classList.add('hidden'));
+    authStatus.textContent = 'Not Authenticated';
+    authStatus.classList.replace('text-green-600', 'text-red-600');
+
+    const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
+    if (conversationArea) conversationArea.innerHTML = '';
   }
 });
 
@@ -498,14 +469,14 @@ window.addEventListener('popstate', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
   if (chatId) {
-    document.getElementById("chatUI")?.classList.remove("hidden");
+    getElement(SELECTORS.CHAT_UI)?.classList.remove('hidden');
     if (typeof window.loadConversation === 'function') {
       window.loadConversation(chatId);
     }
-    document.getElementById("noChatSelectedMessage")?.classList.add("hidden");
+    getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.add('hidden');
   } else {
-    document.getElementById("chatUI")?.classList.add("hidden");
-    document.getElementById("noChatSelectedMessage")?.classList.remove("hidden");
+    getElement(SELECTORS.CHAT_UI)?.classList.add('hidden');
+    getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE)?.classList.remove('hidden');
   }
 });
 
@@ -515,238 +486,54 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// NEW UTILITY FUNCTIONS TO REDUCE DUPLICATION
+// Expose utility functions globally
+window.apiRequest = apiRequest;
+window.showNotification = showNotification;
+window.loadSidebarProjects = loadSidebarProjects;
+window.searchSidebarProjects = searchSidebarProjects;
+window.loadConversationList = loadConversationList;
+window.renderConversationList = renderConversationList;
+window.checkAndHandleAuth = checkAndHandleAuth;
 
-/**
- * Standardized API request function to eliminate duplicate fetch code
- * @param {String} url - The URL to fetch
- * @param {String|Object} methodOrOptions - HTTP method (GET, POST, etc) or options object
- * @param {Object} data - Request body for POST/PUT/PATCH
- * @returns {Promise} - Resolves to parsed JSON response
- */
-window.apiRequest = async function(url, methodOrOptions = "GET", data = null) {
-  // Validate UUID format for conversation IDs
-  function isValidUUID(str) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-  }
+// Add this function to document ready listener
 
-  if (url.includes('/conversations/')) {
-    const parts = url.split('/');
-    const idIndex = parts.findIndex(p => p === 'conversations') + 1;
-    if (idIndex > 0 && idIndex < parts.length && !isValidUUID(parts[idIndex])) {
-      throw new Error(`Invalid UUID format: ${parts[idIndex]}`);
-    }
-  }
-
-  const token = document.cookie.split('; ')
-    .find(row => row.startsWith('access_token='))
-    ?.split('=')[1];
-
-  const options = {
-    method: typeof methodOrOptions === 'string' ? methodOrOptions : 'GET',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include'
-  };
-
-  if (data) options.body = JSON.stringify(data);
+function safeInitialize() {
+  // Safely bind events only to elements that actually exist
+  const elementMap = {};
   
-  // Validate UUID format for conversation IDs
-  if (url.includes('/conversations/')) {
-    const parts = url.split('/');
-    const idIndex = parts.findIndex(p => p === 'conversations') + 1;
-    if (idIndex > 0 && idIndex < parts.length && !isValidUUID(parts[idIndex])) {
-      throw new Error(`Invalid UUID format: ${parts[idIndex]}`);
-    }
-  }
-
-  function isValidUUID(str) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-  }
-  
-  try {
-    // Fix: Changed fetchOptions to options to match the variable name above
-    console.log(`API ${options.method} request to ${url}`, options.body ? 'with data' : '');
-    const response = await fetch(url, options);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`API error response (${response.status}):`, errorText);
-      try {
-        const jsonError = JSON.parse(errorText);
-        throw new Error(jsonError.detail || jsonError.message || `Error ${response.status}`);
-      } catch (e) {
-        throw new Error(`${response.status}: ${errorText}`);
-      }
-    }
-    
-    // For no-content responses
-    if (response.status === 204) {
-      return {};
-    }
-    
-    // Parse JSON response
-    const responseData = await response.json();
-    
-    // Handle our standard { data: ..., success: true } format
-    if (responseData && responseData.data !== undefined) {
-      return responseData;
-    }
-    
-    // For other formats, wrap in our standard format
-    return { 
-      data: responseData, 
-      success: true 
-    };
-  } catch (error) {
-    console.error(`API request failed: ${url}`, error);
-    throw error;
-  }
-};
-
-/**
- * Form data serialization helper
- * @param {HTMLFormElement} form - The form to serialize
- * @returns {Object} - Form data as key-value pairs
- */
-window.serializeForm = function(form) {
-  const formData = new FormData(form);
-  const data = {};
-  
-  for (let [key, value] of formData.entries()) {
-    data[key] = value;
-  }
-  
-  return data;
-};
-
-/**
- * Form validation helper
- * @param {HTMLFormElement} form - The form to validate
- * @returns {Object} - Validation result with isValid flag and errors
- */
-window.validateForm = function(form) {
-  const data = window.serializeForm(form);
-  const errors = {};
-  
-  // Check required fields
-  Array.from(form.elements).forEach(el => {
-    if (el.required && !el.value.trim()) {
-      errors[el.name] = "This field is required";
-    }
+  // Build element map of what actually exists in the DOM
+  Object.entries(SELECTORS).forEach(([key, selector]) => {
+    elementMap[key] = document.querySelector(selector);
   });
   
-  return {
-    isValid: Object.keys(errors).length === 0,
-    data,
-    errors
-  };
-};
-
-/**
- * DOM manipulation helper
- * @param {String} selector - CSS selector
- * @param {HTMLElement} context - Context element (optional)
- * @returns {HTMLElement} - Found element or null
- */
-window.find = function(selector, context = document) {
-  return context.querySelector(selector);
-};
-
-/**
- * Create HTML element with attributes and children
- * @param {String} tag - Element tag name
- * @param {Object} attrs - Element attributes
- * @param {Array|String} children - Child elements or text content
- * @returns {HTMLElement} - Created element
- */
-window.createElement = function(tag, attrs = {}, children = []) {
-  const el = document.createElement(tag);
+  // Only bind events to elements that exist
+  if (elementMap.NAV_TOGGLE_BTN) {
+    elementMap.NAV_TOGGLE_BTN.addEventListener('click', toggleSidebar);
+  }
   
-  // Set attributes
-  Object.entries(attrs).forEach(([key, value]) => {
-    if (key === 'className') {
-      el.className = value;
-    } else if (key === 'dataset') {
-      Object.entries(value).forEach(([dataKey, dataValue]) => {
-        el.dataset[dataKey] = dataValue;
-      });
-    } else if (key.startsWith('on') && typeof value === 'function') {
-      el.addEventListener(key.substring(2).toLowerCase(), value);
-    } else {
-      el.setAttribute(key, value);
-    }
-  });
+  if (elementMap.SIDEBAR_PROJECT_SEARCH) {
+    elementMap.SIDEBAR_PROJECT_SEARCH.addEventListener('input', (e) => {
+      searchSidebarProjects(e.target.value);
+    });
+  }
   
-  // Add children
-  if (typeof children === 'string') {
-    el.textContent = children;
-  } else if (Array.isArray(children)) {
-    children.forEach(child => {
-      if (typeof child === 'string') {
-        el.appendChild(document.createTextNode(child));
-      } else if (child instanceof HTMLElement) {
-        el.appendChild(child);
+  if (elementMap.SIDEBAR_NEW_PROJECT_BTN) {
+    elementMap.SIDEBAR_NEW_PROJECT_BTN.addEventListener('click', () => {
+      if (typeof window.projectManager?.showProjectCreateForm === 'function') {
+        window.projectManager.showProjectCreateForm();
+      } else {
+        const createBtn = elementMap.CREATE_PROJECT_BTN;
+        if (createBtn) createBtn.click();
       }
     });
   }
   
-  return el;
-};
-window.showProjectSelection = function() {
-    return new Promise(async (resolve) => {
-        // Fetch available projects
-        const { data: projects } = await window.apiRequest("/api/projects?filter=active");
-        
-        // Create modal elements
-        const modal = document.createElement("div");
-        modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50";
-        
-        const modalContent = document.createElement("div");
-        modalContent.className = "bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md";
-        
-        // Build project selection UI
-        modalContent.innerHTML = `
-          <h3 class="text-lg font-medium mb-4">Select a Project</h3>
-          <div class="space-y-2" id="projectSelectionList"></div>
-          <div class="mt-6 flex justify-end space-x-2">
-            <button 
-              type="button" 
-              class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-              onclick="this.closest('.fixed').remove(); resolve(null)"
-            >
-              Skip
-            </button>
-          </div>
-        `;
-    
-        // Populate project list
-        const projectList = modalContent.querySelector("#projectSelectionList");
-        
-        if (projects.length === 0) {
-          projectList.innerHTML = `
-            <div class="text-center p-4 text-gray-500">
-              No projects found. <a href="/projects" class="text-blue-600 hover:underline">Create one first?</a>
-            </div>
-          `;
-        } else {
-          projects.forEach(project => {
-            const projectButton = document.createElement("button");
-            projectButton.className = "w-full text-left p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors";
-            projectButton.innerHTML = `
-              <span class="font-medium">${project.name}</span>
-              ${project.description ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${project.description}</p>` : ''}
-            `;
-            projectButton.onclick = () => {
-              modal.remove();
-              resolve(project.id);
-            };
-            projectList.appendChild(projectButton);
-          });
-        }
-    
-        modal.appendChild(modalContent);
-        document.body.appendChild(modal);
+  if (elementMap.SHOW_LOGIN_BTN && elementMap.AUTH_BUTTON) {
+    elementMap.SHOW_LOGIN_BTN.addEventListener('click', () => {
+      elementMap.AUTH_BUTTON.click();
     });
-};
+  }
+  
+  // Add this line to the DOMContentLoaded event 
+  document.addEventListener('DOMContentLoaded', safeInitialize);
+}

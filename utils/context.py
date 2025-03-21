@@ -11,6 +11,7 @@ Includes:
 This code has been trimmed to remove DB functions and response formatting that are now in db_utils.py
 and response_utils.py.
 """
+
 import logging
 import tiktoken
 from typing import List, Dict, Any, Optional
@@ -27,7 +28,9 @@ CONVERSATION_TOKEN_LIMIT = 3000
 SUMMARIZATION_CHUNK_SIZE = 1800  # Adjust as needed
 
 
-async def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> str:
+async def do_summarization(
+    messages: List[Dict[str, str]], model_name: str = "o1"
+) -> str:
     """
     Summarizes a list of conversation messages. This function calls openai_chat
     with a 'system' prompt instructing the model to produce a concise summary.
@@ -41,7 +44,7 @@ async def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1
         "content": (
             "Formatting re-enabled. You are a summarization assistant. Read the conversation below and provide a concise, coherent summary. "
             "Focus on key points and user requests, omitting extraneous details. Keep it under 200 tokens."
-        )
+        ),
     }
 
     summarization_input = [system_prompt] + messages
@@ -52,7 +55,7 @@ async def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1
             messages=summarization_input,
             model_name=model_name,
             max_completion_tokens=300,
-            reasoning_effort=None
+            reasoning_effort=None,
         )
         summary_text = result["choices"][0]["message"]["content"]
         return summary_text.strip()
@@ -81,7 +84,7 @@ async def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]
 
     summary_system_msg = {
         "role": "system",
-        "content": f"[Conversation so far summarized]: {summary_text}"
+        "content": f"[Conversation so far summarized]: {summary_text}",
     }
 
     remainder = messages[half_idx:]
@@ -98,12 +101,14 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
     :param chat_id: The ID of the chat we just updated.
     :param db: The database session or context for retrieving messages.
     """
-    query = text("""
+    query = text(
+        """
     SELECT role, content
     FROM messages
     WHERE conversation_id=:chat_id
     ORDER BY created_at ASC
-    """)
+    """
+    )
     result = await db.execute(query, {"chat_id": chat_id})
     rows = result.mappings().all()
     messages = [{"role": r["role"], "content": r["content"]} for r in rows]
@@ -112,18 +117,22 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
     if total_tokens > CONVERSATION_TOKEN_LIMIT:
         reduced = await manage_context(messages)
         # Replace older messages in DB or handle them as needed
-        logger.info(f"Summarization triggered for chat_id={chat_id}, tokens={total_tokens}")
+        logger.info(
+            f"Summarization triggered for chat_id={chat_id}, tokens={total_tokens}"
+        )
     else:
-        logger.debug(f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}")
+        logger.debug(
+            f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}"
+        )
 
 
 def estimate_token_count(messages: List[Dict[str, str]]) -> int:
     """
     Estimate the token count for a list of messages.
-    
+
     Args:
         messages: List of message dictionaries
-        
+
     Returns:
         Estimated token count
     """

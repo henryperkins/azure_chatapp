@@ -17,10 +17,19 @@ import json
 import config
 from typing import Dict, Any, List, Optional, Tuple, Union, BinaryIO
 from uuid import UUID
+
 from fastapi import HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
+
+# Secure filename imports (install via: pip install werkzeug)
+try:
+    from werkzeug.utils import secure_filename
+except ImportError:
+    secure_filename = None
+
 from models.project_file import ProjectFile
 from models.project import Project
 from services.file_storage import get_file_storage, FileStorage
@@ -30,8 +39,11 @@ from services.text_extraction import get_text_extractor, TextExtractor, TextExtr
 try:
     import tiktoken
     TIKTOKEN_AVAILABLE = True
+    # Allow using a configurable tokenizer encoding
+    TOKENIZER_ENCODING = getattr(config, "TOKENIZER_ENCODING", "cl100k_base")
 except ImportError:
     TIKTOKEN_AVAILABLE = False
+    TOKENIZER_ENCODING = None
     print("Warning: tiktoken not installed.  Token counts will be estimates.  `pip install tiktoken` for accurate counts.")
 
 
@@ -39,20 +51,33 @@ logger = logging.getLogger(__name__)
 
 # Constants for file validation
 MAX_FILE_BYTES = 30_000_000  # 30MB as per project plan
+STREAM_THRESHOLD = 10_000_000  # Threshold beyond which we consider chunked reading
 
 # Expanded allowed file extensions per project plan
 ALLOWED_FILE_EXTENSIONS = {
     ".txt", ".pdf", ".doc", ".docx", ".csv", ".json", ".md",
 }
 
+# For controlling sort fields more securely
+ALLOWED_SORT_FIELDS = {"created_at", "filename", "file_size"}
+
 def validate_file_extension(filename: str) -> bool:
-    """Validates that a filename has an allowed extension"""
+    """Validates that a filename has an allowed extension."""
     _, ext = os.path.splitext(filename.lower())
     return ext in ALLOWED_FILE_EXTENSIONS
 
+def _sanitize_filename(filename: str) -> str:
+    """
+    Safely sanitize the filename to avoid directory traversal or injection.
+    Fallback to using the original name if werkzeug is unavailable.
+    """
+    if secure_filename:
+        return secure_filename(filename or "untitled")
+    return filename or "untitled"
+
 # Get instances of our services
 def _get_services() -> Tuple[FileStorage, TextExtractor]:
-    """Get configured instances of storage and text extraction services"""
+    """Get configured instances of storage and text extraction services."""
     # Configure file storage based on app settings
     storage_config = {
         "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
@@ -66,6 +91,14 @@ def _get_services() -> Tuple[FileStorage, TextExtractor]:
     }
     
     return get_file_storage(storage_config), get_text_extractor()
+
+def _chunked_read(file_obj, chunk_size=65536):
+    """Generator to read a file-like object in chunks."""
+    while True:
+        chunk = file_obj.read(chunk_size)
+        if not chunk:
+            break
+        yield chunk
 
 async def estimate_tokens_from_file(
     content: Union[bytes, BinaryIO],
@@ -82,34 +115,41 @@ async def estimate_tokens_from_file(
     Returns:
         Tuple of (token_count, metadata_dict)
     """
+    # Get text extractor service
+    _, text_extractor = _get_services()
+
+    metadata: Dict[str, Any] = {}
+    
     try:
-        # Get text extractor service
-        _, text_extractor = _get_services()
-        
         # Extract text content and metadata
-        text, metadata = await text_extractor.extract_text(content, filename)
+        text, extracted_meta = await text_extractor.extract_text(content, filename)
+        metadata.update(extracted_meta)
 
         # Use tiktoken if available
-        if TIKTOKEN_AVAILABLE:
-            encoding = tiktoken.get_encoding("cl100k_base")  # Or another appropriate encoding
+        if TIKTOKEN_AVAILABLE and TOKENIZER_ENCODING:
+            encoding = tiktoken.get_encoding(TOKENIZER_ENCODING)
             token_count = len(encoding.encode(text))
         else:
             # Basic token estimation (1 token ≈ 4 chars for English)
             char_count = metadata.get("char_count", len(text))
             token_count = char_count // 4
-        
-        # Add token count to metadata
+
         metadata["token_count"] = token_count
-        
+        metadata["token_estimation_accuracy"] = "high" if TIKTOKEN_AVAILABLE else "approx"
         return token_count, metadata
+
+    except TextExtractionError as tex:
+        logger.error(f"Text extraction error for {filename}: {str(tex)}")
+        raise HTTPException(
+            status_code=422, 
+            detail=f"Text extraction failed for file: {str(tex)}"
+        )
     except Exception as e:
         logger.error(f"Token estimation error for {filename}: {str(e)}")
         # Fallback to basic size-based estimation for unknown file types
         if isinstance(content, bytes):
             content_size = len(content)
         else:
-            # Try to get file size through seek/tell if it's a file object
-            # Simplify content size handling for non-file objects
             try:
                 if isinstance(content, (bytes, bytearray, memoryview)):
                     content_size = len(content)
@@ -136,7 +176,16 @@ async def estimate_tokens_from_file(
         # Conservative token estimation based on file size
         token_count = content_size // 8
         
-        return token_count, {"file_size": content_size, "token_count": token_count}
+        metadata["file_size"] = content_size
+        metadata["token_count"] = token_count
+        metadata["token_estimation_accuracy"] = "low"
+        
+        logger.warning(
+            f"Falling back to conservative token estimation for {filename}. "
+            f"Estimated tokens: {token_count}"
+        )
+        
+        return token_count, metadata
 
 async def upload_file_to_project(
     project_id: UUID,
@@ -146,11 +195,11 @@ async def upload_file_to_project(
 ) -> ProjectFile:
     """
     Handles full file upload process:
-    1. Validates the file (size, type, etc)
-    2. Uploads to storage (local or cloud)
-    3. Extracts text and calculates tokens
-    4. Creates the database record
-    5. Updates project token usage
+    1. Validates the file (size, type, etc).
+    2. Uploads to storage (local or cloud).
+    3. Extracts text and calculates tokens.
+    4. Creates the database record.
+    5. Updates project token usage.
     
     Args:
         project_id: UUID of the project
@@ -161,18 +210,32 @@ async def upload_file_to_project(
     Returns:
         Created ProjectFile database record
     """
-    # 1. Derive or default a filename
-    safe_filename = file.filename or "untitled"
+    from services.project_service import validate_project_access
+    from models.user import User
     
+    # 1. Derive or default a filename
+    requested_filename = file.filename or "untitled"
+    sanitized_filename = _sanitize_filename(requested_filename)
+
     # Validate file extension
-    if not validate_file_extension(safe_filename):
+    if not validate_file_extension(sanitized_filename):
         raise HTTPException(
             status_code=400,
             detail=f"File type not allowed. Supported types: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
         )
     
-    # Read file content
-    contents = await file.read() or b""
+    # Read file content with threshold-based approach
+    contents = b""
+    if file.spool_max_size and file.spool_max_size > STREAM_THRESHOLD:
+        # Potentially stream the file in chunks for very large files
+        # (In practice, you might want to pipe directly to extraction)
+        for chunk in _chunked_read(file.file):
+            contents += chunk
+            if len(contents) > MAX_FILE_BYTES:
+                break
+    else:
+        contents = await file.read() or b""
+
     if len(contents) > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=400,
@@ -180,9 +243,6 @@ async def upload_file_to_project(
         )
     
     # Validate project / user
-    from services.project_service import validate_project_access
-    from models.user import User
-    
     the_user = None
     if user_id is not None:
         the_user = await db.get(User, user_id)
@@ -194,27 +254,30 @@ async def upload_file_to_project(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
     
-    # Extract text and tokens
-    token_estimate, file_metadata = await estimate_tokens_from_file(contents, safe_filename)
-    
+    # 3. Extract text and tokens
+    token_estimate, file_metadata = await estimate_tokens_from_file(contents, sanitized_filename)
+
+    # Check token limit
     if project.token_usage + token_estimate > project.max_tokens:
         raise HTTPException(
             status_code=400,
-            detail=f"Adding this file would exceed the project's token limit of {project.max_tokens}"
+            detail=(
+                f"Adding this file ({token_estimate} tokens) would exceed the project's "
+                f"token limit of {project.max_tokens}"
+            )
         )
     
     # Build combined metadata
     metadata = {
-        "token_estimate": token_estimate,
-        "file_info": file_metadata
+        "tokens": token_estimate,        # standard key for tokens
+        "file_metadata": file_metadata   # store details from extraction
     }
     
     storage, _ = _get_services()
-    
     try:
         file_path = await storage.save_file(
             file_content=io.BytesIO(contents),
-            filename=safe_filename,
+            filename=sanitized_filename,
             content_type=file.content_type or "application/octet-stream",
             metadata=metadata,
             project_id=project_id
@@ -225,12 +288,12 @@ async def upload_file_to_project(
     
     # Derive extension
     file_ext = ""
-    if "." in safe_filename:
-        file_ext = os.path.splitext(safe_filename)[1][1:].lower()
-    
+    if "." in sanitized_filename:
+        file_ext = os.path.splitext(sanitized_filename)[1][1:].lower()
+
     pf = ProjectFile(
         project_id=project_id,
-        filename=file.filename,
+        filename=sanitized_filename,
         file_path=file_path,
         file_size=len(contents),
         file_type=file_ext,
@@ -238,13 +301,18 @@ async def upload_file_to_project(
         metadata=metadata  # Store detailed metadata
     )
     
-    db.add(pf)
-    
-    # 6. Update project token usage
-    project.token_usage += token_estimate
-    
-    await db.commit()
+    # Use explicit transaction for data integrity
+    try:
+        async with db.begin():
+            db.add(pf)
+            project.token_usage += token_estimate
+    except SQLAlchemyError as ex:
+        logger.error(f"Database transaction error during file upload: {str(ex)}")
+        raise HTTPException(status_code=500, detail="Database error during file upload.")
+
+    # Refresh to get final state
     await db.refresh(pf)
+
     return pf
 
 async def list_project_files(
@@ -277,13 +345,11 @@ async def list_project_files(
     if file_type:
         query = query.where(ProjectFile.file_type == file_type.lower())
     
-    # Apply sorting
-    if hasattr(ProjectFile, sort_by):
-        sort_field = getattr(ProjectFile, sort_by)
-        query = query.order_by(sort_field.desc() if sort_desc else sort_field.asc())
-    else:
-        # Default to created_at if invalid sort field
-        query = query.order_by(ProjectFile.created_at.desc() if sort_desc else ProjectFile.created_at.asc())
+    # Securely handle sorting
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_field = getattr(ProjectFile, sort_by)
+    query = query.order_by(sort_field.desc() if sort_desc else sort_field.asc())
     
     # Apply pagination
     query = query.offset(skip).limit(limit)
@@ -337,7 +403,7 @@ async def get_project_file(
             storage, _ = _get_services()
             content = await storage.get_file(file_record.file_path)
             
-            # For text files, decode to string
+            # For text-based files, decode to string
             if file_record.file_type in ['txt', 'json', 'csv', 'py', 'js', 'html', 'css', 'md']:
                 try:
                     content = content.decode('utf-8')
@@ -370,10 +436,26 @@ async def delete_project_file(
     Returns:
         Dictionary with success status and message
     """
-    # Get file record
-    file_record = await get_project_file(project_id, file_id, db, include_content=False)
+    from services.project_service import validate_project_access
+    from models.user import User
+
+    # Validate user and project ownership if user_id is provided
+    if user_id is not None:
+        the_user = await db.get(User, user_id)
+        if not the_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        project = await validate_project_access(project_id, the_user, db)
+    else:
+        # Otherwise, just confirm project existence
+        project_result = await db.execute(select(Project).where(Project.id == project_id))
+        project = project_result.scalars().first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get full database record
+    # Retrieve the file record from DB (reusing get_project_file logic)
+    file_data = await get_project_file(project_id, file_id, db, include_content=False)
+
+    # Get the full DB object
     query = select(ProjectFile).where(
         ProjectFile.id == file_id,
         ProjectFile.project_id == project_id
@@ -384,43 +466,42 @@ async def delete_project_file(
     if not db_file_record:
         raise HTTPException(status_code=404, detail="File not found")
     
-    # Get project for permission check and token usage update
-    project_result = await db.execute(select(Project).where(Project.id == project_id))
-    project = project_result.scalars().first()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # If user_id provided, check if user has access to this project
-    if user_id is not None and project.user_id != user_id:
-        raise HTTPException(status_code=403, detail="You don't have permission to delete files from this project")
-    
     # Get token estimate from metadata
     token_estimate = 0
-    if db_file_record.metadata and "token_estimate" in db_file_record.metadata:
-        token_estimate = db_file_record.metadata["token_estimate"]
-    
-    # Delete the file from storage
+    file_meta = db_file_record.metadata or {}
+    if "tokens" in file_meta:
+        token_estimate = file_meta["tokens"]
+    elif "token_estimate" in file_meta:  # fallback if older key
+        token_estimate = file_meta["token_estimate"]
+
+    # Attempt file deletion in storage
     try:
         storage, _ = _get_services()
         await storage.delete_file(db_file_record.file_path)
+        file_deletion_status = "success"
     except Exception as e:
         logger.error(f"Error deleting file from storage: {str(e)}")
-        # Continue with DB deletion even if storage deletion fails
-    
-    # Delete the database record
-    await db.execute(
-        delete(ProjectFile).where(ProjectFile.id == file_id)
-    )
-    
-    # Update project token usage
-    if token_estimate > 0:
-        project.token_usage = max(0, project.token_usage - token_estimate)  # Ensure we don't go below 0
-    
-    await db.commit()
+        file_deletion_status = "storage_deletion_failed"
+
+    # Remove DB record in a transaction
+    try:
+        async with db.begin():
+            await db.execute(
+                delete(ProjectFile).where(ProjectFile.id == file_id)
+            )
+            project.token_usage = max(0, project.token_usage - token_estimate)
+    except SQLAlchemyError as ex:
+        logger.error(f"Database deletion error: {ex}")
+        raise HTTPException(status_code=500, detail="Database deletion error")
+
     return {
-        "success": True,
-        "message": "File deleted successfully",
+        "success": file_deletion_status == "success",
+        "status": file_deletion_status,
+        "message": (
+            "File deleted successfully" 
+            if file_deletion_status == "success" 
+            else "File record removed but storage deletion encountered issues"
+        ),
         "tokens_removed": token_estimate
     }
 
@@ -473,16 +554,3 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
         "token_usage": project.token_usage if project else 0,
         "max_tokens": project.max_tokens if project else 0,
     }
-
-
-
-
-
-
-
-
-
-
-
-
-

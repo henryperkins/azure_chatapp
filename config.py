@@ -1,8 +1,10 @@
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
+
 
 class Settings:
     """
@@ -14,18 +16,25 @@ class Settings:
     ENV = os.getenv("ENV", "development")
 
     # Session
-    SESSION_SECRET = os.getenv("SESSION_SECRET", "default-secret-key-change-in-production")
+    SESSION_SECRET = os.getenv(
+        "SESSION_SECRET", "default-secret-key-change-in-production"
+    )
 
     # Allowed hosts
     ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
     # CORS Origins - if left empty, default to localhost origins in development
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+    CORS_ORIGINS = (
+        os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+    )
 
     # Database
     # Auth token expiration time in minutes
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:Twiohmld1!@localhost:5433/azure_chat")
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:Twiohmld1!@localhost:5433/azure_chat",
+    )
 
     # JWT secret key - must match JWT_SECRET in auth_deps.py
     JWT_SECRET = os.getenv("JWT_SECRET", "")
@@ -37,5 +46,6 @@ class Settings:
 
     # Cookie domain
     COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")
+
 
 settings = Settings()
