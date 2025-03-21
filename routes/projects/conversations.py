@@ -435,20 +435,32 @@ async def websocket_chat_endpoint(
     project_id: UUID,
     conversation_id: UUID
 ):
-    """
-    Real-time chat updates for the specified conversation.
-    Must authenticate via query param or cookies (token).
-    """
+    """Real-time chat updates for project conversations"""
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
-            # Authenticate user
-            success, user = await authenticate_websocket(websocket, db)
-            if not success or not user:
+            # 1. Explicitly accept websocket first
+            await websocket.accept()
+            
+            # 2. Extract JWT token
+            token = await extract_token_from_websocket(websocket)
+            if not token:
+                logger.warning("WebSocket connection rejected: No token provided")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Validate project is not archived
-            await validate_resource_access(
+            # 3. Validate token and get user
+            try:
+                user = await get_user_from_token(token, db, "access")
+            except Exception as e:
+                logger.warning(f"WebSocket authentication failed: {str(e)}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+                
+            logger.info(f"WebSocket connection attempt for project: {project_id}, conversation: {conversation_id} by user: {user.id}")
+
+            # 4. Validate project access first
+            project = await validate_resource_access(
                 project_id,
                 Project,
                 user,
@@ -456,11 +468,11 @@ async def websocket_chat_endpoint(
                 "Project",
                 [
                     Project.user_id == user.id,
-                    Project.archived.is_(False)  # Cannot modify archived projects
+                    Project.archived.is_(False)
                 ]
             )
-                
-            # Validate conversation ownership
+            
+            # 5. Validate conversation
             conversation = await validate_resource_access(
                 conversation_id,
                 Conversation,
@@ -475,22 +487,29 @@ async def websocket_chat_endpoint(
 
             while True:
                 data = await websocket.receive_text()
-                data_dict = json.loads(data)
+                try:
+                    data_dict = json.loads(data)
+                except json.JSONDecodeError:
+                    data_dict = {"content": data, "role": "user"}
 
                 # Create message
                 message = await create_user_message(
-                    conversation_id=str(conversation.id),  # type: ignore
+                    conversation_id=str(conversation.id),
                     content=data_dict["content"],
                     role=data_dict["role"],
                     db=db
                 )
 
                 if message.role == "user":
-                    await handle_websocket_response(str(conversation.id), db, websocket)  # type: ignore
+                    await handle_websocket_response(str(conversation.id), db, websocket)
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
-        except HTTPException:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        except HTTPException as he:
+            logger.error(f"WebSocket HTTP error: {str(he)}")
+            await websocket.close(code=he.status_code)
+        except Exception as e:
+            logger.error(f"WebSocket error: {str(e)}")
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         finally:
             await db.close()
