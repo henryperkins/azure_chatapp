@@ -41,10 +41,15 @@ function loadConversation(chatId) {
 
   // Use the apiRequest utility function with the right endpoint path
   const projectId = localStorage.getItem("selectedProjectId");
-  if (!projectId) {
-      throw new Error("No project selected - cannot load conversation messages");
+  let apiEndpoint;
+  
+  if (projectId) {
+      apiEndpoint = `/api/projects/${projectId}/conversations/${chatId}/messages`;
+  } else {
+      apiEndpoint = `/api/chat/conversations/${chatId}/messages`;
   }
-  window.apiRequest(`/api/projects/${projectId}/conversations/${chatId}/messages`)
+  
+  window.apiRequest(apiEndpoint)
     .then((data) => {
       conversationArea.innerHTML = "";
       if (data.data && data.data.messages && data.data.messages.length > 0) {
@@ -128,6 +133,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendBtn = document.getElementById("sendBtn");
   const chatTitleEl = document.getElementById("chatTitle");
   const chatTitleEditBtn = document.getElementById("chatTitleEditBtn");
+  
+  // File upload references
+  const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
+  const chatImageInput = document.getElementById("chatImageInput");
+  const chatImagePreview = document.getElementById("chatImagePreview");
+  const chatPreviewImg = document.getElementById("chatPreviewImg");
+  const chatImageName = document.getElementById("chatImageName");
+  const chatImageStatus = document.getElementById("chatImageStatus");
+  const chatRemoveImageBtn = document.getElementById("chatRemoveImageBtn");
 
   // WebSocket URL (only if chatId is defined)
   const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -147,7 +161,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // }
   //
 
-  const wsUrl = `${protocol}${window.location.host}/api/chat/ws/projects/${selectedProjectId}/conversations/${chatId}`;
+  let wsUrl = null;
+  if (chatId) {
+    if (selectedProjectId) {
+      wsUrl = `${protocol}${window.location.host}/api/projects/${selectedProjectId}/conversations/${chatId}/ws`;
+    } else {
+      wsUrl = `${protocol}${window.location.host}/api/chat/conversations/${chatId}/ws`;
+    }
+  }
   let socket = null;
 
   // Toggle display of "no chat selected" message
@@ -158,7 +179,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize the conversation and WebSocket if a chatId exists
   if (chatId) {
     loadConversation(chatId);
-    initializeWebSocket();
+    if (wsUrl) {
+      initializeWebSocket();
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -255,10 +278,24 @@ document.addEventListener("DOMContentLoaded", () => {
     // Clear vision data after sending
     if (visionImage) {
       window.MODEL_CONFIG.visionImage = null;
-      const inputEl = document.getElementById('visionFileInput');
-      if (inputEl) inputEl.value = '';
-      const statusEl = document.getElementById('visionStatus');
-      if (statusEl) statusEl.textContent = '';
+      
+      // Clear both the old visionFileInput and the new chatImageInput
+      const visionFileInput = document.getElementById('visionFileInput');
+      if (visionFileInput) visionFileInput.value = '';
+      
+      const chatImageInput = document.getElementById('chatImageInput');
+      if (chatImageInput) chatImageInput.value = '';
+      
+      // Clear vision status indicators for both interfaces
+      const visionStatus = document.getElementById('visionStatus');
+      if (visionStatus) visionStatus.textContent = '';
+      
+      const chatImagePreview = document.getElementById('chatImagePreview');
+      if (chatImagePreview) chatImagePreview.classList.add('hidden');
+      
+      // Clear the vision preview
+      const visionPreview = document.getElementById('visionPreview');
+      if (visionPreview) visionPreview.innerHTML = '';
     }
 
     // If WebSocket is connected, send via socket
@@ -267,14 +304,15 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       // Fallback to a standard POST fetch using apiRequest
       const projectId = localStorage.getItem("selectedProjectId");
-      if(!projectId){
-        console.error("Cannot send message: No active project ID");
-        if (window.showNotification) {
-          window.showNotification("No project selected while sending message", "error");
-        }
-        return;
+      let apiEndpoint;
+      
+      if (projectId) {
+        apiEndpoint = `/api/projects/${projectId}/conversations/${chatId}/messages`;
+      } else {
+        apiEndpoint = `/api/chat/conversations/${chatId}/messages`;
       }
-      window.apiRequest(`/api/projects/${projectId}/conversations/${chatId}/messages`, "POST", payload)
+      
+      window.apiRequest(apiEndpoint, "POST", payload)
         .then(respData => {
             console.log("sendMessage response body:", respData);
             const indicator = document.getElementById("thinkingIndicator");
@@ -307,17 +345,110 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Optional visual indicator in the user's message if there was an image
+    // Enhanced visual indicator in the user's message if there was an image
     if (visionImage) {
       const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
       const lastUserDiv = msgDivs[msgDivs.length - 1];
       if (lastUserDiv) {
-        const imgIndicator = window.createDomElement("div", {
-          className: "text-sm text-gray-500 mt-1"
+        // Create an image thumbnail if possible by cloning the chat preview image
+        const imgContainer = window.createDomElement("div", {
+          className: "flex items-center bg-gray-50 rounded p-1 mt-2"
+        });
+        
+        // Add the image thumbnail
+        const imgElement = document.createElement("img");
+        imgElement.className = "h-10 w-10 object-cover rounded mr-2";
+        imgElement.src = document.getElementById('chatPreviewImg')?.src || visionImage;
+        imgElement.alt = "Attached Image";
+        imgContainer.appendChild(imgElement);
+        
+        // Add a label
+        const imgLabel = window.createDomElement("div", {
+          className: "text-xs text-gray-500"
         }, "📷 Image attached");
-        lastUserDiv.appendChild(imgIndicator);
+        imgContainer.appendChild(imgLabel);
+        
+        lastUserDiv.appendChild(imgContainer);
       }
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Image Upload Functionality
+  // ---------------------------------------------------------------------
+  
+  // Function to convert an image file to base64
+  async function convertToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  }
+  
+  // Handle clicking the attach image button
+  if (chatAttachImageBtn) {
+    chatAttachImageBtn.addEventListener("click", () => {
+      // Check if this is a vision-capable model
+      const modelName = localStorage.getItem("modelName") || "o3-mini";
+      if (modelName !== "o1") {
+        window.showNotification?.("Vision features only work with the o1 model. Please change your model in the settings.", "warning");
+        return;
+      }
+      chatImageInput.click();
+    });
+  }
+  
+  // Handle file selection
+  if (chatImageInput) {
+    chatImageInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      // Validate file type
+      if (!['image/jpeg', 'image/png'].includes(file.type)) {
+        window.showNotification?.("Only JPEG and PNG images are supported", "error");
+        chatImageInput.value = '';
+        return;
+      }
+      
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        window.showNotification?.("Image must be smaller than 5MB", "error");
+        chatImageInput.value = '';
+        return;
+      }
+      
+      try {
+        // Show preview
+        chatPreviewImg.src = URL.createObjectURL(file);
+        chatImageName.textContent = file.name;
+        chatImageStatus.textContent = "Ready to send";
+        chatImagePreview.classList.remove("hidden");
+        
+        // Convert to base64 and store in MODEL_CONFIG
+        const base64 = await convertToBase64(file);
+        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+        window.MODEL_CONFIG.visionImage = base64;
+        window.MODEL_CONFIG.visionDetail = "auto";
+      } catch (err) {
+        console.error("Error processing image:", err);
+        window.showNotification?.("Failed to process the image", "error");
+        chatImagePreview.classList.add("hidden");
+      }
+    });
+  }
+  
+  // Handle removing the image
+  if (chatRemoveImageBtn) {
+    chatRemoveImageBtn.addEventListener("click", () => {
+      chatImageInput.value = '';
+      chatImagePreview.classList.add("hidden");
+      if (window.MODEL_CONFIG) {
+        window.MODEL_CONFIG.visionImage = null;
+      }
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -329,6 +460,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (userMsg) {
         if (chatId) {
           sendMessage(chatId, userMsg);
+          // Hide the image preview after sending
+          chatImagePreview.classList.add("hidden");
         } else {
           if (window.showNotification) {
             window.showNotification("Please start a new conversation first.", "error");
@@ -336,6 +469,10 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("Please start a new conversation first.");
           }
         }
+      } else if (window.MODEL_CONFIG?.visionImage) {
+        // Allow sending just an image with no text
+        sendMessage(chatId, "Analyze this image");
+        chatImagePreview.classList.add("hidden");
       }
     });
   }
@@ -347,6 +484,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (userMsg) {
           if (chatId) {
             sendMessage(chatId, userMsg);
+            // Hide the image preview after sending
+            chatImagePreview.classList.add("hidden");
           } else {
             if (window.showNotification) {
               window.showNotification("Please start a new conversation first.", "error");
@@ -371,8 +510,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const newTitle = prompt("Enter a new chat title:", chatTitleEl.textContent.trim());
     if (!newTitle) return;
 
-    // Use apiRequest utility (standalone endpoint, doesn't require project)
-    window.apiRequest(`/api/chat/conversations/${chatId}`, "PATCH", { title: newTitle })
+    // Use apiRequest utility with the correct endpoint
+    const projectId = localStorage.getItem("selectedProjectId");
+    let apiEndpoint;
+    
+    if (projectId) {
+      apiEndpoint = `/api/projects/${projectId}/conversations/${chatId}`;
+    } else {
+      apiEndpoint = `/api/chat/conversations/${chatId}`;
+    }
+    
+    window.apiRequest(apiEndpoint, "PATCH", { title: newTitle })
       .then((data) => {
         chatTitleEl.textContent = data.data?.title || newTitle;
         
@@ -399,29 +547,30 @@ document.addEventListener("DOMContentLoaded", () => {
     // Define the function first
     window.createNewChat = async function() {
       try {
-        // Show project selection modal
+        // Get the selected project ID if available
         const selectedProjectId = localStorage.getItem("selectedProjectId");
-        const projectId = selectedProjectId || await window.showProjectSelection();
-        if (!projectId) {
-            window.showNotification?.("You must select a project to start a new chat.", "error");
-            return;
-        }
-
-        // Create payload with optional project_id
+        let projectId = selectedProjectId;
+        
+        // Create payload for the API request
         const payload = {
-          title: "New Chat",
-          project_id: projectId || null
+          title: "New Chat"
         };
 
         // Create conversation through API
-        const url = projectId
-          ? `/api/chat/projects/${projectId}/conversations`
-          : "/api/chat/conversations";
+        let url;
+        
+        if (projectId) {
+          // Project-specific conversation
+          url = `/api/projects/${projectId}/conversations`;
+        } else {
+          // Standalone conversation
+          url = `/api/chat/conversations`;
+        }
 
         const { data: conversation } = await window.apiRequest(
           url,
           "POST",
-          { title: "New Chat" }
+          payload
         );
 
         // Update UI state

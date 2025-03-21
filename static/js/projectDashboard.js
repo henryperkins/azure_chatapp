@@ -764,6 +764,10 @@ function viewFile(fileId) {
 function renderProjectConversations(conversations) {
   const list = document.getElementById("projectConversationsList");
   if (!list) return;
+  
+  // Debug output to help identify issues
+  console.log("Rendering conversations:", conversations);
+  
   if (!conversations || conversations.length === 0) {
     list.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet.</div>`;
     return;

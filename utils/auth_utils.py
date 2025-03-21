@@ -7,18 +7,17 @@ HTTP and WebSocket connections.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from urllib.parse import unquote
 
 import jwt
 from jwt import encode, decode
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, WebSocket, status, Depends
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from models.user import User
 from db import get_async_session
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 JWT_SECRET: str = settings.JWT_SECRET
 JWT_ALGORITHM = "HS256"
 
-# Basic in-memory revocation list. In production, consider a DB or Redis.
+# In-memory revocation cache (backed by database)
 REVOCATION_LIST = set()
 
 
@@ -52,13 +51,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def verify_token(token: str, expected_type: Optional[str] = None) -> Dict[str, Any]:
+async def verify_token(token: str, expected_type: Optional[str] = None, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
     """
     Verify and decode a JWT token.
     
     Args:
         token: JWT token to verify
         expected_type: Optional token type to validate
+        db: Optional database session for checking blacklisted tokens
         
     Returns:
         Decoded token payload
@@ -74,11 +74,35 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Dict[str, A
             logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}")
             raise HTTPException(status_code=401, detail="Invalid token type")
 
-        # Check if token is revoked
+        # Check if token is revoked in memory for quick check
         token_id = decoded.get("jti")
         if token_id in REVOCATION_LIST:
-            logger.warning(f"Token ID '{token_id}' is revoked")
+            logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
             raise HTTPException(status_code=401, detail="Token is revoked")
+            
+        # Check if token is in database blacklist (persistent across restarts)
+        if db and token_id:
+            from models.user import TokenBlacklist
+            query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
+            result = await db.execute(query)
+            blacklisted = result.scalar_one_or_none()
+            if blacklisted:
+                # Add to in-memory list for future quick checks
+                REVOCATION_LIST.add(token_id)
+                logger.warning(f"Token ID '{token_id}' is revoked (database)")
+                raise HTTPException(status_code=401, detail="Token is revoked")
+                
+        # Check token version if available
+        token_version = decoded.get("version")
+        username = decoded.get("sub")
+        if db and token_version is not None and username:
+            from models.user import User
+            query = select(User).where(User.username == username)
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            if user and (user.token_version is None or token_version < user.token_version):
+                logger.warning(f"Token for user '{username}' has outdated version")
+                raise HTTPException(status_code=401, detail="Token has been invalidated")
 
         return decoded
 
@@ -99,6 +123,58 @@ def revoke_token_id(token_id: str) -> None:
     """
     REVOCATION_LIST.add(token_id)
     logger.info(f"Token ID '{token_id}' has been revoked and cannot be used.")
+
+
+async def clean_expired_tokens(db: AsyncSession) -> int:
+    """
+    Clean up expired tokens from the database blacklist.
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        Number of tokens deleted
+    """
+    from models.user import TokenBlacklist
+    
+    # Get current time
+    now = datetime.utcnow()
+    
+    # Delete expired tokens
+    stmt = delete(TokenBlacklist).where(TokenBlacklist.expires < now)
+    result = await db.execute(stmt)
+    await db.commit()
+    
+    # Get the count of deleted rows
+    deleted_count = result.rowcount
+    
+    if deleted_count > 0:
+        logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
+    
+    return deleted_count
+
+
+async def load_revocation_list(db: AsyncSession) -> None:
+    """
+    Load active revoked tokens into memory on startup.
+    
+    Args:
+        db: Database session
+    """
+    from models.user import TokenBlacklist
+    
+    # Get current time
+    now = datetime.utcnow()
+    
+    # Select non-expired tokens
+    query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
+    result = await db.execute(query)
+    
+    # Add to in-memory list
+    token_ids = [row[0] for row in result.fetchall()]
+    REVOCATION_LIST.update(token_ids)
+    
+    logger.info(f"Loaded {len(token_ids)} active blacklisted tokens into memory")
 
 
 def extract_token_from_request(request: Request) -> Optional[str]:
@@ -177,7 +253,7 @@ async def get_user_from_token(
         HTTPException: For authentication failures
     """
     # Verify token
-    decoded = verify_token(token, expected_type)
+    decoded = await verify_token(token, expected_type, db)
     
     username = decoded.get("sub")
     if not username:
@@ -195,6 +271,10 @@ async def get_user_from_token(
     if not user.is_active:
         logger.warning(f"Attempt to use token for disabled account: {username}")
         raise HTTPException(status_code=403, detail="Account disabled")
+    
+    # Attach JWT claims to user object for access in logout and other functions
+    user.jti = decoded.get("jti")
+    user.exp = decoded.get("exp")
         
     return user
 

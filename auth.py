@@ -116,6 +116,8 @@ async def login_user(
     )
     user = result.scalars().first()
     if not user:
+        logger.warning(f"Login attempt for non-existent user: {lower_username}")
+        # Use the same error message for security (avoid username enumeration)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     try:
@@ -135,14 +137,19 @@ async def login_user(
         ) from exc
 
     if not valid_password:
+        logger.warning(f"Failed login attempt for user: {lower_username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not user.is_active:
+        logger.warning(f"Login attempt for disabled account: {lower_username}")
         raise HTTPException(
             status_code=403, 
             detail="Account disabled. Contact support."
         )
 
+    # Update last login time
+    user.last_login = datetime.utcnow()
+    
     token_id = str(uuid.uuid4())
     expire = datetime.utcnow() + timedelta(
         minutes=ACCESS_TOKEN_EXPIRE_MINUTES
@@ -150,6 +157,7 @@ async def login_user(
     
     # Invalidate previous tokens when issuing new ones
     user.token_version = user.token_version + 1 if user.token_version else 1
+    session.add(user)
     await session.commit()
 
     payload = {
@@ -158,7 +166,8 @@ async def login_user(
         "iat": datetime.utcnow(),
         "jti": token_id,
         "type": "access",
-        "version": user.token_version  # Track token version
+        "version": user.token_version,  # Track token version
+        "user_id": user.id
     }
 
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -170,7 +179,8 @@ async def login_user(
     )
 
     secure_cookie = settings.ENV == "production"
-    samesite_value = "none" if secure_cookie else "lax"
+    # In production, use 'strict' for better security; otherwise 'lax' for development ease
+    samesite_value = "strict" if secure_cookie else "lax"
 
     cookie_params = {
         "key": "access_token",
@@ -198,9 +208,16 @@ async def refresh_token(
     response: Response,
     request: Request,
     current_user_and_token: User = Depends(get_current_user_and_token),
+    session: AsyncSession = Depends(get_async_session)
 ) -> LoginResponse:
     """Provides new token with rotation for session continuity."""
     username = current_user_and_token.username
+    user_id = current_user_and_token.id
+
+    # Update last_login time
+    current_user_and_token.last_login = datetime.utcnow()
+    session.add(current_user_and_token)
+    await session.commit()
 
     token_id = str(uuid.uuid4())
     expire = datetime.utcnow() + timedelta(
@@ -213,6 +230,8 @@ async def refresh_token(
         "iat": datetime.utcnow(),
         "jti": token_id,
         "type": "access",
+        "version": current_user_and_token.token_version,  # Include token version
+        "user_id": user_id
     }
 
     new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -220,7 +239,8 @@ async def refresh_token(
     logger.info("Refreshed token for user '%s'", username)
 
     secure_cookie = settings.ENV == "production"
-    samesite_value = "none" if secure_cookie else "lax"
+    # In production, use 'strict' for better security; otherwise 'lax' for development ease
+    samesite_value = "strict" if secure_cookie else "lax"
 
     cookie_params = {
         "key": "access_token",
@@ -262,19 +282,33 @@ async def logout_user(
     session: AsyncSession = Depends(get_async_session)
 ) -> dict:
     """Invalidates token and clears authentication cookie."""
-    # Add token to blacklist
+    # Get JTI from the token
+    token_id = current_user_and_token.jti
+    expires = current_user_and_token.exp
+    user_id = current_user_and_token.id
+    
+    # Add token to database blacklist
     blacklisted_token = TokenBlacklist(
-        jti=current_user_and_token.jti,
-        expires=current_user_and_token.exp
+        jti=token_id,
+        expires=expires,
+        user_id=user_id
     )
     session.add(blacklisted_token)
+    
+    # Increment token version to invalidate all existing tokens for this user
+    current_user_and_token.token_version = current_user_and_token.token_version + 1 if current_user_and_token.token_version else 1
+    session.add(current_user_and_token)
     await session.commit()
     
-    logger.info("User %s logged out successfully. Token %s invalidated.", 
-               current_user_and_token.username, current_user_and_token.jti)
+    # Also add to in-memory blacklist for immediate effect
+    from utils.auth_utils import revoke_token_id
+    revoke_token_id(token_id)
+    
+    logger.info("User %s logged out successfully. Token %s invalidated and token version incremented.", 
+               current_user_and_token.username, token_id)
 
     secure_cookie = settings.ENV == "production"
-    samesite_value = "none" if secure_cookie else "lax"
+    samesite_value = "strict" if secure_cookie else "lax"
 
     cookie_params = {
         "key": "access_token",
