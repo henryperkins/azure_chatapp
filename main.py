@@ -26,7 +26,7 @@ from utils.auth_utils import JWT_SECRET, JWT_ALGORITHM, create_access_token
 from config import settings
 
 # Configure allowed hosts - use "*" for development, specific domains in production
-allowed_hosts = settings.ALLOWED_HOSTS or ["*"]  # Set to ["*"] for development
+allowed_hosts = settings.ALLOWED_HOSTS or ["put.photo"]  # Development: ["*"], Production: ["put.photo", "www.put.photo"]
 from db import init_db, validate_db_schema
 from auth import router as auth_router
 from routes.conversations import router as conversations_router
@@ -107,20 +107,26 @@ allowed_hosts = (
 )  # Temporary development setting
 
 # Enforce HTTPS in production
+# Always enable HTTPS redirection in production
 if settings.ENV == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
+    # Add HSTS header
+    @app.middleware("http")
+    async def add_hsts_header(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
 # CORS Configuration
-origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else []
+origins = [
+    "https://put.photo",
+    "https://www.put.photo",
+    "http://localhost:3000"  # Keep for local development
+]
 
-# In development, allow localhost origins if none specified
-if settings.ENV != "production" and not origins:
-    origins = [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+# Allow environment override
+if settings.CORS_ORIGINS:
+    origins = settings.CORS_ORIGINS.split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -145,9 +151,7 @@ async def websocket_cors_fix(request: Request, call_next):
     """Middleware to handle CORS for WebSocket connections."""
     response = await call_next(request)
     if request.scope.get("path", "").startswith("/ws/"):
-        response.headers["Access-Control-Allow-Origin"] = (
-            "http://localhost:3000"  # Change to production URL in production
-        )
+        response.headers["Access-Control-Allow-Origin"] = "https://put.photo"
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
