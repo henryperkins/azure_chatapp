@@ -4,7 +4,7 @@ user.py
 Defines the User model responsible for authentication identity, roles, 
 and ownership of conversations/projects in the Azure Chat Application.
 """
-from sqlalchemy import Integer, String, TIMESTAMP, text, Boolean, CheckConstraint, Enum, Index
+from sqlalchemy import Integer, String, TIMESTAMP, text, Boolean, CheckConstraint, Index, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import List, TYPE_CHECKING
 from datetime import datetime
@@ -40,6 +40,7 @@ class User(Base):
 
     # Add field for tracking last login time
     last_login: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Relationships
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
@@ -47,3 +48,11 @@ class User(Base):
 
     def __repr__(self):
         return f"<User {self.username} (#{self.id})>"
+
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    jti: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    expires: Mapped[datetime] = mapped_column(TIMESTAMP)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
