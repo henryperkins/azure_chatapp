@@ -3,10 +3,12 @@ message_handlers.py
 -----------------
 Provides utilities for message handling across conversation endpoints.
 Centralizes message creation, validation, and processing logic.
+
+This version has been updated to use db_utils.py functions instead of direct DB access.
 """
 import logging
 import base64
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -16,13 +18,8 @@ from models.conversation import Conversation
 from models.message import Message
 from models.project import Project
 from utils.openai import extract_base64_data
-from utils.context import (
-    manage_context, 
-    token_limit_check, 
-    get_by_id, 
-    get_all_by_condition,
-    save_model
-)
+from utils.context import manage_context, token_limit_check
+from utils.db_utils import get_by_id, get_all_by_condition, save_model
 from utils.serializers import serialize_message
 
 logger = logging.getLogger(__name__)
@@ -76,7 +73,7 @@ async def create_user_message(
             content=content.strip()
         )
         
-        # Save using utility function
+        # Save using utility function from db_utils
         await save_model(db, message)
         
         logger.info(f"Message {message.id} saved for conversation {conversation_id}")
@@ -112,7 +109,7 @@ async def get_conversation_messages(
     if not conversation:
         raise HTTPException(404, "Conversation not found")
     
-    # Get all messages
+    # Get all messages using function from db_utils
     messages = await get_all_by_condition(
         db,
         Message,
