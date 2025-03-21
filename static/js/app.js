@@ -141,14 +141,27 @@ function updateUserSessionState() {
 function toggleSidebar() {
   const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
   const toggleBtn = getElement(SELECTORS.NAV_TOGGLE_BTN);
+  
   if (sidebarEl && toggleBtn) {
-    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-    toggleBtn.setAttribute('aria-expanded', !isExpanded);
-    sidebarEl.classList.toggle('hidden');
-    if (window.innerWidth < 768) {
-      sidebarEl.classList.toggle('fixed');
-      sidebarEl.classList.toggle('inset-0');
-      sidebarEl.classList.toggle('z-50');
+    sidebarEl.classList.toggle('mobile-visible');
+    const isVisible = sidebarEl.classList.contains('mobile-visible');
+    
+    // Handle body scroll lock
+    document.body.style.overflow = isVisible ? 'hidden' : 'auto';
+    
+    // Animate the toggle button
+    toggleBtn.style.transform = isVisible ? 'rotate(90deg)' : 'rotate(0deg)';
+    
+    // Add backdrop overlay
+    const existingBackdrop = document.getElementById('sidebarBackdrop');
+    if (!existingBackdrop) {
+      const backdrop = document.createElement('div');
+      backdrop.id = 'sidebarBackdrop';
+      backdrop.className = 'md:hidden fixed inset-0 bg-black/50 z-40';
+      backdrop.onclick = toggleSidebar;
+      document.body.appendChild(backdrop);
+    } else if (!isVisible) {
+      existingBackdrop.remove();
     }
   }
 }
@@ -184,8 +197,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Only set up resize handler if sidebar exists
   if (sidebarEl) {
-    handleWindowResize();
-    window.addEventListener('resize', handleWindowResize);
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        if (entry.contentRect.width >= 768) { // Desktop breakpoint
+          sidebarEl.classList.remove('mobile-visible', 'fixed');
+          const backdrop = document.getElementById('sidebarBackdrop');
+          if (backdrop) backdrop.remove();
+          document.body.style.overflow = 'auto';
+        }
+      }
+    });
+    
+    resizeObserver.observe(document.body);
   }
 
   updateUserSessionState();

@@ -57,8 +57,28 @@
   }
 }
 
-/* Add mobile-specific styles */
+/* Mobile sidebar styles */
 @media (max-width: 767px) {
+  #mainSidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    bottom: 0;
+    width: 80%;
+    transition: left 0.3s ease-in-out;
+    z-index: 50;
+  }
+  
+  #mainSidebar.mobile-visible {
+    left: 0;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+  }
+  
+  /* Dark mode support */
+  .dark #mainSidebar {
+    background-color: #1f2937; /* bg-gray-800 */
+  }
+
   #projectManagerPanel {
     padding: 1rem;
   }
@@ -77,10 +97,16 @@
     width: 100%;
     text-align: center;
   }
+}
 
-/* Ensure mobile menu stays on top */
+/* Sidebar transitions */
 #mainSidebar {
-  z-index: 9999;
+  @apply transition-col duration-300 ease-in-out;
+}
+
+.dark #mainSidebar {
+  background-color: #1f2937;
+  border-color: #374151;
 }
 /* Dark mode support for project details */
 .dark .file-item,
