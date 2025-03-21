@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from utils.auth_utils import extract_token_from_websocket, get_user_from_token
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import conversation_service, project_service
