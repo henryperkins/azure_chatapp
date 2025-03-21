@@ -8,7 +8,7 @@ Includes:
      - Supports model_name, max_completion_tokens, optional reasoning_effort, vision data (if needed).
   2. Additional helper methods for token usage logging or partial requests.
 
-This code is production-ready, with no placeholders.
+This version has been trimmed to remove the general API request function that moved to response_utils.py.
 """
 
 import requests
@@ -18,6 +18,7 @@ from typing import List, Dict, Optional, Union, Any
 logger = logging.getLogger(__name__)
 
 from config import settings
+from utils.response_utils import azure_api_request
 
 AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
 AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
@@ -33,9 +34,6 @@ async def openai_chat(
     image_data: Optional[str] = None,
     vision_detail: str = "auto"
 ) -> dict:
-    VALID_DETAIL_VALUES = ["auto", "low", "high"]
-    if vision_detail not in VALID_DETAIL_VALUES:
-        raise ValueError(f"Invalid vision_detail: {vision_detail}. Must be one of {VALID_DETAIL_VALUES}.")
     """
     Calls Azure OpenAI's chat completion API. 
     Allows optional 'reasoning_effort' if using "o3-mini" or "o1".
@@ -46,8 +44,12 @@ async def openai_chat(
     :param max_completion_tokens: How many tokens the model can produce at most.
     :param reasoning_effort: 'low', 'medium', or 'high' for "o3-mini"/"o1" if relevant.
     :param image_data: If using "o1" vision support, pass raw image bytes here.
+    :param vision_detail: Detail level for vision - "auto", "low", or "high"
     :return: The JSON response from Azure if successful, or raises an HTTPException otherwise.
     """
+    VALID_DETAIL_VALUES = ["auto", "low", "high"]
+    if vision_detail not in VALID_DETAIL_VALUES:
+        raise ValueError(f"Invalid vision_detail: {vision_detail}. Must be one of {VALID_DETAIL_VALUES}.")
 
     logger.debug(f"Loaded Azure OpenAI endpoint: '{AZURE_OPENAI_ENDPOINT}', key length: {len(AZURE_OPENAI_API_KEY)}")
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_API_KEY:
@@ -116,107 +118,18 @@ async def openai_chat(
         raise RuntimeError(f"Unable to reach Azure OpenAI endpoint: {str(e)}")
 
 def extract_base64_data(image_data: str) -> str:
+    """
+    Extract base64 data from image URL or raw base64 string.
+    
+    Args:
+        image_data: Base64 image data, possibly with data URL prefix
+        
+    Returns:
+        Raw base64 string without prefix
+    """
     if "base64," in image_data:
         return image_data.split("base64,")[1]
     return image_data
-
-# NEW UTILITY FUNCTIONS FOR REDUCING DUPLICATION
-
-async def azure_api_request(
-    endpoint_path: str, 
-    method: str = "GET",
-    data: Optional[Dict[str, Any]] = None,
-    params: Optional[Dict[str, str]] = None,
-    headers: Optional[Dict[str, str]] = None,
-    timeout: int = 30
-) -> Dict[str, Any]:
-    """
-    Standardized Azure API request handler to reduce duplication.
-    
-    Args:
-        endpoint_path: The API path after the base endpoint URL
-        method: HTTP method (GET, POST, PUT, DELETE)
-        data: Request payload for POST/PUT
-        params: URL query parameters
-        headers: Additional headers to include
-        timeout: Request timeout in seconds
-        
-    Returns:
-        JSON response as dict
-        
-    Raises:
-        ValueError: For API errors
-        RuntimeError: For connection errors
-    """
-    url = f"{AZURE_OPENAI_ENDPOINT}/{endpoint_path}"
-    
-    # Prepare headers
-    request_headers = {
-        "api-key": AZURE_OPENAI_API_KEY,
-        "Content-Type": "application/json"
-    }
-    
-    if headers:
-        request_headers.update(headers)
-        
-    # Prepare parameters
-    request_params = {
-        "api-version": API_VERSION
-    }
-    
-    if params:
-        request_params.update(params)
-    
-    # Log the request
-    logger.debug(f"Azure API request: {method} {url}")
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            if method == "GET":
-                response = await client.get(
-                    url, 
-                    params=request_params,
-                    headers=request_headers, 
-                    timeout=timeout
-                )
-            elif method == "POST":
-                response = await client.post(
-                    url, 
-                    params=request_params,
-                    json=data, 
-                    headers=request_headers, 
-                    timeout=timeout
-                )
-            elif method == "PUT":
-                response = await client.put(
-                    url, 
-                    params=request_params,
-                    json=data, 
-                    headers=request_headers, 
-                    timeout=timeout
-                )
-            elif method == "DELETE":
-                response = await client.delete(
-                    url, 
-                    params=request_params,
-                    headers=request_headers, 
-                    timeout=timeout
-                )
-            else:
-                raise ValueError(f"Unsupported HTTP method: {method}")
-                
-            if response.status_code >= 400:
-                logger.error(f"Azure API error: {response.status_code} => {response.text}")
-                raise ValueError(f"Azure API request failed ({response.status_code}): {response.text}")
-                
-            if not response.content:
-                return {}
-                
-            return response.json()
-            
-    except httpx.RequestError as e:
-        logger.error(f"Error connecting to Azure API: {e}")
-        raise RuntimeError(f"Unable to reach Azure API endpoint: {str(e)}")
 
 async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: int = 500) -> str:
     """
