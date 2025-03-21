@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .openai import openai_chat
-from utils.db_utils import get_by_id, get_all_by_condition
+
 
 logger = logging.getLogger(__name__)
 

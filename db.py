@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-DATABASE_URL = "postgresql+asyncpg://user:pass@localhost:5432/azure_chat"
+DATABASE_URL = "postgresql+asyncpg://postgres:Twiohmld1!@localhost:5433/azure_chat"
 
 async_engine = create_async_engine(DATABASE_URL, echo=False)
 
