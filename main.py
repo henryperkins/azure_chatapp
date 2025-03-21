@@ -25,7 +25,8 @@ from services.user_service import get_user_by_username
 from utils.auth_utils import JWT_SECRET, JWT_ALGORITHM, create_access_token
 from config import settings
 
-allowed_hosts = settings.ALLOWED_HOSTS  # Get allowed hosts from config
+# Configure allowed hosts - use "*" for development, specific domains in production
+allowed_hosts = settings.ALLOWED_HOSTS or ["*"]  # Set to ["*"] for development
 from db import init_db, validate_db_schema
 from auth import router as auth_router
 from routes.conversations import router as conversations_router
@@ -47,7 +48,11 @@ os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 # Create FastAPI app instance
 app = FastAPI(
     middleware=[
-        Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts),
+        Middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=allowed_hosts,
+            www_redirect=True
+        ),
         Middleware(
             SessionMiddleware,
             secret_key=os.getenv(
