@@ -15,11 +15,12 @@ from uuid import UUID
 from db import get_async_session
 from models.knowledge_base import KnowledgeBase
 from models.user import User
-from utils.auth_deps import (
-    get_current_user_and_token, 
-    validate_resource_ownership,
-    process_standard_response
+from utils.auth_utils import (
+    get_current_user_and_token,
+    create_standard_response
 )
+from utils.db_utils import validate_resource_access
+
 from utils.context import (
     get_all_by_condition,
     save_model
@@ -68,7 +69,7 @@ async def create_knowledge_base(
         db=db
     )
     
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(kb.id),
         "name": kb.name,
         "description": kb.description,
@@ -117,7 +118,7 @@ async def list_knowledge_bases(
         for kb in knowledge_bases
     ]
     
-    return await process_standard_response({"knowledge_bases": kb_list})
+    return await create_standard_response({"knowledge_bases": kb_list})
 
 
 @router.get("/{kb_id}", response_model=Dict)
@@ -130,7 +131,7 @@ async def get_knowledge_base(
     Retrieves a specific knowledge base by ID.
     """
     # Get the knowledge base using utility function
-    kb = await validate_resource_ownership(
+    kb = await validate_resource_access(
         kb_id,
         KnowledgeBase,
         current_user,
@@ -138,7 +139,7 @@ async def get_knowledge_base(
         "Knowledge Base"
     )
     
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(kb.id),
         "name": kb.name,
         "description": kb.description,
@@ -160,7 +161,7 @@ async def update_knowledge_base(
     Updates an existing knowledge base.
     """
     # Get the knowledge base using utility function
-    kb = await validate_resource_ownership(
+    kb = await validate_resource_access(
         kb_id,
         KnowledgeBase,
         current_user,
@@ -176,7 +177,7 @@ async def update_knowledge_base(
     # Save changes
     await save_model(db, kb)
     
-    return await process_standard_response(
+    return await create_standard_response(
         {
             "id": str(kb.id),
             "name": kb.name,
@@ -199,7 +200,7 @@ async def delete_knowledge_base(
     Deletes a knowledge base owned by the current user.
     """
     # Get the knowledge base using utility function
-    kb = await validate_resource_ownership(
+    kb = await validate_resource_access(
         kb_id,
         KnowledgeBase,
         current_user,
@@ -213,7 +214,7 @@ async def delete_knowledge_base(
     
     logger.info(f"Knowledge base {kb_id} deleted by user {current_user.id}")
     
-    return await process_standard_response(
+    return await create_standard_response(
         {"id": str(kb_id)},
         "Knowledge base deleted successfully"
     )
@@ -229,7 +230,7 @@ async def list_knowledge_base_projects(
     Lists all projects associated with the specified knowledge base.
     """
     # Get the knowledge base using utility function
-    kb = await validate_resource_ownership(
+    kb = await validate_resource_access(
         kb_id,
         KnowledgeBase,
         current_user,
@@ -250,4 +251,4 @@ async def list_knowledge_base_projects(
     from utils.serializers import serialize_project
     project_list = [serialize_project(project) for project in projects]
     
-    return await process_standard_response({"projects": project_list})
+    return await create_standard_response({"projects": project_list})

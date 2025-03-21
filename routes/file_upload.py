@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.file_upload_schemas import FileUploadResponse
 
 from db import get_async_session
-from utils.auth_deps import get_current_user_and_token
+from utils.auth_utils import get_current_user_and_token
 from models.user import User
 
 router = APIRouter()

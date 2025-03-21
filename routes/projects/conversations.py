@@ -23,10 +23,10 @@ from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
 
-from utils.auth_deps import (
+from utils.auth_utils import (
     get_current_user_and_token,
-    validate_resource_ownership,
-    process_standard_response
+    validate_resource_access,
+    create_standard_response
 )
 from utils.message_handlers import (
     create_user_message,
@@ -113,7 +113,7 @@ async def create_conversation(
         db=db
     )
     
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "created_at": conversation.created_at.isoformat(),
@@ -148,7 +148,7 @@ async def list_conversations(
             "created_at": conv.created_at.isoformat() if conv.created_at else None
         })
 
-    return await process_standard_response({"conversations": conv_list})
+    return await create_standard_response({"conversations": conv_list})
 
 
 @router.get("/{conversation_id}", response_model=dict)
@@ -162,7 +162,7 @@ async def get_conversation(
     Retrieve metadata about a specific conversation, verifying ownership and project relationship.
     """
     # Validate resource using enhanced utility
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -174,7 +174,7 @@ async def get_conversation(
         ]
     )
     
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "model_id": conversation.model_id,
@@ -195,7 +195,7 @@ async def update_conversation(
     Updates the conversation's title or model_id.
     """
     # Validate project is not archived
-    project = await validate_resource_ownership(
+    project = await validate_resource_access(
         project_id,
         Project,
         current_user,
@@ -208,7 +208,7 @@ async def update_conversation(
     )
     
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -231,7 +231,7 @@ async def update_conversation(
     
     logger.info(f"Conversation {conversation_id} updated by user {current_user.id}")
 
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "model_id": conversation.model_id,
@@ -250,7 +250,7 @@ async def delete_conversation(
     Soft-deletes a conversation by setting is_deleted = True.
     """
     # Validate project is not archived
-    project = await validate_resource_ownership(
+    project = await validate_resource_access(
         project_id,
         Project,
         current_user,
@@ -263,7 +263,7 @@ async def delete_conversation(
     )
     
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -280,7 +280,7 @@ async def delete_conversation(
     
     logger.info(f"Conversation {conversation_id} soft-deleted by user {current_user.id}")
 
-    return await process_standard_response(
+    return await create_standard_response(
         {"conversation_id": str(conversation.id)},
         message="Conversation deleted successfully"
     )
@@ -303,7 +303,7 @@ async def list_messages(
     Retrieves all messages for a conversation, sorted by creation time ascending.
     """
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -336,7 +336,7 @@ async def list_messages(
         for msg in messages
     ]
     
-    return await process_standard_response({"messages": output})
+    return await create_standard_response({"messages": output})
 
 
 @router.post("/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -352,7 +352,7 @@ async def create_message(
     optionally triggers an assistant response if role='user'.
     """
     # Validate project is not archived
-    project = await validate_resource_ownership(
+    project = await validate_resource_access(
         project_id,
         Project,
         current_user,
@@ -365,7 +365,7 @@ async def create_message(
     )
     
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -428,7 +428,7 @@ async def create_message(
             logger.error(f"Error generating AI response: {e}")
             response_payload["assistant_error"] = str(e)
 
-    return await process_standard_response(response_payload)
+    return await create_standard_response(response_payload)
 
 
 # ============================
@@ -454,7 +454,7 @@ async def websocket_chat_endpoint(
                 return
 
             # Validate project is not archived
-            await validate_resource_ownership(
+            await validate_resource_access(
                 project_id,
                 Project,
                 user,
@@ -467,7 +467,7 @@ async def websocket_chat_endpoint(
             )
                 
             # Validate conversation ownership
-            conversation = await validate_resource_ownership(
+            conversation = await validate_resource_access(
                 conversation_id,
                 Conversation,
                 user,
