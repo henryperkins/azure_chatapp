@@ -24,6 +24,7 @@ from fastapi.middleware import Middleware
 from services.user_service import get_user_by_username
 from utils.auth_utils import JWT_SECRET, JWT_ALGORITHM, create_access_token
 from config import settings
+allowed_hosts = settings.ALLOWED_HOSTS  # Get allowed hosts from config
 from db import init_db, validate_db_schema
 from auth import router as auth_router
 from routes.conversations import router as conversations_router
@@ -121,6 +122,9 @@ app.add_middleware(
 
 logger.info("CORS configured with origins: %s", origins)
 
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # WebSocket CORS fix middleware
 @app.middleware("http")
