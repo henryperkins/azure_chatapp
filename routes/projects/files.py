@@ -21,10 +21,10 @@ from db import get_async_session
 from models.user import User
 from models.project import Project
 from models.project_file import ProjectFile
-from utils.auth_deps import (
+from utils.auth_utils import (
     get_current_user_and_token,
-    validate_resource_ownership,
-    process_standard_response
+    validate_resource_access,
+    create_standard_response
 )
 from utils.context import get_all_by_condition, save_model
 
@@ -60,7 +60,7 @@ async def list_project_files(
     Returns a list of files for a project with optional filtering.
     """
     # Verify project access
-    project = await validate_resource_ownership(
+    project = await validate_resource_access(
         project_id,
         Project,
         current_user,
@@ -84,7 +84,7 @@ async def list_project_files(
         offset=skip
     )
     
-    return await process_standard_response({
+    return await create_standard_response({
         "files": [
             {
                 "id": str(file.id),
@@ -114,7 +114,7 @@ async def upload_project_file(
             user_id=current_user.id
         )
         
-        return await process_standard_response(
+        return await create_standard_response(
             {
                 "id": str(project_file.id),
                 "filename": project_file.filename,
@@ -145,7 +145,7 @@ async def get_project_file(
         user_id=current_user.id,
         include_content=True
     )
-    return await process_standard_response(file_data)
+    return await create_standard_response(file_data)
 
 
 @router.delete("/{file_id}", response_model=dict)
@@ -162,4 +162,4 @@ async def delete_project_file(
         db=db,
         user_id=current_user.id
     )
-    return await process_standard_response(result)
+    return await create_standard_response(result)
