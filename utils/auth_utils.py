@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from db import get_async_session
+from models.user import User, TokenBlacklist
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,6 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
             
         # Check if token is in database blacklist (persistent across restarts)
         if db and token_id:
-            from models.user import TokenBlacklist
             query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
             result = await db.execute(query)
             blacklisted = result.scalar_one_or_none()
@@ -96,7 +96,6 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
         token_version = decoded.get("version")
         username = decoded.get("sub")
         if db and token_version is not None and username:
-            from models.user import User
             query = select(User).where(User.username == username)
             result = await db.execute(query)
             user = result.scalar_one_or_none()
@@ -135,8 +134,6 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     Returns:
         Number of tokens deleted
     """
-    from models.user import TokenBlacklist
-    
     # Get current time
     now = datetime.utcnow()
     
@@ -161,8 +158,6 @@ async def load_revocation_list(db: AsyncSession) -> None:
     Args:
         db: Database session
     """
-    from models.user import TokenBlacklist
-    
     # Get current time
     now = datetime.utcnow()
     
