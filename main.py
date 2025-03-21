@@ -132,8 +132,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],  # Allow frontend to access all headers
-    max_age=600,  # Cache preflight requests for 10 minutes
+    expose_headers=["Set-Cookie", "*"],  # Allow frontend to access all headers
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
 logger.info("CORS configured with origins: %s", origins)

@@ -141,8 +141,11 @@ async def get_all_by_condition(
     if limit is not None:
         query = query.limit(limit)
     
-    result = await db.execute(query)
-    return list(result.scalars().all())
+    try:
+        result = await db.execute(query)
+        return list(result.scalars().all())
+    finally:
+        await db.close()
 
 
 async def validate_resource_access(

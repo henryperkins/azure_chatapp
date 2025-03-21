@@ -163,11 +163,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let wsUrl = null;
   if (chatId) {
-    if (selectedProjectId) {
-      wsUrl = `${protocol}${window.location.host}/api/projects/${selectedProjectId}/conversations/${chatId}/ws`;
-    } else {
-      wsUrl = `${protocol}${window.location.host}/api/chat/conversations/${chatId}/ws`;
-    }
+    const projectId = localStorage.getItem("selectedProjectId");
+    wsUrl = projectId ? 
+      `${protocol}${window.location.host}/api/projects/${projectId}/conversations/${chatId}/ws` : 
+      `${protocol}${window.location.host}/api/chat/conversations/${chatId}/ws`;
   }
   let socket = null;
 

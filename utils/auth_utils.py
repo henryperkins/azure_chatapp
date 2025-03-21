@@ -210,16 +210,20 @@ async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
     token = None
     cookie_header = websocket.headers.get("cookie")
     
-    if cookie_header:
-        try:
-            cookies = {}
-            for c in cookie_header.split("; "):
-                if '=' in c:
-                    k, v = c.split('=', 1)
-                    cookies[k.strip()] = unquote(v.strip())
-            token = cookies.get("access_token")
-        except Exception as e:
-            logger.error(f"Failed to parse cookies: {str(e)}")
+    cookie_header = websocket.headers.get("cookie") or ""
+    cookies = {}
+    
+    try:
+        for cookie in cookie_header.split("; "):
+            if "=" not in cookie:
+                continue  # Skip malformed cookies
+            key, value = cookie.split("=", 1)
+            cookies[key.strip().lower()] = unquote(value.strip())
+        token = cookies.get("access_token")
+    
+    except Exception as e:
+        logger.error(f"Error parsing cookies: {str(e)}")
+        token = None
     
     # If no token in cookies, try query parameters
     if not token and "token" in websocket.query_params:
