@@ -33,7 +33,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:Twiohmld1!@localhost:5433/azure_chat",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/azure_chat_db",
     )
 
     # JWT secret key - must match JWT_SECRET in auth_deps.py

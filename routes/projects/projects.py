@@ -139,15 +139,12 @@ async def get_project(
     Retrieves details for a single project. Must belong to the user.
     """
     # Use the enhanced validation function
-    project = await validate_project_access (
+    project = await validate_project_access(
         project_id,
-        Project,
         current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+        db
     )
-    
+
     # Serialize project to dict for JSON response
     serialized_project = serialize_project(project)
     
@@ -163,15 +160,12 @@ async def update_project(
 ):
     """Update project details"""
     # Verify project ownership
-    project = await validate_project_access (
+    project = await validate_project_access(
         project_id,
-        Project,
         current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+        db
     )
-    
+
     update_dict = update_data.dict(exclude_unset=True)
     if 'max_tokens' in update_dict and update_dict['max_tokens'] < project.token_usage:
         raise HTTPException(400, "New token limit below current usage")
@@ -195,15 +189,12 @@ async def delete_project(
 ):
     """Delete a project and all associated resources"""
     # Verify project ownership
-    project = await validate_project_access (
+    project = await validate_project_access(
         project_id,
-        Project,
         current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+        db
     )
-    
+
     # Delete the project and rely on CASCADE for related resources
     await db.delete(project)
     await db.commit()
@@ -228,15 +219,12 @@ async def toggle_archive_project(
     Toggle archive status of a project.
     Cannot have pinned and archived simultaneously.
     """
-    project = await validate_project_access (
+    project = await validate_project_access(
         project_id,
-        Project,
         current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+        db
     )
-    
+
     # Toggle archived status
     project.archived = not project.archived
     
@@ -262,15 +250,12 @@ async def toggle_pin_project(
    Pin or unpin a project for quick access.
    Cannot pin archived projects.
    """
-   project = await validate_project_access (
+   project = await validate_project_access(
        project_id,
-       Project,
        current_user,
-       db,
-       "Project",
-       [Project.user_id == current_user.id]
+       db
    )
-   
+
    if project.archived and not project.pinned:
        raise HTTPException(status_code=400, detail="Cannot pin an archived project")
 
@@ -292,15 +277,12 @@ async def get_project_stats(
     """
     Get statistics for a project including token usage, file count, etc.
     """
-    project = await validate_project_access (
+    project = await validate_project_access(
         project_id,
-        Project,
         current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id]
+        db
     )
-    
+
     # Get conversation count
     conversations = await get_all_by_condition(
         db,
