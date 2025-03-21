@@ -20,10 +20,10 @@ from models.user import User
 from models.project import Project
 from models.artifact import Artifact
 from models.conversation import Conversation
-from utils.auth_deps import (
+from utils.auth_utils import (
     get_current_user_and_token,
-    validate_resource_ownership,
-    process_standard_response
+    validate_resource_access,
+    create_standard_response
 )
 from utils.context import (
     get_all_by_condition,
@@ -70,7 +70,7 @@ async def create_artifact(
         conversation_id=artifact_data.conversation_id,
         user_id=current_user.id
     )
-    return await process_standard_response(artifact, "Artifact created successfully")
+    return await create_standard_response(artifact, "Artifact created successfully")
 
 
 @router.get("", response_model=dict)
@@ -93,7 +93,7 @@ async def list_artifacts(
         limit=limit,
         user_id=current_user.id
     )
-    return await process_standard_response({"artifacts": artifacts})
+    return await create_standard_response({"artifacts": artifacts})
 
 
 @router.get("/{artifact_id}", response_model=dict)
@@ -110,7 +110,7 @@ async def get_artifact(
         project_id=project_id,
         user_id=current_user.id
     )
-    return await process_standard_response(artifact)
+    return await create_standard_response(artifact)
 
 
 @router.delete("/{artifact_id}", response_model=dict)
@@ -127,4 +127,4 @@ async def delete_artifact(
         project_id=project_id,
         user_id=current_user.id
     )
-    return await process_standard_response(result)
+    return await create_standard_response(result)

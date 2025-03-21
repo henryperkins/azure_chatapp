@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 CONVERSATION_TOKEN_LIMIT = 3000
 SUMMARIZATION_CHUNK_SIZE = 1800  # Adjust as needed
 
+
 async def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1") -> str:
     """
     Summarizes a list of conversation messages. This function calls openai_chat
@@ -59,6 +60,7 @@ async def do_summarization(messages: List[Dict[str, str]], model_name: str = "o1
         logger.error(f"Error during summarization: {e}")
         return "Summary not available due to error."
 
+
 async def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
     Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
@@ -87,6 +89,7 @@ async def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]
     logger.info("Conversation was too large; older messages summarized.")
     return new_conversation
 
+
 async def token_limit_check(chat_id: str, db: AsyncSession):
     """
     Helper to be called after inserting a new message in the DB.
@@ -112,6 +115,7 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
         logger.info(f"Summarization triggered for chat_id={chat_id}, tokens={total_tokens}")
     else:
         logger.debug(f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}")
+
 
 def estimate_token_count(messages: List[Dict[str, str]]) -> int:
     """

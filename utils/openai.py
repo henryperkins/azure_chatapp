@@ -11,20 +11,22 @@ Includes:
 This version has been trimmed to remove the general API request function that moved to response_utils.py.
 """
 
-import requests
 import logging
-from typing import List, Dict, Optional, Union, Any
+import os
+from typing import List, Dict, Optional, Any
 
-logger = logging.getLogger(__name__)
+import httpx
 
 from config import settings
 from utils.response_utils import azure_api_request
 
+logger = logging.getLogger(__name__)
+
+# Azure OpenAI Configuration
 AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
 AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
 API_VERSION = "2025-02-01-preview"
 
-import httpx
 
 async def openai_chat(
     messages: List[Dict[str, str]],
@@ -35,7 +37,7 @@ async def openai_chat(
     vision_detail: str = "auto"
 ) -> dict:
     """
-    Calls Azure OpenAI's chat completion API. 
+    Calls Azure OpenAI's chat completion API.
     Allows optional 'reasoning_effort' if using "o3-mini" or "o1".
     Includes optional image_data for the "o1" model's vision capabilities.
 
@@ -47,11 +49,11 @@ async def openai_chat(
     :param vision_detail: Detail level for vision - "auto", "low", or "high"
     :return: The JSON response from Azure if successful, or raises an HTTPException otherwise.
     """
-    VALID_DETAIL_VALUES = ["auto", "low", "high"]
-    if vision_detail not in VALID_DETAIL_VALUES:
-        raise ValueError(f"Invalid vision_detail: {vision_detail}. Must be one of {VALID_DETAIL_VALUES}.")
+    valid_detail_values = ["auto", "low", "high"]
+    if vision_detail not in valid_detail_values:
+        raise ValueError(f"Invalid vision_detail: {vision_detail}. Must be one of {valid_detail_values}.")
 
-    logger.debug(f"Loaded Azure OpenAI endpoint: '{AZURE_OPENAI_ENDPOINT}', key length: {len(AZURE_OPENAI_API_KEY)}")
+    logger.debug("Loaded Azure OpenAI endpoint: '%s', key length: %d", AZURE_OPENAI_ENDPOINT, len(AZURE_OPENAI_API_KEY))
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_API_KEY:
         logger.error("Azure OpenAI endpoint or key is empty or missing.")
         raise ValueError("Azure OpenAI credentials not configured")
@@ -67,10 +69,7 @@ async def openai_chat(
         "max_completion_tokens": max_completion_tokens
     }
 
-    logger.info(
-        "API Request | Model: %s",
-        model_name
-    )
+    logger.info("API Request | Model: %s", model_name)
 
     if reasoning_effort and model_name in ["o3-mini", "o1"]:
         payload["reasoning_effort"] = reasoning_effort
@@ -109,21 +108,23 @@ async def openai_chat(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, headers=headers, timeout=60)
-            if response.status_code != 200:
-                logger.error(f"Azure OpenAI error: {response.status_code} => {response.text}")
-                raise ValueError(f"OpenAI request failed ({response.status_code}): {response.text}")
+            response.raise_for_status()
             return response.json()
     except httpx.RequestError as e:
-        logger.error(f"Error calling Azure OpenAI: {e}")
-        raise RuntimeError(f"Unable to reach Azure OpenAI endpoint: {str(e)}")
+        logger.error("Error calling Azure OpenAI: %s", e)
+        raise RuntimeError("Unable to reach Azure OpenAI endpoint") from e
+    except httpx.HTTPStatusError as e:
+        logger.error("Azure OpenAI error: %s", e)
+        raise RuntimeError(f"Azure OpenAI request failed: {e.response.status_code} => {e.response.text}") from e
+
 
 def extract_base64_data(image_data: str) -> str:
     """
     Extract base64 data from image URL or raw base64 string.
-    
+
     Args:
         image_data: Base64 image data, possibly with data URL prefix
-        
+
     Returns:
         Raw base64 string without prefix
     """
@@ -131,20 +132,21 @@ def extract_base64_data(image_data: str) -> str:
         return image_data.split("base64,")[1]
     return image_data
 
+
 async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: int = 500) -> str:
     """
     Simple wrapper for text completion to reduce duplication of chat message formatting.
-    
+
     Args:
         prompt: Text prompt to complete
         model_name: Azure OpenAI model to use
         max_tokens: Maximum tokens to generate
-        
+
     Returns:
         Generated text content
     """
     messages = [{"role": "user", "content": prompt}]
-    
+
     try:
         response = await openai_chat(
             messages=messages,
@@ -153,16 +155,17 @@ async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: i
         )
         return response["choices"][0]["message"]["content"]
     except Exception as e:
-        logger.error(f"Error during text completion: {e}")
-        raise RuntimeError(f"Text completion failed: {str(e)}")
+        logger.error("Error during text completion: %s", e)
+        raise RuntimeError(f"Text completion failed: {str(e)}") from e
+
 
 async def get_moderation(text: str) -> Dict[str, Any]:
     """
     Call the Azure OpenAI moderation endpoint.
-    
+
     Args:
         text: Text to moderate
-        
+
     Returns:
         Moderation results
     """
@@ -173,5 +176,5 @@ async def get_moderation(text: str) -> Dict[str, Any]:
             data={"input": text}
         )
     except Exception as e:
-        logger.error(f"Error during content moderation: {e}")
+        logger.error("Error during content moderation: %s", e)
         return {"error": str(e), "flagged": False}

@@ -11,31 +11,33 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional, List, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status
+)
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db import get_async_session
+from db import get_async_session, AsyncSessionLocal
 from models.user import User
 from models.conversation import Conversation
 from models.message import Message
-import services
-from utils.auth_deps import (
-    get_current_user_and_token, 
-    validate_resource_ownership,
-    process_standard_response,
-    JWT_SECRET,
-    JWT_ALGORITHM,
-    create_access_token
+from utils.auth_utils import (
+    get_current_user_and_token,
+    authenticate_websocket
 )
-from utils.openai import openai_chat
-from utils.context import (
-    manage_context, 
-    token_limit_check, 
-    get_by_id, 
+from utils.db_utils import (
+    save_model,
     get_all_by_condition,
-    save_model
+    validate_resource_access
 )
+from utils.context import manage_context
+from utils.response_utils import create_standard_response
+from utils.openai import openai_chat
 from utils.message_handlers import (
     create_user_message,
     get_conversation_messages,
@@ -45,7 +47,6 @@ from utils.ai_response import (
     generate_ai_response,
     handle_websocket_response
 )
-from utils.websocket_auth import authenticate_websocket
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,26 +55,35 @@ router = APIRouter()
 # Pydantic Schemas
 # ============================
 
+class ConversationResponse(BaseModel):
+    id: UUID
+    title: str
+    model_id: str
+    created_at: datetime
+    project_id: Optional[UUID] = None
+
+class ConversationListResponse(BaseModel):
+    conversations: List[ConversationResponse]
+
+class MessageResponse(BaseModel):
+    id: UUID
+    role: str
+    content: str
+    metadata: Dict[str, str]
+    timestamp: datetime
+
 class ConversationCreate(BaseModel):
-    """
-    Pydantic model for creating a new standalone conversation.
-    """
+    """Pydantic model for creating a new standalone conversation."""
     title: str = Field(..., min_length=1, max_length=100, description="A user-friendly title for the new conversation")
     model_id: Optional[str] = Field(None, description="Optional model ID referencing the chosen model deployment")
 
-
 class ConversationUpdate(BaseModel):
-    """
-    Pydantic model for updating an existing conversation.
-    """
+    """Pydantic model for updating an existing conversation."""
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
 
-
 class MessageCreate(BaseModel):
-    """
-    Pydantic model for creating a new message.
-    """
+    """Pydantic model for creating a new message."""
     content: str = Field(..., min_length=1, description="The text content of the user message")
     role: str = Field(
         default="user",
@@ -81,7 +91,6 @@ class MessageCreate(BaseModel):
     )
     image_data: Optional[str] = None
     vision_detail: Optional[str] = "auto"
-
 
 # ============================
 # Conversation Endpoints
@@ -93,33 +102,26 @@ async def create_conversation(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Creates a new standalone conversation (not associated with a project).
-    """
-    # Add default model if none provided
+    """Creates a new standalone conversation."""
     if not conversation_data.model_id:
-        conversation_data.model_id = "o1"  # Default model
+        conversation_data.model_id = "gpt-4"  # Updated default model
     
-    # Create conversation with default title if empty
     title = conversation_data.title.strip() or f"Chat {datetime.now().strftime('%Y-%m-%d')}"
     
     new_conversation = Conversation(
         user_id=current_user.id,
-        project_id=None,  # Explicitly set to None to indicate standalone
+        project_id=None,
         title=title,
         model_id=conversation_data.model_id,
         is_deleted=False,
         created_at=datetime.now()
     )
 
-    # Save using utility function
     await save_model(db, new_conversation)
-
     logger.info("Standalone conversation created with id=%s by user_id=%s", 
                 new_conversation.id, current_user.id)
                 
-    # Return standardized response
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(new_conversation.id),
         "title": new_conversation.title,
         "created_at": new_conversation.created_at.isoformat(),
@@ -160,7 +162,7 @@ async def list_conversations(
         for conv in conversations
     ]
     
-    return await process_standard_response({"conversations": items})
+    return await create_standard_response({"conversations": items})
 
 
 @router.get("/{conversation_id}", response_model=dict)
@@ -173,7 +175,7 @@ async def get_conversation(
     Retrieve metadata about a specific standalone conversation.
     """
     # Validate resource without requiring project relationship
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -185,7 +187,7 @@ async def get_conversation(
         ]
     )
     
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "model_id": conversation.model_id,
@@ -205,7 +207,7 @@ async def update_conversation(
     Updates a standalone conversation's title or model_id.
     """
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -228,7 +230,7 @@ async def update_conversation(
     
     logger.info(f"Conversation {conversation_id} updated by user {current_user.id}")
 
-    return await process_standard_response({
+    return await create_standard_response({
         "id": str(conversation.id),
         "title": conversation.title,
         "model_id": conversation.model_id
@@ -245,7 +247,7 @@ async def delete_conversation(
     Soft-deletes a standalone conversation by setting is_deleted = True.
     """
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -262,7 +264,7 @@ async def delete_conversation(
     
     logger.info(f"Conversation {conversation_id} soft-deleted by user {current_user.id}")
 
-    return await process_standard_response(
+    return await create_standard_response(
         {"conversation_id": str(conversation.id)},
         message="Conversation deleted successfully"
     )
@@ -284,7 +286,7 @@ async def list_messages(
     Retrieves all messages for a standalone conversation.
     """
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -317,7 +319,7 @@ async def list_messages(
         for msg in messages
     ]
     
-    return await process_standard_response({
+    return await create_standard_response({
         "messages": output,
         "metadata": {"title": conversation.title}
     })
@@ -335,7 +337,7 @@ async def create_message(
     optionally triggers an assistant response if role='user'.
     """
     # Validate conversation ownership
-    conversation = await validate_resource_ownership(
+    conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
@@ -394,7 +396,7 @@ async def create_message(
             logger.error(f"Error generating AI response: {e}")
             response_payload["assistant_error"] = str(e)
 
-    return await process_standard_response(response_payload)
+    return await create_standard_response(response_payload)
 
 
 # ============================
@@ -406,52 +408,59 @@ async def websocket_chat_endpoint(
     websocket: WebSocket,
     conversation_id: UUID
 ):
-    """
-    Real-time chat updates for a standalone conversation.
-    Must authenticate via query param or cookies (token).
-    """
-    from db import AsyncSessionLocal
+    """Real-time chat updates for a standalone conversation."""
     async with AsyncSessionLocal() as db:
         try:
-            # Use standardized auth utility
+            # Authenticate user
             success, user = await authenticate_websocket(websocket, db)
             if not success:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Validate using service layer
-            conversation = await services.conversation_service.validate_conversation_access(
-                conversation_id, user.id, db
+            # Validate conversation access
+            conversation = await validate_resource_access(
+                conversation_id,
+                Conversation,
+                user,
+                db,
+                "Conversation",
+                [
+                    Conversation.project_id.is_(None),
+                    Conversation.is_deleted.is_(False)
+                ]
             )
 
+            await websocket.accept()
+            
             while True:
                 raw_data = await websocket.receive_text()
                 try:
-                    data_dict = json.loads(raw_data)
-                    if data_dict.get("type") == "auth" and "cookies" in data_dict:
-                        for c in data_dict["cookies"].split("; "):
-                            if "=" in c:
-                                k, v = c.split("=", 1)
-                                websocket.headers.__dict__["_list"].append((b"cookie", f"{k.strip()}={v.strip()}".encode()))
-                        continue
-                except:
-                    data_dict = {"content": raw_data, "role": "user"}
+                    data = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    data = {"content": raw_data, "role": "user"}
 
-                # Use message service
-                message = await services.message_service.create_websocket_message(
+                # Create message
+                message = await create_websocket_message(
                     conversation_id=conversation.id,
-                    content=data_dict["content"],
-                    role=data_dict["role"],
+                    content=data["content"],
+                    role=data["role"],
                     db=db
                 )
 
+                # Generate AI response if user message
                 if message.role == "user":
-                    await services.ai_response_service.handle_websocket_response(
-                        conversation.id, db, websocket
+                    await handle_ai_websocket_response(
+                        conversation=conversation,
+                        db=db,
+                        websocket=websocket
                     )
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
         except HTTPException as he:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.close(code=he.status_code)
+        except Exception as e:
+            logger.error(f"WebSocket error: {str(e)}")
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         finally:
             await db.close()

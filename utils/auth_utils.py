@@ -11,12 +11,13 @@ from typing import Optional, Dict, Any, Tuple
 from urllib.parse import unquote
 
 import jwt
-from fastapi import HTTPException, Request, WebSocket, status
+from fastapi import HTTPException, Request, WebSocket, status, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from models.user import User
+from utils.db_utils import get_async_session
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,40 @@ async def get_user_from_token(
         logger.warning(f"Attempt to use token for disabled account: {username}")
         raise HTTPException(status_code=403, detail="Account disabled")
         
+    return user
+
+
+async def get_current_user_and_token(
+    request: Request,
+    db: AsyncSession = Depends(get_async_session)
+) -> User:
+    """
+    FastAPI dependency that extracts and validates JWT token from request,
+    then returns the authenticated user.
+    
+    Args:
+        request: FastAPI Request object (injected)
+        db: Database session (injected)
+        
+    Returns:
+        User object if authentication successful
+        
+    Raises:
+        HTTPException: For authentication failures
+    """
+    # Extract token from request
+    token = extract_token_from_request(request)
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user from token
+    user = await get_user_from_token(token, db)
+    
     return user
 
 

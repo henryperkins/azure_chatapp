@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from typing import TypeVar, Type, List, Optional, Any, AsyncGenerator, Callable, Dict, Union
 
 from fastapi import Depends
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import ClauseElement
 
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Type variable for generic database functions
 T = TypeVar('T')
+
 
 # Session management functions
 async def with_db_session(func: Callable[..., T], *args, **kwargs) -> T:
@@ -154,6 +155,51 @@ async def update_model(
     return result.scalars().first()
 
 
+async def validate_resource_access(
+    resource_id: UUID,
+    project_id: UUID,
+    user: User,
+    db: AsyncSession,
+    model_class,
+    resource_name: str = "Resource"
+) -> Any:
+    """
+    Generic method for validating access to any project-related resource.
+    All services can use this for artifacts, files, etc.
+
+    Args:
+        resource_id: UUID of the resource
+        project_id: UUID of the project
+        user: User object
+        db: Database session
+        model_class: The SQLAlchemy model class of the resource
+        resource_name: Human-readable name for error messages
+
+    Returns:
+        The resource object if found and accessible
+
+    Raises:
+        HTTPException: If resource not found or user lacks permission
+    """
+    # First validate project access
+    from utils.auth_utils import validate_project_access
+    project = await validate_project_access(project_id, user, db)
+
+    # Then check for the resource
+    result = await db.execute(
+        select(model_class).where(
+            model_class.id == resource_id,
+            model_class.project_id == project_id
+        )
+    )
+    resource = result.scalars().first()
+
+    if not resource:
+        raise HTTPException(status_code=404, detail=f"{resource_name} not found")
+
+    return resource
+
+
 async def delete_model(
     db: AsyncSession,
     model: Type[T],
@@ -193,7 +239,6 @@ async def count_by_condition(
     Returns:
         Count of matching records
     """
-    from sqlalchemy import func
     query = select(func.count()).select_from(model).where(*conditions)
     result = await db.execute(query)
     return result.scalar() or 0

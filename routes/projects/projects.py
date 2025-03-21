@@ -20,10 +20,10 @@ from models.project import Project
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact
-from utils.auth_deps import (
+from utils.auth_utils import (
     get_current_user_and_token,
-    validate_resource_ownership,
-    process_standard_response
+    validate_project_access,
+    create_standard_response
 )
 from utils.context import (
     get_all_by_condition,
@@ -90,7 +90,7 @@ async def create_project(
         # Serialize project for response
         serialized_project = serialize_project(project)
         
-        return await process_standard_response(serialized_project, "Project created successfully")
+        return await create_standard_response(serialized_project, "Project created successfully")
         
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
@@ -131,7 +131,7 @@ async def list_projects(
     serialized_projects = [serialize_project(project) for project in projects]
     
     # Return standardized response format
-    return await process_standard_response(serialized_projects)
+    return await create_standard_response(serialized_projects)
 
 
 @router.get("/{project_id}", response_model=Dict)
@@ -144,7 +144,7 @@ async def get_project(
     Retrieves details for a single project. Must belong to the user.
     """
     # Use the enhanced validation function
-    project = await validate_resource_ownership(
+    project = await validate_project_access (
         project_id,
         Project,
         current_user,
@@ -156,7 +156,7 @@ async def get_project(
     # Serialize project to dict for JSON response
     serialized_project = serialize_project(project)
     
-    return await process_standard_response(serialized_project)
+    return await create_standard_response(serialized_project)
 
 
 @router.patch("/{project_id}", response_model=Dict)
@@ -168,7 +168,7 @@ async def update_project(
 ):
     """Update project details"""
     # Verify project ownership
-    project = await validate_resource_ownership(
+    project = await validate_project_access (
         project_id,
         Project,
         current_user,
@@ -189,7 +189,7 @@ async def update_project(
     # Serialize project for response
     serialized_project = serialize_project(project)
     
-    return await process_standard_response(serialized_project, "Project updated successfully")
+    return await create_standard_response(serialized_project, "Project updated successfully")
 
 
 @router.delete("/{project_id}", response_model=Dict)
@@ -200,7 +200,7 @@ async def delete_project(
 ):
     """Delete a project and all associated resources"""
     # Verify project ownership
-    project = await validate_resource_ownership(
+    project = await validate_project_access (
         project_id,
         Project,
         current_user,
@@ -213,7 +213,7 @@ async def delete_project(
     await db.delete(project)
     await db.commit()
     
-    return await process_standard_response(
+    return await create_standard_response(
         {"id": str(project_id)},
         "Project and all associated resources deleted successfully"
     )
@@ -233,7 +233,7 @@ async def toggle_archive_project(
     Toggle archive status of a project.
     Cannot have pinned and archived simultaneously.
     """
-    project = await validate_resource_ownership(
+    project = await validate_project_access (
         project_id,
         Project,
         current_user,
@@ -251,7 +251,7 @@ async def toggle_archive_project(
         
     await save_model(db, project)
     
-    return await process_standard_response(
+    return await create_standard_response(
         serialize_project(project), 
         message=f"Project {'archived' if project.archived else 'unarchived'} successfully"
     )
@@ -267,7 +267,7 @@ async def toggle_pin_project(
    Pin or unpin a project for quick access.
    Cannot pin archived projects.
    """
-   project = await validate_resource_ownership(
+   project = await validate_project_access (
        project_id,
        Project,
        current_user,
@@ -282,7 +282,7 @@ async def toggle_pin_project(
    project.pinned = not project.pinned
    await save_model(db, project)
    
-   return await process_standard_response(
+   return await create_standard_response(
        serialize_project(project),
        message=f"Project {'pinned' if project.pinned else 'unpinned'} successfully"
    )
@@ -297,7 +297,7 @@ async def get_project_stats(
     """
     Get statistics for a project including token usage, file count, etc.
     """
-    project = await validate_resource_ownership(
+    project = await validate_project_access (
         project_id,
         Project,
         current_user,
@@ -334,7 +334,7 @@ async def get_project_stats(
     usage_percentage = (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
     
     logger.info(f"Returning stats for project {project_id}: {conversation_count} conversations, {file_count} files")
-    return await process_standard_response({
+    return await create_standard_response({
         "token_usage": project.token_usage,
         "max_tokens": project.max_tokens,
         "usage_percentage": usage_percentage,
