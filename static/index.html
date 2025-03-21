@@ -135,61 +135,50 @@
             New Project
           </button>
         </div>
-      </div>
-    </nav>
-
-    <!-- Main Content Area -->
-    <main class="flex-1 flex flex-col overflow-hidden">
-      <!-- Notification area for ephemeral toasts -->
-      <div id="notificationArea"
-           class="fixed top-16 right-4 z-50 w-72 space-y-2"></div>
-
-      <!-- Scroll container -->
-      <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
-
-        <!-- Model Selection & Configuration Interface -->
-        <section id="modelConfigSection" class="mb-6 bg-white dark:bg-gray-800 rounded shadow p-4">
-          <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Model Configuration</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-
-            <!-- Model Selection -->
-            <div>
-              <label for="modelSelect" class="block font-medium dark:text-gray-200">Select Model</label>
-              <select id="modelSelect"
-                      class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="o3-mini">o3-mini</option>
-                <option value="o1">o1 (Vision Support)</option>
-                <option value="o1-mini">o1-mini</option>
-                <option value="o1-preview">o1-preview</option>
-              </select>
-            </div>
-
-            <!-- Max Tokens Input Group -->
-            <div id="maxTokensContainer" class="col-span-1 md:col-span-2">
-              <label class="block font-medium dark:text-gray-200">Max Completion Tokens</label>
-              <!-- Slider and input will be injected by modelConfig.js -->
-            </div>
-
-            <!-- Reasoning Effort Panel (for the slider) -->
-            <div id="reasoningPanel" class="col-span-1 md:col-span-2 bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2">
-              <!-- The slider is injected by modelConfig.js -->
-            </div>
-
-            <div id="visionPanel" class="col-span-1 md:col-span-2 hidden">
-              <label class="block font-medium dark:text-gray-200">Image Upload (o1 Vision)</label>
-              <input type="file" accept="image/png,image/jpeg"
-                     class="mt-2 text-sm dark:text-gray-200"
-                     id="visionFileInput" />
-              <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
-                Upload JPEG or PNG (≤4 MB). A loading indicator or error message will appear below if invalid.
-              </p>
-              <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                <!-- Filled dynamically: "Analyzing..." or error messages -->
-              </div>
-              <div id="visionPreview" class="mt-2"></div>
-            </div>
+        
+        <hr class="my-4 dark:border-gray-700" />
+        
+        <!-- Model Configuration UI moved to sidebar -->
+        <div class="text-sm">
+          <h2 class="font-semibold text-lg mb-2">Model Configuration</h2>
+          
+          <!-- Model Selection -->
+          <div class="mb-3">
+            <label for="modelSelect" class="block font-medium dark:text-gray-200">Select Model</label>
+            <select id="modelSelect"
+                    class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <option value="o3-mini">o3-mini</option>
+              <option value="o1">o1 (Vision Support)</option>
+              <option value="o1-mini">o1-mini</option>
+              <option value="o1-preview">o1-preview</option>
+            </select>
           </div>
 
+          <!-- Max Tokens Input Group -->
+          <div id="maxTokensContainer" class="mb-3">
+            <label class="block font-medium dark:text-gray-200">Max Completion Tokens</label>
+            <!-- Slider and input will be injected by modelConfig.js -->
+          </div>
+
+          <!-- Reasoning Effort Panel (for the slider) -->
+          <div id="reasoningPanel" class="bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2 mb-3">
+            <!-- The slider is injected by modelConfig.js -->
+          </div>
+
+          <div id="visionPanel" class="hidden mb-3">
+            <label class="block font-medium dark:text-gray-200">Image Upload (o1 Vision)</label>
+            <input type="file" accept="image/png,image/jpeg"
+                   class="mt-2 text-sm dark:text-gray-200"
+                   id="visionFileInput" />
+            <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
+              Upload JPEG or PNG (≤4 MB).
+            </p>
+            <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              <!-- Filled dynamically: "Analyzing..." or error messages -->
+            </div>
+            <div id="visionPreview" class="mt-2"></div>
+          </div>
+          
           <!-- Placeholder for persistent user model config display -->
           <div id="modelConfigDisplay"
                class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm dark:text-gray-200">
@@ -209,7 +198,20 @@
             </svg>
             Updating configuration...
           </div>
-        </section>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Notification area for ephemeral toasts -->
+      <div id="notificationArea"
+           class="fixed top-16 right-4 z-50 w-72 space-y-2"></div>
+
+      <!-- Scroll container -->
+      <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
+
+        <!-- Model Configuration section has been moved to the sidebar -->
 
         <div class="mb-4">
           <button id="newChatBtn" class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
