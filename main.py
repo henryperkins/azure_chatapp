@@ -205,6 +205,46 @@ async def on_startup():
         upload_path.mkdir(parents=True, exist_ok=True)
         upload_path.chmod(0o755)  # Ensure proper permissions
         logger.info("Upload directories initialized with secure permissions")
+        
+        # Initialize auth system
+        from utils.auth_utils import load_revocation_list, clean_expired_tokens
+        from utils.db_utils import schedule_token_cleanup
+        from db import get_async_session_context
+        
+        # Get a database session
+        async with get_async_session_context() as session:
+            # Clean up expired tokens
+            deleted_count = await clean_expired_tokens(session)
+            logger.info(f"Cleaned {deleted_count} expired tokens during startup")
+            
+            # Load active revoked tokens into memory
+            await load_revocation_list(session)
+        
+        # Schedule periodic token cleanup (every 30 minutes)
+        await schedule_token_cleanup(interval_minutes=30)
+            
+        logger.info("Authentication system initialized")
     except Exception as e:
         logger.critical("Startup initialization failed: %s", e)
         raise
+        
+        
+@app.on_event("shutdown")
+async def on_shutdown():
+    """Performs cleanup tasks when the application is shutting down."""
+    logger.info("Application shutting down")
+    
+    # Any cleanup logic here
+    try:
+        from utils.auth_utils import clean_expired_tokens
+        from db import get_async_session_context
+        
+        # Clean up expired tokens one final time
+        async with get_async_session_context() as session:
+            deleted_count = await clean_expired_tokens(session)
+            logger.info(f"Cleaned {deleted_count} expired tokens during shutdown")
+            
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+    
+    logger.info("Shutdown complete")

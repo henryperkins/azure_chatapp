@@ -195,29 +195,65 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   // Token refresh mechanism
   let tokenRefreshInterval = null;
+  let tokenRefreshTimeout = null;
   
   /**
    * Sets up automatic token refresh
    * This ensures the user's session doesn't expire while they're active
    */
   function setupTokenRefresh() {
-    // Clear any existing refresh interval
+    // Clear any existing refresh interval and timeout
     if (tokenRefreshInterval) {
       clearInterval(tokenRefreshInterval);
+      tokenRefreshInterval = null;
     }
     
-    // Set up a new refresh interval - refresh every 45 minutes
-    // (assuming 60 minute token expiry)
+    if (tokenRefreshTimeout) {
+      clearTimeout(tokenRefreshTimeout);
+      tokenRefreshTimeout = null;
+    }
+    
+    // Set up a new refresh interval - refresh every 25 minutes
+    // (assuming 30 minute token expiry - refresh 5 minutes before expiry)
     tokenRefreshInterval = setInterval(() => {
       refreshToken();
-    }, 45 * 60 * 1000); // 45 minutes
+    }, 25 * 60 * 1000); // 25 minutes
+    
+    // Also set up a forced check after 2 minutes to ensure token is valid
+    tokenRefreshTimeout = setTimeout(() => {
+      checkAuthAndRefresh();
+    }, 2 * 60 * 1000); // 2 minutes
     
     // Also refresh when the user becomes active after being idle
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        refreshToken();
+        checkAuthAndRefresh();
       }
     });
+  }
+  
+  /**
+   * Verify authentication and refresh token if needed
+   */
+  async function checkAuthAndRefresh() {
+    try {
+      // First check if we're still authenticated before attempting refresh
+      const resp = await fetch("/api/auth/verify", {
+        credentials: "include"
+      });
+      
+      if (resp.ok) {
+        // We're still authenticated, refresh the token to extend session
+        refreshToken();
+      } else {
+        // We're no longer authenticated, trigger auth state change
+        console.warn("Session expired, user needs to re-login");
+        handleUnauthenticated();
+      }
+    } catch (err) {
+      console.error("Auth check failed:", err);
+      handleUnauthenticated();
+    }
   }
   
   /**
@@ -235,11 +271,12 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("Token refreshed successfully");
         // No need to manually store token since it's in the HttpOnly cookie
       } else {
-        console.warn("Failed to refresh token, may need to re-login");
-        // Wait for next auth check to update UI
+        console.warn("Failed to refresh token, user needs to re-login");
+        handleUnauthenticated();
       }
     } catch (err) {
       console.error("Token refresh error:", err);
+      handleUnauthenticated();
     }
   }
   
@@ -296,16 +333,35 @@ document.addEventListener("DOMContentLoaded", () => {
    * Handle unauthenticated state consistently
    */
   function handleUnauthenticated() {
-    // Clear any token refresh interval
+    // Clear any token refresh interval and timeout
     if (tokenRefreshInterval) {
       clearInterval(tokenRefreshInterval);
       tokenRefreshInterval = null;
     }
     
+    if (tokenRefreshTimeout) {
+      clearTimeout(tokenRefreshTimeout);
+      tokenRefreshTimeout = null;
+    }
+    
+    // Get UI elements using SELECTORS
+    const authButton = getElement(SELECTORS.AUTH_BUTTON);
+    const userMenu = getElement(SELECTORS.USER_MENU);
+    const authStatus = getElement(SELECTORS.AUTH_STATUS);
+    
     // Update UI for unauthenticated state
-    if (authButton && userMenu) {
-      authButton.classList.remove("hidden");
-      userMenu.classList.add("hidden");
+    if (authButton) authButton.classList.remove("hidden");
+    if (userMenu) userMenu.classList.add("hidden");
+    
+    if (authStatus) {
+      authStatus.textContent = "Not Authenticated";
+      authStatus.classList.remove("text-green-600");
+      authStatus.classList.add("text-red-600");
+    }
+    
+    // Show notification
+    if (window.showNotification) {
+      window.showNotification("Your session has expired. Please log in again.", "error");
     }
     
     // Dispatch event so other components know authentication state changed

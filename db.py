@@ -28,8 +28,25 @@ from contextlib import asynccontextmanager
 
 
 async def get_async_session():
+    """FastAPI dependency for getting an async session."""
     async with AsyncSessionLocal() as session:
         yield session
+
+
+@asynccontextmanager
+async def get_async_session_context():
+    """
+    Async context manager for getting a session outside of FastAPI dependencies.
+    
+    Example:
+        async with get_async_session_context() as session:
+            # Use session here
+    """
+    session = AsyncSessionLocal()
+    try:
+        yield session
+    finally:
+        await session.close()
 
 
 async def init_db():
