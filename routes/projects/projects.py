@@ -20,15 +20,10 @@ from models.project import Project
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact
-from utils.auth_utils import (
-    get_current_user_and_token,
-    validate_project_access,
-    create_standard_response
-)
-from utils.context import (
-    get_all_by_condition,
-    save_model
-)
+from utils.auth_utils import get_current_user_and_token
+from services.project_service import validate_project_access
+from utils.db_utils import get_all_by_condition, save_model
+from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
 
 logger = logging.getLogger(__name__)
