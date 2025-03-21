@@ -165,25 +165,24 @@ async def list_conversations(
     Returns a list of standalone conversations for the current user.
     """
     try:
-        async with db.begin():
-            conversations = await get_all_by_condition(
-                db,
-                Conversation,
-                Conversation.user_id == current_user.id,
-                Conversation.project_id.is_(None),  # standalone
-                Conversation.is_deleted.is_(False),
-                order_by=Conversation.created_at.desc(),
-                limit=limit,
-                offset=skip,
-            )
+        conversations = await get_all_by_condition(
+            db,
+            Conversation,
+            Conversation.user_id == current_user.id,
+            Conversation.project_id.is_(None),  # standalone
+            Conversation.is_deleted.is_(False),
+            order_by=Conversation.created_at.desc(),
+            limit=limit,
+            offset=skip,
+        )
 
-            items = []
-            for conv in conversations:
-                items.append(
-                    {
-                        "id": str(conv.id),
-                        "title": conv.title,
-                        "model_id": conv.model_id,
+        items = []
+        for conv in conversations:
+            items.append(
+                {
+                    "id": str(conv.id),
+                    "title": conv.title,
+                    "model_id": conv.model_id,
                         "created_at": conv.created_at,
                         "project_id": None,
                     }
