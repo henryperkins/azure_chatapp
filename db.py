@@ -5,7 +5,7 @@ Sets up the PostgreSQL database connection using SQLAlchemy.
 Defines the async init_db process for migrations or table creation.
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -14,32 +14,23 @@ DATABASE_URL = "postgresql+asyncpg://postgres:Twiohmld1!@localhost:5433/azure_ch
 
 async_engine = create_async_engine(DATABASE_URL, echo=False)
 
-from sqlalchemy.ext.asyncio import async_sessionmaker
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
 AsyncSessionLocal = async_sessionmaker(
-    bind=async_engine,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False
+    bind=async_engine, autocommit=False, autoflush=False, expire_on_commit=False
 )
 
 sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=sync_engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 
 Base = declarative_base()
 
 from contextlib import asynccontextmanager
 
+
 async def get_async_session():
     async with AsyncSessionLocal() as session:
         yield session
+
 
 async def init_db():
     """
@@ -49,6 +40,7 @@ async def init_db():
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+
 async def validate_db_schema():
     """
     Validate the current database schema against the ORM models.
@@ -56,6 +48,7 @@ async def validate_db_schema():
     """
     import logging
     from sqlalchemy import MetaData, inspect
+
     logger = logging.getLogger(__name__)
 
     # Reflect database schema
@@ -69,7 +62,7 @@ async def validate_db_schema():
     # Table validation
     tables_in_db = set(meta.tables.keys())
     tables_in_orm = set(orm_meta.tables.keys())
-    
+
     missing_tables = tables_in_orm - tables_in_db
     if missing_tables:
         raise Exception(f"Missing tables: {missing_tables}")
@@ -80,23 +73,27 @@ async def validate_db_schema():
         orm_cols = orm_meta.tables[table_name].columns
 
         # Check column names and types
-        db_col_map = {c['name']: c for c in db_cols}
+        db_col_map = {c["name"]: c for c in db_cols}
         for orm_col in orm_cols:
             db_col = db_col_map.get(orm_col.name)
             if not db_col:
                 raise Exception(f"Missing column {table_name}.{orm_col.name}")
-                
+
             # Compare type and nullable
-            orm_type = str(orm_col.type).split('(')[0]  # Simplify type comparison
-            db_type = str(db_col['type']).split('(')[0]
-            
+            orm_type = str(orm_col.type).split("(")[0]  # Simplify type comparison
+            db_type = str(db_col["type"]).split("(")[0]
+
             if db_type != orm_type:
-                raise Exception(f"Type mismatch in {table_name}.{orm_col.name}: "
-                              f"DB has {db_type}, ORM expects {orm_type}")
-                              
-            if db_col['nullable'] != orm_col.nullable:
-                raise Exception(f"Nullability mismatch in {table_name}.{orm_col.name}: "
-                              f"DB allows null={db_col['nullable']}, ORM expects {orm_col.nullable}")
+                raise Exception(
+                    f"Type mismatch in {table_name}.{orm_col.name}: "
+                    f"DB has {db_type}, ORM expects {orm_type}"
+                )
+
+            if db_col["nullable"] != orm_col.nullable:
+                raise Exception(
+                    f"Nullability mismatch in {table_name}.{orm_col.name}: "
+                    f"DB allows null={db_col['nullable']}, ORM expects {orm_col.nullable}"
+                )
 
     # Index validation
     for table_name in tables_in_orm:
@@ -105,7 +102,7 @@ async def validate_db_schema():
 
         # Check index existence
         orm_index_names = {idx.name for idx in orm_indexes}
-        db_index_names = {idx['name'] for idx in db_indexes}
+        db_index_names = {idx["name"] for idx in db_indexes}
 
         missing_indexes = orm_index_names - db_index_names
         if missing_indexes:

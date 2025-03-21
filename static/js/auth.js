@@ -248,15 +248,23 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   async function updateAuthStatus() {
     try {
+      const authStatus = getElement(SELECTORS.AUTH_STATUS);
       const resp = await fetch("/api/auth/verify", {
         credentials: "include"  // Include cookies in the request
       });
       
       if (resp.ok) {
         // User is authenticated
-        if (authButton && userMenu) {
-          authButton.classList.add("hidden");
-          userMenu.classList.remove("hidden");
+        const authButton = getElement(SELECTORS.AUTH_BUTTON);
+        const userMenu = getElement(SELECTORS.USER_MENU);
+        
+        if (authButton) authButton.classList.add("hidden");
+        if (userMenu) userMenu.classList.remove("hidden");
+        
+        if (authStatus) {
+          authStatus.textContent = "Authenticated";
+          authStatus.classList.remove("text-red-600");
+          authStatus.classList.add("text-green-600");
         }
         
         // Get user info and update UI
@@ -265,43 +273,22 @@ document.addEventListener("DOMContentLoaded", () => {
           authStatus.textContent = userData.username;
         }
         
-        // Explicitly load project list
-        if (typeof window.projectManager?.loadProjects === "function") {
-          window.projectManager.loadProjects();
-        }
-        
         document.dispatchEvent(new CustomEvent("authStateChanged", {
           detail: { authenticated: true }
         }));
         
         // Setup token refresh mechanism
         setupTokenRefresh();
-      } else if (resp.status === 401) {
-        // Try token refresh on 401 - one last attempt to recover the session
-        try {
-          const refreshResp = await fetch("/api/auth/refresh", {
-            method: "POST",
-            credentials: "include"
-          });
-          
-          if (refreshResp.ok) {
-            // Token refreshed, retry auth verification
-            updateAuthStatus();
-            return;
-          }
-        } catch (refreshErr) {
-          console.error("Token refresh during auth verification failed:", refreshErr);
-        }
         
-        // Not authenticated after refresh attempt
-        handleUnauthenticated();
+        return true;
       } else {
-        // Other error, handle as unauthenticated
         handleUnauthenticated();
+        return false;
       }
     } catch (err) {
       console.error("Auth check failed:", err);
       handleUnauthenticated();
+      return false;
     }
   }
   

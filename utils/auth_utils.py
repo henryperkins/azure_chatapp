@@ -11,6 +11,8 @@ from typing import Optional, Dict, Any, Tuple
 from urllib.parse import unquote
 
 import jwt
+from jwt import encode, decode
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, WebSocket, status, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +48,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    encoded_jwt = encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 
@@ -65,7 +67,7 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Dict[str, A
         HTTPException: If token validation fails
     """
     try:
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
         # Validate token type if specified
         if expected_type and decoded.get("type") != expected_type:
@@ -80,10 +82,10 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Dict[str, A
 
         return decoded
 
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         logger.warning("Token has expired.")
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError as e:
+    except InvalidTokenError as e:
         logger.warning(f"Invalid token: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -115,8 +117,10 @@ def extract_token_from_request(request: Request) -> Optional[str]:
     # Fallback to Authorization header
     if not token:
         auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split("Bearer ")[1]
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1]
             
     return token
 
