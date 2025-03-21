@@ -28,6 +28,18 @@ pytest path/to/test_file.py
 pytest path/to/test_file.py::test_function_name -v
 ```
 
+## Database Management
+```bash
+# Reset database (WARNING: Deletes all data)
+python scripts/reset_database.py
+
+# Create migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+```
+
 ## Code Style Guidelines
 - **Imports**: Group standard library, third-party, and local imports (separated by newlines)
 - **Type Hints**: Use typing module; annotate function parameters and return values
@@ -36,12 +48,4 @@ pytest path/to/test_file.py::test_function_name -v
 - **Naming**: snake_case for variables/functions, PascalCase for classes, UPPER_CASE for constants
 - **SQLAlchemy**: Use async session with proper relationship definitions
 - **FastAPI**: Router grouping by feature, dependency injection for auth/DB
-
-## Database Migration
-```bash
-# Create migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-```
+- **Frontend**: React with TypeScript and Tailwind CSS; use React Context for state

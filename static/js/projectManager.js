@@ -47,29 +47,54 @@
    * If not archived, also loads stats, files, conversations, artifacts.
    */
   function loadProjectDetails(projectId) {
-    window.apiRequest(`/api/projects/${projectId}`, "GET")
-      .then((response) => {
-        currentProject = response.data;
-        document.dispatchEvent(
-          new CustomEvent("projectLoaded", { detail: currentProject })
-        );
-        
-        // If project is archived, skip loading extra data
-        if (currentProject.archived) {
-          console.warn("Project is archived, skipping additional loads.");
-          window.showNotification?.("This project is archived", "warning");
-          return;
-        }
+    // First check which API endpoint format works
+    checkProjectApiEndpoint(projectId).then(endpointType => {
+      // Use the appropriate endpoint format based on what works
+      let projectEndpoint = endpointType === "standard" ? 
+        `/api/projects/${projectId}` : `/api/${projectId}`;
+      
+      window.apiRequest(projectEndpoint, "GET")
+        .then((response) => {
+          currentProject = response.data;
+          document.dispatchEvent(
+            new CustomEvent("projectLoaded", { detail: currentProject })
+          );
+          
+          // If project is archived, skip loading extra data
+          if (currentProject.archived) {
+            console.warn("Project is archived, skipping additional loads.");
+            window.showNotification?.("This project is archived", "warning");
+            return;
+          }
 
-        loadProjectStats(projectId);
-        loadProjectFiles(projectId);
-        loadProjectConversations(projectId);
-        loadProjectArtifacts(projectId);
-      })
-      .catch((err) => {
-        console.error("Error loading project details:", err);
-        window.showNotification?.("Failed to load project details", "error");
-      });
+          loadProjectStats(projectId);
+          loadProjectFiles(projectId);
+          loadProjectConversations(projectId);
+          loadProjectArtifacts(projectId);
+        })
+        .catch((err) => {
+          console.error("Error loading project details:", err);
+          window.showNotification?.("Failed to load project details", "error");
+        });
+    }).catch(() => {
+      // If endpoint check fails, try the standard endpoint anyway
+      window.apiRequest(`/api/projects/${projectId}`, "GET")
+        .then((response) => {
+          currentProject = response.data;
+          document.dispatchEvent(
+            new CustomEvent("projectLoaded", { detail: currentProject })
+          );
+          
+          loadProjectStats(projectId);
+          loadProjectFiles(projectId);
+          loadProjectConversations(projectId);
+          loadProjectArtifacts(projectId);
+        })
+        .catch((err) => {
+          console.error("Error loading project details:", err);
+          window.showNotification?.("Failed to load project details", "error");
+        });
+    });
   }
 
   /**
@@ -109,8 +134,11 @@
    * Dispatches "projectConversationsLoaded" with { detail: conversationArray }.
    */
   function loadProjectConversations(projectId) {
+    // First try the correct endpoint from routes/projects/conversations.py
     window.apiRequest(`/api/projects/${projectId}/conversations`, "GET")
       .then((response) => {
+        // Log the response for debugging
+        console.log("Project conversations response:", response);
         const conversations = response.data?.conversations || response.data || [];
         document.dispatchEvent(
           new CustomEvent("projectConversationsLoaded", { detail: conversations })
@@ -119,7 +147,8 @@
       .catch((err) => {
         // Fallback attempt if "/conversations" fails
         console.error("Error loading conversations:", err);
-        window.apiRequest(`/api/projects/${projectId}/chat/conversations`, "GET")
+        // Try alternative endpoint formats
+        window.apiRequest(`/api/${projectId}/conversations`, "GET")
           .then((resp2) => {
             const conv2 = resp2.data?.conversations || resp2.data || [];
             document.dispatchEvent(
@@ -127,8 +156,19 @@
             );
           })
           .catch((fallbackErr) => {
-            console.error("Error in fallback conversation load:", fallbackErr);
-            window.showNotification?.("Failed to load conversations", "error");
+            console.error("Error in first fallback conversation load:", fallbackErr);
+            // Try a third format
+            window.apiRequest(`/api/chat/projects/${projectId}/conversations`, "GET")
+              .then((resp3) => {
+                const conv3 = resp3.data?.conversations || resp3.data || [];
+                document.dispatchEvent(
+                  new CustomEvent("projectConversationsLoaded", { detail: conv3 })
+                );
+              })
+              .catch((thirdErr) => {
+                console.error("Error in all conversation load attempts:", thirdErr);
+                window.showNotification?.("Failed to load conversations", "error");
+              });
           });
       });
   }
@@ -237,7 +277,37 @@
    */
   function createConversation(projectId) {
     const payload = { title: "New Conversation" };
-    return window.apiRequest(`/api/projects/${projectId}/conversations`, "POST", payload);
+    
+    // Try the main endpoint first
+    return window.apiRequest(`/api/projects/${projectId}/conversations`, "POST", payload)
+      .catch(err => {
+        console.error("Error creating conversation with primary endpoint:", err);
+        // Try the fallback endpoint
+        return window.apiRequest(`/api/chat/projects/${projectId}/conversations`, "POST", payload);
+      });
+  }
+  
+  /**
+   * Check the API endpoint to determine which URL format works
+   * for project conversations. This helps adapt to different backend configurations.
+   */
+  function checkProjectApiEndpoint(projectId) {
+    return window.apiRequest(`/api/projects/${projectId}`, "GET")
+      .then(() => {
+        console.log("API endpoint format is /api/projects/{id}");
+        return "standard";
+      })
+      .catch(() => {
+        return window.apiRequest(`/api/${projectId}`, "GET")
+          .then(() => {
+            console.log("API endpoint format is /api/{id}");
+            return "simple";
+          })
+          .catch(() => {
+            console.log("Could not determine API endpoint format");
+            return "unknown";
+          });
+      });
   }
 
   // Expose the manager as a global object
@@ -262,6 +332,8 @@
     deleteFile,
     deleteArtifact,
     // Conversation
-    createConversation
+    createConversation,
+    // API utilities
+    checkProjectApiEndpoint
   };
 })();

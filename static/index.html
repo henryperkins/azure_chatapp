@@ -243,16 +243,47 @@
                class="border border-gray-200 dark:border-gray-700 h-64 overflow-y-auto p-2 rounded mb-4 dark:bg-gray-900 dark:text-gray-100">
             <!-- Chat messages appended dynamically by chat.js -->
           </div>
-          <!-- Chat input and send button -->
+          <!-- Chat input, file upload and send button -->
           <div class="flex space-x-2 items-center">
+            <!-- File upload button for the chat interface -->
+            <button id="chatAttachImageBtn" 
+                    class="p-2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                    title="Attach Image for Vision Models">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <input type="file" id="chatImageInput" accept="image/png,image/jpeg" class="hidden" />
+            
+            <!-- The actual chat input -->
             <input type="text"
                    id="chatInput"
                    placeholder="Type your message. .."
                    class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-200 focus:ring-blue-500 focus:outline-none" />
+            
+            <!-- Send button -->
             <button id="sendBtn"
                     class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
               Send
             </button>
+          </div>
+          
+          <!-- Image preview area -->
+          <div id="chatImagePreview" class="mt-2 hidden">
+            <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-2 rounded">
+              <div class="flex items-center">
+                <img id="chatPreviewImg" src="" alt="Preview" class="h-12 w-12 object-cover rounded mr-2" />
+                <div>
+                  <div id="chatImageName" class="text-sm font-medium">Image</div>
+                  <div id="chatImageStatus" class="text-xs text-gray-500">Ready to send</div>
+                </div>
+              </div>
+              <button id="chatRemoveImageBtn" class="text-red-500 hover:text-red-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
           <!-- Potential real-time typing or WS status indicators -->
           <div id="typingIndicator" class="text-sm text-gray-500 mt-2 hidden">
@@ -603,9 +634,9 @@
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/modelConfig.js"></script>
   <script src="/static/js/chat.js"></script>
-  <script src="path/to/projectManager.js"></script>
-  <script src="path/to/projectDashboard.js"></script>
-  <script src="path/to/projectEnhancements.js"></script>
+  <script src="/static/js/projectManager.js"></script>
+  <script src="/static/js/projectDashboard.js"></script>
+  <script src="/static/js/projectEnhancements.js"></script>
 
 </body>
 </html>
