@@ -15,16 +15,9 @@ from uuid import UUID
 from db import get_async_session
 from models.knowledge_base import KnowledgeBase
 from models.user import User
-from utils.auth_utils import (
-    get_current_user_and_token,
-    create_standard_response
-)
-from utils.db_utils import validate_resource_access
-
-from utils.context import (
-    get_all_by_condition,
-    save_model
-)
+from utils.auth_utils import get_current_user_and_token
+from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
+from utils.response_utils import create_standard_response
 from utils.serializers import serialize_list
 
 logger = logging.getLogger(__name__)

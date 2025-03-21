@@ -20,16 +20,9 @@ from models.user import User
 from models.project import Project
 from models.artifact import Artifact
 from models.conversation import Conversation
-from utils.auth_utils import (
-    get_current_user_and_token,
-    validate_resource_access,
-    create_standard_response
-)
-from utils.context import (
-    get_all_by_condition,
-    get_by_id,
-    save_model
-)
+from utils.auth_utils import get_current_user_and_token
+from utils.db_utils import validate_resource_access, get_all_by_condition, get_by_id, save_model
+from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

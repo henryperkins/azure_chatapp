@@ -23,11 +23,8 @@ from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
 
-from utils.auth_utils import (
-    get_current_user_and_token,
-    validate_resource_access,
-    create_standard_response
-)
+
+
 from utils.message_handlers import (
     create_user_message,
     get_conversation_messages,
@@ -38,12 +35,9 @@ from utils.ai_response import (
     generate_ai_response,
     handle_websocket_response
 )
-from utils.websocket_auth import authenticate_websocket
-from utils.context import (
-    get_all_by_condition,
-    get_by_id,
-    save_model
-)
+from utils.auth_utils import get_current_user_and_token
+from utils.db_utils import validate_resource_access, get_all_by_condition, get_by_id, save_model
+from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
