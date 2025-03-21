@@ -25,8 +25,12 @@ from services.user_service import get_user_by_username
 from utils.auth_utils import JWT_SECRET, JWT_ALGORITHM, create_access_token
 from config import settings
 
-# Configure allowed hosts - use "*" for development, specific domains in production
-allowed_hosts = settings.ALLOWED_HOSTS or ["put.photo"]  # Development: ["*"], Production: ["put.photo", "www.put.photo"]
+# Configure allowed hosts
+allowed_hosts = ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
+origins = ["*"] if settings.ENV != "production" else [
+    "https://put.photo",
+    "https://www.put.photo"
+]
 from db import init_db, validate_db_schema
 from auth import router as auth_router
 from routes.conversations import router as conversations_router
@@ -51,7 +55,7 @@ app = FastAPI(
         Middleware(
             TrustedHostMiddleware,
             allowed_hosts=allowed_hosts,
-            www_redirect=True
+            www_redirect=False
         ),
         Middleware(
             SessionMiddleware,
@@ -101,11 +105,6 @@ file uploads, and more.
     redoc_url=None,
 )
 
-# Define allowed hosts
-allowed_hosts = (
-    settings.ALLOWED_HOSTS if settings.ALLOWED_HOSTS else ["*"]
-)  # Temporary development setting
-
 # Enforce HTTPS in production
 # Always enable HTTPS redirection in production
 if settings.ENV == "production":
@@ -118,15 +117,14 @@ if settings.ENV == "production":
         return response
 
 # CORS Configuration
-origins = [
-    "https://put.photo",
-    "https://www.put.photo",
-    "http://localhost:3000"  # Keep for local development
-]
-
 # Allow environment override
 if settings.CORS_ORIGINS:
     origins = settings.CORS_ORIGINS.split(",")
+else:
+    origins = ["*"] if settings.ENV != "production" else [
+        "https://put.photo",
+        "https://www.put.photo"
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -151,7 +149,7 @@ async def websocket_cors_fix(request: Request, call_next):
     """Middleware to handle CORS for WebSocket connections."""
     response = await call_next(request)
     if request.scope.get("path", "").startswith("/ws/"):
-        response.headers["Access-Control-Allow-Origin"] = "https://put.photo"
+        response.headers["Access-Control-Allow-Origin"] = "*" if settings.ENV != "production" else "https://put.photo"
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
