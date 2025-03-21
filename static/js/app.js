@@ -62,7 +62,6 @@ function apiRequest(url, method = 'GET', data = null) {
   if (data) {
     options.body = JSON.stringify(data);
   }
-  if (data) options.body = JSON.stringify(data);
 
   return fetch(url, options)
     .then(response => {
