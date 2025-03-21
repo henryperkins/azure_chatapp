@@ -567,20 +567,46 @@ document.addEventListener("DOMContentLoaded", () => {
           url = `/api/chat/conversations`;
         }
 
-        const { data: conversation } = await window.apiRequest(
+        console.log("Creating new conversation with URL:", url);
+        const response = await window.apiRequest(
           url,
           "POST",
           payload
         );
+        
+        console.log("New conversation response:", response);
+
+        // Extract conversation data correctly from response
+        const conversation = response.data;
+        
+        if (!conversation || !conversation.id) {
+          throw new Error("Invalid response format from server");
+        }
 
         // Update UI state
         localStorage.setItem("selectedConversationId", conversation.id);
-        document.getElementById("chatTitle").textContent = conversation.title;
+        
+        // Safely update UI elements
+        const chatTitleEl = document.getElementById("chatTitle");
+        if (chatTitleEl) {
+          chatTitleEl.textContent = conversation.title;
+        }
+        
+        // Update URL and show chat UI
         window.history.pushState({}, "", `/?chatId=${conversation.id}`);
+        
+        // Show the chat UI and hide "no chat selected" message
+        const chatUI = document.getElementById("chatUI");
+        const noChatMsg = document.getElementById("noChatSelectedMessage");
+        
+        if (chatUI) chatUI.classList.remove("hidden");
+        if (noChatMsg) noChatMsg.classList.add("hidden");
 
         // Clear previous messages and load new conversation
         const conversationArea = document.getElementById("conversationArea");
         if (conversationArea) conversationArea.innerHTML = "";
+        
+        // Load the conversation
         window.loadConversation(conversation.id);
       } catch (error) {
         console.error("Error creating new chat:", error);
