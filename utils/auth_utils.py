@@ -34,11 +34,11 @@ REVOCATION_LIST = set()
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     Create a JWT access token.
-    
+
     Args:
         data: Token payload data
         expires_delta: Optional expiration delta
-        
+
     Returns:
         Encoded JWT token string
     """
@@ -55,15 +55,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 async def verify_token(token: str, expected_type: Optional[str] = None, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
     """
     Verify and decode a JWT token.
-    
+
     Args:
         token: JWT token to verify
         expected_type: Optional token type to validate
         db: Optional database session for checking blacklisted tokens
-        
+
     Returns:
         Decoded token payload
-        
+
     Raises:
         HTTPException: If token validation fails
     """
@@ -80,7 +80,7 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
         if token_id in REVOCATION_LIST:
             logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
             raise HTTPException(status_code=401, detail="Token is revoked")
-            
+
         # Check if token is in database blacklist (persistent across restarts)
         if db and token_id:
             query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
@@ -91,7 +91,7 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
                 REVOCATION_LIST.add(token_id)
                 logger.warning(f"Token ID '{token_id}' is revoked (database)")
                 raise HTTPException(status_code=401, detail="Token is revoked")
-                
+
         # Check token version if available
         token_version = decoded.get("version")
         username = decoded.get("sub")
@@ -116,7 +116,7 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
 def revoke_token_id(token_id: str) -> None:
     """
     Add token_id (jti) to revocation list.
-    
+
     Args:
         token_id: Token ID to revoke
     """
@@ -127,48 +127,48 @@ def revoke_token_id(token_id: str) -> None:
 async def clean_expired_tokens(db: AsyncSession) -> int:
     """
     Clean up expired tokens from the database blacklist.
-    
+
     Args:
         db: Database session
-        
+
     Returns:
         Number of tokens deleted
     """
     # Get current time
     now = datetime.utcnow()
-    
+
     # Delete expired tokens
     stmt = delete(TokenBlacklist).where(TokenBlacklist.expires < now)
     result = await db.execute(stmt)
     await db.commit()
-    
+
     # Get the count of deleted rows
     deleted_count = result.rowcount
-    
+
     if deleted_count > 0:
         logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
-    
+
     return deleted_count
 
 
 async def load_revocation_list(db: AsyncSession) -> None:
     """
     Load active revoked tokens into memory on startup.
-    
+
     Args:
         db: Database session
     """
     # Get current time
     now = datetime.utcnow()
-    
+
     # Select non-expired tokens
     query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
     result = await db.execute(query)
-    
+
     # Add to in-memory list
     token_ids = [row[0] for row in result.fetchall()]
     REVOCATION_LIST.update(token_ids)
-    
+
     logger.info(f"Loaded {len(token_ids)} active blacklisted tokens into memory")
 
 
@@ -199,20 +199,20 @@ def extract_token_from_request(request: Request) -> Optional[str]:
 async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
     """
     Extract JWT token from WebSocket connection.
-    
+
     Args:
         websocket: WebSocket connection
-        
+
     Returns:
         Token string if found, None otherwise
     """
     # Try to get token from cookies
     token = None
     cookie_header = websocket.headers.get("cookie")
-    
+
     cookie_header = websocket.headers.get("cookie") or ""
     cookies = {}
-    
+
     try:
         for cookie in cookie_header.split("; "):
             if "=" not in cookie:
@@ -220,61 +220,64 @@ async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
             key, value = cookie.split("=", 1)
             cookies[key.strip().lower()] = unquote(value.strip())
         token = cookies.get("access_token")
-    
+
     except Exception as e:
         logger.error(f"Error parsing cookies: {str(e)}")
         token = None
-    
+
     # If no token in cookies, try query parameters
     if not token and "token" in websocket.query_params:
         token = websocket.query_params["token"]
+
+    if not token:
+        logger.debug("WebSocket connection - No token found. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params) # ADDED DEBUG LOG
 
     return token
 
 
 async def get_user_from_token(
-    token: str, 
-    db: AsyncSession, 
+    token: str,
+    db: AsyncSession,
     expected_type: Optional[str] = "access"
 ) -> User:
     """
     Get user from a token.
-    
+
     Args:
         token: JWT token
         db: Database session
         expected_type: Expected token type
-        
+
     Returns:
         User object
-        
+
     Raises:
         HTTPException: For authentication failures
     """
     # Verify token
     decoded = await verify_token(token, expected_type, db)
-    
+
     username = decoded.get("sub")
     if not username:
         logger.warning("Token missing 'sub' claim in payload")
         raise HTTPException(status_code=401, detail="Invalid token payload: missing subject")
-        
+
     # Get user from database
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalars().first()
-    
+
     if not user:
         logger.warning(f"User with username '{username}' from token not found in database")
         raise HTTPException(status_code=401, detail="User not found")
-        
+
     if not user.is_active:
         logger.warning(f"Attempt to use token for disabled account: {username}")
         raise HTTPException(status_code=403, detail="Account disabled")
-    
+
     # Attach JWT claims to user object for access in logout and other functions
     user.jti = decoded.get("jti")
     user.exp = decoded.get("exp")
-        
+
     return user
 
 
@@ -285,55 +288,56 @@ async def get_current_user_and_token(
     """
     FastAPI dependency that extracts and validates JWT token from request,
     then returns the authenticated user.
-    
+
     Args:
         request: FastAPI Request object (injected)
         db: Database session (injected)
-        
+
     Returns:
         User object if authentication successful
-        
+
     Raises:
         HTTPException: For authentication failures
     """
     # Extract token from request
     token = extract_token_from_request(request)
-    
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Get user from token
     user = await get_user_from_token(token, db)
-    
+
     return user
 
 
 async def authenticate_websocket(
-    websocket: WebSocket, 
+    websocket: WebSocket,
     db: AsyncSession
 ) -> Tuple[bool, Optional[User]]:
     """
     Authenticate a WebSocket connection.
-    
+
     Args:
         websocket: WebSocket connection
         db: Database session
-        
+
     Returns:
         Tuple of (success, user)
     """
     # Get token BEFORE accepting WebSocket
     token = await extract_token_from_websocket(websocket)
-    
+
     if not token:
         logger.warning("WebSocket connection rejected: No token provided")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params) # ADDED DEBUG LOG
         return False, None
-    
+
     # Validate token and get user
     try:
         user = await get_user_from_token(token, db, "access")
