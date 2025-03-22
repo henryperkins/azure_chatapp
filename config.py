@@ -52,7 +52,7 @@ class Settings:
 
     # Claude configuration
     CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-    CLAUDE_API_VERSION = "2023-06-01"
+    CLAUDE_API_VERSION = "2023-12-15"  # Updated to latest stable version
     CLAUDE_MODELS = ["claude-3-7-sonnet-20250219"]
     CLAUDE_BASE_URL = "https://api.anthropic.com/v1/messages"
 

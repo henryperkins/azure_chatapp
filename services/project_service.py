@@ -12,6 +12,7 @@ We provide two different helpers for backwards compatibility:
   - Also accepts a User object, from which we extract user.id
 """
 from uuid import UUID
+from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -55,13 +56,62 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
             name="Default Project",
             description="Your default project for conversations",
             is_default=True,
-            max_tokens=200000
+            max_tokens=200000,
+            default_model="claude-3-7-sonnet-20250219"
         )
         db.add(default_project)
         await db.commit()
         await db.refresh(default_project)
     
     return default_project
+
+async def create_project(
+    user_id: int,
+    name: str,
+    description: Optional[str] = None,
+    goals: Optional[str] = None,
+    max_tokens: int = 200000,
+    knowledge_base_id: Optional[UUID] = None,
+    default_model: str = "claude-3-7-sonnet-20250219",
+    db: AsyncSession = None
+) -> Project:
+    """
+    Creates a new project with the given parameters.
+    
+    Args:
+        user_id: ID of the owner
+        name: Project name
+        description: Optional project description
+        goals: Optional project goals
+        max_tokens: Maximum token limit for the project
+        knowledge_base_id: Optional knowledge base to link
+        default_model: Default AI model to use (defaults to Claude 3.7 Sonnet)
+        db: Database session
+        
+    Returns:
+        Newly created Project object
+    """
+    # Validate project name
+    name = name.strip()
+    if not name:
+        raise ValueError("Project name cannot be empty")
+    
+    # Create project object
+    project = Project(
+        user_id=user_id,
+        name=name,
+        description=description,
+        goals=goals,
+        max_tokens=max_tokens,
+        knowledge_base_id=knowledge_base_id,
+        default_model=default_model
+    )
+    
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    
+    return project
 
 async def get_project_token_usage(project_id: UUID, db: AsyncSession) -> dict:
     """
