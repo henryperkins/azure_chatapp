@@ -180,7 +180,7 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
     
     headers = {
         "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",  # Use supported version
+        "anthropic-version": "2023-06-01",  # Use correct API version
         "content-type": "application/json"
     }
 
@@ -232,12 +232,11 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
             
             # Debug the response structure
             if "content" in response_data:
-                return {
-                    "content": [block["text"] for block in response_data["content"] if block["type"] == "text"]
-                }
+                content = " ".join([block["text"] for block in response_data["content"] if "text" in block])
+                return {"content": [{"role": "assistant", "content": content}]}
             else:
                 logger.warning(f"Unexpected Claude response structure: {list(response_data.keys())}")
-                return {"content": []}
+                return {"content": [{"role": "assistant", "content": "Error: Invalid response format"}]}
             
     except httpx.RequestError as e:
         logger.error(f"Claude API Request Error: {str(e)}")
