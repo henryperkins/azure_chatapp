@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import (
     APIRouter,
