@@ -432,8 +432,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                 [Conversation.project_id.is_(None), Conversation.is_deleted.is_(False)],
             )
 
-            await websocket.accept()
-
+            # Accept already done in authenticate_websocket after successful authentication
+            
             while True:
                 raw_data = await websocket.receive_text()
                 try:

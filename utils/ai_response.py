@@ -65,7 +65,7 @@ async def generate_ai_response(
                 model_name=chosen_model,
                 max_tokens=1500
             )
-            assistant_content = claude_response["content"][0]["text"]
+            assistant_content = claude_response["content"][0].get("text", "")
         else:
             # Call OpenAI API
             logger.info(f"Generating response using OpenAI model: {chosen_model}")
