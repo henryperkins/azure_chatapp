@@ -6,7 +6,7 @@ statistics, and project-level actions.
 """
 
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
