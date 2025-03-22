@@ -24,8 +24,11 @@ pytest
 # Run a single test file/module
 pytest path/to/test_file.py
 
-# Run a specific test
+# Run a specific test function
 pytest path/to/test_file.py::test_function_name -v
+
+# Run with coverage
+pytest --cov=./ --cov-report=term
 ```
 
 ## Database Management
@@ -48,4 +51,6 @@ alembic upgrade head
 - **Naming**: snake_case for variables/functions, PascalCase for classes, UPPER_CASE for constants
 - **SQLAlchemy**: Use async session with proper relationship definitions
 - **FastAPI**: Router grouping by feature, dependency injection for auth/DB
-- **Frontend**: React with TypeScript and Tailwind CSS; use React Context for state
+- **Frontend**: Vanilla JavaScript with Tailwind CSS for styling
+- **Security**: Follow OWASP practices; use JWT tokens; validate all inputs
+- **Logging**: Use built-in logging module with appropriate severity levels

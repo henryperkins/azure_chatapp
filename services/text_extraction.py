@@ -57,6 +57,7 @@ FILE_TYPE_MAP = {
     # Data files
     "csv": {"mimetype": "text/csv", "category": "data"},
     "json": {"mimetype": "application/json", "category": "data"},
+    "xlsx": {"mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "category": "data"},
     
     # Code files
     "py": {"mimetype": "text/x-python", "category": "code"},
@@ -138,13 +139,76 @@ class TextExtractor:
         else:
             return len(text) // 4 # Char estimation
 
+    def _create_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+        """
+        Splits text into chunks with specified token overlap.
+        
+        Args:
+            text: The text to split
+            chunk_size: Target size of each chunk in tokens
+            overlap: Number of tokens to overlap between chunks
+            
+        Returns:
+            List of text chunks with overlaps
+        """
+        if not text:
+            return []
+            
+        # For small texts, just return as a single chunk
+        if len(text) < chunk_size * 4:  # Rough estimation
+            return [text]
+            
+        chunks = []
+        
+        # Get sentences (simple split for now)
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        current_chunk = []
+        current_size = 0
+        
+        for sentence in sentences:
+            # Estimate sentence tokens
+            sentence_tokens = len(sentence) // 4
+            
+            if current_size + sentence_tokens > chunk_size and current_chunk:
+                # Save current chunk
+                chunks.append(" ".join(current_chunk))
+                
+                # Keep overlap sentences
+                overlap_tokens = 0
+                overlap_sentences = []
+                
+                # Work backwards from the end to get overlap
+                for s in reversed(current_chunk):
+                    s_tokens = len(s) // 4
+                    if overlap_tokens + s_tokens <= overlap:
+                        overlap_sentences.insert(0, s)
+                        overlap_tokens += s_tokens
+                    else:
+                        break
+                
+                # Start new chunk with overlap
+                current_chunk = overlap_sentences
+                current_size = overlap_tokens
+            
+            # Add current sentence
+            current_chunk.append(sentence)
+            current_size += sentence_tokens
+        
+        # Add the last chunk if not empty
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+            
+        return chunks
     
     async def extract_text(
         self, 
         file_content: Union[bytes, BinaryIO, str],
         filename: Optional[str] = None,
-        mimetype: Optional[str] = None
-    ) -> Tuple[str, Dict[str, Any]]:
+        mimetype: Optional[str] = None,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200
+    ) -> Tuple[List[str], Dict[str, Any]]:
         """
         Extract text from file content based on file type.
         
@@ -152,9 +216,11 @@ class TextExtractor:
             file_content: Content as bytes, file-like object, or filepath
             filename: Optional filename to determine file type
             mimetype: Optional mimetype to determine file type
+            chunk_size: Target size of each chunk in tokens
+            chunk_overlap: Number of tokens to overlap between chunks
             
         Returns:
-            Tuple of (extracted_text, metadata_dict)
+            Tuple of (extracted_text_chunks, metadata_dict)
         """
         # Handle string input as filepath
         if isinstance(file_content, str) and os.path.exists(file_content):
@@ -231,23 +297,40 @@ class TextExtractor:
             category = file_info.get("category", "text")
             ext = file_info.get("extension", "")
             
+            text = ""
+            metadata = {}
+            
             if category == "text" or ext in ["txt", "md"]:
-                return self._extract_from_text(content_bytes, file_info)
+                text, metadata = self._extract_from_text(content_bytes, file_info)
             elif category == "document":
                 if ext == "pdf":
-                    return self._extract_from_pdf(file_obj, file_info)
+                    text, metadata = self._extract_from_pdf(file_obj, file_info)
                 elif ext in ["doc", "docx"]:
-                    return self._extract_from_docx(file_obj, file_info)
+                    text, metadata = self._extract_from_docx(file_obj, file_info)
             elif category == "data":
                 if ext == "json":
-                    return self._extract_from_json(content_bytes, file_info)
+                    text, metadata = self._extract_from_json(content_bytes, file_info)
                 elif ext == "csv":
-                    return self._extract_from_csv(content_bytes, file_info)
+                    text, metadata = self._extract_from_csv(content_bytes, file_info)
+                elif ext == "xlsx":
+                    text, metadata = self._extract_from_text(content_bytes, file_info)  # Placeholder
             elif category == "code" or ext in ["py", "js", "html", "css"]:
-                return self._extract_from_code(content_bytes, file_info)
+                text, metadata = self._extract_from_code(content_bytes, file_info)
+            else:
+                # Fallback to text extraction for unknown types
+                text, metadata = self._extract_from_text(content_bytes, file_info)
             
-            # Fallback to text extraction for unknown types
-            return self._extract_from_text(content_bytes, file_info)
+            # Create chunks from the text
+            chunks = self._create_chunks(text, chunk_size, chunk_overlap)
+            
+            # Update metadata with chunking info
+            metadata.update({
+                "chunk_count": len(chunks),
+                "chunk_size": chunk_size,
+                "chunk_overlap": chunk_overlap,
+            })
+            
+            return chunks, metadata
             
         except Exception as e:
             logger.exception(f"Error extracting text: {e}")

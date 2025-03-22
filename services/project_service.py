@@ -57,7 +57,7 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
             description="Your default project for conversations",
             is_default=True,
             max_tokens=200000,
-            default_model="claude-3-7-sonnet-20250219"
+            default_model="claude-3-sonnet-20240229"
         )
         db.add(default_project)
         await db.commit()
@@ -72,7 +72,7 @@ async def create_project(
     goals: Optional[str] = None,
     max_tokens: int = 200000,
     knowledge_base_id: Optional[UUID] = None,
-    default_model: str = "claude-3-7-sonnet-20250219",
+    default_model: str = "claude-3-sonnet-20240229",
     db: AsyncSession = None
 ) -> Project:
     """

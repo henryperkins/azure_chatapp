@@ -1,247 +1,311 @@
 """
 knowledge_base_routes.py
 -----------------------
-Routes for knowledge base management with proper authentication.
-Provides endpoints for creating, listing, retrieving, and deleting knowledge bases.
+Routes for managing knowledge bases and integrating them with ChatGPT.
+Provides endpoints for:
+ - Creating and managing knowledge bases
+ - Searching knowledge within a project
+ - Integrating knowledge into chat conversations
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import List, Dict, Any, Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
 from db import get_async_session
-from models.knowledge_base import KnowledgeBase
 from models.user import User
+from models.project import Project
+from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
-from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
+from utils.db_utils import validate_resource_access, get_all_by_condition
 from utils.response_utils import create_standard_response
-from utils.serializers import serialize_list
+from services import knowledgebase_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 # ============================
 # Pydantic Schemas
 # ============================
 
 class KnowledgeBaseCreate(BaseModel):
-    """Schema for creating a new knowledge base"""
+    """
+    Schema for creating a new knowledge base.
+    """
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     embedding_model: Optional[str] = None
 
 
 class KnowledgeBaseUpdate(BaseModel):
-    """Schema for updating an existing knowledge base"""
+    """
+    Schema for updating an existing knowledge base.
+    """
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     embedding_model: Optional[str] = None
     is_active: Optional[bool] = None
 
 
+class SearchRequest(BaseModel):
+    """
+    Schema for searching the knowledge base.
+    """
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(5, ge=1, le=20)
+    filters: Optional[Dict[str, Any]] = None
+
+
 # ============================
 # Knowledge Base Endpoints
 # ============================
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=Dict)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_knowledge_base(
-    data: KnowledgeBaseCreate,
+    knowledge_base_data: KnowledgeBaseCreate,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Create a new knowledge base using the knowledge base service"""
-    # Use knowledge base service
-    kb = await services.knowledgebase_service.create_knowledge_base(
-        name=data.name,
-        description=data.description,
-        embedding_model=data.embedding_model,
-        user_id=current_user.id,
-        db=db
-    )
-    
-    return await create_standard_response({
-        "id": str(kb.id),
-        "name": kb.name,
-        "description": kb.description,
-        "embedding_model": kb.embedding_model,
-        "is_active": kb.is_active,
-        "created_at": kb.created_at.isoformat()
-    }, "Knowledge base created successfully")
+    """
+    Create a new knowledge base.
+    """
+    try:
+        knowledge_base = await knowledgebase_service.create_knowledge_base(
+            name=knowledge_base_data.name,
+            description=knowledge_base_data.description,
+            embedding_model=knowledge_base_data.embedding_model,
+            db=db
+        )
+        
+        return await create_standard_response({
+            "id": str(knowledge_base.id),
+            "name": knowledge_base.name,
+            "description": knowledge_base.description,
+            "embedding_model": knowledge_base.embedding_model,
+            "is_active": knowledge_base.is_active,
+            "created_at": knowledge_base.created_at.isoformat() if knowledge_base.created_at else None
+        }, "Knowledge base created successfully")
+    except Exception as e:
+        logger.error(f"Error creating knowledge base: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create knowledge base: {str(e)}")
 
 
-@router.get("", response_model=Dict)
+@router.get("", response_model=dict)
 async def list_knowledge_bases(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    is_active: Optional[bool] = None,
     skip: int = 0,
-    limit: int = 50
+    limit: int = 100,
+    active_only: bool = True
 ):
     """
-    Lists knowledge bases with optional filtering.
+    List available knowledge bases.
     """
-    # Build conditions
-    conditions = []
-    if is_active is not None:
-        conditions.append(KnowledgeBase.is_active == is_active)
-    
-    # Get knowledge bases using utility function
-    knowledge_bases = await get_all_by_condition(
-        db,
-        KnowledgeBase,
-        *conditions,
-        order_by=KnowledgeBase.name,
-        limit=limit,
-        offset=skip
-    )
-    
-    # Serialize to dictionaries
-    kb_list = [
-        {
-            "id": str(kb.id),
-            "name": kb.name,
-            "description": kb.description,
-            "embedding_model": kb.embedding_model,
-            "is_active": kb.is_active,
-            "created_at": kb.created_at
-        }
-        for kb in knowledge_bases
-    ]
-    
-    return await create_standard_response({"knowledge_bases": kb_list})
+    try:
+        # Build query conditions
+        conditions = []
+        if active_only:
+            conditions.append(KnowledgeBase.is_active.is_(True))
+        
+        # Get knowledge bases
+        knowledge_bases = await get_all_by_condition(
+            db,
+            KnowledgeBase,
+            *conditions,
+            order_by=KnowledgeBase.created_at.desc(),
+            limit=limit,
+            offset=skip
+        )
+        
+        # Format response
+        items = []
+        for kb in knowledge_bases:
+            items.append({
+                "id": str(kb.id),
+                "name": kb.name,
+                "description": kb.description,
+                "embedding_model": kb.embedding_model,
+                "is_active": kb.is_active,
+                "created_at": kb.created_at.isoformat() if kb.created_at else None
+            })
+        
+        return await create_standard_response({"knowledge_bases": items})
+    except Exception as e:
+        logger.error(f"Error listing knowledge bases: {str(e)}")
+        return await create_standard_response(
+            {"knowledge_bases": []},
+            f"Error retrieving knowledge bases: {str(e)}",
+            success=False
+        )
 
 
-@router.get("/{kb_id}", response_model=Dict)
+@router.get("/{knowledge_base_id}", response_model=dict)
 async def get_knowledge_base(
-    kb_id: UUID,
+    knowledge_base_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Retrieves a specific knowledge base by ID.
+    Get a specific knowledge base.
     """
-    # Get the knowledge base using utility function
-    kb = await validate_resource_access(
-        kb_id,
-        KnowledgeBase,
-        current_user,
-        db,
-        "Knowledge Base"
-    )
-    
-    return await create_standard_response({
-        "id": str(kb.id),
-        "name": kb.name,
-        "description": kb.description,
-        "embedding_model": kb.embedding_model,
-        "is_active": kb.is_active,
-        "created_at": kb.created_at,
-        "updated_at": kb.updated_at
-    })
+    try:
+        # Get knowledge base
+        query = select(KnowledgeBase).where(KnowledgeBase.id == knowledge_base_id)
+        result = await db.execute(query)
+        knowledge_base = result.scalars().first()
+        
+        if not knowledge_base:
+            raise HTTPException(status_code=404, detail="Knowledge base not found")
+        
+        # Return knowledge base data
+        return await create_standard_response({
+            "id": str(knowledge_base.id),
+            "name": knowledge_base.name,
+            "description": knowledge_base.description,
+            "embedding_model": knowledge_base.embedding_model,
+            "is_active": knowledge_base.is_active,
+            "created_at": knowledge_base.created_at.isoformat() if knowledge_base.created_at else None,
+            "updated_at": knowledge_base.updated_at.isoformat() if knowledge_base.updated_at else None
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting knowledge base: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving knowledge base: {str(e)}")
 
 
-@router.patch("/{kb_id}", response_model=Dict)
+@router.patch("/{knowledge_base_id}", response_model=dict)
 async def update_knowledge_base(
-    kb_id: UUID,
+    knowledge_base_id: UUID,
     update_data: KnowledgeBaseUpdate,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Updates an existing knowledge base.
+    Update an existing knowledge base.
     """
-    # Get the knowledge base using utility function
-    kb = await validate_resource_access(
-        kb_id,
-        KnowledgeBase,
-        current_user,
-        db,
-        "Knowledge Base"
-    )
-    
-    # Apply updates
-    update_dict = update_data.dict(exclude_unset=True)
-    for key, value in update_dict.items():
-        setattr(kb, key, value)
-    
-    # Save changes
-    await save_model(db, kb)
-    
-    return await create_standard_response(
-        {
-            "id": str(kb.id),
-            "name": kb.name,
-            "description": kb.description,
-            "embedding_model": kb.embedding_model,
-            "is_active": kb.is_active,
-            "updated_at": kb.updated_at
-        },
-        "Knowledge base updated successfully"
-    )
+    try:
+        # Get knowledge base
+        query = select(KnowledgeBase).where(KnowledgeBase.id == knowledge_base_id)
+        result = await db.execute(query)
+        knowledge_base = result.scalars().first()
+        
+        if not knowledge_base:
+            raise HTTPException(status_code=404, detail="Knowledge base not found")
+        
+        # Update fields
+        if update_data.name is not None:
+            knowledge_base.name = update_data.name
+        
+        if update_data.description is not None:
+            knowledge_base.description = update_data.description
+        
+        if update_data.embedding_model is not None:
+            knowledge_base.embedding_model = update_data.embedding_model
+        
+        if update_data.is_active is not None:
+            knowledge_base.is_active = update_data.is_active
+        
+        # Save changes
+        db.add(knowledge_base)
+        await db.commit()
+        await db.refresh(knowledge_base)
+        
+        # Return updated knowledge base
+        return await create_standard_response({
+            "id": str(knowledge_base.id),
+            "name": knowledge_base.name,
+            "description": knowledge_base.description,
+            "embedding_model": knowledge_base.embedding_model,
+            "is_active": knowledge_base.is_active,
+            "updated_at": knowledge_base.updated_at.isoformat() if knowledge_base.updated_at else None
+        }, "Knowledge base updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating knowledge base: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating knowledge base: {str(e)}")
 
 
-@router.delete("/{kb_id}", response_model=Dict)
+@router.delete("/{knowledge_base_id}", response_model=dict)
 async def delete_knowledge_base(
-    kb_id: UUID,
+    knowledge_base_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Deletes a knowledge base owned by the current user.
+    Delete a knowledge base.
     """
-    # Get the knowledge base using utility function
-    kb = await validate_resource_access(
-        kb_id,
-        KnowledgeBase,
-        current_user,
-        db,
-        "Knowledge Base"
-    )
-    
-    # Delete the knowledge base
-    await db.delete(kb)
-    await db.commit()
-    
-    logger.info(f"Knowledge base {kb_id} deleted by user {current_user.id}")
-    
-    return await create_standard_response(
-        {"id": str(kb_id)},
-        "Knowledge base deleted successfully"
-    )
+    try:
+        # Get knowledge base
+        query = select(KnowledgeBase).where(KnowledgeBase.id == knowledge_base_id)
+        result = await db.execute(query)
+        knowledge_base = result.scalars().first()
+        
+        if not knowledge_base:
+            raise HTTPException(status_code=404, detail="Knowledge base not found")
+        
+        # Delete knowledge base
+        await db.delete(knowledge_base)
+        await db.commit()
+        
+        return await create_standard_response(
+            {"id": str(knowledge_base_id)},
+            "Knowledge base deleted successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting knowledge base: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting knowledge base: {str(e)}")
 
 
-@router.get("/{kb_id}/projects", response_model=Dict)
-async def list_knowledge_base_projects(
-    kb_id: UUID,
+# ============================
+# Search Endpoints
+# ============================
+
+@router.post("/projects/{project_id}/search", response_model=dict)
+async def search_project_knowledge(
+    project_id: UUID,
+    search_request: SearchRequest,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Lists all projects associated with the specified knowledge base.
+    Search for knowledge within a project using the knowledge base.
     """
-    # Get the knowledge base using utility function
-    kb = await validate_resource_access(
-        kb_id,
-        KnowledgeBase,
-        current_user,
-        db,
-        "Knowledge Base"
-    )
-    
-    # Get associated projects
-    from models.project import Project
-    projects = await get_all_by_condition(
-        db,
-        Project,
-        Project.knowledge_base_id == kb_id,
-        Project.user_id == current_user.id
-    )
-    
-    # Serialize projects using the utility function
-    from utils.serializers import serialize_project
-    project_list = [serialize_project(project) for project in projects]
-    
-    return await create_standard_response({"projects": project_list})
+    try:
+        # Validate project access
+        project = await validate_resource_access(
+            project_id,
+            Project,
+            current_user,
+            db,
+            "Project",
+            []
+        )
+        
+        # Search for context
+        search_results = await knowledgebase_service.search_project_context(
+            project_id=project_id,
+            query=search_request.query,
+            db=db,
+            top_k=search_request.top_k
+        )
+        
+        return await create_standard_response({
+            "results": search_results,
+            "count": len(search_results),
+            "query": search_request.query
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching project knowledge: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching project knowledge: {str(e)}")
