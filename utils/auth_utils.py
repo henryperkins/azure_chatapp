@@ -175,25 +175,25 @@ async def load_revocation_list(db: AsyncSession) -> None:
 def extract_token_from_request(request: Request) -> Optional[str]:
     """
     Extract JWT token from HTTP request.
-    
-    Args:
-        request: FastAPI Request object
-        
-    Returns:
-        Token string if found, None otherwise
     """
-    # Try cookies first
+    # 1. Try cookies FIRST
     token = request.cookies.get("access_token")
-    
-    # Fallback to Authorization header
-    if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header:
-            parts = auth_header.split()
-            if len(parts) == 2 and parts[0].lower() == "bearer":
-                token = parts[1]
-            
-    return token
+    if token:
+        logger.debug("Token found in cookie.") # ADDED LOGGING
+        return token
+
+    # 2. Fallback to Authorization header
+    logger.debug("Token cookie not found, checking Authorization header.") # ADDED LOGGING
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+            logger.debug("Token found in Authorization header.") # ADDED LOGGING
+            return token
+
+    logger.debug("No token found in cookie or Authorization header.") # ADDED LOGGING
+    return None
 
 
 async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
