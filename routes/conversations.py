@@ -121,7 +121,7 @@ async def create_conversation(
     Creates a new standalone conversation.
     """
     if not conversation_data.model_id:
-        conversation_data.model_id = "claude-3-7-sonnet-20250219"  # Default to Claude 3.7 Sonnet
+        conversation_data.model_id = "claude-3-sonnet-20240229"  # Default to Claude 3 Sonnet
 
     title = conversation_data.title.strip() or (
         f"Chat {datetime.now().strftime('%Y-%m-%d')}"

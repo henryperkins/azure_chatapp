@@ -340,9 +340,9 @@ document.addEventListener("DOMContentLoaded", () => {
 function getModelOptions() {
   return [
     { 
-      id: 'claude-3-7-sonnet-20250219', 
-      name: 'Claude 3.7 Sonnet',
-      description: 'Anthropic\'s powerful reasoning model'
+      id: 'claude-3-sonnet-20240229', 
+      name: 'Claude 3 Sonnet',
+      description: 'Middleweight model - good balance of capability and speed'
     },
     { 
       id: 'gpt-4', 
