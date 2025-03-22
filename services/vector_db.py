@@ -129,9 +129,50 @@ class VectorDB:
                 logger.error(f"Error generating embeddings: {str(e)}")
                 raise VectorDBError(f"Failed to generate embeddings: {str(e)}")
         else:
-            # Placeholder for external API call
-            # In a production system, this would call OpenAI, Azure, or similar
-            raise VectorDBError("No local embedding model available and external API not configured")
+            # Use external embedding API
+            try:
+                from config import settings
+                import httpx
+                
+                # Check which API to use
+                if settings.EMBEDDING_API == "openai":
+                    url = "https://api.openai.com/v1/embeddings"
+                    headers = {
+                        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "input": texts,
+                        "model": "text-embedding-3-small"
+                    }
+                elif settings.EMBEDDING_API == "cohere":
+                    url = "https://api.cohere.ai/v1/embed"
+                    headers = {
+                        "Authorization": f"Bearer {settings.COHERE_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "texts": texts,
+                        "model": "embed-english-v3.0",
+                        "input_type": "search_document"
+                    }
+                else:
+                    raise VectorDBError("No valid embedding API configured")
+                
+                # Make API request
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(url, json=payload, headers=headers, timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if settings.EMBEDDING_API == "openai":
+                        return [item['embedding'] for item in data['data']]
+                    elif settings.EMBEDDING_API == "cohere":
+                        return data['embeddings']
+                    
+            except Exception as e:
+                logger.error(f"Error calling external embedding API: {str(e)}")
+                raise VectorDBError(f"Failed to generate embeddings via API: {str(e)}")
     
     async def add_documents(
         self,
