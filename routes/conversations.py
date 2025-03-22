@@ -454,12 +454,20 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                     msg_dicts = await get_conversation_messages(conversation.id, db)
                     # Stream AI response through websocket
                     # Get and stream AI response
-                    assistant_msg = await generate_ai_response(
-                        conversation_id=conversation.id,
-                        messages=msg_dicts,
-                        model_id=conversation.model_id,
-                        db=db,
-                    )
+                    # Add Claude handling
+                    if conversation.model_id in settings.CLAUDE_MODELS:
+                        assistant_msg = await claude_chat(
+                            messages=msg_dicts,
+                            model_name=conversation.model_id,
+                            max_tokens=1500
+                        )
+                    else:
+                        assistant_msg = await generate_ai_response(
+                            conversation_id=conversation.id,
+                            messages=msg_dicts,
+                            model_id=conversation.model_id,
+                            db=db,
+                        )
 
                     if assistant_msg:
                         await websocket.send_text(

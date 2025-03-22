@@ -17,10 +17,12 @@ from config import settings
 
 async def validate_model(model_id: str):
     """Validate allowed models including Claude"""
+    from config import settings
+    
     allowed_models = [
         "gpt-4", 
         "gpt-3.5-turbo",
-        *settings.CLAUDE_MODELS  # Add Claude models
+        *settings.CLAUDE_MODELS  # Add Claude models from settings
     ]
     
     if model_id not in allowed_models:
