@@ -546,7 +546,7 @@ async def websocket_chat_endpoint(
             )
 
             # 4. Validate conversation exists in project
-            await validate_resource_access(
+            validated_conversation = await validate_resource_access( # Changed variable name to avoid shadowing
                 conversation_id,
                 Conversation,
                 user,
@@ -557,37 +557,15 @@ async def websocket_chat_endpoint(
                     Conversation.is_deleted.is_(False)
                 ]
             )
+            if not validated_conversation:
+                logger.warning("WebSocket connection rejected: Conversation access validation failed")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id) # ADDED DEBUG LOG
+                return
 
-            # 5. Now accept the connection
+            conversation_id_str = str(validated_conversation.id) # Define conversation_id_str here, after conversation is validated
+
             await websocket.accept()
-
-            logger.info(f"WebSocket connection attempt for project: {project_id}, conversation: {conversation_id} by user: {user.id}")
-
-            # 4. Validate project access first - Duplicated, remove
-            # project = await validate_resource_access(
-            #     project_id,
-            #     Project,
-            #     user,
-            #     db,
-            #     "Project",
-            #     [
-            #         Project.user_id == user.id,
-            #         Project.archived.is_(False)
-            #     ]
-            # )
-
-            # 5. Validate conversation - Duplicated, remove
-            # conversation = await validate_resource_access(
-            #     conversation_id,
-            #     Conversation,
-            #     user,
-            #     db,
-            #     "Conversation",
-            #     [
-            #         Conversation.project_id == project_id,
-            #         Conversation.is_deleted.is_(False)
-            #     ]
-            # )
 
             while True:
                 data = await websocket.receive_text()
@@ -598,14 +576,14 @@ async def websocket_chat_endpoint(
 
                 # Create message
                 message = await create_user_message(
-                    conversation_id=str(conversation.id),
+                    conversation_id=conversation_id_str,
                     content=data_dict["content"],
                     role=data_dict["role"],
                     db=db
                 )
 
                 if message.role == "user":
-                    await handle_websocket_response(str(conversation.id), db, websocket)
+                    await handle_websocket_response(conversation_id_str, db, websocket)
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
