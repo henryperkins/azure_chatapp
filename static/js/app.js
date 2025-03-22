@@ -624,9 +624,14 @@ window.addEventListener('popstate', () => {
       }
     }
   } else {
-    // Hide chat UI and show no chat message
-    chatUI?.classList?.add('hidden');
-    noChatMessage?.classList?.remove('hidden');
+    // Auto-create a new chat instead of showing no chat message
+    if (typeof window.createNewChat === 'function') {
+      window.createNewChat();
+    } else {
+      // Fallback to original behavior if createNewChat isn't available
+      chatUI?.classList?.add('hidden');
+      noChatMessage?.classList?.remove('hidden');
+    }
   }
 });
 
