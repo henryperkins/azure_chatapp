@@ -455,6 +455,9 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                     # Stream AI response through websocket
                     # Get and stream AI response
                     # Add Claude handling
+                    from config import settings
+                    from utils.openai import claude_chat
+                    
                     if conversation.model_id in settings.CLAUDE_MODELS:
                         assistant_msg = await claude_chat(
                             messages=msg_dicts,

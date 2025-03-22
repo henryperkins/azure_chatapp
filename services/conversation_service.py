@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 from config import settings
 
+from fastapi import HTTPException
+from config import settings
+
 async def validate_model(model_id: str):
     """Validate allowed models including Claude"""
-    from config import settings
-    
     allowed_models = [
         "gpt-4", 
         "gpt-3.5-turbo",
