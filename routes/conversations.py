@@ -178,22 +178,22 @@ async def list_conversations(
 
         items = []
         for conv in conversations:
-            items.append(
-                {
-                    "id": str(conv.id),
-                    "title": conv.title,
-                    "model_id": conv.model_id,
-                        "created_at": conv.created_at,
-                        "project_id": None,
-                    }
-                )
+            items.append({
+                "id": str(conv.id),
+                "title": conv.title,
+                "model_id": conv.model_id,
+                "created_at": conv.created_at.isoformat(),
+                "project_id": None  # Enforce null for format consistency
+            })
 
-            return await create_standard_response({"conversations": items})
+        return await create_standard_response({"conversations": items})
     except Exception as e:
         logger.error("Failed to list conversations: %s", str(e))
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve conversations"
-        ) from e
+        return await create_standard_response(
+            {"conversations": []},  # <-- Always return proper structure
+            "Error retrieving conversations", 
+            success=False
+        )
 
 
 @router.get("/{conversation_id}", response_model=dict)

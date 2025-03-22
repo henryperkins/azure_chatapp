@@ -77,7 +77,7 @@ async def list_artifacts(
     limit: int = 100
 ):
     """List all artifacts for a project with optional filtering"""
-    artifacts = await services.artifact_service.list_artifacts(
+    result = await services.artifact_service.list_artifacts(
         project_id=project_id,
         db=db,
         conversation_id=conversation_id,
@@ -86,7 +86,13 @@ async def list_artifacts(
         limit=limit,
         user_id=current_user.id
     )
-    return await create_standard_response({"artifacts": artifacts})
+    artifacts = result.get("artifacts", [])
+    
+    return await create_standard_response({
+        "artifacts": artifacts,
+        "count": len(artifacts),
+        "project_id": str(project_id)
+    })
 
 
 @router.get("/{artifact_id}", response_model=dict)

@@ -146,10 +146,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # WebSocket CORS fix middleware
 @app.middleware("http")
 async def websocket_cors_fix(request: Request, call_next):
-    """Middleware to handle CORS for WebSocket connections."""
     response = await call_next(request)
-    if request.scope.get("path", "").startswith("/ws/"):
-        response.headers["Access-Control-Allow-Origin"] = "*" if settings.ENV != "production" else "https://put.photo"
+    
+    # Only modify WebSocket upgrade requests
+    if request.scope.get("type") == "websocket":
+        if settings.ENV == "production":
+            response.headers["Access-Control-Allow-Origin"] = "https://put.photo"
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
