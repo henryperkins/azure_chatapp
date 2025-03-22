@@ -155,10 +155,17 @@ async def login_user(
         minutes=ACCESS_TOKEN_EXPIRE_MINUTES
     )
     
-    # Invalidate previous tokens when issuing new ones
-    user.token_version = user.token_version + 1 if user.token_version else 1
+    # Initialize token version if null and increment
+    if user.token_version is None:
+        # Set initial version based on current timestamp
+        user.token_version = int(datetime.utcnow().timestamp())
+    else:
+        user.token_version += 1
     session.add(user)
     await session.commit()
+    
+    # Clean up expired tokens
+    await clean_expired_tokens(session)
 
     payload = {
         "sub": lower_username,
