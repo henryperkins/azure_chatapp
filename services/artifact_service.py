@@ -263,8 +263,8 @@ async def list_artifacts(
     
     additional_filters = and_(*filters) if filters else None
     
-    # Use shared pagination function
-    artifacts = await get_paginated_resources(
+    # Use shared pagination function and return SQLAlchemy objects directly
+    return await get_paginated_resources(
         db=db,
         model_class=Artifact,
         project_id=project_id,
@@ -274,23 +274,6 @@ async def list_artifacts(
         limit=limit,
         additional_filters=additional_filters
     )
-    
-    # Convert to list of dictionaries (without full content)
-    artifact_list = []
-    for artifact in artifacts:
-        artifact_dict = {
-            "id": str(artifact.id),
-            "project_id": str(artifact.project_id),
-            "conversation_id": str(artifact.conversation_id) if artifact.conversation_id else None,
-            "name": artifact.name,
-            "content_type": artifact.content_type,
-            "created_at": artifact.created_at,
-            "metadata": artifact.metadata,
-            "content_preview": artifact.content[:150] + "..." if len(artifact.content) > 150 else artifact.content
-        }
-        artifact_list.append(artifact_dict)
-    
-    return artifact_list
 
 async def update_artifact(
     db: AsyncSession,

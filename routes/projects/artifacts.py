@@ -77,7 +77,7 @@ async def list_artifacts(
     limit: int = 100
 ):
     """List all artifacts for a project with optional filtering"""
-    result = await services.artifact_service.list_artifacts(
+    artifacts = await services.artifact_service.list_artifacts(
         project_id=project_id,
         db=db,
         conversation_id=conversation_id,
@@ -86,10 +86,21 @@ async def list_artifacts(
         limit=limit,
         user_id=current_user.id
     )
-    artifacts = result.get("artifacts", [])
     
     return await create_standard_response({
-        "artifacts": artifacts,
+        "artifacts": [
+            {
+                "id": str(art.id),
+                "project_id": str(art.project_id),
+                "conversation_id": str(art.conversation_id) if art.conversation_id else None,
+                "name": art.name,
+                "content_type": art.content_type,
+                "created_at": art.created_at.isoformat(),
+                "metadata": art.metadata,
+                "content_preview": art.content[:150] + "..." if len(art.content) > 150 else art.content
+            }
+            for art in artifacts
+        ],
         "count": len(artifacts),
         "project_id": str(project_id)
     })
