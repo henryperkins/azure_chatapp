@@ -13,6 +13,22 @@ from models.conversation import Conversation
 
 logger = logging.getLogger(__name__)
 
+from config import settings
+
+async def validate_model(model_id: str):
+    """Validate allowed models including Claude"""
+    allowed_models = [
+        "gpt-4", 
+        "gpt-3.5-turbo",
+        *settings.CLAUDE_MODELS  # Add Claude models
+    ]
+    
+    if model_id not in allowed_models:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model. Allowed: {', '.join(allowed_models)}"
+        )
+
 async def create_conversation(
     project_id: UUID,
     user_id: int,
