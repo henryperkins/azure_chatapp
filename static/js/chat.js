@@ -708,6 +708,54 @@ window.createNewChat = async function() {
   }
 };
 
+// Add markdown styles
+const style = document.createElement('style');
+style.textContent = `
+  .markdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+  }
+  .markdown-table th, .markdown-table td {
+    padding: 0.5em;
+    border: 1px solid #ddd;
+  }
+  .markdown-code {
+    background: #f5f5f5;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+  }
+  .markdown-pre {
+    background: #f5f5f5;
+    padding: 1em;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  .markdown-quote {
+    border-left: 3px solid #ddd;
+    padding: 0 1em;
+    color: #666;
+  }
+  .code-block-wrapper {
+    position: relative;
+  }
+  .copy-code-btn {
+    position: absolute;
+    right: 0.5em;
+    top: 0.5em;
+    padding: 0.25em 0.5em;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.8em;
+  }
+  .copy-code-btn:hover {
+    background: #f5f5f5;
+  }
+`;
+document.head.appendChild(style);
+
 // ---------------------------------------------------------------------
 // EXPOSE GLOBALS
 // ---------------------------------------------------------------------
