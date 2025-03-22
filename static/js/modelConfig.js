@@ -140,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Load existing settings from localStorage (or defaults)
-  const storedModel = localStorage.getItem("modelName") || "o3-mini";
+  const storedModel = localStorage.getItem("modelName") || "claude-3-7-sonnet-20250219"; // Set Claude as default
   const storedMaxTokens = localStorage.getItem("maxTokens") || "500";
   const storedApiVersion = localStorage.getItem("apiVersion") || "2023-05-01-preview";
   const storedReasoning = localStorage.getItem("reasoningEffort") || "";
