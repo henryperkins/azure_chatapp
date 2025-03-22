@@ -50,5 +50,11 @@ class Settings:
     # Cookie domain
     COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")
 
+    # Claude configuration
+    CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+    CLAUDE_API_VERSION = "2023-06-01"
+    CLAUDE_MODELS = ["claude-3-7-sonnet-20250219"]
+    CLAUDE_BASE_URL = "https://api.anthropic.com/v1/messages"
+
 
 settings = Settings()
