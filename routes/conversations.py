@@ -121,7 +121,7 @@ async def create_conversation(
     Creates a new standalone conversation.
     """
     if not conversation_data.model_id:
-        conversation_data.model_id = "gpt-4"  # Updated default model
+        conversation_data.model_id = "claude-3-7-sonnet-20250219"  # Default to Claude 3.7 Sonnet
 
     title = conversation_data.title.strip() or (
         f"Chat {datetime.now().strftime('%Y-%m-%d')}"
@@ -454,17 +454,40 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                     msg_dicts = await get_conversation_messages(conversation.id, db)
                     # Stream AI response through websocket
                     # Get and stream AI response
-                    # Add Claude handling
+                    # Handle Claude and OpenAI models differently
                     from config import settings
                     from utils.openai import claude_chat
+                    from models.message import Message
                     
                     if conversation.model_id in settings.CLAUDE_MODELS:
-                        assistant_msg = await claude_chat(
-                            messages=msg_dicts,
-                            model_name=conversation.model_id,
-                            max_tokens=1500
-                        )
+                        try:
+                            # Call Claude API
+                            claude_response = await claude_chat(
+                                messages=msg_dicts,
+                                model_name=conversation.model_id,
+                                max_tokens=1500
+                            )
+                            
+                            # Extract content from Claude response
+                            content = claude_response["content"][0]["text"]
+                            
+                            # Create and save message
+                            assistant_msg = Message(
+                                conversation_id=conversation.id,
+                                role="assistant",
+                                content=content
+                            )
+                            db.add(assistant_msg)
+                            await db.commit()
+                            await db.refresh(assistant_msg)
+                        except Exception as e:
+                            logger.error(f"Claude API error in WebSocket: {str(e)}")
+                            await websocket.send_text(
+                                json.dumps({"type": "error", "content": f"Error with Claude: {str(e)}"})
+                            )
+                            continue
                     else:
+                        # Use standard OpenAI response generation
                         assistant_msg = await generate_ai_response(
                             conversation_id=conversation.id,
                             messages=msg_dicts,
