@@ -89,7 +89,7 @@ def _get_services() -> Tuple[FileStorage, TextExtractor]:
         "aws_bucket_name": getattr(config, "AWS_BUCKET_NAME", None),
         "aws_region": getattr(config, "AWS_REGION", None)
     }
-    
+
     return get_file_storage(storage_config), get_text_extractor()
 
 def _chunked_read(file_obj, chunk_size=65536):
@@ -107,11 +107,11 @@ async def estimate_tokens_from_file(
     """
     Estimates the number of tokens in file content using text extraction
     and token calculation.
-    
+
     Args:
         content: File content as bytes or file-like object
         filename: Name of the file for type detection
-        
+
     Returns:
         Tuple of (token_count, metadata_dict)
     """
@@ -119,7 +119,7 @@ async def estimate_tokens_from_file(
     _, text_extractor = _get_services()
 
     metadata: Dict[str, Any] = {}
-    
+
     try:
         # Extract text content and metadata
         text, extracted_meta = await text_extractor.extract_text(content, filename)
@@ -141,7 +141,7 @@ async def estimate_tokens_from_file(
     except TextExtractionError as tex:
         logger.error(f"Text extraction error for {filename}: {str(tex)}")
         raise HTTPException(
-            status_code=422, 
+            status_code=422,
             detail=f"Text extraction failed for file: {str(tex)}"
         )
     except Exception as e:
@@ -172,19 +172,19 @@ async def estimate_tokens_from_file(
                     content_size = MAX_FILE_BYTES // 10
             except:
                 content_size = MAX_FILE_BYTES // 10
-        
+
         # Conservative token estimation based on file size
         token_count = content_size // 8
-        
+
         metadata["file_size"] = content_size
         metadata["token_count"] = token_count
         metadata["token_estimation_accuracy"] = "low"
-        
+
         logger.warning(
             f"Falling back to conservative token estimation for {filename}. "
             f"Estimated tokens: {token_count}"
         )
-        
+
         return token_count, metadata
 
 async def upload_file_to_project(
@@ -200,19 +200,10 @@ async def upload_file_to_project(
     3. Extracts text and calculates tokens.
     4. Creates the database record.
     5. Updates project token usage.
-    
-    Args:
-        project_id: UUID of the project
-        file: FastAPI UploadFile object
-        db: Database session
-        user_id: Optional user ID for permission checks
-        
-    Returns:
-        Created ProjectFile database record
     """
     from services.project_service import validate_project_access
     from models.user import User
-    
+
     # 1. Derive or default a filename
     requested_filename = file.filename or "untitled"
     sanitized_filename = _sanitize_filename(requested_filename)
@@ -223,25 +214,35 @@ async def upload_file_to_project(
             status_code=400,
             detail=f"File type not allowed. Supported types: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
         )
-    
+
     # Read file content with threshold-based approach
     contents = b""
-    if file.spool_max_size and file.spool_max_size > STREAM_THRESHOLD:
-        # Potentially stream the file in chunks for very large files
-        # (In practice, you might want to pipe directly to extraction)
-        for chunk in _chunked_read(file.file):
-            contents += chunk
-            if len(contents) > MAX_FILE_BYTES:
-                break
+    if file.size > STREAM_THRESHOLD:
+        # Stream the file directly to storage
+        file_path = await storage.save_file(
+            file_content=file.file,
+            filename=sanitized_filename,
+            content_type=file.content_type or "application/octet-stream",
+            metadata={},  # metadata will be updated later
+            project_id=project_id
+        )
     else:
+        # Read small files into memory
         contents = await file.read() or b""
+        file_path = await storage.save_file(
+            file_content=io.BytesIO(contents),
+            filename=sanitized_filename,
+            content_type=file.content_type or "application/octet-stream",
+            metadata={},  # metadata will be updated later
+            project_id=project_id
+        )
 
     if len(contents) > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=400,
             detail=f"File too large (>{MAX_FILE_BYTES/1_000_000}MB)."
         )
-    
+
     # Validate project / user
     the_user = None
     if user_id is not None:
@@ -253,9 +254,14 @@ async def upload_file_to_project(
         project = await db.get(Project, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-    
-    # 3. Extract text and tokens
-    token_estimate, file_metadata = await estimate_tokens_from_file(contents, sanitized_filename)
+
+    # 3. Extract text and tokens (skip for non-text files)
+    file_ext = os.path.splitext(sanitized_filename)[1][1:].lower() if "." in sanitized_filename else ""
+    if file_ext in ["txt", "md", "json", "csv"]:
+        token_estimate, file_metadata = await estimate_tokens_from_file(contents, sanitized_filename)
+    else:
+        token_estimate = 0
+        file_metadata = {}
 
     # Check token limit
     if project.token_usage + token_estimate > project.max_tokens:
@@ -266,41 +272,43 @@ async def upload_file_to_project(
                 f"token limit of {project.max_tokens}"
             )
         )
-    
+
     # Build combined metadata
     metadata = {
         "tokens": token_estimate,        # standard key for tokens
         "file_metadata": file_metadata   # store details from extraction
     }
-    
+
+    # Get storage service
+    storage_config = {
+        "storage_type": "local",
+        "local_path": "./uploads/project_files",
+    }
     storage, _ = _get_services()
+
     try:
         file_path = await storage.save_file(
-            file_content=io.BytesIO(contents),
+            file_content=file.file if file.size > STREAM_THRESHOLD else io.BytesIO(contents),
             filename=sanitized_filename,
             content_type=file.content_type or "application/octet-stream",
             metadata=metadata,
             project_id=project_id
         )
     except Exception as e:
-        logger.error(f"File storage error: {str(e)}")
+        logger.error(f"File storage error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"File storage error: {str(e)}")
-    
-    # Derive extension
-    file_ext = ""
-    if "." in sanitized_filename:
-        file_ext = os.path.splitext(sanitized_filename)[1][1:].lower()
 
+    # Create ProjectFile record
     pf = ProjectFile(
         project_id=project_id,
         filename=sanitized_filename,
         file_path=file_path,
-        file_size=len(contents),
+        file_size=file.size,
         file_type=file_ext,
         order_index=0,  # Default order
         metadata=metadata  # Store detailed metadata
     )
-    
+
     # Use explicit transaction for data integrity
     try:
         async with db.begin():
@@ -326,7 +334,7 @@ async def list_project_files(
 ):
     """
     Retrieves files associated with the given project with filtering and pagination.
-    
+
     Args:
         project_id: Project UUID
         db: Database session
@@ -335,25 +343,25 @@ async def list_project_files(
         file_type: Optional filter by file type
         sort_by: Field to sort by (created_at, filename, file_size, etc)
         sort_desc: Sort in descending order if True
-        
+
     Returns:
         List of ProjectFile records
     """
     query = select(ProjectFile).where(ProjectFile.project_id == project_id)
-    
+
     # Apply optional file type filter
     if file_type:
         query = query.where(ProjectFile.file_type == file_type.lower())
-    
+
     # Securely handle sorting
     if sort_by not in ALLOWED_SORT_FIELDS:
         sort_by = "created_at"
     sort_field = getattr(ProjectFile, sort_by)
     query = query.order_by(sort_field.desc() if sort_desc else sort_field.asc())
-    
+
     # Apply pagination
     query = query.offset(skip).limit(limit)
-    
+
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -365,13 +373,13 @@ async def get_project_file(
 ) -> Dict[str, Any]:
     """
     Retrieve a specific file record and optionally its content for the given project.
-    
+
     Args:
         project_id: Project UUID
         file_id: File UUID
         db: Database session
         include_content: Whether to include the file content
-        
+
     Returns:
         Dictionary with file information and optional content
     """
@@ -381,10 +389,10 @@ async def get_project_file(
     )
     result = await db.execute(query)
     file_record = result.scalars().first()
-    
+
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     # Convert to dict for easier manipulation
     file_data = {
         "id": str(file_record.id),
@@ -396,25 +404,25 @@ async def get_project_file(
         "created_at": file_record.created_at,
         "metadata": file_record.metadata or {},
     }
-    
+
     # Include file content if requested
     if include_content:
         try:
             storage, _ = _get_services()
             content = await storage.get_file(file_record.file_path)
-            
+
             # For text-based files, decode to string
             if file_record.file_type in ['txt', 'json', 'csv', 'py', 'js', 'html', 'css', 'md']:
                 try:
                     content = content.decode('utf-8')
                 except UnicodeDecodeError:
                     content = content.decode('utf-8', errors='replace')
-                    
+
             file_data['content'] = content
         except Exception as e:
             logger.error(f"Error retrieving file content: {str(e)}")
             file_data['retrieval_error'] = str(e)
-    
+
     return file_data
 
 async def delete_project_file(
@@ -426,13 +434,13 @@ async def delete_project_file(
     """
     Deletes the file from storage and removes the DB record.
     Also updates the project token usage.
-    
+
     Args:
         project_id: Project UUID
         file_id: File UUID
         db: Database session
         user_id: Optional user ID for permission checks
-        
+
     Returns:
         Dictionary with success status and message
     """
@@ -451,7 +459,7 @@ async def delete_project_file(
         project = project_result.scalars().first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-    
+
     # Retrieve the file record from DB (reusing get_project_file logic)
     file_data = await get_project_file(project_id, file_id, db, include_content=False)
 
@@ -462,10 +470,10 @@ async def delete_project_file(
     )
     result = await db.execute(query)
     db_file_record = result.scalars().first()
-    
+
     if not db_file_record:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     # Get token estimate from metadata
     token_estimate = 0
     file_meta = db_file_record.metadata or {}
@@ -498,8 +506,8 @@ async def delete_project_file(
         "success": file_deletion_status == "success",
         "status": file_deletion_status,
         "message": (
-            "File deleted successfully" 
-            if file_deletion_status == "success" 
+            "File deleted successfully"
+            if file_deletion_status == "success"
             else "File record removed but storage deletion encountered issues"
         ),
         "tokens_removed": token_estimate
@@ -508,11 +516,11 @@ async def delete_project_file(
 async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
     """
     Get statistics about files in a project.
-    
+
     Args:
         project_id: Project UUID
         db: Database session
-        
+
     Returns:
         Dictionary with statistics
     """
@@ -522,14 +530,14 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
     )
     file_count_result = await db.execute(count_query)
     file_count = file_count_result.scalar() or 0
-    
+
     # Get sum of file sizes
     size_query = select(func.sum(ProjectFile.file_size)).select_from(ProjectFile).where(
         ProjectFile.project_id == project_id
     )
     size_result = await db.execute(size_query)
     total_size = size_result.scalar() or 0
-    
+
     # Get file type distribution
     type_query = select(
         ProjectFile.file_type,
@@ -537,15 +545,15 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
     ).where(
         ProjectFile.project_id == project_id
     ).group_by(ProjectFile.file_type)
-    
+
     type_result = await db.execute(type_query)
     file_types = {row[0]: row[1] for row in type_result}
-    
+
     # Get project token usage
     project_query = select(Project).where(Project.id == project_id)
     project_result = await db.execute(project_query)
     project = project_result.scalar()
-    
+
     return {
         "file_count": file_count,
         "total_size_bytes": total_size,
