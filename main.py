@@ -170,6 +170,12 @@ async def index():
     return FileResponse("static/index.html")
 
 
+@app.get("/projects", include_in_schema=False)
+async def projects():
+    """Return the projects HTML file."""
+    return FileResponse("static/projects.html")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint to verify the application is running."""

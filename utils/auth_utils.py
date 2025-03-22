@@ -326,9 +326,7 @@ async def authenticate_websocket(
     Returns:
         Tuple of (success, user)
     """
-    await websocket.accept()
-    
-    # Get token
+    # Get token BEFORE accepting WebSocket
     token = await extract_token_from_websocket(websocket)
     
     if not token:
@@ -339,6 +337,8 @@ async def authenticate_websocket(
     # Validate token and get user
     try:
         user = await get_user_from_token(token, db, "access")
+        # Accept WebSocket only AFTER successful authentication
+        await websocket.accept()
         return True, user
     except Exception as e:
         logger.warning(f"WebSocket authentication failed: {str(e)}")

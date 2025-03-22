@@ -180,7 +180,7 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
     
     headers = {
         "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",  # Use correct API version
+        "anthropic-version": settings.CLAUDE_API_VERSION,
         "content-type": "application/json"
     }
 
@@ -204,13 +204,27 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
         logger.error("No valid messages to send to Claude API")
         raise HTTPException(status_code=400, detail="No valid messages to send to Claude")
     
+    # Extract system message if present
+    system_message = None
+    clean_messages = []
+    for msg in formatted_messages:
+        if msg["role"] == "system":
+            system_message = msg["content"]
+        else:
+            clean_messages.append(msg)
+    
     payload = {
         "model": model_name,
         "max_tokens": max_tokens,
-        "messages": formatted_messages,
-        "system": "You're a helpful AI assistant",  # Add system prompt
+        "messages": clean_messages,
         "temperature": 0.7  # Default value
     }
+    
+    # Add system message if found
+    if system_message:
+        payload["system"] = system_message
+    else:
+        payload["system"] = "You're a helpful AI assistant"
 
     logger.info(f"Sending request to Claude API: {settings.CLAUDE_BASE_URL}")
     
@@ -230,13 +244,26 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
             response_data = response.json()
             logger.info(f"Claude API response received, status: {response.status_code}")
             
-            # Debug the response structure
+            # Process response content
             if "content" in response_data:
-                content = " ".join([block["text"] for block in response_data["content"] if "text" in block])
-                return {"content": [{"role": "assistant", "content": content}]}
+                # Extract text content from all blocks
+                content_parts = []
+                for block in response_data["content"]:
+                    if block.get("type") == "text" and "text" in block:
+                        content_parts.append(block["text"])
+                
+                content = "".join(content_parts)
+                
+                return {
+                    "content": [
+                        {
+                            "text": content
+                        }
+                    ]
+                }
             else:
                 logger.warning(f"Unexpected Claude response structure: {list(response_data.keys())}")
-                return {"content": [{"role": "assistant", "content": "Error: Invalid response format"}]}
+                return {"content": [{"text": "Error: Invalid response format"}]}
             
     except httpx.RequestError as e:
         logger.error(f"Claude API Request Error: {str(e)}")
