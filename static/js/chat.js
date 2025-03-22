@@ -116,6 +116,43 @@ function getMessageClass(role) {
   }
 }
 
+function handleModelSelection() {
+  const modelSelect = document.getElementById("modelSelect");
+  if (!modelSelect) return;
+
+  modelSelect.addEventListener("change", async function() {
+    const selectedModel = this.value;
+    const currentChatId = window.CHAT_CONFIG?.chatId;
+    
+    if (!currentChatId) {
+      window.showNotification("Please start a conversation first", "error");
+      return;
+    }
+
+    try {
+      const projectId = localStorage.getItem("selectedProjectId");
+      let endpoint;
+      
+      if (projectId) {
+        endpoint = `/api/projects/${projectId}/conversations/${currentChatId}/model`;
+      } else {
+        endpoint = `/api/chat/conversations/${currentChatId}/model`;
+      }
+      
+      await window.apiRequest(
+        endpoint,
+        "PATCH",
+        { model_id: selectedModel }
+      );
+      
+      window.showNotification(`Switched to ${this.options[this.selectedIndex].text}`, "success");
+    } catch (error) {
+      console.error("Model change error:", error);
+      window.showNotification("Failed to change model", "error");
+    }
+  });
+}
+
 // Expose loadConversation globally
 window.loadConversation = loadConversation;
 
@@ -123,6 +160,9 @@ window.loadConversation = loadConversation;
 // Main DOMContentLoaded Logic
 // ---------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
+  // Initialize model selection handler
+  handleModelSelection();
+
   // Basic UI references
   const noChatSelectedMessage = document.getElementById("noChatSelectedMessage");
   const conversationArea = document.getElementById("conversationArea");
