@@ -491,7 +491,7 @@ async def create_message(
 
 @router.websocket("/ws/{conversation_id}")
 async def websocket_chat_endpoint(
-    websocket: WebSocket,
+    websocket: WebSocket, 
     project_id: UUID,
     conversation_id: UUID
 ):
@@ -499,23 +499,44 @@ async def websocket_chat_endpoint(
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
-            # 1. Explicitly accept websocket first
-            await websocket.accept()
-            
-            # 2. Extract JWT token
+            # 1. Extract JWT token first
             token = await extract_token_from_websocket(websocket)
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # 3. Validate token and get user
-            try:
-                user = await get_user_from_token(token, db, "access")
-            except Exception as e:
-                logger.warning(f"WebSocket authentication failed: {str(e)}")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
+            # 2. Validate token and get user
+            user = await get_user_from_token(token, db, "access")
+            
+            # 3. Validate project access
+            project = await validate_resource_access(
+                project_id,
+                Project,
+                user,
+                db,
+                "Project",
+                [
+                    Project.user_id == user.id,
+                    Project.archived.is_(False)
+                ]
+            )
+            
+            # 4. Validate conversation exists in project
+            await validate_resource_access(
+                conversation_id,
+                Conversation,
+                user,
+                db,
+                "Conversation",
+                [
+                    Conversation.project_id == project_id,
+                    Conversation.is_deleted.is_(False)
+                ]
+            )
+
+            # 5. Now accept the connection
+            await websocket.accept()
                 
             logger.info(f"WebSocket connection attempt for project: {project_id}, conversation: {conversation_id} by user: {user.id}")
 
