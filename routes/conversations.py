@@ -145,12 +145,14 @@ async def create_conversation(
 
     return await create_standard_response(
         {
-            "id": str(new_conversation.id),
-            "title": new_conversation.title,
-            "created_at": new_conversation.created_at.isoformat(),
-            "project_id": None,
-        },
-        "Conversation created successfully",
+            "data": {
+                "id": str(new_conversation.id),
+                "title": new_conversation.title,
+                "created_at": new_conversation.created_at.isoformat(),
+                "project_id": None,
+            },
+            "message": "Conversation created successfully"
+        }
     )
 
 
