@@ -22,7 +22,7 @@ class Settings:
 
     # Allowed hosts
     ALLOWED_HOSTS: list = os.getenv(
-        "ALLOWED_HOSTS", 
+        "ALLOWED_HOSTS",
         "put.photo,www.put.photo,localhost,127.0.0.1,*"
     ).split(",")
 
