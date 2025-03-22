@@ -644,6 +644,26 @@ window.loadConversationList = loadConversationList;
 window.renderConversationList = renderConversationList;
 window.checkAndHandleAuth = checkAndHandleAuth;
 
+function getModelOptions() {
+    return [
+        { 
+            id: 'claude-3-7-sonnet-20250219', 
+            name: 'Claude 3 Sonnet',
+            description: 'Medium model, great balance of speed & capability'
+        },
+        { 
+            id: 'gpt-4', 
+            name: 'GPT-4',
+            description: 'Most capable model, great for complex tasks'
+        },
+        { 
+            id: 'gpt-3.5-turbo', 
+            name: 'GPT-3.5 Turbo',
+            description: 'Fast and capable, great for most use cases'
+        }
+    ];
+}
+
 // Add this function to document ready listener
 
 function safeInitialize() {
