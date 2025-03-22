@@ -60,24 +60,28 @@
 /* Mobile sidebar styles */
 @media (max-width: 767px) {
   #mainSidebar {
-    position: fixed;
-    left: -100%;
-    top: 0;
-    bottom: 0;
-    width: 80%;
-    transition: left 0.3s ease-in-out;
+    transform: translateX(-100%);
     z-index: 50;
   }
   
-  #mainSidebar.mobile-visible {
-    left: 0;
-    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+  #mainSidebar.translate-x-0 {
+    transform: translateX(0);
   }
   
-  /* Dark mode support */
-  .dark #mainSidebar {
-    background-color: #1f2937; /* bg-gray-800 */
+  #sidebarBackdrop {
+    display: block;
   }
+}
+
+@media (min-width: 768px) {
+  #mainSidebar {
+    transform: translateX(0) !important;
+  }
+  
+  #sidebarBackdrop {
+    display: none !important;
+  }
+}
 
   #projectManagerPanel {
     padding: 1rem;
