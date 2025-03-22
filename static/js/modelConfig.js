@@ -139,6 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
     window.MODEL_CONFIG.visionDetail = visionDetailSelect.value;
   });
 
+  // Initialize model dropdown
+  initializeModelDropdown();
+  
   // Load existing settings from localStorage (or defaults)
   const storedModel = localStorage.getItem("modelName") || "claude-3-7-sonnet-20250219"; // Set Claude as default
   const storedMaxTokens = localStorage.getItem("maxTokens") || "500";
@@ -330,3 +333,54 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+/**
+ * Get available models for the dropdown
+ */
+function getModelOptions() {
+  return [
+    { 
+      id: 'claude-3-7-sonnet-20250219', 
+      name: 'Claude 3.7 Sonnet',
+      description: 'Anthropic\'s powerful reasoning model'
+    },
+    { 
+      id: 'gpt-4', 
+      name: 'GPT-4',
+      description: 'Most capable model - handles complex instructions'
+    },
+    { 
+      id: 'gpt-3.5-turbo', 
+      name: 'GPT-3.5 Turbo',
+      description: 'Fastest model - good for simple queries'
+    },
+    { 
+      id: 'o1', 
+      name: 'o1 (Vision)',
+      description: 'Image understanding capabilities'
+    }
+  ];
+}
+
+/**
+ * Initialize the model selection dropdown
+ */
+function initializeModelDropdown() {
+  const modelSelect = document.getElementById("modelSelect");
+  if (!modelSelect) return;
+
+  // Clear existing options
+  modelSelect.innerHTML = '';
+
+  // Get available models
+  const modelOptions = getModelOptions();
+  
+  // Add models to dropdown
+  modelOptions.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = model.name;
+    if (model.description) option.title = model.description;
+    modelSelect.appendChild(option);
+  });
+}
