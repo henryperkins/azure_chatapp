@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.conversation import Conversation
 from models.message import Message
-from utils.openai import openai_chat
+from utils.openai import openai_chat, claude_chat
+from config import settings
 from utils.db_utils import get_by_id, save_model
 from utils.response_utils import create_standard_response
 from utils.message_handlers import (
@@ -36,12 +37,12 @@ async def generate_ai_response(
     db: AsyncSession = None
 ) -> Optional[Message]:
     """
-    Generate an AI response for a conversation using OpenAI API.
+    Generate an AI response for a conversation using OpenAI or Claude API.
     
     Args:
         conversation_id: Conversation ID
         messages: List of message dictionaries
-        model_id: OpenAI model ID
+        model_id: Model ID for OpenAI or Claude
         image_data: Optional base64 image data for vision
         vision_detail: Detail level for vision
         db: Database session
@@ -49,18 +50,32 @@ async def generate_ai_response(
     Returns:
         Created assistant Message object or None if error
     """
-    chosen_model = "o1" if image_data else (model_id or "o1")
+    # Handle vision data by selecting o1 when image is provided
+    chosen_model = "o1" if image_data else (model_id or "claude-3-7-sonnet-20250219")
     
     try:
-        # Call OpenAI API
-        openai_response = await openai_chat(
-            messages=messages,
-            model_name=chosen_model,
-            image_data=image_data,
-            vision_detail=vision_detail
-        )
+        # Check if it's a Claude model
+        is_claude_model = chosen_model in settings.CLAUDE_MODELS
         
-        assistant_content = openai_response["choices"][0]["message"]["content"]
+        if is_claude_model:
+            # Call Claude API
+            logger.info(f"Generating response using Claude model: {chosen_model}")
+            claude_response = await claude_chat(
+                messages=messages,
+                model_name=chosen_model,
+                max_tokens=1500
+            )
+            assistant_content = claude_response["content"][0]["text"]
+        else:
+            # Call OpenAI API
+            logger.info(f"Generating response using OpenAI model: {chosen_model}")
+            openai_response = await openai_chat(
+                messages=messages,
+                model_name=chosen_model,
+                image_data=image_data,
+                vision_detail=vision_detail
+            )
+            assistant_content = openai_response["choices"][0]["message"]["content"]
         
         # Create assistant message
         assistant_msg = Message(
@@ -81,7 +96,7 @@ async def generate_ai_response(
         
         return assistant_msg
     except Exception as e:
-        logger.error(f"Error calling OpenAI: {e}")
+        logger.error(f"Error generating AI response: {e}")
         return None
 
 
@@ -91,7 +106,7 @@ async def handle_websocket_response(
     websocket: WebSocket
 ) -> None:
     """
-    Handle AI response generation for WebSocket connections.
+    Handle AI response generation for WebSocket connections (OpenAI or Claude).
     
     Args:
         conversation_id: Conversation ID
@@ -110,7 +125,10 @@ async def handle_websocket_response(
         # Get formatted messages for API
         msg_dicts = await get_conversation_messages(conversation_id, db)
         
-        # Generate AI response
+        # Log which model is being used
+        logger.info(f"WebSocket using model: {conversation.model_id}")
+        
+        # Generate AI response (function now handles both Claude and OpenAI)
         assistant_msg = await generate_ai_response(
             conversation_id=conversation_id,
             messages=msg_dicts,
@@ -123,14 +141,17 @@ async def handle_websocket_response(
             await websocket.send_json({
                 "id": str(assistant_msg.id),
                 "role": assistant_msg.role,
-                "content": assistant_msg.content
+                "content": assistant_msg.content,
+                "type": "message"  # Add type for consistent handling in frontend
             })
         else:
-            await websocket.send_json(
-                await create_standard_response(None, "Failed to generate AI response", False)
-            )
+            await websocket.send_json({
+                "type": "error",
+                "content": "Failed to generate AI response"
+            })
     except Exception as e:
         logger.error(f"WebSocket AI response error: {e}")
-        await websocket.send_json(
-            await create_standard_response(None, f"Error generating response: {str(e)}", False)
-        )
+        await websocket.send_json({
+            "type": "error",
+            "content": f"Error generating response: {str(e)}"
+        })
