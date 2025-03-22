@@ -664,7 +664,31 @@ function getModelOptions() {
     ];
 }
 
-// Add this function to document ready listener
+function initializeModelDropdown() {
+  const modelSelect = document.getElementById("modelSelect");
+  if (!modelSelect) return;
+
+  // Clear existing options and preserve first placeholder option
+  while (modelSelect.options.length > 0) {
+    modelSelect.remove(0);
+  }
+
+  // Get available models
+  const modelOptions = getModelOptions();
+
+  // Add models to dropdown
+  modelOptions.forEach(model => {
+    const option = new Option(model.name, model.id);
+    if (model.description) option.title = model.description;
+    modelSelect.add(option);
+  });
+}
+
+// Add this to DOMContentLoaded listener
+document.addEventListener("DOMContentLoaded", () => {
+  initializeModelDropdown();
+  // ... rest of existing initialization code ...
+});
 
 function safeInitialize() {
   // Safely bind events only to elements that actually exist
