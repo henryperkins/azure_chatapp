@@ -142,25 +142,19 @@ function toggleSidebar() {
   const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
   const toggleBtn = getElement(SELECTORS.NAV_TOGGLE_BTN);
   
-  if (sidebarEl && toggleBtn) {
-    sidebarEl.classList.toggle('mobile-visible');
-    const isVisible = sidebarEl.classList.contains('mobile-visible');
+  if (sidebarEl) {
+    sidebarEl.classList.toggle("translate-x-0");
+    sidebarEl.classList.toggle("-translate-x-full");
     
-    // Handle body scroll lock
-    document.body.style.overflow = isVisible ? 'hidden' : 'auto';
-    
-    // Animate the toggle button
-    toggleBtn.style.transform = isVisible ? 'rotate(90deg)' : 'rotate(0deg)';
-    
-    // Add backdrop overlay
+    // Handle backdrop
     const existingBackdrop = document.getElementById('sidebarBackdrop');
     if (!existingBackdrop) {
-      const backdrop = document.createElement('div');
-      backdrop.id = 'sidebarBackdrop';
-      backdrop.className = 'md:hidden fixed inset-0 bg-black/50 z-40';
+      const backdrop = document.createElement("div");
+      backdrop.id = "sidebarBackdrop";
+      backdrop.className = "fixed inset-0 bg-black/50 z-40 md:hidden";
       backdrop.onclick = toggleSidebar;
       document.body.appendChild(backdrop);
-    } else if (!isVisible) {
+    } else {
       existingBackdrop.remove();
     }
   }
