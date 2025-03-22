@@ -215,6 +215,9 @@ async def upload_file_to_project(
             detail=f"File type not allowed. Supported types: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
         )
 
+    # Get storage service
+    storage, _ = _get_services()
+
     # Read file content with threshold-based approach
     contents = b""
     if file.size > STREAM_THRESHOLD:
@@ -279,12 +282,6 @@ async def upload_file_to_project(
         "file_metadata": file_metadata   # store details from extraction
     }
 
-    # Get storage service
-    storage_config = {
-        "storage_type": "local",
-        "local_path": "./uploads/project_files",
-    }
-    storage, _ = _get_services()
 
     try:
         file_path = await storage.save_file(
