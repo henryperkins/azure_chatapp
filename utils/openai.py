@@ -180,7 +180,7 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
     
     headers = {
         "x-api-key": api_key,
-        "anthropic-version": settings.CLAUDE_API_VERSION,
+        "anthropic-version": "2023-06-01",  # Use supported version
         "content-type": "application/json"
     }
 
@@ -206,9 +206,10 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
     
     payload = {
         "model": model_name,
-        "messages": formatted_messages,
         "max_tokens": max_tokens,
-        "stream": False
+        "messages": formatted_messages,
+        "system": "You're a helpful AI assistant",  # Add system prompt
+        "temperature": 0.7  # Default value
     }
 
     logger.info(f"Sending request to Claude API: {settings.CLAUDE_BASE_URL}")
@@ -231,11 +232,12 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
             
             # Debug the response structure
             if "content" in response_data:
-                logger.info(f"Claude response contains {len(response_data['content'])} content items")
+                return {
+                    "content": [block["text"] for block in response_data["content"] if block["type"] == "text"]
+                }
             else:
                 logger.warning(f"Unexpected Claude response structure: {list(response_data.keys())}")
-                
-            return response_data
+                return {"content": []}
             
     except httpx.RequestError as e:
         logger.error(f"Claude API Request Error: {str(e)}")
