@@ -317,13 +317,13 @@
 
         <!-- Model Configuration section has been moved to the sidebar -->
 
-        <div class="mb-4">
+        <div class="mb-4 hidden">
           <button id="newChatBtn" class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             New Chat
           </button>
         </div>
         
-        <div id="noChatSelectedMessage" class="">
+        <div id="noChatSelectedMessage" class="hidden">
           <p>Please start a new conversation first.</p>
         </div>
         
@@ -338,7 +338,7 @@
         
         <!-- Chat UI (with real-time or fetch-based approach) -->
         <section id="chatUI"
-                 class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 hidden">
+                 class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
           <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Chat Interface</h2>
           <div class="flex items-center mb-2">
             <span id="chatTitle" class="font-medium mr-2">Chat Title</span>
