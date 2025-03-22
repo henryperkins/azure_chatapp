@@ -651,7 +651,7 @@ window.initializeModelDropdown = initializeModelDropdown;
 function getModelOptions() {
     return [
         { 
-            id: 'claude-3-7-sonnet-20250219', 
+            id: 'claude-3-sonnet-20240229', 
             name: 'Claude 3 Sonnet',
             description: 'Middleweight model - good balance of capability and speed'
         },
