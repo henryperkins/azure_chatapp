@@ -13,6 +13,26 @@
 
   <!-- CSRF token (if your backend sets it) -->
   <meta name="csrf-token" content="" />
+  
+  <!-- Custom styles for toggle switch -->
+  <style>
+    .toggle-checkbox {
+      right: 0;
+      transition: all 0.3s;
+      z-index: 3;
+    }
+    .toggle-checkbox:checked {
+      right: 6px;
+      border-color: #3b82f6;
+    }
+    .toggle-checkbox:checked + .toggle-label {
+      background-color: #3b82f6;
+    }
+    .toggle-label {
+      transition: all 0.3s;
+      border-radius: 9999px;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
 
@@ -436,6 +456,9 @@
                 <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
                   Artifacts
                 </button>
+                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="knowledge">
+                  Knowledge Base
+                </button>
               </div>
             </div>
             
@@ -532,6 +555,135 @@
                 <div id="projectArtifactsList" class="mt-4">
                   <!-- Artifacts will be populated here -->
                   <div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>
+                </div>
+              </div>
+              
+              <!-- Knowledge Base tab -->
+              <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
+                <div class="mb-4 flex justify-between items-center">
+                  <h3 class="font-medium">Knowledge Base</h3>
+                  <div id="knowledgeBaseActions" class="flex space-x-2">
+                    <button id="searchKnowledgeBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      Search Knowledge
+                    </button>
+                    <button id="knowledgeBaseSettingsBtn" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Settings
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Knowledge Base Status -->
+                <div id="knowledgeBaseStatus" class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div id="knowledgeBaseInactive" class="flex flex-col items-center justify-center py-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <h4 class="text-lg font-medium mb-2">Knowledge Base Not Configured</h4>
+                    <p class="text-gray-500 text-center mb-3 max-w-lg">
+                      Configure a knowledge base to enable AI to search your project files and use relevant information to answer your questions.
+                    </p>
+                    <button id="setupKnowledgeBaseBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      Set Up Knowledge Base
+                    </button>
+                  </div>
+                  
+                  <div id="knowledgeBaseActive" class="hidden">
+                    <div class="flex items-center mb-4">
+                      <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 class="font-medium text-lg"><span id="knowledgeBaseName">Project Knowledge Base</span></h4>
+                        <p class="text-sm text-gray-500"><span id="knowledgeBaseModel">Default Embedding Model</span> • <span id="knowledgeBaseUpdated">Last updated: today</span></p>
+                      </div>
+                      <div class="ml-auto">
+                        <span id="knowledgeBaseToggle" class="relative inline-block w-12 mr-2 align-middle select-none">
+                          <input type="checkbox" name="knowledgeBaseEnabled" id="knowledgeBaseEnabled" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                          <label for="knowledgeBaseEnabled" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </span>
+                        <span class="text-sm" id="knowledgeBaseEnabledLabel">Enabled</span>
+                      </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                      <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
+                        <div class="text-2xl font-semibold mb-1" id="knowledgeFileCount">0</div>
+                        <div class="text-xs text-gray-500">Files Processed</div>
+                      </div>
+                      <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
+                        <div class="text-2xl font-semibold mb-1" id="knowledgeChunkCount">0</div>
+                        <div class="text-xs text-gray-500">Text Chunks</div>
+                      </div>
+                      <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
+                        <div class="text-2xl font-semibold mb-1" id="knowledgeSearchCount">0</div>
+                        <div class="text-xs text-gray-500">Searches</div>
+                      </div>
+                    </div>
+                    
+                    <div class="text-sm text-gray-600 mt-2" id="knowledgeBaseDescription">
+                      This knowledge base helps the AI provide more accurate responses by searching relevant information from your project files.
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Search Interface -->
+                <div class="mb-6">
+                  <h3 class="font-medium mb-3">Search Knowledge</h3>
+                  <div class="flex mb-3">
+                    <input type="text" id="knowledgeSearchInput" placeholder="Search your project knowledge..." 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button id="runKnowledgeSearchBtn" class="bg-blue-600 text-white px-4 py-2 rounded-r hover:bg-blue-700 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div id="knowledgeSearchOptions" class="flex justify-end mb-2">
+                    <label class="text-sm text-gray-600 mr-2">Results: </label>
+                    <select id="knowledgeTopK" class="text-sm border border-gray-300 rounded">
+                      <option value="3">3</option>
+                      <option value="5" selected>5</option>
+                      <option value="10">10</option>
+                      <option value="15">15</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <!-- Search Results -->
+                <div id="knowledgeSearchResults" class="mb-6 hidden">
+                  <h3 class="font-medium mb-3">Search Results</h3>
+                  <div id="knowledgeResultsList">
+                    <!-- Results will be populated here -->
+                  </div>
+                </div>
+                
+                <!-- No results placeholder -->
+                <div id="knowledgeNoResults" class="mb-6 hidden">
+                  <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h4 class="text-lg font-medium mb-2">No results found</h4>
+                    <p class="text-gray-500">Try a different search query or add more files to your project.</p>
+                  </div>
+                </div>
+                
+                <!-- Files with Knowledge Processing Status -->
+                <div class="mb-6">
+                  <h3 class="font-medium mb-3">Files with Knowledge Processing</h3>
+                  <div id="knowledgeProcessedFiles">
+                    <!-- Files with processing status will be displayed here -->
+                    <div class="text-gray-500 text-center py-8">No files have been processed for knowledge search yet.</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -663,6 +815,124 @@
         </button>
       </div>
       <div id="contentViewModalContent"></div>
+    </div>
+  </div>
+  
+  <!-- Knowledge Base Settings Modal -->
+  <div id="knowledgeBaseSettingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold">Knowledge Base Settings</h3>
+        <button id="closeKnowledgeSettingsBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      
+      <form id="knowledgeBaseForm">
+        <input type="hidden" id="knowledgeBaseIdInput" name="knowledge_base_id" value="" />
+        
+        <div class="mb-4">
+          <label for="knowledgeBaseNameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Knowledge Base Name*
+          </label>
+          <input id="knowledgeBaseNameInput" name="name" type="text" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+        </div>
+        
+        <div class="mb-4">
+          <label for="knowledgeBaseDescInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Description
+          </label>
+          <textarea id="knowledgeBaseDescInput" name="description" rows="3"
+                    class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+        </div>
+        
+        <div class="mb-4">
+          <label for="embeddingModelSelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Embedding Model
+          </label>
+          <select id="embeddingModelSelect" name="embedding_model"
+                  class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Default)</option>
+            <option value="all-mpnet-base-v2">all-mpnet-base-v2 (Higher quality)</option>
+            <option value="all-distilroberta-v1">all-distilroberta-v1 (Fast)</option>
+          </select>
+          <p class="text-xs text-gray-500 mt-1">
+            The embedding model determines how text is converted to vector representations for semantic search.
+          </p>
+        </div>
+        
+        <div class="mb-4">
+          <div class="flex items-center mb-2">
+            <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files" 
+                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+            <label for="processAllFilesCheckbox" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+              Process all project files for knowledge search
+            </label>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">
+            This will process all existing files in the project for knowledge search. New files will be automatically processed when added.
+          </p>
+        </div>
+        
+        <div class="mb-4">
+          <div class="flex items-center mb-2">
+            <input type="checkbox" id="autoEnableCheckbox" name="auto_enable" 
+                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" checked />
+            <label for="autoEnableCheckbox" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+              Automatically use knowledge in conversations
+            </label>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">
+            When enabled, the AI will automatically search your project files for relevant information when answering questions.
+          </p>
+        </div>
+        
+        <div class="flex justify-end space-x-2 mt-6">
+          <button type="button" id="cancelKnowledgeBaseFormBtn" 
+                  class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button type="submit" id="submitKnowledgeBaseFormBtn"
+                  class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Save Settings
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Knowledge Result Detail Modal -->
+  <div id="knowledgeResultModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="knowledgeResultTitle" class="text-xl font-semibold">Knowledge Result</h3>
+        <button id="closeKnowledgeResultBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="mb-4">
+        <div class="flex items-center mb-2">
+          <div class="text-sm font-medium text-gray-500 mr-2">Source:</div>
+          <div id="knowledgeResultSource" class="text-sm font-semibold">Filename</div>
+        </div>
+        <div class="flex items-center mb-4">
+          <div class="text-sm font-medium text-gray-500 mr-2">Relevance:</div>
+          <div id="knowledgeResultScore" class="text-sm">Score</div>
+        </div>
+      </div>
+      <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg overflow-x-auto">
+        <pre id="knowledgeResultContent" class="whitespace-pre-wrap text-sm"></pre>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button id="useInChatBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+          Use in Conversation
+        </button>
+      </div>
     </div>
   </div>
 

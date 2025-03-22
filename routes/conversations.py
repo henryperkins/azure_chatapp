@@ -109,6 +109,8 @@ class MessageCreate(BaseModel):
     )
     image_data: Optional[str] = None
     vision_detail: str = "auto"
+    enable_thinking: Optional[bool] = None
+    thinking_budget: Optional[int] = None
 
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -390,12 +392,24 @@ async def create_message(
                 model_id=conversation.model_id,
                 image_data=new_msg.image_data,
                 vision_detail=new_msg.vision_detail,
+                enable_thinking=new_msg.enable_thinking,
+                thinking_budget=new_msg.thinking_budget,
                 db=db,
             )
             if assistant_msg:
                 response_payload["assistant_message_id"] = str(assistant_msg.id)
                 response_payload["assistant_role"] = str(assistant_msg.role)
                 response_payload["assistant_content"] = str(assistant_msg.content)
+                
+                # Include metadata (thinking blocks) if available
+                metadata = assistant_msg.get_metadata_dict()
+                if metadata:
+                    response_payload["assistant_message"] = {
+                        "id": str(assistant_msg.id),
+                        "role": assistant_msg.role,
+                        "content": assistant_msg.content,
+                        "metadata": metadata
+                    }
             else:
                 response_payload["assistant_error"] = "Failed to generate response"
         except Exception as exc:
@@ -466,17 +480,31 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                             claude_response = await claude_chat(
                                 messages=msg_dicts,
                                 model_name=conversation.model_id,
-                                max_tokens=1500
+                                max_tokens=1500,
+                                enable_thinking=settings.CLAUDE_EXTENDED_THINKING_ENABLED,
+                                thinking_budget=settings.CLAUDE_EXTENDED_THINKING_BUDGET
                             )
 
                             # Extract content from Claude response
-                            content = claude_response["content"][0]["text"]
+                            content = claude_response["choices"][0]["message"]["content"]
 
+                            # Extract thinking blocks if available
+                            message_metadata = {}
+                            if claude_response.get("has_thinking"):
+                                message_metadata["has_thinking"] = True
+                                
+                                if "thinking" in claude_response:
+                                    message_metadata["thinking"] = claude_response["thinking"]
+                                    
+                                if "redacted_thinking" in claude_response:
+                                    message_metadata["redacted_thinking"] = claude_response["redacted_thinking"]
+                            
                             # Create and save message
                             assistant_msg = Message(
                                 conversation_id=conversation.id,
                                 role="assistant",
-                                content=content
+                                content=content,
+                                extra_data=message_metadata if message_metadata else None
                             )
                             db.add(assistant_msg)
                             await db.commit()
@@ -497,11 +525,21 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                         )
 
                     if assistant_msg:
-                        await websocket.send_text(
-                            json.dumps(
-                                {"type": "message", "content": assistant_msg.content}
-                            )
-                        )
+                        # Prepare response with thinking blocks if available
+                        response_data = {
+                            "type": "message", 
+                            "content": assistant_msg.content
+                        }
+                        
+                        # Include thinking blocks if available
+                        metadata = assistant_msg.get_metadata_dict()
+                        if metadata.get("has_thinking"):
+                            if "thinking" in metadata:
+                                response_data["thinking"] = metadata["thinking"]
+                            if "redacted_thinking" in metadata:
+                                response_data["redacted_thinking"] = metadata["redacted_thinking"]
+                        
+                        await websocket.send_text(json.dumps(response_data))
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")

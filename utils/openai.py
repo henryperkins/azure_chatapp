@@ -159,7 +159,7 @@ async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: i
         raise RuntimeError(f"Text completion failed: {str(e)}") from e
 
 
-async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -> dict:
+async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000, enable_thinking: bool = None, thinking_budget: int = None) -> dict:
     """Handle Claude API requests"""
     from config import settings
     from fastapi import HTTPException
@@ -183,6 +183,10 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
         "anthropic-version": settings.CLAUDE_API_VERSION,
         "content-type": "application/json"
     }
+    
+    # Add beta header for 128K output support for Claude 3.7
+    if model_name == "claude-3-7-sonnet-20250219":
+        headers["anthropic-beta"] = "output-128k-2025-02-19"
 
     # Fix any message formatting for Claude API
     formatted_messages = []
@@ -220,6 +224,23 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
         "temperature": 0.7  # Default value
     }
     
+    # Add extended thinking if requested and model is supported
+    if enable_thinking is None:
+        # Use config default if not explicitly specified
+        enable_thinking = settings.CLAUDE_EXTENDED_THINKING_ENABLED
+        
+    if enable_thinking and model_name in ["claude-3-7-sonnet-20250219", "claude-3-opus-20240229"]:
+        # Calculate budget_tokens, ensuring it's within valid range and less than max_tokens
+        budget = thinking_budget or settings.CLAUDE_EXTENDED_THINKING_BUDGET
+        # Ensure budget is at least 1024 tokens and less than max_tokens
+        budget = max(1024, min(budget, max_tokens - 1000))
+        
+        payload["thinking"] = True
+        payload["budget_tokens"] = budget
+        
+        # When using extended thinking, we can't use temperature and other sampling params
+        payload.pop("temperature", None)
+    
     # Add system message if found
     if system_message:
         payload["system"] = system_message
@@ -245,25 +266,57 @@ async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -
             logger.info(f"Claude API response received, status: {response.status_code}")
             
             # Process response content
-            if "content" in response_data:
-                # Extract text content from all blocks
+            if response_data.get("content") and isinstance(response_data["content"], list):
+                # Extract text content and thinking blocks
                 content_parts = []
+                thinking_parts = []
+                redacted_thinking_parts = []
+                
                 for block in response_data["content"]:
-                    if block.get("type") == "text" and "text" in block:
+                    block_type = block.get("type")
+                    if block_type == "text" and "text" in block:
                         content_parts.append(block["text"])
+                    elif block_type == "thinking" and "thinking" in block:
+                        thinking_parts.append(block["thinking"])
+                    elif block_type == "redacted_thinking" and "redacted_thinking" in block:
+                        redacted_thinking_parts.append(block["redacted_thinking"])
                 
                 content = "".join(content_parts)
+                thinking = "\n".join(thinking_parts)
+                redacted_thinking = "\n".join(redacted_thinking_parts)
                 
-                return {
-                    "content": [
+                # Include both text and thinking blocks in the response
+                response = {
+                    "choices": [
                         {
-                            "text": content
+                            "message": {
+                                "content": content,
+                                "role": "assistant"
+                            }
+                        }
+                    ],
+                    "has_thinking": len(thinking_parts) > 0 or len(redacted_thinking_parts) > 0
+                }
+                
+                if thinking_parts:
+                    response["thinking"] = thinking
+                
+                if redacted_thinking_parts:
+                    response["redacted_thinking"] = redacted_thinking
+                
+                return response
+            else:
+                logger.warning(f"Unexpected Claude response structure: {list(response_data.keys())}")
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Error: Invalid response format",
+                                "role": "assistant"
+                            }
                         }
                     ]
                 }
-            else:
-                logger.warning(f"Unexpected Claude response structure: {list(response_data.keys())}")
-                return {"content": [{"text": "Error: Invalid response format"}]}
             
     except httpx.RequestError as e:
         logger.error(f"Claude API Request Error: {str(e)}")

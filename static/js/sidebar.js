@@ -12,19 +12,19 @@
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize sidebar tabs
   setupSidebarTabs();
-  
+
   // Initialize collapsible sections
   setupCollapsibleSections();
-  
+
   // Set up pin sidebar functionality
   setupPinningSidebar();
-  
+
   // Set up custom instructions
   setupCustomInstructions();
-  
+
   // Set up new chat button
   setupNewChatButton();
-  
+
   // Initialize model dropdown
   initializeModelDropdownOnLoad();
 });
@@ -40,9 +40,9 @@ function initializeModelDropdownOnLoad() {
       initializeModelDropdown();
     }
     
-    // Set default value to Claude 3.7 Sonnet if not already set
+    // Set default value to Claude 3 Sonnet if not already set
     if (!modelDropdown.value) {
-      modelDropdown.value = 'claude-3-7-sonnet-20250219';
+      modelDropdown.value = 'claude-3-sonnet-20240229';
       
       // Persist the model selection
       if (typeof persistSettings === 'function') {
@@ -277,44 +277,47 @@ function setupCustomInstructions() {
  * Set up new chat button functionality
  */
 function setupNewChatButton() {
-  const newChatBtn = document.getElementById('sidebarNewChatBtn');
-  
+  const newChatBtn = document.querySelector('#sidebarNewChatBtn');
+
   if (!newChatBtn) {
     console.warn('New chat button not found in the DOM');
     return;
   }
-  
-  newChatBtn.addEventListener('click', async () => {
+
+  newChatBtn.addEventListener('click', newChatClickHandler);
+}
+
+async function newChatClickHandler() {
     // Clear selected project
     localStorage.removeItem('selectedProjectId');
-    
+
     // If on projects.html page, navigate to index.html
     if (window.location.pathname.includes('/projects')) {
       window.location.href = '/';
       return;
     }
-    
+
     // Show loading notification
     if (window.showNotification) {
       window.showNotification("Creating new chat...", "info");
     }
-    
+
     console.log("Sidebar New Chat button clicked");
-    
+
     // Otherwise, create new chat if the function exists
     if (typeof window.createNewChat === 'function') {
       try {
         console.log("Calling createNewChat function");
-        localStorage.setItem("modelName", "claude-3-7-sonnet-20250219"); // Ensure Claude is the selected model
+        localStorage.setItem("modelName", "claude-3-sonnet-20240229"); // Ensure Claude is the selected model
         const newChat = await window.createNewChat();
-        console.log("New chat created:", newChat);
+        console.log("New chat created:", newChat); // Add logging
         if (window.showNotification) {
           window.showNotification("Chat created successfully", "success");
         }
       } catch (error) {
-        console.error("Error creating new chat:", error);
+        console.error("Error creating new chat:", error); // Add logging
         if (window.showNotification) {
-          window.showNotification("Error creating chat: " + error.message, "error");
+          window.showNotification("Error creating new chat: " + error.message, "error");
         }
       }
     } else {
@@ -323,7 +326,6 @@ function setupNewChatButton() {
         window.showNotification("Chat creation function not available", "error");
       }
     }
-  });
 }
 
 /**

@@ -48,7 +48,10 @@ class Message(Base):
         "properties": {
             "tokens": {"type": "number"},
             "model": {"type": "string"},
-            "summary": {"type": "boolean"}
+            "summary": {"type": "boolean"},
+            "thinking": {"type": "string"},
+            "redacted_thinking": {"type": "string"},
+            "has_thinking": {"type": "boolean"}
         }
     }
 
