@@ -21,10 +21,10 @@ class Settings:
     )
 
     # Allowed hosts
-    ALLOWED_HOSTS: list = Field(
-        default=["put.photo", "www.put.photo", "localhost", "127.0.0.1", "*"],
-        env="ALLOWED_HOSTS"
-    )
+    ALLOWED_HOSTS: list = os.getenv(
+        "ALLOWED_HOSTS", 
+        "put.photo,www.put.photo,localhost,127.0.0.1,*"
+    ).split(",")
 
     # CORS Origins - if left empty, default to localhost origins in development
     CORS_ORIGINS = (
