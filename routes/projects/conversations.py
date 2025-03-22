@@ -381,6 +381,8 @@ async def project_websocket_chat_endpoint(
                 logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id) # ADDED DEBUG LOG
                 return
 
+            conversation_id_str = str(conversation.id) # Define conversation_id_str here, after conversation is validated
+
             await websocket.accept()
 
             while True:
@@ -392,14 +394,14 @@ async def project_websocket_chat_endpoint(
 
                 # Create message
                 message = await create_user_message(
-                    conversation_id=str(conversation.id),
+                    conversation_id=conversation_id_str,
                     content=data_dict["content"],
                     role=data_dict["role"],
                     db=db
                 )
 
                 if message.role == "user":
-                    await handle_websocket_response(str(conversation.id), db, websocket)
+                    await handle_websocket_response(conversation_id_str, db, websocket)
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
