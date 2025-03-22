@@ -159,6 +159,38 @@ async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: i
         raise RuntimeError(f"Text completion failed: {str(e)}") from e
 
 
+async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -> dict:
+    """Handle Claude API requests"""
+    from config import settings
+    
+    headers = {
+        "x-api-key": settings.CLAUDE_API_KEY,
+        "anthropic-version": settings.CLAUDE_API_VERSION,
+        "content-type": "application/json"
+    }
+
+    payload = {
+        "model": model_name,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "stream": False
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                settings.CLAUDE_BASE_URL,
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        logging.error(f"Claude API Error: {str(e)}")
+        raise HTTPException(500, "Claude service unavailable")
+
+
 async def get_moderation(text: str) -> Dict[str, Any]:
     """
     Call the Azure OpenAI moderation endpoint.
