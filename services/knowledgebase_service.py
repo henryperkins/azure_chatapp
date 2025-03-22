@@ -1,12 +1,12 @@
 """
 knowledgebase_service.py
 ------------------------
-Contains logic for managing ProjectFile entries (knowledge base files) in a dedicated layer:
- - Validation of file uploads
- - Upload to local or cloud storage (S3/Azure)
- - Text extraction from various file formats
- - Token calculation and usage tracking
- - Database interactions for ProjectFile (create, read, delete)
+Contains logic for managing knowledge bases and their components:
+ - File uploads and processing
+ - Text extraction and chunking
+ - Embedding generation and vector storage
+ - Search and retrieval for context
+ - Token usage tracking
 """
 
 import os
@@ -32,8 +32,10 @@ except ImportError:
 
 from models.project_file import ProjectFile
 from models.project import Project
+from models.knowledge_base import KnowledgeBase
 from services.file_storage import get_file_storage, FileStorage
 from services.text_extraction import get_text_extractor, TextExtractor, TextExtractionError
+from services.vector_db import get_vector_db, VectorDB, process_file_for_search
 
 # Add tiktoken import
 try:
@@ -44,22 +46,28 @@ try:
 except ImportError:
     TIKTOKEN_AVAILABLE = False
     TOKENIZER_ENCODING = None
-    print("Warning: tiktoken not installed.  Token counts will be estimates.  `pip install tiktoken` for accurate counts.")
+    print("Warning: tiktoken not installed. Token counts will be estimates. `pip install tiktoken` for accurate counts.")
 
 
 logger = logging.getLogger(__name__)
 
 # Constants for file validation
-MAX_FILE_BYTES = 30_000_000  # 30MB as per project plan
+MAX_FILE_BYTES = 30_000_000  # 30MB 
 STREAM_THRESHOLD = 10_000_000  # Threshold beyond which we consider chunked reading
 
-# Expanded allowed file extensions per project plan
+# Expanded allowed file extensions
 ALLOWED_FILE_EXTENSIONS = {
-    ".txt", ".pdf", ".doc", ".docx", ".csv", ".json", ".md",
+    ".txt", ".pdf", ".doc", ".docx", ".csv", ".json", ".md", ".xlsx", ".html"
 }
 
 # For controlling sort fields more securely
 ALLOWED_SORT_FIELDS = {"created_at", "filename", "file_size"}
+
+# Embedding model configuration
+DEFAULT_EMBEDDING_MODEL = getattr(config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+VECTOR_DB_STORAGE_PATH = getattr(config, "VECTOR_DB_STORAGE_PATH", "./data/vector_db")
+DEFAULT_CHUNK_SIZE = getattr(config, "DEFAULT_CHUNK_SIZE", 1000)
+DEFAULT_CHUNK_OVERLAP = getattr(config, "DEFAULT_CHUNK_OVERLAP", 200)
 
 def validate_file_extension(filename: str) -> bool:
     """Validates that a filename has an allowed extension."""
@@ -122,7 +130,15 @@ async def estimate_tokens_from_file(
 
     try:
         # Extract text content and metadata
-        text, extracted_meta = await text_extractor.extract_text(content, filename)
+        text_chunks, extracted_meta = await text_extractor.extract_text(
+            content, 
+            filename=filename,
+            chunk_size=DEFAULT_CHUNK_SIZE,
+            chunk_overlap=DEFAULT_CHUNK_OVERLAP
+        )
+        
+        # Join chunks for token calculation
+        text = " ".join(text_chunks) if text_chunks else ""
         metadata.update(extracted_meta)
 
         # Use tiktoken if available
@@ -191,7 +207,8 @@ async def upload_file_to_project(
     project_id: UUID,
     file: UploadFile,
     db: AsyncSession,
-    user_id: Optional[int] = None
+    user_id: Optional[int] = None,
+    process_for_search: bool = True
 ) -> ProjectFile:
     """
     Handles full file upload process:
@@ -200,6 +217,7 @@ async def upload_file_to_project(
     3. Extracts text and calculates tokens.
     4. Creates the database record.
     5. Updates project token usage.
+    6. Optionally processes for search.
     """
     from services.project_service import validate_project_access
     from models.user import User
@@ -260,11 +278,14 @@ async def upload_file_to_project(
 
     # 3. Extract text and tokens (skip for non-text files)
     file_ext = os.path.splitext(sanitized_filename)[1][1:].lower() if "." in sanitized_filename else ""
-    if file_ext in ["txt", "md", "json", "csv"]:
-        token_estimate, file_metadata = await estimate_tokens_from_file(contents, sanitized_filename)
-    else:
-        token_estimate = 0
-        file_metadata = {}
+    token_estimate = 0
+    file_metadata = {}
+    
+    # We want to extract text from all files if possible
+    token_estimate, file_metadata = await estimate_tokens_from_file(
+        contents if contents else file.file,
+        sanitized_filename
+    )
 
     # Check token limit
     if project.token_usage + token_estimate > project.max_tokens:
@@ -281,7 +302,6 @@ async def upload_file_to_project(
         "tokens": token_estimate,        # standard key for tokens
         "file_metadata": file_metadata   # store details from extraction
     }
-
 
     try:
         file_path = await storage.save_file(
@@ -317,6 +337,37 @@ async def upload_file_to_project(
 
     # Refresh to get final state
     await db.refresh(pf)
+
+    # Process for search if requested
+    if process_for_search:
+        # Initialize vector DB
+        vector_db = await get_vector_db(
+            model_name=project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL,
+            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+            load_existing=True
+        )
+        
+        # Process file for search
+        search_results = await process_file_for_search(
+            project_file=pf,
+            vector_db=vector_db,
+            file_content=contents or await file.read(),
+            chunk_size=DEFAULT_CHUNK_SIZE,
+            chunk_overlap=DEFAULT_CHUNK_OVERLAP
+        )
+        
+        # Update metadata with search processing results
+        if search_results:
+            metadata["search_processing"] = {
+                "success": search_results.get("success", False),
+                "chunk_count": search_results.get("chunk_count", 0),
+                "added_ids": search_results.get("added_ids", []),
+                "processed_at": str(datetime.now())
+            }
+            
+            # Update the file record with new metadata
+            pf.metadata = metadata
+            await db.commit()
 
     return pf
 
@@ -366,6 +417,7 @@ async def get_project_file(
     project_id: UUID,
     file_id: UUID,
     db: AsyncSession,
+    user_id: Optional[int] = None,
     include_content: bool = False
 ) -> Dict[str, Any]:
     """
@@ -375,11 +427,22 @@ async def get_project_file(
         project_id: Project UUID
         file_id: File UUID
         db: Database session
+        user_id: Optional user ID for permission checks
         include_content: Whether to include the file content
 
     Returns:
         Dictionary with file information and optional content
     """
+    from services.project_service import validate_project_access
+    from models.user import User
+    
+    # Validate user permission if provided
+    if user_id:
+        the_user = await db.get(User, user_id)
+        if not the_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        project = await validate_project_access(project_id, the_user, db)
+    
     query = select(ProjectFile).where(
         ProjectFile.id == file_id,
         ProjectFile.project_id == project_id
@@ -488,6 +551,20 @@ async def delete_project_file(
         logger.error(f"Error deleting file from storage: {str(e)}")
         file_deletion_status = "storage_deletion_failed"
 
+    # Try to remove from vector database
+    try:
+        vector_db = await get_vector_db(
+            model_name=project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL,
+            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+            load_existing=True
+        )
+        
+        # Delete all chunks for this file
+        await vector_db.delete_by_filter({"file_id": str(file_id)})
+    except Exception as e:
+        logger.error(f"Error removing file from vector database: {str(e)}")
+        # Continue with DB deletion even if vector DB fails
+
     # Remove DB record in a transaction
     try:
         async with db.begin():
@@ -559,3 +636,105 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
         "token_usage": project.token_usage if project else 0,
         "max_tokens": project.max_tokens if project else 0,
     }
+
+# Knowledge Base Management
+async def create_knowledge_base(
+    name: str,
+    description: Optional[str] = None,
+    embedding_model: Optional[str] = None,
+    db: AsyncSession = None
+) -> KnowledgeBase:
+    """
+    Create a new knowledge base.
+    
+    Args:
+        name: Name of the knowledge base
+        description: Optional description
+        embedding_model: Optional embedding model to use
+        db: Database session
+        
+    Returns:
+        New KnowledgeBase instance
+    """
+    knowledge_base = KnowledgeBase(
+        name=name,
+        description=description,
+        embedding_model=embedding_model or DEFAULT_EMBEDDING_MODEL,
+        is_active=True
+    )
+    
+    if db:
+        db.add(knowledge_base)
+        await db.commit()
+        await db.refresh(knowledge_base)
+    
+    return knowledge_base
+
+async def search_project_context(
+    project_id: UUID,
+    query: str,
+    db: AsyncSession,
+    top_k: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Search for project context based on a query.
+    
+    Args:
+        project_id: Project UUID
+        query: Search query
+        db: Database session
+        top_k: Number of results to return
+        
+    Returns:
+        List of relevant context pieces
+    """
+    # Get project
+    project_result = await db.execute(select(Project).where(Project.id == project_id))
+    project = project_result.scalars().first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get vector DB
+    vector_db = await get_vector_db(
+        model_name=project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL,
+        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+        load_existing=True
+    )
+    
+    # Search for context
+    from services.vector_db import search_context_for_query
+    results = await search_context_for_query(
+        query=query,
+        vector_db=vector_db,
+        project_id=str(project_id),
+        top_k=top_k
+    )
+    
+    # Enhance results with additional context
+    enhanced_results = []
+    for result in results:
+        # Get file metadata
+        file_id = result.get("metadata", {}).get("file_id")
+        if file_id:
+            try:
+                file_query = select(ProjectFile).where(ProjectFile.id == UUID(file_id))
+                file_result = await db.execute(file_query)
+                file = file_result.scalars().first()
+                
+                if file:
+                    result["file_info"] = {
+                        "filename": file.filename,
+                        "file_type": file.file_type,
+                        "file_size": file.file_size,
+                        "created_at": file.created_at
+                    }
+            except Exception as e:
+                logger.error(f"Error getting file info: {str(e)}")
+        
+        enhanced_results.append(result)
+    
+    return enhanced_results
+
+# Import datetime for metadata
+from datetime import datetime

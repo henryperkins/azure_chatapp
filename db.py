@@ -40,7 +40,7 @@ async def get_async_session():
 async def get_async_session_context():
     """
     Async context manager for getting a session outside of FastAPI dependencies.
-    
+
     Example:
         async with get_async_session_context() as session:
             # Use session here

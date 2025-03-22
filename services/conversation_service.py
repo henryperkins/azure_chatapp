@@ -22,12 +22,11 @@ async def validate_model(model_id: str):
     """Validate allowed models including Claude"""
     from config import settings
     
-    allowed_models = [
-        "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229",
-        "claude-2.1",
-        "claude-2.0"
-    ]
+    # Get allowed Claude models from config
+    allowed_models = settings.CLAUDE_MODELS
+    
+    # Add Azure OpenAI models
+    allowed_models.extend(["o1", "o3-mini", "gpt-4", "gpt-3.5-turbo"])
     
     if model_id not in allowed_models:
         raise HTTPException(

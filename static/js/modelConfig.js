@@ -143,11 +143,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeModelDropdown();
   
   // Load existing settings from localStorage (or defaults)
-  const storedModel = localStorage.getItem("modelName") || "claude-3-7-sonnet-20250219"; // Set Claude as default
+  const storedModel = localStorage.getItem("modelName") || "claude-3-sonnet-20240229"; // Set Claude as default
   const storedMaxTokens = localStorage.getItem("maxTokens") || "500";
   const storedApiVersion = localStorage.getItem("apiVersion") || "2023-05-01-preview";
   const storedReasoning = localStorage.getItem("reasoningEffort") || "";
   const storedVision = localStorage.getItem("visionEnabled") === "true";
+  const storedExtendedThinking = localStorage.getItem("extendedThinking") === "true";
+  const storedThinkingBudget = localStorage.getItem("thinkingBudget") || "16000";
   
   // Initialize UI
   if (modelSelect) modelSelect.value = storedModel;
@@ -171,6 +173,21 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Vision toggle remains the same
   if (visionToggle) visionToggle.checked = storedVision;
+  
+  // Set extended thinking toggle and budget
+  const extendedThinkingToggle = document.getElementById("extendedThinking");
+  const thinkingBudgetSelect = document.getElementById("thinkingBudget");
+  
+  if (extendedThinkingToggle) extendedThinkingToggle.checked = storedExtendedThinking;
+  if (thinkingBudgetSelect) thinkingBudgetSelect.value = storedThinkingBudget;
+  
+  // Show/hide the extended thinking panel based on model selection
+  const extendedThinkingPanel = document.getElementById("extendedThinkingPanel");
+  if (extendedThinkingPanel) {
+    const isCompatibleModel = storedModel === "claude-3-7-sonnet-20250219" || 
+                             storedModel === "claude-3-opus-20240229";
+    extendedThinkingPanel.classList.toggle("hidden", !isCompatibleModel);
+  }
 
   // Save changes to localStorage and (optionally) to a global object
   function persistSettings() {
@@ -222,6 +239,22 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("visionEnabled", String(visionToggle.checked));
       window.MODEL_CONFIG = window.MODEL_CONFIG || {};
       window.MODEL_CONFIG.visionEnabled = visionToggle.checked;
+    }
+    
+    // Extended thinking toggle
+    const extendedThinkingToggle = document.getElementById("extendedThinking");
+    if (extendedThinkingToggle) {
+      localStorage.setItem("extendedThinking", String(extendedThinkingToggle.checked));
+      window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+      window.MODEL_CONFIG.extendedThinking = extendedThinkingToggle.checked;
+    }
+    
+    // Thinking budget
+    const thinkingBudgetSelect = document.getElementById("thinkingBudget");
+    if (thinkingBudgetSelect) {
+      localStorage.setItem("thinkingBudget", thinkingBudgetSelect.value);
+      window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+      window.MODEL_CONFIG.thinkingBudget = Number(thinkingBudgetSelect.value);
     }
 
     updateModelConfigDisplay();
@@ -340,24 +373,39 @@ document.addEventListener("DOMContentLoaded", () => {
 function getModelOptions() {
   return [
     { 
+      id: 'claude-3-opus-20240229', 
+      name: 'Claude 3 Opus',
+      description: 'Most powerful Claude model for complex tasks'
+    },
+    { 
       id: 'claude-3-sonnet-20240229', 
       name: 'Claude 3 Sonnet',
-      description: 'Middleweight model - good balance of capability and speed'
+      description: 'Balanced model - good mix of capability and speed'
+    },
+    { 
+      id: 'claude-3-haiku-20240307', 
+      name: 'Claude 3 Haiku',
+      description: 'Fastest Claude model - great for simple tasks'
+    },
+    { 
+      id: 'claude-3-7-sonnet-20250219', 
+      name: 'Claude 3.7 Sonnet',
+      description: 'Latest Claude model with enhanced capabilities'
     },
     { 
       id: 'gpt-4', 
       name: 'GPT-4',
-      description: 'Most capable model - handles complex instructions'
+      description: 'Highly capable GPT model'
     },
     { 
       id: 'gpt-3.5-turbo', 
       name: 'GPT-3.5 Turbo',
-      description: 'Fastest model - good for simple queries'
+      description: 'Fast GPT model for simpler queries'
     },
     { 
       id: 'o1', 
       name: 'o1 (Vision)',
-      description: 'Image understanding capabilities'
+      description: 'Azure OpenAI model with image understanding'
     }
   ];
 }

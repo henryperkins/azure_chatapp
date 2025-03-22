@@ -213,16 +213,16 @@ document.addEventListener("DOMContentLoaded", () => {
       tokenRefreshTimeout = null;
     }
     
-    // Set up a new refresh interval - refresh every 25 minutes
-    // (assuming 30 minute token expiry - refresh 5 minutes before expiry)
+    // Set up a new refresh interval - refresh every 15 minutes
+    // (assuming 30 minute token expiry - refresh well before expiry)
     tokenRefreshInterval = setInterval(() => {
       refreshToken();
-    }, 25 * 60 * 1000); // 25 minutes
+    }, 15 * 60 * 1000); // 15 minutes
     
-    // Also set up a forced check after 2 minutes to ensure token is valid
+    // Also set up a forced check after 1 minute to ensure token is valid
     tokenRefreshTimeout = setTimeout(() => {
       checkAuthAndRefresh();
-    }, 2 * 60 * 1000); // 2 minutes
+    }, 60 * 1000); // 1 minute
     
     // Also refresh when the user becomes active after being idle
     document.addEventListener("visibilitychange", () => {

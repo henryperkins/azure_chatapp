@@ -52,9 +52,11 @@ class Settings:
 
     # Claude configuration
     CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-    CLAUDE_API_VERSION = "2023-12-15"  # Updated to latest stable version
-    CLAUDE_MODELS = ["claude-3-7-sonnet-20250219"]
+    CLAUDE_API_VERSION = "2023-06-01"  # Current stable version
+    CLAUDE_MODELS = ["claude-3-sonnet-20240229", "claude-3-haiku-20240307", "claude-3-opus-20240229", "claude-3-7-sonnet-20250219"]
     CLAUDE_BASE_URL = "https://api.anthropic.com/v1/messages"
+    CLAUDE_EXTENDED_THINKING_ENABLED = os.getenv("CLAUDE_EXTENDED_THINKING_ENABLED", "True").lower() == "true"
+    CLAUDE_EXTENDED_THINKING_BUDGET = int(os.getenv("CLAUDE_EXTENDED_THINKING_BUDGET", "16000"))
 
 
 settings = Settings()

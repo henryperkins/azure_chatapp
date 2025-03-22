@@ -2,57 +2,41 @@
  * chat.js
  * ------------------------
  * Production-ready chat functionality for the Azure Chat Application.
- * - Displays conversation messages, sends new user messages.
- * - Optionally uses WebSocket for real-time chat updates.
- * - Handles assistant responses from the backend if triggered.
- * - Integrates user JWT for authentication in all fetch calls.
+ * - Single initialization method: initializeChat()
+ * - Loading/sending messages
+ * - Optional WebSocket integration
+ * - Manages assistant responses, custom model selection, and vision images
  */
 
+console.log("chat.js loaded"); // Add this line
+
 // ---------------------------------------------------------------------
-// New (Global) loadConversation function and its helpers
+// HELPER & UTILITY-LIKE FUNCTIONS
 // ---------------------------------------------------------------------
 
-/**
- * Loads an existing conversation, clears the UI, and fetches messages.
- * Updates the chat title from metadata if present.
- */
 function loadConversation(chatId) {
-  // Validate chat ID
   if (!chatId || !isValidUUID(chatId)) {
-    if (window.showNotification) {
-      window.showNotification('Invalid conversation ID', 'error');
-    }
+    window.showNotification?.('Invalid conversation ID', 'error');
     return;
   }
 
-  // Clear previous messages
   const conversationArea = document.getElementById("conversationArea");
   if (conversationArea) conversationArea.innerHTML = "";
 
-  // Update the global chat ID
   window.CHAT_CONFIG = { chatId };
-
-  function isValidUUID(str) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-  }
 
   // Show loading state
   conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
 
-  // Use the apiRequest utility function with the right endpoint path
   const projectId = localStorage.getItem("selectedProjectId");
-  let apiEndpoint;
-  
-  if (projectId) {
-      apiEndpoint = `/api/projects/${projectId}/conversations/${chatId}/messages`;
-  } else {
-      apiEndpoint = `/api/chat/conversations/${chatId}/messages`;
-  }
-  
+  let apiEndpoint = projectId
+    ? `/api/projects/${projectId}/conversations/${chatId}/messages`
+    : `/api/chat/conversations/${chatId}/messages`;
+
   window.apiRequest(apiEndpoint)
     .then((data) => {
       conversationArea.innerHTML = "";
-      if (data.data && data.data.messages && data.data.messages.length > 0) {
+      if (data.data?.messages?.length > 0) {
         data.data.messages.forEach((msg) => {
           appendMessage(msg.role, msg.content);
         });
@@ -62,47 +46,99 @@ function loadConversation(chatId) {
 
       // Update chat title if metadata is present
       const chatTitleEl = document.getElementById("chatTitle");
-      if (chatTitleEl && data.data && data.data.metadata) {
+      if (chatTitleEl && data.data?.metadata) {
         chatTitleEl.textContent = data.data.metadata?.title || "New Chat";
       }
     })
     .catch((err) => {
+      if (err.message === 'Resource not found') {
+        console.warn("Conversation not found:", chatId);
+        window.showNotification?.("This conversation could not be found or is inaccessible. Try creating a new one.", "error");
+        conversationArea.innerHTML = '<div class="text-center text-gray-500">Conversation not found.</div>';
+        return;
+      }
+    
       console.error("Error loading conversation:", err);
       conversationArea.innerHTML = '<div class="text-center text-red-500">Error loading conversation</div>';
-      
-      // Use the standard notification system
-      if (window.showNotification) {
-        window.showNotification("Error loading conversation", "error");
-      }
+      window.showNotification?.("Error loading conversation", "error");
     });
 }
 
-function appendMessage(role, content) {
- const conversationArea = document.getElementById("conversationArea");
- if(!conversationArea) return;
+function isValidUUID(str) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
 
- // Optional: If content includes '[Conversation summarized]', show an indicator
- if (content.includes('[Conversation summarized]') && typeof window.showSummaryIndicator === 'function') {
-   const summaryEl = document.createElement('div');
-   summaryEl.innerHTML = window.showSummaryIndicator();
-   conversationArea.appendChild(summaryEl);
- }
+function appendMessage(role, content, thinking = null, redacted_thinking = null) {
+  const conversationArea = document.getElementById("conversationArea");
+  if (!conversationArea) return;
 
- // Use createDomElement utility function
- const msgDiv = window.createDomElement("div", {
-   className: `mb-2 p-2 rounded ${getMessageClass(role)}`
- });
+  // If content includes '[Conversation summarized]', show an indicator
+  if (content.includes('[Conversation summarized]') && typeof window.showSummaryIndicator === 'function') {
+    const summaryEl = document.createElement('div');
+    summaryEl.innerHTML = window.showSummaryIndicator();
+    conversationArea.appendChild(summaryEl);
+  }
 
- // Safely format text (if window.formatText is defined)
- const safeContent = typeof window.formatText === 'function'
-   ? window.formatText(content)
-   : content;
- msgDiv.innerHTML = safeContent;
- conversationArea.appendChild(msgDiv);
- conversationArea.scrollTop = conversationArea.scrollHeight;
+  // Create message div
+  const msgDiv = window.createDomElement("div", {
+    className: `mb-2 p-2 rounded ${getMessageClass(role)}`
+  });
+
+  const safeContent = typeof window.formatText === 'function'
+    ? window.formatText(content)
+    : content;
+
+  msgDiv.innerHTML = safeContent;
+  
+  // Add thinking blocks if available (for assistant messages)
+  if (role === 'assistant' && (thinking || redacted_thinking)) {
+    // Create a collapsible thinking section
+    const thinkingContainer = document.createElement('div');
+    thinkingContainer.className = 'mt-3 border-t border-gray-200 pt-2';
+    
+    // Create a toggle button
+    const toggleButton = document.createElement('button');
+    toggleButton.className = 'text-gray-600 text-xs flex items-center mb-1';
+    toggleButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 thinking-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+      </svg>
+      Show thinking process
+    `;
+    
+    // Create the content area (hidden by default)
+    const thinkingContent = document.createElement('div');
+    thinkingContent.className = 'bg-gray-50 p-2 rounded text-gray-800 text-sm hidden thinking-content';
+    
+    if (thinking) {
+      thinkingContent.innerHTML = window.formatText ? window.formatText(thinking) : thinking;
+    } else if (redacted_thinking) {
+      thinkingContent.innerHTML = '<em>Claude\'s full reasoning is available but has been automatically encrypted for safety reasons.</em>';
+    }
+    
+    // Add toggle functionality
+    toggleButton.addEventListener('click', () => {
+      thinkingContent.classList.toggle('hidden');
+      const chevron = toggleButton.querySelector('.thinking-chevron');
+      if (thinkingContent.classList.contains('hidden')) {
+        toggleButton.innerHTML = toggleButton.innerHTML.replace('Hide', 'Show');
+        chevron.style.transform = '';
+      } else {
+        toggleButton.innerHTML = toggleButton.innerHTML.replace('Show', 'Hide');
+        chevron.style.transform = 'rotate(180deg)';
+      }
+    });
+    
+    thinkingContainer.appendChild(toggleButton);
+    thinkingContainer.appendChild(thinkingContent);
+    msgDiv.appendChild(thinkingContainer);
+  }
+  
+  conversationArea.appendChild(msgDiv);
+  conversationArea.scrollTop = conversationArea.scrollHeight;
   return msgDiv;
 }
- 
+
 function getMessageClass(role) {
   switch (role) {
     case "user":
@@ -116,6 +152,9 @@ function getMessageClass(role) {
   }
 }
 
+// ---------------------------------------------------------------------
+// MODEL SELECTION
+// ---------------------------------------------------------------------
 function handleModelSelection() {
   const modelSelect = document.getElementById("modelSelect");
   if (!modelSelect) return;
@@ -123,391 +162,436 @@ function handleModelSelection() {
   modelSelect.addEventListener("change", async function() {
     const selectedModel = this.value;
     const currentChatId = window.CHAT_CONFIG?.chatId;
-    
     if (!currentChatId) {
-      window.showNotification("Please start a conversation first", "error");
+      window.showNotification?.("Please start a conversation first", "error");
       return;
     }
 
     try {
       const projectId = localStorage.getItem("selectedProjectId");
-      let endpoint;
-      
-      if (projectId) {
-        endpoint = `/api/projects/${projectId}/conversations/${currentChatId}/model`;
-      } else {
-        endpoint = `/api/chat/conversations/${currentChatId}/model`;
-      }
-      
-      await window.apiRequest(
-        endpoint,
-        "PATCH",
-        { model_id: selectedModel }
-      );
-      
-      window.showNotification(`Switched to ${this.options[this.selectedIndex].text}`, "success");
+      let endpoint = projectId
+        ? `/api/projects/${projectId}/conversations/${currentChatId}/model`
+        : `/api/chat/conversations/${currentChatId}/model`;
+
+      await window.apiRequest(endpoint, "PATCH", { model_id: selectedModel });
+      window.showNotification?.(`Switched to ${this.options[this.selectedIndex].text}`, "success");
     } catch (error) {
       console.error("Model change error:", error);
-      window.showNotification("Failed to change model", "error");
+      window.showNotification?.("Failed to change model", "error");
     }
   });
 }
 
-// Expose loadConversation globally
-window.loadConversation = loadConversation;
-
 // ---------------------------------------------------------------------
-// Main DOMContentLoaded Logic
+// WEBSOCKET LOGIC
 // ---------------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  // Initialize model selection handler
-  handleModelSelection();
+let socket = null;
+let wsUrl = null;
+let wsReconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-  // Basic UI references
-  const noChatSelectedMessage = document.getElementById("noChatSelectedMessage");
-  const conversationArea = document.getElementById("conversationArea");
-  const chatInput = document.getElementById("chatInput");
-  const sendBtn = document.getElementById("sendBtn");
-  const chatTitleEl = document.getElementById("chatTitle");
-  const chatTitleEditBtn = document.getElementById("chatTitleEditBtn");
-  
-  // Auto-create a new chat on page load if no chat ID is present
-  setTimeout(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
-    if (!chatId) {
-      console.log("No chat ID found, auto-creating new chat");
-      window.createNewChat();
+async function setupWebSocket() {
+  const chatId = window.CHAT_CONFIG?.chatId;
+  if (!chatId) return;
+
+  try {
+    // Verify auth
+    const authResponse = await fetch('/api/auth/verify', { credentials: 'include' });
+    if (!authResponse.ok) {
+      console.warn('Authentication check failed for WebSocket');
+      return;
     }
-  }, 100);
-  
-  // Retrieve the chat ID and check if we're embedded
-  const urlParams = new URLSearchParams(window.location.search);
-  const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId') || "";
-  const isEmbedded = urlParams.get('embedded') === 'true';
-  
-  // If embedded, adjust UI to fit in iframe
-  if (isEmbedded) {
-    // Hide header, sidebar, and other elements not needed in embedded view
-    const header = document.querySelector('header');
-    const sidebar = document.getElementById('mainSidebar');
-    const projectNavigationSection = document.querySelector('section.bg-white:not(#chatUI)');
-    
-    if (header) header.style.display = 'none';
-    if (sidebar) sidebar.style.display = 'none';
-    if (projectNavigationSection) projectNavigationSection.style.display = 'none';
-    
-    // Make sure chat UI is immediately visible
-    const chatUI = document.getElementById('chatUI');
-    if (chatUI) {
-      chatUI.classList.remove('hidden');
-      chatUI.classList.add('mt-0');
-      // Increase the height of the conversation area for better use of space
-      if (conversationArea) {
-        conversationArea.classList.remove('h-64');
-        conversationArea.classList.add('h-96');
-      }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const host = window.location.hostname;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    const projectId = localStorage.getItem("selectedProjectId");
+
+    // Verify conversation
+    const checkEndpoint = projectId
+      ? `/api/projects/${projectId}/conversations/${chatId}`
+      : `/api/chat/conversations/${chatId}`;
+
+    const response = await fetch(`${window.location.origin}${checkEndpoint}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      console.warn(`Conversation ${chatId} not accessible:`, response.status);
+      return;
     }
-    
-    // Hide the "no chat selected" message
-    if (noChatSelectedMessage) {
-      noChatSelectedMessage.classList.add('hidden');
-    }
+
+    // Build final wsUrl
+    wsUrl = projectId
+      ? `${protocol}${host}${port}/api/projects/${projectId}/conversations/${chatId}/ws`
+      : `${protocol}${host}${port}/api/chat/conversations/${chatId}/ws`;
+
+    console.log('Setting up WebSocket connection to:', wsUrl);
+    initializeWebSocket();
+  } catch (error) {
+    console.error('Error checking conversation access:', error);
   }
-  
-  // File upload references
-  const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
-  const chatImageInput = document.getElementById("chatImageInput");
-  const chatImagePreview = document.getElementById("chatImagePreview");
-  const chatPreviewImg = document.getElementById("chatPreviewImg");
-  const chatImageName = document.getElementById("chatImageName");
-  const chatImageStatus = document.getElementById("chatImageStatus");
-  const chatRemoveImageBtn = document.getElementById("chatRemoveImageBtn");
+}
 
-  // WebSocket URL (only if chatId is defined)
-  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-  // Determine if this is a project-specific or standalone chat
-  const selectedProjectId = localStorage.getItem("selectedProjectId");
-  // Get JWT token from cookies
-  const cookie = document.cookie
+function initializeWebSocket() {
+  if (!wsUrl) {
+    console.warn("No WebSocket URL available");
+    return;
+  }
+
+  if (wsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.error("Max WebSocket reconnection attempts reached");
+    window.showNotification?.("Unable to establish real-time connection.", "warning");
+    return;
+  }
+
+  // Get auth token
+  const authToken = document.cookie
     .split('; ')
     .find(row => row.startsWith('access_token='))
     ?.split('=')[1];
-    
-  /* Temporarily disable strict cookie check to avoid blocking chat usage */
-  //
-  // if (!cookie) {
-  //   window.showNotification?.("Please login first", "error");
-  //   return;
-  // }
-  //
 
-  let wsUrl = null;
-  if (chatId) {
-    const projectId = localStorage.getItem("selectedProjectId");
-    wsUrl = projectId ? 
-      `${protocol}${window.location.host}/api/projects/${projectId}/conversations/${chatId}/ws` : 
-      `${protocol}${window.location.host}/api/chat/conversations/${chatId}/ws`;
-  }
-  let socket = null;
-
-  // Toggle display of "no chat selected" message
-  if (noChatSelectedMessage) {
-    noChatSelectedMessage.classList.toggle("hidden", chatId !== "");
+  if (!authToken) {
+    console.warn("No auth token for WebSocket");
+    window.showNotification?.("Please log in to enable real-time updates", "warning");
+    return;
   }
 
-  // Initialize the conversation and WebSocket if a chatId exists
-  if (chatId) {
-    loadConversation(chatId);
-    if (wsUrl) {
-      initializeWebSocket();
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // WebSocket Initialization
-  // ---------------------------------------------------------------------
-  function initializeWebSocket() {
-    if (!wsUrl) return;
-    
-    // If you store an auth token in a cookie, retrieve it here
-    const cookie = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('access_token='))
-      ?.split('=')[1];
-      
-    // if (!cookie) {
-    //   window.showNotification?.("Please login first", "error");
-    //   return;
-    // }
-
+  try {
+    console.log("Initializing WebSocket:", wsUrl);
     socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
-      console.log("WebSocket connected.");
-      const cookies = document.cookie;
-      socket.send(JSON.stringify({ type: 'auth', cookies }));
+      console.log("WebSocket connected");
+      wsReconnectAttempts = 0;
+
+      socket.send(JSON.stringify({
+        type: 'auth',
+        token: authToken,
+        chatId: window.CHAT_CONFIG?.chatId,
+        projectId: localStorage.getItem("selectedProjectId")
+      }));
+
+      setTimeout(() => {
+        try {
+          socket.send(JSON.stringify({ type: 'ping' }));
+        } catch (error) {
+          console.warn('Connection verification failed:', error);
+        }
+      }, 1000);
     };
 
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        if (data.type === 'error') {
+          console.error("WebSocket server error:", data.message);
+          window.showNotification?.(data.message, "error");
+          return;
+        }
         if (data.role && data.content) {
-          appendMessage(data.role, data.content);
+          appendMessage(data.role, data.content, data.thinking, data.redacted_thinking);
         }
       } catch (error) {
         console.error("WebSocket message parse error:", error);
       }
     };
 
-    socket.onclose = () => {
-      console.warn("WebSocket closed. Reconnecting...");
-      setTimeout(() => initializeWebSocket(), 1000);
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      if (wsReconnectAttempts === 0) {
+        window.showNotification?.("Connection error occurred. Retrying...", "error");
+      }
+
+      // Try refresh
+      fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+        .catch(err => console.error('Auth refresh failed:', err));
     };
+
+    socket.onclose = async (event) => {
+      console.warn("WebSocket closed. Code:", event.code, "Reason:", event.reason);
+
+      switch (event.code) {
+        case 1000:
+          console.log("WebSocket closed normally");
+          break;
+        case 1001:
+          console.log("Page is being unloaded");
+          break;
+        case 1006:
+          console.warn("Connection closed abnormally");
+          break;
+        case 1008:
+          console.error("Authentication failure on WebSocket");
+          try {
+            await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+          } catch (error) {
+            console.error("Failed to refresh auth:", error);
+            window.showNotification?.("Authentication failed. Please log in again.", "error");
+            return;
+          }
+          break;
+        default:
+          console.warn(`WebSocket closed with code ${event.code}`);
+      }
+
+      if (event.code === 1008) {
+        try {
+          await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+        } catch (error) {
+          console.error("Failed to refresh auth:", error);
+          return;
+        }
+      }
+
+      // Exponential backoff for reconnection
+      const backoffDelay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 10000);
+      wsReconnectAttempts++;
+      console.log(`Reconnecting in ${backoffDelay/1000}s... (Attempt ${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+      setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          setupWebSocket();
+        }
+      }, backoffDelay);
+    };
+
+  } catch (error) {
+    console.error("Error initializing WebSocket:", error);
+    window.showNotification?.("Failed to initialize connection. Will retry...", "error");
+    const backoffDelay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 10000);
+    wsReconnectAttempts++;
+    setTimeout(() => setupWebSocket(), backoffDelay);
+  }
+}
+
+// ---------------------------------------------------------------------
+// MESSAGE SENDING
+// ---------------------------------------------------------------------
+function sendMessage(chatId, userMsg) {
+  console.log("Sending message to chatId=", chatId, "message=", userMsg);
+  if (!chatId) {
+    window.showNotification?.("Please start a new conversation first.", "error");
+    return;
   }
 
-  // ---------------------------------------------------------------------
-  // Send Messages
-  // ---------------------------------------------------------------------
-  function sendMessage(chatId, userMsg) {
-    console.log("Sending message to chatId=", chatId, "with message=", userMsg);
+  // Immediately display user message
+  appendMessage("user", userMsg);
+  const chatInput = document.getElementById("chatInput");
+  if (chatInput) chatInput.value = "";
+
+  // Thinking placeholder
+  const thinkingIndicator = appendMessage("assistant", "<em>Thinking...</em>");
+  thinkingIndicator.setAttribute("id", "thinkingIndicator");
+
+  const visionImage = window.MODEL_CONFIG?.visionImage;
+  const modelName = localStorage.getItem("modelName") || "o3-mini";
+
+  const payload = {
+    role: "user",
+    content: userMsg,
+    model_id: modelName,
+    image_data: visionImage || null,
+    vision_detail: window.MODEL_CONFIG?.visionDetail || "auto",
+    max_completion_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
+    max_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
+    reasoning_effort: window.MODEL_CONFIG?.reasoningEffort || "low"
+  };
+
+  // Clear vision data
+  if (visionImage) {
+    window.MODEL_CONFIG.visionImage = null;
+    const visionFileInput = document.getElementById('visionFileInput');
+    if (visionFileInput) visionFileInput.value = '';
+    const chatImageInput = document.getElementById('chatImageInput');
+    if (visionStatus) visionStatus.textContent = '';
+    const chatImagePreview = document.getElementById('chatImagePreview');
+    if (chatImagePreview) chatImagePreview.classList.add('hidden');
+    const visionPreview = document.getElementById('visionPreview');
+    if (visionPreview) visionPreview.innerHTML = '';
+  }
+
+  // Try sending via WebSocket
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(payload));
+  } else {
+    // Fallback to HTTP
+    const projectId = localStorage.getItem("selectedProjectId");
+    let apiEndpoint = projectId
+      ? `/api/projects/${projectId}/conversations/${chatId}/messages`
+      : `/api/chat/conversations/${chatId}/messages`;
+
+    window.apiRequest(apiEndpoint, "POST", payload)
+      .then(respData => {
+        console.log("sendMessage response body:", respData);
+        const indicator = document.getElementById("thinkingIndicator");
+        if (indicator) {
+          indicator.remove();
+        }
+        if (respData.data?.assistant_message) {
+          // Check for thinking blocks in the metadata
+          const metadata = respData.data.assistant_message.metadata || {};
+          const thinking = metadata.thinking;
+          const redactedThinking = metadata.redacted_thinking;
+          
+          appendMessage(
+            respData.data.assistant_message.role, 
+            respData.data.assistant_message.content,
+            thinking,
+            redactedThinking
+          );
+        }
+        if (respData.data?.assistant_error) {
+          console.error("Assistant error:", respData.data.assistant_error);
+          window.showNotification?.("Error generating response", "error");
+        }
+      })
+      .catch((err) => {
+        console.error("Error sending message via fetch:", err);
+        const indicator = document.getElementById("thinkingIndicator");
+        if (indicator) {
+          indicator.remove();
+        }
+        window.showNotification?.("Error sending message", "error");
+      });
+  }
+
+  // Enhanced visual indicator in user message if image attached
+  if (visionImage) {
+    const conversationArea = document.getElementById("conversationArea");
+    const msgDivs = conversationArea?.querySelectorAll("div.bg-blue-50");
+    const lastUserDiv = msgDivs?.[msgDivs.length - 1];
+    if (lastUserDiv) {
+      const imgContainer = window.createDomElement("div", {
+        className: "flex items-center bg-gray-50 rounded p-1 mt-2"
+      });
+
+      const imgElement = document.createElement("img");
+      imgElement.className = "h-10 w-10 object-cover rounded mr-2";
+      imgElement.src = document.getElementById('chatPreviewImg')?.src || visionImage;
+      imgElement.alt = "Attached Image";
+      imgContainer.appendChild(imgElement);
+
+      const imgLabel = window.createDomElement("div", {
+        className: "text-xs text-gray-500"
+      }, "📷 Image attached");
+      imgContainer.appendChild(imgLabel);
+
+      lastUserDiv.appendChild(imgContainer);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// IMAGE UPLOAD
+// ---------------------------------------------------------------------
+async function convertToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+// ---------------------------------------------------------------------
+// INITIALIZE CHAT (CALLED FROM app.js)
+// ---------------------------------------------------------------------
+function initializeChat() {
+  console.error("initializeChat called"); // Add this line
+  // 1. Model selection handler
+  handleModelSelection();
+
+  // 2. Configure WebSocket if needed
+  setupWebSocket();
+
+  // 3. UI references
+  const chatInput = document.getElementById("chatInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const chatImageInput = document.getElementById("chatImageInput");
+  const chatImagePreview = document.getElementById("chatImagePreview");
+  const chatPreviewImg = document.getElementById("chatPreviewImg");
+  const chatImageName = document.getElementById("chatImageName");
+  const chatImageStatus = document.getElementById("chatImageStatus");
+  const chatRemoveImageBtn = document.getElementById("chatRemoveImageBtn");
+  const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
+
+  // 4. Auto-create a new chat if no chatId is present
+  setTimeout(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
     if (!chatId) {
-      console.error("Cannot send message: No active conversation");
-      if (window.showNotification) {
-        window.showNotification("Please start a new conversation first.", "error");
-      }
-      return;
+      console.log("No chat ID found, auto-creating new chat");
+      window.createNewChat?.();
     }
+  }, 100);
 
-    // Immediately display user message
-    appendMessage("user", userMsg);
-    chatInput.value = "";
-
-    // Show a "thinking" placeholder to give immediate feedback
-    const thinkingIndicator = appendMessage("assistant", "<em>Thinking...</em>");
-    thinkingIndicator.setAttribute("id", "thinkingIndicator");
-
-    // Prepare optional vision data from MODEL_CONFIG
-    const visionImage = window.MODEL_CONFIG?.visionImage;
-    const modelName = localStorage.getItem("modelName") || "o3-mini";
-    const payload = {
-      role: "user",
-      content: userMsg,
-      model_id: modelName,
-      image_data: visionImage || null,
-      vision_detail: window.MODEL_CONFIG?.visionDetail || "auto",
-      max_completion_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
-      // Ensure max_tokens is included in the payload
-      max_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
-      reasoning_effort: window.MODEL_CONFIG?.reasoningEffort || "low"
-    };
-
-    // Show some detail text if an image is attached
-    if (visionImage) {
-      const detailText = `Detail: ${window.MODEL_CONFIG?.visionDetail || "auto"}`;
-      const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
-      const lastUserDiv = msgDivs[msgDivs.length - 1];
-      if (lastUserDiv) {
-        const detailEl = window.createDomElement("div", {
-          className: "text-xs text-gray-500 mt-1"
-        }, detailText);
-        lastUserDiv.appendChild(detailEl);
-      }
-    }
-
-    // Clear vision data after sending
-    if (visionImage) {
-      window.MODEL_CONFIG.visionImage = null;
-      
-      // Clear both the old visionFileInput and the new chatImageInput
-      const visionFileInput = document.getElementById('visionFileInput');
-      if (visionFileInput) visionFileInput.value = '';
-      
-      const chatImageInput = document.getElementById('chatImageInput');
-      if (chatImageInput) chatImageInput.value = '';
-      
-      // Clear vision status indicators for both interfaces
-      const visionStatus = document.getElementById('visionStatus');
-      if (visionStatus) visionStatus.textContent = '';
-      
-      const chatImagePreview = document.getElementById('chatImagePreview');
-      if (chatImagePreview) chatImagePreview.classList.add('hidden');
-      
-      // Clear the vision preview
-      const visionPreview = document.getElementById('visionPreview');
-      if (visionPreview) visionPreview.innerHTML = '';
-    }
-
-    // If WebSocket is connected, send via socket
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(payload));
-    } else {
-      // Fallback to a standard POST fetch using apiRequest
-      const projectId = localStorage.getItem("selectedProjectId");
-      let apiEndpoint;
-      
-      if (projectId) {
-        apiEndpoint = `/api/projects/${projectId}/conversations/${chatId}/messages`;
+  // 5. Setup event listeners
+  if (sendBtn) {
+    sendBtn.addEventListener("click", () => {
+      console.log("Send button clicked"); // Add logging
+      const userMsg = chatInput?.value.trim();
+      const chatId = window.CHAT_CONFIG?.chatId;
+      console.log("chatId:", chatId, "userMsg:", userMsg); // Add logging
+      if (userMsg && chatId) {
+        sendMessage(chatId, userMsg);
+        chatImagePreview?.classList.add("hidden");
+      } else if (!userMsg && window.MODEL_CONFIG?.visionImage && chatId) {
+        // Send just the image
+        sendMessage(chatId, "Analyze this image");
+        chatImagePreview?.classList.add("hidden");
       } else {
-        apiEndpoint = `/api/chat/conversations/${chatId}/messages`;
+        window.showNotification?.("Please start a new conversation first.", "error");
       }
-      
-      window.apiRequest(apiEndpoint, "POST", payload)
-        .then(respData => {
-            console.log("sendMessage response body:", respData);
-            const indicator = document.getElementById("thinkingIndicator");
-            if (indicator) {
-                indicator.remove();
-            }
-            if (respData.data && respData.data.assistant_message) {
-                appendMessage(respData.data.assistant_message.role, respData.data.assistant_message.content);
-            }
-            if (respData.data && respData.data.assistant_error) {
-                console.error("Assistant error:", respData.data.assistant_error);
-                
-                // Use the standard notification system
-                if (window.showNotification) {
-                    window.showNotification("Error generating response", "error");
-                }
-            }
-        })
-        .catch((err) => {
-            console.error("Error sending message via fetch:", err);
-            const indicator = document.getElementById("thinkingIndicator");
-            if (indicator) {
-                indicator.remove();
-            }
-            
-            // Use the standard notification system
-            if (window.showNotification) {
-                window.showNotification("Error sending message", "error");
-            }
-        });
-    }
-
-    // Enhanced visual indicator in the user's message if there was an image
-    if (visionImage) {
-      const msgDivs = conversationArea.querySelectorAll("div.bg-blue-50");
-      const lastUserDiv = msgDivs[msgDivs.length - 1];
-      if (lastUserDiv) {
-        // Create an image thumbnail if possible by cloning the chat preview image
-        const imgContainer = window.createDomElement("div", {
-          className: "flex items-center bg-gray-50 rounded p-1 mt-2"
-        });
-        
-        // Add the image thumbnail
-        const imgElement = document.createElement("img");
-        imgElement.className = "h-10 w-10 object-cover rounded mr-2";
-        imgElement.src = document.getElementById('chatPreviewImg')?.src || visionImage;
-        imgElement.alt = "Attached Image";
-        imgContainer.appendChild(imgElement);
-        
-        // Add a label
-        const imgLabel = window.createDomElement("div", {
-          className: "text-xs text-gray-500"
-        }, "📷 Image attached");
-        imgContainer.appendChild(imgLabel);
-        
-        lastUserDiv.appendChild(imgContainer);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // Image Upload Functionality
-  // ---------------------------------------------------------------------
-  
-  // Function to convert an image file to base64
-  async function convertToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
     });
   }
-  
-  // Handle clicking the attach image button
+
+  if (chatInput) {
+    chatInput.addEventListener("keyup", (e) => {
+      if (e.key === "Enter") {
+        const userMsg = chatInput.value.trim();
+        const chatId = window.CHAT_CONFIG?.chatId;
+        if (userMsg && chatId) {
+          sendMessage(chatId, userMsg);
+          chatImagePreview?.classList.add("hidden");
+        } else {
+          window.showNotification?.("Please start a new conversation first.", "error");
+        }
+      }
+    });
+  }
+
+  // Image upload handling
   if (chatAttachImageBtn) {
     chatAttachImageBtn.addEventListener("click", () => {
-      // Check if this is a vision-capable model
       const modelName = localStorage.getItem("modelName") || "o3-mini";
       if (modelName !== "o1") {
-        window.showNotification?.("Vision features only work with the o1 model. Please change your model in the settings.", "warning");
+        window.showNotification?.("Vision features only work with the o1 model.", "warning");
         return;
       }
-      chatImageInput.click();
+      chatImageInput?.click();
     });
   }
-  
-  // Handle file selection
+
   if (chatImageInput) {
     chatImageInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
-      // Validate file type
       if (!['image/jpeg', 'image/png'].includes(file.type)) {
         window.showNotification?.("Only JPEG and PNG images are supported", "error");
         chatImageInput.value = '';
         return;
       }
-      
-      // Validate file size (5MB max)
       if (file.size > 5 * 1024 * 1024) {
         window.showNotification?.("Image must be smaller than 5MB", "error");
         chatImageInput.value = '';
         return;
       }
-      
       try {
-        // Show preview
         chatPreviewImg.src = URL.createObjectURL(file);
         chatImageName.textContent = file.name;
         chatImageStatus.textContent = "Ready to send";
         chatImagePreview.classList.remove("hidden");
-        
-        // Convert to base64 and store in MODEL_CONFIG
+
         const base64 = await convertToBase64(file);
         window.MODEL_CONFIG = window.MODEL_CONFIG || {};
         window.MODEL_CONFIG.visionImage = base64;
@@ -519,240 +603,92 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-  
-  // Handle removing the image
+
   if (chatRemoveImageBtn) {
     chatRemoveImageBtn.addEventListener("click", () => {
-      chatImageInput.value = '';
-      chatImagePreview.classList.add("hidden");
-      if (window.MODEL_CONFIG) {
-        window.MODEL_CONFIG.visionImage = null;
-      }
+      if (chatImageInput) chatImageInput.value = '';
+      if (chatImagePreview) chatImagePreview.classList.add("hidden");
+      if (window.MODEL_CONFIG) window.MODEL_CONFIG.visionImage = null;
     });
   }
 
-  // ---------------------------------------------------------------------
-  // Event Listeners for Sending Messages
-  // ---------------------------------------------------------------------
-  if (sendBtn) {
-    sendBtn.addEventListener("click", () => {
-      const userMsg = chatInput.value.trim();
-      if (userMsg) {
-        if (chatId) {
-          sendMessage(chatId, userMsg);
-          // Hide the image preview after sending
-          chatImagePreview.classList.add("hidden");
-        } else {
-          if (window.showNotification) {
-            window.showNotification("Please start a new conversation first.", "error");
-          } else {
-            console.error("Please start a new conversation first.");
-          }
-        }
-      } else if (window.MODEL_CONFIG?.visionImage) {
-        // Allow sending just an image with no text
-        sendMessage(chatId, "Analyze this image");
-        chatImagePreview.classList.add("hidden");
-      }
-    });
+  // If there's an existing chatId, load conversation immediately
+  const urlParams = new URLSearchParams(window.location.search);
+  const existingChatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
+  if (existingChatId) {
+    loadConversation(existingChatId);
   }
+}
 
-  if (chatInput) {
-    chatInput.addEventListener("keyup", (e) => {
-      if (e.key === "Enter") {
-        const userMsg = chatInput.value.trim();
-        if (userMsg) {
-          if (chatId) {
-            sendMessage(chatId, userMsg);
-            // Hide the image preview after sending
-            chatImagePreview.classList.add("hidden");
-          } else {
-            if (window.showNotification) {
-              window.showNotification("Please start a new conversation first.", "error");
-            } else {
-              console.error("Please start a new conversation first.");
-            }
-          }
-        }
-      }
-    });
-  }
-
-  // ---------------------------------------------------------------------
-  // Chat Title Editing
-  // ---------------------------------------------------------------------
-  if (chatTitleEditBtn) {
-    chatTitleEditBtn.addEventListener("click", editChatTitle);
-  }
-
-  function editChatTitle() {
-    if (!chatId || !chatTitleEl) return;
-    const newTitle = prompt("Enter a new chat title:", chatTitleEl.textContent.trim());
-    if (!newTitle) return;
-
-    // Use apiRequest utility with the correct endpoint
-    const projectId = localStorage.getItem("selectedProjectId");
-    let apiEndpoint;
-    
-    if (projectId) {
-      apiEndpoint = `/api/projects/${projectId}/conversations/${chatId}`;
-    } else {
-      apiEndpoint = `/api/chat/conversations/${chatId}`;
-    }
-    
-    window.apiRequest(apiEndpoint, "PATCH", { title: newTitle })
-      .then((data) => {
-        chatTitleEl.textContent = data.data?.title || newTitle;
-        
-        // Show notification
-        if (window.showNotification) {
-          window.showNotification("Chat title updated", "success");
-        }
-      })
-      .catch((err) => {
-        console.error("Error updating chat title:", err);
-        
-        // Show error notification
-        if (window.showNotification) {
-          window.showNotification("Error updating chat title", "error");
-        }
-      });
-  }
-
-  // ---------------------------------------------------------------------
-  // Create New Chat
-  // ---------------------------------------------------------------------
-  const newChatBtn = document.getElementById("newChatBtn");
-  if (newChatBtn) {
-    // Define the function first
-    window.createNewChat = async function() {
-      try {
-        // Get the selected project ID if available
-        const selectedProjectId = localStorage.getItem("selectedProjectId");
-        let projectId = selectedProjectId;
-        
-        // Create payload for the API request with default Claude model
-        const payload = {
-          title: "New Chat",
-          model_id: "claude-3-7-sonnet-20250219"
-        };
-
-        // Create conversation through API
-        let url;
-        
-        if (projectId) {
-          // Project-specific conversation
-          url = `/api/projects/${projectId}/conversations`;
-        } else {
-          // Standalone conversation
-          url = `/api/chat/conversations`;
-        }
-
-        console.log("Creating new conversation with URL:", url);
-        console.log("Payload:", payload);
-        
-        // More verbose debug for standalone chat creation
-        if (!projectId) {
-          console.log("Creating a standalone chat (not associated with a project)");
-        }
-        
-        try {
-          // Make the API request with error handling
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload),
-            credentials: 'include'
-          });
-          
-          // Check if the response is OK
-          if (!response.ok) {
-            console.error("API error response:", response.status, response.statusText);
-            throw new Error(`API error response (${response.status}): ${response.statusText}`);
-          }
-          
-          // Parse the JSON response
-          const responseData = await response.json();
-          console.log("New conversation response:", responseData);
-          
-          // Extract conversation data correctly from response
-          let conversation;
-          
-          // Try different response formats
-          if (responseData.data) {
-            console.log("Response contains 'data' property:", responseData.data);
-            conversation = responseData.data;
-          } else if (responseData.conversations) {
-            console.log("Response contains 'conversations' property:", responseData.conversations);
-            conversation = responseData.conversations[0];
-          } else if (responseData.status === "success") {
-            console.log("Response has 'status' success, using main body:", responseData);
-            conversation = responseData;
-          } else {
-            console.log("Response has no standard format, using directly:", responseData);
-            conversation = responseData;
-          }
-          
-          // Handle nested response structure from create_standard_response
-          if (conversation && conversation.data && !conversation.id) {
-            console.log("Found nested data structure, extracting inner data", conversation.data);
-            conversation = conversation.data;
-          }
-          
-          // Validate conversation data
-          if (!conversation || !conversation.id) {
-            console.error("Invalid conversation data:", conversation);
-            throw new Error("Invalid response format from server. Missing conversation ID.");
-          }
-          
-          // Update UI state
-          localStorage.setItem("selectedConversationId", conversation.id);
-          
-          // Safely update UI elements
-          const chatTitleEl = document.getElementById("chatTitle");
-          if (chatTitleEl) {
-            chatTitleEl.textContent = conversation.title || "New Chat";
-          }
-          
-          // Update URL and show chat UI
-          window.history.pushState({}, "", `/?chatId=${conversation.id}`);
-          
-          // Show the chat UI and hide "no chat selected" message
-          const chatUI = document.getElementById("chatUI");
-          const noChatMsg = document.getElementById("noChatSelectedMessage");
-          
-          if (chatUI) chatUI.classList.remove("hidden");
-          if (noChatMsg) noChatMsg.classList.add("hidden");
-
-          // Clear previous messages and load new conversation
-          const conversationArea = document.getElementById("conversationArea");
-          if (conversationArea) conversationArea.innerHTML = "";
-          
-          // Load the conversation
-          window.loadConversation(conversation.id);
-          
-          return conversation;
-        } catch (apiError) {
-          console.error("API request error:", apiError);
-          throw apiError;
-        }
-      } catch (error) {
-        console.error("Error creating new chat:", error);
-        if (window.showNotification) {
-          window.showNotification(`Failed to create new chat: ${error.message}`, "error");
-        }
-        throw error;
-      }
+// ---------------------------------------------------------------------
+// CREATE NEW CHAT
+// ---------------------------------------------------------------------
+window.createNewChat = async function() {
+  try {
+    const selectedProjectId = localStorage.getItem("selectedProjectId");
+    const payload = {
+      title: "New Chat",
+      model_id: "claude-3-sonnet-20240229"
     };
-    
-    // Now add the event listener with console logging
-    newChatBtn.addEventListener("click", () => {
-      console.log("New Chat button clicked");
-      window.createNewChat().catch(err => {
-        console.error("Error in createNewChat:", err);
-      });
+
+    let url = selectedProjectId
+      ? `/api/projects/${selectedProjectId}/conversations`
+      : `/api/chat/conversations`;
+
+    console.log("Creating new conversation with URL:", url);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+      credentials: 'include'
     });
+
+    if (!response.ok) {
+      throw new Error(`API error response (${response.status}): ${response.statusText}`);
+    }
+
+    const responseData = await response.json();
+    let conversation = responseData.data || responseData;
+
+    // If nested structure
+    if (conversation.data && !conversation.id) {
+      conversation = conversation.data;
+    }
+    if (!conversation || !conversation.id) {
+      throw new Error("Invalid response format from server. Missing conversation ID.");
+    }
+
+    // Update UI
+    localStorage.setItem("selectedConversationId", conversation.id);
+    const chatTitleEl = document.getElementById("chatTitle");
+    if (chatTitleEl) {
+      chatTitleEl.textContent = conversation.title || "New Chat";
+    }
+
+    window.history.pushState({}, "", `/?chatId=${conversation.id}`);
+    const chatUI = document.getElementById("chatUI");
+    const noChatMsg = document.getElementById("noChatSelectedMessage");
+    if (chatUI) chatUI.classList.remove("hidden");
+    if (noChatMsg) noChatMsg.classList.add("hidden");
+
+    const conversationArea = document.getElementById("conversationArea");
+    if (conversationArea) conversationArea.innerHTML = "";
+
+    // Load the conversation
+    window.loadConversation(conversation.id);
+    return conversation;
+  } catch (error) {
+    console.error("Error creating new chat:", error);
+    window.showNotification?.(`Failed to create new chat: ${error.message}`, "error");
+    throw error;
   }
-});
+};
+
+// ---------------------------------------------------------------------
+// EXPOSE GLOBALS
+// ---------------------------------------------------------------------
+window.loadConversation = loadConversation;
+window.sendMessage = sendMessage;
+window.setupWebSocket = setupWebSocket;
+window.initializeChat = initializeChat;
