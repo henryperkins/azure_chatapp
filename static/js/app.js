@@ -649,17 +649,22 @@ function getModelOptions() {
         { 
             id: 'claude-3-7-sonnet-20250219', 
             name: 'Claude 3 Sonnet',
-            description: 'Medium model, great balance of speed & capability'
+            description: 'Middleweight model - good balance of capability and speed'
         },
         { 
             id: 'gpt-4', 
             name: 'GPT-4',
-            description: 'Most capable model, great for complex tasks'
+            description: 'Most capable model - handles complex instructions'
         },
         { 
             id: 'gpt-3.5-turbo', 
             name: 'GPT-3.5 Turbo',
-            description: 'Fast and capable, great for most use cases'
+            description: 'Fastest model - good for simple queries'
+        },
+        { 
+            id: 'o1', 
+            name: 'o1 (Vision)',
+            description: 'Image understanding capabilities'
         }
     ];
 }
