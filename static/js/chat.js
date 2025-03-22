@@ -171,6 +171,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatTitleEl = document.getElementById("chatTitle");
   const chatTitleEditBtn = document.getElementById("chatTitleEditBtn");
   
+  // Auto-create a new chat on page load if no chat ID is present
+  setTimeout(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
+    if (!chatId) {
+      console.log("No chat ID found, auto-creating new chat");
+      window.createNewChat();
+    }
+  }, 500);
+  
   // Retrieve the chat ID and check if we're embedded
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId') || "";
