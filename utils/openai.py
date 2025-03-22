@@ -162,33 +162,90 @@ async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: i
 async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000) -> dict:
     """Handle Claude API requests"""
     from config import settings
+    from fastapi import HTTPException
+    
+    # Debug info - log API key presence and model
+    api_key = settings.CLAUDE_API_KEY
+    if not api_key:
+        logger.error("CLAUDE_API_KEY is not set in environment or .env file")
+        raise HTTPException(
+            status_code=500, 
+            detail="Missing Claude API key configuration. Please add your Claude API key to the .env file as CLAUDE_API_KEY=your_key_here"
+        )
+    else:
+        logger.info(f"Claude API key is configured (length: {len(api_key)})")
+    
+    logger.info(f"Using Claude API version: {settings.CLAUDE_API_VERSION}")
+    logger.info(f"Using Claude model: {model_name}")
     
     headers = {
-        "x-api-key": settings.CLAUDE_API_KEY,
+        "x-api-key": api_key,
         "anthropic-version": settings.CLAUDE_API_VERSION,
         "content-type": "application/json"
     }
 
+    # Fix any message formatting for Claude API
+    formatted_messages = []
+    for msg in messages:
+        if not msg.get("role") or not msg.get("content"):
+            continue
+            
+        # Ensure role is one of: user, assistant, system
+        if msg["role"] not in ["user", "assistant", "system"]:
+            continue
+            
+        formatted_messages.append({
+            "role": msg["role"],
+            "content": msg["content"]
+        })
+    
+    # Ensure we have at least one message
+    if not formatted_messages:
+        logger.error("No valid messages to send to Claude API")
+        raise HTTPException(status_code=400, detail="No valid messages to send to Claude")
+    
     payload = {
         "model": model_name,
-        "messages": messages,
+        "messages": formatted_messages,
         "max_tokens": max_tokens,
         "stream": False
     }
 
+    logger.info(f"Sending request to Claude API: {settings.CLAUDE_BASE_URL}")
+    
     try:
         async with httpx.AsyncClient() as client:
+            logger.debug(f"Claude API payload: {payload}")
+            logger.debug(f"Claude API headers: {headers}")
+            
             response = await client.post(
                 settings.CLAUDE_BASE_URL,
                 json=payload,
                 headers=headers,
                 timeout=30
             )
+            
             response.raise_for_status()
-            return response.json()
+            response_data = response.json()
+            logger.info(f"Claude API response received, status: {response.status_code}")
+            
+            # Debug the response structure
+            if "content" in response_data:
+                logger.info(f"Claude response contains {len(response_data['content'])} content items")
+            else:
+                logger.warning(f"Unexpected Claude response structure: {list(response_data.keys())}")
+                
+            return response_data
+            
+    except httpx.RequestError as e:
+        logger.error(f"Claude API Request Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to reach Claude API service")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Claude API HTTP Error: {e.response.status_code} => {e.response.text}")
+        raise HTTPException(status_code=e.response.status_code, detail=f"Claude API Error: {e.response.text}")
     except Exception as e:
-        logging.error(f"Claude API Error: {str(e)}")
-        raise HTTPException(500, "Claude service unavailable")
+        logger.error(f"Claude API Unexpected Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Claude service unavailable: {str(e)}")
 
 
 async def get_moderation(text: str) -> Dict[str, Any]:
