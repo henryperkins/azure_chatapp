@@ -123,9 +123,6 @@ window.loadConversation = loadConversation;
 // Main DOMContentLoaded Logic
 // ---------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  // Retrieve the chat ID if it exists in global config
-  const chatId = window.CHAT_CONFIG?.chatId || "";
-  
   // Basic UI references
   const noChatSelectedMessage = document.getElementById("noChatSelectedMessage");
   const conversationArea = document.getElementById("conversationArea");
@@ -133,6 +130,40 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendBtn = document.getElementById("sendBtn");
   const chatTitleEl = document.getElementById("chatTitle");
   const chatTitleEditBtn = document.getElementById("chatTitleEditBtn");
+  
+  // Retrieve the chat ID and check if we're embedded
+  const urlParams = new URLSearchParams(window.location.search);
+  const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId') || "";
+  const isEmbedded = urlParams.get('embedded') === 'true';
+  
+  // If embedded, adjust UI to fit in iframe
+  if (isEmbedded) {
+    // Hide header, sidebar, and other elements not needed in embedded view
+    const header = document.querySelector('header');
+    const sidebar = document.getElementById('mainSidebar');
+    const projectNavigationSection = document.querySelector('section.bg-white:not(#chatUI)');
+    
+    if (header) header.style.display = 'none';
+    if (sidebar) sidebar.style.display = 'none';
+    if (projectNavigationSection) projectNavigationSection.style.display = 'none';
+    
+    // Make sure chat UI is immediately visible
+    const chatUI = document.getElementById('chatUI');
+    if (chatUI) {
+      chatUI.classList.remove('hidden');
+      chatUI.classList.add('mt-0');
+      // Increase the height of the conversation area for better use of space
+      if (conversationArea) {
+        conversationArea.classList.remove('h-64');
+        conversationArea.classList.add('h-96');
+      }
+    }
+    
+    // Hide the "no chat selected" message
+    if (noChatSelectedMessage) {
+      noChatSelectedMessage.classList.add('hidden');
+    }
+  }
   
   // File upload references
   const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
@@ -567,51 +598,101 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         console.log("Creating new conversation with URL:", url);
-        const response = await window.apiRequest(
-          url,
-          "POST",
-          payload
-        );
+        console.log("Payload:", payload);
         
-        console.log("New conversation response:", response);
-
-        // Extract conversation data correctly from response
-        const conversation = response.data;
-        
-        if (!conversation || !conversation.id) {
-          throw new Error("Invalid response format from server");
-        }
-
-        // Update UI state
-        localStorage.setItem("selectedConversationId", conversation.id);
-        
-        // Safely update UI elements
-        const chatTitleEl = document.getElementById("chatTitle");
-        if (chatTitleEl) {
-          chatTitleEl.textContent = conversation.title;
+        // More verbose debug for standalone chat creation
+        if (!projectId) {
+          console.log("Creating a standalone chat (not associated with a project)");
         }
         
-        // Update URL and show chat UI
-        window.history.pushState({}, "", `/?chatId=${conversation.id}`);
-        
-        // Show the chat UI and hide "no chat selected" message
-        const chatUI = document.getElementById("chatUI");
-        const noChatMsg = document.getElementById("noChatSelectedMessage");
-        
-        if (chatUI) chatUI.classList.remove("hidden");
-        if (noChatMsg) noChatMsg.classList.add("hidden");
+        try {
+          // Make the API request with error handling
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+            credentials: 'include'
+          });
+          
+          // Check if the response is OK
+          if (!response.ok) {
+            console.error("API error response:", response.status, response.statusText);
+            throw new Error(`API error response (${response.status}): ${response.statusText}`);
+          }
+          
+          // Parse the JSON response
+          const responseData = await response.json();
+          console.log("New conversation response:", responseData);
+          
+          // Extract conversation data correctly from response
+          let conversation;
+          
+          // Try different response formats
+          if (responseData.data) {
+            console.log("Response contains 'data' property:", responseData.data);
+            conversation = responseData.data;
+          } else if (responseData.conversations) {
+            console.log("Response contains 'conversations' property:", responseData.conversations);
+            conversation = responseData.conversations[0];
+          } else if (responseData.status === "success") {
+            console.log("Response has 'status' success, using main body:", responseData);
+            conversation = responseData;
+          } else {
+            console.log("Response has no standard format, using directly:", responseData);
+            conversation = responseData;
+          }
+          
+          // Handle nested response structure from create_standard_response
+          if (conversation && conversation.data && !conversation.id) {
+            console.log("Found nested data structure, extracting inner data", conversation.data);
+            conversation = conversation.data;
+          }
+          
+          // Validate conversation data
+          if (!conversation || !conversation.id) {
+            console.error("Invalid conversation data:", conversation);
+            throw new Error("Invalid response format from server. Missing conversation ID.");
+          }
+          
+          // Update UI state
+          localStorage.setItem("selectedConversationId", conversation.id);
+          
+          // Safely update UI elements
+          const chatTitleEl = document.getElementById("chatTitle");
+          if (chatTitleEl) {
+            chatTitleEl.textContent = conversation.title || "New Chat";
+          }
+          
+          // Update URL and show chat UI
+          window.history.pushState({}, "", `/?chatId=${conversation.id}`);
+          
+          // Show the chat UI and hide "no chat selected" message
+          const chatUI = document.getElementById("chatUI");
+          const noChatMsg = document.getElementById("noChatSelectedMessage");
+          
+          if (chatUI) chatUI.classList.remove("hidden");
+          if (noChatMsg) noChatMsg.classList.add("hidden");
 
-        // Clear previous messages and load new conversation
-        const conversationArea = document.getElementById("conversationArea");
-        if (conversationArea) conversationArea.innerHTML = "";
-        
-        // Load the conversation
-        window.loadConversation(conversation.id);
+          // Clear previous messages and load new conversation
+          const conversationArea = document.getElementById("conversationArea");
+          if (conversationArea) conversationArea.innerHTML = "";
+          
+          // Load the conversation
+          window.loadConversation(conversation.id);
+          
+          return conversation;
+        } catch (apiError) {
+          console.error("API request error:", apiError);
+          throw apiError;
+        }
       } catch (error) {
         console.error("Error creating new chat:", error);
         if (window.showNotification) {
           window.showNotification(`Failed to create new chat: ${error.message}`, "error");
         }
+        throw error;
       }
     };
     
