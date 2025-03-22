@@ -193,7 +193,7 @@ async def list_conversations(
         logger.error("Failed to list conversations: %s", str(e))
         return await create_standard_response(
             {"conversations": []},  # <-- Always return proper structure
-            "Error retrieving conversations", 
+            "Error retrieving conversations",
             success=False
         )
 
@@ -421,6 +421,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
             if not success:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
+            logger.debug("WebSocket authentication successful for user: %s", user.username) # ADDED DEBUG LOG
 
             # Validate conversation access
             conversation = await validate_resource_access(
@@ -433,7 +434,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
             )
 
             # Accept already done in authenticate_websocket after successful authentication
-            
+
             while True:
                 raw_data = await websocket.receive_text()
                 try:
@@ -458,7 +459,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                     from config import settings
                     from utils.openai import claude_chat
                     from models.message import Message
-                    
+
                     if conversation.model_id in settings.CLAUDE_MODELS:
                         try:
                             # Call Claude API
@@ -467,10 +468,10 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                                 model_name=conversation.model_id,
                                 max_tokens=1500
                             )
-                            
+
                             # Extract content from Claude response
                             content = claude_response["content"][0]["text"]
-                            
+
                             # Create and save message
                             assistant_msg = Message(
                                 conversation_id=conversation.id,
