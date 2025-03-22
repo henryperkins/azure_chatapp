@@ -101,7 +101,7 @@
 
 /* Sidebar transitions */
 #mainSidebar {
-  @apply transition-col duration-300 ease-in-out;
+  @apply transition-colors duration-300 ease-in-out;
 }
 
 .dark #mainSidebar {
