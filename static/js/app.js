@@ -499,6 +499,7 @@ function checkAndHandleAuth() {
         loadSidebarProjects();
       }
 
+      // Always load a conversation - either existing or new
       if (window.CHAT_CONFIG?.chatId) {
         if (typeof window.loadConversation === 'function') {
           window.loadConversation(window.CHAT_CONFIG.chatId);
