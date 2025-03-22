@@ -286,7 +286,7 @@ async def delete_conversation(
 # ============================
 
 @router.get("/{conversation_id}/messages", response_model=dict)
-async def list_messages(
+async def list_conversation_messages(
     project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -294,10 +294,8 @@ async def list_messages(
     skip: int = 0,
     limit: int = 100
 ):
-    """
-    Retrieves all messages for a conversation, sorted by creation time ascending.
-    """
-    # Validate conversation ownership
+    """Retrieves messages for a project conversation"""
+    # Validate project conversation exists
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
@@ -332,6 +330,67 @@ async def list_messages(
     ]
     
     return await create_standard_response({"messages": output})
+
+@router.websocket("/{conversation_id}/ws")
+async def project_websocket_chat_endpoint(
+    websocket: WebSocket,
+    project_id: UUID,
+    conversation_id: UUID
+):
+    """Real-time chat updates for project conversations"""
+    from db import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        try:
+            # 1. Validate project access
+            project = await validate_project_access(
+                project_id,
+                current_user,
+                db
+            )
+            
+            # 2. Validate conversation belongs to project
+            conversation = await validate_resource_access(
+                conversation_id,
+                Conversation,
+                current_user,
+                db,
+                "Conversation",
+                [
+                    Conversation.project_id == project_id,
+                    Conversation.is_deleted.is_(False)
+                ]
+            )
+            
+            await websocket.accept()
+            
+            while True:
+                data = await websocket.receive_text()
+                try:
+                    data_dict = json.loads(data)
+                except json.JSONDecodeError:
+                    data_dict = {"content": data, "role": "user"}
+
+                # Create message
+                message = await create_user_message(
+                    conversation_id=str(conversation.id),
+                    content=data_dict["content"],
+                    role=data_dict["role"],
+                    db=db
+                )
+
+                if message.role == "user":
+                    await handle_websocket_response(str(conversation.id), db, websocket)
+
+        except WebSocketDisconnect:
+            logger.info("WebSocket disconnected")
+        except HTTPException as he:
+            logger.error(f"WebSocket HTTP error: {str(he)}")
+            await websocket.close(code=he.status_code)
+        except Exception as e:
+            logger.error(f"WebSocket error: {str(e)}")
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        finally:
+            await db.close()
 
 
 @router.post("/{conversation_id}/messages", response_model=dict, status_code=status.HTTP_201_CREATED)
