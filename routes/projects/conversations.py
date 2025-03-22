@@ -341,11 +341,19 @@ async def project_websocket_chat_endpoint(
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
-            # 1. Validate project access
-            project = await validate_project_access(
-                project_id,
-                current_user,
-                db
+            # 1. Extract JWT token first
+            token = await extract_token_from_websocket(websocket)
+            if not token:
+                logger.warning("WebSocket connection rejected: No token provided")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # 2. Validate token and get user
+            user = await get_user_from_token(token, db, "access")
+            
+            # 3. Validate project access using project service
+            project = await project_service.validate_project_access(
+                project_id, user, db
             )
             
             # 2. Validate conversation belongs to project
