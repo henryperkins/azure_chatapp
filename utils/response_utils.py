@@ -13,12 +13,13 @@ API_VERSION = "2025-02-01-preview"
 
 
 async def create_standard_response(data=None, message="Success", success=True):
-    """Standardizes API response format with enhanced error handling."""
+    """Ensure consistent response structure"""
     return {
         "status": "success" if success else "error",
         "message": message,
-        "data": data,
-        "timestamp": datetime.now().isoformat()
+        "data": data if data is not None else ([] if isinstance(data, list) else {}),
+        "timestamp": datetime.now().isoformat(),
+        "request_id": str(uuid4())  # Add unique ID for tracking
     }
 
 
