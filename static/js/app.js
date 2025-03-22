@@ -227,11 +227,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const sidebarNewProjectBtnEl = getElement(SELECTORS.SIDEBAR_NEW_PROJECT_BTN);
   addEventListener(sidebarNewProjectBtnEl, 'click', () => {
-    if (typeof window.projectManager?.showProjectCreateForm === 'function') {
-      window.projectManager.showProjectCreateForm();
-    } else {
-      getElement(SELECTORS.CREATE_PROJECT_BTN)?.click();
-    }
+    // Redirect to the projects page
+    window.location.href = '/projects';
   });
 
   const sidebarConversationsEl = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
@@ -243,10 +240,38 @@ document.addEventListener('DOMContentLoaded', () => {
   sidebarNewChatBtn.id = 'sidebarNewChatBtn';
   sidebarNewChatBtn.className = 'w-full text-left p-2 bg-blue-500 hover:bg-blue-600 text-white rounded mt-2 flex items-center';
   sidebarNewChatBtn.innerHTML = '<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> New Standalone Chat';
-  sidebarNewChatBtn.addEventListener('click', () => {
+  sidebarNewChatBtn.addEventListener('click', async () => {
+    // First ensure we're creating a standalone chat by removing any selected project
     localStorage.removeItem('selectedProjectId');
-    if (typeof window.createNewChat === 'function') {
-      window.createNewChat();
+    
+    // Show a loading notification
+    if (window.showNotification) {
+      window.showNotification("Creating new standalone chat...", "info");
+    }
+    
+    try {
+      // Call the createNewChat function if it exists
+      if (typeof window.createNewChat === 'function') {
+        // If on projects page, navigate to main chat page first
+        if (window.location.pathname.includes('/projects')) {
+          window.location.href = '/';
+          return;
+        }
+        
+        await window.createNewChat();
+        
+        // Show success notification
+        if (window.showNotification) {
+          window.showNotification("New chat created successfully", "success");
+        }
+      } else {
+        if (window.showNotification) {
+          window.showNotification("Chat creation function not available", "error");
+        }
+      }
+    } catch (error) {
+      console.error("Error in sidebar new chat button:", error);
+      // Error notification already shown by createNewChat function
     }
   });
 
@@ -364,15 +389,82 @@ function renderConversationList(data) {
   if (!container) return;
   container.innerHTML = '';
 
+  // Store conversations globally for starred conversations access
+  window.chatConfig = window.chatConfig || {};
+  window.chatConfig.conversations = data.conversations || [];
+
   if (data.conversations && data.conversations.length > 0) {
     data.conversations.forEach(item => {
       const li = document.createElement('li');
-      li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
-      li.innerHTML = `
-        <span class="truncate">${item.title || 'Conversation ' + item.id}</span>
-        <span class="text-xs text-gray-500 ml-2">(${item.model_id})</span>
-        ${item.project_id ? '<span class="text-xs text-gray-500 ml-2">(Project)</span>' : ''}
+      li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
+      
+      // Check if the conversation is starred
+      const isStarred = window.sidebar && typeof window.sidebar.isConversationStarred === 'function' && 
+                        window.sidebar.isConversationStarred(item.id);
+      
+      // Create an element for the title
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'flex-1 truncate';
+      titleSpan.textContent = item.title || 'Conversation ' + item.id;
+      li.appendChild(titleSpan);
+      
+      // Add metadata container
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'flex items-center ml-2';
+      
+      // Add star button
+      const starBtn = document.createElement('button');
+      starBtn.className = `mr-1 ${isStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
+      starBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" 
+             fill="${isStarred ? 'currentColor' : 'none'}" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+        </svg>
       `;
+      
+      // Add star toggle functionality
+      starBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent opening the conversation
+        
+        // Toggle star state if the function exists
+        if (window.sidebar && typeof window.sidebar.toggleStarConversation === 'function') {
+          const nowStarred = window.sidebar.toggleStarConversation(item.id);
+          
+          // Update UI
+          starBtn.className = `mr-1 ${nowStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
+          starBtn.querySelector('svg').setAttribute('fill', nowStarred ? 'currentColor' : 'none');
+          
+          // Refresh starred conversations list if visible
+          if (document.getElementById('starredChatsSection') && 
+              !document.getElementById('starredChatsSection').classList.contains('hidden') &&
+              typeof window.sidebar.loadStarredConversations === 'function') {
+            window.sidebar.loadStarredConversations();
+          }
+        }
+      });
+      
+      metaDiv.appendChild(starBtn);
+      
+      // Add model badge
+      if (item.model_id) {
+        const modelBadge = document.createElement('span');
+        modelBadge.className = 'text-xs text-gray-500 ml-1';
+        modelBadge.textContent = item.model_id;
+        metaDiv.appendChild(modelBadge);
+      }
+      
+      // Add project badge if applicable
+      if (item.project_id) {
+        const projectBadge = document.createElement('span');
+        projectBadge.className = 'text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded ml-1';
+        projectBadge.textContent = 'Project';
+        metaDiv.appendChild(projectBadge);
+      }
+      
+      li.appendChild(metaDiv);
+      
+      // Add click handler to open conversation
       li.addEventListener('click', () => {
         window.history.pushState({}, '', `/?chatId=${item.id}`);
         const chatUI = getElement(SELECTORS.CHAT_UI);
@@ -385,11 +477,12 @@ function renderConversationList(data) {
           window.loadConversation(item.id);
         }
       });
+      
       container.appendChild(li);
     });
   } else {
     const li = document.createElement('li');
-    li.className = 'text-gray-500';
+    li.className = 'text-gray-500 text-center py-4';
     li.textContent = MESSAGES.NO_CONVERSATIONS;
     container.appendChild(li);
   }
@@ -433,7 +526,6 @@ function checkAndHandleAuth() {
       const authButton = getElement(SELECTORS.AUTH_BUTTON);
       const loginRequiredMessage = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
       const chatUI = getElement(SELECTORS.CHAT_UI);
-      const projectManager = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
       const noChatMsg = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
 
       userMenu?.classList?.add('hidden');
@@ -446,7 +538,6 @@ function checkAndHandleAuth() {
       loginRequiredMessage?.classList?.remove('hidden');
 
       chatUI?.classList?.add('hidden');
-      projectManager?.classList?.add('hidden');
       noChatMsg?.classList?.add('hidden');
     });
 
@@ -460,7 +551,6 @@ document.addEventListener('authStateChanged', (e) => {
   const authButton = getElement(SELECTORS.AUTH_BUTTON);
   const userMenu = getElement(SELECTORS.USER_MENU);
   const chatUI = getElement(SELECTORS.CHAT_UI);
-  const projectManagerPanel = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
 
   if (e.detail.authenticated) {
     if (authButton) authButton.classList.add('hidden');
@@ -468,9 +558,8 @@ document.addEventListener('authStateChanged', (e) => {
 
     const authStatusEl = getElement(SELECTORS.AUTH_STATUS);
     const chatUI = getElement(SELECTORS.CHAT_UI);
-    const projectManagerPanel = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
 
-    [chatUI, projectManagerPanel].forEach(el => el?.classList?.remove('hidden'));
+    if (chatUI) chatUI.classList.remove('hidden');
 
     if (authStatusEl) {
       authStatusEl.textContent = 'Authenticated';
@@ -495,10 +584,9 @@ document.addEventListener('authStateChanged', (e) => {
 
     const authStatusEl = getElement(SELECTORS.AUTH_STATUS);
     const chatUI = getElement(SELECTORS.CHAT_UI);
-    const projectManagerPanel = getElement(SELECTORS.PROJECT_MANAGER_PANEL);
     const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
 
-    [chatUI, projectManagerPanel].forEach(el => el?.classList?.add('hidden'));
+    if (chatUI) chatUI.classList.add('hidden');
 
     if (authStatusEl) {
       authStatusEl.textContent = 'Not Authenticated';
