@@ -621,9 +621,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const selectedProjectId = localStorage.getItem("selectedProjectId");
         let projectId = selectedProjectId;
         
-        // Create payload for the API request
+        // Create payload for the API request with default Claude model
         const payload = {
-          title: "New Chat"
+          title: "New Chat",
+          model_id: "claude-3-7-sonnet-20250219"
         };
 
         // Create conversation through API
@@ -736,7 +737,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
     
-    // Now add the event listener
-    newChatBtn.addEventListener("click", window.createNewChat);
+    // Now add the event listener with console logging
+    newChatBtn.addEventListener("click", () => {
+      console.log("New Chat button clicked");
+      window.createNewChat().catch(err => {
+        console.error("Error in createNewChat:", err);
+      });
+    });
   }
 });
