@@ -84,11 +84,34 @@ function appendMessage(role, content, thinking = null, redacted_thinking = null)
     className: `mb-2 p-2 rounded ${getMessageClass(role)}`
   });
 
-  const safeContent = typeof window.formatText === 'function'
-    ? window.formatText(content)
-    : content;
-
-  msgDiv.innerHTML = safeContent;
+  // Format content with markdown support
+  const formattedContent = formatText(content);
+  msgDiv.innerHTML = formattedContent;
+  
+  // Add copy button to code blocks
+  msgDiv.querySelectorAll('pre code').forEach(codeBlock => {
+    const copyButton = document.createElement('button');
+    copyButton.className = 'copy-code-btn';
+    copyButton.textContent = 'Copy';
+    copyButton.addEventListener('click', () => {
+      navigator.clipboard.writeText(codeBlock.textContent)
+        .then(() => {
+          copyButton.textContent = 'Copied!';
+          setTimeout(() => {
+            copyButton.textContent = 'Copy';
+          }, 2000);
+        })
+        .catch(err => {
+          console.error('Failed to copy:', err);
+        });
+    });
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper';
+    wrapper.appendChild(codeBlock.cloneNode(true));
+    wrapper.appendChild(copyButton);
+    codeBlock.replaceWith(wrapper);
+  });
   
   // Add thinking blocks if available (for assistant messages)
   if (role === 'assistant' && (thinking || redacted_thinking)) {
