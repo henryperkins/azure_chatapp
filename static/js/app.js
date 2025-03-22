@@ -644,6 +644,10 @@ window.loadConversationList = loadConversationList;
 window.renderConversationList = renderConversationList;
 window.checkAndHandleAuth = checkAndHandleAuth;
 
+// Expose model selection functions globally for cross-file access
+window.getModelOptions = getModelOptions;
+window.initializeModelDropdown = initializeModelDropdown;
+
 function getModelOptions() {
     return [
         { 
@@ -696,6 +700,11 @@ function initializeModelDropdown() {
 
 // Add this to DOMContentLoaded listener
 document.addEventListener("DOMContentLoaded", () => {
+  // Set Claude as the default model in localStorage if not already set
+  if (!localStorage.getItem("modelName")) {
+    localStorage.setItem("modelName", "claude-3-7-sonnet-20250219");
+  }
+  
   initializeModelDropdown();
   // ... rest of existing initialization code ...
 });
