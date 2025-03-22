@@ -253,25 +253,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Event listeners for changes
   if (modelSelect) {
-    // Clear existing options
-    modelSelect.innerHTML = '';
-    
-    // Get valid models and populate
-    const modelOptions = [
-      {id: "claude-3-7-sonnet-20250219", name: "Claude 3 Sonnet"},
-      {id: "gpt-4", name: "GPT-4"},
-      {id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo"},
-      {id: "o1", name: "o1 (Vision)"}
-    ];
-    
-    modelOptions.forEach(model => {
-      const option = document.createElement('option');
-      option.value = model.id;
-      option.textContent = model.name;
-      option.title = model.description || '';
-      modelSelect.appendChild(option);
-    });
-
     modelSelect.addEventListener("change", () => {
       persistSettings();
       const isVisionModel = modelSelect.value === "o1";

@@ -673,13 +673,18 @@ function initializeModelDropdown() {
   const modelSelect = document.getElementById("modelSelect");
   if (!modelSelect) return;
 
-  // Clear existing options and preserve first placeholder option
-  while (modelSelect.options.length > 0) {
-    modelSelect.remove(0);
-  }
+  // Clear existing options
+  modelSelect.innerHTML = '';
 
   // Get available models
   const modelOptions = getModelOptions();
+  
+  // Add default option
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = 'Select a model';
+  defaultOption.hidden = true;
+  modelSelect.appendChild(defaultOption);
 
   // Add models to dropdown
   modelOptions.forEach(model => {
