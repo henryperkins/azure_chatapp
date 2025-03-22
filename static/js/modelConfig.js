@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Replace dropdown with slider for max tokens
   // Max Tokens Input Group
   const maxTokensGroup = document.createElement("div");
-  maxTokensGroup.className = "flex items-center gap-4";
+  maxTokensGroup.className = "flex flex-col gap-2"; // Changed to vertical layout for sidebar
   
   // Slider
   const maxTokensSlider = document.createElement("input");
