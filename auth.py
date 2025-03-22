@@ -18,6 +18,7 @@ import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from utils.auth_utils import clean_expired_tokens
 
 from config import settings
 from db import get_async_session
