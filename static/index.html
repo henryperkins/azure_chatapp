@@ -106,103 +106,201 @@
       - Overlaid ephemeral notifications at top or bottom
   -->
   <div class="flex flex-1 overflow-hidden">
-    <!-- Sidebar (hidden on mobile by default) -->
+    <!-- Enhanced Sidebar Interface (hidden on mobile by default) -->
     <nav aria-label="Main navigation" id="mainSidebar" role="navigation"
          class="md:block w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 overflow-y-auto fixed md:relative inset-0 z-50 -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out">
-      <!-- Add close button for mobile -->
+      <!-- Mobile close button -->
       <button class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700" onclick="toggleSidebar()">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
-      <div class="p-4 dark:text-gray-100">
-        <h2 class="font-semibold text-lg mb-2">Conversations</h2>
-        <!-- Quick-search input for conversation titles/dates -->
-        <div class="mb-3">
-          <input type="search" aria-label="Search conversations"
-                 placeholder="Search..."
-                 class="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
-        </div>
-        <ul id="sidebarConversations" class="space-y-2 text-sm"></ul>
-        <hr class="my-4 dark:border-gray-700" />
-
-        <!-- Projects or additional sidebar sections -->
-        <h2 class="font-semibold text-lg mb-2">Projects</h2>
-        <div class="mb-3">
-          <input type="search" id="sidebarProjectSearch" aria-label="Search projects"
-                 placeholder="Search projects..."
-                 class="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
-        </div>
-        <ul id="sidebarProjects" class="space-y-2 text-sm">
-          <!-- Projects will be loaded dynamically -->
-        </ul>
-        <div class="mt-3">
-          <button id="sidebarNewProjectBtn" class="w-full bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
-            New Project
+      
+      <!-- Pin/unpin sidebar button (desktop only) -->
+      <button id="pinSidebarBtn" class="hidden md:block absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+        </svg>
+      </button>
+      
+      <div class="p-4 dark:text-gray-100 flex flex-col h-full">
+        <!-- New Chat Button (Prominent) -->
+        <button id="sidebarNewChatBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center justify-center mb-4 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          New Chat
+        </button>
+        
+        <!-- Tab navigation for sidebar sections -->
+        <div class="flex mb-4 border-b border-gray-200 dark:border-gray-700">
+          <button id="recentChatsTab" class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm">
+            Recent
+          </button>
+          <button id="starredChatsTab" class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm">
+            Starred
+          </button>
+          <button id="projectsTab" class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm">
+            Projects
           </button>
         </div>
         
-        <hr class="my-4 dark:border-gray-700" />
-        
-        <!-- Model Configuration UI moved to sidebar -->
-        <div class="text-sm">
-          <h2 class="font-semibold text-lg mb-2">Model Configuration</h2>
-          
-          <!-- Model Selection -->
+        <!-- Recent Chats Section (visible by default) -->
+        <div id="recentChatsSection" class="flex-1 flex flex-col overflow-hidden">
+          <!-- Search input -->
           <div class="mb-3">
-            <label for="modelSelect" class="block font-medium dark:text-gray-200">Select Model</label>
-            <select id="modelSelect"
-                    class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
-              <option value="o3-mini">o3-mini</option>
-              <option value="o1">o1 (Vision Support)</option>
-              <option value="o1-mini">o1-mini</option>
-              <option value="o1-preview">o1-preview</option>
-            </select>
-          </div>
-
-          <!-- Max Tokens Input Group -->
-          <div id="maxTokensContainer" class="mb-3">
-            <label class="block font-medium dark:text-gray-200">Max Completion Tokens</label>
-            <!-- Slider and input will be injected by modelConfig.js -->
-          </div>
-
-          <!-- Reasoning Effort Panel (for the slider) -->
-          <div id="reasoningPanel" class="bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2 mb-3">
-            <!-- The slider is injected by modelConfig.js -->
-          </div>
-
-          <div id="visionPanel" class="hidden mb-3">
-            <label class="block font-medium dark:text-gray-200">Image Upload (o1 Vision)</label>
-            <input type="file" accept="image/png,image/jpeg"
-                   class="mt-2 text-sm dark:text-gray-200"
-                   id="visionFileInput" />
-            <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
-              Upload JPEG or PNG (≤4 MB).
-            </p>
-            <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              <!-- Filled dynamically: "Analyzing..." or error messages -->
+            <div class="relative">
+              <input type="search" aria-label="Search conversations" id="chatSearchInput"
+                     placeholder="Search conversations..."
+                     class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
-            <div id="visionPreview" class="mt-2"></div>
           </div>
           
-          <!-- Placeholder for persistent user model config display -->
-          <div id="modelConfigDisplay"
-               class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm dark:text-gray-200">
-            <span>Selected Model: <span id="currentModelName">o3-mini</span></span><br/>
-            <span>Max Tokens: <span id="currentMaxTokens">500</span></span><br/>
-            <span>Reasoning Effort: <span id="currentReasoning">N/A</span></span><br/>
-            <span>Vision: <span id="visionEnabledStatus">Disabled</span></span>
+          <!-- Conversations list -->
+          <ul id="sidebarConversations" class="overflow-y-auto flex-1 space-y-1 text-sm"></ul>
+        </div>
+        
+        <!-- Starred Chats Section (hidden by default) -->
+        <div id="starredChatsSection" class="hidden flex-1 flex flex-col overflow-hidden">
+          <!-- Starred chats explanation -->
+          <p class="text-xs text-gray-500 mb-3">Starred chats are conversations you've marked as important for quick access.</p>
+          
+          <!-- Starred conversations list -->
+          <ul id="starredConversations" class="overflow-y-auto flex-1 space-y-1 text-sm">
+            <!-- Will be populated dynamically, show placeholder when empty -->
+            <li class="text-center text-gray-500 py-4">
+              No starred conversations yet. Click the star icon on any conversation to add it here.
+            </li>
+          </ul>
+        </div>
+        
+        <!-- Projects Section (hidden by default) -->
+        <div id="projectsSection" class="hidden flex-1 flex flex-col overflow-hidden">
+          <!-- Projects actions -->
+          <div class="mb-3 flex space-x-2">
+            <a href="/projects" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded text-xs transition-colors flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              Manage Projects
+            </a>
+            <button id="sidebarNewProjectBtn" class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 text-xs flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              New Project
+            </button>
           </div>
-
-          <!-- Potential loading indicator for config changes -->
-          <div id="modelConfigLoading" class="mt-3 hidden text-blue-600 flex items-center text-sm">
-            <svg class="animate-spin h-5 w-5 mr-2 text-blue-600"
-                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"></path>
+          
+          <!-- Projects list -->
+          <div class="relative mb-2">
+            <input type="search" id="sidebarProjectSearch" aria-label="Search projects"
+                   placeholder="Search projects..."
+                   class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            Updating configuration...
+          </div>
+          
+          <ul id="sidebarProjects" class="overflow-y-auto flex-1 space-y-1 text-sm">
+            <!-- Projects will be loaded dynamically -->
+          </ul>
+        </div>
+        
+        <!-- Settings section (collapsible) -->
+        <div class="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          <!-- Model configuration toggle button -->
+          <button id="toggleModelConfig" class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium">
+            <span>Model Configuration</span>
+            <svg id="modelConfigChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <!-- Model Configuration UI (collapsible) -->
+          <div id="modelConfigPanel" class="text-sm overflow-hidden transition-all duration-300 max-h-0">
+            <div class="pt-2 pb-1">
+              <!-- Model Selection -->
+              <div class="mb-3">
+                <label for="modelSelect" class="block font-medium dark:text-gray-200 text-xs">Select Model</label>
+                <select id="modelSelect"
+                        class="w-full mt-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
+                  <option value="o3-mini">o3-mini</option>
+                  <option value="o1">o1 (Vision Support)</option>
+                  <option value="o1-mini">o1-mini</option>
+                  <option value="o1-preview">o1-preview</option>
+                </select>
+              </div>
+
+              <!-- Max Tokens Input Group -->
+              <div id="maxTokensContainer" class="mb-3">
+                <label class="block font-medium dark:text-gray-200 text-xs">Max Completion Tokens</label>
+                <!-- Slider and input will be injected by modelConfig.js -->
+              </div>
+
+              <!-- Reasoning Effort Panel (for the slider) -->
+              <div id="reasoningPanel" class="bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2 mb-3">
+                <!-- The slider is injected by modelConfig.js -->
+              </div>
+
+              <div id="visionPanel" class="hidden mb-3">
+                <label class="block font-medium dark:text-gray-200 text-xs">Image Upload (o1 Vision)</label>
+                <input type="file" accept="image/png,image/jpeg"
+                       class="mt-2 text-sm dark:text-gray-200"
+                       id="visionFileInput" />
+                <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                  Upload JPEG or PNG (≤4 MB).
+                </p>
+                <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                  <!-- Filled dynamically: "Analyzing..." or error messages -->
+                </div>
+                <div id="visionPreview" class="mt-2"></div>
+              </div>
+              
+              <!-- Placeholder for persistent user model config display -->
+              <div id="modelConfigDisplay"
+                   class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs dark:text-gray-200">
+                <span>Selected Model: <span id="currentModelName">o3-mini</span></span><br/>
+                <span>Max Tokens: <span id="currentMaxTokens">500</span></span><br/>
+                <span>Reasoning Effort: <span id="currentReasoning">N/A</span></span><br/>
+                <span>Vision: <span id="visionEnabledStatus">Disabled</span></span>
+              </div>
+
+              <!-- Loading indicator for config changes -->
+              <div id="modelConfigLoading" class="mt-3 hidden text-blue-600 flex items-center text-xs">
+                <svg class="animate-spin h-4 w-4 mr-2 text-blue-600"
+                     xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                Updating configuration...
+              </div>
+            </div>
+          </div>
+          
+          <!-- Custom Instructions toggle button -->
+          <button id="toggleCustomInstructions" class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium">
+            <span>Custom Instructions</span>
+            <svg id="customInstructionsChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <!-- Custom Instructions panel (collapsible) -->
+          <div id="customInstructionsPanel" class="text-sm overflow-hidden transition-all duration-300 max-h-0">
+            <div class="pt-2 pb-1">
+              <p class="text-xs text-gray-500 mb-2">Set default instructions for how the AI should respond.</p>
+              <textarea id="globalCustomInstructions" 
+                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-20"
+                        placeholder="Enter instructions for the AI to follow (e.g., response style, format preferences)..."></textarea>
+              <button id="saveGlobalInstructions" class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs">
+                Save Instructions
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -299,216 +397,27 @@
           </div>
         </section>
 
-        <!-- Project Manager Section -->
-        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
-          <!-- Project List View -->
-          <div id="projectListView">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold">Projects</h2>
-              <div class="flex space-x-2">
-                <input id="projectSearchInput" type="search" placeholder="Search projects..." 
-                       class="border px-2 py-1 rounded text-sm" />
-                <button id="createProjectBtn" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
-                  New Project
-                </button>
-              </div>
-            </div>
-            
-            <!-- Projects filter tabs -->
-            <div class="flex border-b border-gray-200 mb-4">
-              <button class="project-filter-btn px-3 py-2 text-blue-600 border-b-2 border-blue-600" data-filter="all">
-                All Projects
-              </button>
-              <button class="project-filter-btn px-3 py-2 text-gray-600" data-filter="pinned">
-                Pinned
-              </button>
-              <button class="project-filter-btn px-3 py-2 text-gray-600" data-filter="archived">
-                Archived
-              </button>
-            </div>
-            
-            <!-- Project list container -->
-            <div id="projectList" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"></div>
-            
-            <!-- No projects message -->
-            <div id="noProjectsMessage" class="hidden text-center py-8 text-gray-500">
-              No projects found. Create your first project using the "New Project" button.
-            </div>
+        <!-- Project Navigation Section -->
+        <section class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Project Tools</h2>
           </div>
           
-          <!-- Project Details View -->
-          <div id="projectDetailsView" class="hidden">
-            <!-- Breadcrumb navigation for better navigation -->
-            <div class="flex items-center mb-4 text-sm text-gray-500">
-              <button id="backToProjectsBtn" class="mr-2 text-gray-500 hover:text-gray-700 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-                </svg>
-                <span class="ml-1">All Projects</span>
-              </button>
-              <span class="mx-2">/</span>
-              <span id="projectTitle" class="text-gray-700 dark:text-gray-300 font-semibold">Project Title</span>
-            </div>
-
-            <!-- Enhanced action buttons with tooltips -->
-            <div class="flex justify-end mb-4 space-x-2">
-              <button id="editProjectBtn" class="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded" title="Edit project details">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
-              <button id="pinProjectBtn" class="p-2 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded" title="Pin project">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-              </button>
-              <button id="archiveProjectBtn" class="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded" title="Archive project">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
-              </button>
-            </div>
+          <div class="flex flex-col space-y-4">
+            <a href="/projects" class="px-4 py-3 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded flex items-center transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Manage Projects
+            </a>
             
-            <!-- Enhanced project stats panel with animations -->
-            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6 shadow-sm" data-testid="project-stats">
-              <div class="mb-4">
-                <div class="flex justify-between mb-1">
-                  <span class="text-sm font-medium">Token Usage: <span id="tokenUsage" class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
-                  <span id="tokenPercentage" class="text-sm">0%</span>
-                </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                  <div id="tokenProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
-                </div>
-              </div>
-              <div class="grid grid-cols-3 gap-4 text-center">
-                <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm hover:shadow-md transition-shadow">
-                  <div id="conversationCount" class="text-lg font-semibold transition-all duration-300">0</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Conversations</div>
-                </div>
-                <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm hover:shadow-md transition-shadow">
-                  <div id="fileCount" class="text-lg font-semibold transition-all duration-300">0</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Files</div>
-                </div>
-                <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm hover:shadow-md transition-shadow">
-                  <div id="artifactCount" class="text-lg font-semibold transition-all duration-300">0</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Artifacts</div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Enhanced tab navigation with active indicators -->
-            <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
-              <div class="flex flex-wrap -mb-px">
-                <button class="project-tab-btn inline-block px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium text-sm" role="tab" aria-selected="true" tabindex="0" data-tab="details">
-                  Details
-                </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="files">
-                  Files
-                </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="conversations">
-                  Conversations
-                </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
-                  Artifacts
-                </button>
-              </div>
-            </div>
-            
-            <!-- Tab content -->
-            <div id="projectTabContent">
-              <!-- Details tab -->
-              <div id="detailsTab" class="project-tab-content" role="tabpanel" tabindex="0">
-                <div class="mb-4">
-                  <h3 class="font-medium mb-2">Description</h3>
-                  <p id="projectDescription" class="text-gray-700 dark:text-gray-300">
-                    Project description will appear here.
-                  </p>
-                </div>
-                <div class="mb-4">
-                  <h3 class="font-medium mb-2">Goals</h3>
-                  <p id="projectGoals" class="text-gray-700 dark:text-gray-300">
-                    Project goals will appear here.
-                  </p>
-                </div>
-                <div class="mb-4">
-                  <h3 class="font-medium mb-2">Custom Instructions</h3>
-                  <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded">
-                    <p id="projectInstructions" class="text-gray-700 dark:text-gray-300">No custom instructions set.</p>
-                    <button id="editInstructionsBtn" class="mt-2 text-sm text-blue-600 hover:underline">
-                      Edit Instructions
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Files tab -->
-              <div id="filesTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
-                <div class="mb-4 flex justify-between items-center">
-                  <h3 class="font-medium">Project Files</h3>
-                  <div>
-                    <input type="file" id="fileInput" class="hidden" multiple />
-                    <button id="uploadFileBtn" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      Upload Files
-                    </button>
-                  </div>
-                </div>
-                
-                <!-- Drag and drop zone -->
-                <div id="dragDropZone" class="mb-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <p class="text-sm font-medium mb-1">Drag and drop your files here</p>
-                  <p class="text-xs text-gray-500">or click the Upload button above</p>
-                  <p class="text-xs text-gray-500 mt-2">Supported formats: .txt, .pdf, .doc, .docx, .csv, .json, .md</p>
-                </div>
-                
-                <div id="filesUploadProgress" class="hidden mb-4 bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
-                  <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-                    <div id="fileProgressBar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                  </div>
-                  <p id="uploadStatus" class="text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
-                </div>
-                
-                <div id="projectFilesList" class="grid grid-cols-1 gap-2 mt-4">
-                  <!-- Files will be dynamically inserted here -->
-                  <div class="text-gray-500 text-center py-8">No files uploaded yet</div>
-                </div>
-              </div>
-              
-              <!-- Enhanced conversations tab -->
-              <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
-                <div class="mb-4 flex justify-between items-center">
-                  <h3 class="font-medium">Conversations</h3>
-                  <button id="newConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    New Conversation
-                  </button>
-                </div>
-                <div id="projectConversationsList" class="mt-4">
-                  <!-- Conversations will be populated here -->
-                  <div class="text-gray-500 text-center py-8">No conversations yet.</div>
-                </div>
-              </div>
-              
-              <!-- Enhanced artifacts tab -->
-              <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
-                <div class="mb-4">
-                  <h3 class="font-medium">Generated Artifacts</h3>
-                  <p class="text-sm text-gray-500 mt-1">
-                    Artifacts are automatically created during conversations when you ask the AI to generate code, documents, or other content.
-                  </p>
-                </div>
-                <div id="projectArtifactsList" class="mt-4">
-                  <!-- Artifacts will be populated here -->
-                  <div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>
-                </div>
-              </div>
+            <div class="px-4 py-3 bg-gray-50 dark:bg-gray-700 rounded">
+              <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                Projects allow you to organize conversations, files, and generated artifacts in one place.
+              </p>
+              <p class="text-sm text-gray-600 dark:text-gray-300">
+                Visit the Projects page to create, view, and manage your projects.
+              </p>
             </div>
           </div>
         </section>
@@ -645,6 +554,7 @@
   <script src="/static/js/projectManager.js"></script>
   <script src="/static/js/projectDashboard.js"></script>
   <script src="/static/js/projectEnhancements.js"></script>
+  <script src="/static/js/sidebar.js"></script>
 
 </body>
 </html>
