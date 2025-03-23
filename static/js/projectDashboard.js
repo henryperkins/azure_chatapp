@@ -895,11 +895,27 @@ function renderProjectConversations(data) {
   const container = document.getElementById('projectConversationsList');
   if (!container) return;
 
-  // Handle both response formats
-  const conversations = data.conversations || data.data?.conversations || [];
-  console.log("Rendering conversations:", conversations);
+  console.log("Rendering conversations from data:", data);
   
-  if (conversations.length === 0) {
+  // Handle different response formats
+  let conversations = [];
+  
+  // Format 1: Array directly (from event.detail)
+  if (Array.isArray(data)) {
+    conversations = data;
+  }
+  // Format 2: { conversations: [...] }
+  else if (data && data.conversations) {
+    conversations = data.conversations;
+  }
+  // Format 3: { data: { conversations: [...] } }
+  else if (data && data.data && data.data.conversations) {
+    conversations = data.data.conversations;
+  }
+  
+  console.log("Processed conversations:", conversations);
+  
+  if (!conversations || conversations.length === 0) {
     container.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet</div>`;
     return;
   }

@@ -9,12 +9,14 @@ import logging
 import os
 from uuid import UUID
 from typing import Optional
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import knowledgebase_service
 from services.vector_db import get_vector_db, process_file_for_search, VECTOR_DB_STORAGE_PATH, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
 from services.file_storage import get_file_storage
+import config
 
 from db import get_async_session
 from models.user import User
@@ -102,12 +104,23 @@ async def upload_project_file(
 ):
     """Upload a file to a project using the knowledge base service"""
     try:
+        # Log file info for debugging
+        logger.info(f"Received file upload: {file.filename}, content_type: {file.content_type}, size: {getattr(file, 'size', 'unknown')}")
+        
+        # Validate file
+        if not file or not file.filename:
+            logger.error("No file or filename provided")
+            raise HTTPException(status_code=400, detail="No file provided")
+        
         project_file = await knowledgebase_service.upload_file_to_project(
             project_id=project_id,
             file=file,
             db=db,
             user_id=current_user.id
         )
+        
+        # Log success
+        logger.info(f"Successfully uploaded file {file.filename} to project {project_id}, saved as {project_file.id}")
         
         return await create_standard_response(
             {
@@ -120,8 +133,15 @@ async def upload_project_file(
             },
             "File uploaded successfully"
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions to preserve status codes
+        raise
+    except ValueError as e:
+        # Handle validation errors
+        logger.error(f"Validation error uploading file: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid file: {str(e)}")
     except Exception as e:
-        logger.error(f"Error uploading file: {str(e)}")
+        logger.error(f"Error uploading file: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 
@@ -194,8 +214,9 @@ async def reprocess_project_files(
     processed_count = 0
     failed_count = 0
     
-    # Get vector DB
-    embedding_model = project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL
+    # Get vector DB - use a default model name if not available
+    default_embedding_model = getattr(config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    embedding_model = project.knowledge_base.embedding_model if project.knowledge_base else default_embedding_model
     vector_db = await get_vector_db(
         model_name=embedding_model,
         storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),

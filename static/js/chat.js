@@ -28,16 +28,54 @@ function loadConversation(chatId) {
   conversationArea.innerHTML = '<div class="text-center text-gray-500">Loading conversation...</div>';
 
   const projectId = localStorage.getItem("selectedProjectId");
-  let apiEndpoint = projectId
+  // First get conversation details to update model selection
+  let conversationEndpoint = projectId
+    ? `/api/projects/${projectId}/conversations/${chatId}`
+    : `/api/chat/conversations/${chatId}`;
+    
+  let messagesEndpoint = projectId
     ? `/api/projects/${projectId}/conversations/${chatId}/messages`
     : `/api/chat/conversations/${chatId}/messages`;
 
-  window.apiRequest(apiEndpoint)
+  // First, get the conversation details to sync model selection
+  window.apiRequest(conversationEndpoint)
+    .then((convData) => {
+      // Update UI to reflect this conversation's model
+      if (convData.data?.model_id) {
+        const modelSelect = document.getElementById("modelSelect");
+        if (modelSelect) {
+          // Update the model dropdown to match conversation model
+          modelSelect.value = convData.data.model_id;
+          // Also update localStorage to keep everything in sync
+          localStorage.setItem("modelName", convData.data.model_id);
+          console.log("Updated model selection to match conversation:", convData.data.model_id);
+          
+          // Update MODEL_CONFIG object
+          window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+          window.MODEL_CONFIG.modelName = convData.data.model_id;
+        }
+      }
+      
+      // Now load messages
+      return window.apiRequest(messagesEndpoint);
+    })
     .then((data) => {
       conversationArea.innerHTML = "";
       if (data.data?.messages?.length > 0) {
         data.data.messages.forEach((msg) => {
-          appendMessage(msg.role, msg.content);
+          // Extract message metadata
+          const metadata = msg.metadata || {};
+          const thinking = metadata.thinking;
+          const redacted_thinking = metadata.redacted_thinking;
+          
+          // Pass all relevant data to appendMessage including knowledge base info
+          appendMessage(
+            msg.role, 
+            msg.content, 
+            thinking, 
+            redacted_thinking, 
+            metadata // Pass the full metadata for knowledge base info
+          );
         });
       } else {
         appendMessage("system", "No messages in this conversation yet");
@@ -67,7 +105,7 @@ function isValidUUID(str) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
-function appendMessage(role, content, thinking = null, redacted_thinking = null) {
+function appendMessage(role, content, thinking = null, redacted_thinking = null, metadata = null) {
   const conversationArea = document.getElementById("conversationArea");
   if (!conversationArea) return;
 
@@ -111,6 +149,21 @@ function appendMessage(role, content, thinking = null, redacted_thinking = null)
     wrapper.appendChild(copyButton);
     codeBlock.replaceWith(wrapper);
   });
+  
+  // Knowledge Base Indicator - when AI used project files to answer
+  const usedKnowledgeBase = metadata?.used_knowledge_context || false;
+  if (role === 'assistant' && usedKnowledgeBase) {
+    const kbContainer = document.createElement('div');
+    kbContainer.className = 'mt-2 bg-blue-50 text-blue-800 rounded p-2 text-xs flex items-center';
+    kbContainer.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <span>Response includes information from project files</span>
+    `;
+    msgDiv.appendChild(kbContainer);
+  }
   
   // Add thinking blocks if available (for assistant messages)
   if (role === 'assistant' && (thinking || redacted_thinking)) {
@@ -214,7 +267,10 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 async function setupWebSocket() {
   const chatId = window.CHAT_CONFIG?.chatId;
-  if (!chatId) return;
+  if (!chatId) {
+    console.warn('No chat ID available for WebSocket setup');
+    return;
+  }
 
   try {
     // Verify auth
@@ -229,6 +285,8 @@ async function setupWebSocket() {
     const port = window.location.port ? `:${window.location.port}` : '';
     const projectId = localStorage.getItem("selectedProjectId");
 
+    console.log(`Setting up WebSocket for chat ID: ${chatId}, project ID: ${projectId || 'none'}`);
+
     // Verify conversation
     const checkEndpoint = projectId
       ? `/api/projects/${projectId}/conversations/${chatId}`
@@ -237,6 +295,7 @@ async function setupWebSocket() {
     const response = await fetch(`${window.location.origin}${checkEndpoint}`, {
       credentials: 'include'
     });
+    
     if (!response.ok) {
       console.warn(`Conversation ${chatId} not accessible:`, response.status);
       return;
@@ -311,7 +370,21 @@ function initializeWebSocket() {
           return;
         }
         if (data.role && data.content) {
-          appendMessage(data.role, data.content, data.thinking, data.redacted_thinking);
+          // Create metadata object if not exists
+          const metadata = {};
+          
+          // Add knowledge context flag if present
+          if (data.used_knowledge_context) {
+            metadata.used_knowledge_context = true;
+          }
+          
+          appendMessage(
+            data.role, 
+            data.content, 
+            data.thinking, 
+            data.redacted_thinking, 
+            metadata
+          );
         }
       } catch (error) {
         console.error("WebSocket message parse error:", error);
@@ -397,6 +470,10 @@ function sendMessage(chatId, userMsg) {
         return;
     }
 
+    // Store the chat ID in the global config
+    window.CHAT_CONFIG = window.CHAT_CONFIG || {};
+    window.CHAT_CONFIG.chatId = chatId;
+
     // Immediately display user message
     appendMessage("user", userMsg);
     const chatInput = document.getElementById("chatInput");
@@ -449,6 +526,8 @@ function sendMessage(chatId, userMsg) {
             ? `/api/projects/${projectId}/conversations/${chatId}/messages`
             : `/api/chat/conversations/${chatId}/messages`;
 
+        console.log("sendMessage - using API endpoint:", apiEndpoint);
+
         window.apiRequest(apiEndpoint, "POST", payload)
             .then(respData => {
                 console.log("sendMessage response body:", respData);
@@ -456,22 +535,46 @@ function sendMessage(chatId, userMsg) {
                 if (indicator) {
                     indicator.remove();
                 }
-                if (respData.data?.assistant_message) {
-                    // Check for thinking blocks in the metadata
-                    const metadata = respData.data.assistant_message.metadata || {};
+                
+                // Extract assistant message based on different response formats
+                let assistantMessage = null;
+                
+                if (respData.data && respData.data.assistant_message) {
+                    // Direct access
+                    assistantMessage = respData.data.assistant_message;
+                } else if (respData.data && respData.data.response && respData.data.response.assistant_message) {
+                    // Response wrapper
+                    assistantMessage = respData.data.response.assistant_message;
+                } else if (respData.data && typeof respData.data.assistant_message === 'string') {
+                    // String JSON format
+                    try {
+                        assistantMessage = JSON.parse(respData.data.assistant_message);
+                    } catch (e) {
+                        console.error("Failed to parse assistant_message string:", e);
+                    }
+                }
+                
+                if (assistantMessage) {
+                    console.log("Rendering assistant message:", assistantMessage);
+                    // Get the full metadata from the message
+                    const metadata = assistantMessage.metadata || {};
                     const thinking = metadata.thinking;
                     const redactedThinking = metadata.redacted_thinking;
 
+                    // Pass the complete metadata to appendMessage to handle knowledge base info
                     appendMessage(
-                        respData.data.assistant_message.role,
-                        respData.data.assistant_message.content,
+                        assistantMessage.role,
+                        assistantMessage.content,
                         thinking,
-                        redactedThinking
+                        redactedThinking,
+                        metadata
                     );
-                }
-                if (respData.data?.assistant_error) {
+                } else if (respData.data?.assistant_error) {
                     console.error("Assistant error:", respData.data.assistant_error);
                     window.showNotification?.("Error generating response", "error");
+                } else {
+                    console.error("No assistant message found in response:", respData);
+                    window.showNotification?.("Unexpected response format", "error");
                 }
             })
             .catch((err) => {
@@ -529,9 +632,13 @@ async function convertToBase64(file) {
 window.createNewChat = async function() {
   try {
     const selectedProjectId = localStorage.getItem("selectedProjectId");
+    // Use the selected model from localStorage instead of hardcoding
+    const selectedModel = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
+    console.log("Creating new chat with model:", selectedModel);
+    
     const payload = {
       title: "New Chat",
-      model_id: "claude-3-sonnet-20240229"
+      model_id: selectedModel
     };
 
     let url = selectedProjectId
@@ -551,19 +658,36 @@ window.createNewChat = async function() {
       throw new Error(`API error response (${response.status}): ${response.statusText}`);
     }
 
+    // Parse the response and extract the conversation ID
     const responseData = await response.json();
-    let conversation = responseData.data || responseData;
-
-    // If nested structure
-    if (conversation.data && !conversation.id) {
-      conversation = conversation.data;
+    console.log("API create conversation response:", responseData);
+    
+    // Handle different response formats
+    let conversation = null;
+    
+    if (responseData.data && responseData.data.id) {
+      // Format: {data: {id: "uuid", ...}}
+      conversation = responseData.data;
+    } else if (responseData.data && responseData.data.data && responseData.data.data.id) {
+      // Format: {data: {data: {id: "uuid", ...}}}
+      conversation = responseData.data.data;
+    } else if (responseData.id) {
+      // Format: {id: "uuid", ...}
+      conversation = responseData;
+    } else {
+      console.error("Unable to parse conversation from response:", responseData);
+      throw new Error("Invalid response format from server. Missing conversation ID.");
     }
-    if (!conversation || !conversation.id) {
+    
+    if (!conversation.id) {
       throw new Error("Invalid response format from server. Missing conversation ID.");
     }
 
     // Update UI
+    window.CHAT_CONFIG = window.CHAT_CONFIG || {};
+    window.CHAT_CONFIG.chatId = conversation.id;
     localStorage.setItem("selectedConversationId", conversation.id);
+    
     const chatTitleEl = document.getElementById("chatTitle");
     if (chatTitleEl) {
       chatTitleEl.textContent = conversation.title || "New Chat";
@@ -580,6 +704,12 @@ window.createNewChat = async function() {
 
     // Load the conversation
     window.loadConversation(conversation.id);
+    
+    // Force a reload of the conversation list to show the new conversation
+    if (typeof window.loadConversationList === 'function') {
+      setTimeout(() => window.loadConversationList(), 500);
+    }
+    
     return conversation;
   } catch (error) {
     console.error("Error creating new chat:", error);
@@ -621,58 +751,93 @@ function initializeChat() {
   }, 100);
 
   // 5. Setup event listeners with error handling and auto-creation
-  if (sendBtn) {
+  const setupSendButton = () => {
+    const sendBtn = document.getElementById("sendBtn");
+    if (!sendBtn) {
+      console.error("Send button not found in DOM. Will retry in 500ms.");
+      setTimeout(setupSendButton, 500);
+      return;
+    }
+    
+    console.log("Setting up send button event listener");
+    
     sendBtn.addEventListener("click", async () => {
       try {
         console.log("Send button clicked");
+        const chatInput = document.getElementById("chatInput");
+        const chatImagePreview = document.getElementById("chatImagePreview");
         const userMsg = chatInput?.value.trim();
         let chatId = window.CHAT_CONFIG?.chatId;
         
         console.log("Initial state:", { chatId, userMsg });
 
-        // If no chat ID but we have a project, try to create a new conversation
+        // If no chat ID, create a new conversation
         if (!chatId) {
-          const projectId = localStorage.getItem("selectedProjectId");
-          if (projectId && userMsg) {
-            try {
-              const newConversation = await window.createNewChat();
-              if (newConversation?.id) {
-                chatId = newConversation.id;
-                window.CHAT_CONFIG.chatId = chatId;
-                console.log("Created new conversation:", chatId);
-              }
-            } catch (err) {
-              console.error("Failed to create conversation:", err);
+          try {
+            const projectId = localStorage.getItem("selectedProjectId");
+            console.log("No chat ID, project ID:", projectId);
+            
+            // Create a new chat (works for both project and standalone)
+            const newConversation = await window.createNewChat();
+            console.log("Created new conversation:", newConversation);
+            
+            if (newConversation && (newConversation.id || (newConversation.data && newConversation.data.id))) {
+              chatId = newConversation.id || newConversation.data.id;
+              window.CHAT_CONFIG = window.CHAT_CONFIG || {};
+              window.CHAT_CONFIG.chatId = chatId;
+              console.log("Created new conversation with ID:", chatId);
+            } else {
+              console.error("Failed to extract conversation ID from:", newConversation);
               window.showNotification?.("Failed to create new conversation", "error");
               return;
             }
-          } else {
-            window.showNotification?.("Please select a project first", "error");
+          } catch (err) {
+            console.error("Failed to create conversation:", err);
+            window.showNotification?.("Failed to create new conversation", "error");
             return;
           }
         }
 
         // Now we should have a chatId
         if (userMsg && chatId) {
+          console.log("Sending message to chat ID:", chatId);
           sendMessage(chatId, userMsg);
           chatImagePreview?.classList.add("hidden");
         } else if (!userMsg && window.MODEL_CONFIG?.visionImage && chatId) {
+          console.log("Sending image to chat ID:", chatId);
           sendMessage(chatId, "Analyze this image");
           chatImagePreview?.classList.add("hidden");
         } else {
           console.log("Send failed - final state:", { chatId, userMsg });
-          window.showNotification?.("Cannot send empty message", "error");
+          if (!userMsg) {
+            window.showNotification?.("Cannot send empty message", "error");
+          } else if (!chatId) {
+            window.showNotification?.("No active conversation", "error");
+          }
         }
       } catch (err) {
         console.error("Error in send handler:", err);
         window.showNotification?.("Error sending message", "error");
       }
     });
-  } else {
-    console.error("Send button not found in DOM");
-  }
+  };
+  
+  // Start the setup process
+  setupSendButton();
 
-  if (chatInput) {
+  // Setup keyboard handler with retry mechanism
+  const setupKeyboardHandler = () => {
+    const chatInput = document.getElementById("chatInput");
+    const chatImagePreview = document.getElementById("chatImagePreview");
+    
+    if (!chatInput) {
+      console.error("Chat input not found in DOM. Will retry in 500ms.");
+      setTimeout(setupKeyboardHandler, 500);
+      return;
+    }
+    
+    console.log("Setting up keyboard event listener");
+    
     chatInput.addEventListener("keyup", async (e) => {
       if (e.key === "Enter") {
         try {
@@ -682,35 +847,49 @@ function initializeChat() {
           
           console.log("Initial state:", { chatId, userMsg });
 
-          // If no chat ID but we have a project, try to create a new conversation
+          // If no chat ID, create a new conversation
           if (!chatId) {
-            const projectId = localStorage.getItem("selectedProjectId");
-            if (projectId && userMsg) {
-              try {
-                const newConversation = await window.createNewChat();
-                if (newConversation?.id) {
-                  chatId = newConversation.id;
-                  window.CHAT_CONFIG.chatId = chatId;
-                  console.log("Created new conversation:", chatId);
-                }
-              } catch (err) {
-                console.error("Failed to create conversation:", err);
+            try {
+              const projectId = localStorage.getItem("selectedProjectId");
+              console.log("No chat ID, project ID:", projectId);
+              
+              // Create a new chat (works for both project and standalone)
+              const newConversation = await window.createNewChat();
+              console.log("Created new conversation:", newConversation);
+              
+              if (newConversation && (newConversation.id || (newConversation.data && newConversation.data.id))) {
+                chatId = newConversation.id || newConversation.data.id;
+                window.CHAT_CONFIG = window.CHAT_CONFIG || {};
+                window.CHAT_CONFIG.chatId = chatId;
+                console.log("Created new conversation with ID:", chatId);
+              } else {
+                console.error("Failed to extract conversation ID from:", newConversation);
                 window.showNotification?.("Failed to create new conversation", "error");
                 return;
               }
-            } else {
-              window.showNotification?.("Please select a project first", "error");
+            } catch (err) {
+              console.error("Failed to create conversation:", err);
+              window.showNotification?.("Failed to create new conversation", "error");
               return;
             }
           }
 
           // Now we should have a chatId
           if (userMsg && chatId) {
+            console.log("Sending message to chat ID:", chatId);
             sendMessage(chatId, userMsg);
+            chatImagePreview?.classList.add("hidden");
+          } else if (!userMsg && window.MODEL_CONFIG?.visionImage && chatId) {
+            console.log("Sending image to chat ID:", chatId);
+            sendMessage(chatId, "Analyze this image");
             chatImagePreview?.classList.add("hidden");
           } else {
             console.log("Send failed - final state:", { chatId, userMsg });
-            window.showNotification?.("Cannot send empty message", "error");
+            if (!userMsg) {
+              window.showNotification?.("Cannot send empty message", "error");
+            } else if (!chatId) {
+              window.showNotification?.("No active conversation", "error");
+            }
           }
         } catch (err) {
           console.error("Error in keyup handler:", err);
@@ -718,23 +897,41 @@ function initializeChat() {
         }
       }
     });
-  } else {
-    console.error("Chat input not found in DOM");
-  }
+  };
+  
+  // Start the keyboard handler setup
+  setupKeyboardHandler();
 
-  // Image upload handling
-  if (chatAttachImageBtn) {
+  // Image upload handling with retry mechanism
+  const setupImageUploadHandlers = () => {
+    const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
+    const chatImageInput = document.getElementById("chatImageInput");
+    const chatPreviewImg = document.getElementById("chatPreviewImg");
+    const chatImageName = document.getElementById("chatImageName");
+    const chatImageStatus = document.getElementById("chatImageStatus");
+    const chatImagePreview = document.getElementById("chatImagePreview");
+    const chatRemoveImageBtn = document.getElementById("chatRemoveImageBtn");
+    
+    // If any of the critical elements are missing, retry setup
+    if (!chatAttachImageBtn || !chatImageInput || !chatImagePreview || !chatRemoveImageBtn) {
+      console.error("Image upload elements not found in DOM. Will retry in 500ms.");
+      setTimeout(setupImageUploadHandlers, 500);
+      return;
+    }
+    
+    console.log("Setting up image upload handlers");
+    
+    // Image attach button
     chatAttachImageBtn.addEventListener("click", () => {
       const modelName = localStorage.getItem("modelName") || "o3-mini";
       if (modelName !== "o1") {
         window.showNotification?.("Vision features only work with the o1 model.", "warning");
         return;
       }
-      chatImageInput?.click();
+      chatImageInput.click();
     });
-  }
 
-  if (chatImageInput) {
+    // Image input change handler
     chatImageInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -749,9 +946,9 @@ function initializeChat() {
         return;
       }
       try {
-        chatPreviewImg.src = URL.createObjectURL(file);
-        chatImageName.textContent = file.name;
-        chatImageStatus.textContent = "Ready to send";
+        if (chatPreviewImg) chatPreviewImg.src = URL.createObjectURL(file);
+        if (chatImageName) chatImageName.textContent = file.name;
+        if (chatImageStatus) chatImageStatus.textContent = "Ready to send";
         chatImagePreview.classList.remove("hidden");
 
         const base64 = await convertToBase64(file);
@@ -764,15 +961,165 @@ function initializeChat() {
         chatImagePreview.classList.add("hidden");
       }
     });
-  }
 
-  if (chatRemoveImageBtn) {
+    // Remove image button
     chatRemoveImageBtn.addEventListener("click", () => {
-      if (chatImageInput) chatImageInput.value = '';
-      if (chatImagePreview) chatImagePreview.classList.add("hidden");
+      chatImageInput.value = '';
+      chatImagePreview.classList.add("hidden");
       if (window.MODEL_CONFIG) window.MODEL_CONFIG.visionImage = null;
     });
+  };
+  
+  // Start the image upload setup
+  setupImageUploadHandlers();
+  
+  // Setup project files button
+  const setupProjectFilesButton = () => {
+    const showProjectFilesBtn = document.getElementById("showProjectFilesBtn");
+    const closeProjectFilesBtn = document.getElementById("closeProjectFilesBtn");
+    const projectFilesModal = document.getElementById("projectFilesModal");
+    const uploadFileFromModalBtn = document.getElementById("uploadFileFromModalBtn");
+    
+    if (!showProjectFilesBtn || !projectFilesModal) {
+      console.error("Project files button or modal not found in DOM. Will retry in 500ms.");
+      setTimeout(setupProjectFilesButton, 500);
+      return;
+    }
+    
+    console.log("Setting up project files button");
+    
+    // Show modal when button is clicked
+    showProjectFilesBtn.addEventListener("click", () => {
+      const projectId = localStorage.getItem("selectedProjectId");
+      if (!projectId) {
+        window.showNotification?.("Please select a project first", "error");
+        return;
+      }
+      
+      // Show modal and load files
+      projectFilesModal.classList.remove("hidden");
+      loadProjectFilesForModal(projectId);
+    });
+    
+    // Close modal
+    if (closeProjectFilesBtn) {
+      closeProjectFilesBtn.addEventListener("click", () => {
+        projectFilesModal.classList.add("hidden");
+      });
+    }
+    
+    // Upload button in modal
+    if (uploadFileFromModalBtn) {
+      uploadFileFromModalBtn.addEventListener("click", () => {
+        // Trigger the main upload file button in the project UI
+        document.getElementById("uploadFileBtn")?.click();
+        // Hide the modal after triggering upload
+        projectFilesModal.classList.add("hidden");
+      });
+    }
+  };
+  
+  // Function to load project files into modal
+  function loadProjectFilesForModal(projectId) {
+    const filesContainer = document.getElementById("projectFilesList");
+    const loadingIndicator = document.getElementById("filesLoadingIndicator");
+    
+    if (!filesContainer || !loadingIndicator) return;
+    
+    // Show loading indicator
+    loadingIndicator.classList.remove("hidden");
+    filesContainer.innerHTML = "";
+    
+    // Fetch files
+    window.apiRequest(`/api/projects/${projectId}/files`)
+      .then(response => {
+        // Hide loading indicator
+        loadingIndicator.classList.add("hidden");
+        
+        const files = response.data?.files || [];
+        if (files.length === 0) {
+          filesContainer.innerHTML = `
+            <li class="py-4 text-center text-gray-500">
+              No files uploaded yet. Click "Upload New File" to add files that can be used as context.
+            </li>
+          `;
+          return;
+        }
+        
+        // Render each file
+        files.forEach(file => {
+          const fileItem = document.createElement("li");
+          fileItem.className = "py-3";
+          fileItem.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex items-center">
+                <span class="text-lg mr-2">${getFileIcon(file.file_type)}</span>
+                <div>
+                  <p class="font-medium">${file.filename}</p>
+                  <p class="text-xs text-gray-500">
+                    ${formatFileSize(file.file_size)} • 
+                    ${file.file_type} • 
+                    Uploaded ${formatDate(file.created_at)}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
+                  Searchable
+                </span>
+              </div>
+            </div>
+          `;
+          filesContainer.appendChild(fileItem);
+        });
+      })
+      .catch(err => {
+        console.error("Error loading project files for modal:", err);
+        loadingIndicator.classList.add("hidden");
+        filesContainer.innerHTML = `
+          <li class="py-4 text-center text-red-500">
+            Error loading files. Please try again.
+          </li>
+        `;
+      });
   }
+  
+  // Helper function to get appropriate icon for file type
+  function getFileIcon(fileType) {
+    const iconMap = {
+      'pdf': '📄',
+      'txt': '📝',
+      'doc': '📝',
+      'docx': '📝',
+      'csv': '📊',
+      'xlsx': '📊',
+      'png': '🖼️',
+      'jpg': '🖼️',
+      'jpeg': '🖼️',
+      'json': '📋',
+      'md': '📋'
+    };
+    
+    return iconMap[fileType] || '📄';
+  }
+  
+  // Helper function to format file size
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+  
+  // Helper function to format date
+  function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  }
+  
+  // Start the project files button setup
+  setupProjectFilesButton();
 
   // If there's an existing chatId, load conversation immediately
   const urlParams = new URLSearchParams(window.location.search);

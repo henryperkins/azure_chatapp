@@ -509,10 +509,36 @@ function renderConversationList(data) {
 
   // Store conversations globally for starred usage
   window.chatConfig = window.chatConfig || {};
-  window.chatConfig.conversations = data.conversations || [];
+  
+  // Handle different response formats
+  let conversations = [];
+  console.log("Raw conversation data:", data);
+  
+  if (data && data.data && data.data.conversations) {
+    // Format: { data: { conversations: [...] } }
+    conversations = data.data.conversations;
+  } else if (data && data.conversations) {
+    // Format: { conversations: [...] }
+    conversations = data.conversations;
+  } else if (data && data.data && Array.isArray(data.data)) {
+    // Format: { data: [...] }
+    conversations = data.data;
+  } else if (Array.isArray(data)) {
+    // Format: [...]
+    conversations = data;
+  } else if (data && data.data && typeof data.data === 'object') {
+    // Try to extract any conversation data if it exists
+    const possibleConversations = Object.values(data.data).find(val => Array.isArray(val));
+    if (possibleConversations) {
+      conversations = possibleConversations;
+    }
+  }
+  
+  window.chatConfig.conversations = conversations;
+  console.log("Processed conversations:", conversations);
 
-  if (data.conversations && data.conversations.length > 0) {
-    data.conversations.forEach(item => {
+  if (conversations && conversations.length > 0) {
+    conversations.forEach(item => {
       const li = document.createElement('li');
       li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
 
@@ -585,6 +611,11 @@ function renderConversationList(data) {
         if (noChatMsg) noChatMsg.classList.add('hidden');
         const chatTitleEl = getElement(SELECTORS.CHAT_TITLE);
         if (chatTitleEl) chatTitleEl.textContent = item.title;
+        
+        // Set the chat ID in window.CHAT_CONFIG
+        window.CHAT_CONFIG = window.CHAT_CONFIG || {};
+        window.CHAT_CONFIG.chatId = item.id;
+        
         if (typeof window.loadConversation === 'function') {
           window.loadConversation(item.id);
         }
