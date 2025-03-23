@@ -157,19 +157,8 @@
             );
           })
           .catch((fallbackErr) => {
-            console.error("Error in first fallback conversation load:", fallbackErr);
-            // Try a third format
-            window.apiRequest(`/api/chat/projects/${projectId}/conversations`, "GET")
-              .then((resp3) => {
-                const conv3 = resp3.data?.conversations || resp3.data || [];
-                document.dispatchEvent(
-                  new CustomEvent("projectConversationsLoaded", { detail: conv3 })
-                );
-              })
-              .catch((thirdErr) => {
-                console.error("Error in all conversation load attempts:", thirdErr);
-                window.showNotification?.("Failed to load conversations", "error");
-              });
+            console.error("Error in conversation load:", fallbackErr);
+            window.showNotification?.("Failed to load conversations", "error");
           });
       });
   }
