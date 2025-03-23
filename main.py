@@ -212,16 +212,28 @@ app.include_router(conversations_router, prefix="/api/chat/conversations", tags=
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(knowledge_base_router, prefix="/api/kb", tags=["knowledge-bases"])
-app.include_router(
-    projects_router,
-    prefix="/api/projects", 
-    tags=["projects"]
-)
 
+# Project files router should be included within project router, not separately
+from routes.projects.artifacts import router as project_artifacts_router
+from routes.projects.conversations import router as project_conversations_router
+
+# Include project sub-routers
 app.include_router(
     project_files_router,
     prefix="/api/projects/{project_id}/files", 
     tags=["project-files"]
+)
+
+app.include_router(
+    project_artifacts_router,
+    prefix="/api/projects/{project_id}/artifacts",
+    tags=["project-artifacts"]
+)
+
+app.include_router(
+    project_conversations_router,
+    prefix="/api/projects/{project_id}/conversations",
+    tags=["project-conversations"]
 )
 
 

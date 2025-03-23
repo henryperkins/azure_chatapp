@@ -396,6 +396,16 @@
             </button>
             <input type="file" id="chatImageInput" accept="image/png,image/jpeg" class="hidden" />
             
+            <!-- Project files button - opens modal with project files -->
+            <button id="showProjectFilesBtn" 
+                    class="p-2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                    title="Browse Project Files">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                      d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+            </button>
+            
             <!-- The actual chat input -->
             <input type="text"
                    id="chatInput"
@@ -590,6 +600,43 @@
   <script src="/static/js/projectDashboard.js"></script>
   <script src="/static/js/projectEnhancements.js"></script>
   <script src="/static/js/sidebar.js"></script>
+  <script src="/static/js/chatExtensions.js"></script>
+
+  <!-- Project Files Modal -->
+  <div id="projectFilesModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold">Project Files</h3>
+        <button id="closeProjectFilesBtn" class="text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      
+      <div class="mb-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+          These files are available as context for your conversation. The AI assistant can reference them when answering your questions.
+        </p>
+      </div>
+      
+      <div id="filesLoadingIndicator" class="text-center text-gray-500 py-4">
+        <p>Loading project files...</p>
+      </div>
+      
+      <div id="projectFilesListContainer" class="max-h-96 overflow-y-auto">
+        <ul id="projectFilesList" class="divide-y divide-gray-200 dark:divide-gray-700">
+          <!-- Will be populated dynamically -->
+        </ul>
+      </div>
+      
+      <div class="mt-4 flex justify-end space-x-2">
+        <button id="uploadFileFromModalBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Upload New File
+        </button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>

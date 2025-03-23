@@ -402,19 +402,22 @@ async def create_message(
                 db=db,
             )
             if assistant_msg:
+                # Individual fields for backward compatibility
                 response_payload["assistant_message_id"] = str(assistant_msg.id)
                 response_payload["assistant_role"] = str(assistant_msg.role)
                 response_payload["assistant_content"] = str(assistant_msg.content)
                 
                 # Include metadata (thinking blocks) if available
                 metadata = assistant_msg.get_metadata_dict()
-                if metadata:
-                    response_payload["assistant_message"] = json.dumps({
-                        "id": str(assistant_msg.id),
-                        "role": assistant_msg.role,
-                        "content": assistant_msg.content,
-                        "metadata": metadata
-                    })
+                
+                # Add the assistant_message as a proper object instead of a JSON string
+                # The frontend expects a JSON string that it will parse
+                response_payload["assistant_message"] = json.dumps({
+                    "id": str(assistant_msg.id),
+                    "role": assistant_msg.role,
+                    "content": assistant_msg.content,
+                    "metadata": metadata
+                })
             else:
                 response_payload["assistant_error"] = "Failed to generate response"
         except Exception as exc:

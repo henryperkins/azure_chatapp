@@ -141,8 +141,30 @@
     
     window.apiRequest(endpoint, "GET")
       .then((response) => {
-        console.log("Response data:", response.data);
-        const conversations = response.data?.conversations || [];
+        console.log("Response data:", response);
+        
+        // Handle different response formats for flexibility
+        let conversations = [];
+        
+        // Format 1: { data: { conversations: [...] } }
+        if (response.data?.conversations) {
+          conversations = response.data.conversations;
+        } 
+        // Format 2: { conversations: [...] }
+        else if (response.conversations) {
+          conversations = response.conversations;
+        }
+        // Format 3: Array of conversations directly
+        else if (Array.isArray(response)) {
+          conversations = response;
+        }
+        // Format 4: data is array directly 
+        else if (Array.isArray(response.data)) {
+          conversations = response.data;
+        }
+        
+        console.log("Processed conversations:", conversations);
+        
         document.dispatchEvent(
           new CustomEvent("projectConversationsLoaded", { 
             detail: conversations 
@@ -227,13 +249,31 @@
   function uploadFile(projectId, file) {
     const formData = new FormData();
     formData.append("file", file);
+    
+    console.log(`Uploading file ${file.name} (${file.size} bytes) to project ${projectId}`);
+    
     return fetch(`/api/projects/${projectId}/files`, {
       method: "POST",
       body: formData,
       credentials: "include"
     }).then((response) => {
-      if (!response.ok) throw new Error("Upload failed");
+      if (!response.ok) {
+        console.error(`Upload failed with status: ${response.status}`);
+        return response.text().then(text => {
+          try {
+            // Try to parse as JSON for better error info
+            const errorJson = JSON.parse(text);
+            throw new Error(errorJson.detail || errorJson.message || "Upload failed");
+          } catch (e) {
+            // If it's not parseable as JSON, use the text directly
+            throw new Error(`Upload failed: ${text || response.statusText}`);
+          }
+        });
+      }
       return response.json();
+    }).catch(err => {
+      console.error("File upload error:", err);
+      throw err; // Re-throw to allow caller to handle it
     });
   }
 
