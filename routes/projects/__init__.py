@@ -14,8 +14,8 @@ router.include_router(projects.router, tags=["projects"])
 
 # Project-associated resources
 router.include_router(
-    conversations.router, 
-    prefix="/{project_id}/conversations", 
+    conversations.router,
+    prefix="/{project_id}/conversations",
     tags=["project-conversations"]
 )
 router.include_router(

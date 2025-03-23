@@ -77,6 +77,22 @@ class MessageCreate(BaseModel):
 # Conversation Endpoints
 # ============================
 
+@router.get("/", response_model=dict)
+async def list_project_conversations(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """List conversations in a project"""
+    await validate_resource_access(project_id, Project, current_user, db)
+    
+    result = await db.execute(
+        select(Conversation).where(Conversation.project_id == project_id)
+    )
+    convos = result.scalars().all()
+    
+    return await create_standard_response({"conversations": convos})
+
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     project_id: UUID,
