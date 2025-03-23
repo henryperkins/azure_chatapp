@@ -135,31 +135,23 @@
    * Dispatches "projectConversationsLoaded" with { detail: conversationArray }.
    */
   function loadProjectConversations(projectId) {
-    // First try the correct endpoint from routes/projects/conversations.py
-    window.apiRequest(`/api/projects/${projectId}/conversations`, "GET")
+    console.log("Loading conversations for project:", projectId);
+    const endpoint = `/api/projects/${projectId}/conversations`;
+    console.log("API Endpoint:", endpoint);
+    
+    window.apiRequest(endpoint, "GET")
       .then((response) => {
-        // Log the response for debugging
-        console.log("Project conversations response:", response);
-        const conversations = response.data?.conversations || response.data || [];
+        console.log("Response data:", response.data);
+        const conversations = response.data?.conversations || [];
         document.dispatchEvent(
-          new CustomEvent("projectConversationsLoaded", { detail: conversations })
+          new CustomEvent("projectConversationsLoaded", { 
+            detail: conversations 
+          })
         );
       })
       .catch((err) => {
-        // Fallback attempt if "/conversations" fails
         console.error("Error loading conversations:", err);
-        // Try alternative endpoint formats
-        window.apiRequest(`/api/${projectId}/conversations`, "GET")
-          .then((resp2) => {
-            const conv2 = resp2.data?.conversations || resp2.data || [];
-            document.dispatchEvent(
-              new CustomEvent("projectConversationsLoaded", { detail: conv2 })
-            );
-          })
-          .catch((fallbackErr) => {
-            console.error("Error in conversation load:", fallbackErr);
-            window.showNotification?.("Failed to load conversations", "error");
-          });
+        window.showNotification?.("Failed to load conversations", "error");
       });
   }
 
