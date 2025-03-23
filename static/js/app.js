@@ -288,6 +288,27 @@ function safeInitialize() {
       elementMap.AUTH_BUTTON.click();
     });
   }
+
+    // New conversation button in project details
+  document.addEventListener('click', function(event) {
+    if (event.target.closest('#newConversationBtn')) {
+      const projectId = localStorage.getItem('selectedProjectId');
+      if (projectId) {
+        window.projectManager.createConversation(projectId)
+          .then(newConversation => {
+            // Redirect to the new conversation
+            window.location.href = `/?chatId=${newConversation.id}`;
+          })
+          .catch(err => {
+            console.error("Failed to create conversation:", err);
+            window.showNotification?.("Failed to create conversation", "error");
+          });
+      } else {
+        console.error("No project selected to create conversation in");
+        window.showNotification?.("No project selected", "error");
+      }
+    }
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -643,4 +664,18 @@ window.renderConversationList = renderConversationList;
 window.checkAndHandleAuth = checkAndHandleAuth;
 
 // Initialize chat functionality (includes model dropdown)
-window.initializeModelDropdown = () => window.initializeChat?.();
+window.initializeModelDropdown = () => {
+  // Initialize the model dropdown first
+  if (typeof initializeModelDropdown === 'function') {
+    initializeModelDropdown();
+  }
+  // Then initialize chat
+  if (typeof window.initializeChat === 'function') {
+    window.initializeChat();
+  }
+};
+
+// Call initialization after DOM content is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  window.initializeModelDropdown();
+});
