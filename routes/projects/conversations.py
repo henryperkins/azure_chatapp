@@ -9,11 +9,9 @@ and their messages that belong to a specific project.
 import logging
 import json
 from uuid import UUID
-from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
-from utils.auth_utils import extract_token_from_websocket, get_user_from_token
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import conversation_service, project_service
@@ -34,8 +32,8 @@ from utils.ai_response import (
     generate_ai_response,
     handle_websocket_response
 )
-from utils.auth_utils import get_current_user_and_token
-from utils.db_utils import validate_resource_access, get_all_by_condition, get_by_id, save_model
+from utils.auth_utils import get_current_user_and_token, extract_token_from_websocket, get_user_from_token
+from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
@@ -155,16 +153,17 @@ async def get_conversation(
     Retrieve metadata about a specific conversation, verifying ownership and project relationship.
     """
     # Validate resource using enhanced utility
+    additional_filters = [
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False)
+    ]
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
         db,
         "Conversation",
-        [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
+        additional_filters
     )
 
     return await create_standard_response({
@@ -188,29 +187,31 @@ async def update_conversation(
     Updates the conversation's title or model_id.
     """
     # Validate project is not archived
-    project = await validate_resource_access(
+    additional_filters_project = [
+        Project.user_id == current_user.id,
+        Project.archived.is_(False)  # Cannot modify archived projects
+    ]
+    await validate_resource_access(
         project_id,
         Project,
         current_user,
         db,
         "Project",
-        [
-            Project.user_id == current_user.id,
-            Project.archived.is_(False)  # Cannot modify archived projects
-        ]
+        additional_filters_project
     )
 
     # Validate conversation ownership
+    additional_filters_conv = [
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False)
+    ]
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
         db,
         "Conversation",
-        [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
+        additional_filters_conv
     )
 
     # Update fields
@@ -243,29 +244,31 @@ async def delete_conversation(
     Soft-deletes a conversation by setting is_deleted = True.
     """
     # Validate project is not archived
-    project = await validate_resource_access(
+    additional_filters_project = [
+        Project.user_id == current_user.id,
+        Project.archived.is_(False)  # Cannot modify archived projects
+    ]
+    await validate_resource_access(
         project_id,
         Project,
         current_user,
         db,
         "Project",
-        [
-            Project.user_id == current_user.id,
-            Project.archived.is_(False)  # Cannot modify archived projects
-        ]
+        additional_filters_project
     )
 
     # Validate conversation ownership
+    additional_filters_conv = [
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False)
+    ]
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
         db,
         "Conversation",
-        [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
+        additional_filters_conv
     )
 
     conversation.is_deleted = True
@@ -294,16 +297,17 @@ async def list_conversation_messages(
 ):
     """Retrieves messages for a project conversation"""
     # Validate project conversation exists
+    additional_filters = [
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False)
+    ]
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
         db,
         "Conversation",
-        [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
+        additional_filters
     )
 
     # Get messages using enhanced function
@@ -361,24 +365,23 @@ async def project_websocket_chat_endpoint(
                 return
 
             # 4. Validate conversation belongs to project
+            additional_filters = [
+                Conversation.project_id == project_id,
+                Conversation.is_deleted.is_(False)
+            ]
             conversation = await validate_resource_access(
                 conversation_id,
                 Conversation,
                 user,
                 db,
                 "Conversation",
-                [
-                    Conversation.project_id == project_id,
-                    Conversation.is_deleted.is_(False)
-                ]
+                additional_filters
             )  # type: ignore
             if not conversation:
                 logger.warning("WebSocket connection rejected: Conversation access validation failed")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id)  # ADDED DEBUG LOG
                 return
-
-            conversation_id_str = str(conversation.id)  # Define conversation_id_str here, after conversation is validated
 
             await websocket.accept()
 
@@ -390,15 +393,15 @@ async def project_websocket_chat_endpoint(
                     data_dict = {"content": data, "role": "user"}
 
                 # Create message
-                message = await create_user_message(
-                    conversation_id=conversation_id_str,
-                    content=data_dict["content"],
-                    role=data_dict["role"],
-                    db=db
-                )
+                    message = await create_user_message(
+                        conversation_id=conversation_id,
+                        content=data_dict["content"],
+                        role=data_dict["role"],
+                        db=db
+                    )
 
                 if message.role == "user":
-                    await handle_websocket_response(conversation_id_str, db, websocket)
+                    await handle_websocket_response(conversation_id, db, websocket)
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
@@ -425,38 +428,41 @@ async def create_message(
     optionally triggers an assistant response if role='user'.
     """
     # Validate project is not archived
-    project = await validate_resource_access(
+    additional_filters_project = [
+        Project.user_id == current_user.id,
+        Project.archived.is_(False)  # Cannot modify archived projects
+    ]
+    await validate_resource_access(
         project_id,
         Project,
         current_user,
         db,
         "Project",
-        [
-            Project.user_id == current_user.id,
-            Project.archived.is_(False)  # Cannot modify archived projects
-        ]
+        additional_filters_project
     )
 
     # Validate conversation ownership
+    additional_filters_conv = [
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False)
+    ]
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
         db,
         "Conversation",
-        [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
+        additional_filters_conv
     )
 
     # Validate image data if provided
     if new_msg.image_data:
         await validate_image_data(new_msg.image_data)
 
-    # Create user message
+    # Create user message - convert to plain UUID to match expected type
+    conversation_id_uuid = UUID(str(conversation.id))
     message = await create_user_message(
-        conversation_id=str(conversation.id),  # type: ignore
+        conversation_id=conversation_id_uuid,
         content=new_msg.content.strip(),
         role=new_msg.role.lower().strip(),
         db=db
@@ -475,8 +481,10 @@ async def create_message(
 
         try:
             # Generate AI response
+            # Convert to plain UUID to match expected type
+            conversation_id_uuid = UUID(str(conversation.id))
             assistant_msg = await generate_ai_response(
-                conversation_id=str(conversation.id),  # type: ignore
+                conversation_id=conversation_id_uuid,
                 messages=msg_dicts,
                 model_id=conversation.model_id,
                 image_data=new_msg.image_data,
@@ -523,44 +531,44 @@ async def websocket_chat_endpoint(
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params) # ADDED DEBUG LOG
+                logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)  # ADDED DEBUG LOG
                 return
 
             # 2. Validate token and get user
             user = await get_user_from_token(token, db, "access")
 
             # 3. Validate project access
-            project = await validate_resource_access(
+            additional_filters_project = [
+                Project.user_id == user.id,
+                Project.archived.is_(False)
+            ]
+            await validate_resource_access(
                 project_id,
                 Project,
                 user,
                 db,
                 "Project",
-                [
-                    Project.user_id == user.id,
-                    Project.archived.is_(False)
-                ]
+                additional_filters_project
             )
 
             # 4. Validate conversation exists in project
-            validated_conversation = await validate_resource_access( # Changed variable name to avoid shadowing
+            additional_filters_conv = [
+                Conversation.project_id == project_id,
+                Conversation.is_deleted.is_(False)
+            ]
+            validated_conversation = await validate_resource_access(
                 conversation_id,
                 Conversation,
                 user,
                 db,
                 "Conversation",
-                [
-                    Conversation.project_id == project_id,
-                    Conversation.is_deleted.is_(False)
-                ]
+                additional_filters_conv
             )
             if not validated_conversation:
                 logger.warning("WebSocket connection rejected: Conversation access validation failed")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id)  # ADDED DEBUG LOG
                 return
-
-            conversation_id_str = str(validated_conversation.id)  # Define conversation_id_str here, after conversation is validated
 
             await websocket.accept()
 
@@ -572,15 +580,22 @@ async def websocket_chat_endpoint(
                     data_dict = {"content": data, "role": "user"}
 
                 # Create message
-                message = await create_user_message(
-                    conversation_id=conversation_id_str,
-                    content=data_dict["content"],
-                    role=data_dict["role"],
-                    db=db
-                )
-
-                if message.role == "user":
-                    await handle_websocket_response(conversation_id_str, db, websocket)
+                try:
+                    message = await create_user_message(
+                        conversation_id=conversation_id,
+                        content=data_dict["content"],
+                        role=data_dict["role"],
+                        db=db
+                    )
+                    
+                    if message.role == "user":
+                        await handle_websocket_response(conversation_id, db, websocket)
+                except Exception as e:
+                    logger.error(f"Error creating message: {str(e)}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": f"Error creating message: {str(e)}"
+                    })
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
