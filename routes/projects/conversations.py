@@ -79,7 +79,6 @@ class MessageCreate(BaseModel):
 # ============================
 
 @router.get("", response_model=dict)
-@router.get("/", response_model=dict)  # Handle with and without trailing slash
 async def list_project_conversations(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -89,7 +88,9 @@ async def list_project_conversations(
     await validate_resource_access(project_id, Project, current_user, db)
     
     result = await db.execute(
-        select(Conversation).where(Conversation.project_id == project_id)
+        select(Conversation)
+        .where(Conversation.project_id == project_id)
+        .order_by(Conversation.created_at.desc())
     )
     convos = result.scalars().all()
     
