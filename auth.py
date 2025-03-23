@@ -148,22 +148,31 @@ async def login_user(
             detail="Account disabled. Contact support."
         )
 
-    # Update last login time
-    user.last_login = datetime.utcnow()
-    
-    token_id = str(uuid.uuid4())
-    expire = datetime.utcnow() + timedelta(
-        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    
-    # Initialize token version if null and increment
-    if user.token_version is None:
-        # Set initial version based on current timestamp
-        user.token_version = int(datetime.utcnow().timestamp())
-    else:
-        user.token_version += 1
-    session.add(user)
-    await session.commit()
+    # Start transaction with isolation level to prevent race conditions
+    async with session.begin_nested():
+        # Refresh user with lock to prevent concurrent updates
+        locked_user = await session.get(
+            User, 
+            user.id, 
+            with_for_update=True
+        )
+        
+        # Update last login time
+        if locked_user:
+            locked_user.last_login = datetime.utcnow()
+            
+            # Atomic token version update
+            if locked_user.token_version is None:
+                locked_user.token_version = int(datetime.utcnow().timestamp())
+            else:
+                locked_user.token_version += 1
+        
+        token_id = str(uuid.uuid4())
+        expire = datetime.utcnow() + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+        
+        await session.commit()
     
     # Clean up expired tokens
     await clean_expired_tokens(session)
