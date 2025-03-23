@@ -157,9 +157,17 @@ function registerDataEventListeners() {
   // Projects list loaded
   document.addEventListener("projectsLoaded", (e) => renderProjectsList(e.detail));
   // Single project loaded
-  document.addEventListener("projectLoaded", (e) => renderProjectDetails(e.detail));
-  // Stats loaded
-  document.addEventListener("projectStatsLoaded", (e) => renderProjectStats(e.detail));
+    document.addEventListener("projectLoaded", (e) => {
+        setTimeout(() => {
+            renderProjectDetails(e.detail);
+        }, 500); // Add 500ms delay
+    });
+    // Stats loaded
+    document.addEventListener("projectStatsLoaded", (e) => {
+        setTimeout(() => {
+            renderProjectStats(e.detail);
+        }, 500);
+    });  // Add 500ms delay
   // Files loaded
   document.addEventListener("projectFilesLoaded", (e) => renderProjectFiles(e.detail.files));
   // Conversations loaded

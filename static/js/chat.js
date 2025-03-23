@@ -8,11 +8,10 @@
  * - Manages assistant responses, custom model selection, and vision images
  */
 
-console.log("chat.js loaded"); // Add this line
-
 // ---------------------------------------------------------------------
-// HELPER & UTILITY-LIKE FUNCTIONS
+  // HELPER & UTILITY-LIKE FUNCTIONS
 // ---------------------------------------------------------------------
+console.log("chat.js loaded"); // Move to the very top
 
 function loadConversation(chatId) {
   if (!chatId || !isValidUUID(chatId)) {
@@ -391,117 +390,125 @@ function initializeWebSocket() {
 // MESSAGE SENDING
 // ---------------------------------------------------------------------
 function sendMessage(chatId, userMsg) {
-  console.log("Sending message to chatId=", chatId, "message=", userMsg);
-  if (!chatId) {
-    window.showNotification?.("Please start a new conversation first.", "error");
-    return;
-  }
+    console.log("sendMessage called with chatId:", chatId, "userMsg:", userMsg); // Detailed logging
 
-  // Immediately display user message
-  appendMessage("user", userMsg);
-  const chatInput = document.getElementById("chatInput");
-  if (chatInput) chatInput.value = "";
-
-  // Thinking placeholder
-  const thinkingIndicator = appendMessage("assistant", "<em>Thinking...</em>");
-  thinkingIndicator.setAttribute("id", "thinkingIndicator");
-
-  const visionImage = window.MODEL_CONFIG?.visionImage;
-  const modelName = localStorage.getItem("modelName") || "o3-mini";
-
-  const payload = {
-    role: "user",
-    content: userMsg,
-    model_id: modelName,
-    image_data: visionImage || null,
-    vision_detail: window.MODEL_CONFIG?.visionDetail || "auto",
-    max_completion_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
-    max_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
-    reasoning_effort: window.MODEL_CONFIG?.reasoningEffort || "low"
-  };
-
-  // Clear vision data
-  if (visionImage) {
-    window.MODEL_CONFIG.visionImage = null;
-    const visionFileInput = document.getElementById('visionFileInput');
-    if (visionFileInput) visionFileInput.value = '';
-    const chatImageInput = document.getElementById('chatImageInput');
-    if (visionStatus) visionStatus.textContent = '';
-    const chatImagePreview = document.getElementById('chatImagePreview');
-    if (chatImagePreview) chatImagePreview.classList.add('hidden');
-    const visionPreview = document.getElementById('visionPreview');
-    if (visionPreview) visionPreview.innerHTML = '';
-  }
-
-  // Try sending via WebSocket
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(payload));
-  } else {
-    // Fallback to HTTP
-    const projectId = localStorage.getItem("selectedProjectId");
-    let apiEndpoint = projectId
-      ? `/api/projects/${projectId}/conversations/${chatId}/messages`
-      : `/api/chat/conversations/${chatId}/messages`;
-
-    window.apiRequest(apiEndpoint, "POST", payload)
-      .then(respData => {
-        console.log("sendMessage response body:", respData);
-        const indicator = document.getElementById("thinkingIndicator");
-        if (indicator) {
-          indicator.remove();
-        }
-        if (respData.data?.assistant_message) {
-          // Check for thinking blocks in the metadata
-          const metadata = respData.data.assistant_message.metadata || {};
-          const thinking = metadata.thinking;
-          const redactedThinking = metadata.redacted_thinking;
-          
-          appendMessage(
-            respData.data.assistant_message.role, 
-            respData.data.assistant_message.content,
-            thinking,
-            redactedThinking
-          );
-        }
-        if (respData.data?.assistant_error) {
-          console.error("Assistant error:", respData.data.assistant_error);
-          window.showNotification?.("Error generating response", "error");
-        }
-      })
-      .catch((err) => {
-        console.error("Error sending message via fetch:", err);
-        const indicator = document.getElementById("thinkingIndicator");
-        if (indicator) {
-          indicator.remove();
-        }
-        window.showNotification?.("Error sending message", "error");
-      });
-  }
-
-  // Enhanced visual indicator in user message if image attached
-  if (visionImage) {
-    const conversationArea = document.getElementById("conversationArea");
-    const msgDivs = conversationArea?.querySelectorAll("div.bg-blue-50");
-    const lastUserDiv = msgDivs?.[msgDivs.length - 1];
-    if (lastUserDiv) {
-      const imgContainer = window.createDomElement("div", {
-        className: "flex items-center bg-gray-50 rounded p-1 mt-2"
-      });
-
-      const imgElement = document.createElement("img");
-      imgElement.className = "h-10 w-10 object-cover rounded mr-2";
-      imgElement.src = document.getElementById('chatPreviewImg')?.src || visionImage;
-      imgElement.alt = "Attached Image";
-      imgContainer.appendChild(imgElement);
-
-      const imgLabel = window.createDomElement("div", {
-        className: "text-xs text-gray-500"
-      }, "📷 Image attached");
-      imgContainer.appendChild(imgLabel);
-
-      lastUserDiv.appendChild(imgContainer);
+    if (!chatId) {
+        window.showNotification?.("Please start a new conversation first.", "error");
+        return;
     }
-  }
+
+    // Immediately display user message
+    appendMessage("user", userMsg);
+    const chatInput = document.getElementById("chatInput");
+    if (chatInput) chatInput.value = "";
+
+    // Thinking placeholder
+    const thinkingIndicator = appendMessage("assistant", "<em>Thinking...</em>");
+    thinkingIndicator.setAttribute("id", "thinkingIndicator");
+
+    const visionImage = window.MODEL_CONFIG?.visionImage;
+    const modelName = localStorage.getItem("modelName") || "o3-mini";
+    console.log("sendMessage - modelName:", modelName); // Log model name
+
+    const payload = {
+        role: "user",
+        content: userMsg,
+        model_id: modelName,
+        image_data: visionImage || null,
+        vision_detail: window.MODEL_CONFIG?.visionDetail || "auto",
+        max_completion_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
+        max_tokens: Number(window.MODEL_CONFIG?.maxTokens) || 500,
+        reasoning_effort: window.MODEL_CONFIG?.reasoningEffort || "low"
+    };
+
+    console.log("sendMessage - payload:", payload); // Log the payload
+
+    // Clear vision data
+    if (visionImage) {
+        window.MODEL_CONFIG.visionImage = null;
+        const visionFileInput = document.getElementById('visionFileInput');
+        if (visionFileInput) visionFileInput.value = '';
+        const chatImageInput = document.getElementById('chatImageInput');
+        if (chatImageInput) chatImageInput.value = ''; // Clear the file input
+        if (window.showNotification) window.showNotification('Image removed', 'info');
+        const chatImagePreview = document.getElementById('chatImagePreview');
+        if (chatImagePreview) chatImagePreview.classList.add('hidden');
+        const visionPreview = document.getElementById('visionPreview');
+        if (visionPreview) visionPreview.innerHTML = '';
+    }
+
+    // Try sending via WebSocket
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        console.log("sendMessage - sending via WebSocket");
+        socket.send(JSON.stringify(payload));
+    } else {
+        // Fallback to HTTP
+        console.log("sendMessage - sending via HTTP");
+        const projectId = localStorage.getItem("selectedProjectId");
+        let apiEndpoint = projectId
+            ? `/api/projects/${projectId}/conversations/${chatId}/messages`
+            : `/api/chat/conversations/${chatId}/messages`;
+
+        window.apiRequest(apiEndpoint, "POST", payload)
+            .then(respData => {
+                console.log("sendMessage response body:", respData);
+                const indicator = document.getElementById("thinkingIndicator");
+                if (indicator) {
+                    indicator.remove();
+                }
+                if (respData.data?.assistant_message) {
+                    // Check for thinking blocks in the metadata
+                    const metadata = respData.data.assistant_message.metadata || {};
+                    const thinking = metadata.thinking;
+                    const redactedThinking = metadata.redacted_thinking;
+
+                    appendMessage(
+                        respData.data.assistant_message.role,
+                        respData.data.assistant_message.content,
+                        thinking,
+                        redactedThinking
+                    );
+                }
+                if (respData.data?.assistant_error) {
+                    console.error("Assistant error:", respData.data.assistant_error);
+                    window.showNotification?.("Error generating response", "error");
+                }
+            })
+            .catch((err) => {
+                console.error("Error sending message via fetch:", err);
+                const indicator = document.getElementById("thinkingIndicator");
+                if (indicator) {
+                    indicator.remove();
+                }
+                window.showNotification?.("Error sending message", "error");
+            });
+    }
+
+    // Enhanced visual indicator in user message if image attached (this part seems correct)
+    if (visionImage) {
+      const conversationArea = document.getElementById("conversationArea");
+      const msgDivs = conversationArea?.querySelectorAll("div.bg-blue-50");
+      const lastUserDiv = msgDivs?.[msgDivs.length - 1]; // Corrected selector
+      if (lastUserDiv) {
+        const imgContainer = window.createDomElement("div", {
+          className: "flex items-center bg-gray-50 rounded p-1 mt-2"
+        });
+
+        const imgElement = document.createElement("img");
+        imgElement.className = "h-10 w-10 object-cover rounded mr-2";
+        imgElement.src = document.getElementById('chatPreviewImg')?.src || visionImage;
+
+        imgElement.alt = "Attached Image";
+        imgContainer.appendChild(imgElement);
+
+        const imgLabel = window.createDomElement("div", {
+          className: "text-xs text-gray-500"
+        }, "📷 Image attached");
+        imgContainer.appendChild(imgLabel);
+
+        lastUserDiv.appendChild(imgContainer);
+      }
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -514,133 +521,6 @@ async function convertToBase64(file) {
     reader.onload = () => resolve(reader.result);
     reader.onerror = (error) => reject(error);
   });
-}
-
-// ---------------------------------------------------------------------
-// INITIALIZE CHAT (CALLED FROM app.js)
-// ---------------------------------------------------------------------
-function initializeChat() {
-  console.error("initializeChat called"); // Add this line
-  // 1. Model selection handler
-  handleModelSelection();
-
-  // 2. Configure WebSocket if needed
-  setupWebSocket();
-
-  // 3. UI references
-  const chatInput = document.getElementById("chatInput");
-  const sendBtn = document.getElementById("sendBtn");
-  const chatImageInput = document.getElementById("chatImageInput");
-  const chatImagePreview = document.getElementById("chatImagePreview");
-  const chatPreviewImg = document.getElementById("chatPreviewImg");
-  const chatImageName = document.getElementById("chatImageName");
-  const chatImageStatus = document.getElementById("chatImageStatus");
-  const chatRemoveImageBtn = document.getElementById("chatRemoveImageBtn");
-  const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
-
-  // 4. Auto-create a new chat if no chatId is present
-  setTimeout(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
-    if (!chatId) {
-      console.log("No chat ID found, auto-creating new chat");
-      window.createNewChat?.();
-    }
-  }, 100);
-
-  // 5. Setup event listeners
-  if (sendBtn) {
-    sendBtn.addEventListener("click", () => {
-      console.log("Send button clicked"); // Add logging
-      const userMsg = chatInput?.value.trim();
-      const chatId = window.CHAT_CONFIG?.chatId;
-      console.log("chatId:", chatId, "userMsg:", userMsg); // Add logging
-      if (userMsg && chatId) {
-        sendMessage(chatId, userMsg);
-        chatImagePreview?.classList.add("hidden");
-      } else if (!userMsg && window.MODEL_CONFIG?.visionImage && chatId) {
-        // Send just the image
-        sendMessage(chatId, "Analyze this image");
-        chatImagePreview?.classList.add("hidden");
-      } else {
-        window.showNotification?.("Please start a new conversation first.", "error");
-      }
-    });
-  }
-
-  if (chatInput) {
-    chatInput.addEventListener("keyup", (e) => {
-      if (e.key === "Enter") {
-        const userMsg = chatInput.value.trim();
-        const chatId = window.CHAT_CONFIG?.chatId;
-        if (userMsg && chatId) {
-          sendMessage(chatId, userMsg);
-          chatImagePreview?.classList.add("hidden");
-        } else {
-          window.showNotification?.("Please start a new conversation first.", "error");
-        }
-      }
-    });
-  }
-
-  // Image upload handling
-  if (chatAttachImageBtn) {
-    chatAttachImageBtn.addEventListener("click", () => {
-      const modelName = localStorage.getItem("modelName") || "o3-mini";
-      if (modelName !== "o1") {
-        window.showNotification?.("Vision features only work with the o1 model.", "warning");
-        return;
-      }
-      chatImageInput?.click();
-    });
-  }
-
-  if (chatImageInput) {
-    chatImageInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (!['image/jpeg', 'image/png'].includes(file.type)) {
-        window.showNotification?.("Only JPEG and PNG images are supported", "error");
-        chatImageInput.value = '';
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        window.showNotification?.("Image must be smaller than 5MB", "error");
-        chatImageInput.value = '';
-        return;
-      }
-      try {
-        chatPreviewImg.src = URL.createObjectURL(file);
-        chatImageName.textContent = file.name;
-        chatImageStatus.textContent = "Ready to send";
-        chatImagePreview.classList.remove("hidden");
-
-        const base64 = await convertToBase64(file);
-        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-        window.MODEL_CONFIG.visionImage = base64;
-        window.MODEL_CONFIG.visionDetail = "auto";
-      } catch (err) {
-        console.error("Error processing image:", err);
-        window.showNotification?.("Failed to process the image", "error");
-        chatImagePreview.classList.add("hidden");
-      }
-    });
-  }
-
-  if (chatRemoveImageBtn) {
-    chatRemoveImageBtn.addEventListener("click", () => {
-      if (chatImageInput) chatImageInput.value = '';
-      if (chatImagePreview) chatImagePreview.classList.add("hidden");
-      if (window.MODEL_CONFIG) window.MODEL_CONFIG.visionImage = null;
-    });
-  }
-
-  // If there's an existing chatId, load conversation immediately
-  const urlParams = new URLSearchParams(window.location.search);
-  const existingChatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
-  if (existingChatId) {
-    loadConversation(existingChatId);
-  }
 }
 
 // ---------------------------------------------------------------------
@@ -707,6 +587,200 @@ window.createNewChat = async function() {
     throw error;
   }
 };
+
+// ---------------------------------------------------------------------
+// INITIALIZE CHAT (CALLED FROM app.js)
+// ---------------------------------------------------------------------
+function initializeChat() {
+  console.log("initializeChat called"); // Changed to console.log
+  // 1. Model selection handler
+  handleModelSelection();
+
+  // 2. Configure WebSocket if needed
+  setupWebSocket();
+
+  // 3. UI references
+  const chatInput = document.getElementById("chatInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const chatImageInput = document.getElementById("chatImageInput");
+  const chatImagePreview = document.getElementById("chatImagePreview");
+  const chatPreviewImg = document.getElementById("chatPreviewImg");
+  const chatImageName = document.getElementById("chatImageName");
+  const chatImageStatus = document.getElementById("chatImageStatus");
+  const chatRemoveImageBtn = document.getElementById("chatRemoveImageBtn");
+  const chatAttachImageBtn = document.getElementById("chatAttachImageBtn");
+
+  // 4. Auto-create a new chat if no chatId is present
+  setTimeout(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
+    if (!chatId) {
+      console.log("No chat ID found, auto-creating new chat");
+      window.createNewChat?.();
+    }
+  }, 100);
+
+  // 5. Setup event listeners with error handling and auto-creation
+  if (sendBtn) {
+    sendBtn.addEventListener("click", async () => {
+      try {
+        console.log("Send button clicked");
+        const userMsg = chatInput?.value.trim();
+        let chatId = window.CHAT_CONFIG?.chatId;
+        
+        console.log("Initial state:", { chatId, userMsg });
+
+        // If no chat ID but we have a project, try to create a new conversation
+        if (!chatId) {
+          const projectId = localStorage.getItem("selectedProjectId");
+          if (projectId && userMsg) {
+            try {
+              const newConversation = await window.createNewChat();
+              if (newConversation?.id) {
+                chatId = newConversation.id;
+                window.CHAT_CONFIG.chatId = chatId;
+                console.log("Created new conversation:", chatId);
+              }
+            } catch (err) {
+              console.error("Failed to create conversation:", err);
+              window.showNotification?.("Failed to create new conversation", "error");
+              return;
+            }
+          } else {
+            window.showNotification?.("Please select a project first", "error");
+            return;
+          }
+        }
+
+        // Now we should have a chatId
+        if (userMsg && chatId) {
+          sendMessage(chatId, userMsg);
+          chatImagePreview?.classList.add("hidden");
+        } else if (!userMsg && window.MODEL_CONFIG?.visionImage && chatId) {
+          sendMessage(chatId, "Analyze this image");
+          chatImagePreview?.classList.add("hidden");
+        } else {
+          console.log("Send failed - final state:", { chatId, userMsg });
+          window.showNotification?.("Cannot send empty message", "error");
+        }
+      } catch (err) {
+        console.error("Error in send handler:", err);
+        window.showNotification?.("Error sending message", "error");
+      }
+    });
+  } else {
+    console.error("Send button not found in DOM");
+  }
+
+  if (chatInput) {
+    chatInput.addEventListener("keyup", async (e) => {
+      if (e.key === "Enter") {
+        try {
+          console.log("Enter key pressed");
+          const userMsg = chatInput.value.trim();
+          let chatId = window.CHAT_CONFIG?.chatId;
+          
+          console.log("Initial state:", { chatId, userMsg });
+
+          // If no chat ID but we have a project, try to create a new conversation
+          if (!chatId) {
+            const projectId = localStorage.getItem("selectedProjectId");
+            if (projectId && userMsg) {
+              try {
+                const newConversation = await window.createNewChat();
+                if (newConversation?.id) {
+                  chatId = newConversation.id;
+                  window.CHAT_CONFIG.chatId = chatId;
+                  console.log("Created new conversation:", chatId);
+                }
+              } catch (err) {
+                console.error("Failed to create conversation:", err);
+                window.showNotification?.("Failed to create new conversation", "error");
+                return;
+              }
+            } else {
+              window.showNotification?.("Please select a project first", "error");
+              return;
+            }
+          }
+
+          // Now we should have a chatId
+          if (userMsg && chatId) {
+            sendMessage(chatId, userMsg);
+            chatImagePreview?.classList.add("hidden");
+          } else {
+            console.log("Send failed - final state:", { chatId, userMsg });
+            window.showNotification?.("Cannot send empty message", "error");
+          }
+        } catch (err) {
+          console.error("Error in keyup handler:", err);
+          window.showNotification?.("Error sending message", "error");
+        }
+      }
+    });
+  } else {
+    console.error("Chat input not found in DOM");
+  }
+
+  // Image upload handling
+  if (chatAttachImageBtn) {
+    chatAttachImageBtn.addEventListener("click", () => {
+      const modelName = localStorage.getItem("modelName") || "o3-mini";
+      if (modelName !== "o1") {
+        window.showNotification?.("Vision features only work with the o1 model.", "warning");
+        return;
+      }
+      chatImageInput?.click();
+    });
+  }
+
+  if (chatImageInput) {
+    chatImageInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!['image/jpeg', 'image/png'].includes(file.type)) {
+        window.showNotification?.("Only JPEG and PNG images are supported", "error");
+        chatImageInput.value = '';
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        window.showNotification?.("Image must be smaller than 5MB", "error");
+        chatImageInput.value = '';
+        return;
+      }
+      try {
+        chatPreviewImg.src = URL.createObjectURL(file);
+        chatImageName.textContent = file.name;
+        chatImageStatus.textContent = "Ready to send";
+        chatImagePreview.classList.remove("hidden");
+
+        const base64 = await convertToBase64(file);
+        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+        window.MODEL_CONFIG.visionImage = base64;
+        window.MODEL_CONFIG.visionDetail = "auto";
+      } catch (err) {
+        console.error("Error processing image:", err);
+        window.showNotification?.("Failed to process the image", "error");
+        chatImagePreview.classList.add("hidden");
+      }
+    });
+  }
+
+  if (chatRemoveImageBtn) {
+    chatRemoveImageBtn.addEventListener("click", () => {
+      if (chatImageInput) chatImageInput.value = '';
+      if (chatImagePreview) chatImagePreview.classList.add("hidden");
+      if (window.MODEL_CONFIG) window.MODEL_CONFIG.visionImage = null;
+    });
+  }
+
+  // If there's an existing chatId, load conversation immediately
+  const urlParams = new URLSearchParams(window.location.search);
+  const existingChatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
+  if (existingChatId) {
+    loadConversation(existingChatId);
+  }
+}
 
 // Add markdown styles
 const style = document.createElement('style');
