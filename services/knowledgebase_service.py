@@ -12,17 +12,15 @@ Contains logic for managing knowledge bases and their components:
 import os
 import io
 import logging
-import hashlib
-import json
 import config
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Union, BinaryIO
 from uuid import UUID
 
-from fastapi import HTTPException, UploadFile, File
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update, func
+from sqlalchemy import select, delete, func
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload
 
 # Secure filename imports (install via: pip install werkzeug)
 try:
@@ -35,18 +33,9 @@ from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from services.file_storage import get_file_storage, FileStorage
 from services.text_extraction import get_text_extractor, TextExtractor, TextExtractionError
-from services.vector_db import get_vector_db, VectorDB, process_file_for_search
-
-# Add tiktoken import
-try:
-    import tiktoken
-    TIKTOKEN_AVAILABLE = True
-    # Allow using a configurable tokenizer encoding
-    TOKENIZER_ENCODING = getattr(config, "TOKENIZER_ENCODING", "cl100k_base")
-except ImportError:
-    TIKTOKEN_AVAILABLE = False
-    TOKENIZER_ENCODING = None
-    print("Warning: tiktoken not installed. Token counts will be estimates. `pip install tiktoken` for accurate counts.")
+from services.vector_db import get_vector_db, process_file_for_search, VectorDB
+from services.project_service import validate_project_access
+from models.user import User
 
 
 logger = logging.getLogger(__name__)
@@ -123,37 +112,34 @@ async def estimate_tokens_from_file(
     Returns:
         Tuple of (token_count, metadata_dict)
     """
+    from utils.context import estimate_token_count
+
     # Get text extractor service
     _, text_extractor = _get_services()
-
-    metadata: Dict[str, Any] = {}
-
+    
     try:
-        # Extract text content and metadata
+        # Extract text using existing extractor
         text_chunks, extracted_meta = await text_extractor.extract_text(
-            content, 
+            content,
             filename=filename,
             chunk_size=DEFAULT_CHUNK_SIZE,
             chunk_overlap=DEFAULT_CHUNK_OVERLAP
         )
         
-        # Join chunks for token calculation
+        # Join chunks for a complete text
         text = " ".join(text_chunks) if text_chunks else ""
-        metadata.update(extracted_meta)
-
-        # Use tiktoken if available
-        if TIKTOKEN_AVAILABLE and TOKENIZER_ENCODING:
-            encoding = tiktoken.get_encoding(TOKENIZER_ENCODING)
-            token_count = len(encoding.encode(text))
-        else:
-            # Basic token estimation (1 token ≈ 4 chars for English)
-            char_count = metadata.get("char_count", len(text))
-            token_count = char_count // 4
-
-        metadata["token_count"] = token_count
-        metadata["token_estimation_accuracy"] = "high" if TIKTOKEN_AVAILABLE else "approx"
+        
+        # Use centralized token counter
+        token_count = estimate_token_count([{"role": "user", "content": text}])
+        
+        metadata = {
+            **extracted_meta,
+            "token_count": token_count,
+            "token_estimation_accuracy": "high"
+        }
+        
         return token_count, metadata
-
+        
     except TextExtractionError as tex:
         logger.error(f"Text extraction error for {filename}: {str(tex)}")
         raise HTTPException(
@@ -162,46 +148,58 @@ async def estimate_tokens_from_file(
         )
     except Exception as e:
         logger.error(f"Token estimation error for {filename}: {str(e)}")
-        # Fallback to basic size-based estimation for unknown file types
-        if isinstance(content, bytes):
-            content_size = len(content)
-        else:
-            try:
-                if isinstance(content, (bytes, bytearray, memoryview)):
-                    content_size = len(content)
-                elif hasattr(content, 'read'):
-                    # Attempt to read content to measure size
-                    if hasattr(content, 'seek'):
-                        current_pos = content.tell()
-                        content.seek(0, os.SEEK_END)
-                        content_size = content.tell()
-                        content.seek(current_pos)
-                    else:
-                        file_data = content.read()
-                        content_size = len(file_data or b'')
-                        try:
-                            content.seek(0)
-                        except:
-                            pass
-                else:
-                    # Fallback conservative estimate
-                    content_size = MAX_FILE_BYTES // 10
-            except:
-                content_size = MAX_FILE_BYTES // 10
-
-        # Conservative token estimation based on file size
+        # For errors, provide conservative size-based estimate
+        content_size = (
+            len(content) if isinstance(content, bytes)
+            else getattr(content, "size", MAX_FILE_BYTES // 10)
+        )
         token_count = content_size // 8
-
-        metadata["file_size"] = content_size
-        metadata["token_count"] = token_count
-        metadata["token_estimation_accuracy"] = "low"
-
+        
+        metadata = {
+            "file_size": content_size,
+            "token_count": token_count,
+            "token_estimation_accuracy": "low"
+        }
+        
         logger.warning(
             f"Falling back to conservative token estimation for {filename}. "
             f"Estimated tokens: {token_count}"
         )
-
+        
         return token_count, metadata
+
+async def _validate_user_and_project(
+    project_id: UUID,
+    user_id: Optional[int],
+    db: AsyncSession
+) -> Project:
+    """Helper to validate user permissions and get project."""
+    if user_id is not None:
+        the_user = await db.get(User, user_id)
+        if not the_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return await validate_project_access(project_id, the_user, db)
+    
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+async def _get_vector_db_for_project(
+    project_id: UUID,
+    project: Optional[Project] = None
+) -> VectorDB:
+    """Helper to get vector DB instance for a project."""
+    model_name = (
+        project.knowledge_base.embedding_model
+        if project and project.knowledge_base
+        else DEFAULT_EMBEDDING_MODEL
+    )
+    return await get_vector_db(
+        model_name=model_name,
+        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+        load_existing=True
+    )
 
 async def upload_file_to_project(
     project_id: UUID,
@@ -219,64 +217,34 @@ async def upload_file_to_project(
     5. Updates project token usage.
     6. Optionally processes for search.
     """
-    from services.project_service import validate_project_access
-    from models.user import User
-
-    # 1. Derive or default a filename
-    requested_filename = file.filename or "untitled"
-    sanitized_filename = _sanitize_filename(requested_filename)
-
-    # Validate file extension
+    # 1. Process filename and validate
+    sanitized_filename = _sanitize_filename(file.filename or "untitled")
     if not validate_file_extension(sanitized_filename):
         raise HTTPException(
             status_code=400,
             detail=f"File type not allowed. Supported types: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
         )
 
-    # Get storage service
+    # 2. Initialize services and validate file size
     storage, _ = _get_services()
-
-    # Read file content with threshold-based approach
+    file_size = getattr(file, 'size', None)
     contents = b""
-    if file.size > STREAM_THRESHOLD:
-        # Stream the file directly to storage
-        file_path = await storage.save_file(
-            file_content=file.file,
-            filename=sanitized_filename,
-            content_type=file.content_type or "application/octet-stream",
-            metadata={},  # metadata will be updated later
-            project_id=project_id
-        )
-    else:
-        # Read small files into memory
-        contents = await file.read() or b""
-        file_path = await storage.save_file(
-            file_content=io.BytesIO(contents),
-            filename=sanitized_filename,
-            content_type=file.content_type or "application/octet-stream",
-            metadata={},  # metadata will be updated later
-            project_id=project_id
-        )
-
-    if len(contents) > MAX_FILE_BYTES:
+    
+    if file_size is None:
+        contents = await file.read()
+        file_size = len(contents)
+        await file.seek(0)
+        
+    if file_size > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=400,
-            detail=f"File too large (>{MAX_FILE_BYTES/1_000_000}MB)."
+            detail=f"File too large (>{MAX_FILE_BYTES / (1024 * 1024):.1f}MB)."
         )
 
-    # Validate project / user
-    the_user = None
-    if user_id is not None:
-        the_user = await db.get(User, user_id)
-        if not the_user:
-            raise HTTPException(status_code=404, detail="User not found")
-        project = await validate_project_access(project_id, the_user, db)
-    else:
-        project = await db.get(Project, project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # 3. Validate project access
+    project = await _validate_user_and_project(project_id, user_id, db)
 
-    # 3. Extract text and tokens (skip for non-text files)
+    # 4. Process file content
     file_ext = os.path.splitext(sanitized_filename)[1][1:].lower() if "." in sanitized_filename else ""
     token_estimate = 0
     file_metadata = {}
@@ -304,8 +272,9 @@ async def upload_file_to_project(
     }
 
     try:
+        # Save file using appropriate method based on size
         file_path = await storage.save_file(
-            file_content=file.file if file.size > STREAM_THRESHOLD else io.BytesIO(contents),
+            file_content=file.file if file_size > STREAM_THRESHOLD else io.BytesIO(contents),
             filename=sanitized_filename,
             content_type=file.content_type or "application/octet-stream",
             metadata=metadata,
@@ -315,7 +284,7 @@ async def upload_file_to_project(
         logger.error(f"File storage error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"File storage error: {str(e)}")
 
-    # Create ProjectFile record
+    # Create ProjectFile record with metadata
     pf = ProjectFile(
         project_id=project_id,
         filename=sanitized_filename,
@@ -340,12 +309,7 @@ async def upload_file_to_project(
 
     # Process for search if requested
     if process_for_search:
-        # Initialize vector DB
-        vector_db = await get_vector_db(
-            model_name=project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL,
-            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-            load_existing=True
-        )
+        vector_db = await _get_vector_db_for_project(project_id, project)
         
         # Process file for search
         search_results = await process_file_for_search(
@@ -433,16 +397,14 @@ async def get_project_file(
     Returns:
         Dictionary with file information and optional content
     """
-    from services.project_service import validate_project_access
-    from models.user import User
-    
     # Validate user permission if provided
     if user_id:
         the_user = await db.get(User, user_id)
         if not the_user:
             raise HTTPException(status_code=404, detail="User not found")
-        project = await validate_project_access(project_id, the_user, db)
+        await validate_project_access(project_id, the_user, db)
     
+    # Query file record
     query = select(ProjectFile).where(
         ProjectFile.id == file_id,
         ProjectFile.project_id == project_id
@@ -504,26 +466,11 @@ async def delete_project_file(
     Returns:
         Dictionary with success status and message
     """
-    from services.project_service import validate_project_access
-    from models.user import User
-
     # Validate user and project ownership if user_id is provided
-    if user_id is not None:
-        the_user = await db.get(User, user_id)
-        if not the_user:
-            raise HTTPException(status_code=404, detail="User not found")
-        project = await validate_project_access(project_id, the_user, db)
-    else:
-        # Otherwise, just confirm project existence
-        project_result = await db.execute(select(Project).where(Project.id == project_id))
-        project = project_result.scalars().first()
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Get authorized project
+    project = await _validate_user_and_project(project_id, user_id, db)
 
-    # Retrieve the file record from DB (reusing get_project_file logic)
-    file_data = await get_project_file(project_id, file_id, db, include_content=False)
-
-    # Get the full DB object
+    # Get the file record
     query = select(ProjectFile).where(
         ProjectFile.id == file_id,
         ProjectFile.project_id == project_id
@@ -553,11 +500,7 @@ async def delete_project_file(
 
     # Try to remove from vector database
     try:
-        vector_db = await get_vector_db(
-            model_name=project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL,
-            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-            load_existing=True
-        )
+        vector_db = await _get_vector_db_for_project(project_id, project)
         
         # Delete all chunks for this file
         await vector_db.delete_by_filter({"file_id": str(file_id)})
@@ -642,7 +585,7 @@ async def create_knowledge_base(
     name: str,
     description: Optional[str] = None,
     embedding_model: Optional[str] = None,
-    db: AsyncSession = None
+    db: Optional[AsyncSession] = None
 ) -> KnowledgeBase:
     """
     Create a new knowledge base.
@@ -688,19 +631,9 @@ async def search_project_context(
     Returns:
         List of relevant context pieces
     """
-    # Get project
-    project_result = await db.execute(select(Project).where(Project.id == project_id))
-    project = project_result.scalars().first()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Get vector DB
-    vector_db = await get_vector_db(
-        model_name=project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL,
-        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-        load_existing=True
-    )
+    # Get project and initialize vector DB
+    project = await _validate_user_and_project(project_id, None, db)
+    vector_db = await _get_vector_db_for_project(project_id, project)
     
     # Search for context
     from services.vector_db import search_context_for_query
@@ -735,6 +668,3 @@ async def search_project_context(
         enhanced_results.append(result)
     
     return enhanced_results
-
-# Import datetime for metadata
-from datetime import datetime
