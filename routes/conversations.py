@@ -6,8 +6,8 @@ Provides endpoints for managing conversations and their messages.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict
-from uuid import UUID, uuid4
+from typing import Optional
+from uuid import UUID  # Remove uuid4 as it's unused
 
 from fastapi import (
     APIRouter,
@@ -19,6 +19,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+# Remove unused ColumnElement import
 
 from db import get_async_session, AsyncSessionLocal
 from models.conversation import Conversation
@@ -37,6 +38,9 @@ from utils.ai_response import generate_ai_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+project_id: UUID | None = None  # Instead of Optional[UUID]
+# Remove the problematic line referring to undefined conversation_id
+# conversation_id = UUID(str(conversation_id))
 
 
 class ConversationResponse(BaseModel):
@@ -56,7 +60,7 @@ class ConversationListResponse(BaseModel):
     Schema for returning a list of conversations.
     """
 
-    conversations: List[ConversationResponse]
+    conversations: list[ConversationResponse]
 
 
 class MessageResponse(BaseModel):
@@ -67,7 +71,7 @@ class MessageResponse(BaseModel):
     id: UUID
     role: str
     content: str
-    metadata: Dict[str, str]
+    metadata: dict[str, str]
     timestamp: datetime
 
 
@@ -370,8 +374,9 @@ async def create_message(
     if new_msg.image_data:
         await validate_image_data(new_msg.image_data)
 
+    # Use UUID() to ensure type compatibility
     message = await create_user_message(
-        conversation_id=conversation.id,
+        conversation_id=UUID(str(conversation.id)),
         content=new_msg.content.strip(),
         role=new_msg.role.lower().strip(),
         db=db,
@@ -384,10 +389,10 @@ async def create_message(
     }
 
     if message.role == "user":
-        msg_dicts = await get_conversation_messages(conversation_id, db)
+        msg_dicts = await get_conversation_messages(UUID(str(conversation_id)), db)
         try:
             assistant_msg = await generate_ai_response(
-                conversation_id=conversation.id,
+                conversation_id=UUID(str(conversation.id)),
                 messages=msg_dicts,
                 model_id=conversation.model_id,
                 image_data=new_msg.image_data,
@@ -404,12 +409,12 @@ async def create_message(
                 # Include metadata (thinking blocks) if available
                 metadata = assistant_msg.get_metadata_dict()
                 if metadata:
-                    response_payload["assistant_message"] = {
+                    response_payload["assistant_message"] = json.dumps({
                         "id": str(assistant_msg.id),
                         "role": assistant_msg.role,
                         "content": assistant_msg.content,
                         "metadata": metadata
-                    }
+                    })
             else:
                 response_payload["assistant_error"] = "Failed to generate response"
         except Exception as exc:
@@ -435,7 +440,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
             if not success:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-            logger.debug("WebSocket authentication successful for user: %s", user.username) # ADDED DEBUG LOG
+            if user and user.username:
+                logger.debug("WebSocket authentication successful for user: %s", user.username)  # ADDED DEBUG LOG
 
             # Validate conversation access
             conversation = await validate_resource_access(
@@ -458,7 +464,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
 
                 # Create message using existing function
                 message = await create_user_message(
-                    conversation_id=conversation.id,
+                    conversation_id=UUID(str(conversation.id)),
                     content=data["content"],
                     role=data["role"],
                     db=db,
@@ -466,7 +472,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
 
                 # Generate AI response if user message
                 if message.role == "user":
-                    msg_dicts = await get_conversation_messages(conversation.id, db)
+                    msg_dicts = await get_conversation_messages(UUID(str(conversation.id)), db)
                     # Stream AI response through websocket
                     # Get and stream AI response
                     # Handle Claude and OpenAI models differently
@@ -518,7 +524,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                     else:
                         # Use standard OpenAI response generation
                         assistant_msg = await generate_ai_response(
-                            conversation_id=conversation.id,
+                            conversation_id=UUID(str(conversation.id)),
                             messages=msg_dicts,
                             model_id=conversation.model_id,
                             db=db,

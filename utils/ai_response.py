@@ -85,7 +85,7 @@ async def retrieve_knowledge_context(
             filename = file_info.get("filename", "Unknown source")
             
             # Add context block with source attribution
-            context_blocks.append(f"[Source {i+1}: {filename}]\n{text}\n")
+            context_blocks.append(f"[Source {i + 1}: {filename}]\n{text}\n")
             
         if not context_blocks:
             return None

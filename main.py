@@ -20,24 +20,24 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
+from fastapi.exceptions import RequestValidationError
 
-from services.user_service import get_user_by_username
-from utils.auth_utils import JWT_SECRET, JWT_ALGORITHM, create_access_token
-from config import settings
-
-# Configure allowed hosts
-allowed_hosts = ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
-origins = ["*"] if settings.ENV != "production" else [
-    "https://put.photo",
-    "https://www.put.photo"
-]
-from db import init_db, validate_db_schema
+# Import routers
 from auth import router as auth_router
 from routes.conversations import router as conversations_router
 from routes.file_upload import router as file_upload_router
 from routes.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
-from fastapi.exceptions import RequestValidationError
+
+# Import database utilities
+from db import init_db, validate_db_schema, get_async_session_context
+
+# Import utility functions
+from utils.auth_utils import load_revocation_list, clean_expired_tokens
+from utils.db_utils import schedule_token_cleanup
+
+# Import configuration
+from config import settings
 
 # Ensure Python recognizes config.py as a module
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -48,6 +48,13 @@ logger = logging.getLogger(__name__)
 
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
+
+# Configure allowed hosts
+allowed_hosts = ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
+origins = ["*"] if settings.ENV != "production" else [
+    "https://put.photo",
+    "https://www.put.photo"
+]
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -109,6 +116,7 @@ file uploads, and more.
 # Always enable HTTPS redirection in production
 if settings.ENV == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
+    
     # Add HSTS header
     @app.middleware("http")
     async def add_hsts_header(request: Request, call_next):
@@ -119,7 +127,8 @@ if settings.ENV == "production":
 # CORS Configuration
 # Allow environment override
 if settings.CORS_ORIGINS:
-    origins = settings.CORS_ORIGINS.split(",")
+    # Fix: check if already a list or needs splitting
+    origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else settings.CORS_ORIGINS.split(",")
 else:
     origins = ["*"] if settings.ENV != "production" else [
         "https://put.photo",
@@ -137,8 +146,6 @@ app.add_middleware(
 )
 
 logger.info("CORS configured with origins: %s", origins)
-
-from fastapi.staticfiles import StaticFiles
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -224,10 +231,6 @@ async def on_startup():
         logger.info("Upload directories initialized with secure permissions")
         
         # Initialize auth system
-        from utils.auth_utils import load_revocation_list, clean_expired_tokens
-        from utils.db_utils import schedule_token_cleanup
-        from db import get_async_session_context
-        
         # Get a database session
         async with get_async_session_context() as session:
             # Clean up expired tokens
@@ -253,9 +256,6 @@ async def on_shutdown():
     
     # Any cleanup logic here
     try:
-        from utils.auth_utils import clean_expired_tokens
-        from db import get_async_session_context
-        
         # Clean up expired tokens one final time
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)

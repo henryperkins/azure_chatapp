@@ -14,8 +14,8 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import select, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import BinaryExpression
+from sqlalchemy.sql import ColumnElement  # Add this import
 
 from db import get_async_session_context
 from models.user import User
@@ -106,7 +106,7 @@ async def save_model(db: AsyncSession, model_instance: Any) -> None:
 async def get_all_by_condition(
     db: AsyncSession,
     model_class: Type[T],
-    *where_clauses: BinaryExpression,
+    *where_clauses: Union[BinaryExpression, ColumnElement],  # Change this type
     order_by: Optional[Any] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
