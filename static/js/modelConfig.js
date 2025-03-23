@@ -139,9 +139,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.MODEL_CONFIG.visionDetail = visionDetailSelect.value;
   });
 
-  // Initialize model dropdown
-  initializeModelDropdown();
-  
   // Load existing settings from localStorage (or defaults)
   const storedModel = localStorage.getItem("modelName") || "claude-3-sonnet-20240229"; // Set Claude as default
   const storedMaxTokens = localStorage.getItem("maxTokens") || "500";

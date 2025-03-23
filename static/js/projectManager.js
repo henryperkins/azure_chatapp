@@ -56,10 +56,11 @@
       window.apiRequest(projectEndpoint, "GET")
         .then((response) => {
           currentProject = response.data;
+          localStorage.setItem('selectedProjectId', currentProject.id); // Store projectId
           document.dispatchEvent(
             new CustomEvent("projectLoaded", { detail: currentProject })
           );
-          
+
           // If project is archived, skip loading extra data
           if (currentProject.archived) {
             console.warn("Project is archived, skipping additional loads.");
@@ -276,17 +277,44 @@
    * Returns a promise resolving with the conversation data.
    */
   function createConversation(projectId) {
-    const payload = { title: "New Conversation" };
-    
-    // Try the main endpoint first
-    return window.apiRequest(`/api/projects/${projectId}/conversations`, "POST", payload)
-      .catch(err => {
-        console.error("Error creating conversation with primary endpoint:", err);
-        // Try the fallback endpoint
-        return window.apiRequest(`/api/chat/projects/${projectId}/conversations`, "POST", payload);
-      });
-  }
-  
+      const payload = { title: "New Conversation" };
+
+      // Try the main endpoint first
+      console.log("Attempting to create conversation with primary endpoint: /api/projects/" + projectId + "/conversations");
+      return window.apiRequest(`/api/projects/${projectId}/conversations`, "POST", payload)
+        .then(response => {
+          console.log("Create conversation successful (primary endpoint):", response);
+          // Check for the ID in the response
+          if (response?.data?.id) {
+            return response.data;
+          } else {
+            console.error("Invalid conversation ID in response (primary endpoint):", response);
+            throw new Error("Invalid conversation ID");
+          }
+        })
+        .catch(err => {
+          console.error("Error creating conversation with primary endpoint:", err);
+          // Try the fallback endpoint
+          console.log("Attempting to create conversation with fallback endpoint: /api/chat/projects/" + projectId + "/conversations");
+          return window.apiRequest(`/api/chat/projects/${projectId}/conversations`, "POST", payload)
+            .then(response => {
+              console.log("Create conversation successful (fallback endpoint):", response);
+              // Check for the ID in the response
+              if (response?.data?.id) {
+                return response.data;
+              } else {
+                console.error("Invalid conversation ID in response (fallback endpoint):", response);
+                throw new Error("Invalid conversation ID");
+              }
+            })
+            .catch(fallbackErr => {
+              console.error("Error creating conversation with fallback endpoint:", fallbackErr);
+              window.showNotification?.("Failed to create conversation", "error");
+              throw fallbackErr; // Re-throw to ensure caller can handle the error
+            });
+        });
+    }
+
   /**
    * Check the API endpoint to determine which URL format works
    * for project conversations. This helps adapt to different backend configurations.

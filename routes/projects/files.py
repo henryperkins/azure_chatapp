@@ -7,22 +7,19 @@ Provides endpoints for uploading, listing, retrieving and deleting files.
 
 import logging
 import os
-import shutil
-from uuid import UUID, uuid4
-from typing import Optional, Dict, List
+from uuid import UUID
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-import services
+from services import knowledgebase_service
 
 from db import get_async_session
 from models.user import User
 from models.project import Project
 from models.project_file import ProjectFile
 from utils.auth_utils import get_current_user_and_token
-from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
+from utils.db_utils import validate_resource_access, get_all_by_condition
 from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
@@ -57,13 +54,12 @@ async def list_project_files(
     Returns a list of files for a project with optional filtering.
     """
     # Verify project access
-    project = await validate_resource_access(
+    await validate_resource_access(
         project_id,
         Project,
         current_user,
         db,
-        "Project",
-        [Project.user_id == current_user.id]
+        "Project"
     )
     
     # Prepare query conditions
@@ -104,7 +100,7 @@ async def upload_project_file(
 ):
     """Upload a file to a project using the knowledge base service"""
     try:
-        project_file = await services.knowledgebase_service.upload_file_to_project(
+        project_file = await knowledgebase_service.upload_file_to_project(
             project_id=project_id,
             file=file,
             db=db,
@@ -135,7 +131,7 @@ async def get_project_file(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Get file details and content using knowledge base service"""
-    file_data = await services.knowledgebase_service.get_project_file(
+    file_data = await knowledgebase_service.get_project_file(
         project_id=project_id,
         file_id=file_id,
         db=db,
@@ -153,7 +149,7 @@ async def delete_project_file(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Delete a file using knowledge base service"""
-    result = await services.knowledgebase_service.delete_project_file(
+    result = await knowledgebase_service.delete_project_file(
         project_id=project_id,
         file_id=file_id,
         db=db,

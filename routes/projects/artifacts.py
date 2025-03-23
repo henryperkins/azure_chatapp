@@ -1,27 +1,23 @@
 """
 p_artifacts.py
--------------
+--------------
 Routes for managing artifacts within a project.
 Provides endpoints for creating, listing, retrieving and deleting artifacts.
 """
 
 import logging
 from uuid import UUID
-from typing import Optional, Dict, List
+from typing import Optional, List, Dict, Any
+from types import SimpleNamespace
 
-from fastapi import APIRouter, Depends, HTTPException, status
-import services.artifact_service
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
+import services.artifact_service
 from db import get_async_session
 from models.user import User
-from models.project import Project
-from models.artifact import Artifact
-from models.conversation import Conversation
 from utils.auth_utils import get_current_user_and_token
-from utils.db_utils import validate_resource_access, get_all_by_condition, get_by_id, save_model
 from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
@@ -34,7 +30,7 @@ router = APIRouter()
 
 class ArtifactCreate(BaseModel):
     """
-    Schema for creating a new artifact
+    Schema for creating a new artifact.
     """
     name: str = Field(..., min_length=1, max_length=200)
     content_type: str = Field(..., description="Type of content: code, document, etc.")
@@ -53,7 +49,7 @@ async def create_artifact(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Create a new artifact for the project"""
+    """Create a new artifact for the project."""
     artifact = await services.artifact_service.create_artifact(
         db=db,
         project_id=project_id,
@@ -76,8 +72,9 @@ async def list_artifacts(
     skip: int = 0,
     limit: int = 100
 ):
-    """List all artifacts for a project with optional filtering"""
-    artifacts = await services.artifact_service.list_artifacts(
+    """List all artifacts for a project with optional filtering."""
+    # The service returns a list of dictionaries.
+    artifacts_data: List[Dict[str, Any]] = await services.artifact_service.list_artifacts(
         project_id=project_id,
         db=db,
         conversation_id=conversation_id,
@@ -86,7 +83,10 @@ async def list_artifacts(
         limit=limit,
         user_id=current_user.id
     )
-    
+
+    # Convert dictionaries to objects so that dot notation works.
+    artifacts = [SimpleNamespace(**art) for art in artifacts_data]
+
     return await create_standard_response({
         "artifacts": [
             {
@@ -96,8 +96,8 @@ async def list_artifacts(
                 "name": art.name,
                 "content_type": art.content_type,
                 "created_at": art.created_at.isoformat(),
-                "metadata": art.metadata,
-                "content_preview": art.content[:150] + "..." if len(art.content) > 150 else art.content
+                "metadata": art.metadata,  # Adjust this key if needed (e.g., extra_data)
+                "content_preview": (art.content[:150] + "..." if len(art.content) > 150 else art.content)
             }
             for art in artifacts
         ],
@@ -108,12 +108,12 @@ async def list_artifacts(
 
 @router.get("/{artifact_id}", response_model=dict)
 async def get_artifact(
-   project_id: UUID,
-   artifact_id: UUID,
-   current_user: User = Depends(get_current_user_and_token),
-   db: AsyncSession = Depends(get_async_session)
+    project_id: UUID,
+    artifact_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
 ):
-    """Get a specific artifact by ID"""
+    """Get a specific artifact by ID."""
     artifact = await services.artifact_service.get_artifact(
         db=db,
         artifact_id=artifact_id,
@@ -125,12 +125,12 @@ async def get_artifact(
 
 @router.delete("/{artifact_id}", response_model=dict)
 async def delete_artifact(
-   project_id: UUID,
-   artifact_id: UUID,
-   current_user: User = Depends(get_current_user_and_token),
-   db: AsyncSession = Depends(get_async_session)
+    project_id: UUID,
+    artifact_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
 ):
-    """Delete an artifact by ID"""
+    """Delete an artifact by ID."""
     result = await services.artifact_service.delete_artifact(
         db=db,
         artifact_id=artifact_id,
