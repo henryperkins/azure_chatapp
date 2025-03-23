@@ -891,43 +891,38 @@ function viewFile(fileId) {
 /**
  * Render conversations
  */
-function renderProjectConversations(conversations) {
-  const list = document.getElementById("projectConversationsList");
-  if (!list) return;
-  
-  // Debug output to help identify issues
+function renderProjectConversations(data) {
+  const container = document.getElementById('projectConversationsList');
+  if (!container) return;
+
+  // Handle both response formats
+  const conversations = data.conversations || data.data?.conversations || [];
   console.log("Rendering conversations:", conversations);
   
-  if (!conversations || conversations.length === 0) {
-    list.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet.</div>`;
+  if (conversations.length === 0) {
+    container.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet</div>`;
     return;
   }
-  list.innerHTML = "";
 
-  conversations.forEach(conv => {
-    const item = document.createElement("div");
-    item.className = "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2";
+  // Clear existing content
+  container.innerHTML = '';
 
-    const info = document.createElement("div");
-    const title = document.createElement("div");
-    title.className = "font-medium";
-    title.textContent = conv.title || `Conversation ${conv.id}`;
-    const date = document.createElement("div");
-    date.className = "text-xs text-gray-500";
-    date.textContent = formatDate(conv.created_at, true);
-    info.appendChild(title);
-    info.appendChild(date);
-
-    const openBtn = document.createElement("button");
-    openBtn.className = "px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm";
-    openBtn.textContent = "Open";
-    openBtn.addEventListener("click", () => {
-      window.location.href = `/?chatId=${conv.id}`;
-    });
-
-    item.appendChild(info);
-    item.appendChild(openBtn);
-    list.appendChild(item);
+  conversations.forEach(convo => {
+    const convoElement = document.createElement('div');
+    convoElement.className = 'p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2';
+    convoElement.innerHTML = `
+      <div class="font-medium">${convo.title || `Conversation ${convo.id}`}</div>
+      <div class="text-xs text-gray-500">
+        Created ${formatDate(convo.created_at, true)}
+      </div>
+      <div class="mt-2">
+        <button class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          onclick="window.location.href='/?chatId=${convo.id}'">
+          Open
+        </button>
+      </div>
+    `;
+    container.appendChild(convoElement);
   });
 }
 
