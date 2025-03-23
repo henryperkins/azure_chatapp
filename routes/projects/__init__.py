@@ -9,10 +9,7 @@ from . import projects, conversations, files, artifacts
 
 router = APIRouter()
 
-# Core project operations
-router.include_router(projects.router, tags=["projects"])
-
-# Project-associated resources
+# Project-associated resources (include first)
 router.include_router(
     conversations.router,
     prefix="/{project_id}/conversations",
@@ -28,3 +25,6 @@ router.include_router(
     prefix="/{project_id}/artifacts", 
     tags=["project-artifacts"]
 )
+
+# Core project operations (include after child routes)
+router.include_router(projects.router, tags=["projects"])
