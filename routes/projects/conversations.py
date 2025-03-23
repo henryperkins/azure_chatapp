@@ -85,6 +85,9 @@ async def list_project_conversations(
     db: AsyncSession = Depends(get_async_session)
 ):
     """List conversations in a project"""
+    logger.info(f"Listing conversations for project {project_id}")
+    
+    # Validate project access
     await validate_resource_access(project_id, Project, current_user, db)
     
     result = await db.execute(
@@ -94,6 +97,7 @@ async def list_project_conversations(
     )
     convos = result.scalars().all()
     
+    logger.debug(f"Found {len(convos)} conversations")
     return await create_standard_response({"conversations": convos})
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
