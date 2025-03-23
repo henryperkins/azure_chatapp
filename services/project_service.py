@@ -12,12 +12,13 @@ We provide two different helpers for backwards compatibility:
   - Also accepts a User object, from which we extract user.id
 """
 from uuid import UUID
-from typing import Optional
+from typing import Optional, Any
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from models.project import Project
 from models.user import User
+from sqlalchemy import asc, desc
 
 async def validate_project_access(project_id: UUID, user: User, db: AsyncSession) -> Project:
     """
@@ -44,7 +45,7 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
     """
     result = await db.execute(
         select(Project)
-        .where(Project.user_id == user.id, Project.is_default == True)
+        .where(Project.user_id == user.id, Project.is_default.is_(True))
         .limit(1)
     )
     default_project = result.scalars().first()
@@ -68,12 +69,12 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
 async def create_project(
     user_id: int,
     name: str,
+    db: AsyncSession,
     description: Optional[str] = None,
     goals: Optional[str] = None,
     max_tokens: int = 200000,
     knowledge_base_id: Optional[UUID] = None,
-    default_model: str = "claude-3-sonnet-20240229",
-    db: AsyncSession = None
+    default_model: str = "claude-3-sonnet-20240229"
 ) -> Project:
     """
     Creates a new project with the given parameters.
@@ -128,28 +129,26 @@ async def get_project_token_usage(project_id: UUID, db: AsyncSession) -> dict:
         "usage_percentage": (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
     }
 
-from sqlalchemy import asc, desc
-from typing import Any
 
 async def validate_resource_access(
     resource_id: UUID,
-    project_id: UUID,
+    model_class,
     user: User,
     db: AsyncSession,
-    model_class,
-    resource_name: str = "Resource"
+    resource_name: str = "Resource",
+    additional_conditions=None
 ) -> Any:
     """
-    Generic method for validating access to any project-related resource.
-    All services can use this for artifacts, files, etc.
+    Generic method for validating access to any resource.
+    All services can use this for projects, artifacts, files, etc.
 
     Args:
         resource_id: UUID of the resource
-        project_id: UUID of the project
+        model_class: The SQLAlchemy model class of the resource
         user: User object
         db: Database session
-        model_class: The SQLAlchemy model class of the resource
         resource_name: Human-readable name for error messages
+        additional_conditions: Optional additional conditions for the query
 
     Returns:
         The resource object if found and accessible
@@ -157,21 +156,29 @@ async def validate_resource_access(
     Raises:
         HTTPException: If resource not found or user lacks permission
     """
-    # First validate project access
-    project = await validate_project_access(project_id, user, db)
-
-    # Then check for the resource
-    result = await db.execute(
-        select(model_class).where(
-            model_class.id == resource_id,
-            model_class.project_id == project_id
-        )
-    )
+    # Build the query
+    query = select(model_class).where(model_class.id == resource_id)
+    
+    # Add user ID check if the model has a user_id field
+    if hasattr(model_class, 'user_id'):
+        query = query.where(model_class.user_id == user.id)
+        
+    # Add additional conditions if provided
+    if additional_conditions:
+        for condition in additional_conditions:
+            query = query.where(condition)
+    
+    # Execute the query
+    result = await db.execute(query)
     resource = result.scalars().first()
-
+    
     if not resource:
-        raise HTTPException(status_code=404, detail=f"{resource_name} not found")
-
+        raise HTTPException(status_code=404, detail=f"{resource_name} not found or unauthorized access")
+    
+    # Check if the resource is archived (if applicable)
+    if hasattr(resource, 'archived') and resource.archived:
+        raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
+    
     return resource
 
 async def get_project_conversations(project_id: UUID, db: AsyncSession):
@@ -190,7 +197,7 @@ async def get_paginated_resources(
     sort_desc: bool = True,
     skip: int = 0,
     limit: int = 100,
-    additional_filters = None
+    additional_filters=None
 ):
     """
     Generic function for paginated queries of project resources with sorting.
