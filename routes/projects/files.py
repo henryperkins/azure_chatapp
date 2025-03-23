@@ -13,6 +13,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import knowledgebase_service
+from services.vector_db import get_vector_db, process_file_for_search, VECTOR_DB_STORAGE_PATH, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
+from services.file_storage import get_file_storage
 
 from db import get_async_session
 from models.user import User
@@ -156,3 +158,94 @@ async def delete_project_file(
         user_id=current_user.id
     )
     return await create_standard_response(result)
+
+@router.post("/reprocess", response_model=dict)
+async def reprocess_project_files(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Reprocess all files in a project for the knowledge base."""
+    # Verify project access
+    project = await validate_resource_access(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project"
+    )
+    
+    # Check if project has a knowledge base
+    if not project.knowledge_base_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Project does not have an associated knowledge base"
+        )
+    
+    # Get all files
+    files = await get_all_by_condition(
+        db,
+        ProjectFile,
+        ProjectFile.project_id == project_id
+    )
+    
+    # Setup for processing
+    total_files = len(files)
+    processed_count = 0
+    failed_count = 0
+    
+    # Get vector DB
+    embedding_model = project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL
+    vector_db = await get_vector_db(
+        model_name=embedding_model,
+        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+        load_existing=True
+    )
+    
+    # Get storage configuration
+    storage_config = {
+        "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+    }
+    storage = get_file_storage(storage_config)
+    
+    # Process each file
+    for file_record in files:
+        try:
+            # Get file content
+            file_content = await storage.get_file(file_record.file_path)
+            
+            # Process for search
+            result = await process_file_for_search(
+                project_file=file_record,
+                vector_db=vector_db,
+                file_content=file_content,
+                chunk_size=DEFAULT_CHUNK_SIZE,
+                chunk_overlap=DEFAULT_CHUNK_OVERLAP
+            )
+            
+            # Update metadata
+            metadata = file_record.metadata or {}
+            metadata["search_processing"] = {
+                "success": result.get("success", False),
+                "chunk_count": result.get("chunk_count", 0),
+                "processed_at": datetime.now().isoformat()
+            }
+            file_record.metadata = metadata
+            
+            if result.get("success", False):
+                processed_count += 1
+            else:
+                failed_count += 1
+        except Exception as e:
+            logger.error(f"Error processing file {file_record.id}: {str(e)}")
+            failed_count += 1
+    
+    # Save all changes
+    await db.commit()
+    
+    return await create_standard_response({
+        "total_files": total_files,
+        "processed_success": processed_count,
+        "processed_failed": failed_count
+    }, "Files reprocessed for knowledge base")

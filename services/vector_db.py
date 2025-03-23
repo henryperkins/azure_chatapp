@@ -4,14 +4,19 @@ vector_db.py
 Service for handling vector embeddings and similarity search functionality.
 Supports different embedding models and both in-memory and database storage.
 """
+
 import logging
 import json
 import os
-import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Union
 import uuid
-
+import numpy as np
+from typing import List, Dict, Any, Optional
 from models.project_file import ProjectFile
+
+# Constants for vector DB configuration
+VECTOR_DB_STORAGE_PATH = "./storage/vector_db"
+DEFAULT_CHUNK_SIZE = 1000
+DEFAULT_CHUNK_OVERLAP = 200
 
 logger = logging.getLogger(__name__)
 

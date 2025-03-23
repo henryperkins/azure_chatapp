@@ -617,22 +617,144 @@ function renderProjectDetails(project) {
 }
 
 /**
- * Render project stats: token usage, etc.
+ * Render project stats with enhanced knowledge base information
  */
 function renderProjectStats(stats) {
-  document.getElementById("tokenUsage").textContent = formatNumber(stats.token_usage || 0);
-  document.getElementById("maxTokens").textContent = formatNumber(stats.max_tokens || 0);
-  const usage = stats.token_usage || 0;
-  const maxT = stats.max_tokens || 0;
-  const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
-  document.getElementById("tokenPercentage").textContent = `${pct}%`;
-  document.getElementById("tokenProgressBar").style.width = `${pct}%`;
+    document.getElementById("tokenUsage").textContent = formatNumber(stats.token_usage || 0);
+    document.getElementById("maxTokens").textContent = formatNumber(stats.max_tokens || 0);
+    const usage = stats.token_usage || 0;
+    const maxT = stats.max_tokens || 0;
+    const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
+    document.getElementById("tokenPercentage").textContent = `${pct}%`;
+    document.getElementById("tokenProgressBar").style.width = `${pct}%`;
 
-  // Update counters
-  document.getElementById("conversationCount").textContent = stats.conversation_count || 0;
-  document.getElementById("fileCount").textContent = stats.file_count || 0;
-  document.getElementById("artifactCount").textContent = stats.artifact_count || 0;
+    // Update counters
+    document.getElementById("conversationCount").textContent = stats.conversation_count || 0;
+    document.getElementById("fileCount").textContent = stats.file_count || 0;
+    document.getElementById("artifactCount").textContent = stats.artifact_count || 0;
+    
+    // Update knowledge base info if available
+    const kbInfoContainer = document.getElementById("knowledgeBaseInfo");
+    if (kbInfoContainer) {
+        if (stats.knowledge_base) {
+            const kb = stats.knowledge_base;
+            
+            // Create or update knowledge base info
+            kbInfoContainer.innerHTML = `
+                <div class="mb-2 font-medium">Knowledge Base</div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span>${kb.name || "Unknown"}</span>
+                    <span class="px-2 py-0.5 bg-${kb.is_active ? 'green' : 'gray'}-100 
+                        text-${kb.is_active ? 'green' : 'gray'}-800 rounded text-xs">
+                        ${kb.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </div>
+                <div class="text-xs text-gray-500 mb-2">Model: ${kb.embedding_model || "Default"}</div>
+                
+                <div class="mt-2 mb-1 text-xs font-medium text-gray-600">File Processing</div>
+                <div class="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                    <div class="bg-blue-600 h-1.5 rounded-full" 
+                         style="width: ${stats.file_count ? Math.round((kb.indexed_files / stats.file_count) * 100) : 0}%">
+                    </div>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span>${kb.indexed_files || 0} indexed</span>
+                    <span>${kb.pending_files || 0} pending</span>
+                </div>
+                
+                <div class="mt-3">
+                    <button id="reprocessFilesBtn" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Reprocess All Files
+                    </button>
+                </div>
+            `;
+            
+            // Add event listener for reprocess button
+            document.getElementById("reprocessFilesBtn")?.addEventListener("click", () => {
+                reprocessAllFiles(projectManager.currentProject.id);
+            });
+            
+            kbInfoContainer.classList.remove("hidden");
+        } else {
+            // Show create knowledge base button
+            kbInfoContainer.innerHTML = `
+                <div class="mb-2 font-medium">Knowledge Base</div>
+                <p class="text-sm text-gray-600 mb-3">
+                    No knowledge base associated with this project. Create one to enable semantic search.
+                </p>
+                <button id="createKnowledgeBaseBtn" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Create Knowledge Base
+                </button>
+            `;
+            
+            // Add event listener for create button
+            document.getElementById("createKnowledgeBaseBtn")?.addEventListener("click", () => {
+                showModal("knowledgeBaseSettingsModal");
+            });
+            
+            kbInfoContainer.classList.remove("hidden");
+        }
+    }
 }
+
+/**
+ * Create a knowledge base for the current project
+ */
+function createKnowledgeBase(projectId, data) {
+    if (!projectId) return;
+    
+    window.apiRequest(`/api/projects/${projectId}/knowledge-base`, "POST", data)
+        .then((response) => {
+            hideModal("knowledgeBaseSettingsModal");
+            window.showNotification?.("Knowledge base created successfully", "success");
+            
+            // Reload project stats to show new knowledge base
+            projectManager.loadProjectStats(projectId);
+        })
+        .catch((err) => {
+            console.error("Error creating knowledge base:", err);
+            window.showNotification?.("Failed to create knowledge base", "error");
+        });
+}
+
+/**
+ * Reprocess all files for search in the knowledge base
+ */
+function reprocessAllFiles(projectId) {
+    if (!projectId) return;
+    
+    window.showNotification?.("Reprocessing files, this may take a moment...", "info");
+    
+    window.apiRequest(`/api/projects/${projectId}/files/reprocess`, "POST")
+        .then((response) => {
+            const data = response.data || {};
+            window.showNotification?.(
+                `Reprocessed ${data.processed_success || 0} files successfully. ${data.processed_failed || 0} failed.`,
+                data.processed_failed ? "warning" : "success"
+            );
+            
+            // Reload project stats to show updated processing status
+            projectManager.loadProjectStats(projectId);
+        })
+        .catch((err) => {
+            console.error("Error reprocessing files:", err);
+            window.showNotification?.("Failed to reprocess files", "error");
+        });
+}
+
+// Add event listener for knowledge base form submission
+document.getElementById("knowledgeBaseForm")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    
+    const formData = {
+        name: document.getElementById("knowledgeBaseNameInput").value.trim(),
+        description: document.getElementById("knowledgeBaseDescInput").value.trim(),
+        embedding_model: document.getElementById("embeddingModelSelect").value,
+        process_existing_files: document.getElementById("processAllFilesCheckbox").checked
+    };
+    
+    createKnowledgeBase(projectManager.currentProject?.id, formData);
+});
 
 /**
  * Render the list of files
