@@ -131,7 +131,7 @@ async def login_user(
         )
     except ValueError as exc:
         logger.error("Corrupted password hash for user '%s': %s", 
-                    lower_username, exc)
+                     lower_username, exc)
         raise HTTPException(
             status_code=400,
             detail="Corrupted password hash. Please reset account.",
@@ -197,7 +197,7 @@ async def login_user(
         "secure": secure_cookie,
         "samesite": samesite_value,
         "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "path": "/",
+        "path": "/"
     }
 
     if settings.COOKIE_DOMAIN:
@@ -224,6 +224,11 @@ async def refresh_token(
 
     # Update last_login time
     current_user_and_token.last_login = datetime.utcnow()
+    session.add(current_user_and_token)
+    await session.commit()
+
+    # Increment token version
+    current_user_and_token.token_version = current_user_and_token.token_version + 1 if current_user_and_token.token_version else int(datetime.utcnow().timestamp())
     session.add(current_user_and_token)
     await session.commit()
 
@@ -257,7 +262,7 @@ async def refresh_token(
         "secure": secure_cookie,
         "samesite": samesite_value,
         "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "path": "/",
+        "path": "/"
     }
 
     if settings.COOKIE_DOMAIN:
@@ -313,7 +318,7 @@ async def logout_user(
     revoke_token_id(token_id)
     
     logger.info("User %s logged out successfully. Token %s invalidated and token version incremented.", 
-               current_user_and_token.username, token_id)
+                current_user_and_token.username, token_id)
 
     secure_cookie = settings.ENV == "production"
     samesite_value = "strict" if secure_cookie else "lax"

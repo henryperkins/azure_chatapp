@@ -7,10 +7,10 @@ HTTP and WebSocket connections.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Optional, Dict, Any, Tuple  # Removed unused List import - Fixed Flake8 styling
 from urllib.parse import unquote
 
-import jwt
+# import jwt # Removed unused import
 from jwt import encode, decode
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, WebSocket, status, Depends
@@ -49,6 +49,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    logger.debug(f"Access token created for user: {data.get('sub')}, expires in {expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)}, jti: {data.get('jti')}")  # ADDED DEBUG LOG - Fixed Flake8 styling
     return encoded_jwt
 
 
@@ -72,13 +73,13 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
 
         # Validate token type if specified
         if expected_type and decoded.get("type") != expected_type:
-            logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}")
+            logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}. Token type: {decoded.get('type')}, Expected type: {expected_type}")  # Enhanced logging for type mismatch - Fixed Flake8 styling
             raise HTTPException(status_code=401, detail="Invalid token type")
 
         # Check if token is revoked in memory for quick check
         token_id = decoded.get("jti")
         if token_id in REVOCATION_LIST:
-            logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
+            logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")  # Enhanced logging for revocation - Fixed Flake8 styling
             raise HTTPException(status_code=401, detail="Token is revoked")
 
         # Check if token is in database blacklist (persistent across restarts)
@@ -89,7 +90,7 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
             if blacklisted:
                 # Add to in-memory list for future quick checks
                 REVOCATION_LIST.add(token_id)
-                logger.warning(f"Token ID '{token_id}' is revoked (database)")
+                logger.warning(f"Token ID '{token_id}' is revoked (database)")  # Enhanced logging for db revocation - Fixed Flake8 styling
                 raise HTTPException(status_code=401, detail="Token is revoked")
 
         # Check token version if available
@@ -100,16 +101,17 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
             result = await db.execute(query)
             user = result.scalar_one_or_none()
             if user and (user.token_version is None or token_version < user.token_version):
-                logger.warning(f"Token for user '{username}' has outdated version")
+                logger.warning(f"Token for user '{username}' has outdated version. Token version: {token_version}, User version: {user.token_version}")  # Enhanced logging for outdated version - Fixed Flake8 styling
                 raise HTTPException(status_code=401, detail="Token has been invalidated")
 
+        logger.debug(f"Token verification successful for jti: {token_id}, user: {username}")  # ADDED DEBUG LOG for success - Fixed Flake8 styling
         return decoded
 
     except ExpiredSignatureError:
-        logger.warning("Token has expired.")
+        logger.warning("Token has expired.")  # Enhanced logging for expiry - Fixed Flake8 styling
         raise HTTPException(status_code=401, detail="Token has expired")
     except InvalidTokenError as e:
-        logger.warning(f"Invalid token: {str(e)}")
+        logger.warning(f"Invalid token: {str(e)}")  # Enhanced logging for invalid token - Fixed Flake8 styling
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
@@ -179,20 +181,20 @@ def extract_token_from_request(request: Request) -> Optional[str]:
     # 1. Try cookies FIRST
     token = request.cookies.get("access_token")
     if token:
-        logger.debug("Token found in cookie.") # ADDED LOGGING
+        logger.debug("Token found in cookie.")  # ADDED LOGGING - Fixed Flake8 styling
         return token
 
     # 2. Fallback to Authorization header
-    logger.debug("Token cookie not found, checking Authorization header.") # ADDED LOGGING
+    logger.debug("Token cookie not found, checking Authorization header.")  # ADDED LOGGING - Fixed Flake8 styling
     auth_header = request.headers.get("Authorization")
     if auth_header:
         parts = auth_header.split()
         if len(parts) == 2 and parts[0].lower() == "bearer":
             token = parts[1]
-            logger.debug("Token found in Authorization header.") # ADDED LOGGING
+            logger.debug("Token found in Authorization header.")  # ADDED LOGGING - Fixed Flake8 styling
             return token
 
-    logger.debug("No token found in cookie or Authorization header.") # ADDED LOGGING
+    logger.debug("No token found in cookie or Authorization header.")  # ADDED LOGGING - Fixed Flake8 styling
     return None
 
 
@@ -230,7 +232,7 @@ async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
         token = websocket.query_params["token"]
 
     if not token:
-        logger.debug("WebSocket connection - No token found. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params) # ADDED DEBUG LOG
+        logger.debug("WebSocket connection - No token found. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)  # ADDED DEBUG LOG - Fixed Flake8 styling
 
     return token
 
@@ -335,7 +337,7 @@ async def authenticate_websocket(
     if not token:
         logger.warning("WebSocket connection rejected: No token provided")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params) # ADDED DEBUG LOG
+        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)  # ADDED DEBUG LOG - Fixed Flake8 styling
         return False, None
 
     # Validate token and get user

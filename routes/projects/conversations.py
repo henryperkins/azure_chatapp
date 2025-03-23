@@ -24,8 +24,6 @@ from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
 
-
-
 from utils.message_handlers import (
     create_user_message,
     get_conversation_messages,
@@ -346,7 +344,7 @@ async def project_websocket_chat_endpoint(
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params) # ADDED DEBUG LOG
+                logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)  # ADDED DEBUG LOG
                 return
 
             # 2. Validate token and get user
@@ -354,14 +352,13 @@ async def project_websocket_chat_endpoint(
 
             # 3. Validate project access using project service
             project = await project_service.validate_project_access(
-                project_id, user, db # type: ignore
+                project_id, user, db  # type: ignore
             )
             if not project:
                 logger.warning("WebSocket connection rejected: Project access validation failed")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("Project access validation failed for project_id: %s, user_id: %s", project_id, user.id) # ADDED DEBUG LOG
+                logger.debug("Project access validation failed for project_id: %s, user_id: %s", project_id, user.id)  # ADDED DEBUG LOG
                 return
-
 
             # 4. Validate conversation belongs to project
             conversation = await validate_resource_access(
@@ -374,14 +371,14 @@ async def project_websocket_chat_endpoint(
                     Conversation.project_id == project_id,
                     Conversation.is_deleted.is_(False)
                 ]
-            ) # type: ignore
+            )  # type: ignore
             if not conversation:
                 logger.warning("WebSocket connection rejected: Conversation access validation failed")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id) # ADDED DEBUG LOG
+                logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id)  # ADDED DEBUG LOG
                 return
 
-            conversation_id_str = str(conversation.id) # Define conversation_id_str here, after conversation is validated
+            conversation_id_str = str(conversation.id)  # Define conversation_id_str here, after conversation is validated
 
             await websocket.accept()
 
@@ -560,10 +557,10 @@ async def websocket_chat_endpoint(
             if not validated_conversation:
                 logger.warning("WebSocket connection rejected: Conversation access validation failed")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id) # ADDED DEBUG LOG
+                logger.debug("Conversation access validation failed for conversation_id: %s, project_id: %s, user_id: %s", conversation_id, project_id, user.id)  # ADDED DEBUG LOG
                 return
 
-            conversation_id_str = str(validated_conversation.id) # Define conversation_id_str here, after conversation is validated
+            conversation_id_str = str(validated_conversation.id)  # Define conversation_id_str here, after conversation is validated
 
             await websocket.accept()
 
