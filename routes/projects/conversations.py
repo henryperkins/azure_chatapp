@@ -78,27 +78,7 @@ class MessageCreate(BaseModel):
 # Conversation Endpoints
 # ============================
 
-@router.get("", response_model=dict)
-async def list_project_conversations(
-    project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """List conversations in a project"""
-    logger.info(f"Listing conversations for project {project_id}")
-    
-    # Validate project access
-    await validate_resource_access(project_id, Project, current_user, db)
-    
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.project_id == project_id)
-        .order_by(Conversation.created_at.desc())
-    )
-    convos = result.scalars().all()
-    
-    logger.debug(f"Found {len(convos)} conversations")
-    return await create_standard_response({"conversations": convos})
+# The duplicate endpoint is removed - the other endpoint (list_conversations) provides the same functionality
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
@@ -145,24 +125,47 @@ async def list_conversations(
     limit: int = 100
 ):
     """List project conversations using conversation service"""
-    conversations = await conversation_service.list_project_conversations(
-        project_id=project_id,
-        db=db,
-        user_id=current_user.id,
-        skip=skip,
-        limit=limit
-    )
-    # Convert raw SQLAlchemy conversation objects to dicts
-    conv_list = []
-    for conv in conversations:
-        conv_list.append({
-            "id": str(conv.id),
-            "title": conv.title,
-            "model_id": conv.model_id,
-            "created_at": conv.created_at.isoformat() if conv.created_at else None
-        })
-
-    return await create_standard_response({"conversations": conv_list})
+    logger.info(f"Loading project conversations for project {project_id} (user {current_user.id})")
+    
+    # First validate project access
+    try:
+        await project_service.validate_project_access(
+            project_id, current_user, db
+        )
+        logger.info(f"Project access validated for project {project_id}")
+    except HTTPException as e:
+        logger.error(f"Project access denied: {str(e)}")
+        raise
+    
+    # Get conversations via service
+    try:
+        conversations = await conversation_service.list_project_conversations(
+            project_id=project_id,
+            db=db,
+            user_id=current_user.id,
+            skip=skip,
+            limit=limit
+        )
+        
+        # Convert raw SQLAlchemy conversation objects to dicts
+        conv_list = []
+        for conv in conversations:
+            conv_list.append({
+                "id": str(conv.id),
+                "title": conv.title,
+                "model_id": conv.model_id,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "project_id": str(project_id)  # Add project_id to each conversation
+            })
+        
+        logger.info(f"Successfully loaded {len(conv_list)} conversations for project {project_id}")
+        return await create_standard_response({"conversations": conv_list})
+    except Exception as e:
+        logger.error(f"Error loading project conversations: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load project conversations: {str(e)}"
+        )
 
 
 @router.get("/{conversation_id}", response_model=dict)
@@ -416,12 +419,12 @@ async def project_websocket_chat_endpoint(
                     data_dict = {"content": data, "role": "user"}
 
                 # Create message
-                    message = await create_user_message(
-                        conversation_id=conversation_id,
-                        content=data_dict["content"],
-                        role=data_dict["role"],
-                        db=db
-                    )
+                message = await create_user_message(
+                    conversation_id=conversation_id,
+                    content=data_dict["content"],
+                    role=data_dict["role"],
+                    db=db
+                )
 
                 if message.role == "user":
                     await handle_websocket_response(conversation_id, db, websocket)

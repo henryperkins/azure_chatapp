@@ -90,11 +90,26 @@ async def list_project_conversations(
     Returns:
         List of Conversation objects
     """
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.project_id == project_id)
-        .offset(skip)
-        .limit(limit)
-        .order_by(Conversation.created_at.desc())
-    )
-    return result.scalars().all()
+    # Add logging to debug
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Listing conversations for project {project_id} (user_id={user_id})")
+    
+    try:
+        # Only show non-deleted conversations
+        result = await db.execute(
+            select(Conversation)
+            .where(
+                Conversation.project_id == project_id,
+                Conversation.is_deleted.is_(False)
+            )
+            .offset(skip)
+            .limit(limit)
+            .order_by(Conversation.created_at.desc())
+        )
+        conversations = result.scalars().all()
+        logger.info(f"Found {len(conversations)} non-deleted conversations for project {project_id}")
+        return conversations
+    except Exception as e:
+        logger.error(f"Error fetching project conversations: {str(e)}")
+        raise
