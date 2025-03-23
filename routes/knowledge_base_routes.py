@@ -309,3 +309,4 @@ async def search_project_knowledge(
     except Exception as e:
         logger.error(f"Error searching project knowledge: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching project knowledge: {str(e)}")
+    

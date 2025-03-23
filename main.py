@@ -28,6 +28,8 @@ from routes.conversations import router as conversations_router
 from routes.file_upload import router as file_upload_router
 from routes.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
+from routes.projects.projects import router as projects_router
+from routes.projects.files import router as project_files_router
 
 # Import database utilities
 from db import init_db, validate_db_schema, get_async_session_context
@@ -210,6 +212,17 @@ app.include_router(conversations_router, prefix="/api/chat/conversations", tags=
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(knowledge_base_router, prefix="/api/kb", tags=["knowledge-bases"])
+app.include_router(
+    projects_router,
+    prefix="/api/projects", 
+    tags=["projects"]
+)
+
+app.include_router(
+    project_files_router,
+    prefix="/api/projects/{project_id}/files", 
+    tags=["project-files"]
+)
 
 
 @app.on_event("startup")
