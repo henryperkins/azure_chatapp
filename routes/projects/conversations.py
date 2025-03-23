@@ -78,7 +78,8 @@ class MessageCreate(BaseModel):
 # Conversation Endpoints
 # ============================
 
-@router.get("/", response_model=dict)
+@router.get("", response_model=dict)
+@router.get("/", response_model=dict)  # Handle with and without trailing slash
 async def list_project_conversations(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
