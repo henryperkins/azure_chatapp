@@ -85,8 +85,8 @@ export default class WebSocketService {
     // Use the same port as the current page if not specified in backendHost
     const port = location.port ? `:${location.port}` : '';
     // Use ws:// for localhost, wss:// otherwise
-    const wsProtocol = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'ws:' : (location.protocol === 'https:' ? 'wss:' : 'ws:');
-    
+    const wsProtocol = 'ws:'; // Always use non-secure WebSockets for now
+        
     // Build the WebSocket URL
     return `${wsProtocol}//${backendHost}${port}${endpoint}/ws`;
     // TODO: Ensure wss:// is used in production
