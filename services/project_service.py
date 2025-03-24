@@ -12,7 +12,7 @@ We provide two different helpers for backwards compatibility:
   - Also accepts a User object, from which we extract user.id
 """
 from uuid import UUID
-from typing import Optional, Any
+from typing import Optional, Any, List, Dict, Type
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -191,37 +191,19 @@ async def get_project_conversations(project_id: UUID, db: AsyncSession):
 
 async def get_paginated_resources(
     db: AsyncSession,
-    model_class,
+    model_class: Type,
     project_id: UUID,
     sort_by: str = "created_at",
     sort_desc: bool = True,
     skip: int = 0,
     limit: int = 100,
-    additional_filters=None
-):
-    """
-    Generic function for paginated queries of project resources with sorting.
-
-    Args:
-        db: Database session
-        model_class: SQLAlchemy model class to query
-        project_id: Project ID to filter by
-        sort_by: Field to sort by
-        sort_desc: True for descending order
-        skip: Pagination offset
-        limit: Page size
-        additional_filters: Optional additional filter conditions
-
-    Returns:
-        List of resources
-    """
+    additional_filters: Optional[Any] = None
+) -> List[Dict[str, Any]]:
     query = select(model_class).where(model_class.project_id == project_id)
 
-    # Apply additional filters if provided
     if additional_filters:
         query = query.where(additional_filters)
 
-    # Apply sorting
     if hasattr(model_class, sort_by):
         sort_field = getattr(model_class, sort_by)
         query = query.order_by(desc(sort_field) if sort_desc else asc(sort_field))
@@ -231,4 +213,7 @@ async def get_paginated_resources(
     query = query.offset(skip).limit(limit)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    items = result.scalars().all()
+
+    # Explicitly convert ORM objects to dicts
+    return [item.to_dict() for item in items]

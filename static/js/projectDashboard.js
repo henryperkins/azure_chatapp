@@ -1,4 +1,4 @@
-/**
+ /**
  * projectDashboard.js
  * -------------------
  * Handles all DOM manipulation and UI event handling:
@@ -7,34 +7,84 @@
  * - Rendering the updated data into the page
  */
 
+// Wait for DOM to be fully loaded and available
+let domReady = false;
+let pendingInitialization = null;
+
 document.addEventListener("DOMContentLoaded", () => {
-  // 1. Parse URL to see if we need to auto-load a specific project
-  const urlParams = new URLSearchParams(window.location.search);
-  const projectId = urlParams.get("project");
-
-  if (projectId) {
-    projectManager.loadProjectDetails(projectId);
-    showProjectDetailsView();
-  } else {
-    projectManager.loadProjects();
-    showProjectListView();
+  domReady = true;
+  if (pendingInitialization) {
+    pendingInitialization();
   }
-
-  // 2. Set up top-level event listeners (buttons, forms, etc.)
-  setupGlobalEventListeners();
-
-  // 3. Listen to the custom events dispatched by projectManager.js
-  registerDataEventListeners();
 });
+
+// Initialize the dashboard
+function initializeDashboard() {
+  const initialization = () => {
+    // Verify critical elements exist
+    const projectListView = document.getElementById("projectListView");
+    const projectDetailsView = document.getElementById("projectDetailsView");
+
+    if (!projectListView || !projectDetailsView) {
+      console.error("Critical project view elements not found. Retrying in 1000ms...");
+      setTimeout(initializeDashboard, 1000);
+      return;
+    }
+
+    // 1. Parse URL to see if we need to auto-load a specific project
+    const urlParams = new URLSearchParams(window.location.search);
+    const projectId = urlParams.get("project");
+
+    if (projectId) {
+      showProjectDetailsView().then(success => {
+        if (success) {
+          projectManager.loadProjectDetails(projectId);
+        } else {
+          console.error("Failed to show project details view");
+          window.showNotification?.("Failed to load project details", "error");
+        }
+      });
+    } else {
+      showProjectListView().then(success => {
+        if (success) {
+          projectManager.loadProjects();
+        } else {
+          console.error("Failed to show project list view");
+          window.showNotification?.("Failed to load projects view", "error");
+        }
+      });
+    }
+
+    // 2. Set up top-level event listeners (buttons, forms, etc.)
+    setupGlobalEventListeners();
+
+    // 3. Listen to the custom events dispatched by projectManager.js
+    registerDataEventListeners();
+
+    console.log("Dashboard initialized successfully");
+  };
+
+  if (!domReady) {
+    pendingInitialization = initialization;
+  } else {
+    initialization();
+  }
+}
+
+// Start initialization
+initializeDashboard();
 
 /**
  * Sets up event listeners for global UI elements: forms, buttons, etc.
  */
 function setupGlobalEventListeners() {
   // Nav: Back to projects
-  document.getElementById("backToProjectsBtn")?.addEventListener("click", () => {
-    showProjectListView();
-    projectManager.loadProjects();
+  document.getElementById("backToProjectsBtn")?.addEventListener("click", async () => {
+      if (await showProjectListView()) {
+          projectManager.loadProjects();
+      } else {
+          window.showNotification?.("Failed to switch view. Please try again.", "error");
+      }
   });
 
   // Create new project
@@ -176,19 +226,247 @@ function registerDataEventListeners() {
   document.addEventListener("projectArtifactsLoaded", (e) => renderProjectArtifacts(e.detail.artifacts));
 }
 
+/**
+ * Render the list of conversations for a project
+ */
+function renderProjectConversations(data) {
+  const list = document.getElementById("projectConversationsList");
+  if (!list) return;
+
+  if (!data || !data.conversations || data.conversations.length === 0) {
+    list.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet.</div>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  data.conversations.forEach(conversation => {
+    const item = document.createElement("div");
+    item.className = "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2";
+    
+    // Info section
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "flex items-center";
+    
+    const detailDiv = document.createElement("div");
+    detailDiv.className = "flex flex-col";
+    
+    const titleDiv = document.createElement("div");
+    titleDiv.className = "font-medium";
+    titleDiv.textContent = conversation.title || `Conversation ${conversation.id}`;
+    
+    const infoText = document.createElement("div");
+    infoText.className = "text-xs text-gray-500";
+    infoText.textContent = `${conversation.message_count || 0} messages · ${formatDate(conversation.created_at)}`;
+    
+    detailDiv.appendChild(titleDiv);
+    detailDiv.appendChild(infoText);
+    infoDiv.appendChild(detailDiv);
+    item.appendChild(infoDiv);
+    
+    // Actions section
+    const actions = document.createElement("div");
+    actions.className = "flex space-x-2";
+    
+    // View conversation button
+    const viewBtn = document.createElement("a");
+    viewBtn.href = `/?chatId=${conversation.id}`;
+    viewBtn.className = "text-blue-600 hover:text-blue-800";
+    viewBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+    `;
+    
+    actions.appendChild(viewBtn);
+    item.appendChild(actions);
+    list.appendChild(item);
+  });
+}
+
+/**
+ * Render the list of artifacts for a project
+ */
+function renderProjectArtifacts(artifacts) {
+  const list = document.getElementById("projectArtifactsList");
+  if (!list) return;
+
+  if (!artifacts || artifacts.length === 0) {
+    list.innerHTML = `<div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  artifacts.forEach(artifact => {
+    const item = document.createElement("div");
+    item.className = "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2";
+    
+    // Info section
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "flex items-center";
+    
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "text-lg mr-2";
+    iconSpan.textContent = artifactIcon(artifact.content_type);
+    infoDiv.appendChild(iconSpan);
+    
+    const detailDiv = document.createElement("div");
+    detailDiv.className = "flex flex-col";
+    
+    const titleDiv = document.createElement("div");
+    titleDiv.className = "font-medium";
+    titleDiv.textContent = artifact.name || `Artifact ${artifact.id}`;
+    
+    const infoText = document.createElement("div");
+    infoText.className = "text-xs text-gray-500";
+    infoText.textContent = `${formatDate(artifact.created_at)} · From conversation ${artifact.conversation_id}`;
+    
+    detailDiv.appendChild(titleDiv);
+    detailDiv.appendChild(infoText);
+    infoDiv.appendChild(detailDiv);
+    item.appendChild(infoDiv);
+    
+    // Actions section
+    const actions = document.createElement("div");
+    actions.className = "flex space-x-2";
+    
+    // View button
+    const viewBtn = document.createElement("button");
+    viewBtn.className = "text-blue-600 hover:text-blue-800";
+    viewBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+    `;
+    viewBtn.addEventListener("click", () => {
+      const modal = createViewModal(artifact.name, "Loading artifact content...");
+      if (modal.modalContent) {
+        modal.modalContent.innerHTML = `<pre class="whitespace-pre-wrap">${escapeHtml(artifact.content)}</pre>`;
+      }
+    });
+    
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "text-red-600 hover:text-red-800";
+    deleteBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    `;
+    deleteBtn.addEventListener("click", () => confirmDeleteArtifact(artifact.id, artifact.name));
+    
+    actions.appendChild(viewBtn);
+    actions.appendChild(deleteBtn);
+    item.appendChild(actions);
+    list.appendChild(item);
+  });
+}
+
 /* --------------------------
    UI Visibility / Modal Helpers
 --------------------------- */
 
-function showProjectListView() {
-  document.getElementById("projectListView")?.classList.remove("hidden");
-  document.getElementById("projectDetailsView")?.classList.add("hidden");
+/**
+ * Switch to project list view with retry mechanism and element verification
+ * @returns {Promise<boolean>} - Resolves to true if successful
+ */
+async function showProjectListView(retryCount = 0) {
+  const maxRetries = 5;
+  const retryDelay = 1000;
+
+  // Try to get required elements
+  const elements = {
+    projectListView: document.getElementById("projectListView"),
+    projectDetailsView: document.getElementById("projectDetailsView")
+  };
+
+  // Check if any required elements are missing
+  const missingElements = Object.entries(elements)
+    .filter(([, element]) => !element)
+    .map(([name]) => name);
+
+  // If elements are missing and we haven't exceeded retries, try again
+  if (missingElements.length > 0 && retryCount < maxRetries) {
+    console.log(`Waiting for elements (attempt ${retryCount + 1}/${maxRetries}): ${missingElements.join(", ")}`);
+    return new Promise(resolve => {
+      setTimeout(() => {
+        resolve(showProjectListView(retryCount + 1));
+      }, retryDelay);
+    });
+  }
+
+  // If we've exceeded retries, log error and return
+  if (missingElements.length > 0) {
+    console.error(`Failed to find elements after ${maxRetries} retries:`, missingElements);
+    return false;
+  }
+
+  // All elements found, switch views
+  elements.projectListView.classList.remove("hidden");
+  elements.projectDetailsView.classList.add("hidden");
   window.history.pushState({}, "", window.location.pathname);
+
+  return true;
 }
 
-function showProjectDetailsView() {
-  document.getElementById("projectListView")?.classList.add("hidden");
-  document.getElementById("projectDetailsView")?.classList.remove("hidden");
+/**
+ * Switch to project details view with retry mechanism and element verification
+ * @param {number} retryCount - Number of retries attempted (internal use)
+ * @returns {Promise<boolean>} - Resolves to true if successful
+ */
+async function showProjectDetailsView(retryCount = 0) {
+    const maxRetries = 5;
+    const retryDelay = 1000; // 1 second
+
+    // Try to get all required elements
+    const elements = {
+        projectListView: document.getElementById("projectListView"),
+        projectDetailsView: document.getElementById("projectDetailsView"),
+        projectTitle: document.getElementById("projectTitle"),
+        projectDescription: document.getElementById("projectDescription"),
+        projectGoals: document.getElementById("projectGoals"),
+        projectInstructions: document.getElementById("projectInstructions"),
+        tokenUsage: document.getElementById("tokenUsage"),
+        maxTokens: document.getElementById("maxTokens"),
+        tokenPercentage: document.getElementById("tokenPercentage"),
+        tokenProgressBar: document.getElementById("tokenProgressBar"),
+        conversationCount: document.getElementById("conversationCount"),
+        fileCount: document.getElementById("fileCount"),
+        artifactCount: document.getElementById("artifactCount")
+    };
+
+    // Check if any required elements are missing
+    const missingElements = Object.entries(elements)
+        .filter(([, element]) => !element)
+        .map(([name]) => name);
+
+    // If elements are missing and we haven't exceeded retries, try again
+    if (missingElements.length > 0 && retryCount < maxRetries) {
+        console.log(`Waiting for elements (attempt ${retryCount + 1}/${maxRetries}): ${missingElements.join(", ")}`);
+        return new Promise(resolve => {
+            setTimeout(() => {
+                resolve(showProjectDetailsView(retryCount + 1));
+            }, retryDelay);
+        });
+    }
+
+    // If we've exceeded retries, log error and return
+    if (missingElements.length > 0) {
+        console.error(`Failed to find elements after ${maxRetries} retries:`, missingElements);
+        return false;
+    }
+
+    // All elements found, switch views
+    elements.projectListView.classList.add("hidden");
+    elements.projectDetailsView.classList.remove("hidden");
+
+    return true;
 }
 
 function showModal(id) {
@@ -484,13 +762,13 @@ function createProjectCard(project) {
   const maxTokens = project.max_tokens || 0;
   const usagePct = maxTokens > 0 ? Math.min(100, (usage / maxTokens) * 100).toFixed(1) : 0;
 
-  // Outer container
-  const div = document.createElement("div");
-  div.className = `bg-white dark:bg-gray-700 rounded shadow p-4 border-l-4 ${
-    project.pinned ? "border-yellow-500" : "border-blue-500"
-  } ${project.archived ? "opacity-60" : ""} w-full md:w-auto mb-2`;
+    // Outer container
+    const div = document.createElement("div");
+    div.className = `bg-white dark:bg-gray-700 rounded shadow p-4 border-l-4 ${
+      project.pinned ? "border-yellow-500" : "border-blue-500"
+    } ${project.archived ? "opacity-60" : ""} w-full md:w-auto mb-2`;
 
-  // Header
+    // Header
   const header = document.createElement("div");
   header.className = "flex justify-between mb-2";
 
@@ -547,23 +825,39 @@ function createProjectCard(project) {
   const actions = document.createElement("div");
   actions.className = "flex space-x-1";
 
-  // View
-  const viewBtn = document.createElement("button");
-  viewBtn.className = "p-1 text-blue-600 hover:text-blue-800 view-project-btn";
-  viewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
-      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-       d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-       d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0
-       8.268 2.943 9.542 7-1.274 4.057-5.064
-       7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-    </svg>`;
-  viewBtn.addEventListener("click", () => {
-    projectManager.loadProjectDetails(project.id);
-    showProjectDetailsView();
-  });
-  actions.appendChild(viewBtn);
+    const viewBtn = document.createElement("button");
+    viewBtn.className = "p-1 text-blue-600 hover:text-blue-800 view-project-btn flex items-center justify-center";
+    viewBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+      <span class="loading-spinner hidden ml-1"></span>
+    `;
+  
+    const loadingSpinner = viewBtn.querySelector('.loading-spinner');
+    
+    viewBtn.addEventListener("click", async () => {
+      try {
+        loadingSpinner.classList.remove('hidden');
+        viewBtn.disabled = true;
+        
+        const viewSuccess = await showProjectDetailsView();
+        if (viewSuccess) {
+          await projectManager.loadProjectDetails(project.id);
+        } else {
+          window.showNotification?.("Failed to switch to project view. Please try again.", "error");
+        }
+      } catch (err) {
+        console.error("Error loading project details:", err);
+        window.showNotification?.("An error occurred while loading project details", "error");
+      } finally {
+        loadingSpinner.classList.add('hidden');
+        viewBtn.disabled = false;
+      }
+    });
+    
+    actions.appendChild(viewBtn);
 
   // Delete
   const deleteBtn = document.createElement("button");
@@ -592,15 +886,37 @@ function createProjectCard(project) {
  * Render details for a single project in the "projectDetailsView".
  */
 function renderProjectDetails(project) {
-  document.getElementById("projectTitle").textContent = project.name;
-  document.getElementById("projectDescription").textContent =
-    project.description || "No description provided.";
-  document.getElementById("projectGoals").textContent =
-    project.goals || "No goals defined.";
-  document.getElementById("projectInstructions").textContent =
-    project.custom_instructions || "No custom instructions set.";
+    console.log("renderProjectDetails called with project:", project);
+    const projectTitle = document.getElementById("projectTitle");
+    const projectDescription = document.getElementById("projectDescription");
+    const projectGoals = document.getElementById("projectGoals");
+    const projectInstructions = document.getElementById("projectInstructions");
 
-  // Pin/Archive button states
+    if (projectTitle) {
+        projectTitle.textContent = project.name;
+    } else {
+        console.error("projectTitle element not found");
+    }
+    if (projectDescription) {
+        projectDescription.textContent =
+        project.description || "No description provided.";
+    } else {
+        console.error("projectDescription element not found");
+    }
+    if (projectGoals) {
+        projectGoals.textContent = project.goals || "No goals defined.";
+    } else {
+        console.error("projectGoals element not found");
+    }
+
+    if (projectInstructions) {
+        projectInstructions.textContent =
+        project.custom_instructions || "No custom instructions set.";
+    } else {
+        console.error("projectInstructions element not found");
+    }
+
+    // Pin/Archive button states
   const pinBtn = document.getElementById("pinProjectBtn");
   if (pinBtn) {
     const svg = pinBtn.querySelector("svg");
@@ -616,88 +932,131 @@ function renderProjectDetails(project) {
   }
 }
 
-/**
- * Render project stats with enhanced knowledge base information
- */
-function renderProjectStats(stats) {
-    document.getElementById("tokenUsage").textContent = formatNumber(stats.token_usage || 0);
-    document.getElementById("maxTokens").textContent = formatNumber(stats.max_tokens || 0);
-    const usage = stats.token_usage || 0;
-    const maxT = stats.max_tokens || 0;
-    const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
-    document.getElementById("tokenPercentage").textContent = `${pct}%`;
-    document.getElementById("tokenProgressBar").style.width = `${pct}%`;
+  /**
+   * Render project stats with enhanced knowledge base information
+   */
+  function renderProjectStats(stats) {
+      console.log("renderProjectStats called with stats:", stats);
+      const tokenUsage = document.getElementById("tokenUsage");
+      const maxTokens = document.getElementById("maxTokens");
+      const tokenPercentage = document.getElementById("tokenPercentage");
+      const tokenProgressBar = document.getElementById("tokenProgressBar");
+      const conversationCount = document.getElementById("conversationCount");
+      const fileCount = document.getElementById("fileCount");
+      const artifactCount = document.getElementById("artifactCount");
+      const kbInfoContainer = document.getElementById("knowledgeBaseInfo");
 
-    // Update counters
-    document.getElementById("conversationCount").textContent = stats.conversation_count || 0;
-    document.getElementById("fileCount").textContent = stats.file_count || 0;
-    document.getElementById("artifactCount").textContent = stats.artifact_count || 0;
-    
-    // Update knowledge base info if available
-    const kbInfoContainer = document.getElementById("knowledgeBaseInfo");
-    if (kbInfoContainer) {
-        if (stats.knowledge_base) {
-            const kb = stats.knowledge_base;
-            
-            // Create or update knowledge base info
-            kbInfoContainer.innerHTML = `
-                <div class="mb-2 font-medium">Knowledge Base</div>
-                <div class="flex justify-between text-sm mb-1">
-                    <span>${kb.name || "Unknown"}</span>
-                    <span class="px-2 py-0.5 bg-${kb.is_active ? 'green' : 'gray'}-100 
-                        text-${kb.is_active ? 'green' : 'gray'}-800 rounded text-xs">
-                        ${kb.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                </div>
-                <div class="text-xs text-gray-500 mb-2">Model: ${kb.embedding_model || "Default"}</div>
-                
-                <div class="mt-2 mb-1 text-xs font-medium text-gray-600">File Processing</div>
-                <div class="w-full bg-gray-200 rounded-full h-1.5 mb-1">
-                    <div class="bg-blue-600 h-1.5 rounded-full" 
-                         style="width: ${stats.file_count ? Math.round((kb.indexed_files / stats.file_count) * 100) : 0}%">
-                    </div>
-                </div>
-                <div class="flex justify-between text-xs text-gray-500">
-                    <span>${kb.indexed_files || 0} indexed</span>
-                    <span>${kb.pending_files || 0} pending</span>
-                </div>
-                
-                <div class="mt-3">
-                    <button id="reprocessFilesBtn" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-                        Reprocess All Files
-                    </button>
-                </div>
-            `;
-            
-            // Add event listener for reprocess button
-            document.getElementById("reprocessFilesBtn")?.addEventListener("click", () => {
-                reprocessAllFiles(projectManager.currentProject.id);
-            });
-            
-            kbInfoContainer.classList.remove("hidden");
-        } else {
-            // Show create knowledge base button
-            kbInfoContainer.innerHTML = `
-                <div class="mb-2 font-medium">Knowledge Base</div>
-                <p class="text-sm text-gray-600 mb-3">
-                    No knowledge base associated with this project. Create one to enable semantic search.
-                </p>
-                <button id="createKnowledgeBaseBtn" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-                    Create Knowledge Base
-                </button>
-            `;
-            
-            // Add event listener for create button
-            document.getElementById("createKnowledgeBaseBtn")?.addEventListener("click", () => {
-                showModal("knowledgeBaseSettingsModal");
-            });
-            
-            kbInfoContainer.classList.remove("hidden");
-        }
-    }
-}
+      if (tokenUsage) {
+          tokenUsage.textContent = formatNumber(stats.token_usage || 0);
+      } else {
+          console.error("tokenUsage element not found");
+      }
+      if (maxTokens) {
+          maxTokens.textContent = formatNumber(stats.max_tokens || 0);
+      } else {
+          console.error("maxTokens element not found");
+      }
+      const usage = stats.token_usage || 0;
+      const maxT = stats.max_tokens || 0;
+      const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
 
-/**
+      if (tokenPercentage) {
+          tokenPercentage.textContent = `${pct}%`;
+      } else {
+          console.error("tokenPercentage element not found");
+      }
+
+      if (tokenProgressBar) {
+          tokenProgressBar.style.width = `${pct}%`;
+      } else {
+          console.error("tokenProgressBar element not found");
+      }
+
+      // Update counters
+      if (conversationCount) {
+          conversationCount.textContent = stats.conversation_count || 0;
+      } else {
+          console.error("conversationCount element not found");
+      }
+
+      if (fileCount) {
+          fileCount.textContent = stats.file_count || 0;
+      } else {
+          console.error("fileCount element not found");
+      }
+
+      if (artifactCount) {
+          artifactCount.textContent = stats.artifact_count || 0;
+      } else {
+          console.error("artifactCount element not found");
+      }
+
+      // Update knowledge base info if available
+      if (kbInfoContainer) {
+          if (stats.knowledge_base) {
+              const kb = stats.knowledge_base;
+
+              // Create or update knowledge base info
+              kbInfoContainer.innerHTML = `
+                  <div class="mb-2 font-medium">Knowledge Base</div>
+                  <div class="flex justify-between text-sm mb-1">
+                      <span>${kb.name || "Unknown"}</span>
+                      <span class="px-2 py-0.5 bg-${kb.is_active ? 'green' : 'gray'}-100 
+                          text-${kb.is_active ? 'green' : 'gray'}-800 rounded text-xs">
+                          ${kb.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                  </div>
+                  <div class="text-xs text-gray-500 mb-2">Model: ${kb.embedding_model || "Default"}</div>
+                  
+                  <div class="mt-2 mb-1 text-xs font-medium text-gray-600">File Processing</div>
+                  <div class="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                      <div class="bg-blue-600 h-1.5 rounded-full" 
+                          style="width: ${stats.file_count ? Math.round((kb.indexed_files / stats.file_count) * 100) : 0}%">
+                      </div>
+                  </div>
+                  <div class="flex justify-between text-xs text-gray-500">
+                      <span>${kb.indexed_files || 0} indexed</span>
+                      <span>${kb.pending_files || 0} pending</span>
+                  </div>
+                  
+                  <div class="mt-3">
+                      <button id="reprocessFilesBtn" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                          Reprocess All Files
+                      </button>
+                  </div>
+              `;
+
+              // Add event listener for reprocess button
+              document.getElementById("reprocessFilesBtn")?.addEventListener("click", () => {
+                  reprocessAllFiles(projectManager.currentProject.id);
+              });
+
+              kbInfoContainer.classList.remove("hidden");
+          } else {
+              // Show create knowledge base button
+              kbInfoContainer.innerHTML = `
+                  <div class="mb-2 font-medium">Knowledge Base</div>
+                  <p class="text-sm text-gray-600 mb-3">
+                      No knowledge base associated with this project. Create one to enable semantic search.
+                  </p>
+                  <button id="createKnowledgeBaseBtn" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                      Create Knowledge Base
+                  </button>
+              `;
+
+              // Add event listener for create button
+              document.getElementById("createKnowledgeBaseBtn")?.addEventListener("click", () => {
+                  showModal("knowledgeBaseSettingsModal");
+              });
+
+              kbInfoContainer.classList.remove("hidden");
+          }
+      } else {
+          console.warn('kbInfoContainer not found');
+      }
+  }
+
+  /**
  * Create a knowledge base for the current project
  */
 function createKnowledgeBase(projectId, data) {
@@ -781,274 +1140,40 @@ function renderProjectFiles(files) {
     infoDiv.appendChild(iconSpan);
 
     const detailDiv = document.createElement("div");
-    const filename = document.createElement("div");
-    filename.className = "font-medium";
-    filename.textContent = file.filename;
-    detailDiv.appendChild(filename);
-
-    const meta = document.createElement("div");
-    meta.className = "text-xs text-gray-500";
-    meta.textContent = `${formatBytes(file.file_size)} • ${formatDate(file.created_at)}`;
-    detailDiv.appendChild(meta);
-
+    detailDiv.className = "flex flex-col";
+    
+    const fileName = document.createElement("div");
+    fileName.className = "font-medium";
+    fileName.textContent = file.filename;
+    
+    const fileInfo = document.createElement("div");
+    fileInfo.className = "text-xs text-gray-500";
+    fileInfo.textContent = `${formatBytes(file.file_size)} · ${formatDate(file.created_at)}`;
+    
+    detailDiv.appendChild(fileName);
+    detailDiv.appendChild(fileInfo);
     infoDiv.appendChild(detailDiv);
     item.appendChild(infoDiv);
-
+    
     // Actions
-    const actionsDiv = document.createElement("div");
-    actionsDiv.className = "flex space-x-2";
-
-    const viewBtn = document.createElement("button");
-    viewBtn.className = "text-gray-600 hover:text-gray-800";
-    viewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5"
-      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-       d="M15 12a3 3 0 11-6 0 3 3
-       0 016 0z" />
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-       d="M2.458 12C3.732 7.943 7.523
-       5 12 5c4.478 0 8.268 2.943
-       9.542 7-1.274 4.057-5.064
-       7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    const actions = document.createElement("div");
+    actions.className = "flex space-x-2";
+    
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "text-red-600 hover:text-red-800";
+    deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>`;
-    viewBtn.addEventListener("click", () => viewFile(file.id));
-    actionsDiv.appendChild(viewBtn);
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "text-red-600 hover:text-red-800";
-    delBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5"
-      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-       d="M19 7l-.867 12.142A2 2
-       0 0116.138 21H7.862a2 2 0
-       01-1.995-1.858L5 7m5
-       4v6m4-6v6m1-10V4a1 1 0
-       00-1-1h-4a1 1 0
-       00-1 1v3M4 7h16" />
-    </svg>`;
-    delBtn.addEventListener("click", () => {
-      confirmDeleteFile(file.id, file.filename);
-    });
-    actionsDiv.appendChild(delBtn);
-
-    item.appendChild(actionsDiv);
+    deleteBtn.addEventListener("click", () => confirmDeleteFile(file.id, file.filename));
+    
+    actions.appendChild(deleteBtn);
+    item.appendChild(actions);
+    
     filesList.appendChild(item);
   });
 }
 
-/**
- * View file content (in a modal).
- */
-function viewFile(fileId) {
-  const p = projectManager.currentProject;
-  if (!p) {
-    window.showNotification?.("No project selected", "error");
-    return;
-  }
-
-  // Show a loading modal
-  const { modal, modalContent, heading } = createViewModal("Loading file...", "Loading...");
-  
-  // Fetch file info
-  window.apiRequest(`/api/projects/${p.id}/files/${fileId}`, "GET")
-    .then((resp) => {
-      const file = resp.data;
-      heading.textContent = file.filename;
-
-      if (file.content === null) {
-        modalContent.innerHTML = `
-          <div class="bg-yellow-50 p-4 rounded">
-            <p class="text-yellow-700">File content not displayable (binary or large file).</p>
-            <p class="text-yellow-600 mt-2">Type: ${file.file_type}, Size: ${formatBytes(file.file_size)}</p>
-          </div>
-        `;
-      } else {
-        modalContent.innerHTML = `
-          <div class="flex justify-between items-center mb-2">
-            <div>
-              <span class="text-gray-500 text-sm">Type: ${file.file_type}</span>
-              <span class="text-gray-500 text-sm ml-4">Size: ${formatBytes(file.file_size)}</span>
-            </div>
-            <button id="copyFileContentBtn" class="text-blue-600 hover:text-blue-800 text-sm">Copy Content</button>
-          </div>
-          <pre class="bg-gray-50 dark:bg-gray-700 p-4 rounded overflow-x-auto whitespace-pre-wrap"><code>${escapeHtml(file.content)}</code></pre>
-        `;
-
-        // Copy button
-        document.getElementById("copyFileContentBtn")?.addEventListener("click", () => {
-          navigator.clipboard.writeText(file.content)
-            .then(() => window.showNotification?.("File content copied", "success"))
-            .catch(() => window.showNotification?.("Failed to copy", "error"));
-        });
-      }
-    })
-    .catch((err) => {
-      console.error("Error loading file:", err);
-      modalContent.innerHTML = `<div class="bg-red-50 p-4 rounded">Failed to load file. Please try again later.</div>`;
-    });
-}
-
-/**
- * Render conversations
- */
-function renderProjectConversations(data) {
-  const container = document.getElementById('projectConversationsList');
-  if (!container) return;
-
-  console.log("Rendering conversations from data:", data);
-  
-  // Handle different response formats
-  let conversations = [];
-  
-  // Format 1: Array directly (from event.detail)
-  if (Array.isArray(data)) {
-    conversations = data;
-  }
-  // Format 2: { conversations: [...] }
-  else if (data && data.conversations) {
-    conversations = data.conversations;
-  }
-  // Format 3: { data: { conversations: [...] } }
-  else if (data && data.data && data.data.conversations) {
-    conversations = data.data.conversations;
-  }
-  
-  console.log("Processed conversations:", conversations);
-  
-  if (!conversations || conversations.length === 0) {
-    container.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet</div>`;
-    return;
-  }
-
-  // Clear existing content
-  container.innerHTML = '';
-
-  conversations.forEach(convo => {
-    const convoElement = document.createElement('div');
-    convoElement.className = 'p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2';
-    convoElement.innerHTML = `
-      <div class="font-medium">${convo.title || `Conversation ${convo.id}`}</div>
-      <div class="text-xs text-gray-500">
-        Created ${formatDate(convo.created_at, true)}
-      </div>
-      <div class="mt-2">
-        <button class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-          onclick="window.location.href='/?chatId=${convo.id}'">
-          Open
-        </button>
-      </div>
-    `;
-    container.appendChild(convoElement);
-  });
-}
-
-/**
- * Render artifacts
- */
-function renderProjectArtifacts(artifacts) {
-  const list = document.getElementById("projectArtifactsList");
-  if (!list) return;
-  if (!artifacts || artifacts.length === 0) {
-    list.innerHTML = `<div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>`;
-    return;
-  }
-  list.innerHTML = "";
-
-  artifacts.forEach(art => {
-    const item = document.createElement("div");
-    item.className = "p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2";
-
-    const header = document.createElement("div");
-    header.className = "flex items-center justify-between mb-2";
-
-    const left = document.createElement("div");
-    left.className = "flex items-center";
-    const iconSpan = document.createElement("span");
-    iconSpan.className = "text-lg mr-2";
-    iconSpan.textContent = artifactIcon(art.content_type);
-    left.appendChild(iconSpan);
-
-    const title = document.createElement("div");
-    title.className = "font-medium";
-    title.textContent = art.name || "Untitled Artifact";
-    left.appendChild(title);
-
-    header.appendChild(left);
-
-    const time = document.createElement("div");
-    time.className = "text-xs text-gray-500";
-    time.textContent = formatDate(art.created_at);
-    header.appendChild(time);
-
-    item.appendChild(header);
-
-    const actions = document.createElement("div");
-    actions.className = "flex justify-end space-x-2 mt-2";
-
-    const viewBtn = document.createElement("button");
-    viewBtn.className = "px-2 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100";
-    viewBtn.textContent = "View";
-    viewBtn.addEventListener("click", () => {
-      viewArtifact(art.id);
-    });
-    actions.appendChild(viewBtn);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "px-2 py-1 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", () => {
-      confirmDeleteArtifact(art.id, art.name);
-    });
-    actions.appendChild(deleteBtn);
-
-    item.appendChild(actions);
-    list.appendChild(item);
-  });
-}
-
-/* --------------------------
-   Viewing Artifact
---------------------------- */
-function viewArtifact(artifactId) {
-  const p = projectManager.currentProject;
-  if (!p) {
-    window.showNotification?.("No project selected", "error");
-    return;
-  }
-
-  const { modalContent, heading } = createViewModal("Loading artifact...", "Loading...");
-
-  window.apiRequest(`/api/projects/${p.id}/artifacts/${artifactId}`, "GET")
-    .then((resp) => {
-      const art = resp.data;
-      heading.textContent = art.name || "Artifact Details";
-
-      const contentType = art.content_type || "unknown";
-      let contentHtml = escapeHtml(art.content || "");
-
-      modalContent.innerHTML = `
-        <div class="flex justify-between items-center mb-2">
-          <span class="text-gray-500 text-sm">Type: ${contentType}</span>
-          <button id="copyArtifactContentBtn" class="text-blue-600 hover:text-blue-800 text-sm">Copy Content</button>
-        </div>
-        <pre class="bg-gray-50 dark:bg-gray-700 p-4 rounded overflow-x-auto whitespace-pre-wrap">${contentHtml}</pre>
-      `;
-
-      document.getElementById("copyArtifactContentBtn")?.addEventListener("click", () => {
-        navigator.clipboard.writeText(art.content)
-          .then(() => window.showNotification?.("Artifact content copied", "success"))
-          .catch(() => window.showNotification?.("Failed to copy", "error"));
-      });
-    })
-    .catch((err) => {
-      console.error("Error viewing artifact:", err);
-      modalContent.innerHTML = `<div class="bg-red-50 p-4 rounded">Failed to load artifact. Please try again later.</div>`;
-    });
-}
-
-/* --------------------------
-   Filtering & Searching
---------------------------- */
 function filterProjects(filter) {
   document.querySelectorAll(".project-filter-btn").forEach(btn => {
     const isActive = btn.dataset.filter === filter;

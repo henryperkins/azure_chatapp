@@ -16,17 +16,14 @@ import io
 import logging
 from datetime import datetime
 from functools import wraps
-from typing import (
-    Dict,
-    Any,
-    List,
-    Optional,
-    Tuple,
-    Union,
-    BinaryIO
-)
+from typing import Dict, Any, Optional, Tuple, Union, BinaryIO
 from uuid import UUID
-
+import uuid
+try:
+    from werkzeug.utils import secure_filename
+except ImportError:
+    secure_filename = None
+    
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
@@ -40,10 +37,12 @@ from models.user import User
 
 # Services imported from dedicated modules:
 from services.file_storage import get_file_storage, FileStorage
-from services.text_extraction import get_text_extractor, TextExtractor, TextExtractionError
+from services.text_extraction import get_text_extractor, TextExtractionError
 from services.vector_db import get_vector_db, process_file_for_search
 from services.project_service import validate_project_access
 from utils.context import estimate_token_count  # Provided in original environment
+from utils.serializers import serialize_project_file
+
 
 logger = logging.getLogger(__name__)
 
@@ -200,51 +199,23 @@ def extract_file_metadata(
     include_token_count: bool = True,
     include_file_path: bool = False
 ) -> Dict[str, Any]:
-    """
-    Extracts standardized metadata from a file record.
-    Provides consistent keys in the returned dictionary.
-    """
-    result = {
-        "id": str(file_record.id),
-        "project_id": str(file_record.project_id),
-        "filename": file_record.filename,
-        "file_size": file_record.file_size,
-        "file_type": file_record.file_type,
-        "created_at": file_record.created_at,
-    }
-
-    metadata = file_record.metadata or {}
-    if include_token_count:
-        token_count = (
-            metadata.get("tokens")
-            or metadata.get("token_count")
-            or metadata.get("token_estimate", 0)
-        )
-        result["token_count"] = token_count
-
-    if include_file_path:
-        result["file_path"] = file_record.file_path
-
-    # Search processing info if present
-    search_processing = metadata.get("search_processing", {})
-    if search_processing:
-        result["search_status"] = {
-            "success": search_processing.get("success", False),
-            "chunk_count": search_processing.get("chunk_count", 0),
-            "processed_at": search_processing.get("processed_at")
-        }
-
-    return result
+    """Use centralized serializer with additional fields"""
+    base_data = serialize_project_file(file_record, include_content=False)
+    
+    # Add custom fields
+    base_data.update({
+        "search_status": (file_record.metadata or {}).get("search_processing", {}),
+        "token_count": (file_record.metadata or {}).get("token_count", 0) if include_token_count else None
+    })
+    
+    if not include_file_path:
+        base_data.pop("file_path", None)
+        
+    return base_data
 
 # -----------------------------------------------------------------------------
 # 6. File Upload & Processing
 # -----------------------------------------------------------------------------
-import uuid
-try:
-    from werkzeug.utils import secure_filename
-except ImportError:
-    secure_filename = None
-
 def _sanitize_filename(filename: str) -> str:
     """
     Safely sanitize a filename to avoid path traversal or injection.
