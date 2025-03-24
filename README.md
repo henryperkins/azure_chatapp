@@ -34,6 +34,7 @@ azure_chatapp/
 └── utils/            # Shared utilities
     ├── auth_deps.py  # JWT middleware
     └── openai.py     # Azure client
+```
 
 ## Core API Endpoints
 
