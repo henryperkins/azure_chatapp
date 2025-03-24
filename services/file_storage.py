@@ -8,22 +8,20 @@ import os
 import logging
 import hashlib
 import tempfile
-from typing import Optional, Dict, Any, BinaryIO, Union
-from fastapi import UploadFile
+from typing import Optional, Dict, Any, BinaryIO, Union, IO  # noqa: F401
 import httpx
 from uuid import UUID
-
+from utils.serializers import serialize_uuid
+from azure.storage.blob import ContentSettings 
 # Cloud storage import conditionals to avoid hard dependencies
 try:
-    from azure.storage.blob import BlobServiceClient, ContentSettings
-    from azure.core.exceptions import ResourceExistsError
+    from azure.storage.blob import BlobServiceClient
     AZURE_AVAILABLE = True
 except ImportError:
     AZURE_AVAILABLE = False
 
 try:
     import boto3
-    from botocore.exceptions import ClientError
     AWS_AVAILABLE = True
 except ImportError:
     AWS_AVAILABLE = False
@@ -52,7 +50,7 @@ class FileStorage:
             storage_type: Storage backend ('local', 'azure', or 's3')
             local_path: Path for local file storage if using 'local'
             azure_*: Azure Blob Storage parameters
-            aws_*: AWS S3 parameters
+            aws_*: AWS S3 storage parameters
         """
         self.storage_type = storage_type.lower()
         
@@ -69,7 +67,7 @@ class FileStorage:
                 raise ValueError("Azure connection string and container name are required for Azure storage")
             self.azure_connection_string = azure_connection_string
             self.azure_container_name = azure_container_name
-            self.blob_service_client = BlobServiceClient.from_connection_string(azure_connection_string)
+            self.blob_service_client = BlobServiceClient.from_connection_string(azure_connection_string)  # type: ignore
             self.container_client = self.blob_service_client.get_container_client(azure_container_name)
             
         # Initialize AWS S3
@@ -79,22 +77,23 @@ class FileStorage:
             if not all([aws_access_key, aws_secret_key, aws_bucket_name, aws_region]):
                 raise ValueError("AWS access key, secret key, bucket name and region are required for S3 storage")
             self.aws_bucket_name = aws_bucket_name
-            self.s3_client = boto3.client(
+            self.s3_client = boto3.client(  # type: ignore
                 's3',
                 aws_access_key_id=aws_access_key,
                 aws_secret_access_key=aws_secret_key,
                 region_name=aws_region
             )
         else:
+            # This handles any storage_type not caught by previous conditions
             raise ValueError(f"Unsupported storage type: {storage_type}")
 
     async def save_file(
         self, 
-        file_content: Union[bytes, BinaryIO], 
+        file_content: bytes | BinaryIO, 
         filename: str,
-        content_type: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        project_id: Optional[UUID] = None
+        content_type: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        project_id: UUID | None = None
     ) -> str:
         """
         Save a file to the configured storage.
@@ -110,19 +109,27 @@ class FileStorage:
             Storage path or URL where the file is stored
         """
         # Generate file hash for uniqueness
+        content_to_save = None
+        
+        # Better handling of different input types
         if isinstance(file_content, bytes):
             file_hash = hashlib.sha256(file_content).hexdigest()[:12]
             content_to_save = file_content
-        else:
-            # If it's a file-like object, read it first to compute hash
+        elif hasattr(file_content, 'read') and callable(getattr(file_content, 'read')):
+            # It's a file-like object with a read method
             content_to_save = file_content.read()
             file_hash = hashlib.sha256(content_to_save).hexdigest()[:12]
-            # Reset file pointer if it's a file-like object that supports seek
-            if hasattr(file_content, 'seek'):
-                file_content.seek(0)
+            file_content.seek(0)  # Reset file pointer
+        else:
+            # Try to convert other bytes-like objects (bytearray, memoryview)
+            try:
+                content_to_save = bytes(file_content)  # type: ignore
+                file_hash = hashlib.sha256(content_to_save).hexdigest()[:12]
+            except TypeError:
+                raise TypeError("file_content must be bytes-like or a file-like object")
         
         # Create a storage-specific filename/path with project id for better organization
-        storage_filename = f"{project_id}_{file_hash}_{filename}" if project_id else f"{file_hash}_{filename}"
+        storage_filename = f"{serialize_uuid(project_id)}_{file_hash}_{filename}" if project_id else f"{file_hash}_{filename}"
                 
         # Local storage implementation
         if self.storage_type == "local":
@@ -332,7 +339,7 @@ class FileStorage:
             raise ValueError(f"Unsupported file path format: {file_path}")
 
 # Factory function to create a FileStorage instance based on configuration
-def get_file_storage(config: Dict[str, Any]) -> FileStorage:
+def get_file_storage(config: dict[str, Any]) -> FileStorage:
     """
     Create and configure a FileStorage instance based on configuration.
     
@@ -368,7 +375,11 @@ def get_file_storage(config: Dict[str, Any]) -> FileStorage:
 
 
 # Simple helper functions for direct use in routes
-async def save_file_to_storage(file_content, filename, project_id=None):
+async def save_file_to_storage(
+    file_content: bytes | BinaryIO, 
+    filename: str, 
+    project_id: UUID | None = None
+) -> str:
     """
     Simplified function to save a file to storage.
     Uses the local storage option by default.
@@ -376,14 +387,14 @@ async def save_file_to_storage(file_content, filename, project_id=None):
     storage = FileStorage(storage_type="local")
     return await storage.save_file(file_content, filename, project_id=project_id)
 
-async def get_file_from_storage(file_path):
+async def get_file_from_storage(file_path: str) -> bytes:
     """
     Simplified function to retrieve a file from storage.
     """
     storage = FileStorage(storage_type="local")
     return await storage.get_file(file_path)
 
-async def delete_file_from_storage(file_path):
+async def delete_file_from_storage(file_path: str) -> bool:
     """
     Simplified function to delete a file from storage.
     """

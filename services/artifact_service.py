@@ -5,14 +5,13 @@ Service for managing project artifacts (generated content like code snippets, do
 with advanced organization, filtering, and export capabilities.
 """
 import logging
-import json
 import base64
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, delete, and_, or_, func, desc, asc
+from sqlalchemy import and_, or_, func
 from models.artifact import Artifact
 from models.project import Project
 from models.conversation import Conversation
@@ -208,8 +207,7 @@ async def list_artifacts(
     Returns:
         List of artifact dictionaries (without full content for efficiency)
     """
-    from services.project_service import validate_project_access, get_paginated_resources
-    from sqlalchemy import or_, and_
+    from services.project_service import get_paginated_resources
     
     # If user_id is provided, validate user's access
     if user_id is not None:
