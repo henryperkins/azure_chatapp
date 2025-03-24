@@ -134,7 +134,7 @@ async def list_projects(
     return await create_standard_response(serialized_projects)
 
 
-@router.get("/{project_id}", response_model=Dict)
+@router.get("/{project_id}/", response_model=Dict)
 async def get_project(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -156,7 +156,7 @@ async def get_project(
     return await create_standard_response(serialized_project)
 
 
-@router.patch("/{project_id}", response_model=Dict)
+@router.patch("/{project_id}/", response_model=Dict)
 async def update_project(
     project_id: UUID,
     update_data: ProjectUpdate,
@@ -186,7 +186,7 @@ async def update_project(
     return await create_standard_response(serialized_project, "Project updated successfully")
 
 
-@router.delete("/{project_id}", response_model=Dict)
+@router.delete("/{project_id}/", response_model=Dict)
 async def delete_project(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
