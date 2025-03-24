@@ -73,23 +73,23 @@ export default class WebSocketService {
     const endpoint = this.projectId
       ? `/api/projects/${this.projectId}/conversations/${chatId}`
       : `/api/chat/conversations/${chatId}`;
-
+  
     const res = await this._api(endpoint);
     if (!res.ok) throw new Error(`Conversation ${chatId} not accessible.`);
-
+  
     // Use a safe default hostname if the current one doesn't look right
     const currentHostname = location.hostname;
     const backendHost = window.BACKEND_HOST ||
-                       (currentHostname === 'put.photo' ? 'localhost' : currentHostname);
+                        (currentHostname === 'put.photo' ? 'localhost' : currentHostname);
     
     // Use the same port as the current page if not specified in backendHost
     const port = location.port ? `:${location.port}` : '';
-    // Use ws:// for localhost, wss:// otherwise
-    const wsProtocol = 'ws:'; // Always use non-secure WebSockets for now
-        
+    
+    // Use secure WebSockets when the page is loaded over HTTPS
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      
     // Build the WebSocket URL
     return `${wsProtocol}//${backendHost}${port}${endpoint}/ws`;
-    // TODO: Ensure wss:// is used in production
   }
 
   _initWebSocket() {
