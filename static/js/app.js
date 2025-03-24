@@ -62,16 +62,9 @@ function getElement(selector) {
 
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
-  const baseUrl = window.location.origin;
-
-  // Check if endpoint is absolute or relative
-  let url;
-  if (/^https?:\/\//i.test(endpoint)) {
-    url = endpoint;
-  } else {
-    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    url = `${baseUrl}${normalizedEndpoint}`;
-  }
+  // Always use current host for API requests
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${window.location.origin}${normalizedEndpoint}`;
 
   const options = {
     method,
