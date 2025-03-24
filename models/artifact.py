@@ -9,7 +9,7 @@ Defines the Artifact model, representing content generated within a project:
 from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, CheckConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 from db import Base
@@ -42,3 +42,16 @@ class Artifact(Base):
 
     def __repr__(self) -> str:
         return f"<Artifact {self.id} name={self.name} type={self.content_type}>"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": str(self.id),
+            "project_id": str(self.project_id),
+            "conversation_id": str(self.conversation_id) if self.conversation_id else None,
+            "name": self.name,
+            "content_type": self.content_type,
+            "content": self.content,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "extra_data": self.extra_data,
+        }

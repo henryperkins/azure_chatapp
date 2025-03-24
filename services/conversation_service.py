@@ -8,20 +8,30 @@ and database models.
 import logging
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from models.conversation import Conversation
-
-logger = logging.getLogger(__name__)
-
-from config import settings
-
 from fastapi import HTTPException
 from config import settings
 
+# Import utilities
+from utils.db_utils import get_all_by_condition, save_model
+
+
+logger = logging.getLogger(__name__)
+
+# Create decorator for consistent error handling
+def handle_service_errors(error_message="Service operation failed"):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                logger.error(f"{error_message}: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"{error_message}: {str(e)}")
+        return wrapper
+    return decorator
+
 async def validate_model(model_id: str):
-    """Validate allowed models including Claude"""
-    from config import settings
-    
+    """Validate allowed models including Claude"""    
     # Get allowed Claude models from config
     allowed_models = settings.CLAUDE_MODELS
     
@@ -34,6 +44,7 @@ async def validate_model(model_id: str):
             detail=f"Invalid model. Allowed: {', '.join(allowed_models)}"
         )
 
+@handle_service_errors("Failed to create conversation")
 async def create_conversation(
     project_id: UUID,
     user_id: int,
@@ -43,73 +54,50 @@ async def create_conversation(
 ) -> Conversation:
     """
     Creates a new conversation with proper model alignment.
-    
-    Args:
-        project_id: UUID of the parent project
-        user_id: ID of the user creating the conversation
-        title: Initial conversation title
-        model_id: Model ID to use for this conversation
-        db: Database session
-        
-    Returns:
-        Newly created Conversation object
     """
-    try:
-        conv = Conversation(
-            project_id=project_id,
-            user_id=user_id,
-            title=title,
-            model_id=model_id
-        )
-        db.add(conv)
-        await db.commit()
-        await db.refresh(conv)
-        return conv
-    except Exception as e:
-        logger.error(f"Error creating conversation: {str(e)}")
-        await db.rollback()
-        raise RuntimeError("Failed to create conversation")
+    # Validate model first (reuse existing function)
+    await validate_model(model_id)
+    
+    # Create conversation object
+    conv = Conversation(
+        project_id=project_id,
+        user_id=user_id,
+        title=title,
+        model_id=model_id
+    )
+    
+    # Use db_utils for saving
+    saved_conv = await save_model(db, conv)
+    if not saved_conv:
+        raise ValueError("Failed to save conversation")
+    return saved_conv
 
+@handle_service_errors("Failed to list project conversations")
 async def list_project_conversations(
     project_id: UUID,
     db: AsyncSession,
     user_id: int,
     skip: int = 0,
     limit: int = 100
-) -> list[Conversation]:
+) -> list:
     """
     Retrieves conversations for a project with pagination.
-    
-    Args:
-        project_id: UUID of the project
-        db: Database session
-        user_id: ID of requesting user
-        skip: Number of items to skip
-        limit: Maximum number of items to return
-        
-    Returns:
-        List of Conversation objects
+    Returns serialized list of conversations.
     """
-    # Add logging to debug
-    import logging
-    logger = logging.getLogger(__name__)
     logger.info(f"Listing conversations for project {project_id} (user_id={user_id})")
     
-    try:
-        # Only show non-deleted conversations
-        result = await db.execute(
-            select(Conversation)
-            .where(
-                Conversation.project_id == project_id,
-                Conversation.is_deleted.is_(False)
-            )
-            .offset(skip)
-            .limit(limit)
-            .order_by(Conversation.created_at.desc())
-        )
-        conversations = result.scalars().all()
-        logger.info(f"Found {len(conversations)} non-deleted conversations for project {project_id}")
-        return conversations
-    except Exception as e:
-        logger.error(f"Error fetching project conversations: {str(e)}")
-        raise
+    # Use get_all_by_condition from db_utils
+    conversations = await get_all_by_condition(
+        db, 
+        Conversation,
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(False),
+        order_by=Conversation.created_at.desc(),
+        limit=limit,
+        offset=skip
+    )
+    
+    logger.info(f"Found {len(conversations)} non-deleted conversations for project {project_id}")
+    
+    # Return serialized data
+    return conversations
