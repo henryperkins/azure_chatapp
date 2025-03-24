@@ -15,6 +15,15 @@ const ProjectDashboard = {
 
   // Initialize the dashboard
   init() {
+    console.log("Project Dashboard initialization started");
+    
+    // Check if all components are available, if not retry after a short delay
+    if (!this.areComponentsAvailable()) {
+      console.log("Components not yet available, deferring initialization");
+      setTimeout(() => this.init(), 100);
+      return;
+    }
+    
     // Setup UI components
     this.setupComponents();
     
@@ -27,19 +36,28 @@ const ProjectDashboard = {
     console.log("Project Dashboard initialized");
   },
 
+  // Check if all required components are available
+  areComponentsAvailable() {
+    return (
+      window.ProjectListComponent !== undefined &&
+      window.ProjectDetailsComponent !== undefined &&
+      window.KnowledgeBaseComponent !== undefined
+    );
+  },
+
   // Setup UI components
   setupComponents() {
     // Initialize view components
-    this.components.projectList = new ProjectListComponent({
+    this.components.projectList = new window.ProjectListComponent({
       elementId: "projectList",
       onViewProject: this.handleViewProject.bind(this)
     });
     
-    this.components.projectDetails = new ProjectDetailsComponent({
+    this.components.projectDetails = new window.ProjectDetailsComponent({
       onBack: this.handleBackToList.bind(this)
     });
     
-    this.components.knowledgeBase = new KnowledgeBaseComponent();
+    this.components.knowledgeBase = new window.KnowledgeBaseComponent();
     
     // Bind global event listeners
     this.bindEvents();
