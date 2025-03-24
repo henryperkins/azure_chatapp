@@ -80,7 +80,7 @@ class MessageCreate(BaseModel):
 
 # The duplicate endpoint is removed - the other endpoint (list_conversations) provides the same functionality
 
-@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     project_id: UUID,
     conversation_data: ConversationCreate,
@@ -116,7 +116,7 @@ async def create_conversation(
     }, "Conversation created successfully")
 
 
-@router.get("", response_model=dict)
+@router.get("/", response_model=dict)
 async def list_conversations(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
