@@ -25,7 +25,11 @@ from db import get_async_session, AsyncSessionLocal
 from models.conversation import Conversation
 from models.message import Message
 from models.user import User
-from utils.auth_utils import get_current_user_and_token, authenticate_websocket
+from utils.auth_utils import (
+    get_current_user_and_token,
+    extract_token_from_websocket,
+    get_user_from_token
+)
 from utils.db_utils import save_model, get_all_by_condition, validate_resource_access
 from utils.message_handlers import (
     create_user_message,
@@ -438,25 +442,42 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
     """Real-time chat updates for a standalone conversation."""
     async with AsyncSessionLocal() as db:
         try:
-            # Authenticate user
-            success, user = await authenticate_websocket(websocket, db)
-            if not success:
+            # Extract and validate token before accepting connection
+            token = await extract_token_from_websocket(websocket)
+            if not token:
+                logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-            if user and user.username:
-                logger.debug("WebSocket authentication successful for user: %s", user.username)  # ADDED DEBUG LOG
 
-            # Validate conversation access
-            conversation = await validate_resource_access(
-                conversation_id,
-                Conversation,
-                user,
-                db,
-                "Conversation",
-                [Conversation.project_id.is_(None), Conversation.is_deleted.is_(False)],
-            )
+            # Get user from token
+            try:
+                user = await get_user_from_token(token, db, "access")
+                if not user:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                logger.debug("WebSocket authentication successful for user: %s", user.username)
+            except Exception as e:
+                logger.warning(f"WebSocket authentication failed: {str(e)}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
-            # Accept already done in authenticate_websocket after successful authentication
+            # Validate conversation access before accepting connection
+            try:
+                conversation = await validate_resource_access(
+                    conversation_id,
+                    Conversation,
+                    user,
+                    db,
+                    "Conversation",
+                    [Conversation.project_id.is_(None), Conversation.is_deleted.is_(False)],
+                )
+            except Exception as e:
+                logger.warning(f"WebSocket conversation access denied: {str(e)}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # Accept connection only after both auth and access validation succeed
+            await websocket.accept()
 
             while True:
                 raw_data = await websocket.receive_text()

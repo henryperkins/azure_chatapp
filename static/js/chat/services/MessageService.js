@@ -3,7 +3,7 @@
  * Handles message sending, receiving, and processing
  */
 
-class MessageService {
+export default class MessageService {
   constructor(options = {}) {
     this.onMessageReceived = options.onMessageReceived || (() => {});
     this.onError = options.onError || console.error;
