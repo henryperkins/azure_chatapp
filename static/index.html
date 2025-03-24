@@ -595,7 +595,14 @@
   <script src="/static/js/formatting.js"></script>
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/modelConfig.js"></script>
-  <script src="/static/js/chat.js"></script>
+  <script src="/static/js/chat/services/WebSocketService.js" type="module"></script>
+  <script src="/static/js/chat/services/MessageService.js" type="module"></script>
+  <script src="/static/js/chat/services/ConversationService.js" type="module"></script>
+  <script src="/static/js/chat/components/MessageList.js" type="module"></script>
+  <script src="/static/js/chat/components/MessageInput.js" type="module"></script>
+  <script src="/static/js/chat/components/ImageUpload.js" type="module"></script>
+  <script src="/static/js/chat/components/ChatInterface.js" type="module"></script>
+  <script src="/static/js/chat/index.js" type="module"></script>
   <script src="/static/js/projectManager.js"></script>
   <script src="/static/js/projectDashboard.js"></script>
   <script src="/static/js/projectEnhancements.js"></script>
@@ -624,10 +631,30 @@
         <p>Loading project files...</p>
       </div>
       
+      <!-- Drag and drop zone -->
+      <div id="dragDropZone" class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 mb-4 text-center">
+        <p class="text-gray-500 dark:text-gray-400">Drag and drop files here</p>
+        <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">or</p>
+        <button id="browseFilesBtn" class="mt-2 px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+          Browse Files
+        </button>
+      </div>
+
+      <!-- Files list -->
       <div id="projectFilesListContainer" class="max-h-96 overflow-y-auto">
         <ul id="projectFilesList" class="divide-y divide-gray-200 dark:divide-gray-700">
           <!-- Will be populated dynamically -->
         </ul>
+      </div>
+
+      <!-- Upload progress -->
+      <div id="filesUploadProgress" class="hidden mt-4 bg-gray-50 dark:bg-gray-700 p-4 rounded">
+        <div class="flex justify-between mb-1">
+          <span id="uploadStatus" class="text-sm text-gray-600 dark:text-gray-300">Uploading...</span>
+        </div>
+        <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
+          <div id="fileProgressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+        </div>
       </div>
       
       <div class="mt-4 flex justify-end space-x-2">

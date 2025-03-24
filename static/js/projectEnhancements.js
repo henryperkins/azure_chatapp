@@ -61,6 +61,22 @@
       dragDropZone.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'border-blue-400');
     }
 
+    // Connect browse files button
+    const browseFilesBtn = document.getElementById('browseFilesBtn');
+    if (browseFilesBtn) {
+      browseFilesBtn.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.onchange = (e) => {
+          if (e.target.files.length > 0) {
+            handleFilesUpload(e.target.files);
+          }
+        };
+        input.click();
+      });
+    }
+
     // Handle dropped files
     dragDropZone.addEventListener('drop', handleDrop, false);
 
