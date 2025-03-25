@@ -28,10 +28,8 @@ export default class MessageService {
       return false;
     }
 
-    // Notify that message is being sent
     this.onSending(content);
 
-    // Prepare message payload
     const payload = {
       content,
       role: 'user',
@@ -43,12 +41,18 @@ export default class MessageService {
       thinking_budget: modelConfig.thinkingBudget
     };
 
-    // Try WebSocket first, fall back to HTTP
-    if (this.wsService && this.wsService.send(payload)) {
-      return true;
-    } else {
-      return this._sendMessageViaHttp(chatId, payload);
+    // Try WebSocket first
+    if (this.wsService) {
+      try {
+        const sent = await this.wsService.send(payload);
+        if (sent) return true;
+      } catch (error) {
+        console.warn('WebSocket send failed, falling back to HTTP:', error);
+      }
     }
+
+    // Fall back to HTTP
+    return this._sendMessageViaHttp(conversationId, payload);
   }
 
   // Private methods for internal use
