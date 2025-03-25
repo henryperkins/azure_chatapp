@@ -8,10 +8,12 @@
  * You can register additional listeners or override certain behaviors if needed.
  */
 
-(function() {
-  // We wait for DOMContentLoaded to ensure everything else is ready
-  document.addEventListener("DOMContentLoaded", () => {
-    console.log("Project Enhancements loaded.");
+/**
+ * Initialize project enhancements module
+ */
+function initProjectEnhancements() {
+  try {
+    console.log("Initializing project enhancements");
 
     // Listen to an event from projectManager for custom logic
     document.addEventListener("projectFilesLoaded", (e) => {
@@ -21,9 +23,18 @@
 
     // Setup drag and drop file upload functionality
     setupDragDropFileUpload();
-  });
 
-  /**
+    console.log("Project enhancements initialized");
+  } catch (error) {
+    console.error("Project enhancements initialization failed:", error);
+    throw error;
+  }
+}
+
+// Export initialization function
+window.initProjectEnhancements = initProjectEnhancements;
+
+/**
    * Sets up drag and drop file upload for the project files area
    */
   function setupDragDropFileUpload() {
@@ -161,4 +172,3 @@
       }
     }
   }
-})();
