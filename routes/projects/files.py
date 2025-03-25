@@ -107,30 +107,54 @@ async def upload_project_file(
         # Log file info for debugging
         logger.info(f"Received file upload: {file.filename}, content_type: {file.content_type}, size: {getattr(file, 'size', 'unknown')}")
         
-        # Validate file
+        # Validate file existence
         if not file or not file.filename:
             logger.error("No file or filename provided")
             raise HTTPException(status_code=400, detail="No file provided")
         
-        project_file = await knowledgebase_service.upload_file_to_project(
+        # Validate project access
+        project = await validate_resource_access(
+            project_id,
+            Project,
+            current_user,
+            db,
+            "Project"
+        )
+        
+        # Validate file extension
+        if not validate_file_extension(file.filename):
+            error_msg = f"File type not allowed. Supported: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
+            logger.error(f"File extension validation failed: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Read a small portion to check if file is readable
+        try:
+            # Just peek at the file - don't read it all
+            peek_content = await file.read(1024)
+            if not peek_content and file.filename != '':  # Empty files might be valid in some cases
+                logger.warning(f"Empty or unreadable file: {file.filename}")
+            # Reset the file pointer for the service to read it again
+            await file.seek(0)
+        except Exception as read_error:
+            logger.error(f"Error reading file: {str(read_error)}")
+            raise HTTPException(status_code=400, detail=f"File is unreadable: {str(read_error)}")
+        
+        # Delegate to the service for full processing
+        result = await knowledgebase_service.upload_file_to_project(
             project_id=project_id,
             file=file,
             db=db,
             user_id=current_user.id
         )
         
+        # Extract the file data from the response
+        file_data = result["file"]
+        
         # Log success
-        logger.info(f"Successfully uploaded file {file.filename} to project {project_id}, saved as {project_file.id}")
+        logger.info(f"Successfully uploaded file {file.filename} to project {project_id}, saved as {file_data['id']}")
         
         return await create_standard_response(
-            {
-                "id": str(project_file.id),
-                "filename": project_file.filename,
-                "file_type": project_file.file_type,
-                "file_size": project_file.file_size,
-                "created_at": project_file.created_at.isoformat(),
-                "metadata": project_file.metadata
-            },
+            file_data,  # Pass the entire file data dictionary 
             "File uploaded successfully"
         )
     except HTTPException:
@@ -246,7 +270,9 @@ async def reprocess_project_files(
             )
             
             # Update metadata
-            metadata = file_record.metadata or {}
+            metadata = {} if file_record.metadata is None else (
+                file_record.metadata if isinstance(file_record.metadata, dict) else {}
+            )
             metadata["search_processing"] = {
                 "success": result.get("success", False),
                 "chunk_count": result.get("chunk_count", 0),
