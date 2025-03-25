@@ -13,6 +13,7 @@ from models.conversation import Conversation
 from models.message import Message
 from models.artifact import Artifact
 from models.project_file import ProjectFile
+from models.knowledge_base import KnowledgeBase
 
 
 def serialize_datetime(dt: Optional[datetime]) -> Optional[str]:
