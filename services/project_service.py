@@ -215,5 +215,5 @@ async def get_paginated_resources(
     result = await db.execute(query)
     items = result.scalars().all()
 
-    from utils.serializers import serialize_list
+    from utils.serializers import serialize_list, serialize_project
     return serialize_list(items, serialize_project)
