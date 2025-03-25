@@ -6,9 +6,20 @@
  * - Additional conversation actions
  */
 
-document.addEventListener('DOMContentLoaded', () => {
-  setupChatTitleEditing();
-});
+/**
+ * Initializes chat extensions module
+ */
+function initChatExtensions() {
+  try {
+    setupChatTitleEditing();
+    console.log("Chat extensions initialized");
+  } catch (error) {
+    console.error("Chat extensions initialization failed:", error);
+  }
+}
+
+// Export initialization function
+window.initChatExtensions = initChatExtensions;
 
 /**
  * Sets up the chat title editing functionality
