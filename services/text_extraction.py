@@ -11,6 +11,7 @@ import re
 import io
 import logging
 from typing import Union, Dict, Any, Optional, BinaryIO, List, Tuple
+from utils.file_validation import FileValidator
 import mimetypes
 import chardet
 
@@ -198,7 +199,7 @@ class TextExtractor:
             file_info = self.get_file_info(filename)
         elif mimetype:
             # Find extension from mimetype
-            for ext, info in FILE_TYPE_MAP.items():
+            for ext, info in FileValidator.ALLOWED_EXTENSIONS.items():
                 if info["mimetype"] == mimetype:
                     file_info = info.copy()
                     file_info["extension"] = ext
@@ -219,15 +220,15 @@ class TextExtractor:
             # Try to detect content type from bytes
             # This is simplistic - a production system would use more robust detection
             if content_bytes.startswith(b'%PDF'):
-                file_info = FILE_TYPE_MAP.get("pdf", {}).copy()
+                file_info = {"extension": "pdf", "category": "document", "mimetype": "application/pdf"}
                 file_info["extension"] = "pdf"
             elif content_bytes.startswith(b'PK\x03\x04'):
                 # This could be DOCX, XLSX, etc. - let's assume DOCX
-                file_info = FILE_TYPE_MAP.get("docx", {}).copy()
+                file_info = {"extension": "docx", "category": "document", "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
                 file_info["extension"] = "docx"
             elif content_bytes.startswith(b'{') and content_bytes.rstrip().endswith(b'}'):
                 # Likely JSON
-                file_info = FILE_TYPE_MAP.get("json", {}).copy()
+                file_info = {"extension": "json", "category": "data", "mimetype": "application/json"}
                 file_info["extension"] = "json"
             else:
                 # Default to text and try to detect encoding
