@@ -45,27 +45,15 @@ except ImportError:
     print("Warning: tiktoken not installed. Token counts will be estimates. `pip install tiktoken` for accurate counts.")
 
 
-# File type mapping with extension to mimetype and metadata
+from utils.file_validation import FileValidator
+
+# Reuse file type mapping from FileValidator
 FILE_TYPE_MAP = {
-    # Text files
-    "txt": {"mimetype": "text/plain", "category": "text"},
-    "md": {"mimetype": "text/markdown", "category": "text"},
-    
-    # Document files
-    "pdf": {"mimetype": "application/pdf", "category": "document"},
-    "doc": {"mimetype": "application/msword", "category": "document"},
-    "docx": {"mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "category": "document"},
-    
-    # Data files
-    "csv": {"mimetype": "text/csv", "category": "data"},
-    "json": {"mimetype": "application/json", "category": "data"},
-    "xlsx": {"mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "category": "data"},
-    
-    # Code files
-    "py": {"mimetype": "text/x-python", "category": "code"},
-    "js": {"mimetype": "application/javascript", "category": "code"},
-    "html": {"mimetype": "text/html", "category": "code"},
-    "css": {"mimetype": "text/css", "category": "code"},
+    ext[1:]: {  # Remove leading dot
+        "mimetype": mimetypes.guess_type(f"file{ext}")[0] or "application/octet-stream",
+        "category": category
+    }
+    for ext, category in FileValidator.ALLOWED_EXTENSIONS.items()
 }
 
 class TextExtractionError(Exception):
