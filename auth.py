@@ -198,12 +198,14 @@ async def login_user(
     secure_cookie = settings.ENV == "production"
     # In development, use 'none' to allow cross-origin cookies
     samesite_value = "strict" if secure_cookie else "none"
+    # Force secure=False in development for local testing
+    actual_secure = secure_cookie and not settings.DEBUG
 
     cookie_params = {
         "key": "access_token",
         "value": token,
         "httponly": True,
-        "secure": secure_cookie,
+        "secure": actual_secure,
         "samesite": samesite_value,
         "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         "path": "/"
