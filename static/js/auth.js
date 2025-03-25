@@ -361,9 +361,20 @@ async function refreshTokenIfActive() {
   
   // Prevent multiple refresh attempts
   if (sessionStorage.getItem('refreshing')) {
-    return false;
+    // Wait for the existing refresh to complete
+    let attempts = 0;
+    while (sessionStorage.getItem('refreshing') && attempts < 10) {
+      await new Promise(r => setTimeout(r, 300));
+      attempts++;
+    }
+    // If after waiting it's still refreshing, consider it failed
+    if (sessionStorage.getItem('refreshing')) {
+      console.warn('Token refresh timeout after waiting');
+      return false;
+    }
+    return; // Another process completed the refresh
   }
-
+  
   try {
     sessionStorage.setItem('refreshing', 'true');
     console.log('Attempting token refresh...');

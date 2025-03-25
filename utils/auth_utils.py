@@ -144,26 +144,24 @@ def revoke_token_id(token_id: str) -> None:
 
 
 async def clean_expired_tokens(db: AsyncSession) -> int:
-    """
-    Clean up expired tokens from the database blacklist.
-
-    Args:
-        db: Database session
-
-    Returns:
-        Number of tokens deleted
-    """
-    # Get current time
+    """Clean up expired tokens from the database and in-memory cache."""
+    global REVOCATION_LIST
     now = datetime.utcnow()
 
-    # Delete expired tokens
+    # Delete expired tokens from database
     stmt = delete(TokenBlacklist).where(TokenBlacklist.expires < now)
     result = await db.execute(stmt)
     await db.commit()
-
-    # Get the count of deleted rows
     deleted_count = result.rowcount
 
+    # Get current valid blacklist entries for in-memory cache update
+    query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
+    result = await db.execute(query)
+    valid_jtis = {row[0] for row in result.fetchall()}
+    
+    # Update in-memory list to match database (removes expired entries)
+    REVOCATION_LIST = valid_jtis
+    
     if deleted_count > 0:
         logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
 
@@ -191,66 +189,41 @@ async def load_revocation_list(db: AsyncSession) -> None:
     logger.info(f"Loaded {len(token_ids)} active blacklisted tokens into memory")
 
 
-def extract_token_from_request(request: Request) -> Optional[str]:
-    """
-    Extract JWT token from HTTP request.
-    """
-    # 1. Try cookies FIRST
-    token = request.cookies.get("access_token")
-    if token:
-        logger.debug("Token found in cookie.")  # ADDED LOGGING - Fixed Flake8 styling
-        return token
-
-    # 2. Fallback to Authorization header
-    logger.debug("Token cookie not found, checking Authorization header.")  # ADDED LOGGING - Fixed Flake8 styling
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        parts = auth_header.split()
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            token = parts[1]
-            logger.debug("Token found in Authorization header.")  # ADDED LOGGING - Fixed Flake8 styling
-            return token
-
-    logger.debug("No token found in cookie or Authorization header.")  # ADDED LOGGING - Fixed Flake8 styling
-    return None
-
-
-async def extract_token_from_websocket(websocket: WebSocket) -> Optional[str]:
-    """
-    Extract JWT token from WebSocket connection.
-
-    Args:
-        websocket: WebSocket connection
-
-    Returns:
-        Token string if found, None otherwise
-    """
-    # Try to get token from cookies
-    token = None
-    cookie_header = websocket.headers.get("cookie")
-
-    cookie_header = websocket.headers.get("cookie") or ""
-    cookies = {}
-
-    try:
-        for cookie in cookie_header.split("; "):
-            if "=" not in cookie:
-                continue  # Skip malformed cookies
-            key, value = cookie.split("=", 1)
-            cookies[key.strip().lower()] = unquote(value.strip())
-        token = cookies.get("access_token")
-
-    except Exception as e:
-        logger.error(f"Error parsing cookies: {str(e)}")
-        token = None
-
-    # If no token in cookies, try query parameters
-    if not token and "token" in websocket.query_params:
-        token = websocket.query_params["token"]
-
+# In auth_utils.py - merge token extraction functions
+def extract_token_from_request(request: Union[Request, WebSocket]) -> Optional[str]:
+    """Extract JWT token from HTTP request or WebSocket connection."""
+    # Is this a WebSocket connection?
+    is_websocket = hasattr(request, 'query_params') and not hasattr(request, 'cookies')
+    
+    # Try cookies first (handle different request types)
+    if is_websocket:
+        cookie_header = request.headers.get("cookie", "")
+        cookies = {}
+        try:
+            for cookie in cookie_header.split("; "):
+                if "=" not in cookie:
+                    continue
+                key, value = cookie.split("=", 1)
+                cookies[key.strip().lower()] = unquote(value.strip())
+            token = cookies.get("access_token")
+        except Exception as e:
+            logger.error(f"Error parsing cookies: {str(e)}")
+            token = None
+    else:
+        token = request.cookies.get("access_token")
+    
+    # If no token in cookies, try authorization header
     if not token:
-        logger.debug("WebSocket connection - No token found. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)  # ADDED DEBUG LOG - Fixed Flake8 styling
-
+        auth_header = request.headers.get("Authorization")
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+    
+    # Last resort for WebSocket: check query params
+    if not token and is_websocket and "token" in request.query_params:
+        token = request.query_params["token"]
+    
     return token
 
 
