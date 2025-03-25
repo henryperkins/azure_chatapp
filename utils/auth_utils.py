@@ -116,10 +116,19 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
         return decoded
 
     except ExpiredSignatureError:
-        logger.warning("Token has expired.")  # Enhanced logging for expiry - Fixed Flake8 styling
+        now = datetime.utcnow().timestamp()
+        logger.warning(
+            f"Token expired - jti: {token_id}, "
+            f"exp: {decoded.get('exp')}, now: {now}, "
+            f"diff: {now - decoded.get('exp')}s"
+        )
         raise HTTPException(status_code=401, detail="Token has expired")
     except InvalidTokenError as e:
-        logger.warning(f"Invalid token: {str(e)}")  # Enhanced logging for invalid token - Fixed Flake8 styling
+        logger.warning(
+            f"Invalid token - jti: {token_id}, error: {str(e)}, "
+            f"headers: {decoded.get('headers', {})}, "
+            f"payload: {decoded.get('payload', {})}"
+        )
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
