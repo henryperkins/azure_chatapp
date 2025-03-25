@@ -29,16 +29,11 @@ from utils.response_utils import create_standard_response
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Constants for file validation
-MAX_FILE_BYTES = 30_000_000  # 30MB
-ALLOWED_FILE_EXTENSIONS = {
-    ".txt", ".pdf", ".doc", ".docx", ".csv", ".json", ".md",
-}
+from utils.file_validation import FileValidator
 
-def validate_file_extension(filename: str) -> bool:
-    """Validates that a filename has an allowed extension"""
-    _, ext = os.path.splitext(filename.lower())
-    return ext in ALLOWED_FILE_EXTENSIONS
+# Reuse constants from FileValidator
+MAX_FILE_BYTES = FileValidator.MAX_FILE_SIZE
+ALLOWED_FILE_EXTENSIONS = FileValidator.ALLOWED_EXTENSIONS.keys()
 
 
 # ============================
