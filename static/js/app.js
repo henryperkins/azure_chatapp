@@ -110,10 +110,29 @@ function updateAuthUI(authenticated) {
   }
 }
 
+// API Configuration
+const API_CONFIG = {
+  baseUrl: window.location.origin,
+  isAuthenticated: false,
+  authCheckInProgress: false
+};
+
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
-  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${window.location.origin}${normalizedEndpoint}`;
+
+  // Don't make API calls if authentication check is in progress
+  if (API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
+    console.log('Delaying API call until auth check completes:', endpoint);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return apiRequest(endpoint, method, data, retryCount);
+  }
+
+  // Clean and normalize the endpoint
+  const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
+  const url = cleanEndpoint.startsWith('/')
+    ? `${API_CONFIG.baseUrl}${cleanEndpoint}`
+    : `${API_CONFIG.baseUrl}/${cleanEndpoint}`;
+
 
   const options = {
     method,
@@ -207,6 +226,29 @@ function handleAPIError(context, error) {
     Notifications.sessionExpired();
   }
   return Promise.reject(error);
+}
+
+// ---------------------------------------------------------------------
+// USER SESSION MANAGEMENT
+// ---------------------------------------------------------------------
+function updateUserSessionState() {
+  try {
+    // Get stored user info
+    const userInfo = sessionStorage.getItem('userInfo');
+    if (userInfo) {
+      const { username } = JSON.parse(userInfo);
+      updateAuthUI(true);
+      console.log('Session restored for user:', username);
+    } else {
+      updateAuthUI(false);
+      console.log('No active session found');
+    }
+  } catch (error) {
+    console.error('Error updating session state:', error);
+    // Clear potentially corrupted session data
+    sessionStorage.clear();
+    updateAuthUI(false);
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -432,25 +474,52 @@ function renderConversationList(data) {
 // ---------------------------------------------------------------------
 // AUTH MANAGEMENT
 // ---------------------------------------------------------------------
-function checkAndHandleAuth() {
-  apiRequest(API_ENDPOINTS.AUTH_VERIFY)
-    .then(() => {
-      updateAuthUI(true);
-      loadConversationList();
+async function checkAndHandleAuth() {
+  try {
+    // Set flag to prevent other API calls during auth check
+    API_CONFIG.authCheckInProgress = true;
+
+    const authResponse = await apiRequest(API_ENDPOINTS.AUTH_VERIFY);
+    if (!authResponse) {
+      throw new Error('No response from auth verification');
+    }
+
+    // Update auth state and UI
+    API_CONFIG.isAuthenticated = true;
+    updateAuthUI(true);
+    sessionStorage.setItem('userInfo', JSON.stringify({
+      username: authResponse.username
+    }));
+
+    // Load initial data sequentially to avoid race conditions
+    try {
+      await loadConversationList();
       
       if (window.projectManager?.loadProjects) {
-        window.projectManager.loadProjects();
-        loadSidebarProjects();
+        await window.projectManager.loadProjects();
+        await loadSidebarProjects();
       }
 
       if (window.CHAT_CONFIG?.chatId && window.loadConversation) {
-        window.loadConversation(window.CHAT_CONFIG.chatId);
+        await window.loadConversation(window.CHAT_CONFIG.chatId);
       }
-    })
-    .catch(() => {
-      updateAuthUI(false);
-      Notifications.authRequired();
-    });
+    } catch (dataError) {
+      console.error('Error loading initial data:', dataError);
+      Notifications.apiError('Failed to load initial data');
+    }
+
+    return true;
+  } catch (error) {
+    // Clear any existing auth state on failure
+    API_CONFIG.isAuthenticated = false;
+    sessionStorage.clear();
+    updateAuthUI(false);
+    Notifications.authRequired();
+    return false;
+  } finally {
+    // Always clear the auth check flag
+    API_CONFIG.authCheckInProgress = false;
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -480,6 +549,34 @@ function handleWindowResize() {
   if (!sidebarEl) return;
   if (window.innerWidth >= 768) {
     sidebarEl.classList.remove('fixed', 'inset-0', 'z-50');
+  }
+}
+
+// ---------------------------------------------------------------------
+// UTILITY FUNCTIONS (Continued)
+// ---------------------------------------------------------------------
+function searchSidebarProjects(query) {
+  const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
+  if (!sidebarProjects) return;
+
+  const projects = sidebarProjects.querySelectorAll('li');
+  const searchTerm = query.toLowerCase();
+
+  projects.forEach(project => {
+    const projectName = project.querySelector('span')?.textContent.toLowerCase() || '';
+    project.classList.toggle('hidden', !projectName.includes(searchTerm));
+  });
+
+  // Show empty state if no matches
+  const hasVisibleProjects = Array.from(projects).some(p => !p.classList.contains('hidden'));
+  const existingEmptyState = sidebarProjects.querySelector('.text-center');
+  
+  if (!hasVisibleProjects) {
+    if (!existingEmptyState) {
+      showEmptyState(sidebarProjects, 'No matching projects found');
+    }
+  } else if (existingEmptyState) {
+    existingEmptyState.remove();
   }
 }
 
@@ -552,25 +649,152 @@ function setupGlobalKeyboardShortcuts() {
   });
 }
 
-function initializeApplication() {
-  safeInitialize();
-
-  if (!localStorage.getItem("modelName")) {
-    localStorage.setItem("modelName", "claude-3-sonnet-20240229");
+async function initializeApplication() {
+  try {
+    console.log("Starting main application initialization");
+    
+    // Initialize UI and handlers first
+    safeInitialize();
+    if (!localStorage.getItem("modelName")) {
+      localStorage.setItem("modelName", "claude-3-sonnet-20240229");
+    }
+    
+    updateUserSessionState();
+    setupGlobalKeyboardShortcuts();
+    
+    // Perform auth check and load initial data
+    const authSuccess = await checkAndHandleAuth();
+    if (!authSuccess) {
+      console.warn("Authentication failed during initialization");
+      return false;
+    }
+    
+    // Set up window event handlers
+    window.addEventListener('popstate', handleNavigationChange);
+    window.addEventListener('resize', handleWindowResize);
+    
+    console.log("✅ Main application initialization complete");
+    return true;
+  } catch (error) {
+    console.error("❌ Main application initialization failed:", error);
+    Notifications.apiError("Failed to initialize application");
+    return false;
   }
+}
 
-  updateUserSessionState();
-  setupGlobalKeyboardShortcuts();
-  checkAndHandleAuth();
-  window.addEventListener('popstate', handleNavigationChange);
-  window.addEventListener('resize', handleWindowResize);
+// ---------------------------------------------------------------------
+// INITIALIZATION UTILITIES
+// ---------------------------------------------------------------------
+const InitUtils = {
+  async initModule(name, initFn, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        console.log(`Initializing ${name} module (attempt ${i + 1}/${maxRetries})...`);
+        await initFn();
+        console.log(`✅ ${name} module initialized`);
+        return true;
+      } catch (error) {
+        console.error(`Failed to initialize ${name} module:`, error);
+        if (i === maxRetries - 1) throw error;
+        await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+      }
+    }
+  },
+
+  coreModules: [
+    { name: 'auth', init: () => window.initAuth?.() },
+    { name: 'formatting', init: () => window.initFormatting?.() },
+    { name: 'model config', init: () => window.initModelConfig?.() },
+    { name: 'components', init: () => window.initComponents?.() }
+  ],
+
+  featureModules: [
+    { name: 'chat extensions', init: () => window.initChatExtensions?.() },
+    { name: 'project enhancements', init: () => window.initProjectEnhancements?.() },
+    { name: 'project dashboard', init: () => window.initProjectDashboard?.() }
+  ]
+};
+
+// ---------------------------------------------------------------------
+// MAIN INITIALIZATION SEQUENCE
+// ---------------------------------------------------------------------
+/**
+ * Initialize all application modules in the correct order
+ * Returns true if successful, false if failed
+ */
+async function initializeAllModules() {
+  try {
+    console.log("Starting application initialization sequence");
+
+    // Initialize core modules first
+    console.log("Initializing core modules...");
+    for (const module of InitUtils.coreModules) {
+      if (module.init) {
+        await InitUtils.initModule(module.name, module.init);
+      }
+    }
+
+    // Initialize feature modules
+    console.log("Initializing feature modules...");
+    for (const module of InitUtils.featureModules) {
+      if (module.init) {
+        await InitUtils.initModule(module.name, module.init);
+      }
+    }
+
+    // Initialize main application last
+    console.log("Initializing main application...");
+    const appSuccess = await initializeApplication();
+    if (!appSuccess) {
+      throw new Error("Main application initialization failed");
+    }
+
+    console.log("✅ All modules initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("❌ Module initialization failed:", error);
+    Notifications.apiError("Failed to initialize application modules");
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------
 // EVENT LISTENERS & EXPORTS
 // ---------------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', initializeApplication);
 
+// Start initialization when DOM is ready
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    // Initialize all core and feature modules
+    const success = await initializeAllModules();
+    if (!success) {
+      throw new Error("Module initialization failed");
+    }
+
+    // Initialize additional UI components after core initialization
+    if (typeof initializeModelDropdown === 'function') {
+      await InitUtils.initModule('model dropdown', initializeModelDropdown);
+    }
+
+    if (typeof window.initializeChat === 'function') {
+      await InitUtils.initModule('chat', window.initializeChat);
+    }
+
+
+    console.log("✅ Application initialization sequence complete");
+  } catch (error) {
+    console.error("❌ Application initialization failed:", error);
+    Notifications.apiError("Application initialization failed");
+
+    // Attempt to show a user-friendly error message
+    const loginRequiredMsg = document.getElementById('loginRequiredMessage');
+    if (loginRequiredMsg) {
+      loginRequiredMsg.classList.remove('hidden');
+    }
+  }
+});
+
+// Handle authentication state changes
 document.addEventListener('authStateChanged', (e) => {
   updateAuthUI(e.detail.authenticated);
   if (e.detail.authenticated) {
@@ -599,13 +823,3 @@ window.App = {
   checkAndHandleAuth,
   initialize: initializeApplication
 };
-
-// Initialize model dropdown and chat
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof initializeModelDropdown === 'function') {
-    initializeModelDropdown();
-  }
-  if (typeof window.initializeChat === 'function') {
-    window.initializeChat();
-  }
-});
