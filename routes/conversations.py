@@ -38,6 +38,7 @@ from utils.message_handlers import (
 )
 from utils.response_utils import create_standard_response
 from utils.ai_response import generate_ai_response
+from utils.serializers import serialize_conversation, serialize_message
 
 
 logger = logging.getLogger(__name__)
