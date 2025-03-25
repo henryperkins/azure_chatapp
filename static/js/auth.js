@@ -1,16 +1,22 @@
 // auth.js - streamlined authentication logic for Azure Chat App
 
-document.addEventListener("DOMContentLoaded", () => {
-  initAuth();
-});
-
 // -------------------------
 // Initialization
 // -------------------------
 async function initAuth() {
-  setupUIListeners();
-  await updateAuthStatus();
+  try {
+    console.log("Initializing auth module");
+    setupUIListeners();
+    await updateAuthStatus();
+    console.log("Auth module initialized");
+  } catch (error) {
+    console.error("Auth initialization failed:", error);
+    throw error;
+  }
 }
+
+// Export initialization function
+window.initAuth = initAuth;
 
 // -------------------------
 // UI Event Listeners
