@@ -7,13 +7,11 @@ and their messages that belong to a specific project.
 """
 
 import logging
-import json
 from uuid import UUID
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import conversation_service, project_service
 
@@ -36,6 +34,7 @@ from utils.ai_response import (
 from utils.auth_utils import get_current_user_and_token, extract_token_from_websocket, get_user_from_token
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
+from utils.serializers import serialize_message, serialize_conversation
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -107,13 +106,10 @@ async def create_conversation(
         db=db
     )
 
-    return await create_standard_response({
-        "id": str(conversation.id),
-        "title": conversation.title,
-        "created_at": conversation.created_at.isoformat(),
-        "project_id": str(project_id),
-        "model_id": conversation.model_id
-    }, "Conversation created successfully")
+    return await create_standard_response(
+        serialize_conversation(conversation),
+        "Conversation created successfully"
+    )
 
 
 @router.get("/", response_model=dict)
@@ -147,19 +143,10 @@ async def list_conversations(
             limit=limit
         )
         
-        # Convert raw SQLAlchemy conversation objects to dicts
-        conv_list = []
-        for conv in conversations:
-            conv_list.append({
-                "id": str(conv.id),
-                "title": conv.title,
-                "model_id": conv.model_id,
-                "created_at": conv.created_at.isoformat() if conv.created_at else None,
-                "project_id": str(project_id)  # Add project_id to each conversation
-            })
-        
-        logger.info(f"Successfully loaded {len(conv_list)} conversations for project {project_id}")
-        return await create_standard_response({"conversations": conv_list})
+        logger.info(f"Successfully loaded {len(conversations)} conversations for project {project_id}")
+        return await create_standard_response({
+            "conversations": [serialize_conversation(conv) for conv in conversations]
+        })
     except Exception as e:
         logger.error(f"Error loading project conversations: {str(e)}")
         raise HTTPException(
@@ -192,13 +179,9 @@ async def get_conversation(
         additional_filters
     )
 
-    return await create_standard_response({
-        "id": str(conversation.id),
-        "title": conversation.title,
-        "model_id": conversation.model_id,
-        "created_at": conversation.created_at,
-        "project_id": str(conversation.project_id)
-    })
+    return await create_standard_response(
+        serialize_conversation(conversation)
+    )
 
 
 @router.patch("/{conversation_id}", response_model=dict)
@@ -346,18 +329,10 @@ async def list_conversation_messages(
         offset=skip
     )
 
-    output = [
-        {
-            "id": str(msg.id),
-            "role": msg.role,
-            "content": msg.content,
-            "metadata": msg.get_metadata_dict(),
-            "timestamp": msg.created_at
-        }
-        for msg in messages
-    ]
-
-    return await create_standard_response({"messages": output})
+    return await create_standard_response({
+        "messages": [serialize_message(msg) for msg in messages],
+        "metadata": {"title": conversation.title}
+    })
 
 @router.websocket("/{conversation_id}/ws")
 async def project_websocket_chat_endpoint(
@@ -494,11 +469,7 @@ async def create_message(
         db=db
     )
 
-    response_payload = {
-        "message_id": str(message.id),
-        "role": message.role,
-        "content": message.content
-    }
+    response_payload = serialize_message(message)
 
     # Generate AI response if user message
     if message.role == "user":
