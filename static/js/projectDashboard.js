@@ -30,7 +30,7 @@ class ProjectDashboard {
     this.bindEvents();
     
     console.log("Project Dashboard initialized");
-  },
+  }
 
   // Check if all required components are available
   areComponentsAvailable() {
@@ -39,7 +39,7 @@ class ProjectDashboard {
       window.ProjectDetailsComponent !== undefined &&
       window.KnowledgeBaseComponent !== undefined
     );
-  },
+  }
 
   // Setup UI components
   setupComponents() {
@@ -57,7 +57,7 @@ class ProjectDashboard {
     
     // Bind global event listeners
     this.bindEvents();
-  },
+  }
   
   // Process URL parameters
   processUrlParams() {
@@ -69,7 +69,7 @@ class ProjectDashboard {
     } else {
       this.showProjectList();
     }
-  },
+  }
   
   // Register data event listeners
   registerDataEvents() {
@@ -79,7 +79,7 @@ class ProjectDashboard {
     document.addEventListener("projectFilesLoaded", this.handleFilesLoaded.bind(this));
     document.addEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
     document.addEventListener("projectArtifactsLoaded", this.handleArtifactsLoaded.bind(this));
-  },
+  }
   
   // Global event binding
   bindEvents() {
@@ -133,7 +133,7 @@ class ProjectDashboard {
     document.getElementById("cancelKnowledgeBaseFormBtn")?.addEventListener("click", () => {
       ModalManager.hide("knowledge");
     });
-  },
+  }
   
   // View management
   showProjectList() {
@@ -142,18 +142,18 @@ class ProjectDashboard {
     this.components.projectDetails.hide();
     window.history.pushState({}, "", window.location.pathname);
     projectManager.loadProjects();
-  },
+  }
   
   showProjectDetails(projectId) {
     this.state.currentView = 'details';
     this.components.projectList.hide();
     this.components.projectDetails.show();
     projectManager.loadProjectDetails(projectId);
-  },
+  }
 
   showProjectDetailsView(projectId) {
     this.showProjectDetails(projectId);
-  },
+  }
   
   // UI state management
   setActiveFilter(filter) {
@@ -164,7 +164,7 @@ class ProjectDashboard {
       btn.classList.toggle("text-blue-600", isActive);
       btn.classList.toggle("text-gray-600", !isActive);
     });
-  },
+  }
   
   // Improved tab switching logic
   switchProjectTab(tabId) {
@@ -198,47 +198,47 @@ class ProjectDashboard {
         dataLoaders[tabId]();
       }
     }
-  },
+  }
   
   // Event handlers
   handleViewProject(projectId) {
     this.showProjectDetails(projectId);
-  },
+  }
   
   handleBackToList() {
     this.showProjectList();
-  },
+  }
   
   handleProjectsLoaded(event) {
     const projects = event.detail;
     this.components.projectList.renderProjects(projects);
-  },
+  }
   
   handleProjectLoaded(event) {
     const project = event.detail;
     this.state.currentProject = project;
     this.components.projectDetails.renderProject(project);
-  },
+  }
   
   handleProjectStatsLoaded(event) {
     const stats = event.detail;
     this.components.projectDetails.renderStats(stats);
-  },
+  }
   
   handleFilesLoaded(event) {
     const files = event.detail.files;
     this.components.projectDetails.renderFiles(files);
-  },
+  }
   
   handleConversationsLoaded(event) {
     const conversations = event.detail;
     this.components.projectDetails.renderConversations(conversations);
-  },
+  }
   
   handleArtifactsLoaded(event) {
     const artifacts = event.detail.artifacts;
     this.components.projectDetails.renderArtifacts(artifacts);
-  },
+  }
   
   handleProjectFormSubmit(e) {
     e.preventDefault();
@@ -251,7 +251,7 @@ class ProjectDashboard {
       name: document.getElementById("projectNameInput").value.trim(),
       description: document.getElementById("projectDescInput").value.trim(),
       goals: document.getElementById("projectGoalsInput").value.trim(),
-      max_tokens: parseInt(document.getElementById("projectMaxTokensInput").value, 10),
+      max_tokens: parseInt(document.getElementById("projectMaxTokensInput").value, 10)
     };
     
     if (!data.name) {
@@ -272,7 +272,7 @@ class ProjectDashboard {
         console.error("Error saving project:", err);
         UIUtils.showNotification("Failed to save project", "error");
       });
-  },
+  }
   
   handleKbFormSubmit(e) {
     e.preventDefault();
@@ -290,7 +290,7 @@ class ProjectDashboard {
     };
     
     this.createKnowledgeBase(this.state.currentProject.id, formData);
-  },
+  }
   
   handleFileUpload(e) {
     if (!this.state.currentProject) {
@@ -302,7 +302,7 @@ class ProjectDashboard {
     if (!files || !files.length) return;
     
     this.components.projectDetails.uploadFiles(this.state.currentProject.id, files);
-  },
+  }
   
   // API Actions
   createKnowledgeBase(projectId, data) {
@@ -316,7 +316,7 @@ class ProjectDashboard {
         console.error("Error creating knowledge base:", err);
         UIUtils.showNotification("Failed to create knowledge base", "error");
       });
-  },
+  }
   
   reprocessAllFiles(projectId) {
     if (!projectId) return;
@@ -337,20 +337,59 @@ class ProjectDashboard {
         UIUtils.showNotification("Failed to reprocess files", "error");
       });
   }
-};
+}
 
-// Initialize the dashboard when DOM is fully loaded
-document.addEventListener("DOMContentLoaded", () => {
-  // Initialize after a small delay to ensure all components are loaded
-  setTimeout(() => {
-    if (window.ProjectDashboard) {
-      const dashboard = new window.ProjectDashboard();
-      dashboard.init();
-    } else {
-      console.error("ProjectDashboard class not found");
+/**
+ * Initialize the project dashboard module
+ */
+async function initProjectDashboard() {
+  try {
+    console.log("Initializing project dashboard module");
+    
+    // Wait for components to be available
+    let retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = 500; // ms
+
+    while (retryCount < maxRetries) {
+      if (window.ProjectListComponent &&
+          window.ProjectDetailsComponent &&
+          window.KnowledgeBaseComponent) {
+        break;
+      }
+      
+      console.log(`Waiting for components (attempt ${retryCount + 1}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      retryCount++;
     }
-  }, 100);
-});
 
-// Export the module
+    if (!window.ProjectListComponent ||
+        !window.ProjectDetailsComponent ||
+        !window.KnowledgeBaseComponent) {
+      throw new Error("Required components not available");
+    }
+
+    if (!window.ProjectDashboard) {
+      throw new Error("ProjectDashboard class not found");
+    }
+
+    // Create dashboard instance
+    const dashboard = new window.ProjectDashboard();
+    
+    // Initialize with error handling
+    try {
+      await dashboard.init();
+      console.log("✅ Project dashboard initialized");
+    } catch (error) {
+      console.error("Dashboard initialization error:", error);
+      throw error;
+    }
+  } catch (error) {
+    console.error("❌ Project dashboard module initialization failed:", error);
+    throw error;
+  }
+}
+
+// Export the class and initialization function
 window.ProjectDashboard = ProjectDashboard;
+window.initProjectDashboard = initProjectDashboard;
