@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional
-from uuid import UUID  # Remove uuid4 as it's unused
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -19,7 +19,6 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-# Remove unused ColumnElement import
 
 from db import get_async_session, AsyncSessionLocal
 from models.conversation import Conversation
