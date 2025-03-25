@@ -135,12 +135,8 @@ const API_CONFIG = window.API_CONFIG;
 
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
-  const requestStartTime = Date.now();
-
-  // Ensure base URL is available
-  window.getBaseUrl();
-
-  // Don't make API calls if authentication check is in progress - add a timeout
+  
+  // Don't make API calls if authentication check is in progress
   if (API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
     if (retryCount > 5) {
       console.warn('Too many auth check delays, proceeding with request anyway');
@@ -148,27 +144,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       console.log(`Delaying API call to ${endpoint} until auth check completes (attempt ${retryCount + 1})`);
       await new Promise(resolve => setTimeout(resolve, 500));
       return apiRequest(endpoint, method, data, retryCount + 1);
-    }
-  }
-
-  // Check for authentication if making authenticated requests
-  if (!endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
-    // Get token from TokenManager if available
-    const authHeader = window.TokenManager?.getAuthHeader?.() || {};
-    const hasAuth = Object.keys(authHeader).length > 0;
-    
-    // If this isn't an auth endpoint and we don't have auth, check if we're trying
-    // to access a protected resource
-    if (!endpoint.includes('/auth/') && !hasAuth) {
-      // Check if it's a public endpoint that doesn't require auth
-      const isPublicEndpoint = endpoint.includes('/public/') || 
-                             endpoint.includes('/health') ||
-                             endpoint === API_ENDPOINTS.AUTH_VERIFY;
-      
-      if (!isPublicEndpoint) {
-        console.warn(`Attempted unauthenticated access to protected endpoint: ${endpoint}`);
-        return Promise.reject(new Error('Authentication required'));
-      }
     }
   }
 
@@ -185,7 +160,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
-      ...window.TokenManager?.getAuthHeader?.()
+      ...TokenManager.getAuthHeader()
     },
     credentials: 'include',
     mode: 'cors',
@@ -199,118 +174,56 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   try {
     const response = await fetch(url, options);
     
-    // Enhanced error handling with more detailed logging
     if (!response.ok) {
-      console.warn(`API error response (${response.status}): ${url}`);
-      
-      // Handle 404 errors
-      if (response.status === 404) {
-        throw new Error('Resource not found');
-      }
-      
-      // Handle auth errors (401/403)
-      if (response.status === 401 || response.status === 403) {
-        // Only attempt auth refresh for non-auth endpoints
-        if (!endpoint.includes('/auth/') && retryCount < maxRetries) {
-          try {
-            // Check if we have the TokenManager available
-            if (window.TokenManager?.refreshTokens) {
-              console.log(`Attempting token refresh before retry ${retryCount + 1}/${maxRetries} for ${url}`);
-              await window.TokenManager.refreshTokens();
-              console.log(`Token refreshed, retrying request to ${url}`);
-              return apiRequest(endpoint, method, data, retryCount + 1);
-            } else {
-              console.warn('TokenManager not available for refresh');
-            }
-          } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
+      // Handle auth errors with token refresh
+      if (response.status === 401 && retryCount < maxRetries) {
+        try {
+          // If we have a token manager with refresh capability, use it
+          if (window.TokenManager?.refreshTokens) {
+            await window.TokenManager.refreshTokens();
             
-            // Only show auth required for actual content requests, not background checks
-            if (!endpoint.includes('/auth/verify') && !endpoint.includes('/auth/refresh')) {
-              API_CONFIG.isAuthenticated = false;
-              sessionStorage.removeItem('userInfo');
-              
-              // Only show notifications for user-initiated requests
-              if (Date.now() - requestStartTime < 5000) {
-                if (window.Notifications?.authRequired) {
-                  window.Notifications.authRequired();
-                } else {
-                  showNotification(MESSAGES.LOGIN_REQUIRED, 'info');
-                }
-                
-                document.dispatchEvent(new CustomEvent('authStateChanged', { 
-                  detail: { authenticated: false } 
-                }));
-              }
-            }
+            // Update auth headers with new token
+            options.headers = { 
+              ...options.headers,
+              ...TokenManager.getAuthHeader()
+            };
+            
+            // Retry the request
+            return apiRequest(endpoint, method, data, retryCount + 1);
           }
+        } catch (error) {
+          console.error('Token refresh failed:', error);
+          // If refresh fails, proceed to throw the original error
         }
-        
-        throw new Error('Authentication required');
       }
       
-      // Generic error for other status codes
-      throw new Error(`API error response (${response.status}): ${response.statusText || 'Unknown error'}`);
+      // Handle specific error status codes
+      if (response.status === 401) {
+        // Clear auth state on 401 errors
+        sessionStorage.removeItem('userInfo');
+        sessionStorage.removeItem('auth_state');
+        API_CONFIG.isAuthenticated = false;
+        
+        document.dispatchEvent(new CustomEvent('authStateChanged', { 
+          detail: { authenticated: false } 
+        }));
+      }
+      
+      throw new Error(`API error (${response.status}): ${response.statusText}`);
     }
 
-    // Handle empty responses
-    if (response.headers.get('content-length') === '0' || 
-        response.headers.get('content-type')?.includes('text/plain')) {
-      return { success: true };
+    const data = await response.json();
+  
+    // Update tokens if present in response
+    if (data.access_token) {
+      TokenManager.setTokens(data.access_token, data.refresh_token);
     }
-
-    return response.json();
+  
+    return data;
   } catch (error) {
-    // Enhanced error logging with endpoint info
-    console.error(`API request failed for ${method} ${url}:`, error);
-    
-    // Rethrow with consistent format for easier handling
+    console.error(`API request failed:`, error);
     throw error;
   }
-}
-
-function showNotification(msg, type = 'info') {
-  const notificationArea = getElement(SELECTORS.NOTIFICATION_AREA);
-  if (!notificationArea) return;
-
-  const toast = document.createElement('div');
-  toast.classList.add('mb-2', 'px-4', 'py-2', 'rounded', 'shadow', 'text-white',
-                    'transition-opacity', 'opacity-0');
-
-  switch (type) {
-    case 'success': toast.classList.add('bg-green-600'); break;
-    case 'error': toast.classList.add('bg-red-600'); break;
-    default: toast.classList.add('bg-gray-700');
-  }
-
-  toast.textContent = msg;
-  notificationArea.appendChild(toast);
-
-  requestAnimationFrame(() => {
-    toast.classList.remove('opacity-0');
-  });
-
-  setTimeout(() => {
-    toast.classList.add('opacity-0');
-    setTimeout(() => toast.remove(), 500);
-  }, 3000);
-}
-
-const Notifications = {
-  authRequired: () => showNotification(MESSAGES.LOGIN_REQUIRED, 'info'),
-  sessionExpired: () => showNotification(MESSAGES.SESSION_EXPIRED, 'error'),
-  projectNotFound: () => showNotification(MESSAGES.PROJECT_NOT_FOUND, 'error'),
-  apiError: (context) => showNotification(`Error ${context}`, 'error')
-};
-
-function handleAPIError(context, error) {
-  console.error(`Error in ${context}:`, error);
-  if (error.message.includes('404')) {
-    Notifications.projectNotFound();
-  } else if (error.message.includes('401') || error.message.includes('403')) {
-    Notifications.sessionExpired();
-  }
-  return Promise.reject(error);
 }
 
 // ---------------------------------------------------------------------
@@ -390,10 +303,8 @@ function createConversationListItem(item) {
             d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915
             c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c
             .3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976
-            2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00
-            -.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914 
+            2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914 
             a1 1 0 00.951-.69l1.519-4.674z"/>
-    </svg>
   `;
   starBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -435,7 +346,10 @@ function navigateToConversation(conversationId) {
   setChatUIVisibility(true);
   
   if (typeof window.loadConversation === 'function') {
-    return window.loadConversation(conversationId);
+    return window.loadConversation(conversationId).catch(error => {
+      handleAPIError('loading conversation', error);
+      setChatUIVisibility(false);
+    });
   }
   return Promise.resolve();
 }
@@ -470,7 +384,7 @@ function handleNavigationChange() {
         setChatUIVisibility(false);
       }
     })
-    .catch(error => {
+    .catch(error) => {
       handleAPIError('auth verification', error);
     });
 }
@@ -603,95 +517,67 @@ function renderConversationList(data) {
 // ---------------------------------------------------------------------
 // AUTH MANAGEMENT
 // ---------------------------------------------------------------------
+let authCheckInProgress = false;
+let authCheckPromise = null;
+
 async function checkAndHandleAuth() {
+  // If a check is already in progress, return the existing promise
+  if (authCheckInProgress && authCheckPromise) {
+    return authCheckPromise;
+  }
+  
   try {
-    // Check if we already have auth information in session storage
-    const userInfo = sessionStorage.getItem('userInfo');
-    const authState = sessionStorage.getItem('auth_state');
+    authCheckInProgress = true;
+    window.API_CONFIG.authCheckInProgress = true;
     
-    // If we have no stored auth info, don't even try checking
-    if (!userInfo && !authState) {
-      console.log("No stored auth info, skipping auth check");
-      API_CONFIG.isAuthenticated = false;
-      updateAuthUI(false);
-      return false;
-    }
-    
-    // Set flag to prevent other API calls during auth check
-    API_CONFIG.authCheckInProgress = true;
-    
-    try {
-      const authResponse = await apiRequest(API_ENDPOINTS.AUTH_VERIFY);
-      if (!authResponse) {
-        throw new Error('No response from auth verification');
-      }
-      
-      // Update auth state and UI
-      API_CONFIG.isAuthenticated = true;
-      updateAuthUI(true);
-      sessionStorage.setItem('userInfo', JSON.stringify({
-        username: authResponse.username
-      }));
-      
-      // Store username for other components to access
-      window.AUTH_DATA = { username: authResponse.username };
-      
-      // Now broadcast authentication success before loading data
-      document.dispatchEvent(new CustomEvent('authStateChanged', { 
-        detail: { authenticated: true, username: authResponse.username }
-      }));
-      
-      // Only then attempt to load initial data
-      setTimeout(async () => {
-        try {
-          // Load conversations first since they're most important
-          await loadConversationList().catch(err => {
-            console.warn("Failed to load conversations:", err);
-          });
-          
-          // Then load project data if the project manager is available
-          if (window.projectManager?.loadProjects) {
-            await window.projectManager.loadProjects().catch(err => {
-              console.warn("Failed to load projects:", err);
-            });
-            
-            await loadSidebarProjects().catch(err => {
-              console.warn("Failed to load sidebar projects:", err);
-            });
+    // Create a new promise for this check
+    authCheckPromise = new Promise(async (resolve, reject) => {
+      try {
+        // Verify token with the server
+        const response = await fetch('/api/auth/verify', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache'
           }
-          
-          // Finally load the conversation if it's in the URL
-          if (window.CHAT_CONFIG?.chatId && window.loadConversation) {
-            await window.loadConversation(window.CHAT_CONFIG.chatId).catch(err => {
-              console.warn("Failed to load conversation:", err);
-            });
-          }
-        } catch (dataError) {
-          console.error('Error loading initial data:', dataError);
-          Notifications.apiError('Failed to load initial data');
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Auth verification failed: ${response.status}`);
         }
-      }, 300); // Short delay to ensure token propagation
-      
-      return true;
-    } catch (error) {
-      throw error;
-    }
+        
+        const data = await response.json();
+        
+        // Update session info
+        sessionStorage.setItem('userInfo', JSON.stringify({
+          username: data.username,
+          roles: data.roles || [],
+          lastVerified: Date.now()
+        }));
+        
+        updateAuthUI(true);
+        setupTokenRefresh();
+        broadcastAuth(true, data.username);
+        resolve(true);
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+        TokenManager.clearTokens();
+        clearSession();
+        updateAuthUI(false);
+        broadcastAuth(false);
+        reject(error);
+      } finally {
+        authCheckInProgress = false;
+        window.API_CONFIG.authCheckInProgress = false;
+        authCheckPromise = null;
+      }
+    });
+    
+    return await authCheckPromise;
   } catch (error) {
-    // Clear any existing auth state on failure
-    API_CONFIG.isAuthenticated = false;
-    if (window.TokenManager?.clearTokens) {
-      window.TokenManager.clearTokens();
-    }
-    sessionStorage.removeItem('userInfo');
-    sessionStorage.removeItem('auth_state');
-    updateAuthUI(false);
-    document.dispatchEvent(new CustomEvent('authStateChanged', { 
-      detail: { authenticated: false }
-    }));
-    return false;
-  } finally {
-    // Always clear the auth check flag
-    API_CONFIG.authCheckInProgress = false;
+    authCheckInProgress = false;
+    window.API_CONFIG.authCheckInProgress = false;
+    throw error;
   }
 }
 
@@ -859,6 +745,7 @@ async function initializeApplication() {
     
     console.log("✅ Main application initialization complete");
     return true;
+
   } catch (error) {
     console.error("❌ Main application initialization failed:", error);
     Notifications.apiError("Failed to initialize application");
@@ -981,7 +868,13 @@ async function initializeAllModules() {
     return true;
   } catch (error) {
     console.error("❌ Module initialization failed:", error);
-    return false;
+    Notifications.apiError("Application initialization failed");
+
+    // Attempt to show a user-friendly error message
+    const loginRequiredMsg = document.getElementById('loginRequiredMessage');
+    if (loginRequiredMsg) {
+      loginRequiredMsg.classList.remove('hidden');
+    }
   }
 }
 
@@ -1006,7 +899,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof window.initializeChat === 'function') {
       await InitUtils.initModule('chat', window.initializeChat);
     }
-
 
     console.log("✅ Application initialization sequence complete");
   } catch (error) {
