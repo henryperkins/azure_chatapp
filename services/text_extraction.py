@@ -76,7 +76,12 @@ class TextExtractor:
         Returns:
             Dictionary with mimetype, category, and extension
         """
-        return FileValidator.get_file_info(filename)
+        file_info = FileValidator.get_file_info(filename)
+        return {
+            "mimetype": file_info["mimetype"],
+            "category": file_info["category"], 
+            "extension": file_info["extension"],
+        }
 
     def _count_tokens(self, text: str) -> int:
         """Counts tokens using tiktoken if available, otherwise estimates."""

@@ -113,11 +113,12 @@ async def upload_project_file(
             "Project"
         )
         
-        # Validate file extension
-        if not FileValidator.validate_extension(file.filename):
-            error_msg = f"File type not allowed. Supported: {', '.join(FileValidator.get_allowed_extensions_list())}"
-            logger.error(f"File extension validation failed: {error_msg}")
-            raise HTTPException(status_code=400, detail=error_msg)
+        # Validate file using centralized validator
+        try:
+            file_info = FileValidator.validate_upload_file(file)
+        except ValueError as e:
+            logger.error(f"File validation failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
         
         # Read a small portion to check if file is readable
         try:

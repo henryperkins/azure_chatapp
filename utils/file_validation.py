@@ -120,13 +120,23 @@ class FileValidator:
         
         # Validate extension
         if not cls.validate_extension(filename):
-            raise ValueError(f"File type not allowed. Supported: {', '.join(cls.ALLOWED_EXTENSIONS.keys())}")
+            raise ValueError(f"File type not allowed. Supported: {', '.join(cls.get_allowed_extensions_list())}")
             
         # Get file info
         file_info = cls.get_file_info(filename)
         
         # Validate size if known
         if file_size is not None and not cls.validate_size(file_size):
-            raise ValueError(f"File too large (max {cls.MAX_FILE_SIZE/1_000_000}MB)")
+            raise ValueError(f"File too large (max {cls.get_max_file_size_mb()}MB)")
             
         return file_info
+
+    @classmethod
+    def get_allowed_extensions_list(cls) -> List[str]:
+        """Get list of allowed extensions with dots"""
+        return list(cls.ALLOWED_EXTENSIONS.keys())
+
+    @classmethod 
+    def get_max_file_size_mb(cls) -> float:
+        """Get max file size in MB"""
+        return cls.MAX_FILE_SIZE / (1024 * 1024)
