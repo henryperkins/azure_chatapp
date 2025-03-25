@@ -1,4 +1,103 @@
-// auth.js - streamlined authentication logic for Azure Chat App
+// auth.js - Enhanced authentication logic for Azure Chat App
+
+// -------------------------
+// Token Management
+// -------------------------
+const TokenManager = {
+  accessToken: null,
+  refreshToken: null,
+
+  setTokens(access, refresh) {
+    if (!access) {
+      console.warn('Attempted to set null/undefined access token');
+      return;
+    }
+    
+    console.log('Setting new access token');
+    this.accessToken = access;
+    this.refreshToken = refresh;
+    
+    // Store token info with additional data
+    sessionStorage.setItem('auth_state', JSON.stringify({
+      hasTokens: true,
+      timestamp: Date.now()
+    }));
+    
+    // Set window configuration to indicate authenticated state
+    if (window.API_CONFIG) {
+      window.API_CONFIG.isAuthenticated = true;
+    }
+    
+    // Also make sure the userInfo is set
+    if (sessionStorage.getItem('userInfo') === null && window.AUTH_DATA?.username) {
+      sessionStorage.setItem('userInfo', JSON.stringify({
+        username: window.AUTH_DATA.username 
+      }));
+    }
+  },
+
+  clearTokens() {
+    this.accessToken = null;
+    this.refreshToken = null;
+    sessionStorage.removeItem('auth_state');
+  },
+
+  getAuthHeader() {
+    return this.accessToken ? { "Authorization": `Bearer ${this.accessToken}` } : {};
+  },
+
+  // Renamed from refreshToken to refreshTokens to avoid naming conflict
+  refreshTokens: async function() {
+    // Prevent multiple refresh attempts
+    if (sessionStorage.getItem('refreshing')) {
+      // Wait for the existing refresh to complete
+      let attempts = 0;
+      while (sessionStorage.getItem('refreshing') && attempts < 10) {
+        await new Promise(r => setTimeout(r, 300));
+        attempts++;
+      }
+      // If after waiting it's still refreshing, consider it failed
+      if (sessionStorage.getItem('refreshing')) {
+        throw new Error('Token refresh timeout');
+      }
+      return; // Another process completed the refresh
+    }
+    
+    try {
+      sessionStorage.setItem('refreshing', 'true');
+      console.log('TokenManager: Attempting token refresh...');
+      
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error(`TokenManager: Refresh failed with status ${response.status}`);
+        throw new Error(`Refresh failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.access_token) {
+        throw new Error('No access token in refresh response');
+      }
+      
+      this.setTokens(data.access_token, data.refresh_token);
+      console.log('TokenManager: Token refresh successful');
+      sessionStorage.removeItem('refreshing');
+      return true;
+    } catch (error) {
+      console.error('TokenManager: Token refresh failed:', error);
+      sessionStorage.removeItem('refreshing');
+      throw error;
+    }
+  }
+};
 
 // -------------------------
 // Initialization
@@ -6,17 +105,33 @@
 async function initAuth() {
   try {
     console.log("Initializing auth module");
+    
+    // Restore session if exists
+    const authState = JSON.parse(sessionStorage.getItem('auth_state'));
+    if (authState?.hasTokens) {
+      await updateAuthStatus();
+    } else {
+      // Just update UI to logged out state without trying to call the API
+      clearSession();
+      updateUserUI(null);
+      broadcastAuth(false);
+    }
+    
     setupUIListeners();
-    await updateAuthStatus();
     console.log("Auth module initialized");
+    return true;
   } catch (error) {
     console.error("Auth initialization failed:", error);
-    throw error;
+    clearSession();
+    updateUserUI(null);
+    broadcastAuth(false);
+    return false;
   }
 }
 
-// Export initialization function
+// Export initialization function and token manager
 window.initAuth = initAuth;
+window.TokenManager = TokenManager;
 
 // -------------------------
 // UI Event Listeners
@@ -87,23 +202,59 @@ async function handleLogin(e) {
 // Core Auth Functions
 // -------------------------
 async function loginUser(username, password) {
-  const data = await authRequest('/api/auth/login', username, password);
-  sessionStorage.setItem('userInfo', JSON.stringify({ username: data.username }));
-
-  updateUserUI(data.username);
-  setupTokenRefresh();
-  broadcastAuth(true, data.username);
-  notify(`Welcome back, ${data.username}`, "success");
+  try {
+    // Request login and get tokens
+    const data = await authRequest('/api/auth/login', username, password);
+    
+    // Store user info
+    sessionStorage.setItem('userInfo', JSON.stringify({ username: data.username }));
+    
+    // Set tokens and ensure they're available
+    if (data.access_token) {
+      TokenManager.setTokens(data.access_token, data.refresh_token);
+    }
+    
+    // Update UI
+    updateUserUI(data.username);
+    setupTokenRefresh();
+    
+    // Add a small delay to ensure token propagation
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Now broadcast auth state change
+    broadcastAuth(true, data.username);
+    notify(`Welcome back, ${data.username}`, "success");
+    
+    return data;
+  } catch (error) {
+    console.error("Login failed:", error);
+    notify("Login failed. Please check your credentials.", "error");
+    throw error;
+  }
 }
 
 async function logout(e) {
   e?.preventDefault();
-  try { await api('/api/auth/logout', 'POST'); } catch (e) {}
+  
+  // Only try to call the API if we're actually logged in
+  if (TokenManager.accessToken) {
+    try { 
+      await api('/api/auth/logout', 'POST'); 
+    } catch (error) {
+      console.log("Logout API error:", error);
+      // Continue with local logout regardless of API errors
+    }
+  }
+  
   clearSession();
   updateUserUI(null);
   broadcastAuth(false);
-  notify("Logged out", "success");
-  window.location.href = '/login';
+  
+  // Only redirect if this was triggered by a user action (logout button click)
+  if (e) {
+    notify("Logged out", "success");
+    window.location.href = '/';
+  }
 }
 
 // -------------------------
@@ -119,14 +270,50 @@ async function authRequest(url, username, password) {
 }
 
 async function api(url, method = 'GET', body) {
-  const res = await fetch(url, {
+  // Use the getBaseUrl utility from app.js
+  const baseUrl = window.getBaseUrl();
+  
+  const headers = {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
+    ...TokenManager.getAuthHeader()
+  };
+
+  // Clean and normalize the endpoint
+  const cleanEndpoint = url.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
+  const apiUrl = cleanEndpoint.startsWith('/')
+    ? `${baseUrl}${cleanEndpoint}`
+    : `${baseUrl}/${cleanEndpoint}`;
+
+  const res = await fetch(apiUrl, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
     body: body ? JSON.stringify(body) : undefined
   });
-  if (!res.ok) throw new Error((await res.json()).message || res.statusText);
-  return await res.json();
+
+  if (!res.ok) {
+    const error = new Error();
+    error.status = res.status;
+    
+    try {
+      const errorData = await res.json();
+      error.message = errorData.message || res.statusText;
+    } catch {
+      error.message = res.statusText;
+    }
+    
+    throw error;
+  }
+
+  const data = await res.json();
+  
+  // Update tokens if they're in the response
+  if (data.access_token) {
+    TokenManager.setTokens(data.access_token, data.refresh_token);
+  }
+  
+  return data;
 }
 
 function updateUserUI(username) {
@@ -172,7 +359,13 @@ function clearTokenTimers() {
 async function refreshTokenIfActive() {
   if (document.visibilityState !== "visible") return;
   
+  // Prevent multiple refresh attempts
+  if (sessionStorage.getItem('refreshing')) {
+    return false;
+  }
+
   try {
+    sessionStorage.setItem('refreshing', 'true');
     console.log('Attempting token refresh...');
     const response = await api('/api/auth/refresh', 'POST');
     
@@ -180,21 +373,27 @@ async function refreshTokenIfActive() {
       throw new Error('No access token in refresh response');
     }
 
+    TokenManager.setTokens(response.access_token, response.refresh_token);
     console.log('Token refresh successful');
+    sessionStorage.removeItem('refreshing');
     return true;
     
   } catch (error) {
     console.error('Token refresh failed:', error);
+    sessionStorage.removeItem('refreshing');
     
-    // Special handling for 401 - don't logout immediately
-    if (error.message.includes('401')) {
-      console.warn('Refresh token invalid, attempting full reauthentication');
-      await updateAuthStatus();
-      return false;
+    if (error.status === 401) {
+      console.warn('Refresh token expired, attempting re-authentication');
+      try {
+        await updateAuthStatus();
+        return true;
+      } catch (reAuthError) {
+        console.error('Re-authentication failed:', reAuthError);
+      }
     }
     
-    // For other errors, logout completely
-    logout();
+    TokenManager.clearTokens();
+    await logout();
     return false;
   }
 }
@@ -205,13 +404,29 @@ async function refreshTokenIfActive() {
 async function updateAuthStatus() {
   try {
     const data = await api('/api/auth/verify');
-    sessionStorage.setItem('userInfo', JSON.stringify({ username: data.username }));
+    
+    // Update tokens if present in response
+    if (data.access_token) {
+      TokenManager.setTokens(data.access_token, data.refresh_token);
+    }
+    
+    // Update session info with extended user data
+    sessionStorage.setItem('userInfo', JSON.stringify({
+      username: data.username,
+      roles: data.roles || [],
+      lastVerified: Date.now()
+    }));
+    
     updateUserUI(data.username);
     setupTokenRefresh();
     broadcastAuth(true, data.username);
-  } catch {
+    return true;
+  } catch (error) {
+    console.error('Auth status check failed:', error);
+    TokenManager.clearTokens();
     clearSession();
     updateUserUI(null);
     broadcastAuth(false);
+    return false;
   }
 }

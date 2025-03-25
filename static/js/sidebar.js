@@ -108,20 +108,33 @@ function setupSidebarTabs() {
       }
     });
     
-    // Special actions for specific tabs
-    if (tabName === 'recent') {
-      // Make sure conversations are loaded
-      if (typeof window.loadConversationList === 'function') {
-        window.loadConversationList();
+    // Check auth before loading data
+    const isAuthenticated = window.API_CONFIG?.isAuthenticated || 
+                          (sessionStorage.getItem('userInfo') !== null && 
+                           sessionStorage.getItem('auth_state') !== null);
+    
+    // Check for ongoing auth verification
+    const authCheckInProgress = window.API_CONFIG?.authCheckInProgress;
+    
+    // Only load data if authenticated and no auth check is in progress
+    if (isAuthenticated && !authCheckInProgress) {
+      // Special actions for specific tabs
+      if (tabName === 'recent') {
+        // Make sure conversations are loaded
+        if (typeof window.loadConversationList === 'function') {
+          setTimeout(() => window.loadConversationList(), 300);
+        }
+      } else if (tabName === 'starred') {
+        // Load starred conversations
+        setTimeout(() => loadStarredConversations(), 300);
+      } else if (tabName === 'projects') {
+        // Make sure projects are loaded
+        if (typeof window.loadSidebarProjects === 'function') {
+          setTimeout(() => window.loadSidebarProjects(), 300);
+        }
       }
-    } else if (tabName === 'starred') {
-      // Load starred conversations
-      loadStarredConversations();
-    } else if (tabName === 'projects') {
-      // Make sure projects are loaded
-      if (typeof window.loadSidebarProjects === 'function') {
-        window.loadSidebarProjects();
-      }
+    } else {
+      console.log("Not authenticated or auth check in progress, skipping data loading for tab:", tabName);
     }
   }
   
