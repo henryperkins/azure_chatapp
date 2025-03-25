@@ -51,16 +51,31 @@ class LoginResponse(BaseModel):
 
 
 def validate_password(password: str):
-    """Validates password meets security requirements."""
+    """Validates password meets security requirements with a single pass."""
     if len(password) < 12:
         raise ValueError("Password must be at least 12 characters")
-    if not any(c.isupper() for c in password):
+    
+    has_upper = has_lower = has_digit = has_special = False
+    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?~"
+    
+    for char in password:
+        has_upper = has_upper or char.isupper()
+        has_lower = has_lower or char.islower()
+        has_digit = has_digit or char.isdigit()
+        has_special = has_special or char in special_chars
+        
+        # Early exit if all criteria met
+        if has_upper and has_lower and has_digit and has_special:
+            return
+    
+    # Determine which requirement failed
+    if not has_upper:
         raise ValueError("Password must contain uppercase letters")
-    if not any(c.islower() for c in password):
+    if not has_lower:
         raise ValueError("Password must contain lowercase letters")
-    if not any(c.isdigit() for c in password):
+    if not has_digit:
         raise ValueError("Password must contain numbers")
-    if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?~" for c in password):
+    if not has_special:
         raise ValueError("Password must contain at least one special character")
 
 
@@ -331,15 +346,19 @@ async def logout_user(
     logger.info("User %s logged out successfully. Token %s invalidated and token version incremented.", 
                 current_user_and_token.username, token_id)
 
+    # Use the same parameters as during login to ensure cookie is deleted
     secure_cookie = settings.ENV == "production"
-    samesite_value = "strict" if secure_cookie else "lax"
+    samesite_value = "strict" if secure_cookie else "none"
+    actual_secure = secure_cookie and not settings.DEBUG
 
     cookie_params = {
         "key": "access_token",
-        "path": "/",
+        "value": "",  # Empty value for deletion
         "httponly": True,
-        "secure": secure_cookie,
+        "secure": actual_secure,
         "samesite": samesite_value,
+        "max_age": 0,  # Immediate expiration
+        "path": "/"
     }
 
     if settings.COOKIE_DOMAIN:
