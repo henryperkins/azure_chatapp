@@ -122,7 +122,7 @@ async def get_conversation_messages(
     
     # Add custom instructions if the conversation has a project
     if include_system_prompt and conversation.project_id:
-        project = await get_by_id(db, Project, conversation.project_id)
+        project = await get_by_id(db, Project, UUID(str(conversation.project_id)))
         if project and project.custom_instructions:
             msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
     
@@ -146,7 +146,7 @@ async def update_project_token_usage(
     if not conversation.project_id:
         return
         
-    project = await get_by_id(db, Project, conversation.project_id)
+    project = await get_by_id(db, Project, UUID(str(conversation.project_id)))
     if project:
         project.token_usage += token_count
         await save_model(db, project)
