@@ -215,5 +215,5 @@ async def get_paginated_resources(
     result = await db.execute(query)
     items = result.scalars().all()
 
-    # Explicitly convert ORM objects to dicts
-    return [item.to_dict() for item in items]
+    from utils.serializers import serialize_list
+    return serialize_list(items, serialize_project)

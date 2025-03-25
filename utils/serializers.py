@@ -178,3 +178,41 @@ def serialize_list(items: List[Any], serializer_func, **kwargs) -> List[Dict[str
         List of serialized dictionaries
     """
     return [serializer_func(item, **kwargs) for item in items]
+
+def serialize_knowledge_base(kb: 'KnowledgeBase') -> Dict[str, Any]:
+    """
+    Serialize a KnowledgeBase model to a dictionary.
+    
+    Args:
+        kb: KnowledgeBase database model
+        
+    Returns:
+        Dictionary with serialized knowledge base data
+    """
+    return {
+        "id": serialize_uuid(kb.id),
+        "name": kb.name,
+        "description": kb.description,
+        "embedding_model": kb.embedding_model,
+        "is_active": kb.is_active,
+        "created_at": serialize_datetime(kb.created_at),
+        "updated_at": serialize_datetime(kb.updated_at)
+    }
+
+def serialize_vector_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Standardize vector search results format.
+    
+    Args:
+        result: Raw vector search result dict
+        
+    Returns:
+        Standardized result dictionary
+    """
+    return {
+        "id": result.get("id", ""),
+        "score": round(float(result.get("score", 0)), 4),
+        "text": (result.get("text", "") or "")[:500],  # Preview
+        "metadata": result.get("metadata", {}),
+        "file_info": result.get("file_info", {})
+    }
