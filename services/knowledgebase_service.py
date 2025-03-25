@@ -199,19 +199,19 @@ def extract_file_metadata(
     include_token_count: bool = True,
     include_file_path: bool = False
 ) -> Dict[str, Any]:
-    """Use centralized serializer with additional fields"""
-    base_data = serialize_project_file(file_record, include_content=False)
+    """Standardized file metadata using serializers"""
+    data = serialize_project_file(
+        file_record, 
+        include_content=False,
+        include_file_path=include_file_path
+    )
     
-    # Add custom fields
-    base_data.update({
-        "search_status": (file_record.metadata or {}).get("search_processing", {}),
-        "token_count": (file_record.metadata or {}).get("token_count", 0) if include_token_count else None
-    })
-    
-    if not include_file_path:
-        base_data.pop("file_path", None)
+    # Add knowledge base specific fields
+    if include_token_count:
+        data["token_count"] = (file_record.metadata or {}).get("token_count", 0)
+    data["search_status"] = (file_record.metadata or {}).get("search_processing", {})
         
-    return base_data
+    return data
 
 # -----------------------------------------------------------------------------
 # 6. File Upload & Processing
@@ -749,8 +749,9 @@ async def search_project_context(
                 logger.error(f"Error enhancing search result with file info: {e}", exc_info=True)
         enhanced_results.append(res)
 
+    from utils.serializers import serialize_vector_result
     return {
         "query": query,
-        "results": enhanced_results,
+        "results": [serialize_vector_result(r) for r in enhanced_results],
         "result_count": len(enhanced_results)
     }
