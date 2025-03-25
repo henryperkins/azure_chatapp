@@ -34,26 +34,43 @@ class ProjectDashboard {
 
   // Check if all required components are available
   areComponentsAvailable() {
-    return (
-      window.ProjectListComponent !== undefined &&
-      window.ProjectDetailsComponent !== undefined &&
-      window.KnowledgeBaseComponent !== undefined
+    const requiredComponents = [
+      'ProjectListComponent',
+      'ProjectDetailsComponent', 
+      'KnowledgeBaseComponent'
+    ];
+    
+    const missing = requiredComponents.filter(
+      comp => window[comp] === undefined
     );
+    
+    if (missing.length) {
+      console.warn('Missing required components:', missing);
+      return false;
+    }
+    return true;
   }
 
-  // Setup UI components
+  // Setup UI components with error handling
   setupComponents() {
-    // Initialize view components
-    this.components.projectList = new window.ProjectListComponent({
-      elementId: "projectList",
-      onViewProject: this.handleViewProject.bind(this)
-    });
-    
-    this.components.projectDetails = new window.ProjectDetailsComponent({
-      onBack: this.handleBackToList.bind(this)
-    });
-    
-    this.components.knowledgeBase = new window.KnowledgeBaseComponent();
+    try {
+      // Initialize view components
+      this.components.projectList = new window.ProjectListComponent({
+        elementId: "projectList",
+        onViewProject: this.handleViewProject.bind(this)
+      });
+      
+      this.components.projectDetails = new window.ProjectDetailsComponent({
+        onBack: this.handleBackToList.bind(this)
+      });
+      
+      this.components.knowledgeBase = new window.KnowledgeBaseComponent();
+      
+      console.debug('All components initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize components:', error);
+      throw new Error('Component initialization failed');
+    }
     
     // Bind global event listeners
     this.bindEvents();
@@ -84,8 +101,13 @@ class ProjectDashboard {
   // Global event binding
   bindEvents() {
     // Global search
-    document.getElementById("projectSearchInput")?.addEventListener("input", 
-      (e) => this.components.projectList.filterBySearch(e.target.value));
+    const searchInput = document.getElementById("projectSearchInput");
+    if (searchInput && this.components.projectList?.filterBySearch) {
+      searchInput.addEventListener("input", 
+        (e) => this.components.projectList.filterBySearch(e.target.value));
+    } else {
+      console.warn('Project search input or filter method not available');
+    }
     
     // Filter buttons
     document.querySelectorAll(".project-filter-btn").forEach(btn => {
