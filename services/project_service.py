@@ -114,6 +114,17 @@ async def create_project(
     
     return project
 
+async def validate_project_token_usage(
+    project: Project, 
+    additional_tokens: int
+) -> None:
+    """Validate project has enough token capacity"""
+    if project.token_usage + additional_tokens > project.max_tokens:
+        raise ValueError(
+            f"Operation requires {additional_tokens} tokens but only " 
+            f"{project.max_tokens - project.token_usage} available"
+        )
+
 async def get_project_token_usage(project_id: UUID, db: AsyncSession) -> dict:
     """
     Retrieves token usage statistics for a project.

@@ -344,6 +344,19 @@ class FileStorage:
         else:
             raise ValueError(f"Unsupported file path format: {file_path}")
 
+async def get_storage_config() -> Dict[str, Any]:
+    """Get standardized storage configuration from settings"""
+    return {
+        "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
+        "azure_connection_string": getattr(config, "AZURE_STORAGE_CONNECTION_STRING", None),
+        "azure_container_name": getattr(config, "AZURE_STORAGE_CONTAINER", None),
+        "aws_access_key": getattr(config, "AWS_ACCESS_KEY", None),
+        "aws_secret_key": getattr(config, "AWS_SECRET_KEY", None),
+        "aws_bucket_name": getattr(config, "AWS_BUCKET_NAME", None),
+        "aws_region": getattr(config, "AWS_REGION", None)
+    }
+
 # Factory function to create a FileStorage instance based on configuration
 def get_file_storage(config: dict[str, Any]) -> FileStorage:
     """
