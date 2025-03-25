@@ -11,10 +11,22 @@
  * Use or integrate with highlight.js or marked.js as needed.
  */
 
-document.addEventListener("DOMContentLoaded", () => {
-  // If you want to automatically format certain elements on page load:
-  autoFormatExistingElements();
-});
+/**
+ * Initialize formatting module
+ */
+function initFormatting() {
+  try {
+    console.log("Initializing formatting module");
+    autoFormatExistingElements();
+    console.log("Formatting module initialized");
+  } catch (error) {
+    console.error("Formatting initialization failed:", error);
+    throw error;
+  }
+}
+
+// Export initialization function
+window.initFormatting = initFormatting;
 
 /**
  * Main entry point for formatting a string representing user/assistant messages or system output.
