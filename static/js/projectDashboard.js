@@ -17,21 +17,15 @@ const ProjectDashboard = {
   init() {
     console.log("Project Dashboard initialization started");
     
-    // Check if all components are available, if not retry after a short delay
-    if (!this.areComponentsAvailable()) {
-      console.log("Components not yet available, deferring initialization");
-      setTimeout(() => this.init(), 100);
-      return;
-    }
-    
-    // Setup UI components
+    // Setup components first
     this.setupComponents();
     
-    // Process URL parameters to determine initial view
+    // Then process URL params
     this.processUrlParams();
     
-    // Register data event listeners
+    // Then register events
     this.registerDataEvents();
+    this.bindEvents();
     
     console.log("Project Dashboard initialized");
   },
@@ -153,6 +147,10 @@ const ProjectDashboard = {
     this.components.projectList.hide();
     this.components.projectDetails.show();
     projectManager.loadProjectDetails(projectId);
+  },
+
+  showProjectDetailsView(projectId) {
+    this.showProjectDetails(projectId);
   },
   
   // UI state management
@@ -341,5 +339,12 @@ const ProjectDashboard = {
 
 // Initialize the dashboard when DOM is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
-  ProjectDashboard.init();
+  // Initialize after a small delay to ensure all components are loaded
+  setTimeout(() => {
+    if (window.ProjectDashboard) {
+      window.ProjectDashboard.init();
+    } else {
+      console.error("ProjectDashboard not found");
+    }
+  }, 100);
 });

@@ -439,10 +439,10 @@ function loadSidebarProjects() {
         li.addEventListener('click', () => {
           console.log('Project list item clicked. Project ID:', project.id);
           localStorage.setItem('selectedProjectId', project.id);
-          if (typeof window.projectManager?.loadProjectDetails === 'function') {
-            window.projectManager.loadProjectDetails(project.id);
-            console.log('Calling showProjectDetailsView from project list click');
-            showProjectDetailsView();
+          if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectDetailsView === 'function') {
+            window.ProjectDashboard.showProjectDetailsView(project.id);
+          } else {
+            console.error('ProjectDashboard not available');
           }
         });
 
