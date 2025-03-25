@@ -44,10 +44,14 @@ export default class MessageService {
     // Try WebSocket first
     if (this.wsService) {
       try {
-        const sent = await this.wsService.send(payload);
+        const sent = await this.wsService.send(payload).catch(error => {
+          console.warn('WebSocket send failed:', error);
+          return false;
+        });
+        
         if (sent) return true;
       } catch (error) {
-        console.warn('WebSocket send failed, falling back to HTTP:', error);
+        console.warn('WebSocket error:', error);
       }
     }
 
