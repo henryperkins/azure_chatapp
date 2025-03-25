@@ -392,7 +392,7 @@ async def project_websocket_chat_endpoint(
                 try:
                     data_dict = json.loads(raw_data)
                 except json.JSONDecodeError:
-                    data_dict = {"content": data, "role": "user"}
+                    data_dict = {"content": raw_data, "role": "user"}
 
                 # Create message
                 message = await create_user_message(
