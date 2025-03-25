@@ -48,9 +48,15 @@ export default class WebSocketService {
         return;
       }
 
-      // If connecting, wait for connection
+      // If connecting, wait for connection with timeout
       if (this.socket?.readyState === WebSocket.CONNECTING) {
+        const timeout = setTimeout(() => {
+          this.socket?.removeEventListener('open', onOpen);
+          reject(new Error('WebSocket connection timeout'));
+        }, 5000); // 5 second timeout
+
         const onOpen = () => {
+          clearTimeout(timeout);
           try {
             this.socket.send(JSON.stringify(message));
             resolve(true);
@@ -59,11 +65,12 @@ export default class WebSocketService {
           }
           this.socket.removeEventListener('open', onOpen);
         };
+
         this.socket.addEventListener('open', onOpen);
         return;
       }
 
-      // If not connected at all, reject
+      // If not connected at all, reject immediately
       reject(new Error('WebSocket not connected'));
     });
   }
