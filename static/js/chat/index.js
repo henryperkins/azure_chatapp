@@ -61,15 +61,51 @@ function sendMessage(chatId, userMsg) {
 }
 
 // Set up WebSocket connection
-function setupWebSocket() {
-  console.log("Setting up WebSocket");
+async function setupWebSocket(chatId) {
+  console.log("Setting up WebSocket for chat:", chatId);
   
   if (!chatInterface) {
     initializeChat();
   }
   
-  // The WebSocket is now handled internally by ChatInterface
-  // This function is kept for backwards compatibility
+  // If a chatId is provided, attempt to connect
+  if (chatId) {
+    try {
+      // Try to establish a websocket connection for this chat
+      if (chatInterface.wsService) {
+        const connected = await chatInterface.wsService.connect(chatId);
+        if (connected) {
+          chatInterface.messageService.initialize(chatId, chatInterface.wsService);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.warn("WebSocket setup failed:", error.message);
+      console.log("Using HTTP fallback for communications");
+      return false;
+    }
+  } else if (chatInterface.currentChatId) {
+    // Use the current chatId if available
+    return setupWebSocket(chatInterface.currentChatId);
+  }
+  
+  return false;
+}
+
+// Test WebSocket connectivity and authentication
+async function testWebSocketConnection() {
+  if (!chatInterface) {
+    initializeChat();
+  }
+  
+  if (chatInterface.wsService) {
+    return await chatInterface.wsService.testConnection();
+  }
+  
+  return {
+    success: false,
+    message: "Chat interface not initialized"
+  };
 }
 
 // Add markdown styles to the document if not already present
@@ -143,4 +179,5 @@ window.loadConversation = loadConversation;
 window.createNewChat = createNewChat;
 window.sendMessage = sendMessage;
 window.setupWebSocket = setupWebSocket;
+window.testWebSocketConnection = testWebSocketConnection;
 window.initializeChat = initializeChat;

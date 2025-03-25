@@ -48,9 +48,16 @@ export default class ChatInterface {
     // Extract chat ID from URL or global config
     this._extractChatId();
     
+    // Check authentication status before WebSocket connections
+    const isAuthenticated = sessionStorage.getItem('auth_state') && 
+                           sessionStorage.getItem('userInfo');
+    
     // Initialize WebSocketService first
     this.wsService = new WebSocketService({
-      onConnect: () => console.log("WebSocket connected"),
+      onConnect: () => {
+        console.log("WebSocket connected successfully");
+        // Update UI to show connection status if needed
+      },
       onDisconnect: (event) => console.log("WebSocket disconnected", event),
       onError: this._handleError.bind(this)
     });
@@ -60,7 +67,7 @@ export default class ChatInterface {
       onMessageReceived: this._handleMessageReceived.bind(this),
       onSending: this._handleMessageSending.bind(this),
       onError: this._handleError.bind(this),
-      wsService: this.wsService,
+      wsService: isAuthenticated ? this.wsService : null,
       apiRequest: window.apiRequest
     });
     
@@ -87,6 +94,9 @@ export default class ChatInterface {
       showNotification: this.notificationFunction
     });
     
+    // Set up auth state change listeners
+    this._setupAuthListeners();
+    
     // Handle existing chat or auto-create a new one
     this._initialLoadConversation();
   }
@@ -104,9 +114,18 @@ export default class ChatInterface {
     return this.conversationService.loadConversation(chatId)
       .then(success => {
         if (success) {
-          // Setup WebSocket for real-time updates
-          this.wsService.connect(chatId);
-          this.messageService.initialize(chatId, this.wsService);
+          // Only try to connect if the conversation loaded successfully
+          this.wsService.connect(chatId)
+            .then(() => {
+              console.log("WebSocket connected for conversation:", chatId);
+              // Then initialize message service with the connected websocket
+              this.messageService.initialize(chatId, this.wsService);
+            })
+            .catch(err => {
+              console.warn("Using HTTP fallback for messaging:", err.message);
+              // Initialize message service without websocket (HTTP fallback)
+              this.messageService.initialize(chatId, null);
+            });
         }
         return success;
       });
@@ -156,14 +175,25 @@ export default class ChatInterface {
     if (this.currentChatId) {
       this.loadConversation(this.currentChatId);
     } else {
-      // Auto-create new chat if no ID is present
-      setTimeout(() => {
-        this.createNewConversation()
-          .catch(err => {
-            console.error("Error auto-creating conversation:", err);
-            this.notificationFunction("Could not create a new conversation. Please try again.", "error");
-          });
-      }, 100);
+      // Only auto-create a conversation if authenticated
+      const isAuthenticated = window.API_CONFIG?.isAuthenticated || 
+                            sessionStorage.getItem('userInfo') !== null;
+      
+      if (isAuthenticated) {
+        // Auto-create new chat if authenticated
+        setTimeout(() => {
+          this.createNewConversation()
+            .catch(err => {
+              console.error("Error auto-creating conversation:", err);
+              this.notificationFunction("Could not create a new conversation. Please try again.", "error");
+            });
+        }, 100);
+      } else {
+        console.log("Not authenticated, skipping auto-conversation creation");
+        // Show the no-chat message or login required message
+        const loginMsg = document.getElementById("loginRequiredMessage");
+        if (loginMsg) loginMsg.classList.remove("hidden");
+      }
     }
   }
 
@@ -252,5 +282,28 @@ export default class ChatInterface {
   _handleError(message, error) {
     console.error(message, error);
     this.notificationFunction(message, 'error');
+  }
+
+  /**
+   * Set up listeners for authentication state changes
+   */
+  _setupAuthListeners() {
+    document.addEventListener('authStateChanged', (event) => {
+      const isAuthenticated = event.detail?.authenticated;
+      
+      if (isAuthenticated && this.currentChatId && 
+          this.wsService && !this.wsService.isConnected()) {
+        // Try to reconnect when auth state becomes valid
+        this.wsService.connect(this.currentChatId)
+          .then(() => {
+            console.log("WebSocket reconnected after authentication");
+            this.messageService.initialize(this.currentChatId, this.wsService);
+          })
+          .catch(err => console.warn("WebSocket reconnect failed:", err.message));
+      } else if (!isAuthenticated && this.wsService) {
+        // Disconnect when auth is lost
+        this.wsService.disconnect();
+      }
+    });
   }
 }

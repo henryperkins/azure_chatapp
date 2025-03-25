@@ -111,28 +111,72 @@ function updateAuthUI(authenticated) {
 }
 
 // API Configuration
-const API_CONFIG = {
-  baseUrl: window.location.origin,
+// Export API_CONFIG and utilities to window so other modules can access it
+window.API_CONFIG = {
+  baseUrl: null,  // Will be set on first use
   isAuthenticated: false,
   authCheckInProgress: false
 };
 
+// Helper to get base URL
+window.getBaseUrl = function() {
+  if (!window.API_CONFIG.baseUrl) {
+    // Get URL from current page
+    const baseUrl = window.location.origin ||
+                   (window.location.protocol + '//' + window.location.host);
+    window.API_CONFIG.baseUrl = baseUrl;
+    console.log('Set API base URL:', baseUrl);
+  }
+  return window.API_CONFIG.baseUrl;
+};
+
+// Alias for local use
+const API_CONFIG = window.API_CONFIG;
+
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
+  const requestStartTime = Date.now();
 
-  // Don't make API calls if authentication check is in progress
+  // Ensure base URL is available
+  window.getBaseUrl();
+
+  // Don't make API calls if authentication check is in progress - add a timeout
   if (API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
-    console.log('Delaying API call until auth check completes:', endpoint);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return apiRequest(endpoint, method, data, retryCount);
+    if (retryCount > 5) {
+      console.warn('Too many auth check delays, proceeding with request anyway');
+    } else {
+      console.log(`Delaying API call to ${endpoint} until auth check completes (attempt ${retryCount + 1})`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return apiRequest(endpoint, method, data, retryCount + 1);
+    }
+  }
+
+  // Check for authentication if making authenticated requests
+  if (!endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+    // Get token from TokenManager if available
+    const authHeader = window.TokenManager?.getAuthHeader?.() || {};
+    const hasAuth = Object.keys(authHeader).length > 0;
+    
+    // If this isn't an auth endpoint and we don't have auth, check if we're trying
+    // to access a protected resource
+    if (!endpoint.includes('/auth/') && !hasAuth) {
+      // Check if it's a public endpoint that doesn't require auth
+      const isPublicEndpoint = endpoint.includes('/public/') || 
+                             endpoint.includes('/health') ||
+                             endpoint === API_ENDPOINTS.AUTH_VERIFY;
+      
+      if (!isPublicEndpoint) {
+        console.warn(`Attempted unauthenticated access to protected endpoint: ${endpoint}`);
+        return Promise.reject(new Error('Authentication required'));
+      }
+    }
   }
 
   // Clean and normalize the endpoint
   const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
   const url = cleanEndpoint.startsWith('/')
-    ? `${API_CONFIG.baseUrl}${cleanEndpoint}`
-    : `${API_CONFIG.baseUrl}/${cleanEndpoint}`;
-
+    ? `${window.getBaseUrl()}${cleanEndpoint}`
+    : `${window.getBaseUrl()}/${cleanEndpoint}`;
 
   const options = {
     method,
@@ -140,7 +184,8 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache'
+      'Pragma': 'no-cache',
+      ...window.TokenManager?.getAuthHeader?.()
     },
     credentials: 'include',
     mode: 'cors',
@@ -153,51 +198,73 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
 
   try {
     const response = await fetch(url, options);
-
-    if (response.status === 404) {
-      throw new Error('Resource not found');
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      if (retryCount < maxRetries) {
-        console.log(`Auth error (${response.status}), attempting refresh (attempt ${retryCount + 1})`);
-        try {
-          const refreshResponse = await fetch('/api/auth/refresh', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
+    
+    // Enhanced error handling with more detailed logging
+    if (!response.ok) {
+      console.warn(`API error response (${response.status}): ${url}`);
+      
+      // Handle 404 errors
+      if (response.status === 404) {
+        throw new Error('Resource not found');
+      }
+      
+      // Handle auth errors (401/403)
+      if (response.status === 401 || response.status === 403) {
+        // Only attempt auth refresh for non-auth endpoints
+        if (!endpoint.includes('/auth/') && retryCount < maxRetries) {
+          try {
+            // Check if we have the TokenManager available
+            if (window.TokenManager?.refreshTokens) {
+              console.log(`Attempting token refresh before retry ${retryCount + 1}/${maxRetries} for ${url}`);
+              await window.TokenManager.refreshTokens();
+              console.log(`Token refreshed, retrying request to ${url}`);
+              return apiRequest(endpoint, method, data, retryCount + 1);
+            } else {
+              console.warn('TokenManager not available for refresh');
             }
-          });
-          
-          if (!refreshResponse.ok) {
-            throw new Error(`Refresh failed with status ${refreshResponse.status}`);
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+            
+            // Only show auth required for actual content requests, not background checks
+            if (!endpoint.includes('/auth/verify') && !endpoint.includes('/auth/refresh')) {
+              API_CONFIG.isAuthenticated = false;
+              sessionStorage.removeItem('userInfo');
+              
+              // Only show notifications for user-initiated requests
+              if (Date.now() - requestStartTime < 5000) {
+                if (window.Notifications?.authRequired) {
+                  window.Notifications.authRequired();
+                } else {
+                  showNotification(MESSAGES.LOGIN_REQUIRED, 'info');
+                }
+                
+                document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                  detail: { authenticated: false } 
+                }));
+              }
+            }
           }
-          
-          return apiRequest(url, method, data, retryCount + 1);
-        } catch (refreshError) {
-          console.error('Token refresh failed:', refreshError);
-          document.dispatchEvent(new CustomEvent("authStateChanged", {
-            detail: { authenticated: false }
-          }));
-          throw new Error('Authentication required');
         }
-      } else {
-        document.dispatchEvent(new CustomEvent("authStateChanged", {
-          detail: { authenticated: false }
-        }));
+        
         throw new Error('Authentication required');
       }
+      
+      // Generic error for other status codes
+      throw new Error(`API error response (${response.status}): ${response.statusText || 'Unknown error'}`);
     }
 
-    if (!response.ok) {
-      throw new Error(`API error response (${response.status}): ${response.statusText}`);
+    // Handle empty responses
+    if (response.headers.get('content-length') === '0' || 
+        response.headers.get('content-type')?.includes('text/plain')) {
+      return { success: true };
     }
 
     return response.json();
   } catch (error) {
-    console.error(`API request failed: ${url}`, error);
+    // Enhanced error logging with endpoint info
+    console.error(`API request failed for ${method} ${url}:`, error);
+    
+    // Rethrow with consistent format for easier handling
     throw error;
   }
 }
@@ -412,49 +479,93 @@ function handleNavigationChange() {
 // DATA LOADING FUNCTIONS
 // ---------------------------------------------------------------------
 function loadSidebarProjects() {
-  apiRequest(API_ENDPOINTS.PROJECTS)
+  // Skip if not authenticated
+  const isAuthenticated = API_CONFIG?.isAuthenticated || 
+                        (sessionStorage.getItem('userInfo') !== null && 
+                         sessionStorage.getItem('auth_state') !== null);
+  
+  if (!isAuthenticated) {
+    console.log("Not authenticated, skipping sidebar projects load");
+    return Promise.resolve([]);
+  }
+  
+  // Also skip if auth check is in progress
+  if (API_CONFIG.authCheckInProgress) {
+    console.log("Auth check in progress, deferring sidebar projects load");
+    return Promise.resolve([]);
+  }
+  
+  return apiRequest(API_ENDPOINTS.PROJECTS)
     .then(response => {
       const projects = Array.isArray(response.data) ? response.data : [];
       const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
-      if (!sidebarProjects) return;
-
+      if (!sidebarProjects) return projects;
+      
       sidebarProjects.innerHTML = '';
-
+      
       if (projects.length === 0) {
         showEmptyState(sidebarProjects, MESSAGES.NO_PROJECTS);
-        return;
+        return projects;
       }
-
+      
       projects.forEach(project => {
         sidebarProjects.appendChild(createProjectListItem(project));
       });
+      
+      return projects;
     })
-    .catch(err => handleAPIError('loading sidebar projects', err));
+    .catch(err => {
+      handleAPIError('loading sidebar projects', err);
+      return [];
+    });
 }
 
 function loadConversationList() {
+  // Skip if not authenticated
+  const isAuthenticated = API_CONFIG?.isAuthenticated || 
+                        (sessionStorage.getItem('userInfo') !== null && 
+                         sessionStorage.getItem('auth_state') !== null);
+  
+  if (!isAuthenticated) {
+    console.log("Not authenticated, skipping conversation list load");
+    return Promise.resolve([]);
+  }
+  
+  // Also skip if auth check is in progress
+  if (API_CONFIG.authCheckInProgress) {
+    console.log("Auth check in progress, deferring conversation list load");
+    return Promise.resolve([]);
+  }
+  
   const selectedProjectId = localStorage.getItem('selectedProjectId');
   if (!selectedProjectId) {
-    apiRequest(API_ENDPOINTS.CONVERSATIONS)
-      .then(data => renderConversationList(data))
-      .catch(err => handleAPIError('loading conversation list', err));
-    return;
+    return apiRequest(API_ENDPOINTS.CONVERSATIONS)
+      .then(data => {
+        renderConversationList(data);
+        return data;
+      })
+      .catch(err => {
+        handleAPIError('loading conversation list', err);
+        return [];
+      });
   }
-
+  
   const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', selectedProjectId);
-  apiRequest(endpoint)
+  return apiRequest(endpoint)
     .then(data => {
-      if (!data) return;
+      if (!data) return [];
       renderConversationList(data);
+      return data;
     })
     .catch(err => {
       if (err.message.includes('404')) {
         localStorage.removeItem('selectedProjectId');
         Notifications.projectNotFound();
-        loadSidebarProjects();
-        loadConversationList();
+        loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+        return loadConversationList();
       } else {
         handleAPIError('loading project conversations', err);
+        return [];
       }
     });
 }
@@ -494,45 +605,89 @@ function renderConversationList(data) {
 // ---------------------------------------------------------------------
 async function checkAndHandleAuth() {
   try {
+    // Check if we already have auth information in session storage
+    const userInfo = sessionStorage.getItem('userInfo');
+    const authState = sessionStorage.getItem('auth_state');
+    
+    // If we have no stored auth info, don't even try checking
+    if (!userInfo && !authState) {
+      console.log("No stored auth info, skipping auth check");
+      API_CONFIG.isAuthenticated = false;
+      updateAuthUI(false);
+      return false;
+    }
+    
     // Set flag to prevent other API calls during auth check
     API_CONFIG.authCheckInProgress = true;
-
-    const authResponse = await apiRequest(API_ENDPOINTS.AUTH_VERIFY);
-    if (!authResponse) {
-      throw new Error('No response from auth verification');
-    }
-
-    // Update auth state and UI
-    API_CONFIG.isAuthenticated = true;
-    updateAuthUI(true);
-    sessionStorage.setItem('userInfo', JSON.stringify({
-      username: authResponse.username
-    }));
-
-    // Load initial data sequentially to avoid race conditions
+    
     try {
-      await loadConversationList();
+      const authResponse = await apiRequest(API_ENDPOINTS.AUTH_VERIFY);
+      if (!authResponse) {
+        throw new Error('No response from auth verification');
+      }
       
-      if (window.projectManager?.loadProjects) {
-        await window.projectManager.loadProjects();
-        await loadSidebarProjects();
-      }
-
-      if (window.CHAT_CONFIG?.chatId && window.loadConversation) {
-        await window.loadConversation(window.CHAT_CONFIG.chatId);
-      }
-    } catch (dataError) {
-      console.error('Error loading initial data:', dataError);
-      Notifications.apiError('Failed to load initial data');
+      // Update auth state and UI
+      API_CONFIG.isAuthenticated = true;
+      updateAuthUI(true);
+      sessionStorage.setItem('userInfo', JSON.stringify({
+        username: authResponse.username
+      }));
+      
+      // Store username for other components to access
+      window.AUTH_DATA = { username: authResponse.username };
+      
+      // Now broadcast authentication success before loading data
+      document.dispatchEvent(new CustomEvent('authStateChanged', { 
+        detail: { authenticated: true, username: authResponse.username }
+      }));
+      
+      // Only then attempt to load initial data
+      setTimeout(async () => {
+        try {
+          // Load conversations first since they're most important
+          await loadConversationList().catch(err => {
+            console.warn("Failed to load conversations:", err);
+          });
+          
+          // Then load project data if the project manager is available
+          if (window.projectManager?.loadProjects) {
+            await window.projectManager.loadProjects().catch(err => {
+              console.warn("Failed to load projects:", err);
+            });
+            
+            await loadSidebarProjects().catch(err => {
+              console.warn("Failed to load sidebar projects:", err);
+            });
+          }
+          
+          // Finally load the conversation if it's in the URL
+          if (window.CHAT_CONFIG?.chatId && window.loadConversation) {
+            await window.loadConversation(window.CHAT_CONFIG.chatId).catch(err => {
+              console.warn("Failed to load conversation:", err);
+            });
+          }
+        } catch (dataError) {
+          console.error('Error loading initial data:', dataError);
+          Notifications.apiError('Failed to load initial data');
+        }
+      }, 300); // Short delay to ensure token propagation
+      
+      return true;
+    } catch (error) {
+      throw error;
     }
-
-    return true;
   } catch (error) {
     // Clear any existing auth state on failure
     API_CONFIG.isAuthenticated = false;
-    sessionStorage.clear();
+    if (window.TokenManager?.clearTokens) {
+      window.TokenManager.clearTokens();
+    }
+    sessionStorage.removeItem('userInfo');
+    sessionStorage.removeItem('auth_state');
     updateAuthUI(false);
-    Notifications.authRequired();
+    document.dispatchEvent(new CustomEvent('authStateChanged', { 
+      detail: { authenticated: false }
+    }));
     return false;
   } finally {
     // Always clear the auth check flag
@@ -671,7 +826,11 @@ async function initializeApplication() {
   try {
     console.log("Starting main application initialization");
     
-    // Initialize UI and handlers first
+    // Initialize base URL
+    const baseUrl = window.getBaseUrl();
+    console.log("API base URL set to:", baseUrl);
+    
+    // Initialize UI and handlers
     safeInitialize();
     if (!localStorage.getItem("modelName")) {
       localStorage.setItem("modelName", "claude-3-sonnet-20240229");
@@ -683,8 +842,15 @@ async function initializeApplication() {
     // Perform auth check and load initial data
     const authSuccess = await checkAndHandleAuth();
     if (!authSuccess) {
-      console.warn("Authentication failed during initialization");
-      return false;
+      // Changed from warning to info - this is expected when not logged in
+      console.info("User not authenticated - showing login UI");
+      
+      // Make sure login UI is visible
+      const loginRequiredMsg = document.getElementById('loginRequiredMessage');
+      if (loginRequiredMsg) loginRequiredMsg.classList.remove('hidden');
+      
+      // We're returning true here since the app initialized correctly, just without auth
+      return true;
     }
     
     // Set up window event handlers
@@ -740,38 +906,81 @@ const InitUtils = {
  * Initialize all application modules in the correct order
  * Returns true if successful, false if failed
  */
+
 async function initializeAllModules() {
   try {
     console.log("Starting application initialization sequence");
 
-    // Initialize core modules first
-    console.log("Initializing core modules...");
+    // Initialize required core modules first
+    let coreSuccesses = 0;
+    let coreModulesCount = 0;
+    
+    // Try auth initialization first
+    if (window.initAuth) {
+      try {
+        await InitUtils.initModule('auth', window.initAuth);
+        console.log("✓ Auth module initialized");
+        coreSuccesses++;
+      } catch (error) {
+        console.info("Auth module not available - user will need to log in");
+        // Still continue with other modules since we can function without auth initially
+        API_CONFIG.isAuthenticated = false;
+      }
+      coreModulesCount++;
+    }
+
+    // Initialize other core modules
     for (const module of InitUtils.coreModules) {
-      if (module.init) {
-        await InitUtils.initModule(module.name, module.init);
+      if (module.name !== 'auth' && module.init) {
+        coreModulesCount++;
+        try {
+          await InitUtils.initModule(module.name, module.init);
+          console.log(`✓ Core module ${module.name} initialized`);
+          coreSuccesses++;
+        } catch (error) {
+          console.warn(`Core module ${module.name} failed:`, error);
+        }
       }
     }
 
+    // Check if enough core modules initialized
+    if (coreSuccesses / coreModulesCount < 0.5) {
+      console.warn("Less than half of core modules initialized successfully");
+    }
+    
     // Initialize feature modules
-    console.log("Initializing feature modules...");
     for (const module of InitUtils.featureModules) {
       if (module.init) {
-        await InitUtils.initModule(module.name, module.init);
+        try {
+          // Skip project dashboard if components aren't available
+          if (module.name === 'project dashboard') {
+            // Just check if they exist, not if they're fully functional
+            if (!window.ProjectListComponent || !window.ProjectDetailsComponent) {
+              console.info('Skipping project dashboard - required components not found');
+              continue;
+            }
+          }
+          
+          await InitUtils.initModule(module.name, module.init);
+          console.log(`✓ Feature module ${module.name} initialized`);
+        } catch (error) {
+          console.warn(`Feature module ${module.name} initialization skipped:`, error.message);
+        }
       }
     }
 
-    // Initialize main application last
+    // Initialize main application
     console.log("Initializing main application...");
-    const appSuccess = await initializeApplication();
-    if (!appSuccess) {
-      throw new Error("Main application initialization failed");
+    try {
+      await initializeApplication();
+      console.log("✅ Application initialized successfully");
+    } catch (error) {
+      console.warn("Application initialized with warnings:", error);
     }
-
-    console.log("✅ All modules initialized successfully");
+    
     return true;
   } catch (error) {
     console.error("❌ Module initialization failed:", error);
-    Notifications.apiError("Failed to initialize application modules");
     return false;
   }
 }
@@ -815,18 +1024,60 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Handle authentication state changes
 document.addEventListener('authStateChanged', (e) => {
   updateAuthUI(e.detail.authenticated);
+  
   if (e.detail.authenticated) {
-    loadConversationList();
-    if (window.projectManager?.loadProjects) {
-      window.projectManager.loadProjects();
-      loadSidebarProjects();
-    }
-    if (window.CHAT_CONFIG?.chatId && window.loadConversation) {
-      window.loadConversation(window.CHAT_CONFIG.chatId);
+    // Only load data if we actually have auth tokens
+    const hasTokens = window.TokenManager?.accessToken || 
+                     (sessionStorage.getItem('auth_state') && 
+                      JSON.parse(sessionStorage.getItem('auth_state'))?.hasTokens);
+    
+    if (hasTokens) {
+      // Add small delay to ensure token propagation
+      setTimeout(() => {
+        try {
+          // Load conversations first since they're most important
+          loadConversationList().catch(err => {
+            console.warn("Failed to load conversations:", err);
+          });
+          
+          // Then load project data if the project manager is available
+          if (window.projectManager?.loadProjects) {
+            window.projectManager.loadProjects().then(() => {
+              loadSidebarProjects().catch(err => {
+                console.warn("Failed to load sidebar projects:", err);
+              });
+            }).catch(err => {
+              console.warn("Failed to load projects:", err);
+            });
+          }
+          
+          // Finally load the conversation if it's in the URL
+          const urlParams = new URLSearchParams(window.location.search);
+          const chatId = urlParams.get('chatId') || window.CHAT_CONFIG?.chatId;
+          if (chatId && window.loadConversation) {
+            window.loadConversation(chatId).catch(err => {
+              console.warn("Failed to load conversation:", err);
+            });
+          }
+        } catch (error) {
+          console.error('Error loading initial data after auth:', error);
+        }
+      }, 300);
+    } else {
+      console.warn('Auth event received but no tokens available - skipping data loading');
     }
   } else {
+    // Clear UI for logged out state
     const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
-    if (conversationArea) conversationArea.innerHTML = '';
+    if (conversationArea) {
+      conversationArea.innerHTML = '';
+    }
+    
+    // Show login required message
+    const loginMsg = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+    if (loginMsg) {
+      loginMsg.classList.remove('hidden');
+    }
   }
 });
 
