@@ -154,15 +154,8 @@ async def create_conversation(
     )
 
     return await create_standard_response(
-        {
-            "data": {
-                "id": str(new_conversation.id),
-                "title": new_conversation.title,
-                "created_at": new_conversation.created_at.isoformat(),
-                "project_id": None,
-            },
-            "message": "Conversation created successfully"
-        }
+        serialize_conversation(new_conversation),
+        "Conversation created successfully"
     )
 
 
@@ -190,13 +183,7 @@ async def list_conversations(
 
         items = []
         for conv in conversations:
-            items.append({
-                "id": str(conv.id),
-                "title": conv.title,
-                "model_id": conv.model_id,
-                "created_at": conv.created_at.isoformat(),
-                "project_id": None  # Enforce null for format consistency
-            })
+            items.append(serialize_conversation(conv))
 
         return await create_standard_response({"conversations": items})
     except Exception as e:
@@ -227,13 +214,7 @@ async def get_conversation(
     )
 
     return await create_standard_response(
-        {
-            "id": str(conversation.id),
-            "title": conversation.title,
-            "model_id": conversation.model_id,
-            "created_at": conversation.created_at,
-            "project_id": None,
-        }
+        serialize_conversation(conversation)
     )
 
 
@@ -266,12 +247,8 @@ async def update_conversation(
     logger.info("Conversation %s updated by user %s", conversation_id, current_user.id)
 
     return await create_standard_response(
-        {
-            "id": str(conversation.id),
-            "title": conversation.title,
-            "model_id": conversation.model_id,
-        },
-        "Conversation updated successfully",
+        serialize_conversation(conversation),
+        "Conversation updated successfully"
     )
 
 
@@ -300,8 +277,8 @@ async def delete_conversation(
     )
 
     return await create_standard_response(
-        {"conversation_id": str(conversation.id)},
-        message="Conversation deleted successfully",
+        {"id": str(conversation.id)},
+        "Conversation deleted successfully"
     )
 
 
@@ -336,15 +313,7 @@ async def list_messages(
 
     output = []
     for msg in messages:
-        output.append(
-            {
-                "id": str(msg.id),
-                "role": msg.role,
-                "content": msg.content,
-                "metadata": msg.get_metadata_dict(),
-                "timestamp": msg.created_at,
-            }
-        )
+        output.append(serialize_message(msg))
 
     return await create_standard_response(
         {"messages": output, "metadata": {"title": conversation.title}}
