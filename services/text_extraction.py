@@ -379,11 +379,14 @@ class TextExtractor:
             reader = pypdf.PdfReader(file_obj)
             page_count = len(reader.pages)
             text = ""
-
-            # Extract text from each page
-            for page_num in range(page_count):
-                page = reader.pages[page_num]
-                text += page.extract_text() + "\n\n"
+            
+            # Extract text with layout preservation
+            for page in reader.pages:
+                text += page.extract_text(
+                    extraction_mode="layout",  # Preserve spacing/indentation
+                    layout_mode_space_vertically=True,
+                    layout_mode_scale_overlap=0.5
+                ) + "\n\n"
 
             # Cleanup any excessive whitespace
             text = re.sub(r'\s+', ' ', text).strip()
