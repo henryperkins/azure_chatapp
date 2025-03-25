@@ -18,7 +18,7 @@ import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from utils.auth_utils import clean_expired_tokens
+from utils.auth_utils import clean_expired_tokens, extract_token
 
 from config import settings
 from db import get_async_session
@@ -26,11 +26,11 @@ from models.user import User, TokenBlacklist
 from utils.auth_utils import (
     JWT_SECRET,
     JWT_ALGORITHM,
-    get_current_user_and_token,
+    create_access_token,
+    revoke_token_id,
 )
 
 logger = logging.getLogger(__name__)
-
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
@@ -202,7 +202,7 @@ async def login_user(
         "user_id": user.id
     }
 
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = create_access_token(payload)
 
     logger.info(
         "User '%s' logged in with token ID %s.",
@@ -210,26 +210,12 @@ async def login_user(
         token_id
     )
 
-    secure_cookie = settings.ENV == "production"
-    # In development, use 'none' to allow cross-origin cookies
-    samesite_value = "strict" if secure_cookie else "none"
-    # Force secure=False in development for local testing
-    actual_secure = secure_cookie and not settings.DEBUG
-
-    cookie_params = {
-        "key": "access_token",
-        "value": token,
-        "httponly": True,
-        "secure": actual_secure,
-        "samesite": samesite_value,
-        "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "path": "/"
-    }
-
-    if settings.COOKIE_DOMAIN:
-        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
-
-    response.set_cookie(**cookie_params)
+    set_secure_cookie(
+        response, 
+        "access_token", 
+        token, 
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
 
     return LoginResponse(
         access_token=token, 
@@ -273,28 +259,16 @@ async def refresh_token(
         "user_id": user_id
     }
 
-    new_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    new_token = create_access_token(payload)
 
     logger.info("Refreshed token for user '%s'", username)
 
-    secure_cookie = settings.ENV == "production"
-    # In production, use 'strict' for better security; otherwise 'lax' for development ease
-    samesite_value = "strict" if secure_cookie else "lax"
-
-    cookie_params = {
-        "key": "access_token",
-        "value": new_token,
-        "httponly": True,
-        "secure": secure_cookie,
-        "samesite": samesite_value,
-        "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        "path": "/"
-    }
-
-    if settings.COOKIE_DOMAIN:
-        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
-
-    response.set_cookie(**cookie_params)
+    set_secure_cookie(
+        response, 
+        "access_token", 
+        new_token, 
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
 
     return LoginResponse(
         access_token=new_token, 
@@ -335,35 +309,55 @@ async def logout_user(
     session.add(blacklisted_token)
     
     # Increment token version to invalidate all existing tokens for this user
-    current_user_and_token.token_version = current_user_and_token.token_version + 1 if current_user_and_token.token_version else 1
-    session.add(current_user_and_token)
+    async with session.begin_nested():
+        # Get user with lock to prevent concurrent updates
+        locked_user = await session.get(
+            User, 
+            current_user_and_token.id, 
+            with_for_update=True
+        )
+        
+        # Increment token version
+        if locked_user:
+            locked_user.token_version = locked_user.token_version + 1 if locked_user.token_version else int(datetime.utcnow().timestamp())
+    
     await session.commit()
     
     # Also add to in-memory blacklist for immediate effect
-    from utils.auth_utils import revoke_token_id
     revoke_token_id(token_id)
     
     logger.info("User %s logged out successfully. Token %s invalidated and token version incremented.", 
                 current_user_and_token.username, token_id)
 
     # Use the same parameters as during login to ensure cookie is deleted
-    secure_cookie = settings.ENV == "production"
-    samesite_value = "strict" if secure_cookie else "none"
-    actual_secure = secure_cookie and not settings.DEBUG
-
-    cookie_params = {
-        "key": "access_token",
-        "value": "",  # Empty value for deletion
-        "httponly": True,
-        "secure": actual_secure,
-        "samesite": samesite_value,
-        "max_age": 0,  # Immediate expiration
-        "path": "/"
-    }
-
-    if settings.COOKIE_DOMAIN:
-        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
-
-    response.delete_cookie(**cookie_params)
+    set_secure_cookie(
+        response,
+        "access_token",
+        "",
+        max_age=0  # Immediate expiration
+    )
 
     return {"status": "logged out"}
+
+
+def set_secure_cookie(response, key, value, max_age=None):
+    """Set a secure cookie with consistent settings."""
+    secure_cookie = settings.ENV == "production"
+    samesite_value = "strict" if secure_cookie else "lax"
+    
+    cookie_params = {
+        "key": key,
+        "value": value,
+        "httponly": True,
+        "secure": secure_cookie,
+        "samesite": samesite_value,
+        "path": "/"
+    }
+    
+    if max_age is not None:
+        cookie_params["max_age"] = max_age
+        
+    if settings.COOKIE_DOMAIN:
+        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
+        
+    response.set_cookie(**cookie_params)

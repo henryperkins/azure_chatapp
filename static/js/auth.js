@@ -46,7 +46,6 @@ const TokenManager = {
     return this.accessToken ? { "Authorization": `Bearer ${this.accessToken}` } : {};
   },
 
-  // Renamed from refreshToken to refreshTokens to avoid naming conflict
   refreshTokens: async function() {
     // Prevent multiple refresh attempts
     if (sessionStorage.getItem('refreshing')) {
@@ -89,12 +88,12 @@ const TokenManager = {
       
       this.setTokens(data.access_token, data.refresh_token);
       console.log('TokenManager: Token refresh successful');
-      sessionStorage.removeItem('refreshing');
       return true;
     } catch (error) {
       console.error('TokenManager: Token refresh failed:', error);
-      sessionStorage.removeItem('refreshing');
       throw error;
+    } finally {
+      sessionStorage.removeItem('refreshing');
     }
   }
 };
@@ -115,6 +114,9 @@ async function initAuth() {
       clearSession();
       updateUserUI(null);
       broadcastAuth(false);
+      // Make sure login UI is visible
+      const loginRequiredMsg = document.getElementById('loginRequiredMessage');
+      if (loginRequiredMsg) loginRequiredMsg.classList.remove('hidden');
     }
     
     setupUIListeners();
@@ -206,29 +208,47 @@ async function loginUser(username, password) {
     // Request login and get tokens
     const data = await authRequest('/api/auth/login', username, password);
     
-    // Store user info
-    sessionStorage.setItem('userInfo', JSON.stringify({ username: data.username }));
+    // Store user info with better error handling
+    try {
+      sessionStorage.setItem('userInfo', JSON.stringify({ 
+        username: username.toLowerCase(),
+        timestamp: Date.now()
+      }));
+    } catch (storageError) {
+      console.warn('Failed to store user info in session storage:', storageError);
+      // Continue anyway - auth can still work with cookies
+    }
     
     // Set tokens and ensure they're available
     if (data.access_token) {
       TokenManager.setTokens(data.access_token, data.refresh_token);
+    } else {
+      console.warn('Login response missing access_token');
     }
     
-    // Update UI
-    updateUserUI(data.username);
-    setupTokenRefresh();
-    
-    // Add a small delay to ensure token propagation
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Now broadcast auth state change
-    broadcastAuth(true, data.username);
-    notify(`Welcome back, ${data.username}`, "success");
+    // Update UI with better error handling
+    try {
+      updateUserUI(username.toLowerCase());
+      setupTokenRefresh();
+      broadcastAuth(true, username.toLowerCase());
+    } catch (uiError) {
+      console.error('Failed to update UI after login:', uiError);
+      // Continue anyway - auth is still successful
+    }
     
     return data;
   } catch (error) {
     console.error("Login failed:", error);
-    notify("Login failed. Please check your credentials.", "error");
+    
+    // Provide specific error message based on error status
+    if (error.status === 401) {
+      notify("Invalid username or password", "error");
+    } else if (error.status === 429) {
+      notify("Too many login attempts. Please try again later.", "error");
+    } else {
+      notify("Login failed: " + (error.message || "Please check your credentials"), "error");
+    }
+    
     throw error;
   }
 }
@@ -236,24 +256,47 @@ async function loginUser(username, password) {
 async function logout(e) {
   e?.preventDefault();
   
-  // Only try to call the API if we're actually logged in
-  if (TokenManager.accessToken) {
-    try { 
-      await api('/api/auth/logout', 'POST'); 
-    } catch (error) {
-      console.log("Logout API error:", error);
-      // Continue with local logout regardless of API errors
+  try {
+    // Only try to call the API if we're actually logged in
+    if (TokenManager.accessToken) {
+      try { 
+        await api('/api/auth/logout', 'POST'); 
+      } catch (error) {
+        console.warn("Logout API error:", error);
+        // Continue with local logout regardless of API errors
+      }
     }
-  }
-  
-  clearSession();
-  updateUserUI(null);
-  broadcastAuth(false);
-  
-  // Only redirect if this was triggered by a user action (logout button click)
-  if (e) {
-    notify("Logged out", "success");
-    window.location.href = '/';
+    
+    // Clear tokens and session data
+    TokenManager.clearTokens();
+    try {
+      sessionStorage.clear();
+    } catch (storageError) {
+      console.warn('Failed to clear session storage:', storageError);
+    }
+    
+    // Better cookie removal
+    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    
+    // Update UI
+    updateUserUI(null);
+    broadcastAuth(false);
+    
+    // Only redirect/notify if this was triggered by a user action
+    if (e) {
+      notify("Logged out", "success");
+      window.location.href = '/';
+    }
+  } catch (error) {
+    console.error("Logout error:", error);
+    // Still attempt to clear local state
+    TokenManager.clearTokens();
+    sessionStorage.clear();
+    updateUserUI(null);
+    
+    if (e) {
+      window.location.href = '/';
+    }
   }
 }
 
@@ -308,7 +351,7 @@ async function api(url, method = 'GET', body) {
 
   const data = await res.json();
   
-  // Update tokens if they're in the response
+  // Update tokens if present in response
   if (data.access_token) {
     TokenManager.setTokens(data.access_token, data.refresh_token);
   }
@@ -318,7 +361,11 @@ async function api(url, method = 'GET', body) {
 
 function updateUserUI(username) {
   document.getElementById("authButton")?.classList.toggle("hidden", !!username);
-  document.getElementById("userMenu")?.classList.toggle("hidden", !username);
+
+  const userMenu = document.getElementById("userMenu");
+  if (userMenu) {
+    userMenu.classList.toggle("hidden", !username);
+  }
 
   const statusEl = document.getElementById("authStatus");
   if (statusEl) {
@@ -386,13 +433,10 @@ async function refreshTokenIfActive() {
 
     TokenManager.setTokens(response.access_token, response.refresh_token);
     console.log('Token refresh successful');
-    sessionStorage.removeItem('refreshing');
     return true;
     
   } catch (error) {
     console.error('Token refresh failed:', error);
-    sessionStorage.removeItem('refreshing');
-    
     if (error.status === 401) {
       console.warn('Refresh token expired, attempting re-authentication');
       try {
@@ -406,6 +450,8 @@ async function refreshTokenIfActive() {
     TokenManager.clearTokens();
     await logout();
     return false;
+  } finally {
+    sessionStorage.removeItem('refreshing');
   }
 }
 

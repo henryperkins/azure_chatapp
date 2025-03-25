@@ -24,6 +24,7 @@ class WebSocketService {
       if (!chatId || this.connecting) return Promise.reject(new Error('Invalid request'));
       this.connecting = true;
       this.chatId = chatId;
+      
       try {
         // Quick auth check
         const authState = sessionStorage.getItem('auth_state');
@@ -33,6 +34,7 @@ class WebSocketService {
           this.useHttpFallback = true;
           return Promise.reject(new Error('Auth required'));
         }
+        
         // Build URL
         const baseUrl = window.location.origin;
         const wsBase = baseUrl.replace(/^http/, 'ws');
@@ -112,6 +114,37 @@ class WebSocketService {
         console.warn(`WebSocket reconnect attempt ${this.reconnectAttempts} failed: ${e.message}`);
       }
     }
+  
+    isConnected() {
+      return this.socket && this.socket.readyState === WebSocket.OPEN;
+    }
+  
+    send(payload) {
+      if (!this.isConnected()) {
+        return Promise.reject(new Error('WebSocket not connected'));
+      }
+      return new Promise((resolve, reject) => {
+        this.socket.send(JSON.stringify(payload));
+        this.socket.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'error') {
+            reject(new Error(data.message || 'WebSocket error'));
+          } else {
+            resolve(data);
+          }
+        };
+        this.socket.onerror = (error) => {
+          reject(error);
+        };
+      });
+    }
+  
+    disconnect() {
+      if (this.socket) {
+        this.socket.close();
+        this.socket = null;
+      }
+    }
   }
   
   // Message Service - Sends and receives chat messages
@@ -146,7 +179,7 @@ class WebSocketService {
         maxTokens: parseInt(localStorage.getItem("maxTokens") || "500"),
         vision: localStorage.getItem("visionEnabled") === "true",
         detail: localStorage.getItem("visionDetail") || "auto",
-        thinking: localStorage.getItem("extendedThinking") === "true",
+        thinking: localStorage.getItem("thinkingEnabled") === "true",
         budget: parseInt(localStorage.getItem("thinkingBudget") || "16000")
       };
   
@@ -165,7 +198,29 @@ class WebSocketService {
         try {
           await this.wsService.send(payload);
           return true;
-        } catch (error) { /* Fall through to HTTP */ }
+        } catch (error) {
+          // Handle auth errors
+          if (error.message?.includes('auth') || error.status === 401) {
+            // Try to refresh token if possible
+            if (window.TokenManager?.refreshTokens) {
+              try {
+                await window.TokenManager.refreshTokens();
+                // Retry with new token
+                return this.sendMessage(content);
+              } catch (refreshError) {
+                // Token refresh failed, handle appropriately
+                console.error('Token refresh failed:', refreshError);
+                document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                  detail: { authenticated: false } 
+                }));
+                this.onError('Authentication failed. Please log in again.');
+                return false;
+              }
+            }
+          }
+          // Other errors
+          throw error;
+        }
       }
   
       // HTTP fallback
@@ -235,7 +290,191 @@ class WebSocketService {
       };
       if (data) options.body = JSON.stringify(data);
       const response = await fetch(endpoint, options);
-      if (!response.ok) throw new Error(`API error (${response.status})`);
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Handle 401 Unauthorized
+          if (window.TokenManager?.refreshTokens) {
+            try {
+              await window.TokenManager.refreshTokens();
+              // Retry the request
+              return this.sendMessage(content);
+            } catch (refreshError) {
+              // Token refresh failed, handle appropriately
+              console.error('Token refresh failed:', refreshError);
+              document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                detail: { authenticated: false } 
+              }));
+              this.onError('Authentication failed. Please log in again.');
+              return false;
+            }
+          }
+        }
+        throw new Error(`API error (${response.status})`);
+      }
+      return response.json();
+    }
+  }
+  
+  // Message Service - Sends and receives chat messages
+  class MessageService {
+    constructor(options = {}) {
+      this.onMessageReceived = options.onMessageReceived || (() => {});
+      this.onError = options.onError || console.error;
+      this.onSending = options.onSending || (() => {});
+      this.wsService = options.wsService || null;
+      this.currentChatId = null;
+      this.apiRequest = window.apiRequest || this._defaultApiRequest;
+    }
+  
+    initialize(chatId, wsService) {
+      this.currentChatId = chatId;
+      if (wsService) {
+        this.wsService = wsService;
+        this.wsService.onMessage = this._handleWebSocketMessage.bind(this);
+      }
+    }
+  
+    async sendMessage(content) {
+      if (!this.currentChatId) {
+        this.onError('No conversation ID available');
+        return false;
+      }
+      this.onSending(content);
+  
+      // Get model config from localStorage
+      const config = {
+        model: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
+        maxTokens: parseInt(localStorage.getItem("maxTokens") || "500"),
+        vision: localStorage.getItem("visionEnabled") === "true",
+        detail: localStorage.getItem("visionDetail") || "auto",
+        thinking: localStorage.getItem("thinkingEnabled") === "true",
+        budget: parseInt(localStorage.getItem("thinkingBudget") || "16000")
+      };
+  
+      const payload = {
+        content, role: 'user',
+        model_id: config.model,
+        max_tokens: config.maxTokens,
+        image_data: config.vision ? window.MODEL_CONFIG?.visionImage : null,
+        vision_detail: config.detail,
+        enable_thinking: config.thinking,
+        thinking_budget: config.budget
+      };
+  
+      // Try WebSocket first
+      if (this.wsService && this.wsService.isConnected()) {
+        try {
+          await this.wsService.send(payload);
+          return true;
+        } catch (error) {
+          // Handle auth errors
+          if (error.message?.includes('auth') || error.status === 401) {
+            // Try to refresh token if possible
+            if (window.TokenManager?.refreshTokens) {
+              try {
+                await window.TokenManager.refreshTokens();
+                // Retry with new token
+                return this.sendMessage(content);
+              } catch (refreshError) {
+                // Token refresh failed, handle appropriately
+                console.error('Token refresh failed:', refreshError);
+                document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                  detail: { authenticated: false } 
+                }));
+                this.onError('Authentication failed. Please log in again.');
+                return false;
+              }
+            }
+          }
+          // Other errors
+          throw error;
+        }
+      }
+  
+      // HTTP fallback
+      const projectId = localStorage.getItem("selectedProjectId");
+      const endpoint = projectId
+        ? `/api/projects/${projectId}/conversations/${this.currentChatId}/messages`
+        : `/api/chat/conversations/${this.currentChatId}/messages`;
+  
+      try {
+        const response = await this.apiRequest(endpoint, "POST", payload);
+        let message = null;
+  
+        if (response.data?.assistant_message) {
+          message = typeof response.data.assistant_message === 'string'
+            ? JSON.parse(response.data.assistant_message)
+            : response.data.assistant_message;
+        }
+  
+        if (message) {
+          const metadata = message.metadata || {};
+          this.onMessageReceived({
+            role: message.role,
+            content: message.content,
+            thinking: message.thinking,
+            redacted_thinking: message.redacted_thinking,
+            metadata: metadata
+          });
+          return true;
+        }
+        return false;
+      } catch (error) {
+        this.onError("Error sending message", error);
+        return false;
+      }
+    }
+  
+    _handleWebSocketMessage(event) {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'error') {
+          this.onError(data.message || 'WebSocket error');
+          return;
+        }
+  
+        if (data.role && data.content) {
+          const metadata = {};
+          if (data.used_knowledge_context) metadata.used_knowledge_context = true;
+  
+          this.onMessageReceived({
+            role: data.role,
+            content: data.content,
+            thinking: data.thinking,
+            redacted_thinking: data.redacted_thinking,
+            metadata: metadata
+          });
+        }
+      } catch (error) {
+        this.onError('Failed to parse WebSocket message', error);
+      }
+    }
+  
+    async _defaultApiRequest(endpoint, method = "GET", data = null) {
+      const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
+      if (data) options.body = JSON.stringify(data);
+      const response = await fetch(endpoint, options);
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Handle 401 Unauthorized
+          if (window.TokenManager?.refreshTokens) {
+            try {
+              await window.TokenManager.refreshTokens();
+              // Retry the request
+              return this.sendMessage(content);
+            } catch (refreshError) {
+              // Token refresh failed, handle appropriately
+              console.error('Token refresh failed:', refreshError);
+              document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                detail: { authenticated: false } 
+              }));
+              this.onError('Authentication failed. Please log in again.');
+              return false;
+            }
+          }
+        }
+        throw new Error(`API error (${response.status})`);
+      }
       return response.json();
     }
   }
@@ -247,7 +486,7 @@ class WebSocketService {
       this.onError = options.onError || console.error;
       this.onLoadingStart = options.onLoadingStart || (() => {});
       this.onLoadingEnd = options.onLoadingEnd || (() => {});
-      this.showNotification = options.showNotification || console.log;
+      this.showNotification = options.showNotification || window.showNotification || console.log;
       this.apiRequest = window.apiRequest || this._defaultApiRequest;
       this.currentConversation = null;
     }
@@ -334,7 +573,24 @@ class WebSocketService {
       if (data) options.body = JSON.stringify(data);
       const response = await fetch(endpoint, options);
       if (!response.ok) {
-        if (response.status === 404) throw new Error('Resource not found');
+        if (response.status === 401) {
+          // Handle 401 Unauthorized
+          if (window.TokenManager?.refreshTokens) {
+            try {
+              await window.TokenManager.refreshTokens();
+              // Retry the request
+              return this.sendMessage(content);
+            } catch (refreshError) {
+              // Token refresh failed, handle appropriately
+              console.error('Token refresh failed:', refreshError);
+              document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                detail: { authenticated: false } 
+              }));
+              this.onError('Authentication failed. Please log in again.');
+              return false;
+            }
+          }
+        }
         throw new Error(`API error (${response.status})`);
       }
       return response.json();
@@ -375,8 +631,12 @@ class WebSocketService {
           messages.forEach(msg => {
             const metadata = msg.metadata || {};
             this.appendMessage(
-              msg.role, msg.content, null, metadata.thinking,
-              metadata.redacted_thinking, metadata
+              msg.role,
+              msg.content,
+              null,
+              metadata.thinking,
+              metadata.redacted_thinking,
+              metadata
             );
           });
         },
@@ -761,7 +1021,24 @@ class WebSocketService {
       if (data) options.body = JSON.stringify(data);
       const response = await fetch(endpoint, options);
       if (!response.ok) {
-        if (response.status === 404) throw new Error('Resource not found');
+        if (response.status === 401) {
+          // Handle 401 Unauthorized
+          if (window.TokenManager?.refreshTokens) {
+            try {
+              await window.TokenManager.refreshTokens();
+              // Retry the request
+              return this.sendMessage(content);
+            } catch (refreshError) {
+              // Token refresh failed, handle appropriately
+              console.error('Token refresh failed:', refreshError);
+              document.dispatchEvent(new CustomEvent('authStateChanged', { 
+                detail: { authenticated: false } 
+              }));
+              this.onError('Authentication failed. Please log in again.');
+              return false;
+            }
+          }
+        }
         throw new Error(`API error (${response.status})`);
       }
       return response.json();
@@ -899,4 +1176,3 @@ class WebSocketService {
   window.setupWebSocket = setupWebSocket;
   window.testWebSocketConnection = testWebSocketConnection;
   window.initializeChat = initializeChat;
-  
