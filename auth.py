@@ -196,8 +196,8 @@ async def login_user(
     )
 
     secure_cookie = settings.ENV == "production"
-    # In production, use 'strict' for better security; otherwise 'lax' for development ease
-    samesite_value = "strict" if secure_cookie else "lax"
+    # In development, use 'none' to allow cross-origin cookies
+    samesite_value = "strict" if secure_cookie else "none"
 
     cookie_params = {
         "key": "access_token",

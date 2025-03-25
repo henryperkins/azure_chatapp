@@ -172,11 +172,16 @@ function clearTokenTimers() {
 async function refreshTokenIfActive() {
   if (document.visibilityState !== "visible") return;
   try {
-    await api('/api/auth/refresh', 'POST');
-    console.log('Token refreshed');
+    const response = await api('/api/auth/refresh', 'POST');
+    if (!response?.access_token) {
+      throw new Error('No token in refresh response');
+    }
+    console.log('Token refreshed successfully');
+    return true;
   } catch (e) {
-    console.warn('Token refresh failed:', e);
+    console.error('Token refresh failed:', e);
     logout();
+    return false;
   }
 }
 

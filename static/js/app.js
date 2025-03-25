@@ -136,8 +136,12 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
 
   const options = {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include'
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    credentials: 'include',
+    mode: 'cors'
   };
 
   if (data) {
