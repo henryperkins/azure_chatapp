@@ -6,12 +6,14 @@
  */
 
 // Main Dashboard Controller
-const ProjectDashboard = {
-  components: {},
-  state: {
-    currentView: null, // 'list' or 'details'
-    currentProject: null
-  },
+class ProjectDashboard {
+  constructor() {
+    this.components = {};
+    this.state = {
+      currentView: null, // 'list' or 'details' 
+      currentProject: null
+    };
+  }
 
   // Initialize the dashboard
   init() {
@@ -342,9 +344,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize after a small delay to ensure all components are loaded
   setTimeout(() => {
     if (window.ProjectDashboard) {
-      window.ProjectDashboard.init();
+      const dashboard = new window.ProjectDashboard();
+      dashboard.init();
     } else {
-      console.error("ProjectDashboard not found");
+      console.error("ProjectDashboard class not found");
     }
   }, 100);
 });
+
+// Export the module
+window.ProjectDashboard = ProjectDashboard;
