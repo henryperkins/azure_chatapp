@@ -81,25 +81,6 @@ class FileValidator:
         }
 
     @classmethod
-    def sanitize_filename(cls, filename: str) -> str:
-        """
-        Sanitize filename to prevent path traversal and special chars.
-        Appends short UUID to prevent collisions.
-        """
-        # Remove directory path attempts
-        filename = os.path.basename(filename)
-        
-        # Replace special chars
-        filename = re.sub(r'[^\w\-_.]', '_', filename)
-        
-        # Shorten if too long
-        if len(filename) > 100:
-            name, ext = os.path.splitext(filename)
-            filename = f"{name[:50]}{ext}"
-            
-        return filename
-
-    @classmethod
     def get_allowed_extensions_list(cls) -> List[str]:
         """Get list of allowed extensions with dots"""
         return list(cls.ALLOWED_EXTENSIONS.keys())
@@ -109,34 +90,43 @@ class FileValidator:
         """Get max file size in MB"""
         return cls.MAX_FILE_SIZE / (1024 * 1024)
 
-    @classmethod
-    def validate_upload_file(cls, file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
-        """
-        Comprehensive validation for uploaded files.
-        Returns file info dict or raises ValueError.
-        """
-        filename = getattr(file, "filename", "untitled")
-        file_size = getattr(file, "size", None)
-        
-        # Validate extension
-        if not cls.validate_extension(filename):
-            raise ValueError(f"File type not allowed. Supported: {', '.join(cls.get_allowed_extensions_list())}")
-            
-        # Get file info
-        file_info = cls.get_file_info(filename)
-        
-        # Validate size if known
-        if file_size is not None and not cls.validate_size(file_size):
-            raise ValueError(f"File too large (max {cls.get_max_file_size_mb()}MB)")
-            
-        return file_info
+def validate_file_size(file_size: int) -> bool:
+    """Validate file size is within limits."""
+    return file_size <= FileValidator.MAX_FILE_SIZE
 
-    @classmethod
-    def get_allowed_extensions_list(cls) -> List[str]:
-        """Get list of allowed extensions with dots"""
-        return list(cls.ALLOWED_EXTENSIONS.keys())
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename to prevent path traversal and special chars.
+    Appends short UUID to prevent collisions.
+    """
+    # Remove directory path attempts
+    filename = os.path.basename(filename)
+    
+    # Replace special chars
+    filename = re.sub(r'[^\w\-_.]', '_', filename)
+    
+    # Shorten if too long
+    if len(filename) > 100:
+        name, ext = os.path.splitext(filename)
+        filename = f"{name[:50]}{ext}"
+        
+    return filename
 
-    @classmethod 
-    def get_max_file_size_mb(cls) -> float:
-        """Get max file size in MB"""
+def validate_upload_file(file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
+    """
+    Comprehensive validation for uploaded files.
+    Returns file info dict or raises ValueError.
+    """
+    filename = getattr(file, "filename", "untitled")
+    file_size = getattr(file, "size", None)
+    
+    if not FileValidator.validate_extension(filename):
+        raise ValueError(f"File type not allowed. Supported: {', '.join(FileValidator.get_allowed_extensions_list())}")
+        
+    file_info = FileValidator.get_file_info(filename)
+    
+    if file_size is not None and not validate_file_size(file_size):
+        raise ValueError(f"File too large (max {FileValidator.get_max_file_size_mb()}MB)")
+        
+    return file_info
         return cls.MAX_FILE_SIZE / (1024 * 1024)
