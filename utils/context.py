@@ -138,3 +138,16 @@ def estimate_token_count(messages: List[Dict[str, str]]) -> int:
     """
     encoder = tiktoken.encoding_for_model("gpt-4")
     return sum(len(encoder.encode(msg["content"])) for msg in messages)
+
+async def estimate_tokens(text: str) -> int:
+    """Estimate token count for text using tiktoken if available"""
+    if not text:
+        return 0
+        
+    if TIKTOKEN_AVAILABLE:
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+            return len(encoding.encode(text))
+        except Exception:
+            return len(text) // 4  # Fallback
+    return len(text) // 4  # Default fallback
