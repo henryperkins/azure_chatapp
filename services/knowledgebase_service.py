@@ -432,13 +432,20 @@ async def upload_file_to_project(
         if not file_content and file_info["file_size"] > STREAM_THRESHOLD:
             file_content = await file.read()  # for large file streaming fallback
 
-        search_results = await process_file_for_search(
-            project_file=project_file,
-            vector_db=vector_db,
-            file_content=file_content,
-            chunk_size=DEFAULT_CHUNK_SIZE,
-            chunk_overlap=DEFAULT_CHUNK_OVERLAP
-        )
+        # Check if file was previously indexed
+        existing_chunks = 0
+        if project_file.metadata and 'search_processing' in project_file.metadata:
+            existing_chunks = project_file.metadata['search_processing'].get('chunk_count', 0)
+        
+        # Only process if new or changed
+        if existing_chunks == 0 or force_reindex:
+            search_results = await process_file_for_search(
+                project_file=project_file,
+                vector_db=vector_db,
+                file_content=file_content,
+                chunk_size=DEFAULT_CHUNK_SIZE,
+                chunk_overlap=DEFAULT_CHUNK_OVERLAP
+            )
 
         if search_results.get("success"):
             # Save chunk indexing info into file metadata

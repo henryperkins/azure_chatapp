@@ -135,10 +135,16 @@ class FileStorage:
         if self.storage_type == "local":
             file_path = os.path.join(self.local_path, storage_filename)
             
-            # Write the file
+            # Write the file with checksum validation
             with open(file_path, "wb") as f:
                 if isinstance(file_content, bytes):
                     f.write(file_content)
+                    # Verify write integrity
+                    f.flush()
+                    with open(file_path, "rb") as verify_f:
+                        written = verify_f.read()
+                        if written != file_content:
+                            raise IOError("File write verification failed")
                 else:
                     # If it's already been read for the hash, use the cached content
                     if content_to_save:
