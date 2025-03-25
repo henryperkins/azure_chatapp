@@ -171,15 +171,29 @@ function clearTokenTimers() {
 
 async function refreshTokenIfActive() {
   if (document.visibilityState !== "visible") return;
+  
   try {
+    console.log('Attempting token refresh...');
     const response = await api('/api/auth/refresh', 'POST');
+    
     if (!response?.access_token) {
-      throw new Error('No token in refresh response');
+      throw new Error('No access token in refresh response');
     }
-    console.log('Token refreshed successfully');
+
+    console.log('Token refresh successful');
     return true;
-  } catch (e) {
-    console.error('Token refresh failed:', e);
+    
+  } catch (error) {
+    console.error('Token refresh failed:', error);
+    
+    // Special handling for 401 - don't logout immediately
+    if (error.message.includes('401')) {
+      console.warn('Refresh token invalid, attempting full reauthentication');
+      await updateAuthStatus();
+      return false;
+    }
+    
+    // For other errors, logout completely
     logout();
     return false;
   }

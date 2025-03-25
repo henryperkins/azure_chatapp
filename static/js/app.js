@@ -138,10 +138,13 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     method,
     headers: { 
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
     },
     credentials: 'include',
-    mode: 'cors'
+    mode: 'cors',
+    cache: 'no-store'
   };
 
   if (data) {
@@ -157,13 +160,24 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
 
     if (response.status === 401 || response.status === 403) {
       if (retryCount < maxRetries) {
+        console.log(`Auth error (${response.status}), attempting refresh (attempt ${retryCount + 1})`);
         try {
-          await fetch('/api/auth/refresh', {
+          const refreshResponse = await fetch('/api/auth/refresh', {
             method: 'POST',
-            credentials: 'include'
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
           });
+          
+          if (!refreshResponse.ok) {
+            throw new Error(`Refresh failed with status ${refreshResponse.status}`);
+          }
+          
           return apiRequest(url, method, data, retryCount + 1);
         } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
           document.dispatchEvent(new CustomEvent("authStateChanged", {
             detail: { authenticated: false }
           }));
