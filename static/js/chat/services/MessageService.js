@@ -22,18 +22,26 @@ export default class MessageService {
     }
   }
 
-  async sendMessage(message, options = {}) {
-    const chatId = options.chatId || this.currentChatId;
-    if (!chatId) {
-      this.onError('No chat ID available for sending message');
+  async sendMessage({ conversationId, content, modelConfig }) {
+    if (!conversationId) {
+      this.onError('No conversation ID available for sending message');
       return false;
     }
 
     // Notify that message is being sent
-    this.onSending(message);
+    this.onSending(content);
 
-    // Prepare message payload with model settings
-    const payload = this._prepareMessagePayload(message, options);
+    // Prepare message payload
+    const payload = {
+      content,
+      role: 'user',
+      model_id: modelConfig.modelName,
+      max_tokens: modelConfig.maxTokens,
+      image_data: modelConfig.visionEnabled ? window.MODEL_CONFIG?.visionImage : null,
+      vision_detail: modelConfig.visionDetail,
+      enable_thinking: modelConfig.extendedThinking,
+      thinking_budget: modelConfig.thinkingBudget
+    };
 
     // Try WebSocket first, fall back to HTTP
     if (this.wsService && this.wsService.send(payload)) {

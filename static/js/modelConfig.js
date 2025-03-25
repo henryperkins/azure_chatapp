@@ -255,6 +255,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     updateModelConfigDisplay();
+    
+    // Dispatch config change event
+    const event = new CustomEvent('modelConfigChanged', {
+      detail: {
+        modelName: localStorage.getItem('modelName'),
+        maxTokens: localStorage.getItem('maxTokens'),
+        visionEnabled: localStorage.getItem('visionEnabled'),
+        visionDetail: localStorage.getItem('visionDetail'),
+        extendedThinking: localStorage.getItem('extendedThinking'),
+        thinkingBudget: localStorage.getItem('thinkingBudget')
+      }
+    });
+    document.dispatchEvent(event);
   }
   
   function updateModelConfigDisplay() {
