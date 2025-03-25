@@ -47,14 +47,6 @@ except ImportError:
 
 from utils.file_validation import FileValidator
 
-# Reuse file type mapping from FileValidator
-FILE_TYPE_MAP = {
-    ext[1:]: {  # Remove leading dot
-        "mimetype": mimetypes.guess_type(f"file{ext}")[0] or "application/octet-stream",
-        "category": category
-    }
-    for ext, category in FileValidator.ALLOWED_EXTENSIONS.items()
-}
 
 class TextExtractionError(Exception):
     """Exception raised for errors during text extraction."""
@@ -83,39 +75,7 @@ class TextExtractor:
         Returns:
             Dictionary with mimetype, category, and extension
         """
-        _, ext = os.path.splitext(filename.lower())
-        ext = ext[1:] if ext.startswith('.') else ext
-        
-        if ext in FILE_TYPE_MAP:
-            info = FILE_TYPE_MAP[ext].copy()
-            info['extension'] = ext
-            return info
-        
-        # Use mimetypes as fallback
-        mimetype, _ = mimetypes.guess_type(filename)
-        if not mimetype:
-            # Default to plain text
-            mimetype = "text/plain"
-            category = "text"
-        else:
-            # Determine category based on mimetype
-            if mimetype.startswith("text/"):
-                category = "text"
-            elif mimetype.startswith("application/"):
-                if any(keyword in mimetype for keyword in ["pdf", "word", "document"]):
-                    category = "document"
-                elif any(keyword in mimetype for keyword in ["json", "xml"]):
-                    category = "data"
-                else:
-                    category = "unknown"
-            else:
-                category = "unknown"
-                
-        return {
-            "mimetype": mimetype,
-            "category": category,
-            "extension": ext
-        }
+        return FileValidator.get_file_info(filename)
 
     def _count_tokens(self, text: str) -> int:
         """Counts tokens using tiktoken if available, otherwise estimates."""
