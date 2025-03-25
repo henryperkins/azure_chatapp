@@ -6,6 +6,7 @@ Provides endpoints for creating, retrieving, updating and deleting conversations
 and their messages that belong to a specific project.
 """
 
+import json
 import logging
 from uuid import UUID
 from typing import Optional
@@ -387,9 +388,9 @@ async def project_websocket_chat_endpoint(
             await websocket.accept()
 
             while True:
-                data = await websocket.receive_text()
+                raw_data = await websocket.receive_text()
                 try:
-                    data_dict = json.loads(data)
+                    data_dict = json.loads(raw_data)
                 except json.JSONDecodeError:
                     data_dict = {"content": data, "role": "user"}
 

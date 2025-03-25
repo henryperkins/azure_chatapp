@@ -17,6 +17,15 @@ export default class ChatInterface {
     this.chatTitleSelector = options.chatTitleSelector || '#chatTitle';
     this.notificationFunction = options.showNotification || window.showNotification || console.log;
     
+    this.currentModelConfig = {
+      modelName: localStorage.getItem('modelName') || 'claude-3-sonnet-20240229',
+      maxTokens: parseInt(localStorage.getItem('maxTokens')) || 500,
+      visionEnabled: localStorage.getItem('visionEnabled') === 'true',
+      visionDetail: localStorage.getItem('visionDetail') || 'auto',
+      extendedThinking: localStorage.getItem('extendedThinking') === 'true',
+      thinkingBudget: parseInt(localStorage.getItem('thinkingBudget')) || 16000
+    };
+    
     this.container = document.querySelector(this.containerSelector);
     this.conversationArea = document.querySelector(this.conversationAreaSelector);
     this.chatTitle = document.querySelector(this.chatTitleSelector);
