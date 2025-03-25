@@ -10,7 +10,8 @@ Centralized file validation utilities including:
 import os
 import re
 import logging
-from typing import Optional, Dict, Any, BinaryIO, Union
+from typing import Optional, Dict, Any, BinaryIO, Union, List
+from fastapi import UploadFile
 import mimetypes
 from config import settings
 
