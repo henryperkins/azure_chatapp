@@ -7,10 +7,9 @@ HTTP and WebSocket connections.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Tuple  # Removed unused List import - Fixed Flake8 styling
+from typing import Optional, Dict, Any, Tuple
 from urllib.parse import unquote
 
-# import jwt # Removed unused import
 from jwt import encode, decode
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, WebSocket, status, Depends
@@ -57,7 +56,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
             "alg": JWT_ALGORITHM
         }
     )
-    logger.debug(f"Access token created for user: {data.get('sub')}, expires in {expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)}, jti: {data.get('jti')}")  # ADDED DEBUG LOG - Fixed Flake8 styling
+    logger.debug(f"Access token created for user: {data.get('sub')}, expires in {expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)}, jti: {data.get('jti')}")
     return encoded_jwt
 
 
@@ -81,13 +80,13 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
 
         # Validate token type if specified
         if expected_type and decoded.get("type") != expected_type:
-            logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}. Token type: {decoded.get('type')}, Expected type: {expected_type}")  # Enhanced logging for type mismatch - Fixed Flake8 styling
+            logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}. Token type: {decoded.get('type')}, Expected type: {expected_type}")
             raise HTTPException(status_code=401, detail="Invalid token type")
 
         # Check if token is revoked in memory for quick check
         token_id = decoded.get("jti")
         if token_id in REVOCATION_LIST:
-            logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")  # Enhanced logging for revocation - Fixed Flake8 styling
+            logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
             raise HTTPException(status_code=401, detail="Token is revoked")
 
         # Check if token is in database blacklist (persistent across restarts)
@@ -98,7 +97,7 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
             if blacklisted:
                 # Add to in-memory list for future quick checks
                 REVOCATION_LIST.add(token_id)
-                logger.warning(f"Token ID '{token_id}' is revoked (database)")  # Enhanced logging for db revocation - Fixed Flake8 styling
+                logger.warning(f"Token ID '{token_id}' is revoked (database)")
                 raise HTTPException(status_code=401, detail="Token is revoked")
 
         # Check token version if available
@@ -109,10 +108,10 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
             result = await db.execute(query)
             user = result.scalar_one_or_none()
             if user and (user.token_version is None or token_version < user.token_version):
-                logger.warning(f"Token for user '{username}' has outdated version. Token version: {token_version}, User version: {user.token_version}")  # Enhanced logging for outdated version - Fixed Flake8 styling
+                logger.warning(f"Token for user '{username}' has outdated version. Token version: {token_version}, User version: {user.token_version}")
                 raise HTTPException(status_code=401, detail="Token has been invalidated")
 
-        logger.debug(f"Token verification successful for jti: {token_id}, user: {username}")  # ADDED DEBUG LOG for success - Fixed Flake8 styling
+        logger.debug(f"Token verification successful for jti: {token_id}, user: {username}")
         return decoded
 
     except ExpiredSignatureError:
@@ -189,40 +188,35 @@ async def load_revocation_list(db: AsyncSession) -> None:
     logger.info(f"Loaded {len(token_ids)} active blacklisted tokens into memory")
 
 
-# In auth_utils.py - merge token extraction functions
-def extract_token_from_request(request: Union[Request, WebSocket]) -> Optional[str]:
-    """Extract JWT token from HTTP request or WebSocket connection."""
-    # Is this a WebSocket connection?
-    is_websocket = hasattr(request, 'query_params') and not hasattr(request, 'cookies')
+def extract_token(request_or_websocket):
+    """Extract token from HTTP request or WebSocket connection."""
+    token = None
     
-    # Try cookies first (handle different request types)
+    # Check if it's a WebSocket
+    is_websocket = hasattr(request_or_websocket, 'query_params') and not hasattr(request_or_websocket, 'cookies')
+    
+    # Try cookies first
     if is_websocket:
-        cookie_header = request.headers.get("cookie", "")
-        cookies = {}
-        try:
-            for cookie in cookie_header.split("; "):
-                if "=" not in cookie:
-                    continue
-                key, value = cookie.split("=", 1)
-                cookies[key.strip().lower()] = unquote(value.strip())
-            token = cookies.get("access_token")
-        except Exception as e:
-            logger.error(f"Error parsing cookies: {str(e)}")
-            token = None
+        cookie_header = request_or_websocket.headers.get("cookie", "")
+        if cookie_header:
+            for cookie in cookie_header.split(";"):
+                parts = cookie.strip().split("=", 1)
+                if len(parts) == 2 and parts[0].strip() == "access_token":
+                    token = parts[1].strip()
+                    break
     else:
-        token = request.cookies.get("access_token")
+        # Regular request
+        token = request_or_websocket.cookies.get("access_token")
     
-    # If no token in cookies, try authorization header
+    # Try authorization header if no token in cookies
     if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header:
-            parts = auth_header.split()
-            if len(parts) == 2 and parts[0].lower() == "bearer":
-                token = parts[1]
+        auth_header = request_or_websocket.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove "Bearer " prefix
     
-    # Last resort for WebSocket: check query params
-    if not token and is_websocket and "token" in request.query_params:
-        token = request.query_params["token"]
+    # Try query params for WebSocket
+    if not token and is_websocket:
+        token = request_or_websocket.query_params.get("token")
     
     return token
 
@@ -292,7 +286,7 @@ async def get_current_user_and_token(
         HTTPException: For authentication failures
     """
     # Extract token from request
-    token = extract_token_from_request(request)
+    token = extract_token(request)
 
     if not token:
         raise HTTPException(
@@ -322,12 +316,12 @@ async def authenticate_websocket(
         Tuple of (success, user)
     """
     # Get token BEFORE accepting WebSocket
-    token = await extract_token_from_websocket(websocket)
+    token = extract_token(websocket)
 
     if not token:
         logger.warning("WebSocket connection rejected: No token provided")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)  # ADDED DEBUG LOG - Fixed Flake8 styling
+        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
         return False, None
 
     # Validate token and get user
