@@ -129,4 +129,3 @@ def validate_upload_file(file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
         raise ValueError(f"File too large (max {FileValidator.get_max_file_size_mb()}MB)")
         
     return file_info
-        return cls.MAX_FILE_SIZE / (1024 * 1024)
