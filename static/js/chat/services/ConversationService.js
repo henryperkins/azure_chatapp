@@ -19,9 +19,17 @@ export default class ConversationService {
         this.onError('Invalid conversation ID');
         return false;
       }
-  
+    
+      // More strict authentication check
+      if (!this._isAuthenticatedStrict()) {
+        console.warn("Authentication required to load conversation");
+        this.showNotification("Please log in to access conversations", "error");
+        this.onError('Authentication required', new Error('Authentication required'));
+        return false;
+      }
+    
       this.onLoadingStart();
-  
+    
       try {
         const conversationData = await this._fetchConversation(chatId);
         const messagesData = await this._fetchMessages(chatId);
@@ -41,6 +49,13 @@ export default class ConversationService {
         if (error.message === 'Resource not found') {
           console.warn("Conversation not found:", chatId);
           this.showNotification("This conversation could not be found or is inaccessible. Try creating a new one.", "error");
+        } else if (error.message.includes('Authentication required') || error.message.includes('401') || error.message.includes('403')) {
+          console.warn("Authentication required to access conversation:", chatId);
+          this.showNotification("Please log in to access this conversation", "error");
+          // Clear any invalid auth state
+          if (window.TokenManager?.clearTokens) {
+            window.TokenManager.clearTokens();
+          }
         } else {
           console.error("Error loading conversation:", error);
           this.showNotification("Error loading conversation", "error");
@@ -50,6 +65,45 @@ export default class ConversationService {
         this.onError('Failed to load conversation', error);
         return false;
       }
+    }
+    // Add this method before _isAuthenticatedStrict()
+    _isAuthenticated() {
+      // Check multiple possible authentication indicators
+      const hasAuthState = sessionStorage.getItem('auth_state') !== null;
+      const hasUserInfo = sessionStorage.getItem('userInfo') !== null;
+      const isAuthenticated = window.API_CONFIG?.isAuthenticated === true;
+      const hasTokens = window.TokenManager?.accessToken !== null;
+      
+      // Return true if any authentication indicator is present
+      return hasAuthState || hasUserInfo || isAuthenticated || hasTokens;
+    }
+    // Add a stricter authentication check
+    _isAuthenticatedStrict() {
+      // First try the existing check
+      const basicAuth = this._isAuthenticated();
+      
+      if (!basicAuth) return false;
+      
+      // For stricter checking, require both auth state and tokens
+      const hasAuthState = sessionStorage.getItem('auth_state') !== null;
+      const hasUserInfo = sessionStorage.getItem('userInfo') !== null;
+      const hasTokens = window.TokenManager?.accessToken !== null;
+      
+      // Check token expiration if possible
+      let isExpired = false;
+      try {
+        const authState = JSON.parse(sessionStorage.getItem('auth_state') || '{}');
+        const timestamp = authState.timestamp || 0;
+        const now = Date.now();
+        // Consider expired if token is more than 30 minutes old
+        isExpired = (now - timestamp) > 30 * 60 * 1000;
+      } catch (e) {
+        console.warn("Error checking token expiration:", e);
+        isExpired = true;
+      }
+      
+      // Return true only if we have all authentication indicators and token isn't expired
+      return hasAuthState && hasUserInfo && hasTokens && !isExpired;
     }
   
     async createNewConversation(options = {}) {
@@ -106,18 +160,26 @@ export default class ConversationService {
     }
   
     async _fetchConversation(chatId) {
-      const projectId = localStorage.getItem("selectedProjectId");
-      const conversationEndpoint = projectId
-        ? `/api/projects/${projectId}/conversations/${chatId}`
-        : `/api/chat/conversations/${chatId}`;
+      try {
+        const projectId = localStorage.getItem("selectedProjectId");
+        const conversationEndpoint = projectId
+          ? `/api/projects/${projectId}/conversations/${chatId}`
+          : `/api/chat/conversations/${chatId}`;
         
-      const response = await this.apiRequest(conversationEndpoint);
-      
-      // Handle different response formats
-      if (response.data) {
-        return response.data;
-      } else {
-        return response;
+        const response = await this.apiRequest(conversationEndpoint);
+        
+        // Handle different response formats
+        if (response.data) {
+          return response.data;
+        } else {
+          return response;
+        }
+      } catch (error) {
+        // Enhance error handling
+        if (error.message.includes('401') || error.message.includes('403')) {
+          throw new Error('Authentication required');
+        }
+        throw error;
       }
     }
   

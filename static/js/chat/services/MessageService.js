@@ -19,6 +19,9 @@ export default class MessageService {
     if (wsService) {
       this.wsService = wsService;
       this.wsService.onMessage = this._handleWebSocketMessage.bind(this);
+      console.log(`MessageService initialized with WebSocket for chat: ${chatId}`);
+    } else {
+      console.log(`MessageService initialized with HTTP fallback for chat: ${chatId}`);
     }
   }
 
@@ -41,21 +44,21 @@ export default class MessageService {
       thinking_budget: modelConfig.thinkingBudget
     };
 
-    // Try WebSocket first
-    if (this.wsService) {
+    // WebSocket attempt with proper fallback
+    if (this.wsService && this.wsService.isConnected()) {
       try {
-        const sent = await this.wsService.send(payload).catch(error => {
-          console.warn('WebSocket send failed:', error);
-          return false;
-        });
-        
-        if (sent) return true;
+        await this.wsService.send(payload);
+        console.log("Message sent successfully via WebSocket");
+        return true;
       } catch (error) {
-        console.warn('WebSocket error:', error);
+        console.warn('WebSocket send failed, falling back to HTTP:', error);
+        // Continue to HTTP fallback below
       }
+    } else if (this.wsService) {
+      console.warn('WebSocket available but not connected. Using HTTP fallback.');
     }
 
-    // Fall back to HTTP
+    // HTTP fallback
     return this._sendMessageViaHttp(conversationId, payload);
   }
 
