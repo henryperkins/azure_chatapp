@@ -31,9 +31,6 @@ router = APIRouter()
 
 from utils.file_validation import FileValidator
 
-# Reuse constants from FileValidator
-MAX_FILE_BYTES = FileValidator.MAX_FILE_SIZE
-ALLOWED_FILE_EXTENSIONS = FileValidator.ALLOWED_EXTENSIONS.keys()
 
 
 # ============================
@@ -117,8 +114,8 @@ async def upload_project_file(
         )
         
         # Validate file extension
-        if not validate_file_extension(file.filename):
-            error_msg = f"File type not allowed. Supported: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
+        if not FileValidator.validate_extension(file.filename):
+            error_msg = f"File type not allowed. Supported: {', '.join(FileValidator.get_allowed_extensions_list())}"
             logger.error(f"File extension validation failed: {error_msg}")
             raise HTTPException(status_code=400, detail=error_msg)
         

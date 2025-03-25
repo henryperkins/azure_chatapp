@@ -99,6 +99,16 @@ class FileValidator:
         return filename
 
     @classmethod
+    def get_allowed_extensions_list(cls) -> List[str]:
+        """Get list of allowed extensions with dots"""
+        return list(cls.ALLOWED_EXTENSIONS.keys())
+
+    @classmethod 
+    def get_max_file_size_mb(cls) -> float:
+        """Get max file size in MB"""
+        return cls.MAX_FILE_SIZE / (1024 * 1024)
+
+    @classmethod
     def validate_upload_file(cls, file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
         """
         Comprehensive validation for uploaded files.
