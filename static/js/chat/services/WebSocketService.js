@@ -36,21 +36,36 @@ export default class WebSocketService {
   }
 
   send(message) {
-    // If WebSocket is open, use it
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(message));
-      return true;
-    }
-    
-    // If we've set the HTTP fallback flag, don't show an error
-    if (this.useHttpFallback) {
-      console.log("Using HTTP fallback instead of WebSocket");
-      return false; // Return false to trigger HTTP fallback in MessageService
-    }
-    
-    // Otherwise, show an error
-    this.onError('WebSocket not open.');
-    return false;
+    return new Promise((resolve, reject) => {
+      // If already connected and ready, send immediately
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        try {
+          this.socket.send(JSON.stringify(message));
+          resolve(true);
+        } catch (error) {
+          reject(error);
+        }
+        return;
+      }
+
+      // If connecting, wait for connection
+      if (this.socket?.readyState === WebSocket.CONNECTING) {
+        const onOpen = () => {
+          try {
+            this.socket.send(JSON.stringify(message));
+            resolve(true);
+          } catch (error) {
+            reject(error);
+          }
+          this.socket.removeEventListener('open', onOpen);
+        };
+        this.socket.addEventListener('open', onOpen);
+        return;
+      }
+
+      // If not connected at all, reject
+      reject(new Error('WebSocket not connected'));
+    });
   }
 
   disconnect() {
