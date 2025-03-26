@@ -5,6 +5,8 @@ Service for handling file storage operations with both local and cloud options.
 Provides abstraction layer between storage mechanisms and application logic.
 """
 
+from config import settings
+
 def format_bytes(size: int) -> str:
     """Format bytes to human-readable string (matches frontend exactly)
     
@@ -365,14 +367,14 @@ class FileStorage:
 async def get_storage_config() -> Dict[str, Any]:
     """Get standardized storage configuration from settings"""
     return {
-        "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-        "azure_connection_string": getattr(config, "AZURE_STORAGE_CONNECTION_STRING", None),
-        "azure_container_name": getattr(config, "AZURE_STORAGE_CONTAINER", None),
-        "aws_access_key": getattr(config, "AWS_ACCESS_KEY", None),
-        "aws_secret_key": getattr(config, "AWS_SECRET_KEY", None),
-        "aws_bucket_name": getattr(config, "AWS_BUCKET_NAME", None),
-        "aws_region": getattr(config, "AWS_REGION", None)
+        "storage_type": getattr(settings, "FILE_STORAGE_TYPE", "local"),
+        "local_path": getattr(settings, "LOCAL_UPLOADS_DIR", "./uploads"),
+        "azure_connection_string": getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None),
+        "azure_container_name": getattr(settings, "AZURE_STORAGE_CONTAINER", None),
+        "aws_access_key": getattr(settings, "AWS_ACCESS_KEY", None),
+        "aws_secret_key": getattr(settings, "AWS_SECRET_KEY", None),
+        "aws_bucket_name": getattr(settings, "AWS_BUCKET_NAME", None),
+        "aws_region": getattr(settings, "AWS_REGION", None)
     }
 
 # Factory function to create a FileStorage instance based on configuration
