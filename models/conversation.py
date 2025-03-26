@@ -56,17 +56,18 @@ class Conversation(Base):
         return f"<Conversation {self.id} (User #{self.user_id}) title={self.title}>"
 
     async def validate_knowledge_base(self, db: AsyncSession) -> None:
-        """Validate KB is properly configured for this conversation"""
-        if not self.use_knowledge_base:
-            return
+        """Validate KB usage is properly configured"""
+        if self.use_knowledge_base and not self.project_id:
+            raise ValueError("Knowledge base can only be used with project-associated conversations")
             
-        if not self.project_id:
-            raise ValueError("Conversation must belong to project to use KB")
-        
-        project = await db.get(Project, self.project_id)
-        if not project or not project.knowledge_base_id:
-            raise ValueError("Project has no knowledge base")
-        
-        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
-        if not kb or not kb.is_active:
-            raise ValueError("Knowledge base is not active")
+        if self.use_knowledge_base:
+            if not self.project_id:
+                raise ValueError("Conversation must belong to project to use KB")
+            
+            project = await db.get(Project, self.project_id)
+            if not project or not project.knowledge_base_id:
+                raise ValueError("Project has no knowledge base configured")
+            
+            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+            if not kb or not kb.is_active:
+                raise ValueError("Project's knowledge base is not active")

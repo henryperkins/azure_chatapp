@@ -34,9 +34,11 @@ async def augment_with_knowledge(
     Returns:
         List of message dicts with injected knowledge context
     """
-    # Get conversation and check if KB enabled
     conversation = await db.get(Conversation, conversation_id)
-    if not conversation or not conversation.use_knowledge_base:
+    if not conversation or not conversation.project_id:
+        return []  # No KB for standalone conversations
+
+    if not conversation.use_knowledge_base:
         return []
 
     # Get project ID from conversation
