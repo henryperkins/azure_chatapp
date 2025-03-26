@@ -133,7 +133,14 @@ async def list_projects(
     serialized_projects = [serialize_project(project) for project in projects]
     
     # Return standardized response format
-    return await create_standard_response(serialized_projects)
+    return await create_standard_response({
+        "projects": serialized_projects,
+        "count": len(serialized_projects),
+        "filter": {
+            "archived": archived,
+            "pinned": pinned
+        }
+    })
 
 
 @router.get("/{project_id}/", response_model=Dict)
