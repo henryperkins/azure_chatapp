@@ -579,14 +579,14 @@
     window.CHAT_CONFIG = {
       chatId: new URLSearchParams(window.location.search).get('chatId') || ""
     };
-    window.BACKEND_HOST = 'localhost:8000'; // Default, can be overridden
+    window.BACKEND_HOST = window.location.host; // Use same host as frontend
     window.ENV = 'development'; // Matches config.py default
   </script>
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/sidebar.js"></script>
   <script src="/static/js/formatting.js"></script>
   <script src="/static/js/modelConfig.js"></script>
-  <script src="/static/js/projectDashboard.js"></script>
+  <script src="/static/js/projectDashboard.js" type="module"></script>
   <script src="/static/js/app.js" type="module"></script>
   <script src="/static/js/projectManager.js" type="module"></script>
   <script src="/static/js/chat.js" type="module"></script>
