@@ -38,10 +38,13 @@ CREATE TABLE knowledge_bases (
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
     last_used TIMESTAMP,
     version INTEGER DEFAULT 1 NOT NULL,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT knowledge_bases_project_unique UNIQUE (project_id)
 );
 CREATE INDEX ix_knowledge_bases_name ON knowledge_bases(name);
+CREATE INDEX ix_knowledge_bases_project_id ON knowledge_bases(project_id);
 
 -- Projects table
 CREATE TABLE projects (
