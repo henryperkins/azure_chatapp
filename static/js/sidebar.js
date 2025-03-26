@@ -42,7 +42,7 @@ function initializeModelDropdownOnLoad() {
     
     // Set default value to Claude 3 Sonnet if not already set
     if (!modelDropdown.value) {
-      modelDropdown.value = 'claude-3-sonnet-20240229';
+      modelDropdown.value = 'claude-3-7-sonnet-20250219';
       
       // Persist the model selection
       if (typeof persistSettings === 'function') {

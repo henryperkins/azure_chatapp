@@ -189,9 +189,10 @@ async def claude_chat(
         "content-type": "application/json"
     }
     
-    # Add beta header for 128K output support for Claude 3.7
+    # Add beta headers for extended features
     if model_name == "claude-3-7-sonnet-20250219":
         headers["anthropic-beta"] = "output-128k-2025-02-19"
+        headers["anthropic-features"] = "extended-thinking-2025-02-19"
 
     # Fix any message formatting for Claude API
     formatted_messages = []
