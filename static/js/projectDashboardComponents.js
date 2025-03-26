@@ -777,7 +777,6 @@ class KnowledgeBaseComponent {
     
     this.bindEvents();
   }
-  
   bindEvents() {
     this.elements.searchButton?.addEventListener("click", () => {
       const query = this.elements.searchInput?.value?.trim();
@@ -790,6 +789,42 @@ class KnowledgeBaseComponent {
     
     document.getElementById("knowledgeBaseEnabled")?.addEventListener("change", (e) => {
       this.toggleKnowledgeBase(e.target.checked);
+    });
+
+    document.getElementById("setupKnowledgeBaseBtn")?.addEventListener("click", () => {
+      window.modalManager?.show("knowledge");
+    });
+
+    document.getElementById("knowledgeBaseForm")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      const form = e.target;
+      const formData = new FormData(form);
+      const projectId = window.projectManager?.currentProject?.id;
+      
+      if (!projectId) {
+        uiUtilsInstance.showNotification("No project selected", "error");
+        return;
+      }
+
+      try {
+        uiUtilsInstance.showNotification("Setting up knowledge base...", "info");
+        
+        const response = await window.apiRequest(
+          `/api/projects/${projectId}/knowledge-base`,
+          "POST",
+          Object.fromEntries(formData)
+        );
+
+        uiUtilsInstance.showNotification("Knowledge base setup complete", "success");
+        window.modalManager?.hide("knowledge");
+        
+        // Refresh knowledge base info
+        await window.projectManager?.loadProjectStats(projectId);
+      } catch (error) {
+        console.error("Knowledge base setup failed:", error);
+        uiUtilsInstance.showNotification("Failed to setup knowledge base", "error");
+      }
     });
     
     this.elements.searchInput?.addEventListener("keyup", (e) => {

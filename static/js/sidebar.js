@@ -43,26 +43,13 @@ function initializeModelDropdownOnLoad() {
     // Set default value to Claude 3.7 Sonnet if not already set
     if (!modelDropdown.value) {
       modelDropdown.value = 'claude-3-7-sonnet-20250219';
-      // Update max tokens to match 128K context
-      if (window.MODEL_CONFIG) {
-        window.MODEL_CONFIG.maxTokens = 128000;
-        // Set default thinking budget for Claude 3.7
-        window.MODEL_CONFIG.thinkingBudget = 16000;
-      }
-      
-      // Persist the model selection and thinking budget
       if (typeof persistSettings === 'function') {
         persistSettings();
-      } else {
-        // Simple fallback if persistSettings isn't available
-        localStorage.setItem('modelName', modelDropdown.value);
-        localStorage.setItem('thinkingBudget', '16000');
-        if (window.MODEL_CONFIG) {
-          window.MODEL_CONFIG.modelName = modelDropdown.value;
-          window.MODEL_CONFIG.thinkingBudget = 16000;
-        }
       }
     }
+    
+    // Listen for user changes to model selection
+    modelDropdown.addEventListener('change', persistSettings);
   }
 }
 
@@ -308,8 +295,10 @@ function setupNewChatButton() {
   const newProjectBtn = document.getElementById('sidebarNewProjectBtn');
   if (newProjectBtn) {
     newProjectBtn.addEventListener('click', () => {
-      if (typeof ModalManager !== 'undefined' && ModalManager.show) {
-        ModalManager.show('project');
+      if (window.projectDashboard?.modalManager?.show) {
+        window.projectDashboard.modalManager.show('project');
+      } else if (window.ModalManager?.show) {
+        window.ModalManager.show('project');
       } else {
         console.error('ModalManager not available');
         if (typeof window.showNotification === 'function') {

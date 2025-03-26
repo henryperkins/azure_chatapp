@@ -352,11 +352,11 @@
     
     console.log(`Uploading file ${file.name} (${file.size} bytes) to project ${projectId}`);
     
-    return window.apiRequest(`/api/projects/${projectId}/files`, "POST", formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    }).then((response) => {
+    // Add any required metadata fields to formData
+    formData.append('project_id', projectId);
+    
+    return window.apiRequest(`/api/projects/${projectId}/knowledgebase/files`, "POST", formData)
+    .then((response) => {
       if (!response.ok) {
         console.error(`Upload failed with status: ${response.status}`);
         return response.text().then(text => {

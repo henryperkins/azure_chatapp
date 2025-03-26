@@ -1050,6 +1050,19 @@ function initializeChat() {
   chatInterface = new ChatInterface();
   chatInterface.initialize();
   window.projectChatInterface = chatInterface; // Expose the instance globally
+
+  // Listen for model configuration changes
+  document.addEventListener('modelConfigChanged', (e) => {
+    if (chatInterface && chatInterface.messageService) {
+      const modelName = e.detail?.modelName || localStorage.getItem('modelName');
+      if (modelName) {
+        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+        window.MODEL_CONFIG.modelName = modelName;
+        window.MODEL_CONFIG.maxTokens = Number(e.detail?.maxTokens) || 200000;
+        window.MODEL_CONFIG.thinkingBudget = Number(e.detail?.thinkingBudget) || 10000;
+      }
+    }
+  });
 }
 
 function loadConversation(chatId) {
