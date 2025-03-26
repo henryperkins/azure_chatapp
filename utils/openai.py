@@ -240,10 +240,14 @@ async def claude_chat(
         enable_thinking = settings.CLAUDE_EXTENDED_THINKING_ENABLED
         
     if enable_thinking and model_name in ["claude-3-7-sonnet-20250219", "claude-3-opus-20240229"]:
-        # Get model-specific thinking budget constraints
-        model_config = next((m for m in getModelOptions() if m['id'] == model_name), {})
-        default_budget = model_config.get('defaultThinkingBudget', settings.CLAUDE_EXTENDED_THINKING_BUDGET)
-        min_budget = model_config.get('minThinkingBudget', 1024)
+        # Use model-specific thinking budget constraints
+        default_budget = settings.CLAUDE_EXTENDED_THINKING_BUDGET
+        min_budget = 1024  # Minimum thinking budget for all models
+        
+        # Special handling for Claude 3.7 Sonnet
+        if model_name == "claude-3-7-sonnet-20250219":
+            default_budget = 16000
+            min_budget = 2048
         
         # Calculate final budget
         budget = thinking_budget or default_budget
