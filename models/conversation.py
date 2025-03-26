@@ -35,8 +35,16 @@ class Conversation(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
     extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
+    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id"),
+        nullable=True
+    )
+    use_knowledge_base: Mapped[bool] = mapped_column(Boolean, default=False)
+    search_results: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True))
     
     user = relationship("User", back_populates="conversations")
+    knowledge_base = relationship("KnowledgeBase")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="conversations")
     artifacts = relationship("Artifact", back_populates="conversation")
