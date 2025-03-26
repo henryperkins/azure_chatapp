@@ -220,7 +220,11 @@ class ProjectDetailsComponent {
         className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
         onclick: async () => {
           const chatContainer = document.getElementById('projectChatContainer');
-          if (chatContainer) chatContainer.classList.remove('hidden');
+          if (chatContainer) {
+            chatContainer.classList.remove('hidden');
+            // Scroll to chat container
+            chatContainer.scrollIntoView({ behavior: 'smooth' });
+          }
           
           console.log('Loading conversation', conversation.id);
           
@@ -288,6 +292,15 @@ class ProjectDetailsComponent {
         this.switchTab(tabName);
       });
     });
+    
+    // Add this new code for the minimize chat button
+    const minimizeChatBtn = document.getElementById('minimizeChatBtn');
+    if (minimizeChatBtn) {
+      minimizeChatBtn.addEventListener('click', () => {
+        const chatContainer = document.getElementById('projectChatContainer');
+        if (chatContainer) chatContainer.classList.add('hidden');
+      });
+    }
 
     // Handle new conversation button
     const newConvoBtn = document.getElementById('newConversationBtn');
