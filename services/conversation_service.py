@@ -75,7 +75,7 @@ async def validate_model(model_id: str):
 
 @handle_service_errors("Failed to create conversation")
 async def create_conversation(
-    project_id: UUID,
+    project_id: Optional[UUID],  # Make project_id optional
     user_id: int,
     title: str,
     model_id: str,
@@ -83,11 +83,12 @@ async def create_conversation(
     use_knowledge_base: bool = False
 ) -> Conversation:
     """
-    Creates a new conversation with proper model and knowledge base validation.
-    Ensures:
-    - Model is allowed
-    - If using KB: project has active KB and user has access
+    Creates a new conversation with validation that standalone conversations
+    cannot use knowledge base.
     """
+    # Validate knowledge base usage first
+    if use_knowledge_base and not project_id:
+        raise ValueError("Knowledge base requires project association")
     """
     Creates a new conversation with proper model alignment.
     """
@@ -117,8 +118,8 @@ async def create_conversation(
             user_id=user_id,
             title=title,
             model_id=model_id,
-            use_knowledge_base=use_knowledge_base and bool(project.knowledge_base_id),
-            knowledge_base_id=project.knowledge_base_id if use_knowledge_base else None
+            use_knowledge_base=use_knowledge_base if project_id else False,  # Force false if no project
+            knowledge_base_id=project.knowledge_base_id if use_knowledge_base and project_id else None
         )
         logger.info("Conversation object created")
         
