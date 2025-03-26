@@ -462,6 +462,15 @@ async function api(url, method = 'GET', body) {
     const response = await fetch(url, options);
     
     if (!response.ok) {
+      // Skip logging for expected 401 errors
+      if (response.status === 401) {
+        const error = new Error('Not authenticated');
+        error.status = 401;
+        error.expected = true;
+        throw error;
+      }
+
+      // Handle other errors normally
       const error = new Error(response.statusText);
       error.status = response.status;
       
@@ -589,6 +598,12 @@ async function refreshTokenIfActive() {
 // Initial Auth Check
 // -------------------------
 async function verifyAuthState() {
+  // Skip verification if we have no auth header
+  const authHeader = TokenManager.getAuthHeader();
+  if (!authHeader || !authHeader.Authorization) {
+    return false;
+  }
+
   try {
     const response = await api('/api/auth/verify');
     return response.authenticated;
