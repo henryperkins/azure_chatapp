@@ -240,9 +240,12 @@ async def generate_ai_response(
         if db:
             await save_model(db, assistant_msg)
             
-            # Update token usage if applicable
+            # Update token usage if applicable - use more accurate estimation for Claude 3.7
             if conversation and conversation.project_id:
-                token_estimate = len(assistant_content) // 4
+                if is_claude_model and chosen_model == "claude-3-7-sonnet-20250219":
+                    token_estimate = len(assistant_content) // 3  # More accurate for Claude 3.7
+                else:
+                    token_estimate = len(assistant_content) // 4
                 await update_project_token_usage(conversation, token_estimate, db)
         
         return assistant_msg
