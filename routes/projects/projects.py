@@ -143,8 +143,8 @@ async def list_projects(
         "filter": {
             "type": filter or "all",
             "applied": {
-                "archived": filter === "archived",
-                "pinned": filter === "pinned"
+                "archived": filter == "archived",
+                "pinned": filter == "pinned"
             }
         }
     })
