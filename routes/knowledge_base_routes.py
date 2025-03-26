@@ -12,7 +12,13 @@ import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+router = APIRouter()
 from sqlalchemy import update
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -287,7 +293,9 @@ async def delete_knowledge_base(
 # ============================
 
 @router.post("/projects/{project_id}/search", response_model=dict)
+@limiter.limit("10/minute")
 async def search_project_knowledge(
+    request: Request,
     project_id: UUID,
     search_request: SearchRequest,
     current_user: User = Depends(get_current_user_and_token),
