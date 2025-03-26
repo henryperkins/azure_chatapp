@@ -59,47 +59,38 @@
 }
 
 /* Transition for smooth animation */
-#mainSidebar {
-  transition: transform 0.3s ease-in-out;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Custom components */
+  .toggle-checkbox:checked {
+    @apply translate-x-full border-blue-500;
+  }
+  .toggle-checkbox:checked + .toggle-label {
+    @apply bg-blue-500;
+  }
 }
 
-/* Mobile sidebar styles */
-@media (max-width: 767px) {
-  #mainSidebar {
-    transform: translateX(-100%);
-    z-index: 50;
+@layer utilities {
+  /* Custom animations */
+  @keyframes slideIn {
+    from { 
+      @apply opacity-0 -translate-y-2.5;
+    }
+    to { 
+      @apply opacity-100 translate-y-0;
+    }
+  }
+  .animate-slide-in {
+    animation: slideIn 0.2s ease-out forwards;
   }
   
-  #mainSidebar.translate-x-0 {
-    transform: translateX(0);
+  /* Custom transitions */
+  .sidebar-transition {
+    @apply transition-transform duration-200 ease-in-out;
   }
-  
-  #sidebarBackdrop {
-    display: block;
-    z-index: 40;
-  }
-}
-
-@media (min-width: 768px) {
-  #mainSidebar {
-    transform: translateX(0) !important;
-    z-index: auto;
-  }
-  
-  #sidebarBackdrop {
-    display: none !important;
-  }
-}
-
-/* Auth dropdown styles */
-.auth-dropdown {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  border: 1px solid rgba(0,0,0,0.1);
-}
-
-.dark .auth-dropdown {
-  background-color: #1f2937;
-  border-color: #374151;
 }
 /* Add custom vision styles */
 .vision-response {
