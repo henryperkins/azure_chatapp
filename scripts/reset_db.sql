@@ -45,6 +45,7 @@ CREATE TABLE knowledge_bases (
 );
 CREATE INDEX ix_knowledge_bases_name ON knowledge_bases(name);
 CREATE INDEX ix_knowledge_bases_project_id ON knowledge_bases(project_id);
+CREATE INDEX ix_knowledge_bases_is_active ON knowledge_bases(is_active);
 
 -- Projects table
 CREATE TABLE projects (
