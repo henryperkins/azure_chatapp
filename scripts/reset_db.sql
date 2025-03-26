@@ -70,12 +70,12 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
-    CONSTRAINT projects_check_token_limit CHECK (max_tokens >= token_usage),
-    CONSTRAINT projects_check_archive_pin CHECK (NOT (archived AND pinned)),
-    CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default))
+    CONSTRAINT projects_max_tokens_check CHECK (max_tokens >= token_usage),
+    CONSTRAINT projects_archived_pinned_check CHECK (NOT (archived AND pinned)),
+    CONSTRAINT projects_archived_default_check CHECK (NOT (archived AND is_default))
 );
 
-CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
+CREATE INDEX IF NOT EXISTS ix_projects_knowledge_base_id ON projects(knowledge_base_id);
 CREATE INDEX ix_projects_created_at ON projects(created_at);
 CREATE INDEX ix_projects_updated_at ON projects(updated_at);
 CREATE INDEX ix_projects_user_id ON projects(user_id);
@@ -91,7 +91,7 @@ CREATE TABLE conversations (
     message_count INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    extra_data JSONB DEFAULT '{}'::jsonb,
+    extra_data JSONB DEFAULT '{}'::jsonb NOT NULL,
     knowledge_base_id UUID REFERENCES knowledge_bases(id),
     use_knowledge_base BOOLEAN DEFAULT FALSE NOT NULL,
     search_results JSONB
@@ -162,10 +162,12 @@ ADD CONSTRAINT knowledge_bases_project_unique UNIQUE (project_id);
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    IF NEW IS DISTINCT FROM OLD THEN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+    END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE TRIGGER update_messages_modtime
 BEFORE UPDATE ON messages
