@@ -33,11 +33,12 @@
       .then((response) => {
         console.log("[ProjectManager] Raw API response:", response);
         
-        // Standardize response format
+        // Standardize response format - updated to match backend
         let projects = [];
-        if (response && typeof response === 'object') {
-          // Handle both { data: [...] } and { projects: [...] } formats
-          projects = response.data || response.projects || [];
+        if (response?.data?.projects) {
+          projects = response.data.projects;
+        } else if (Array.isArray(response?.data)) {
+          projects = response.data;
         } else if (Array.isArray(response)) {
           projects = response;
         }
@@ -70,7 +71,20 @@
       })
       .catch((err) => {
         console.error("[ProjectManager] Error loading projects:", err);
-        window.showNotification?.("Failed to load projects", "error");
+        const errorMsg = err?.response?.data?.message || 
+                        err?.message || 
+                        "Failed to load projects";
+        window.showNotification?.(errorMsg, "error");
+        
+        // Dispatch empty projects to clear UI
+        document.dispatchEvent(
+          new CustomEvent("projectsLoaded", { 
+            detail: [],
+            originalCount: 0,
+            filterApplied: filter,
+            error: true
+          })
+        );
         throw err;
       });
   }
