@@ -46,6 +46,18 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "✅ DATABASE RESET SUCCESSFUL"
     echo "All tables have been recreated according to the model structure."
+    
+    # Simple verification
+    echo -e "\nVerifying table counts..."
+    PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" <<EOF
+    SELECT 
+        COUNT(*) as table_count,
+        (SELECT COUNT(*) FROM users) as users,
+        (SELECT COUNT(*) FROM projects) as projects,
+        (SELECT COUNT(*) FROM conversations) as conversations
+    FROM information_schema.tables 
+    WHERE table_schema = 'public';
+EOF
 else
     echo ""
     echo "❌ DATABASE RESET FAILED"
