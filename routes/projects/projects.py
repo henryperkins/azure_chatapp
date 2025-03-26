@@ -101,20 +101,24 @@ async def create_project(
 
 @router.get("/", response_model=Dict)
 async def list_projects(
-    archived: Optional[bool] = None,
-    pinned: Optional[bool] = None,
+    filter: Optional[str] = None, 
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """List all projects owned by the current user with optional filtering"""
-    # Create conditions list based on filters
     conditions = [Project.user_id == current_user.id]
-    if archived is not None:
-        conditions.append(Project.archived == archived)
-    if pinned is not None:
-        conditions.append(Project.pinned == pinned)
+    
+    # Handle filter parameter from UI
+    if filter == "pinned":
+        conditions.append(Project.pinned == True)
+        conditions.append(Project.archived == False)
+    elif filter == "archived":
+        conditions.append(Project.archived == True)
+    elif filter == "active":
+        conditions.append(Project.archived == False)
+    # 'all' filter shows everything
     
     # Use consolidated function for database query
     projects = await get_all_by_condition(

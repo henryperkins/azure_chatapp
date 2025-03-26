@@ -328,6 +328,7 @@ class ProjectListComponent {
     this.element = document.getElementById(this.elementId);
     this.onViewProject = options.onViewProject;
     this.messageEl = document.getElementById("noProjectsMessage");
+    this.bindFilterEvents();
   }
   
   show() {
@@ -495,6 +496,25 @@ class ProjectListComponent {
         this.messageEl.classList.add("hidden");
       }
     }
+  }
+
+  bindFilterEvents() {
+    const filterButtons = document.querySelectorAll('.project-filter-btn');
+    filterButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        // Update active button styling
+        filterButtons.forEach(btn => {
+          btn.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
+          btn.classList.add('text-gray-600');
+        });
+        button.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+        button.classList.remove('text-gray-600');
+        
+        // Load projects with selected filter
+        const filter = button.dataset.filter;
+        window.projectManager.loadProjects(filter);
+      });
+    });
   }
 }
 
