@@ -76,11 +76,21 @@ async def create_knowledge_base(
     db: AsyncSession = Depends(get_async_session)
 ):
     """
-    Create a new knowledge base.
+    Creates a new knowledge base associated with a project.
     """
     try:
+        # First validate the user has access to the project
+        project = await validate_resource_access(
+            knowledge_base_data.project_id,
+            Project,
+            current_user,
+            db,
+            "Project"
+        )
+        
         knowledge_base = await knowledgebase_service.create_knowledge_base(
             name=knowledge_base_data.name,
+            project_id=knowledge_base_data.project_id,
             description=knowledge_base_data.description,
             embedding_model=knowledge_base_data.embedding_model,
             db=db
@@ -92,8 +102,11 @@ async def create_knowledge_base(
             "description": knowledge_base.description,
             "embedding_model": knowledge_base.embedding_model,
             "is_active": knowledge_base.is_active,
+            "project_id": str(knowledge_base.project_id),
             "created_at": knowledge_base.created_at.isoformat() if knowledge_base.created_at else None
         }, "Knowledge base created successfully")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating knowledge base: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create knowledge base: {str(e)}")
