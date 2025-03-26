@@ -23,6 +23,13 @@ class KnowledgeBase(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    project_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, 
         server_default=text("CURRENT_TIMESTAMP"),
@@ -34,8 +41,7 @@ class KnowledgeBase(Base):
         onupdate=text("CURRENT_TIMESTAMP")
     )
     
-    # Relationship to projects using this knowledge base
-    projects = relationship("Project", back_populates="knowledge_base")
+    project = relationship("Project", back_populates="knowledge_base")
     
     def __repr__(self):
         return f"<KnowledgeBase {self.name} (#{self.id})>"
