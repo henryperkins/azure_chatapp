@@ -79,7 +79,15 @@ class WebSocketService {
       if (window.TokenManager?.accessToken) {
         params.append('token', window.TokenManager.accessToken);
       }
-      this.wsUrl = `${wsBase}/ws?${params.toString()}`;
+      // Get backend host from environment or use current host
+      const backendHost = process.env.VITE_BACKEND_HOST || window.location.host;
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      this.wsUrl = `${wsProtocol}${backendHost}/ws?${params.toString()}`;
+      
+      console.log('WebSocket URL:', this.wsUrl);
+      if (!this.wsUrl.startsWith('ws://') && !this.wsUrl.startsWith('wss://')) {
+        throw new Error('Invalid WebSocket URL');
+      }
 
       return new Promise((resolve, reject) => {
         try {
@@ -241,7 +249,7 @@ class MessageService {
           type: 'message',
           chatId: this.chatId,
           content: content,
-          model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229"
+          model_id: localStorage.getItem("modelName") || "claude-3-7-sonnet-20250219"
         });
         this.onMessageReceived({
           role: 'assistant',
@@ -483,7 +491,22 @@ class UIComponents {
       },
 
       addThinking: function() {
-        return this.appendMessage("assistant", "<em>Thinking...</em>", this.thinkingId);
+        const thinkingDiv = document.createElement('div');
+        thinkingDiv.id = this.thinkingId;
+        thinkingDiv.className = 'mb-2 p-2 rounded bg-gray-50 text-gray-600 flex items-center';
+        thinkingDiv.innerHTML = `
+          <div class="animate-pulse flex space-x-2">
+            <div class="w-2 h-2 bg-gray-400 rounded-full"></div>
+            <div class="w-2 h-2 bg-gray-400 rounded-full"></div>
+            <div class="w-2 h-2 bg-gray-400 rounded-full"></div>
+          </div>
+          <span class="ml-2">Claude is thinking...</span>
+        `;
+        if (this.container) {
+          this.container.appendChild(thinkingDiv);
+          this.container.scrollTop = this.container.scrollHeight;
+        }
+        return thinkingDiv;
       },
 
       removeThinking: function() {
@@ -512,18 +535,29 @@ class UIComponents {
       appendMessage: function(role, content, id = null, thinking = null, redacted = null, metadata = null) {
         if (!this.container) return null;
 
-        // If the content includes summary text, optionally show a summary indicator
-        if (content.includes('[Conversation summarized]') && window.showSummaryIndicator) {
-          const el = document.createElement('div');
-          el.innerHTML = window.showSummaryIndicator();
-          this.container.appendChild(el);
-        }
-
-        // Create the message element
+        // Create message container
         const msgDiv = document.createElement('div');
-        msgDiv.className = `mb-2 p-2 rounded ${this._getClass(role)}`;
+        msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this._getClass(role)}`;
         if (id) msgDiv.id = id;
-        msgDiv.innerHTML = this.formatText(content);
+
+        // Add header with role indicator
+        const header = document.createElement('div');
+        header.className = 'flex items-center mb-2';
+        header.innerHTML = `
+          <span class="font-medium ${role === 'assistant' ? 'text-green-700' : 'text-blue-700'}">
+            ${role === 'assistant' ? 'Claude' : 'You'}
+          </span>
+          <span class="ml-2 text-xs text-gray-500">
+            ${new Date().toLocaleTimeString()}
+          </span>
+        `;
+        msgDiv.appendChild(header);
+
+        // Add main content
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'prose max-w-none';
+        contentDiv.innerHTML = this.formatText(content);
+        msgDiv.appendChild(contentDiv);
 
         // Add copy buttons to code blocks
         msgDiv.querySelectorAll('pre code').forEach(block => {

@@ -777,7 +777,11 @@ async function initializeApplication() {
     // Initialize UI and handlers
     safeInitialize();
     if (!localStorage.getItem("modelName")) {
-      localStorage.setItem("modelName", "claude-3-sonnet-20240229");
+      localStorage.setItem("modelName", "claude-3-7-sonnet-20250219");
+      // Set extended thinking budget for Claude 3.7
+      if (!localStorage.getItem("thinkingBudget")) {
+        localStorage.setItem("thinkingBudget", "16000");
+      }
     }
     
     updateUserSessionState();
