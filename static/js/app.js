@@ -384,7 +384,7 @@ function handleNavigationChange() {
         setChatUIVisibility(false);
       }
     })
-    .catch(error) => {
+    .catch((error) => {
       handleAPIError('auth verification', error);
     });
 }
