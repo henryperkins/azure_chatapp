@@ -35,6 +35,16 @@ def reset_database():
         
         print("\nDatabase structure has been successfully reset to match the current models.")
         print("All tables have been recreated with the correct structure.")
+        
+        # Validate the schema after reset
+        from db import validate_db_schema
+        print("\nValidating database schema...")
+        try:
+            await validate_db_schema()
+            print("✅ Database schema validated successfully")
+        except Exception as e:
+            print(f"❌ Schema validation failed: {e}")
+            sys.exit(1)
     except Exception as e:
         print(f"Error resetting database: {e}")
         sys.exit(1)
