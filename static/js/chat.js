@@ -976,7 +976,7 @@ class ChatInterface {
     } else {
       console.error(`Failed to find container with selector: ${selector}`);
     }
-  }; // Add semicolon after method definition
+  }
 
   _handleConversationLoaded(conversation) {
     if (this.titleEl) {
@@ -1154,3 +1154,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeChat();
   }
 });
+// Ensure ChatInterface is directly available globally
+window.ChatInterface = ChatInterface;

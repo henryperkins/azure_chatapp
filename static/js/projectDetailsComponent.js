@@ -132,17 +132,17 @@ class ProjectDetailsComponent {
 
     // Update file, conversation and artifact counts
     if (stats.file_count !== undefined) {
-      const fileCountEl = document.getElementById('projectFileCount');
+      const fileCountEl = document.getElementById('fileCount');
       if (fileCountEl) fileCountEl.textContent = uiUtilsInstance.formatNumber(stats.file_count);
     }
     
     if (stats.conversation_count !== undefined) {
-      const convoCountEl = document.getElementById('projectConversationCount');
+      const convoCountEl = document.getElementById('conversationCount');
       if (convoCountEl) convoCountEl.textContent = uiUtilsInstance.formatNumber(stats.conversation_count);
     }
     
     if (stats.artifact_count !== undefined) {
-      const artifactCountEl = document.getElementById('projectArtifactCount');
+      const artifactCountEl = document.getElementById('artifactCount');
       if (artifactCountEl) artifactCountEl.textContent = uiUtilsInstance.formatNumber(stats.artifact_count);
     }
   }
