@@ -3,6 +3,7 @@ import httpx
 import logging
 from uuid import uuid4
 from config import settings
+from fastapi.responses import JSONResponse
 
 
 logger = logging.getLogger(__name__)
