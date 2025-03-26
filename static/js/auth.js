@@ -148,9 +148,16 @@ function setupUIListeners() {
       e.preventDefault();
       e.stopPropagation();
       authDropdown.classList.toggle("hidden");
+      
+      // Close other open dropdowns
+      document.querySelectorAll('.dropdown-content').forEach(dropdown => {
+        if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
+          dropdown.classList.add('hidden');
+        }
+      });
     });
 
-    // Close dropdown when clicking outside
+    // Close when clicking outside
     document.addEventListener("click", (e) => {
       if (!e.target.closest("#authContainer") && !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
