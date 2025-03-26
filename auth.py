@@ -231,6 +231,7 @@ async def login_user(
 async def refresh_token(
     response: Response,
     request: Request,
+    current_user_and_token: User = Depends(get_current_user_and_token),
     session: AsyncSession = Depends(get_async_session)
 ) -> LoginResponse:
     """Provides new token with rotation for session continuity."""
