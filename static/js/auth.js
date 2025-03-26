@@ -189,13 +189,58 @@ function setupUIListeners() {
   }
 
   // Handle form submissions
-  document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
+  document.getElementById("loginForm")?.addEventListener("submit", async function(e) {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    await handleLogin({
-      username: formData.get("username"),
-      password: formData.get("password") 
-    });
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    const username = formData.get("username");
+    const password = formData.get("password");
+
+    if (!username || !password) {
+      window.showNotification?.("Please enter both username and password", "error");
+      return;
+    }
+
+    try {
+      // Show loading state
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg class="animate-spin h-4 w-4 mx-auto text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      `;
+
+      // Call login function
+      await loginUser(username, password);
+      
+      // Hide auth dropdown
+      const authDropdown = document.getElementById("authDropdown");
+      if (authDropdown) {
+        authDropdown.classList.add("hidden");
+        authDropdown.classList.remove("slide-in");
+      }
+
+      // Show success notification
+      window.showNotification?.("Login successful", "success");
+      
+      // Reload page to initialize authenticated state
+      window.location.reload();
+      
+    } catch (error) {
+      console.error("Login failed:", error);
+      window.showNotification?.(error.message || "Login failed", "error");
+    } finally {
+      // Reset button state
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Log In";
+      }
+    }
   });
 
   document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
@@ -287,50 +332,44 @@ async function handleLogin(e) {
 async function loginUser(username, password) {
   try {
     // Request login and get tokens
-    const data = await authRequest('/api/auth/login', username, password);
+    const data = await api('/api/auth/login', 'POST', { 
+      username: username.trim(), 
+      password 
+    });
     
-    // Store user info with better error handling
-    try {
-      sessionStorage.setItem('userInfo', JSON.stringify({ 
-        username: username.toLowerCase(),
-        timestamp: Date.now()
-      }));
-    } catch (storageError) {
-      console.warn('Failed to store user info in session storage:', storageError);
-      // Continue anyway - auth can still work with cookies
+    if (!data.access_token) {
+      throw new Error("Invalid response from server");
     }
+
+    // Store user info
+    sessionStorage.setItem('userInfo', JSON.stringify({ 
+      username: username.toLowerCase(),
+      timestamp: Date.now() 
+    }));
+
+    // Set tokens
+    TokenManager.setTokens(data.access_token, data.refresh_token);
     
-    // Set tokens and ensure they're available
-    if (data.access_token) {
-      TokenManager.setTokens(data.access_token, data.refresh_token);
-    } else {
-      console.warn('Login response missing access_token');
-    }
-    
-    // Update UI with better error handling
-    try {
-      updateUserUI(username.toLowerCase());
-      setupTokenRefresh();
-      broadcastAuth(true, username.toLowerCase());
-    } catch (uiError) {
-      console.error('Failed to update UI after login:', uiError);
-      // Continue anyway - auth is still successful
-    }
+    // Update UI
+    updateUserUI(username.toLowerCase());
+    setupTokenRefresh();
+    broadcastAuth(true, username.toLowerCase());
     
     return data;
   } catch (error) {
     console.error("Login failed:", error);
     
-    // Provide specific error message based on error status
+    // Provide specific error messages
+    let message = "Login failed";
     if (error.status === 401) {
-      notify("Invalid username or password", "error");
+      message = "Invalid username or password";
     } else if (error.status === 429) {
-      notify("Too many login attempts. Please try again later.", "error");
-    } else {
-      notify("Login failed: " + (error.message || "Please check your credentials"), "error");
+      message = "Too many attempts. Please try again later.";
+    } else if (error.message) {
+      message = error.message;
     }
     
-    throw error;
+    throw new Error(message);
   }
 }
 
