@@ -61,6 +61,32 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
 
+async def fix_db_schema():
+    """Fix common schema mismatches between database and ORM models."""
+    from sqlalchemy import text
+    from sqlalchemy.schema import CreateIndex
+
+    async with async_engine.begin() as conn:
+        # Create missing indexes
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_projects_created_at ON projects(created_at);
+            CREATE INDEX IF NOT EXISTS ix_projects_updated_at ON projects(updated_at);
+            CREATE INDEX IF NOT EXISTS ix_projects_knowledge_base_id ON projects(knowledge_base_id);
+            CREATE INDEX IF NOT EXISTS ix_users_id ON users(id);
+            CREATE INDEX IF NOT EXISTS ix_users_last_login ON users(last_login);
+            CREATE INDEX IF NOT EXISTS ix_users_created_at ON users(created_at);
+        """))
+        
+        # Add any missing columns
+        await conn.execute(text("""
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS message_count INTEGER DEFAULT 0 NOT NULL;
+        """))
+        
+        # Update default model if needed
+        await conn.execute(text("""
+            ALTER TABLE projects ALTER COLUMN default_model SET DEFAULT 'claude-3-sonnet-20240229';
+        """))
+
 async def validate_db_schema():
     """
     Validate the current database schema against the ORM models.
@@ -145,3 +171,5 @@ async def validate_db_schema():
         logger.info("✅ Database schema matches ORM models")
     else:
         logger.warning("⚠️ Database schema has mismatches with ORM models (see warnings above)")
+    
+    return has_mismatches  # Return whether mismatches were found

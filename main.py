@@ -192,8 +192,12 @@ async def on_startup():
     try:
         # Initialize database and run migrations
         await init_db()
-        await validate_db_schema()
-        logger.info("Database schema validated and migrations applied")
+        has_mismatches = await validate_db_schema()
+        if has_mismatches:
+            logger.warning("Attempting to fix schema mismatches...")
+            await fix_db_schema()
+            await validate_db_schema()  # Validate again after fixes
+        logger.info("Database schema validated and fixed")
 
         # Create uploads directory with proper permissions
         upload_path = Path("./uploads/project_files")

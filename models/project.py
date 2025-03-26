@@ -67,6 +67,7 @@ class Project(Base):
         "KnowledgeBase", 
         back_populates="project", 
         uselist=False,
+        cascade="all, delete-orphan",
         single_parent=True,
         foreign_keys=[knowledge_base_id]
     )
