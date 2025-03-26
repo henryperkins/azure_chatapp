@@ -134,7 +134,7 @@ async def _validate_user_and_project(
 # 4. Token Estimation
 # -----------------------------------------------------------------------------
 async def estimate_tokens_from_file(
-    content: Union[bytes, BinaryIO],
+    content: Union[bytes, BinaryIO, AsyncGenerator[bytes, None]],
     filename: str
 ) -> Tuple[int, Dict[str, Any]]:
     """
@@ -362,9 +362,59 @@ async def _save_file_and_create_record(
 
     # Persist in DB and update project token usage
     try:
-        async with db.begin():
-            db.add(pf)
-            project.token_usage += token_estimate
+        try:
+            async with db.begin():
+                db.add(pf)
+                project.token_usage += token_estimate
+                await db.flush()  # Ensure we can do the vector operations before committing
+            
+                # Process for search before committing
+                if process_for_search:
+                    model_name = (
+                        project.knowledge_base.embedding_model
+                        if project.knowledge_base
+                        else DEFAULT_EMBEDDING_MODEL
+                    )
+                    vector_db = await get_vector_db(
+                        model_name=model_name,
+                        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+                        load_existing=True
+                    )
+                
+                    file_content = file_info["contents"]
+                    if not file_content and file_info["file_size"] > STREAM_THRESHOLD:
+                        file_content = await file.read()
+                
+                    search_results = await process_file_for_search(
+                        project_file=pf,
+                        vector_db=vector_db,
+                        file_content=file_content,
+                        chunk_size=DEFAULT_CHUNK_SIZE,
+                        chunk_overlap=DEFAULT_CHUNK_OVERLAP
+                    )
+                
+                    if search_results.get("success"):
+                        pf_metadata = pf.metadata or {}
+                        pf_metadata["search_processing"] = {
+                            "success": True,
+                            "chunk_count": search_results["chunk_count"],
+                            "added_ids": search_results["added_ids"],
+                            "processed_at": datetime.utcnow().isoformat()
+                        }
+                        pf.metadata = pf_metadata
+                    else:
+                        logger.error(f"Search indexing failed for file {pf.id}: {search_results.get('error')}")
+                        raise ValueError("Failed to index file for search")
+        except Exception as e:
+            # Clean up the file if processing failed
+            if 'pf' in locals():
+                storage_config = {
+                    "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+                    "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+                }
+                storage = get_file_storage(storage_config)
+                await storage.delete_file(pf.file_path)
+            raise
     except SQLAlchemyError as ex:
         logger.error(f"Database transaction error: {str(ex)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Database error during file upload.")
