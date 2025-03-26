@@ -148,7 +148,7 @@ function initModelConfig() {
     if (maxTokensInput) {
       maxTokensInput.value = storedMaxTokens;
       maxTokensInput.type = "number";
-      maxTokensInput.min = "1";
+      maxTokensInput.min = "100";
       maxTokensInput.max = "100000";
     }
     // Set the reasoningEffortSelect if there's a saved value
