@@ -290,11 +290,17 @@ function setupCustomInstructions() {
  * Set up new chat button functionality
  */
 function setupNewChatButton() {
-  const newChatBtn = document.querySelector('#sidebarNewChatBtn');
+  // Try both possible button IDs for backward compatibility
+  const newChatBtn = document.querySelector('#sidebarNewProjectBtn, #sidebarNewChatBtn');
 
   if (!newChatBtn) {
-    console.warn('New chat button not found in the DOM');
+    console.warn('New chat/project button not found in DOM - projects page may not function correctly');
     return;
+  }
+
+  // Update button text if it's the projects page version
+  if (newChatBtn.id === 'sidebarNewProjectBtn') {
+    newChatBtn.textContent = 'New Project';
   }
 
   newChatBtn.addEventListener('click', newChatClickHandler);

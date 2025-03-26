@@ -48,6 +48,12 @@ const API_ENDPOINTS = {
   PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations'
 };
 
+// Simple notifications system
+const Notifications = {
+  apiError: (msg) => console.error('API Error:', msg),
+  projectNotFound: () => console.warn('Project not found')
+};
+
 // ---------------------------------------------------------------------
 // UTILITY FUNCTIONS (Refactored)
 // ---------------------------------------------------------------------
@@ -259,49 +265,65 @@ function updateUserSessionState() {
 // UI COMPONENT CREATION
 // ---------------------------------------------------------------------
 function createProjectListItem(project) {
-  const li = document.createElement('li');
-  li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
-  li.dataset.projectId = project.id;
-
-  const nameSpan = document.createElement('span');
-  nameSpan.textContent = project.name;
-  nameSpan.className = 'flex-1 truncate';
-  li.appendChild(nameSpan);
-
-  if (project.pinned) {
-    const pinIcon = document.createElement('span');
-    pinIcon.textContent = '📌';
-    pinIcon.className = 'ml-1 text-yellow-600';
-    li.appendChild(pinIcon);
-  }
-
-  li.addEventListener('click', () => {
-    localStorage.setItem('selectedProjectId', project.id);
-    if (window.ProjectDashboard?.showProjectDetailsView) {
-      window.ProjectDashboard.showProjectDetailsView(project.id);
+  try {
+    // Handle both direct project object and nested API response
+    const projectData = project.data || project;
+    if (!projectData?.id || !projectData?.name) {
+      console.error('Invalid project data:', project);
+      return null;
     }
-  });
 
-  return li;
+    const li = document.createElement('li');
+    li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
+    li.dataset.projectId = projectData.id;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = projectData.name;
+    nameSpan.className = 'flex-1 truncate';
+    li.appendChild(nameSpan);
+
+    if (projectData.pinned) {
+      const pinIcon = document.createElement('span');
+      pinIcon.textContent = '📌';
+      pinIcon.className = 'ml-1 text-yellow-600';
+      li.appendChild(pinIcon);
+    }
+
+    li.addEventListener('click', () => {
+      localStorage.setItem('selectedProjectId', projectData.id);
+      if (window.ProjectDashboard?.showProjectDetailsView) {
+        window.ProjectDashboard.showProjectDetailsView(projectData.id);
+      }
+    });
+
+    return li;
+  } catch (error) {
+    console.error('Error creating project list item:', error);
+    return null;
+  }
 }
 
 function createConversationListItem(item) {
   const li = document.createElement('li');
-  li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
+  li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
 
-  const isStarred = window.sidebar?.isConversationStarred?.(item.id);
+  // Main container for the two-line layout
+  const container = document.createElement('div');
+  container.className = 'flex flex-col';
+
+  // First line - Conversation title and star button
+  const firstLine = document.createElement('div');
+  firstLine.className = 'flex items-center justify-between';
 
   const titleSpan = document.createElement('span');
-  titleSpan.className = 'flex-1 truncate';
+  titleSpan.className = 'flex-1 truncate font-medium';
   titleSpan.textContent = item.title || 'Conversation ' + item.id;
-  li.appendChild(titleSpan);
-
-  const metaDiv = document.createElement('div');
-  metaDiv.className = 'flex items-center ml-2';
+  firstLine.appendChild(titleSpan);
 
   // Star button
+  const isStarred = window.sidebar?.isConversationStarred?.(item.id);
   const starBtn = document.createElement('button');
-  starBtn.className = `mr-1 ${isStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
+  starBtn.className = `ml-2 ${isStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
   starBtn.innerHTML = `
     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
          fill="${isStarred ? 'currentColor' : 'none'}" viewBox="0 0 24 24" stroke="currentColor">
@@ -309,36 +331,50 @@ function createConversationListItem(item) {
             d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915
             c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c
             .3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976
-            2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914 
+            2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914
             a1 1 0 00.951-.69l1.519-4.674z"/>
   `;
   starBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (window.sidebar?.toggleStarConversation) {
       const nowStarred = window.sidebar.toggleStarConversation(item.id);
-      starBtn.className = `mr-1 ${nowStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
+      starBtn.className = `ml-2 ${nowStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
       starBtn.querySelector('svg').setAttribute('fill', nowStarred ? 'currentColor' : 'none');
     }
   });
-  metaDiv.appendChild(starBtn);
+  firstLine.appendChild(starBtn);
 
-  // Model badge
+  // Second line - Metadata
+  const secondLine = document.createElement('div');
+  secondLine.className = 'flex items-center text-xs text-gray-500 mt-1';
+
+  // Model info
   if (item.model_id) {
-    const modelBadge = document.createElement('span');
-    modelBadge.className = 'text-xs text-gray-500 ml-1';
-    modelBadge.textContent = item.model_id;
-    metaDiv.appendChild(modelBadge);
+    const modelSpan = document.createElement('span');
+    modelSpan.className = 'truncate';
+    modelSpan.textContent = item.model_id;
+    secondLine.appendChild(modelSpan);
   }
 
-  // Project badge
+  // Project indicator
   if (item.project_id) {
-    const projectBadge = document.createElement('span');
-    projectBadge.className = 'text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded ml-1';
-    projectBadge.textContent = 'Project';
-    metaDiv.appendChild(projectBadge);
+    if (item.model_id) {
+      const separator = document.createElement('span');
+      separator.className = 'mx-1';
+      separator.textContent = '•';
+      secondLine.appendChild(separator);
+    }
+    const projectSpan = document.createElement('span');
+    projectSpan.className = 'truncate';
+    projectSpan.textContent = 'Project';
+    secondLine.appendChild(projectSpan);
   }
 
-  li.appendChild(metaDiv);
+  // Add both lines to container
+  container.appendChild(firstLine);
+  container.appendChild(secondLine);
+  li.appendChild(container);
+
   li.addEventListener('click', () => navigateToConversation(item.id));
 
   return li;
@@ -417,7 +453,12 @@ function loadSidebarProjects() {
   
   return apiRequest(API_ENDPOINTS.PROJECTS)
     .then(response => {
-      const projects = Array.isArray(response.data) ? response.data : [];
+      console.log('Projects API response:', response);
+      // Handle both direct array and nested response structure
+      const projects = Array.isArray(response.data)
+        ? response.data
+        : response.data?.projects || [];
+        
       const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
       if (!sidebarProjects) return projects;
       
@@ -429,7 +470,8 @@ function loadSidebarProjects() {
       }
       
       projects.forEach(project => {
-        sidebarProjects.appendChild(createProjectListItem(project));
+        const item = createProjectListItem(project);
+        if (item) sidebarProjects.appendChild(item);
       });
       
       return projects;
@@ -536,7 +578,10 @@ async function checkAndHandleAuth() {
     }
     return false;
   } catch (error) {
-    console.error('Auth verification failed:', error);
+    // Only log unexpected errors (not 401s)
+    if (!error.expected) {
+      console.error('Auth verification failed:', error);
+    }
     updateAuthUI(false);
     broadcastAuth(false);
     return false;
