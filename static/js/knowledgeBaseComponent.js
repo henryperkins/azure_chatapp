@@ -2,17 +2,19 @@
 import {
   UIUtils as UIUtilsClass,
   AnimationUtils as AnimationUtilsClass,
-  ModalManager
+  ModalManager as ModalManagerClass
 } from './projectDashboardUtils.js';
 
 // Create instances of utility classes for use within this module
 const uiUtilsInstance = new UIUtilsClass();
 const animationUtilsInstance = new AnimationUtilsClass();
+const modalManagerInstance = new ModalManagerClass();
 
 // Ensure instances are available globally if other scripts rely on them (optional, but safer for now)
 if (typeof window !== 'undefined') {
   if (!window.UIUtils) window.UIUtils = uiUtilsInstance;
   if (!window.AnimationUtils) window.AnimationUtils = animationUtilsInstance;
+  if (!window.modalManager) window.modalManager = modalManagerInstance;
 }
 
 console.log('UIUtils instance created:', !!uiUtilsInstance?.createElement);
@@ -49,7 +51,15 @@ class KnowledgeBaseComponent {
     });
 
     document.getElementById("setupKnowledgeBaseBtn")?.addEventListener("click", () => {
-      window.modalManager?.show("knowledge");
+      // Show modal first
+      modalManagerInstance?.show("knowledge");
+      
+      // Try to get and store project ID if available
+      const projectId = window.projectManager?.currentProject?.id;
+      const form = document.getElementById("knowledgeBaseForm");
+      if (form && projectId) {
+        form.dataset.projectId = projectId;
+      }
     });
 
     document.getElementById("knowledgeBaseForm")?.addEventListener("submit", async (e) => {
@@ -57,10 +67,11 @@ class KnowledgeBaseComponent {
       
       const form = e.target;
       const formData = new FormData(form);
+      // Get project ID - fail if not available
       const projectId = window.projectManager?.currentProject?.id;
-      
       if (!projectId) {
-        uiUtilsInstance.showNotification("No project selected", "error");
+        uiUtilsInstance.showNotification("Please open a project before setting up knowledge base", "error");
+        window.modalManager?.hide("knowledge");
         return;
       }
 
