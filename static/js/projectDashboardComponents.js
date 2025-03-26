@@ -847,12 +847,11 @@ class KnowledgeBaseComponent {
         "success"
       );
       window.projectManager?.loadProjectStats(project.id);
-      })
-      .catch(err => {
-        console.error("Error toggling knowledge base:", err);
-        uiUtilsInstance.showNotification("Operation failed", "error");
-        document.getElementById("knowledgeBaseEnabled").checked = !enabled;
-      });
+    } catch (err) {
+      console.error("Error toggling knowledge base:", err);
+      uiUtilsInstance.showNotification("Operation failed", "error");
+      document.getElementById("knowledgeBaseEnabled").checked = !enabled;
+    }
   }
   
   showSearchLoading() {
