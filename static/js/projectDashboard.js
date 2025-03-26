@@ -1170,8 +1170,27 @@ class ProjectDashboard {
   }
   
   handleProjectsLoaded(event) {
+    console.log("[Dashboard] Received projectsLoaded event", event);
+      
     const projects = event.detail;
-    this.components.projectList.renderProjects(projects);
+    if (!projects || !Array.isArray(projects)) {
+      console.error("[Dashboard] Invalid projects data received", projects);
+      projects = [];
+    }
+
+    console.log(`[Dashboard] Rendering ${projects.length} projects`);
+      
+    try {
+      this.components.projectList.renderProjects(projects);
+        
+      // Update empty state visibility
+      const noProjectsMsg = document.getElementById('noProjectsMessage');
+      if (noProjectsMsg) {
+        noProjectsMsg.classList.toggle('hidden', projects.length > 0);
+      }
+    } catch (error) {
+      console.error("[Dashboard] Error rendering projects:", error);
+    }
   }
   
   handleProjectLoaded(event) {
