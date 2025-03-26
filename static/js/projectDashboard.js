@@ -190,6 +190,10 @@ class ProjectDashboard {
   /**
    * Data loading methods
    */
+  showProjectCreateForm() {
+    this.modalManager.show('project');
+  }
+
   async loadProjects(filter = 'all') {
     try {
       if (!window.projectManager) {
@@ -353,7 +357,7 @@ class ProjectDashboard {
       } else {
         console.log(isEditing ? "Project updated" : "Project created");
       }
-      ModalManager.hide("project");
+      this.modalManager.hide("project");
       this.loadProjects();
     } catch (error) {
       console.error("Error saving project:", error);
@@ -406,12 +410,14 @@ if (typeof window !== 'undefined') {
       
       if (missingElements.length > 0) {
         console.warn('Missing required elements:', missingElements);
-        // Create fallback container if main one is missing
-        if (!document.getElementById('projectList')) {
-          const container = document.createElement('div');
-          container.id = 'projectList';
-          document.body.appendChild(container);
-        }
+        // Create fallback containers for missing elements
+        missingElements.forEach(id => {
+          if (!document.getElementById(id)) {
+            const container = document.createElement('div');
+            container.id = id;
+            document.body.appendChild(container);
+          }
+        });
       }
 
       await initProjectDashboard();

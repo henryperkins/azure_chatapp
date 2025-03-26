@@ -3,12 +3,43 @@
 @tailwind utilities;
 
 @layer components {
-  /* Toggle switch */
-  .toggle-checkbox:checked {
-    @apply translate-x-full border-blue-500;
+  /* New toggle switch */
+  .toggle-switch {
+    @apply relative inline-block w-11 h-6;
   }
-  .toggle-checkbox:checked + .toggle-label {
-    @apply bg-blue-500;
+  
+  .toggle-switch input {
+    @apply opacity-0 w-0 h-0;
+  }
+  
+  .toggle-slider {
+    @apply absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-gray-200 transition rounded-full;
+    @apply border border-gray-300 dark:border-gray-600 dark:bg-gray-700;
+  }
+  
+  .toggle-slider:before {
+    @apply absolute content-[''] h-5 w-5 left-0.5 bottom-0.5 bg-white transition rounded-full;
+    @apply shadow-sm;
+  }
+  
+  input:checked + .toggle-slider {
+    @apply bg-blue-500 border-blue-600 dark:bg-blue-600;
+  }
+  
+  input:checked + .toggle-slider:before {
+    @apply transform translate-x-5;
+  }
+  
+  input:focus + .toggle-slider {
+    @apply ring-2 ring-blue-300;
+  }
+  
+  .toggle-container {
+    @apply flex items-center gap-2;
+  }
+  
+  .toggle-label {
+    @apply text-sm text-gray-700 dark:text-gray-300;
   }
 }
 

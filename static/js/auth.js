@@ -258,10 +258,7 @@ function setupUIListeners() {
   document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    await handleRegister({
-      username: formData.get("username"),
-      password: formData.get("password")
-    });
+    await handleRegister(formData);
   });
 
   document.getElementById("logoutBtn")?.addEventListener("click", logout);
@@ -316,18 +313,25 @@ function switchForm(isLogin) {
 // -------------------------
 // Authentication Handlers
 // -------------------------
-async function handleRegister(e) {
-  e.preventDefault();
-  const { username, password } = e.target;
+async function handleRegister(formData) {
+  const username = formData.get("username");
+  const password = formData.get("password");
 
-  if (password.value.length < 8) {
+  if (password.length < 8) {
     notify("Password must be at least 8 characters", "error");
     return;
   }
 
-  await authRequest('/api/auth/register', username.value, password.value);
-  await loginUser(username.value, password.value);
-  e.target.reset();
+  try {
+    await authRequest('/api/auth/register', username, password);
+    await loginUser(username, password);
+    // Reset form on success
+    document.getElementById("registerForm")?.reset();
+    notify("Registration successful", "success");
+  } catch (error) {
+    notify(error.message || "Registration failed", "error");
+    throw error;
+  }
 }
 
 async function handleLogin(e) {
@@ -369,7 +373,10 @@ async function loginUser(username, password) {
     
     return data;
   } catch (error) {
-    console.error("Login failed:", error);
+    // Only log unexpected errors
+    if (!error.expected) {
+      console.error("Login failed:", error);
+    }
     
     // Provide specific error messages
     let message = "Login failed";
@@ -464,7 +471,7 @@ async function api(url, method = 'GET', body) {
     if (!response.ok) {
       // Skip logging for expected 401 errors
       if (response.status === 401) {
-        const error = new Error('Not authenticated');
+        const error = new Error('Invalid username or password');
         error.status = 401;
         error.expected = true;
         throw error;
