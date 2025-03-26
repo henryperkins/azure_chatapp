@@ -49,7 +49,17 @@ class KnowledgeBaseCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     project_id: UUID = Field(..., description="Project to associate with this knowledge base")
     description: Optional[str] = None
-    embedding_model: Optional[str] = None
+    embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Embedding model to use",
+        json_schema_extra={
+            "options": [
+                "all-MiniLM-L6-v2",
+                "text-embedding-3-small", 
+                "embed-english-v3.0"
+            ]
+        }
+    )
 
 
 class KnowledgeBaseUpdate(BaseModel):
