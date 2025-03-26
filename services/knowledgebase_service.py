@@ -16,7 +16,7 @@ import io
 import logging
 from datetime import datetime
 from functools import wraps
-from typing import Dict, Any, Optional, Tuple, Union, BinaryIO
+from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator
 from uuid import UUID
 import uuid
 try:
