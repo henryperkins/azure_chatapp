@@ -181,12 +181,16 @@ async def generate_ai_response(
         is_claude_model = chosen_model in settings.CLAUDE_MODELS or chosen_model == "claude-3-7-sonnet-20250219"
         
         if is_claude_model:
-            # Call Claude API
+            # Call Claude API with model-specific settings
             logger.info(f"Generating response using Claude model: {chosen_model}")
+        
+            # Use larger max_tokens for Claude 3.7 Sonnet
+            max_response_tokens = 4000 if chosen_model == "claude-3-7-sonnet-20250219" else 1500
+        
             claude_response = await claude_chat(
                 messages=messages,
                 model_name=chosen_model,
-                max_tokens=1500,
+                max_tokens=max_response_tokens,
                 enable_thinking=enable_thinking if enable_thinking is not None else settings.CLAUDE_EXTENDED_THINKING_ENABLED,
                 thinking_budget=thinking_budget if thinking_budget is not None else settings.CLAUDE_EXTENDED_THINKING_BUDGET
             )

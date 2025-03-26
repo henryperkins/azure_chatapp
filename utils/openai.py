@@ -240,14 +240,17 @@ async def claude_chat(
         enable_thinking = settings.CLAUDE_EXTENDED_THINKING_ENABLED
         
     if enable_thinking and model_name in ["claude-3-7-sonnet-20250219", "claude-3-opus-20240229"]:
-        # Ensure we have enough tokens for both response and thinking
-        max_tokens = max(max_tokens, 2000)  # Minimum for decent thinking
-        # Calculate budget_tokens with model-specific adjustments
-        budget = thinking_budget or settings.CLAUDE_EXTENDED_THINKING_BUDGET
-        # Adjust minimum budget based on model
-        min_budget = 2048 if model_name == "claude-3-7-sonnet-20250219" else 1024
-        # Ensure budget is within valid range
+        # Get model-specific thinking budget constraints
+        model_config = next((m for m in getModelOptions() if m['id'] == model_name), {})
+        default_budget = model_config.get('defaultThinkingBudget', settings.CLAUDE_EXTENDED_THINKING_BUDGET)
+        min_budget = model_config.get('minThinkingBudget', 1024)
+        
+        # Calculate final budget
+        budget = thinking_budget or default_budget
         budget = max(min_budget, min(budget, max_tokens - min_budget))
+        
+        # Adjust max_tokens to ensure room for both thinking and response
+        max_tokens = max(max_tokens, min_budget * 2)  # At least 2x min budget
         
         payload["thinking"] = {
             "type": "enabled",

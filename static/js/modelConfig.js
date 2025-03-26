@@ -234,7 +234,9 @@ function getModelOptions() {
       name: 'Claude 3.7 Sonnet',
       description: 'Latest Claude model with enhanced capabilities (128K context)',
       supportsExtendedThinking: true,
-      maxTokens: 128000
+      maxTokens: 128000,
+      defaultThinkingBudget: 16000,
+      minThinkingBudget: 2048
     },
     { 
       id: 'gpt-4', 
