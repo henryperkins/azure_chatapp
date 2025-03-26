@@ -326,9 +326,16 @@ class ProjectListComponent {
   constructor(options) {
     this.elementId = options.elementId;
     this.element = document.getElementById(this.elementId);
+    if (!this.element) {
+      console.error(`ProjectListComponent: Element with ID '${this.elementId}' not found`);
+    }
     this.onViewProject = options.onViewProject;
     this.messageEl = document.getElementById("noProjectsMessage");
+    if (!this.messageEl) {
+      console.warn("ProjectListComponent: No projects message element not found");
+    }
     this.bindFilterEvents();
+    console.log(`ProjectListComponent initialized for element ${this.elementId}`);
   }
   
   show() {
@@ -339,22 +346,41 @@ class ProjectListComponent {
     document.getElementById("projectListView")?.classList.add("hidden");
   }
   
-  renderProjects(projects) {
-    if (!this.element) return;
+  renderProjects(eventOrProjects) {
+    // Handle both direct projects array and event with nested data
+    const projects = Array.isArray(eventOrProjects)
+      ? eventOrProjects
+      : eventOrProjects?.detail?.data?.projects || [];
+      
+    console.log('Rendering projects:', projects);
+    if (!this.element) {
+      console.error('Project list element not found');
+      return;
+    }
     
     this.element.innerHTML = "";
     
-    if (!projects || projects.length === 0) {
+    if (projects.length === 0) {
+      console.log('No projects to display');
       if (this.messageEl) this.messageEl.classList.remove("hidden");
       return;
     }
     
     if (this.messageEl) this.messageEl.classList.add("hidden");
     
-    projects.forEach(project => {
-      const card = this.createProjectCard(project);
-      this.element.appendChild(card);
-    });
+    try {
+      projects.forEach(project => {
+        console.log('Creating card for project:', project);
+        const card = this.createProjectCard(project);
+        if (!card) {
+          console.error('Failed to create card for project:', project);
+          return;
+        }
+        this.element.appendChild(card);
+      });
+    } catch (error) {
+      console.error('Error rendering projects:', error);
+    }
   }
   
   createProjectCard(project) {
@@ -1083,17 +1109,55 @@ class ProjectDashboard {
   init() {
     console.log("Project Dashboard initialization started");
     
-    // Setup components first
-    this.setupComponents();
+    // Verify main container exists
+    const panel = document.getElementById('projectManagerPanel');
+    if (!panel) {
+      console.error('Project dashboard container not found');
+      return;
+    }
     
-    // Then process URL params
-    this.processUrlParams();
-    
-    // Then register events
-    this.registerDataEvents();
-    this.bindEvents();
-    
-    console.log("Project Dashboard initialized");
+    try {
+      console.log("Setting up components...");
+      this.setupComponents();
+      
+      console.log("Processing URL parameters...");
+      this.processUrlParams();
+      
+      console.log("Registering event listeners...");
+      this.registerDataEvents();
+      this.bindEvents();
+      
+      console.log("Loading initial projects...");
+      this.loadProjects();
+      
+      console.log("Project Dashboard fully initialized for element:", panel);
+    } catch (error) {
+      console.error("Project Dashboard initialization failed:", error);
+    }
+  }
+
+  async loadProjects(filter = 'all') {
+    console.log(`Loading projects with filter: ${filter}`);
+    try {
+      const response = await apiRequest(`/api/projects?filter=${filter}`);
+      console.log("Projects API response:", response);
+      
+      if (response?.data?.projects) {
+        const event = new CustomEvent("projectsLoaded", {
+          detail: response.data
+        });
+        document.dispatchEvent(event);
+      } else {
+        console.error("Invalid projects response structure", response);
+      }
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+      const event = new CustomEvent("projectsLoaded", {
+        detail: [],
+        error: true
+      });
+      document.dispatchEvent(event);
+    }
   }
 
   // Setup UI components with error handling
@@ -1191,13 +1255,70 @@ class ProjectDashboard {
   
   handleProjectsLoaded(event) {
     console.log("[Dashboard] Received projectsLoaded event", event);
+    
+    // Handle both direct projects array and nested API response structures
+    let projects = [];
+    let originalCount = 0;
+    let filter = 'all';
+    let hasError = false;
+    
+    try {
+      // Check for different possible response structures
+      if (Array.isArray(event.detail)) {
+        projects = event.detail;
+        originalCount = projects.length;
+      } else if (event.detail?.data?.projects) {
+        projects = event.detail.data.projects;
+        originalCount = event.detail.data.count || projects.length;
+        filter = event.detail.data.filter?.type || 'all';
+      } else if (event.detail?.projects) {
+        projects = event.detail.projects;
+        originalCount = event.detail.count || projects.length;
+        filter = event.detail.filter?.type || 'all';
+      }
       
-    const projects = event.detail || [];
-    const originalCount = event.originalCount || projects.length;
-    const filter = event.filterApplied || 'all';
-    const hasError = event.error || false;
+      hasError = event.error || false;
 
-    console.log(`[Dashboard] Rendering ${projects.length} projects (${originalCount} total, filter: ${filter})`);
+      console.log('Projects data:', {
+        source: event.detail,
+        projects: projects,
+        count: originalCount,
+        filter: filter,
+        hasError: hasError
+      });
+
+      if (!this.components.projectList.element) {
+        console.error('Project list container not found in DOM');
+        return;
+      }
+
+      this.components.projectList.renderProjects(projects);
+        
+      // Update empty state visibility and message
+      const noProjectsMsg = document.getElementById('noProjectsMessage');
+      if (noProjectsMsg) {
+        noProjectsMsg.classList.toggle('hidden', projects.length > 0 || hasError);
+        
+        if (hasError) {
+          noProjectsMsg.textContent = "Error loading projects. Please try again.";
+          noProjectsMsg.classList.add('text-red-600');
+        } else if (projects.length === 0 && originalCount > 0) {
+          noProjectsMsg.textContent = `No projects match the "${filter}" filter`;
+          noProjectsMsg.classList.remove('text-red-600');
+        } else if (projects.length === 0) {
+          noProjectsMsg.textContent = "No projects found. Create your first project!";
+          noProjectsMsg.classList.remove('text-red-600');
+        }
+      }
+    } catch (error) {
+      console.error("[Dashboard] Error handling projects:", error);
+      const noProjectsMsg = document.getElementById('noProjectsMessage');
+      if (noProjectsMsg) {
+        noProjectsMsg.textContent = "Error displaying projects";
+        noProjectsMsg.classList.remove('hidden');
+        noProjectsMsg.classList.add('text-red-600');
+      }
+    }
       
     try {
       this.components.projectList.renderProjects(projects);
@@ -1322,10 +1443,20 @@ window.ProjectDashboard = ProjectDashboard;
 window.ProjectListComponent = ProjectListComponent;
 window.ProjectDetailsComponent = ProjectDetailsComponent;
 window.KnowledgeBaseComponent = KnowledgeBaseComponent;
-window.initProjectDashboard = initProjectDashboard;
 window.ModalManager = ModalManager;
 window.AnimationUtils = AnimationUtils;
 window.UIUtils = UIUtils;
+
+// Initialize dashboard when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.getElementById('projectManagerPanel')) {
+    console.log('Initializing ProjectDashboard...');
+    const dashboard = new ProjectDashboard();
+    dashboard.init();
+  } else {
+    console.log('Project dashboard container not found - skipping initialization');
+  }
+});
 
 // Initialize dashboard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
