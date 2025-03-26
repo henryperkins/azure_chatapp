@@ -29,7 +29,7 @@ CREATE TABLE users (
 CREATE INDEX ix_users_username ON users(username);
 CREATE INDEX ix_users_role ON users(role);
 
--- Knowledge Bases table
+-- Create Knowledge Bases table without project_id constraint initially
 CREATE TABLE knowledge_bases (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(200) NOT NULL,
@@ -38,10 +38,9 @@ CREATE TABLE knowledge_bases (
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
     last_used TIMESTAMP,
     version INTEGER DEFAULT 1 NOT NULL,
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id UUID,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT knowledge_bases_project_unique UNIQUE (project_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 CREATE INDEX ix_knowledge_bases_name ON knowledge_bases(name);
 CREATE INDEX ix_knowledge_bases_project_id ON knowledge_bases(project_id);
@@ -67,7 +66,7 @@ CREATE TABLE projects (
     extra_data JSONB,
     CONSTRAINT projects_check_token_limit CHECK (max_tokens >= token_usage),
     CONSTRAINT projects_check_archive_pin CHECK (NOT (archived AND pinned)),
-    CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default)),
+    CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default))
 );
 
 -- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
@@ -141,6 +140,14 @@ CREATE TABLE artifacts (
     CONSTRAINT valid_content_types CHECK (content_type IN ('code', 'document', 'image', 'audio', 'video'))
 );
 CREATE INDEX ix_artifacts_project_id ON artifacts(project_id);
+
+-- Add the foreign key constraint to knowledge_bases after projects exists
+ALTER TABLE knowledge_bases 
+ADD CONSTRAINT fk_knowledge_bases_project 
+FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+
+ALTER TABLE knowledge_bases
+ADD CONSTRAINT knowledge_bases_project_unique UNIQUE (project_id);
 
 -- Create function and trigger for automatic updated_at timestamps
 -- This function updates the updated_at column to CURRENT_TIMESTAMP on any row update
