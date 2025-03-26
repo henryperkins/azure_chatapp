@@ -34,7 +34,7 @@ class KnowledgeBase(Base):
     )
     project_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"), 
         nullable=False,
         unique=True,
         index=True
