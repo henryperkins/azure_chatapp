@@ -249,8 +249,10 @@ async def claude_chat(
         # Ensure budget is within valid range
         budget = max(min_budget, min(budget, max_tokens - min_budget))
         
-        payload["thinking"] = True
-        payload["budget_tokens"] = budget
+        payload["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": budget
+        }
         
         # When using extended thinking, we can't use temperature and other sampling params
         payload.pop("temperature", None)
