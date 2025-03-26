@@ -362,14 +362,14 @@ class ProjectDetailsComponent {
     if (activeTab) activeTab.classList.remove('hidden');
 
     document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-      tabBtn.classList.remove('border-blue-600', 'text-blue-600');
-      tabBtn.classList.add('text-gray-500', 'hover:text-gray-700');
+      tabBtn.classList.remove('active');
+      tabBtn.setAttribute('aria-selected', 'false');
     });
 
     const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
     if (activeTabBtn) {
-      activeTabBtn.classList.add('border-blue-600', 'text-blue-600');
-      activeTabBtn.classList.remove('text-gray-500', 'hover:text-gray-700');
+      activeTabBtn.classList.add('active');
+      activeTabBtn.setAttribute('aria-selected', 'true');
     }
   }
 
