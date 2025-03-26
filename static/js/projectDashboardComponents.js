@@ -830,13 +830,18 @@ class KnowledgeBaseComponent {
     const project = window.projectManager?.currentProject;
     if (!project?.knowledge_base_id) return;
     
+    const toggle = document.getElementById("knowledgeBaseEnabled");
+    const originalState = toggle.checked;
+    
+    // Optimistic UI update
+    toggle.checked = enabled;
     uiUtilsInstance.showNotification(
       `${enabled ? "Enabling" : "Disabling"} knowledge base...`,
       "info"
     );
     
     try {
-      await window.apiRequest(
+      const response = await window.apiRequest(
         `/api/knowledge-base/${project.knowledge_base_id}`, 
         "PATCH", 
         { is_active: enabled }
@@ -846,11 +851,32 @@ class KnowledgeBaseComponent {
         `Knowledge base ${enabled ? "enabled" : "disabled"}`,
         "success"
       );
-      window.projectManager?.loadProjectStats(project.id);
+      
+      // Refresh stats and KB info
+      await Promise.all([
+        window.projectManager?.loadProjectStats(project.id),
+        this.loadKnowledgeBaseHealth(project.knowledge_base_id)
+      ]);
     } catch (err) {
       console.error("Error toggling knowledge base:", err);
-      uiUtilsInstance.showNotification("Operation failed", "error");
-      document.getElementById("knowledgeBaseEnabled").checked = !enabled;
+      // Revert UI on error
+      toggle.checked = originalState;
+      uiUtilsInstance.showNotification(
+        `Failed to toggle knowledge base: ${err.message || "Unknown error"}`,
+        "error"
+      );
+    }
+  }
+
+  async loadKnowledgeBaseHealth(kbId) {
+    try {
+      const health = await window.apiRequest(
+        `/api/knowledge-base/${kbId}/health`,
+        "GET"
+      );
+      this.renderHealthStatus(health);
+    } catch (err) {
+      console.error("Failed to load KB health:", err);
     }
   }
   
@@ -912,8 +938,14 @@ class KnowledgeBaseComponent {
     this.elements.noResultsSection.classList.add("hidden");
     
     results.forEach(result => {
+      // Extract error details if present
+      const errorDetails = result.metadata?.processing_error;
+      const hasError = errorDetails && !result.success;
+      
       const item = uiUtilsInstance.createElement("div", {
-        className: "bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow"
+        className: `bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow ${
+          hasError ? "border-l-4 border-red-500" : ""
+        }`
       });
       
       // Header with file info and match score

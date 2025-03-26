@@ -33,6 +33,7 @@ from utils.auth_utils import get_current_user_and_token
 from utils.db_utils import validate_resource_access, get_all_by_condition
 from utils.response_utils import create_standard_response
 from services import knowledgebase_service
+from services.vector_db import get_vector_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -343,6 +344,39 @@ async def search_project_knowledge(
     except Exception as e:
         logger.error(f"Error searching project knowledge: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching project knowledge: {str(e)}")
+
+    @router.get("/{knowledge_base_id}/health", response_model=dict)
+    async def get_knowledge_base_health(
+        knowledge_base_id: UUID,
+        current_user: User = Depends(get_current_user_and_token),
+        db: AsyncSession = Depends(get_async_session)
+    ):
+        """Get health status of knowledge base including vector DB stats"""
+        kb = await db.get(KnowledgeBase, knowledge_base_id)
+        if not kb:
+            raise HTTPException(status_code=404, detail="Knowledge base not found")
+            
+        # Get vector DB status
+        vector_db = await get_vector_db(
+            model_name=kb.embedding_model,
+            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(kb.project_id)),
+            load_existing=True
+        )
+        
+        # Get file processing stats
+        processed_files = await db.execute(
+            select(func.count()).where(
+                ProjectFile.project_id == kb.project_id,
+                ProjectFile.metadata["search_processing"]["success"].as_boolean()
+            )
+        )
+        
+        return {
+            "status": "active" if kb.is_active else "inactive",
+            "embedding_model": kb.embedding_model,
+            "processed_files": processed_files.scalar() or 0,
+            "last_updated": kb.updated_at.isoformat() if kb.updated_at else None
+        }
 
     @router.post("/projects/{project_id}/toggle", response_model=dict)
     async def toggle_project_knowledge_base(
