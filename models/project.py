@@ -10,6 +10,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
 from typing import Optional
 from datetime import datetime
+from sqlalchemy import event
 import uuid
 
 class Project(Base):
@@ -65,3 +66,9 @@ class Project(Base):
 
     def __repr__(self):
         return f"<Project {self.name} (#{self.id}) user_id={self.user_id}>"
+
+@event.listens_for(Project.knowledge_base_id, 'set', retval=True)
+def validate_knowledge_base_assignment(target, value, oldvalue, initiator):
+    if value and oldvalue and value != oldvalue:
+        raise ValueError("Cannot change knowledge base association - create a new knowledge base instead")
+    return value

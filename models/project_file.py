@@ -23,6 +23,7 @@ class ProjectFile(Base):
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
+        unique=True,  # Ensures one KB per project
         index=True
     )
     filename: Mapped[str] = mapped_column(String, nullable=False)
