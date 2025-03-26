@@ -232,7 +232,7 @@ function getModelOptions() {
     { 
       id: 'claude-3-7-sonnet-20250219', 
       name: 'Claude 3.7 Sonnet',
-      description: 'Latest Claude model with enhanced capabilities'
+      description: 'Latest Claude model with enhanced capabilities (128K context)'
     },
     { 
       id: 'gpt-4', 
