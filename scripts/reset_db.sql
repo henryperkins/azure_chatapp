@@ -29,6 +29,9 @@ CREATE TABLE users (
 
 CREATE INDEX ix_users_username ON users(username);
 CREATE INDEX ix_users_role ON users(role);
+CREATE INDEX ix_users_id ON users(id);
+CREATE INDEX ix_users_last_login ON users(last_login);
+CREATE INDEX ix_users_created_at ON users(created_at);
 
 -- Create Knowledge Bases table without project_id constraint initially
 CREATE TABLE knowledge_bases (
