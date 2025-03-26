@@ -714,6 +714,45 @@ async def create_knowledge_base(
         await db.refresh(kb)
     return kb
 
+@handle_service_errors("Error cleaning up KB references")
+async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
+    """Clean up invalid KB references and return counts of fixes"""
+    from sqlalchemy import update, exists
+    
+    # Projects with invalid KB references
+    project_result = await db.execute(
+        update(Project)
+        .where(
+            Project.knowledge_base_id.is_not(None),
+            ~exists().where(KnowledgeBase.id == Project.knowledge_base_id)
+        )
+        .values(knowledge_base_id=None)
+        .returning(Project.id)
+    )
+    project_fixes = len(project_result.scalars().all())
+    
+    # Conversations with invalid project/KB references
+    conv_result = await db.execute(
+        update(Conversation)
+        .where(
+            Conversation.use_knowledge_base.is_(True),
+            ~exists().where(
+                (Project.id == Conversation.project_id) &
+                (Project.knowledge_base_id.is_not(None))
+            )
+        )
+        .values(use_knowledge_base=False)
+        .returning(Conversation.id)
+    )
+    conv_fixes = len(conv_result.scalars().all())
+    
+    await db.commit()
+    
+    return {
+        "projects_fixed": project_fixes,
+        "conversations_fixed": conv_fixes
+    }
+
 @handle_service_errors("Error searching project context")
 async def search_project_context(
     project_id: UUID,

@@ -67,10 +67,22 @@ async def do_summarization(
         return "Summary not available due to error."
 
 
+class ContextTokenTracker:
+    """Tracks token usage during context management"""
+    def __init__(self, max_tokens: int):
+        self.used_tokens = 0
+        self.max_tokens = max_tokens
+
+    def add_context(self, tokens: int) -> None:
+        if self.used_tokens + tokens > self.max_tokens:
+            raise ValueError(f"Token limit exceeded (used {self.used_tokens}/{self.max_tokens})")
+        self.used_tokens += tokens
+
 async def manage_context(
     messages: List[Dict[str, str]],
     user_message: Optional[str] = None,
-    search_results: Optional[Dict[str, Any]] = None
+    search_results: Optional[Dict[str, Any]] = None,
+    max_tokens: Optional[int] = None
 ) -> List[Dict[str, str]]:
     """
     Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
