@@ -41,6 +41,7 @@ class KnowledgeBaseCreate(BaseModel):
     Schema for creating a new knowledge base.
     """
     name: str = Field(..., min_length=1, max_length=200)
+    project_id: UUID = Field(..., description="Project to associate with this knowledge base")
     description: Optional[str] = None
     embedding_model: Optional[str] = None
 

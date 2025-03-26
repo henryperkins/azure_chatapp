@@ -696,23 +696,44 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
 @handle_service_errors("Error creating knowledge base")
 async def create_knowledge_base(
     name: str,
+    project_id: UUID,
     description: Optional[str] = None,
     embedding_model: Optional[str] = None,
     db: Optional[AsyncSession] = None
 ) -> KnowledgeBase:
     """
-    Create a new KnowledgeBase in the database.
+    Create a new KnowledgeBase in the database associated with a project.
     """
+    if db is None:
+        raise ValueError("Database session is required")
+        
+    # Check if project already has a knowledge base
+    existing_kb = await db.execute(
+        select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+    )
+    if existing_kb.scalars().first():
+        raise ValueError("Project already has a knowledge base")
+
     kb = KnowledgeBase(
         name=name,
         description=description,
         embedding_model=embedding_model or DEFAULT_EMBEDDING_MODEL,
-        is_active=True
+        is_active=True,
+        project_id=project_id
     )
-    if db:
-        db.add(kb)
-        await db.commit()
-        await db.refresh(kb)
+    
+    db.add(kb)
+    await db.commit()
+    await db.refresh(kb)
+    
+    # Update the project's knowledge_base_id
+    await db.execute(
+        update(Project)
+        .where(Project.id == project_id)
+        .values(knowledge_base_id=kb.id)
+    )
+    await db.commit()
+    
     return kb
 
 @handle_service_errors("Error cleaning up KB references")
