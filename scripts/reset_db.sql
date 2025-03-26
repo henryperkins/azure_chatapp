@@ -32,6 +32,7 @@ CREATE INDEX ix_users_role ON users(role);
 CREATE INDEX ix_users_id ON users(id);
 CREATE INDEX ix_users_last_login ON users(last_login);
 CREATE INDEX ix_users_created_at ON users(created_at);
+CREATE INDEX ix_users_updated_at ON users(updated_at);
 
 -- Create Knowledge Bases table without project_id constraint initially
 CREATE TABLE knowledge_bases (
@@ -74,7 +75,9 @@ CREATE TABLE projects (
     CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default))
 );
 
--- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
+CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
+CREATE INDEX ix_projects_created_at ON projects(created_at);
+CREATE INDEX ix_projects_updated_at ON projects(updated_at);
 CREATE INDEX ix_projects_user_id ON projects(user_id);
 
 -- Conversations table
