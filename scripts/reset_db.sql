@@ -132,7 +132,7 @@ CREATE TABLE artifacts (
     name VARCHAR(200) NOT NULL,
     content_type VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     extra_data JSONB,
     CONSTRAINT valid_content_types CHECK (content_type IN ('code', 'document', 'image', 'audio', 'video'))
