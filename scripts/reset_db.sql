@@ -85,7 +85,7 @@ CREATE TABLE conversations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB DEFAULT '{}'::jsonb,
     knowledge_base_id UUID REFERENCES knowledge_bases(id),
-    use_knowledge_base BOOLEAN DEFAULT FALSE,
+    use_knowledge_base BOOLEAN DEFAULT FALSE NOT NULL,
     search_results JSONB
 );
 CREATE INDEX ix_conversations_user_id ON conversations(user_id);
