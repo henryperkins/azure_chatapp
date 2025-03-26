@@ -614,29 +614,66 @@ class ProjectDetailsComponent {
 
   uploadFiles(projectId, files) {
     this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+    const allowedExtensions = ['.txt', '.pdf', '.doc', '.docx', '.csv', '.json', '.md', '.xlsx', '.html'];
+    const maxSizeMB = 30;
     
     if (this.elements.uploadProgress) {
       this.elements.uploadProgress.classList.remove("hidden");
       this.elements.progressBar.style.width = "0%";
       this.elements.uploadStatus.textContent = `Uploading 0/${files.length} files...`;
     }
-    
-    // Return a Promise that resolves when all uploads complete
-    return Promise.all(
-      Array.from(files).map(file =>
-        window.projectManager?.uploadFile(projectId, file)
-          .then(() => {
-            this.fileUploadStatus.completed++;
-            this.updateUploadProgress();
-          })
-          .catch(() => {
-            this.fileUploadStatus.failed++;
-            this.fileUploadStatus.completed++;
-            this.updateUploadProgress();
-            throw new Error('File upload failed');
-          })
-      )
-    );
+
+    // Validate files first
+    const validFiles = [];
+    const invalidFiles = [];
+
+    Array.from(files).forEach(file => {
+      const fileExt = file.name.split('.').pop().toLowerCase();
+      const isValidExt = allowedExtensions.includes(`.${fileExt}`);
+      const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
+
+      if (isValidExt && isValidSize) {
+        validFiles.push(file);
+      } else {
+        let errorMsg = '';
+        if (!isValidExt) {
+          errorMsg = `Invalid file type (.${fileExt}). Allowed: ${allowedExtensions.join(', ')}`;
+        } else {
+          errorMsg = `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB limit)`;
+        }
+        invalidFiles.push({file, error: errorMsg});
+      }
+    });
+
+    // Show errors for invalid files
+    if (invalidFiles.length > 0) {
+      invalidFiles.forEach(({file, error}) => {
+        uiUtilsInstance.showNotification(`Skipped ${file.name}: ${error}`, 'error');
+        this.fileUploadStatus.failed++;
+        this.fileUploadStatus.completed++;
+      });
+      this.updateUploadProgress();
+    }
+
+    // Process valid files
+    if (validFiles.length > 0) {
+      return Promise.all(
+        validFiles.map(file => {
+          return window.projectManager?.uploadFile(projectId, file)
+            .then(() => {
+              this.fileUploadStatus.completed++;
+              this.updateUploadProgress();
+            })
+            .catch(error => {
+              uiUtilsInstance.showNotification(`Failed to upload ${file.name}: ${error.message}`, 'error');
+              this.fileUploadStatus.failed++;
+              this.fileUploadStatus.completed++;
+              this.updateUploadProgress();
+            });
+        })
+      );
+    }
+    return Promise.resolve();
   }
 
   updateUploadProgress() {
