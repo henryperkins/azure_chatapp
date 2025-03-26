@@ -433,50 +433,48 @@ async function authRequest(url, username, password) {
 }
 
 async function api(url, method = 'GET', body) {
-  // Use the getBaseUrl utility from app.js
-  const baseUrl = window.getBaseUrl();
-  
-  const headers = {
-    "Content-Type": "application/json",
-    "Cache-Control": "no-cache",
-    ...TokenManager.getAuthHeader()
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...TokenManager.getAuthHeader()
+    },
+    credentials: 'include'
   };
 
-  // Clean and normalize the endpoint
-  const cleanEndpoint = url.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
-  const apiUrl = cleanEndpoint.startsWith('/')
-    ? `${baseUrl}${cleanEndpoint}`
-    : `${baseUrl}/${cleanEndpoint}`;
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
 
-  const res = await fetch(apiUrl, {
-    method,
-    headers,
-    credentials: "include",
-    body: body ? JSON.stringify(body) : undefined
-  });
-
-  if (!res.ok) {
-    const error = new Error();
-    error.status = res.status;
+  try {
+    const response = await fetch(url, options);
     
-    try {
-      const errorData = await res.json();
-      error.message = errorData.message || res.statusText;
-    } catch {
-      error.message = res.statusText;
+    if (!response.ok) {
+      const error = new Error(response.statusText);
+      error.status = response.status;
+      
+      try {
+        const errorData = await response.json();
+        error.message = errorData.message || errorData.detail || response.statusText;
+      } catch {
+        error.message = response.statusText;
+      }
+      
+      throw error;
+    }
+
+    const data = await response.json();
+    
+    // Update tokens if present in response
+    if (data.access_token) {
+      TokenManager.setTokens(data.access_token, data.refresh_token);
     }
     
+    return data;
+  } catch (error) {
+    console.error(`API request to ${url} failed:`, error);
     throw error;
   }
-
-  const data = await res.json();
-  
-  // Update tokens if present in response
-  if (data.access_token) {
-    TokenManager.setTokens(data.access_token, data.refresh_token);
-  }
-  
-  return data;
 }
 
 function updateUserUI(username) {
