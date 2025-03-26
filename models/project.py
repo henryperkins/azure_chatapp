@@ -66,8 +66,8 @@ class Project(Base):
     knowledge_base = relationship(
         "KnowledgeBase", 
         back_populates="project", 
-        uselist=False, 
-        cascade="all, delete-orphan",
+        uselist=False,
+        single_parent=True,
         foreign_keys=[knowledge_base_id]
     )
 

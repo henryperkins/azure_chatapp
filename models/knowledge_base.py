@@ -54,7 +54,7 @@ class KnowledgeBase(Base):
         "Project", 
         back_populates="knowledge_base", 
         foreign_keys=[project_id],
-        single_parent=True
+        cascade="all, delete-orphan"
     )
     
     def __repr__(self):
