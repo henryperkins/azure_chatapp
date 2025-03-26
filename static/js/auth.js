@@ -597,17 +597,65 @@ async function refreshTokenIfActive() {
 // -------------------------
 // Initial Auth Check
 // -------------------------
-async function verifyAuthState() {
-  // Skip verification if we have no auth header
-  const authHeader = TokenManager.getAuthHeader();
-  if (!authHeader || !authHeader.Authorization) {
-    return false;
+// Cache for auth verification results
+const authVerificationCache = {
+  lastVerified: 0,
+  cacheDuration: 5000, // 5 seconds
+  result: null,
+  
+  isValid: function() {
+    return this.result !== null &&
+           Date.now() - this.lastVerified < this.cacheDuration;
+  },
+  
+  set: function(result) {
+    this.result = result;
+    this.lastVerified = Date.now();
   }
+};
 
+async function verifyAuthState() {
   try {
+    // Return cached result if valid
+    if (authVerificationCache.isValid()) {
+      return authVerificationCache.result;
+    }
+
+    // First check if we have tokens
+    const hasTokens = TokenManager.accessToken ||
+                    sessionStorage.getItem('auth_state');
+    
+    // If no tokens at all, definitely not authenticated
+      if (!hasTokens) {
+      authVerificationCache.set(false);
+      return false;
+    }
+
+    // Verify with API if we think we might be authenticated
     const response = await api('/api/auth/verify');
+    
+    // If API says we're authenticated but tokens are missing, refresh
+    if (response.authenticated && !TokenManager.accessToken) {
+      await updateAuthStatus();
+      authVerificationCache.set(true);
+      return true;
+    }
+
+    // Cache and return result
+    authVerificationCache.set(response.authenticated);
     return response.authenticated;
-  } catch {
+  } catch (error) {
+    console.warn('Auth verification error:', error);
+    
+    // If it's a network error, assume we might still be authenticated
+    if (error.message?.includes('NetworkError') ||
+        error.message?.includes('Failed to fetch')) {
+      const result = !!TokenManager.accessToken;
+      authVerificationCache.set(result);
+      return result;
+    }
+    
+    authVerificationCache.set(false);
     return false;
   }
 }

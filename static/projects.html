@@ -523,6 +523,17 @@
                   <!-- Conversations will be populated here -->
                   <div class="text-gray-500 text-center py-8">No conversations yet.</div>
                 </div>
+                
+                <!-- Chat interface container (hidden by default) -->
+                <div id="projectChatContainer" class="hidden mt-6 border-t pt-6">
+                  <div id="projectChatUI" class="bg-white dark:bg-gray-800 rounded shadow p-4">
+                    <div id="projectChatMessages" class="h-96 overflow-y-auto mb-4"></div>
+                    <div class="flex">
+                      <input id="projectChatInput" type="text" class="flex-1 border rounded-l px-3 py-2" placeholder="Type your message...">
+                      <button id="projectChatSendBtn" class="bg-blue-600 text-white px-4 py-2 rounded-r">Send</button>
+                    </div>
+                  </div>
+                </div>
               </div>
               
               <!-- Enhanced artifacts tab -->
@@ -918,23 +929,16 @@
   </div>
 
  <!-- Core scripts -->
-<script src="/static/js/app.js"></script>
-<script src="/static/js/formatting.js"></script>
-<script src="/static/js/auth.js"></script>
-<script src="/static/js/modelConfig.js"></script>
-
-<!-- Consolidated scripts -->
-<script src="/static/js/chat.js" type="module"></script>
-<script src="/static/js/sidebar.js"></script>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    if (window.projectManager) {
-      const script = document.createElement('script');
-      script.src = '/static/js/projectDashboard.js';
-      document.body.appendChild(script);
-    }
-  });
-</script>
+ <script src="/static/js/formatting.js"></script>
+ <script src="/static/js/auth.js"></script>
+ <script src="/static/js/modelConfig.js"></script>
+ <script src="/static/js/projectManager.js" type="module"></script>
+ <script src="/static/js/projectDashboard.js" type="module"></script>
+ 
+ <!-- Consolidated scripts -->
+ <script src="/static/js/chat.js" type="module"></script>
+ <script src="/static/js/sidebar.js"></script>
+ <script src="/static/js/app.js"></script>
 
 </body>
 </html>
