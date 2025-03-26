@@ -1,5 +1,6 @@
 import ProjectListComponent from './projectListComponent.js';
-import { ProjectDetailsComponent, KnowledgeBaseComponent } from './projectDashboardComponents.js';
+import { ProjectDetailsComponent } from './projectDashboardComponents.js';
+import KnowledgeBaseComponent from './knowledgeBaseComponent.js';
 import { UIUtils, ModalManager } from './projectDashboardUtils.js';
 
 /**
