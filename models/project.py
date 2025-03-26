@@ -63,11 +63,12 @@ class Project(Base):
     user = relationship("User", back_populates="projects")
     
     # Relationship to knowledge base
-    knowledge_base = relationship(
+    knowledge_bases = relationship(  # Changed from knowledge_base to knowledge_bases
         "KnowledgeBase", 
         back_populates="project",
-        uselist=False,
-        foreign_keys=[knowledge_base_id]
+        uselist=True,  # Changed to True since a project can have multiple knowledge bases
+        foreign_keys=[knowledge_base_id],
+        cascade="all, delete-orphan"
     )
 
     def __repr__(self):

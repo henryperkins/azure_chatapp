@@ -52,7 +52,7 @@ class KnowledgeBase(Base):
     
     project = relationship(
         "Project", 
-        back_populates="knowledge_base",
+        back_populates="knowledge_bases",  # Changed from knowledge_base to knowledge_bases
         foreign_keys=[project_id],
         uselist=False,
         single_parent=True
