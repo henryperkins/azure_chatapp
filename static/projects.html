@@ -388,38 +388,46 @@
             </div>
 
             <!-- Chat interface container -->
-            <div id="projectChatContainer" class="hidden mt-6">
-              <div id="projectChatUI" class="bg-white dark:bg-gray-800 rounded shadow p-4">
-                <div id="projectChatMessages" class="h-96 overflow-y-auto mb-4"></div>
-                <div class="flex">
-                  <input id="projectChatInput" type="text" class="flex-1 border rounded-l px-3 py-2" placeholder="Type your message...">
-                  <button id="projectChatSendBtn" class="bg-blue-600 text-white px-4 py-2 rounded-r">Send</button>
+            <div id="projectChatContainer" class="hidden mt-4 transition-all duration-300 ease-in-out">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="font-medium text-lg">Conversation</h3>
+                <button id="minimizeChatBtn" class="text-gray-500 hover:text-gray-700 p-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div id="projectChatUI" class="bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
+                <div id="projectChatMessages" class="h-[50vh] sm:h-[60vh] md:h-[70vh] overflow-y-auto p-4"></div>
+                <div class="flex items-center border-t border-gray-200 dark:border-gray-700 p-2">
+                  <input id="projectChatInput" type="text" class="flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Type your message...">
+                  <button id="projectChatSendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors">Send</button>
                 </div>
               </div>
             </div>
             
             <!-- Enhanced project stats panel with animations -->
-            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6 shadow-sm" data-testid="project-stats">
-              <div class="mb-4">
+            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-2 sm:p-4 rounded-lg mb-4 sm:mb-6 shadow-sm" data-testid="project-stats">
+              <div class="mb-2 sm:mb-4">
                 <div class="flex justify-between mb-1">
-                  <span class="text-sm font-medium">Token Usage: <span id="tokenUsage" class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
-                  <span id="tokenPercentage" class="text-sm">0%</span>
+                  <span class="text-xs sm:text-sm font-medium">Token Usage: <span id="tokenUsage" class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
+                  <span id="tokenPercentage" class="text-xs sm:text-sm">0%</span>
                 </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 overflow-hidden">
-                  <div id="tokenProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 sm:h-2.5 overflow-hidden">
+                  <div id="tokenProgressBar" class="bg-blue-600 h-2 sm:h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
                 </div>
               </div>
-              <div class="grid grid-cols-3 gap-4 text-center">
-                <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm hover:shadow-md transition-shadow">
-                  <div id="conversationCount" class="text-lg font-semibold transition-all duration-300">0</div>
+              <div class="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                <div class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded shadow-sm hover:shadow-md transition-shadow">
+                  <div id="conversationCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Conversations</div>
                 </div>
-                <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm hover:shadow-md transition-shadow">
-                  <div id="fileCount" class="text-lg font-semibold transition-all duration-300">0</div>
+                <div class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded shadow-sm hover:shadow-md transition-shadow">
+                  <div id="fileCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Files</div>
                 </div>
-                <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm hover:shadow-md transition-shadow">
-                  <div id="artifactCount" class="text-lg font-semibold transition-all duration-300">0</div>
+                <div class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded shadow-sm hover:shadow-md transition-shadow">
+                  <div id="artifactCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Artifacts</div>
                 </div>
               </div>
