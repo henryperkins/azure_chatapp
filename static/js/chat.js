@@ -827,9 +827,7 @@ class UIComponents {
   }
 }
 
-// --------------------------
-// Main Chat Interface
-// --------------------------
+// Main Chat Interface class
 class ChatInterface {
   constructor(options = {}) {
     this.notificationFunction = options.showNotification || window.showNotification || console.log;
@@ -848,6 +846,23 @@ class ChatInterface {
   }
 
   initialize() {
+    // Determine page context and set selectors
+    const isProjectsPage = window.location.pathname.includes('/projects');
+    
+    // Update selectors based on page context
+    if (isProjectsPage) {
+      this.containerSelector = '#projectChatUI';
+      this.messageContainerSelector = '#projectChatMessages';
+      this.inputSelector = '#projectChatInput';
+      this.sendButtonSelector = '#projectChatSendBtn';
+    } else {
+      // Default selectors for index.html/main chat
+      this.containerSelector = '#chatUI';
+      this.messageContainerSelector = '#conversationArea';
+      this.inputSelector = '#chatInput';
+      this.sendButtonSelector = '#sendBtn';
+    }
+
     // Extract chat ID from URL or config
     const urlParams = new URLSearchParams(window.location.search);
     this.currentChatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
@@ -1113,7 +1128,16 @@ async function testWebSocketConnection() {
       return { success: false, error: error.message, message: "WebSocket test failed" };
     }
   }
-  return { success: false, message: "Chat interface not initialized" };
+  
+  // Export ChatInterface globally
+  if (typeof window !== 'undefined') {
+    window.ChatInterface = window.ChatInterface || ChatInterface;
+  }
+  
+  // Expose ChatInterface globally
+  if (typeof window !== 'undefined') {
+    window.ChatInterface = window.ChatInterface || ChatInterface;
+  }
 }
 
 // Attach to window

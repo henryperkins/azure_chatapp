@@ -294,6 +294,28 @@ class ProjectDetailsComponent {
     this.state = { currentProject: null };
     this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
     
+    // Initialize chat interface only if available
+    if (typeof window.ChatInterface === 'function') {
+      if (!window.projectChatInterface) {
+        console.log('Initializing project chat interface');
+        try {
+          window.projectChatInterface = new window.ChatInterface({
+            containerSelector: '#projectChatUI',
+            messageContainerSelector: '#projectChatMessages',
+            inputSelector: '#projectChatInput',
+            sendButtonSelector: '#projectChatSendBtn'
+          });
+          window.projectChatInterface.initialize();
+        } catch (err) {
+          console.error('Failed to initialize chat interface:', err);
+        }
+      } else {
+        console.log('Project chat interface already exists');
+      }
+    } else {
+      console.warn('ChatInterface not available - chat functionality will be limited');
+    }
+
     this.elements = {
       container: document.getElementById("projectDetailsView"),
       title: document.getElementById("projectTitle"),
@@ -311,6 +333,8 @@ class ProjectDetailsComponent {
       pinBtn: document.getElementById("pinProjectBtn"),
       backBtn: document.getElementById("backToProjectsBtn"),
     };
+
+    console.log('ProjectDetailsComponent elements initialized');
     
     this.bindEvents();
     this.setupDragDropHandlers();
@@ -461,17 +485,33 @@ class ProjectDetailsComponent {
     conversations.forEach(conversation => {
       const convoEl = uiUtilsInstance.createElement("div", {
         className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
-        onclick: () => {
+        onclick: async () => {
           const chatContainer = document.getElementById('projectChatContainer');
           if (chatContainer) chatContainer.classList.remove('hidden');
           
-          // Ensure the chat interface exists and set the correct target container
-          if (window.projectChatInterface && typeof window.projectChatInterface.setTargetContainer === 'function') {
-            window.projectChatInterface.setTargetContainer('#projectChatMessages'); // Set target for messages
-            window.projectChatInterface.loadConversation(conversation.id);
-          } else {
-            console.error("projectChatInterface or setTargetContainer not available.");
-            // Optionally show an error to the user
+          console.log('Loading conversation', conversation.id);
+          
+          // Verify chat interface is ready
+          if (!window.projectChatInterface) {
+            console.error('Project chat interface not initialized');
+            return;
+          }
+
+          // Ensure target container is set
+          try {
+            window.projectChatInterface.setTargetContainer('#projectChatMessages');
+            console.log('Target container set successfully');
+          } catch (err) {
+            console.error('Failed to set target container:', err);
+          }
+
+          // Load conversation with error handling
+          try {
+            await window.projectChatInterface.loadConversation(conversation.id);
+            console.log('Conversation loaded successfully');
+          } catch (err) {
+            console.error('Failed to load conversation:', err);
+            window.UIUtils?.showNotification('Failed to load conversation', 'error');
           }
         }
       });
@@ -531,9 +571,15 @@ class ProjectDetailsComponent {
           const chatContainer = document.getElementById('projectChatContainer');
           if (chatContainer) chatContainer.classList.remove('hidden');
 
-          // Initialize chat interface if not already done
+          // Initialize or update chat interface with correct selectors
           if (!window.projectChatInterface) {
-            window.initializeChat();
+            window.projectChatInterface = new window.ChatInterface({
+              containerSelector: '#projectChatUI',
+              messageContainerSelector: '#projectChatMessages',
+              inputSelector: '#projectChatInput',
+              sendButtonSelector: '#projectChatSendBtn'
+            });
+            window.projectChatInterface.initialize();
           }
 
           // Create new conversation
