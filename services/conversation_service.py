@@ -55,22 +55,34 @@ async def create_conversation(
     """
     Creates a new conversation with proper model alignment.
     """
-    # Validate model first (reuse existing function)
-    await validate_model(model_id)
+    logger.info(f"Creating conversation for project {project_id} with model {model_id}")
     
-    # Create conversation object
-    conv = Conversation(
-        project_id=project_id,
-        user_id=user_id,
-        title=title,
-        model_id=model_id
-    )
-    
-    # Use db_utils for saving
-    saved_conv = await save_model(db, conv)
-    if not saved_conv:
-        raise ValueError("Failed to save conversation")
-    return saved_conv
+    try:
+        # Validate model first (reuse existing function)
+        await validate_model(model_id)
+        logger.info("Model validation passed")
+        
+        # Create conversation object
+        conv = Conversation(
+            project_id=project_id,
+            user_id=user_id,
+            title=title,
+            model_id=model_id
+        )
+        logger.info("Conversation object created")
+        
+        # Use db_utils for saving
+        saved_conv = await save_model(db, conv)
+        if not saved_conv:
+            logger.error("Failed to save conversation - save_model returned None")
+            raise ValueError("Failed to save conversation - check database logs for details")
+            
+        logger.info(f"Conversation created successfully with ID {saved_conv.id}")
+        return saved_conv
+        
+    except Exception as e:
+        logger.error(f"Error in create_conversation: {str(e)}", exc_info=True)
+        raise
 
 @handle_service_errors("Failed to list project conversations")
 async def list_project_conversations(

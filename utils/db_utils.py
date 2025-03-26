@@ -97,17 +97,28 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
     logger.info(f"Scheduled token cleanup to run every {interval_minutes} minutes")
 
 
-async def save_model(db: AsyncSession, model_instance: Any) -> None:
+async def save_model(db: AsyncSession, model_instance: Any) -> Optional[Any]:
     """
     Generic function to save a model instance to the database.
     
     Args:
         db: Database session
         model_instance: SQLAlchemy model instance to save
+        
+    Returns:
+        The saved model instance if successful, None otherwise
     """
-    db.add(model_instance)
-    await db.commit()
-    await db.refresh(model_instance)
+    try:
+        logger.debug(f"Saving model instance: {model_instance}")
+        db.add(model_instance)
+        await db.commit()
+        await db.refresh(model_instance)
+        logger.debug(f"Successfully saved model: {model_instance}")
+        return model_instance
+    except Exception as e:
+        logger.error(f"Error saving model {type(model_instance).__name__}: {str(e)}")
+        await db.rollback()
+        return None
 
 
 async def get_all_by_condition(
