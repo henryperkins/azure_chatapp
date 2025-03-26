@@ -32,7 +32,7 @@ from utils.ai_response import (
     generate_ai_response,
     handle_websocket_response
 )
-from utils.auth_utils import get_current_user_and_token, extract_token_from_websocket, get_user_from_token
+from utils.auth_utils import get_current_user_and_token, extract_token, get_user_from_token
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_message, serialize_conversation
@@ -346,7 +346,7 @@ async def project_websocket_chat_endpoint(
     async with AsyncSessionLocal() as db:
         try:
             # 1. Extract JWT token first
-            token = await extract_token_from_websocket(websocket)
+            token = extract_token(websocket)
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -525,7 +525,7 @@ async def websocket_chat_endpoint(
     async with AsyncSessionLocal() as db:
         try:
             # 1. Extract JWT token first
-            token = await extract_token_from_websocket(websocket)
+            token = extract_token(websocket)
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
