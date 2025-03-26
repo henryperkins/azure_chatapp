@@ -102,7 +102,7 @@ CREATE TABLE messages (
     extra_data JSONB DEFAULT '{}'::jsonb,
     context_used JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT valid_message_roles CHECK (role IN ('user', 'assistant', 'system'))
 );
 CREATE INDEX ix_messages_id ON messages(id);
