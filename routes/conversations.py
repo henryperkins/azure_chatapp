@@ -26,7 +26,7 @@ from models.message import Message
 from models.user import User
 from utils.auth_utils import (
     get_current_user_and_token,
-    extract_token_from_websocket,
+    extract_token,
     get_user_from_token
 )
 from utils.db_utils import save_model, get_all_by_condition, validate_resource_access
@@ -412,7 +412,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
     async with AsyncSessionLocal() as db:
         try:
             # Extract and validate token before accepting connection
-            token = await extract_token_from_websocket(websocket)
+            token = extract_token(websocket)
             if not token:
                 logger.warning("WebSocket connection rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
