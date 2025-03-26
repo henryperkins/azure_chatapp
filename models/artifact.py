@@ -34,7 +34,7 @@ class Artifact(Base):
     content_type: Mapped[str] = mapped_column(String(50), nullable=False)  # code, document, image, etc.
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="Max 10MB of text content")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"), nullable=False)
     extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
 
     project = relationship("Project", back_populates="artifacts")
