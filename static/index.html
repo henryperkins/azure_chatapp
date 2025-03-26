@@ -18,6 +18,22 @@
     .toggle-checkbox:checked + .toggle-label {
       background-color: #3b82f6;
     }
+
+    /* Auth Dropdown */
+    .slide-in {
+      animation: slideIn 0.2s ease-out forwards;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
   </style>
   
   <!-- Ensure responsive, mobile-friendly behavior -->
