@@ -18,7 +18,11 @@ import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from utils.auth_utils import clean_expired_tokens, extract_token
+from utils.auth_utils import (
+    clean_expired_tokens,
+    extract_token,
+    get_current_user_and_token,
+)
 
 from config import settings
 from db import get_async_session
@@ -227,7 +231,6 @@ async def login_user(
 async def refresh_token(
     response: Response,
     request: Request,
-    current_user_and_token: User = Depends(get_current_user_and_token),
     session: AsyncSession = Depends(get_async_session)
 ) -> LoginResponse:
     """Provides new token with rotation for session continuity."""
