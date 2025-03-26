@@ -137,23 +137,12 @@ class ProjectListComponent {
     let card;
     if (UIUtils && uiUtilsInstance.createElement) {
       card = uiUtilsInstance.createElement("div", {
-        className: `bg-white dark:bg-gray-700 rounded-lg shadow-md p-4
-          border-2 ${project.pinned ? "border-yellow-400" : "border-blue-400"}
-          ${project.archived ? "opacity-75" : ""}
-          w-full min-w-[300px] min-h-[200px] mb-4
-          hover:shadow-lg transition-all duration-200`,
-        style: { display: 'flex', flexDirection: 'column' }
+        className: `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"} ${project.archived ? "project-card-archived" : ""}`
       });
     } else {
       // Fallback implementation
       card = document.createElement('div');
-      card.className = `bg-white dark:bg-gray-700 rounded-lg shadow-md p-4
-        border-2 ${project.pinned ? "border-yellow-400" : "border-blue-400"}
-        ${project.archived ? "opacity-75" : ""}
-        w-full min-w-[300px] min-h-[200px] mb-4
-        hover:shadow-lg transition-all duration-200`;
-      card.style.display = 'flex';
-      card.style.flexDirection = 'column';
+      card.className = `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"} ${project.archived ? "project-card-archived" : ""}`;
     }
     
     // Header
@@ -188,9 +177,9 @@ class ProjectListComponent {
       `
     });
     
-    const progressOuter = uiUtilsInstance.createElement("div", { className: "w-full bg-gray-200 rounded-full h-1.5" });
+    const progressOuter = uiUtilsInstance.createElement("div", { className: "progress-outer" });
     const progressInner = uiUtilsInstance.createElement("div", { 
-      className: "bg-blue-600 h-1.5 rounded-full",
+      className: "progress-inner",
       style: { width: `${usagePct}%` }
     });
     
