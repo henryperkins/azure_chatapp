@@ -43,7 +43,7 @@ class Conversation(Base):
         ForeignKey("knowledge_bases.id"),
         nullable=True
     )
-    use_knowledge_base: Mapped[bool] = mapped_column(Boolean, default=False)
+    use_knowledge_base: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     search_results: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True))
     
     user = relationship("User", back_populates="conversations")
