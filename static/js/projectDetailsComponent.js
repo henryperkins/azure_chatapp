@@ -122,9 +122,10 @@ class ProjectDetailsComponent {
     }
     
     if (this.elements.tokenProgressBar) {
+      this.elements.tokenProgressBar.style.width = "0%"; // Reset to ensure animation works
       animationUtilsInstance.animateProgress(
         this.elements.tokenProgressBar,
-        parseFloat(this.elements.tokenProgressBar.style.width || "0"),
+        0,
         pct
       );
     }
@@ -160,7 +161,7 @@ class ProjectDetailsComponent {
     
     files.forEach(file => {
       const item = uiUtilsInstance.createElement("div", {
-        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2"
+        className: "content-item"
       });
       
       // Info section
@@ -385,13 +386,13 @@ class ProjectDetailsComponent {
     
     ['dragenter', 'dragover'].forEach(event => {
       dragZone.addEventListener(event, () => {
-        dragZone.classList.add('bg-gray-100', 'dark:bg-gray-700', 'border-blue-400');
+        dragZone.classList.add('drag-zone-active');
       });
     });
     
     ['dragleave', 'drop'].forEach(event => {
       dragZone.addEventListener(event, () => {
-        dragZone.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'border-blue-400');
+        dragZone.classList.remove('drag-zone-active');
       });
     });
     
@@ -471,8 +472,9 @@ class ProjectDetailsComponent {
   updateUploadProgress() {
     const { completed, failed, total } = this.fileUploadStatus;
     const percentage = Math.round((completed / total) * 100);
-    
+      
     if (this.elements.progressBar) {
+      this.elements.progressBar.classList.add('transition-all', 'duration-300');
       animationUtilsInstance.animateProgress(
         this.elements.progressBar,
         parseFloat(this.elements.progressBar.style.width || "0"),
