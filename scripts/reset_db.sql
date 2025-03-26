@@ -62,9 +62,9 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
-    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)),
-    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
+    CONSTRAINT projects_check_token_limit CHECK (max_tokens >= token_usage),
+    CONSTRAINT projects_check_archive_pin CHECK (NOT (archived AND pinned)),
+    CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default))
 );
 
 -- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
@@ -100,7 +100,7 @@ CREATE TABLE messages (
     extra_data JSONB DEFAULT '{}'::jsonb,
     context_used JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT valid_message_roles CHECK (role IN ('user', 'assistant', 'system'))
 );
 CREATE INDEX ix_messages_id ON messages(id);
@@ -138,3 +138,36 @@ CREATE TABLE artifacts (
     CONSTRAINT valid_content_types CHECK (content_type IN ('code', 'document', 'image', 'audio', 'video'))
 );
 CREATE INDEX ix_artifacts_project_id ON artifacts(project_id);
+
+-- Create function and trigger for automatic updated_at timestamps
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_messages_modtime
+BEFORE UPDATE ON messages
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+CREATE TRIGGER update_conversations_modtime
+BEFORE UPDATE ON conversations
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+CREATE TRIGGER update_projects_modtime
+BEFORE UPDATE ON projects
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+CREATE TRIGGER update_project_files_modtime
+BEFORE UPDATE ON project_files
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+CREATE TRIGGER update_artifacts_modtime
+BEFORE UPDATE ON artifacts
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+CREATE TRIGGER update_knowledge_bases_modtime
+BEFORE UPDATE ON knowledge_bases
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
