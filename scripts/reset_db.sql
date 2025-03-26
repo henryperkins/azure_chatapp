@@ -72,7 +72,8 @@ CREATE TABLE projects (
     extra_data JSONB,
     CONSTRAINT projects_max_tokens_check CHECK (max_tokens >= token_usage),
     CONSTRAINT projects_archived_pinned_check CHECK (NOT (archived AND pinned)),
-    CONSTRAINT projects_archived_default_check CHECK (NOT (archived AND is_default))
+    CONSTRAINT projects_archived_default_check CHECK (NOT (archived AND is_default)),
+    CONSTRAINT projects_name_length CHECK (length(name) <= 200)
 );
 
 CREATE INDEX IF NOT EXISTS ix_projects_knowledge_base_id ON projects(knowledge_base_id);
@@ -90,7 +91,7 @@ CREATE TABLE conversations (
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    extra_data JSONB DEFAULT '{}'::jsonb,
+    extra_data JSONB DEFAULT '{}'::jsonb NOT NULL,
     knowledge_base_id UUID REFERENCES knowledge_bases(id),
     use_knowledge_base BOOLEAN DEFAULT FALSE NOT NULL,
     search_results JSONB
@@ -107,7 +108,7 @@ CREATE INDEX ix_conversations_is_deleted ON conversations(is_deleted);
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    role VARCHAR NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
     content TEXT NOT NULL,
     extra_data JSONB DEFAULT '{}'::jsonb,
     context_used JSONB,
