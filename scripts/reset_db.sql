@@ -65,7 +65,7 @@ CREATE TABLE projects (
     is_default BOOLEAN DEFAULT FALSE NOT NULL,
     version INTEGER DEFAULT 1 NOT NULL,
     knowledge_base_id UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,
-    default_model VARCHAR(50) DEFAULT 'o1' NOT NULL,
+    default_model VARCHAR(50) DEFAULT 'claude-3-sonnet-20240229' NOT NULL,
     user_id INTEGER NOT NULL REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -88,7 +88,6 @@ CREATE TABLE conversations (
     title VARCHAR DEFAULT 'New Chat' NOT NULL,
     model_id VARCHAR,
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
-    message_count INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB DEFAULT '{}'::jsonb NOT NULL,
@@ -96,6 +95,9 @@ CREATE TABLE conversations (
     use_knowledge_base BOOLEAN DEFAULT FALSE NOT NULL,
     search_results JSONB
 );
+
+-- Add message_count column after table creation
+ALTER TABLE conversations ADD COLUMN message_count INTEGER DEFAULT 0 NOT NULL;
 CREATE INDEX ix_conversations_user_id ON conversations(user_id);
 CREATE INDEX ix_conversations_project_id ON conversations(project_id);
 CREATE INDEX ix_conversations_created_at ON conversations(created_at);
