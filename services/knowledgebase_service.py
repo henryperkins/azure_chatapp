@@ -304,7 +304,8 @@ async def _save_file_and_create_record(
     project_id: UUID,
     file: UploadFile,
     file_info: Dict[str, Any],
-    token_info: Dict[str, Any]
+    token_info: Dict[str, Any],
+    process_for_search: bool = True
 ) -> ProjectFile:
     """
     Saves file to storage (via file_storage) and creates the ProjectFile DB record.
@@ -472,7 +473,8 @@ async def upload_file_to_project(
         project_id=project_id,
         file=file,
         file_info=file_info,
-        token_info=token_info
+        token_info=token_info,
+        process_for_search=process_for_search
     )
 
     # 5. Optionally index for search
