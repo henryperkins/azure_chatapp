@@ -708,10 +708,11 @@ async def create_knowledge_base(
         raise ValueError("Database session is required")
         
     # Check if project already has a knowledge base
-    existing_kb = await db.execute(
-        select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
-    )
-    if existing_kb.scalars().first():
+    project = await db.get(Project, project_id)
+    if not project:
+        raise ValueError("Project not found")
+    
+    if project.knowledge_base_id:
         raise ValueError("Project already has a knowledge base")
 
     kb = KnowledgeBase(
@@ -727,12 +728,9 @@ async def create_knowledge_base(
     await db.refresh(kb)
     
     # Update the project's knowledge_base_id
-    await db.execute(
-        update(Project)
-        .where(Project.id == project_id)
-        .values(knowledge_base_id=kb.id)
-    )
+    project.knowledge_base_id = kb.id
     await db.commit()
+    await db.refresh(project)
     
     return kb
 
