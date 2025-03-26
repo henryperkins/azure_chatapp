@@ -62,10 +62,11 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
-    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage) COMMENT "Token usage cannot exceed allocated maximum",
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)) COMMENT "Archived projects cannot be pinned",
-    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default)) COMMENT "Archived projects cannot be default"
+    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
+    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)),
+    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
 );
+
 -- Add constraint comments
 COMMENT ON CONSTRAINT check_token_limit ON projects IS 'Token usage cannot exceed allocated maximum';
 COMMENT ON CONSTRAINT check_archive_pin ON projects IS 'Archived projects cannot be pinned';
