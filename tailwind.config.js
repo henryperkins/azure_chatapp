@@ -19,6 +19,14 @@ module.exports = {
 
   theme: {
     extend: {
+      animation: {
+        'spin-slow': 'spin 3s linear infinite',
+        'slide-in': 'slideIn 0.2s ease-out forwards',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+      },
+      transitionProperty: {
+        'transform': 'transform'
+      },
       colors: {
         // Primary color palette
         primary: {
@@ -81,4 +89,10 @@ module.exports = {
   plugins: [
     // e.g., require('@tailwindcss/forms'), require('@tailwindcss/typography'), etc.
   ],
+  variants: {
+    extend: {
+      animation: ['responsive', 'motion-safe', 'motion-reduce'],
+      transitionProperty: ['responsive', 'hover', 'focus'],
+    }
+  },
 };
