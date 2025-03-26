@@ -70,9 +70,15 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
-    CONSTRAINT projects_max_tokens_check CHECK (max_tokens >= token_usage),
-    CONSTRAINT projects_archived_pinned_check CHECK (NOT (archived AND pinned)),
-    CONSTRAINT projects_archived_default_check CHECK (NOT (archived AND is_default))
+    CONSTRAINT projects_max_tokens_check 
+        CHECK (max_tokens >= token_usage) 
+        NOT VALID,  -- Allows existing invalid data to remain
+    CONSTRAINT projects_archived_pinned_check 
+        CHECK (NOT (archived AND pinned)) 
+        NOT VALID,
+    CONSTRAINT projects_archived_default_check 
+        CHECK (NOT (archived AND is_default)) 
+        NOT VALID
 );
 
 CREATE INDEX IF NOT EXISTS ix_projects_knowledge_base_id ON projects(knowledge_base_id);
@@ -162,7 +168,9 @@ ADD CONSTRAINT knowledge_bases_project_unique UNIQUE (project_id);
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW IS DISTINCT FROM OLD THEN
+    -- Only update timestamp if non-timestamp columns changed
+    IF (NEW.* IS DISTINCT FROM OLD.*) AND 
+       (NEW.updated_at IS NOT DISTINCT FROM OLD.updated_at) THEN
         NEW.updated_at = CURRENT_TIMESTAMP;
     END IF;
     RETURN NEW;
