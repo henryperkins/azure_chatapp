@@ -3,283 +3,181 @@
 @tailwind utilities;
 
 @layer components {
-  /* New toggle switch */
-  .toggle-switch {
-    @apply relative inline-block w-11 h-6;
-  }
-  
-  .toggle-switch input {
-    @apply opacity-0 w-0 h-0;
-  }
-  
-  .toggle-slider {
-    @apply absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-gray-200 transition rounded-full;
-    @apply border border-gray-300 dark:border-gray-600 dark:bg-gray-700;
-  }
-  
-  .toggle-slider:before {
-    @apply absolute content-[''] h-5 w-5 left-0.5 bottom-0.5 bg-white transition rounded-full;
-    @apply shadow-sm;
-  }
-  
-  input:checked + .toggle-slider {
-    @apply bg-blue-500 border-blue-600 dark:bg-blue-600;
-  }
-  
-  input:checked + .toggle-slider:before {
-    @apply transform translate-x-5;
-  }
-  
-  input:focus + .toggle-slider {
-    @apply ring-2 ring-blue-300;
-  }
-  
-  .toggle-container {
-    @apply flex items-center gap-2;
-  }
-  
-  .toggle-label {
-    @apply text-sm text-gray-700 dark:text-gray-300;
-  }
-}
-
-@layer utilities {
-  /* Animations */
-  @keyframes slideIn {
-    from { 
-      @apply opacity-0 -translate-y-2.5;
-    }
-    to { 
-      @apply opacity-100 translate-y-0;
-    }
-  }
-
-  .animate-slide-in {
-    animation: slideIn 0.2s ease-out forwards;
-  }
-  
-  .sidebar-transition {
-    @apply transition-transform duration-200 ease-in-out;
-  }
-}
-
-/* Sidebar transitions */
-#mainSidebar {
-  @apply transition-transform duration-300 ease-in-out;
-}
-
-.dark #mainSidebar {
-  background-color: #1f2937;
-  border-color: #374151;
-}
-
-/* Ensure sidebar has proper mobile styles */
-@media (max-width: 767px) {
-  #mainSidebar {
-    transform: translateX(-100%);
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 50;
-  }
-  
-  #mainSidebar.translate-x-0 {
-    transform: translateX(0);
-  }
-}
-
-/* Transition for smooth animation */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer components {
-  /* Custom components */
+  /* Toggle switch component using only Tailwind classes */
   .toggle-checkbox:checked {
     @apply translate-x-full border-blue-500;
   }
   .toggle-checkbox:checked + .toggle-label {
     @apply bg-blue-500;
   }
+  
+  /* Project card component */
+  .project-card {
+    @apply bg-white dark:bg-gray-700 rounded-lg shadow-md p-4
+      border-2 hover:shadow-lg transition-all duration-200
+      w-full min-w-[300px] min-h-[200px] mb-4;
+  }
+  
+  .project-card-pinned {
+    @apply border-yellow-400;
+  }
+  
+  .project-card-unpinned {
+    @apply border-blue-400;
+  }
+  
+  .project-card-archived {
+    @apply opacity-75;
+  }
+  
+  /* File and content items */
+  .content-item {
+    @apply flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600;
+  }
+  
+  /* Notification styles */
+  .notification {
+    @apply p-3 rounded-lg shadow-lg mb-2 flex items-center text-sm;
+  }
+  
+  .notification.success {
+    @apply bg-green-100 text-green-800 border-l-4 border-green-500;
+  }
+  
+  .notification.error {
+    @apply bg-red-100 text-red-800 border-l-4 border-red-500;
+  }
+  
+  .notification.info {
+    @apply bg-blue-100 text-blue-800 border-l-4 border-blue-500;
+  }
+  
+  .notification.warning {
+    @apply bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500;
+  }
 }
 
 @layer utilities {
-  /* Custom animations */
+  /* Animation utilities */
   @keyframes slideIn {
     from { 
-      @apply opacity-0 -translate-y-2.5;
+      @apply opacity-0 -translate-y-2;
     }
     to { 
       @apply opacity-100 translate-y-0;
     }
   }
+
   .animate-slide-in {
     animation: slideIn 0.2s ease-out forwards;
   }
   
-  /* Custom transitions */
-  .sidebar-transition {
-    @apply transition-transform duration-200 ease-in-out;
+  @keyframes countUp {
+    from { 
+      @apply opacity-50 translate-y-1;
+    }
+    to { 
+      @apply opacity-100 translate-y-0;
+    }
   }
-}
-/* Add custom vision styles */
-.vision-response {
-    /* Remove problematic utility classes to fix build errors */
-    padding-left: 1rem; /* approximate pl-4 */
-    background-color: #f3f4f6; /* approximate gray-100 */
-}
-
-.vision-indicator {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.875rem;
-    color: #9333ea;
-}
-
-:root.dark .vision-indicator {
-    color: #d8b4fe;
-}
-
-/* Add these utility classes */
-.opacity-transition {
-  transition: opacity 0.3s ease-in-out;
-}
-
-.slide-in {
-  animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-  from { 
-    opacity: 0;
-    transform: translateY(-10px); 
+  
+  .animate-count-up {
+    animation: countUp 0.3s ease-out;
   }
-  to { 
-    opacity: 1;
-    transform: translateY(0); 
+  
+  /* Transition utilities */
+  .transition-sidebar {
+    @apply transition-transform duration-300 ease-in-out;
+  }
+  
+  .transition-opacity {
+    @apply transition-opacity duration-300 ease-in-out;
+  }
+  
+  /* Chat message container */
+  .chat-message-container {
+    @apply h-[50vh] sm:h-[60vh] md:h-[70vh] overflow-y-auto p-4;
+  }
+  
+  /* Draggable zone utilities */
+  .drag-zone {
+    @apply border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 
+           text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 
+           transition-colors;
+  }
+  
+  .drag-zone-active {
+    @apply bg-gray-100 dark:bg-gray-700 border-blue-400;
   }
 }
 
-/* Enhance dropdown shadow and border */
-.auth-dropdown {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  border: 1px solid rgba(0,0,0,0.1);
+/* Dark mode specific styles */
+.dark .file-item,
+.dark .artifact-item,
+.dark .conversation-item {
+  @apply bg-gray-800 text-gray-200;
 }
 
-/* Responsive adjustments for mobile */
-@media (max-width: 640px) {
-  .auth-dropdown {
-    position: fixed;
-    top: 60px;
-    left: 0;
-    right: 0;
-    margin: 0 16px;
-    width: auto;
-  }
-}
-
-/* Mobile sidebar styles */
+/* Mobile sidebar handling */
 @media (max-width: 767px) {
   #mainSidebar {
-    transform: translateX(-100%);
-    z-index: 50;
+    @apply fixed inset-0 z-50 -translate-x-full transition-transform duration-300;
   }
   
-  #mainSidebar.translate-x-0 {
-    transform: translateX(0);
+  #mainSidebar.sidebar-open {
+    @apply translate-x-0;
   }
   
-  #sidebarBackdrop {
-    display: block;
-    z-index: 40;
+  .auth-dropdown {
+    @apply fixed top-16 inset-x-4 z-50;
   }
 }
 
 @media (min-width: 768px) {
   #mainSidebar {
-    transform: translateX(0) !important;
-    z-index: auto;
+    @apply translate-x-0 relative;
   }
   
   #sidebarBackdrop {
-    display: none !important;
+    @apply hidden;
   }
 }
 
-/* Smooth transitions */
-#mainSidebar {
-  transition: transform 0.3s ease-in-out;
+/* Vision feature styles */
+.vision-response {
+  @apply pl-4 bg-gray-100;
 }
 
-/* Dark mode support */
-.dark #mainSidebar {
-  background-color: #111827;
-  border-color: #374151;
+.vision-indicator {
+  @apply inline-flex items-center text-sm text-purple-600 dark:text-purple-300;
 }
 
-.dark #authDropdown {
-  background-color: #1f2937;
-  border: 1px solid #374151;
+/* Progress bars */
+.progress-outer {
+  @apply w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5;
 }
 
-  #projectManagerPanel {
-    padding: 1rem;
-  }
+.progress-inner {
+  @apply bg-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out;
+}
 
-  .project-filter-btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-  }
-
-  #projectSearchInput {
-    width: 100%;
-    margin-bottom: 1rem;
-  }
-
-  #createProjectBtn {
-    width: 100%;
-    text-align: center;
-  }
-
-/* Sidebar transitions */
-#mainSidebar {
-  @apply transition-colors duration-300 ease-in-out;
+/* Clean up duplicate styles and harmonize with Tailwind conventions */
+.sidebar-transition {
+  @apply transition-transform duration-200 ease-in-out;
 }
 
 .dark #mainSidebar {
-  background-color: #1f2937;
-  border-color: #374151;
-}
-/* Dark mode support for project details */
-.dark .file-item,
-.dark .artifact-item,
-.dark .conversation-item {
-  background-color: #374151;
-  color: #f3f4f6;
+  @apply bg-gray-900 border-gray-700;
 }
 
-/* Animation for counting up */
-@keyframes countUp {
-  from { opacity: 0.5; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+.project-tab-content {
+  @apply transition-opacity duration-200;
 }
 
-.count-animation {
-  animation: countUp 0.3s ease-out;
-}
-
-/* Drag and drop zone styles */
 #dragDropZone {
-  transition: all 0.2s ease-in-out;
+  @apply transition-all duration-200 ease-in-out;
 }
 
 #dragDropZone:hover {
-  border-color: #3b82f6;
-  background-color: rgba(59, 130, 246, 0.05);
-}
-
-/* Pagination for artifacts */
-.pagination-hidden {
-  display: none !important;
+  @apply border-blue-400 bg-blue-50 bg-opacity-5;
 }

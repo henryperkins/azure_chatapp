@@ -235,7 +235,7 @@ class KnowledgeBaseComponent {
       const hasError = errorDetails && !result.success;
       
       const item = uiUtilsInstance.createElement("div", {
-        className: `bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow ${
+        className: `content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow ${
           hasError ? "border-l-4 border-red-500" : ""
         }`
       });

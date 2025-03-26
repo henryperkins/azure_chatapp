@@ -61,6 +61,7 @@ class UIUtils {
           const notification = document.createElement('div');
           notification.className = `notification ${type}`;
           notification.textContent = message;
+          notification.classList.add('animate-slide-in');
           notificationArea.appendChild(notification);
           
           // Auto-remove after 5 seconds
