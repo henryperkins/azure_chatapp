@@ -28,11 +28,19 @@ DB_HOST="localhost"
 DB_PORT="5432"
 DB_NAME="azure_chat_db"  # Or your database name
 
-# Build psql connection string
-PSQL_CONN="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+# Add connection test
+if ! PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d "postgres" -c "\q"; then
+    echo "❌ Failed to connect to PostgreSQL server"
+    exit 1
+fi
+
+# Create database if it doesn't exist
+PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d "postgres" \
+    -c "CREATE DATABASE \"$DB_NAME\" WITH OWNER \"$DB_USER\";" 2>/dev/null
 
 echo "Executing SQL script to reset database structure..."
-psql "$PSQL_CONN" -f scripts/reset_db.sql
+PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" \
+    -f scripts/reset_db.sql
 
 if [ $? -eq 0 ]; then
     echo ""

@@ -62,9 +62,9 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
-    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage) COMMENT 'Token usage cannot exceed allocated maximum',
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)) COMMENT 'Archived projects cannot be pinned',
-    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default)) COMMENT 'Archived projects cannot be default'
+    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
+    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)),
+    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
 );
 
 -- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
@@ -81,7 +81,7 @@ CREATE TABLE conversations (
     message_count INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    extra_data JSONB DEFAULT '{selectedText}'
+    extra_data JSONB DEFAULT '{}'::jsonb
 );
 CREATE INDEX ix_conversations_user_id ON conversations(user_id);
 CREATE INDEX ix_conversations_project_id ON conversations(project_id);
@@ -94,7 +94,8 @@ CREATE TABLE messages (
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     role VARCHAR NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
     content TEXT NOT NULL,
-    extra_data JSONB DEFAULT '{selectedText}',
+    extra_data JSONB DEFAULT '{}'::jsonb,
+    context_used JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
