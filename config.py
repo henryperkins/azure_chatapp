@@ -42,6 +42,12 @@ class Settings:
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
 
+    # JWT Configuration
+    JWT_SECRET = os.getenv("JWT_SECRET", "")
+    JWT_ALGORITHM = "HS256"
+    JWT_KEY_ID = os.getenv("JWT_KEY_ID", "default-key-id")  # For key rotation support
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
     # Cookie domain
     COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")
 
