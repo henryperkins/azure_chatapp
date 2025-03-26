@@ -1,5 +1,5 @@
 /**
- * Project Management Consolidated
+ * projectDashboard.js
  * Combines functionality from:
  * - projectDashboard.js
  * - projectEnhancement.js
@@ -130,6 +130,10 @@ const UIUtils = {
       } else if (key.startsWith('on') && typeof value === 'function') {
         const eventType = key.substring(2).toLowerCase();
         element.addEventListener(eventType, value);
+      } else if (key === 'textContent') {
+        element.textContent = value;
+      } else if (key === 'innerHTML') {
+        element.innerHTML = value;
       } else {
         element.setAttribute(key, value);
       }
@@ -199,6 +203,18 @@ const UIUtils = {
         "'": '&#39;'
       }[m];
     });
+  },
+
+  /**
+   * Toggle element visibility by adding/removing the 'hidden' class
+   */
+  toggleVisibility(elementOrId, isVisible) {
+    const el = typeof elementOrId === 'string' 
+      ? document.getElementById(elementOrId) 
+      : elementOrId;
+    if (el) {
+      el.classList.toggle('hidden', !isVisible);
+    }
   }
 };
 
@@ -339,11 +355,11 @@ class ProjectListComponent {
   }
   
   show() {
-    document.getElementById("projectListView")?.classList.remove("hidden");
+    UIUtils.toggleVisibility("projectListView", true);
   }
   
   hide() {
-    document.getElementById("projectListView")?.classList.add("hidden");
+    UIUtils.toggleVisibility("projectListView", false);
   }
   
   renderProjects(eventOrProjects) {
@@ -451,7 +467,10 @@ class ProjectListComponent {
       innerHTML: `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7
+                   -1.274 4.057-5.064 7-9.542 7
+                   -4.477 0-8.268-2.943-9.542-7z" />
         </svg>
       `,
       onclick: () => this.onViewProject(project.id)
@@ -462,7 +481,10 @@ class ProjectListComponent {
       className: "p-1 text-red-600 hover:text-red-800 delete-project-btn",
       innerHTML: `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
+                   a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6
+                   m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
       `,
       onclick: () => this.confirmDelete(project)
@@ -639,19 +661,17 @@ class ProjectDetailsComponent {
   }
   
   show() {
-    if (this.elements.container) {
-      this.elements.container.classList.remove("hidden");
-    }
+    UIUtils.toggleVisibility(this.elements.container, true);
   }
   
   hide() {
-    if (this.elements.container) {
-      this.elements.container.classList.add("hidden");
-    }
+    UIUtils.toggleVisibility(this.elements.container, false);
   }
   
   renderProject(project) {
-    if (this.elements.title) this.elements.title.textContent = project.name;
+    if (this.elements.title) {
+      this.elements.title.textContent = project.name;
+    }
     if (this.elements.description) {
       this.elements.description.textContent = project.description || "No description provided.";
     }
@@ -703,24 +723,14 @@ class ProjectDetailsComponent {
       });
       
       // Info section
-      const infoDiv = UIUtils.createElement("div", {
-        className: "flex items-center"
-      });
-      
+      const infoDiv = UIUtils.createElement("div", { className: "flex items-center" });
       const iconSpan = UIUtils.createElement("span", {
         className: "text-lg mr-2",
         textContent: UIUtils.fileIcon(file.file_type)
       });
       
-      const detailDiv = UIUtils.createElement("div", {
-        className: "flex flex-col"
-      });
-      
-      const fileName = UIUtils.createElement("div", {
-        className: "font-medium",
-        textContent: file.filename
-      });
-      
+      const detailDiv = UIUtils.createElement("div", { className: "flex flex-col" });
+      const fileName = UIUtils.createElement("div", { className: "font-medium", textContent: file.filename });
       const fileInfo = UIUtils.createElement("div", {
         className: "text-xs text-gray-500",
         textContent: `${UIUtils.formatBytes(file.file_size)} · ${UIUtils.formatDate(file.created_at)}`
@@ -733,17 +743,18 @@ class ProjectDetailsComponent {
       item.appendChild(infoDiv);
       
       // Actions section
-      const actions = UIUtils.createElement("div", {
-        className: "flex space-x-2"
-      });
+      const actions = UIUtils.createElement("div", { className: "flex space-x-2" });
       
       // Delete button
       const deleteBtn = UIUtils.createElement("button", {
         className: "text-red-600 hover:text-red-800",
         innerHTML: `
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" 
+               viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
+                     a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
+                     a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         `,
         onclick: () => this.confirmDeleteFile(file)
@@ -791,34 +802,43 @@ class ProjectDetailsComponent {
         });
     });
   }
-  
+
+  /**
+   * Simplified UI updates for file upload progress
+   */
+  _updateUploadUI(statusMessage, progressPercentage) {
+    if (this.elements.progressBar) {
+      AnimationUtils.animateProgress(
+        this.elements.progressBar,
+        parseFloat(this.elements.progressBar.style.width || "0"),
+        progressPercentage
+      );
+    }
+    if (this.elements.uploadStatus) {
+      this.elements.uploadStatus.textContent = statusMessage;
+    }
+  }
+
   updateUploadProgress() {
     const { completed, failed, total } = this.fileUploadStatus;
-    
     const percentage = Math.round((completed / total) * 100);
     
-    if (this.elements.progressBar) {
-      AnimationUtils.animateProgress(this.elements.progressBar, 
-        parseFloat(this.elements.progressBar.style.width || "0"), percentage);
-    }
-    
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent = `Uploading ${completed}/${total} files...`;
-    }
+    this._updateUploadUI(`Uploading ${completed}/${total} files...`, percentage);
     
     if (completed === total) {
       if (failed === 0) {
-        this.elements.uploadStatus.textContent = "Upload complete!";
+        this._updateUploadUI("Upload complete!", 100);
         UIUtils.showNotification("Files uploaded successfully", "success");
       } else {
-        this.elements.uploadStatus.textContent = `Upload completed with ${failed} error(s)`;
+        this._updateUploadUI(`Upload completed with ${failed} error(s)`, 100);
         UIUtils.showNotification(`${failed} file(s) failed to upload`, "error");
       }
       
       // Refresh file list & stats
       if (window.projectManager.currentProject) {
-        window.projectManager.loadProjectFiles(window.projectManager.currentProject.id);
-        window.projectManager.loadProjectStats(window.projectManager.currentProject.id);
+        const projectId = window.projectManager.currentProject.id;
+        window.projectManager.loadProjectFiles(projectId);
+        window.projectManager.loadProjectStats(projectId);
       }
       
       // Reset input
@@ -1021,15 +1041,11 @@ class KnowledgeBaseComponent {
         className: "flex justify-between items-center border-b border-gray-200 pb-2 mb-2"
       });
       
-      const fileInfo = UIUtils.createElement("div", {
-        className: "flex items-center"
-      });
-      
+      const fileInfo = UIUtils.createElement("div", { className: "flex items-center" });
       const fileIcon = UIUtils.createElement("span", {
         className: "text-lg mr-2",
         textContent: UIUtils.fileIcon(result.file_type || "txt")
       });
-      
       const fileName = UIUtils.createElement("div", {
         className: "font-medium",
         textContent: result.filename || result.file_path || "Unknown source"
@@ -1100,7 +1116,7 @@ class ProjectDashboard {
   constructor() {
     this.components = {};
     this.state = {
-      currentView: null, // 'list' or 'details' 
+      currentView: null, // 'list' or 'details'
       currentProject: null
     };
   }
@@ -1256,7 +1272,6 @@ class ProjectDashboard {
   handleProjectsLoaded(event) {
     console.log("[Dashboard] Received projectsLoaded event", event);
     
-    // Handle both direct projects array and nested API response structures
     let projects = [];
     let originalCount = 0;
     let filter = 'all';
@@ -1292,6 +1307,7 @@ class ProjectDashboard {
         return;
       }
 
+      // Render projects once
       this.components.projectList.renderProjects(projects);
         
       // Update empty state visibility and message
@@ -1312,35 +1328,6 @@ class ProjectDashboard {
       }
     } catch (error) {
       console.error("[Dashboard] Error handling projects:", error);
-      const noProjectsMsg = document.getElementById('noProjectsMessage');
-      if (noProjectsMsg) {
-        noProjectsMsg.textContent = "Error displaying projects";
-        noProjectsMsg.classList.remove('hidden');
-        noProjectsMsg.classList.add('text-red-600');
-      }
-    }
-      
-    try {
-      this.components.projectList.renderProjects(projects);
-        
-      // Update empty state visibility and message
-      const noProjectsMsg = document.getElementById('noProjectsMessage');
-      if (noProjectsMsg) {
-        noProjectsMsg.classList.toggle('hidden', projects.length > 0 || hasError);
-        
-        if (hasError) {
-          noProjectsMsg.textContent = "Error loading projects. Please try again.";
-          noProjectsMsg.classList.add('text-red-600');
-        } else if (projects.length === 0 && originalCount > 0) {
-          noProjectsMsg.textContent = `No projects match the "${filter}" filter`;
-          noProjectsMsg.classList.remove('text-red-600');
-        } else if (projects.length === 0) {
-          noProjectsMsg.textContent = "No projects found. Create your first project!";
-          noProjectsMsg.classList.remove('text-red-600');
-        }
-      }
-    } catch (error) {
-      console.error("[Dashboard] Error rendering projects:", error);
       const noProjectsMsg = document.getElementById('noProjectsMessage');
       if (noProjectsMsg) {
         noProjectsMsg.textContent = "Error displaying projects";
@@ -1447,20 +1434,11 @@ window.ModalManager = ModalManager;
 window.AnimationUtils = AnimationUtils;
 window.UIUtils = UIUtils;
 
-// Initialize dashboard when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('projectManagerPanel')) {
-    console.log('Initializing ProjectDashboard...');
-    const dashboard = new ProjectDashboard();
-    dashboard.init();
-  } else {
-    console.log('Project dashboard container not found - skipping initialization');
-  }
-});
-
-// Initialize dashboard when DOM is ready
+// Single DOMContentLoaded listener
 document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('projectManagerPanel')) {
     initProjectDashboard();
+  } else {
+    console.warn('Project dashboard container not found - skipping initialization');
   }
 });
