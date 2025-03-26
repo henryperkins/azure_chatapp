@@ -1172,21 +1172,24 @@ class ProjectDashboard {
   handleProjectsLoaded(event) {
     console.log("[Dashboard] Received projectsLoaded event", event);
       
-    const projects = event.detail;
-    if (!projects || !Array.isArray(projects)) {
-      console.error("[Dashboard] Invalid projects data received", projects);
-      projects = [];
-    }
+    const projects = event.detail || [];
+    const originalCount = event.originalCount || projects.length;
+    const filter = event.filterApplied || 'all';
 
-    console.log(`[Dashboard] Rendering ${projects.length} projects`);
+    console.log(`[Dashboard] Rendering ${projects.length} projects (${originalCount} total, filter: ${filter})`);
       
     try {
       this.components.projectList.renderProjects(projects);
         
-      // Update empty state visibility
+      // Update empty state visibility and message
       const noProjectsMsg = document.getElementById('noProjectsMessage');
       if (noProjectsMsg) {
         noProjectsMsg.classList.toggle('hidden', projects.length > 0);
+        if (projects.length === 0 && originalCount > 0) {
+          noProjectsMsg.textContent = `No projects match the "${filter}" filter`;
+        } else if (projects.length === 0) {
+          noProjectsMsg.textContent = "No projects found. Create your first project!";
+        }
       }
     } catch (error) {
       console.error("[Dashboard] Error rendering projects:", error);
