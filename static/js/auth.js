@@ -139,7 +139,6 @@ window.TokenManager = TokenManager;
 // UI Event Listeners
 // -------------------------
 function setupUIListeners() {
-  // Handle auth dropdown toggle
   const authBtn = document.getElementById("authButton");
   const authDropdown = document.getElementById("authDropdown");
 
@@ -147,14 +146,16 @@ function setupUIListeners() {
     authBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      authDropdown.classList.toggle("hidden");
+      const isHidden = authDropdown.classList.toggle("hidden");
       
-      // Close other open dropdowns
-      document.querySelectorAll('.dropdown-content').forEach(dropdown => {
-        if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
-          dropdown.classList.add('hidden');
-        }
-      });
+      // Close other open dropdowns if showing this one
+      if (!isHidden) {
+        document.querySelectorAll('.dropdown-content').forEach(dropdown => {
+          if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
+            dropdown.classList.add("hidden");
+          }
+        });
+      }
     });
 
     // Close when clicking outside
