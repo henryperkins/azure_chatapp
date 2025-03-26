@@ -515,6 +515,49 @@ class ProjectDetailsComponent {
         this.switchTab(tabName);
       });
     });
+
+    // Handle new conversation button
+    const newConvoBtn = document.getElementById('newConversationBtn');
+    if (newConvoBtn) {
+      newConvoBtn.addEventListener('click', async (e) => {
+        e.preventDefault(); // Prevent default navigation
+        e.stopPropagation();
+        
+        const projectId = this.state.currentProject?.id;
+        if (!projectId) return;
+
+        try {
+          // Show the chat container
+          const chatContainer = document.getElementById('projectChatContainer');
+          if (chatContainer) chatContainer.classList.remove('hidden');
+
+          // Initialize chat interface if not already done
+          if (!window.projectChatInterface) {
+            window.initializeChat();
+          }
+
+          // Create new conversation
+          const conversation = await window.projectChatInterface.createNewConversation();
+          
+          // Set target container and load conversation
+          if (window.projectChatInterface && typeof window.projectChatInterface.setTargetContainer === 'function') {
+            window.projectChatInterface.setTargetContainer('#projectChatMessages');
+            window.projectChatInterface.loadConversation(conversation.id);
+          }
+
+          // Update URL without reloading
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('chatId', conversation.id);
+          window.history.pushState({}, '', newUrl);
+
+          // Store project ID in localStorage for chat context
+          localStorage.setItem('selectedProjectId', projectId);
+        } catch (error) {
+          console.error('Error creating new conversation:', error);
+          window.UIUtils?.showNotification('Failed to create conversation', 'error');
+        }
+      });
+    }
   }
 
   switchTab(tabName) {
