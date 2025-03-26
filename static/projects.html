@@ -386,6 +386,17 @@
                 </svg>
               </button>
             </div>
+
+            <!-- Chat interface container -->
+            <div id="projectChatContainer" class="hidden mt-6">
+              <div id="projectChatUI" class="bg-white dark:bg-gray-800 rounded shadow p-4">
+                <div id="projectChatMessages" class="h-96 overflow-y-auto mb-4"></div>
+                <div class="flex">
+                  <input id="projectChatInput" type="text" class="flex-1 border rounded-l px-3 py-2" placeholder="Type your message...">
+                  <button id="projectChatSendBtn" class="bg-blue-600 text-white px-4 py-2 rounded-r">Send</button>
+                </div>
+              </div>
+            </div>
             
             <!-- Enhanced project stats panel with animations -->
             <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6 shadow-sm" data-testid="project-stats">
@@ -516,16 +527,6 @@
                   <div class="text-gray-500 text-center py-8">No conversations yet.</div>
                 </div>
                 
-                <!-- Chat interface container (hidden by default) -->
-                <div id="projectChatContainer" class="hidden mt-6 border-t pt-6">
-                  <div id="projectChatUI" class="bg-white dark:bg-gray-800 rounded shadow p-4">
-                    <div id="projectChatMessages" class="h-96 overflow-y-auto mb-4"></div>
-                    <div class="flex">
-                      <input id="projectChatInput" type="text" class="flex-1 border rounded-l px-3 py-2" placeholder="Type your message...">
-                      <button id="projectChatSendBtn" class="bg-blue-600 text-white px-4 py-2 rounded-r">Send</button>
-                    </div>
-                  </div>
-                </div>
               </div>
               
               <!-- Enhanced artifacts tab -->
@@ -930,6 +931,7 @@
  <script>
    console.log('Base scripts loading...');
  </script>
+ <script src="/static/js/chat.js"></script> <!-- Load sync first -->
  <script src="/static/js/formatting.js"></script>
  <script src="/static/js/auth.js"></script>
  <script src="/static/js/modelConfig.js"></script>
