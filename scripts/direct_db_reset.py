@@ -57,8 +57,21 @@ def reset_database():
         # Create all tables from model definitions
         Base.metadata.create_all(sync_engine)
         
+        # Verify all tables were created
+        from sqlalchemy import inspect
+        inspector = inspect(sync_engine)
+        expected_tables = {
+            'users', 'knowledge_bases', 'projects', 
+            'conversations', 'messages', 'project_files', 
+            'artifacts'
+        }
+        actual_tables = set(inspector.get_table_names())
+        missing_tables = expected_tables - actual_tables
+        if missing_tables:
+            print(f"❌ Missing tables: {missing_tables}")
+            sys.exit(1)
         
-        print("\nDatabase structure has been successfully reset to match the current models.")
+        print("\n✅ Database structure has been successfully reset to match the current models.")
         print("All tables have been recreated with the correct structure.")
     except Exception as e:
         print(f"Error resetting database: {e}")
