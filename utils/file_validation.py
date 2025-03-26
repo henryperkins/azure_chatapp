@@ -7,10 +7,11 @@ Centralized file validation utilities including:
 - Type detection
 - Filename sanitization
 """
+
 import os
 import re
 import logging
-from typing import Optional, Dict, Any, BinaryIO, Union, List
+from typing import Dict, Any, BinaryIO, Union, List
 from fastapi import UploadFile
 import mimetypes
 from config import settings
@@ -90,6 +91,25 @@ class FileValidator:
         """Get max file size in MB"""
         return cls.MAX_FILE_SIZE / (1024 * 1024)
 
+    @classmethod
+    def validate_upload_file(cls, file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
+        """
+        Comprehensive validation for uploaded files.
+        Returns file info dict or raises ValueError.
+        """
+        filename = getattr(file, "filename", "untitled")
+        file_size = getattr(file, "size", None)
+        
+        if not cls.validate_extension(filename):
+            raise ValueError(f"File type not allowed. Supported: {', '.join(cls.get_allowed_extensions_list())}")
+            
+        file_info = cls.get_file_info(filename)
+        
+        if file_size is not None and not cls.validate_size(file_size):
+            raise ValueError(f"File too large (max {cls.get_max_file_size_mb()}MB)")
+            
+        return file_info
+
 def validate_file_size(file_size: int) -> bool:
     """Validate file size is within limits."""
     return file_size <= FileValidator.MAX_FILE_SIZE
@@ -111,21 +131,3 @@ def sanitize_filename(filename: str) -> str:
         filename = f"{name[:50]}{ext}"
         
     return filename
-
-def validate_upload_file(file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
-    """
-    Comprehensive validation for uploaded files.
-    Returns file info dict or raises ValueError.
-    """
-    filename = getattr(file, "filename", "untitled")
-    file_size = getattr(file, "size", None)
-    
-    if not FileValidator.validate_extension(filename):
-        raise ValueError(f"File type not allowed. Supported: {', '.join(FileValidator.get_allowed_extensions_list())}")
-        
-    file_info = FileValidator.get_file_info(filename)
-    
-    if file_size is not None and not validate_file_size(file_size):
-        raise ValueError(f"File too large (max {FileValidator.get_max_file_size_mb()}MB)")
-        
-    return file_info

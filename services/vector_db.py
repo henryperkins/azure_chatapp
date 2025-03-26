@@ -79,7 +79,7 @@ class VectorDB:
 
         # Initialize embedding model if available
         self.embedding_model = None
-        if SENTENCE_TRANSFORMERS_AVAILABLE:
+        if SENTENCE_TRANSFORMERS_AVAILABLE and SentenceTransformer is not None:
             try:
                 self.embedding_model = SentenceTransformer(embedding_model)
                 logger.info(f"Initialized embedding model: {embedding_model}")
@@ -96,14 +96,6 @@ class VectorDB:
         # FAISS index (if available)
         self.index = None
         self.id_map: List[str] = []  # Maps FAISS indices to document IDs
-
-        # Initialize FAISS if available
-        if self.use_faiss:
-            try:
-                self.index = None  # Will be initialized when adding first vector
-            except Exception as e:
-                logger.error(f"Error initializing FAISS: {str(e)}")
-                self.use_faiss = False
 
     def get_embedding_dimension(self) -> int:
         """
@@ -241,7 +233,8 @@ class VectorDB:
                 dimension = embeddings_np.shape[1]
                 self.index = faiss.IndexFlatL2(dimension)
 
-            self.index.add(embeddings_np)
+            if self.index is not None:
+                self.index.add(embeddings_np)
             self.id_map.extend(ids)
 
         # Persist to disk if storage path is provided
@@ -275,18 +268,21 @@ class VectorDB:
         query_vector = query_embedding[0]
 
         # Different search strategies based on available libraries
-        if self.use_faiss and self.index is not None:
+        # FAISS search if available
+        if self.use_faiss and self.index is not None and len(self.id_map) > 0:
             assert faiss is not None, "FAISS import is unexpectedly None"
             query_np = np.array([query_vector], dtype=np.float32)
-            distances, indices = self.index.search(query_np, min(top_k, len(self.id_map)))
-
+            
+            # Perform the search with proper bounds checking
+            k = min(top_k, len(self.id_map))
+            distances, indices = self.index.search(query_np, k)
+            
             results = []
             for dist, idx in zip(distances[0], indices[0]):
-                if idx < len(self.id_map):
+                if idx >= 0 and idx < len(self.id_map):  # Check for valid index
                     doc_id = self.id_map[idx]
                     if doc_id in self.metadata:
-                        # Convert L2 distance to some similarity score
-                        # (This is a rough heuristic; adjust to your preference)
+                        # Convert L2 distance to similarity score
                         score = max(0.0, 1.0 - (dist / 100.0))
 
                         # Apply metadata filter
@@ -305,8 +301,8 @@ class VectorDB:
                         })
             return results
 
+        # Fallback to scikit-learn cosine similarity if available
         elif SKLEARN_AVAILABLE and cosine_similarity is not None:
-            # Fallback to scikit-learn cosine similarity
             ids = list(self.vectors.keys())
             vectors = [self.vectors[id] for id in ids]
 
@@ -346,8 +342,8 @@ class VectorDB:
                 logger.error(f"Error in sklearn similarity search: {str(e)}")
                 raise VectorDBError(f"Failed to compute vector similarity: {str(e)}")
 
+        # Final fallback to manual cosine similarity
         else:
-            # Fallback to manual cosine similarity
             results = []
             for doc_id, vector in self.vectors.items():
                 # Apply metadata filter
@@ -424,6 +420,7 @@ class VectorDB:
             if doc_id in self.metadata:
                 del self.metadata[doc_id]
 
+        # Rebuild FAISS index if needed
         if self.use_faiss and deleted_count > 0:
             assert faiss is not None, "FAISS import is unexpectedly None"
             remaining_ids = list(self.vectors.keys())
@@ -433,12 +430,14 @@ class VectorDB:
                 vectors_np = np.array(remaining_vectors, dtype=np.float32)
                 dimension = vectors_np.shape[1]
                 self.index = faiss.IndexFlatL2(dimension)
-                self.index.add(vectors_np)
+                if self.index is not None:
+                    self.index.add(vectors_np)
                 self.id_map = remaining_ids
             else:
                 self.index = None
                 self.id_map = []
 
+        # Persist changes if storage path is set
         if self.storage_path and deleted_count > 0:
             await self._save_to_disk()
 
@@ -509,14 +508,15 @@ class VectorDB:
             self.vectors = data.get("vectors", {})
             self.metadata = data.get("metadata", {})
 
-            if self.use_faiss and self.vectors:
-                assert faiss is not None, "FAISS import is unexpectedly None"
+            # Rebuild FAISS index if needed
+            if self.use_faiss and self.vectors and faiss is not None:
                 ids = list(self.vectors.keys())
                 vectors = [self.vectors[id] for id in ids]
                 vectors_np = np.array(vectors, dtype=np.float32)
                 dimension = vectors_np.shape[1]
                 self.index = faiss.IndexFlatL2(dimension)
-                self.index.add(vectors_np)
+                if self.index is not None:
+                    self.index.add(vectors_np)
                 self.id_map = ids
 
             return True
@@ -526,7 +526,6 @@ class VectorDB:
             return False
 
 
-# Factory function to get or create a vector database instance
 async def get_vector_db(
     model_name: str = "all-MiniLM-L6-v2",
     use_faiss: bool = True,
@@ -557,13 +556,12 @@ async def get_vector_db(
     return vector_db
 
 
-# Process and embed a new file for similarity search
 async def process_file_for_search(
     project_file: ProjectFile,
     vector_db: VectorDB,
     file_content: bytes,
-    chunk_size: int = 1000,
-    chunk_overlap: int = 200
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
 ) -> Dict[str, Any]:
     """
     Process a file for similarity search.
@@ -641,7 +639,6 @@ async def process_file_for_search(
         }
 
 
-# Find relevant context for a query
 async def search_context_for_query(
     query: str,
     vector_db: VectorDB,

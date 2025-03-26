@@ -18,11 +18,13 @@ import chardet
 logger = logging.getLogger(__name__)
 
 # Define conditional imports to avoid hard dependencies
+DOCX_AVAILABLE = False
+docx = None  # type: ignore
 try:
-    import docx
+    import docx  # type: ignore
     DOCX_AVAILABLE = True
 except ImportError:
-    DOCX_AVAILABLE = False
+    pass
 
 try:
     import pypdf
@@ -44,9 +46,6 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
     tiktoken = None  # Set to None after the import attempt fails
     print("Warning: tiktoken not installed. Token counts will be estimates. `pip install tiktoken` for accurate counts.")
-
-
-from utils.file_validation import FileValidator
 
 
 class TextExtractionError(Exception):
@@ -204,10 +203,14 @@ class TextExtractor:
             file_info = self.get_file_info(filename)
         elif mimetype:
             # Find extension from mimetype
-            for ext, info in FileValidator.ALLOWED_EXTENSIONS.items():
-                if info["mimetype"] == mimetype:
-                    file_info = info.copy()
-                    file_info["extension"] = ext
+            for ext, category in FileValidator.ALLOWED_EXTENSIONS.items():
+                file_mimetype = mimetypes.guess_type(f"file{ext}")[0] or "application/octet-stream"
+                if file_mimetype == mimetype:
+                    file_info = {
+                        "mimetype": file_mimetype,
+                        "category": category,
+                        "extension": ext
+                    }
                     break
             
             # If not found in our map, use basic info
@@ -336,11 +339,7 @@ class TextExtractor:
             
             # Extract text with layout preservation
             for page in reader.pages:
-                text += page.extract_text(
-                    extraction_mode="layout",  # Preserve spacing/indentation
-                    layout_mode_space_vertically=True,
-                    layout_mode_scale_overlap=0.5
-                ) + "\n\n"
+                text += page.extract_text() + "\n\n"
 
             # Cleanup any excessive whitespace
             text = re.sub(r'\s+', ' ', text).strip()
@@ -369,7 +368,10 @@ class TextExtractor:
             # Reset file pointer
             file_obj.seek(0)
 
-            doc = docx.Document(file_obj)
+            if not DOCX_AVAILABLE or docx is None:
+                raise TextExtractionError("DOCX extraction requires python-docx library")
+            
+            doc = docx.Document(file_obj)  # type: ignore
             paragraphs = [p.text for p in doc.paragraphs]
             text = "\n".join(paragraphs)
 

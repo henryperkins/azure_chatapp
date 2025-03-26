@@ -14,6 +14,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import knowledgebase_service
+from utils.file_validation import FileValidator
 from services.vector_db import get_vector_db, process_file_for_search, VECTOR_DB_STORAGE_PATH, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
 from services.file_storage import get_file_storage
 import config
@@ -28,10 +29,6 @@ from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-from utils.file_validation import FileValidator
-
-
 
 # ============================
 # File Endpoints

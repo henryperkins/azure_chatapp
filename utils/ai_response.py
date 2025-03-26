@@ -10,11 +10,10 @@ This module supports:
 - Vision processing with OpenAI
 """
 import logging
-import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Optional, List
 from uuid import UUID
 
-from fastapi import HTTPException, WebSocket
+from fastapi import WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.conversation import Conversation
@@ -28,15 +27,14 @@ from utils.message_handlers import (
     get_conversation_messages,
     update_project_token_usage
 )
-from utils.serializers import serialize_message
 
 logger = logging.getLogger(__name__)
 
 
 async def retrieve_knowledge_context(
-    query: str, 
+    query: str,
     project_id: Optional[UUID] = None,
-    db: AsyncSession = None,
+    db: Optional[AsyncSession] = None,
     top_k: int = 3
 ) -> Optional[str]:
     """
@@ -72,17 +70,22 @@ async def retrieve_knowledge_context(
         # Format context for inclusion in the prompt
         context_blocks = []
         for i, result in enumerate(search_results):
-            # Only include high confidence results (score > 0.6)
-            if result.get("score", 0) < 0.6:
+            # Skip if result is not a dictionary
+            if not isinstance(result, dict):
                 continue
                 
-            text = result.get("text", "")
+            # Only include high confidence results (score > 0.6)
+            score = result.get("score", 0) if isinstance(result, dict) else 0
+            if score < 0.6:
+                continue
+                
+            text = result.get("text", "") if isinstance(result, dict) else ""
             if not text:
                 continue
                 
             # Get file info if available
-            file_info = result.get("file_info", {})
-            filename = file_info.get("filename", "Unknown source")
+            file_info = result.get("file_info", {}) if isinstance(result, dict) else {}
+            filename = file_info.get("filename", "Unknown source") if isinstance(file_info, dict) else "Unknown source"
             
             # Add context block with source attribution
             context_blocks.append(f"[Source {i + 1}: {filename}]\n{text}\n")
@@ -106,7 +109,7 @@ async def generate_ai_response(
     vision_detail: str = "auto",
     enable_thinking: Optional[bool] = None,
     thinking_budget: Optional[int] = None,
-    db: AsyncSession = None
+    db: Optional[AsyncSession] = None
 ) -> Optional[Message]:
     """
     Generate an AI response for a conversation using OpenAI or Claude API.
@@ -142,11 +145,17 @@ async def generate_ai_response(
         # Retrieve knowledge context if available
         knowledge_context = None
         if project_id and last_user_message and db:
-            knowledge_context = await retrieve_knowledge_context(
-                query=last_user_message,
-                project_id=project_id,
-                db=db
-            )
+            try:
+                # Ensure project_id is proper UUID
+                from uuid import UUID
+                project_uuid = UUID(str(project_id)) if project_id else None
+                knowledge_context = await retrieve_knowledge_context(
+                    query=last_user_message,
+                    project_id=project_uuid,
+                    db=db
+                )
+            except (ValueError, AttributeError):
+                pass
             
         # Inject knowledge context as a system message if available
         if knowledge_context:
@@ -200,6 +209,11 @@ async def generate_ai_response(
         
         # Create assistant message
         message_metadata = {}
+        
+        # Initialize thinking variables
+        thinking_content = None
+        redacted_thinking = None
+        has_thinking = False
         
         # Include thinking blocks in metadata if available
         if is_claude_model and (thinking_content or redacted_thinking or has_thinking):
@@ -272,7 +286,15 @@ async def handle_websocket_response(
         # Get project if available to apply project-specific settings
         project = None
         if conversation.project_id:
-            project = await get_by_id(db, Project, conversation.project_id)
+            project = None
+            if conversation.project_id:
+                try:
+                    # Ensure project_id is proper UUID
+                    from uuid import UUID
+                    project_uuid = UUID(str(conversation.project_id))
+                    project = await get_by_id(db, Project, project_uuid)
+                except (ValueError, AttributeError):
+                    pass
             if project and project.extra_data:
                 # Extract project-specific thinking settings if available
                 project_settings = project.extra_data.get("ai_settings", {})
@@ -310,7 +332,7 @@ async def handle_websocket_response(
                     
             # Include knowledge context flag if used
             if metadata.get("used_knowledge_context"):
-                response_data["used_knowledge_context"] = True
+                response_data["used_knowledge_context"] = "true"
             
             await websocket.send_json(response_data)
         else:
