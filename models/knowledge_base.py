@@ -50,7 +50,7 @@ class KnowledgeBase(Base):
         onupdate=text("CURRENT_TIMESTAMP")
     )
     
-    project = relationship("Project", back_populates="knowledge_base")
+    project = relationship("Project", back_populates="knowledge_base", foreign_keys=[project_id])
     
     def __repr__(self):
         return f"<KnowledgeBase {self.name} (#{self.id})>"
