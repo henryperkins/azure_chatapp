@@ -1,5 +1,5 @@
 import { ProjectListComponent, ProjectDetailsComponent, KnowledgeBaseComponent } from './projectDashboardComponents.js';
-import { UIUtils } from './projectDashboardUtils.js';
+import { UIUtils, ModalManager } from './projectDashboardUtils.js';
 
 /**
  * Project Dashboard - Main controller class
@@ -11,6 +11,7 @@ class ProjectDashboard {
       currentView: null, // 'list' or 'details'
       currentProject: null
     };
+    this.modalManager = new ModalManager();
   }
 
   /**
@@ -43,9 +44,14 @@ class ProjectDashboard {
   }
 
   async _completeInitialization() {
-    // Verify required dependencies
+    // Verify required dependencies and route
     if (!window.projectManager) {
       throw new Error('ProjectManager not available - required dependency');
+    }
+    
+    // Only initialize project UI if we're on the projects page
+    if (!window.location.pathname.includes('/projects')) {
+      return;
     }
 
     // Ensure DOM elements exist or create fallbacks
@@ -58,6 +64,9 @@ class ProjectDashboard {
     }
 
     // Initialize components with error handling
+    // Initialize UIUtils first
+    this.uiUtils = new UIUtils();
+    
     this.components = {
       projectList: new ProjectListComponent({
         elementId: "projectList",
@@ -87,6 +96,11 @@ class ProjectDashboard {
    * Process URL parameters to determine initial view
    */
   processUrlParams() {
+    // Only process project params if we're on the projects page
+    if (!window.location.pathname.includes('/projects')) {
+      return;
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const projectId = urlParams.get("project");
     
@@ -330,15 +344,24 @@ class ProjectDashboard {
 
     try {
       await window.projectManager.createOrUpdateProject(projectId, formData);
-      UIUtils.showNotification(
-        isEditing ? "Project updated" : "Project created",
-        "success"
-      );
+      // Check for UIUtils before calling showNotification
+      if (window.UIUtils?.showNotification) {
+        window.UIUtils.showNotification(
+          isEditing ? "Project updated" : "Project created",
+          "success"
+        );
+      } else {
+        console.log(isEditing ? "Project updated" : "Project created");
+      }
       ModalManager.hide("project");
       this.loadProjects();
     } catch (error) {
       console.error("Error saving project:", error);
-      UIUtils.showNotification("Failed to save project", "error");
+      if (window.UIUtils?.showNotification) {
+        window.UIUtils.showNotification("Failed to save project", "error");
+      } else {
+        console.error("Failed to save project");
+      }
     }
   }
 }
@@ -354,6 +377,7 @@ async function initProjectDashboard() {
     // For debugging and development access
     if (typeof window !== 'undefined') {
       window.projectDashboard = dashboard;
+      window.ModalManager = dashboard.modalManager;
     }
     
     return dashboard;

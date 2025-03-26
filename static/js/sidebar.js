@@ -46,16 +46,20 @@ function initializeModelDropdownOnLoad() {
       // Update max tokens to match 128K context
       if (window.MODEL_CONFIG) {
         window.MODEL_CONFIG.maxTokens = 128000;
+        // Set default thinking budget for Claude 3.7
+        window.MODEL_CONFIG.thinkingBudget = 16000;
       }
       
-      // Persist the model selection
+      // Persist the model selection and thinking budget
       if (typeof persistSettings === 'function') {
         persistSettings();
       } else {
         // Simple fallback if persistSettings isn't available
         localStorage.setItem('modelName', modelDropdown.value);
+        localStorage.setItem('thinkingBudget', '16000');
         if (window.MODEL_CONFIG) {
           window.MODEL_CONFIG.modelName = modelDropdown.value;
+          window.MODEL_CONFIG.thinkingBudget = 16000;
         }
       }
     }
