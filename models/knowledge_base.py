@@ -4,7 +4,7 @@ knowledge_base.py
 Defines the KnowledgeBase model for managing vector embeddings and semantic search
 capabilities that can be attached to projects.
 """
-from sqlalchemy import String, Text, TIMESTAMP, text, Boolean
+from sqlalchemy import String, Text, TIMESTAMP, text, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
