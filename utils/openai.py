@@ -191,10 +191,12 @@ async def claude_chat(
     
     # Add beta headers for extended features and 128K context
     if model_name == "claude-3-7-sonnet-20250219":
-        headers["anthropic-beta"] = "output-128k-2025-02-19"
-        headers["anthropic-features"] = "extended-thinking-2025-02-19"
-        # Increase default max tokens for 128K context
-        max_tokens = min(max_tokens, 128000)
+        headers.update({
+            "anthropic-beta": "output-128k-2025-02-19",
+            "anthropic-features": "extended-thinking-2025-02-19,long-context-2025-02-19"
+        })
+        # Adjust max tokens for 128K context while leaving room for thinking
+        max_tokens = min(max_tokens, 120000 if enable_thinking else 128000)
 
     # Fix any message formatting for Claude API
     formatted_messages = []
@@ -240,10 +242,12 @@ async def claude_chat(
     if enable_thinking and model_name in ["claude-3-7-sonnet-20250219", "claude-3-opus-20240229"]:
         # Ensure we have enough tokens for both response and thinking
         max_tokens = max(max_tokens, 2000)  # Minimum for decent thinking
-        # Calculate budget_tokens, ensuring it's within valid range and less than max_tokens
+        # Calculate budget_tokens with model-specific adjustments
         budget = thinking_budget or settings.CLAUDE_EXTENDED_THINKING_BUDGET
-        # Ensure budget is at least 1024 tokens and less than max_tokens
-        budget = max(1024, min(budget, max_tokens - 1000))
+        # Adjust minimum budget based on model
+        min_budget = 2048 if model_name == "claude-3-7-sonnet-20250219" else 1024
+        # Ensure budget is within valid range
+        budget = max(min_budget, min(budget, max_tokens - min_budget))
         
         payload["thinking"] = True
         payload["budget_tokens"] = budget
