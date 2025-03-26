@@ -8,71 +8,6 @@
   <link rel="stylesheet" href="/static/dist/tailwind.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
   
-  <!-- Custom styles -->
-  <style>
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    .animate-spin {
-      animation: spin 1s linear infinite;
-    }
-    /* Toggle Switch */
-    .toggle-checkbox:checked {
-      transform: translateX(100%);
-      border-color: #3b82f6;
-    }
-    .toggle-checkbox:checked + .toggle-label {
-      background-color: #3b82f6;
-    }
-
-    /* Auth Dropdown */
-    .slide-in {
-      animation: slideIn 0.2s ease-out forwards;
-      display: block !important;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    #authDropdown {
-      z-index: 1000;
-      display: none;
-    }
-
-    #authDropdown.slide-in {
-      display: block;
-    }
-
-    /* Sidebar transitions */
-    #mainSidebar {
-      transition: transform 0.2s ease-in-out;
-    }
-    
-    .sidebar-enter {
-      transform: translateX(-100%);
-    }
-    
-    .sidebar-enter-active {
-      transform: translateX(0);
-    }
-    
-    .sidebar-exit {
-      transform: translateX(0);
-    }
-    
-    .sidebar-exit-active {
-      transform: translateX(-100%);
-    }
-  </style>
   
   <!-- Ensure responsive, mobile-friendly behavior -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -117,7 +52,7 @@
           </button>
             
           <!-- Auth Dropdown (hidden by default) -->
-          <div id="authDropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded shadow-lg p-3 hidden slide-in dark:text-gray-100" style="z-index: 1000;">
+          <div id="authDropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded shadow-lg p-3 hidden animate-slide-in dark:text-gray-100 z-[1000]">
             <div class="flex border-b border-gray-200 dark:border-gray-700 mb-2 justify-center">
               <button id="loginTab" class="px-2 py-1 text-xs font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">Login</button>
               <button id="registerTab" class="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">Register</button>
@@ -174,7 +109,7 @@
   <div class="flex flex-1 overflow-hidden">
     <!-- Enhanced Sidebar Interface (hidden on mobile by default) -->
     <nav aria-label="Main navigation" id="mainSidebar" role="navigation"
-         class="md:block w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 overflow-y-auto fixed md:relative inset-0 z-50 -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out transform">
+         class="md:block w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 overflow-y-auto fixed md:relative inset-0 z-50 -translate-x-full md:translate-x-0 sidebar-transition">
       <!-- Mobile close button -->
       <button class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700" onclick="toggleSidebar()">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -317,8 +252,8 @@
                 <div class="flex items-center justify-between">
                   <label class="block text-sm font-medium dark:text-gray-200">Extended Thinking</label>
                   <div class="relative inline-block w-10 mr-2 align-middle select-none">
-                    <input type="checkbox" id="extendedThinking" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" />
-                    <label for="extendedThinking" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                    <input type="checkbox" id="extendedThinking" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-300 right-0" />
+                    <label for="extendedThinking" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer transition-all duration-300"></label>
                   </div>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">Shows Claude's step-by-step reasoning process (Claude 3.7 and Opus only)</p>
