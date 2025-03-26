@@ -81,7 +81,10 @@ CREATE TABLE conversations (
     message_count INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    extra_data JSONB DEFAULT '{}'::jsonb
+    extra_data JSONB DEFAULT '{}'::jsonb,
+    knowledge_base_id UUID REFERENCES knowledge_bases(id),
+    use_knowledge_base BOOLEAN DEFAULT FALSE,
+    search_results JSONB
 );
 CREATE INDEX ix_conversations_user_id ON conversations(user_id);
 CREATE INDEX ix_conversations_project_id ON conversations(project_id);
@@ -97,7 +100,8 @@ CREATE TABLE messages (
     extra_data JSONB DEFAULT '{}'::jsonb,
     context_used JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT valid_message_roles CHECK (role IN ('user', 'assistant', 'system'))
 );
 CREATE INDEX ix_messages_id ON messages(id);
 CREATE INDEX ix_messages_conversation_id ON messages(conversation_id);
