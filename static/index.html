@@ -34,6 +34,27 @@
         transform: translateY(0);
       }
     }
+
+    /* Sidebar transitions */
+    #mainSidebar {
+      transition: transform 0.2s ease-in-out;
+    }
+    
+    .sidebar-enter {
+      transform: translateX(-100%);
+    }
+    
+    .sidebar-enter-active {
+      transform: translateX(0);
+    }
+    
+    .sidebar-exit {
+      transform: translateX(0);
+    }
+    
+    .sidebar-exit-active {
+      transform: translateX(-100%);
+    }
   </style>
   
   <!-- Ensure responsive, mobile-friendly behavior -->

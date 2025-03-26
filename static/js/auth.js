@@ -145,14 +145,14 @@ function setupUIListeners() {
 
   if (authBtn && authDropdown) {
     authBtn.addEventListener("click", (e) => {
-      e.stopPropagation(); // Prevent event bubbling
+      e.preventDefault();
+      e.stopPropagation();
       authDropdown.classList.toggle("hidden");
-      authDropdown.classList.toggle("slide-in");
     });
 
     // Close dropdown when clicking outside
     document.addEventListener("click", (e) => {
-      if (!e.target.closest("#authContainer")) {
+      if (!e.target.closest("#authContainer") && !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
       }
     });
