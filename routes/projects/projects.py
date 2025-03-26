@@ -141,8 +141,11 @@ async def list_projects(
         "projects": serialized_projects,
         "count": len(serialized_projects),
         "filter": {
-            "archived": archived,
-            "pinned": pinned
+            "type": filter or "all",
+            "applied": {
+                "archived": filter === "archived",
+                "pinned": filter === "pinned"
+            }
         }
     })
 
