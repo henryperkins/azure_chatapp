@@ -29,7 +29,7 @@
       return Promise.resolve([]);
     }
 
-    return window.apiRequest("/api/projects", "GET")
+    return window.apiRequest(`/api/projects?filter=${filter}`, "GET")
       .then((response) => {
         console.log("[ProjectManager] Raw API response:", response);
         
