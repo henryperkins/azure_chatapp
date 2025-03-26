@@ -185,9 +185,48 @@ function setupUIListeners() {
   }
 
   // Handle form submissions
-  document.getElementById("registerForm")?.addEventListener("submit", handleRegister);
-  document.getElementById("loginForm")?.addEventListener("submit", handleLogin);
+  document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    await handleLogin({
+      username: formData.get("username"),
+      password: formData.get("password") 
+    });
+  });
+
+  document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    await handleRegister({
+      username: formData.get("username"),
+      password: formData.get("password")
+    });
+  });
+
   document.getElementById("logoutBtn")?.addEventListener("click", logout);
+}
+
+function switchForm(isLogin) {
+  const loginTab = document.getElementById("loginTab");
+  const registerTab = document.getElementById("registerTab");
+  const loginForm = document.getElementById("loginForm"); 
+  const registerForm = document.getElementById("registerForm");
+
+  if (isLogin) {
+    loginTab.classList.add("border-blue-500", "text-blue-600");
+    loginTab.classList.remove("text-gray-500");
+    registerTab.classList.remove("border-blue-500", "text-blue-600");
+    registerTab.classList.add("text-gray-500");
+    loginForm.classList.remove("hidden");
+    registerForm.classList.add("hidden");
+  } else {
+    loginTab.classList.remove("border-blue-500", "text-blue-600");
+    loginTab.classList.add("text-gray-500");
+    registerTab.classList.add("border-blue-500", "text-blue-600");
+    registerTab.classList.remove("text-gray-500");
+    loginForm.classList.add("hidden");
+    registerForm.classList.remove("hidden");
+  }
 }
 
 function switchForm(isLogin) {
@@ -496,6 +535,15 @@ async function refreshTokenIfActive() {
 // -------------------------
 // Initial Auth Check
 // -------------------------
+async function verifyAuthState() {
+  try {
+    const response = await api('/api/auth/verify');
+    return response.authenticated;
+  } catch {
+    return false;
+  }
+}
+
 async function updateAuthStatus() {
   try {
     const data = await api('/api/auth/verify');
