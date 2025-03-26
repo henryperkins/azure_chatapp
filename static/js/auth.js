@@ -139,40 +139,70 @@ window.TokenManager = TokenManager;
 // UI Event Listeners
 // -------------------------
 function setupUIListeners() {
-  toggleForms();
-  handleAuthDropdown();
+  // Handle auth dropdown toggle
+  const authBtn = document.getElementById("authButton");
+  const authDropdown = document.getElementById("authDropdown");
 
-  document.getElementById("registerForm")?.addEventListener("submit", handleRegister);
-  document.getElementById("loginForm")?.addEventListener("submit", handleLogin);
-  document.getElementById("logoutBtn")?.addEventListener("click", logout);
-}
+  if (authBtn && authDropdown) {
+    authBtn.addEventListener("click", (e) => {
+      e.stopPropagation(); // Prevent event bubbling
+      authDropdown.classList.toggle("hidden");
+      authDropdown.classList.toggle("slide-in");
+    });
 
-function toggleForms() {
+    // Close dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#authContainer")) {
+        authDropdown.classList.add("hidden");
+      }
+    });
+  }
+
+  // Handle form switching
   const loginTab = document.getElementById("loginTab");
   const registerTab = document.getElementById("registerTab");
   const loginForm = document.getElementById("loginForm");
   const registerForm = document.getElementById("registerForm");
 
-  loginTab?.addEventListener("click", () => switchForm(true));
-  registerTab?.addEventListener("click", () => switchForm(false));
+  if (loginTab && registerTab && loginForm && registerForm) {
+    loginTab.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchForm(true);
+    });
 
-  function switchForm(isLogin) {
-    loginTab.classList.toggle("border-blue-500", isLogin);
-    registerTab.classList.toggle("border-blue-500", !isLogin);
-    loginForm.classList.toggle("hidden", !isLogin);
-    registerForm.classList.toggle("hidden", isLogin);
+    registerTab.addEventListener("click", (e) => {
+      e.preventDefault();
+      switchForm(false);
+    });
   }
+
+  // Handle form submissions
+  document.getElementById("registerForm")?.addEventListener("submit", handleRegister);
+  document.getElementById("loginForm")?.addEventListener("submit", handleLogin);
+  document.getElementById("logoutBtn")?.addEventListener("click", logout);
 }
 
-function handleAuthDropdown() {
-  const authBtn = document.getElementById("authButton");
-  const authDropdown = document.getElementById("authDropdown");
-  const authContainer = document.getElementById("authContainer");
+function switchForm(isLogin) {
+  const loginTab = document.getElementById("loginTab");
+  const registerTab = document.getElementById("registerTab");
+  const loginForm = document.getElementById("loginForm");
+  const registerForm = document.getElementById("registerForm");
 
-  authBtn?.addEventListener("click", () => authDropdown?.classList.toggle("hidden"));
-  document.addEventListener("click", (e) => {
-    if (!authContainer?.contains(e.target)) authDropdown?.classList.add("hidden");
-  });
+  if (isLogin) {
+    loginTab.classList.add("border-blue-500", "text-blue-600");
+    loginTab.classList.remove("text-gray-500");
+    registerTab.classList.remove("border-blue-500", "text-blue-600");
+    registerTab.classList.add("text-gray-500");
+    loginForm.classList.remove("hidden");
+    registerForm.classList.add("hidden");
+  } else {
+    loginTab.classList.remove("border-blue-500", "text-blue-600");
+    loginTab.classList.add("text-gray-500");
+    registerTab.classList.add("border-blue-500", "text-blue-600");
+    registerTab.classList.remove("text-gray-500");
+    loginForm.classList.add("hidden");
+    registerForm.classList.remove("hidden");
+  }
 }
 
 // -------------------------
