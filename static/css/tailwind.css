@@ -70,17 +70,35 @@
   
   #sidebarBackdrop {
     display: block;
+    z-index: 40;
   }
 }
 
 @media (min-width: 768px) {
   #mainSidebar {
     transform: translateX(0) !important;
+    z-index: auto;
   }
   
   #sidebarBackdrop {
     display: none !important;
   }
+}
+
+/* Smooth transitions */
+#mainSidebar {
+  transition: transform 0.3s ease-in-out;
+}
+
+/* Dark mode support */
+.dark #mainSidebar {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.dark #authDropdown {
+  background-color: #1f2937;
+  border: 1px solid #374151;
 }
 
   #projectManagerPanel {
