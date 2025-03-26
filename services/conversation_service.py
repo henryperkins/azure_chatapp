@@ -82,6 +82,12 @@ async def create_conversation(
     use_knowledge_base: bool = False
 ) -> Conversation:
     """
+    Creates a new conversation with proper model and knowledge base validation.
+    Ensures:
+    - Model is allowed
+    - If using KB: project has active KB and user has access
+    """
+    """
     Creates a new conversation with proper model alignment.
     """
     logger.info(f"Creating conversation for project {project_id} with model {model_id}")
@@ -92,9 +98,18 @@ async def create_conversation(
         logger.info("Model validation passed")
         
         # Create conversation object
-        # Get project to check if it has a knowledge base
+        # Validate project and knowledge base
         project = await db.get(Project, project_id)
-        kb_id = project.knowledge_base_id if project else None
+        if not project:
+            raise HTTPException(404, "Project not found")
+            
+        if use_knowledge_base:
+            if not project.knowledge_base_id:
+                raise HTTPException(400, "Project has no linked knowledge base")
+                
+            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+            if not kb or not kb.is_active:
+                raise HTTPException(400, "Project's knowledge base is not active")
         
         conv = Conversation(
             project_id=project_id,
