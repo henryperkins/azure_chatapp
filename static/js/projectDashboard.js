@@ -1175,6 +1175,7 @@ class ProjectDashboard {
     const projects = event.detail || [];
     const originalCount = event.originalCount || projects.length;
     const filter = event.filterApplied || 'all';
+    const hasError = event.error || false;
 
     console.log(`[Dashboard] Rendering ${projects.length} projects (${originalCount} total, filter: ${filter})`);
       
@@ -1184,15 +1185,27 @@ class ProjectDashboard {
       // Update empty state visibility and message
       const noProjectsMsg = document.getElementById('noProjectsMessage');
       if (noProjectsMsg) {
-        noProjectsMsg.classList.toggle('hidden', projects.length > 0);
-        if (projects.length === 0 && originalCount > 0) {
+        noProjectsMsg.classList.toggle('hidden', projects.length > 0 || hasError);
+        
+        if (hasError) {
+          noProjectsMsg.textContent = "Error loading projects. Please try again.";
+          noProjectsMsg.classList.add('text-red-600');
+        } else if (projects.length === 0 && originalCount > 0) {
           noProjectsMsg.textContent = `No projects match the "${filter}" filter`;
+          noProjectsMsg.classList.remove('text-red-600');
         } else if (projects.length === 0) {
           noProjectsMsg.textContent = "No projects found. Create your first project!";
+          noProjectsMsg.classList.remove('text-red-600');
         }
       }
     } catch (error) {
       console.error("[Dashboard] Error rendering projects:", error);
+      const noProjectsMsg = document.getElementById('noProjectsMessage');
+      if (noProjectsMsg) {
+        noProjectsMsg.textContent = "Error displaying projects";
+        noProjectsMsg.classList.remove('hidden');
+        noProjectsMsg.classList.add('text-red-600');
+      }
     }
   }
   
