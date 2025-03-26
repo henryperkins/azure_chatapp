@@ -16,6 +16,12 @@ from db import Base
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('user', 'assistant', 'system')",
+            name="valid_message_roles"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -29,7 +35,12 @@ class Message(Base):
         nullable=False,
         index=True
     )
-    role: Mapped[str] = mapped_column(String, nullable=False)  # "user", "assistant", "system"
+    role: Mapped[str] = mapped_column(
+        String, 
+        nullable=False,
+        comment="Message role: user, assistant, or system",
+        server_default="user"
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
     context_used: Mapped[Optional[dict]] = mapped_column(
