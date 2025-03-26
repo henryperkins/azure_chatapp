@@ -12,6 +12,27 @@
   border-color: #374151;
 }
 
+/* Ensure sidebar has proper mobile styles */
+@media (max-width: 767px) {
+  #mainSidebar {
+    transform: translateX(-100%);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+  }
+  
+  #mainSidebar.translate-x-0 {
+    transform: translateX(0);
+  }
+}
+
+/* Transition for smooth animation */
+#mainSidebar {
+  transition: transform 0.3s ease-in-out;
+}
+
 /* Mobile sidebar styles */
 @media (max-width: 767px) {
   #mainSidebar {
