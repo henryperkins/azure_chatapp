@@ -69,22 +69,6 @@ function initModelConfig() {
     maxTokensHidden.id = "maxTokensHidden";
     const visionToggle = document.getElementById("visionToggle");
     
-    // Create or reference API Version input
-    let apiVersionInput = document.getElementById("apiVersionInput");
-    if (!apiVersionInput) {
-      // If no element found, create it programmatically and insert into DOM for demonstration
-      const container = document.getElementById("apiConfigPanel") || document.body;
-      const label = document.createElement("label");
-      label.textContent = "API Version (YYYY-MM-DD or YYYY-MM-DD-preview):";
-      label.className = "block text-sm font-medium mt-4";
-      apiVersionInput = document.createElement("input");
-      apiVersionInput.id = "apiVersionInput";
-      apiVersionInput.type = "text";
-      apiVersionInput.className = "mt-1 block border rounded p-1 w-60 text-sm";
-      apiVersionInput.placeholder = "2023-05-01-preview";
-      container.appendChild(label);
-      container.appendChild(apiVersionInput);
-    }
     
     // Safely handle the possibility that the 'reasoningPanel' doesn't exist
     const reasoningPanel = document.getElementById("reasoningPanel");
@@ -154,7 +138,6 @@ function initModelConfig() {
     // Load existing settings from localStorage (or defaults)
     const storedModel = localStorage.getItem("modelName") || "claude-3-sonnet-20240229"; // Set Claude as default
     const storedMaxTokens = localStorage.getItem("maxTokens") || "500";
-    const storedApiVersion = localStorage.getItem("apiVersion") || "2023-05-01-preview";
     const storedReasoning = localStorage.getItem("reasoningEffort") || "";
     const storedVision = localStorage.getItem("visionEnabled") === "true";
     const storedExtendedThinking = localStorage.getItem("extendedThinking") === "true";
@@ -167,10 +150,6 @@ function initModelConfig() {
       maxTokensInput.type = "number";
       maxTokensInput.min = "1";
       maxTokensInput.max = "100000";
-    }
-    // If we found an API version input, set it
-    if (apiVersionInput) {
-      apiVersionInput.value = storedApiVersion;
     }
     // Set the reasoningEffortSelect if there's a saved value
     if (storedReasoning) {
@@ -364,18 +343,6 @@ function setupVisionFileInput() {
  * Save changes to localStorage and (optionally) to a global object
  */
 function persistSettings() {
-  // API Version
-  const apiVersionInput = document.getElementById("apiVersionInput");
-  if (apiVersionInput) {
-    let userVal = apiVersionInput.value.trim();
-    if (!userVal) {
-      userVal = "2023-05-01-preview";
-      apiVersionInput.value = userVal;
-    }
-    localStorage.setItem("apiVersion", userVal);
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.apiVersion = userVal;
-  }
 
   // Model
   const modelSelect = document.getElementById("modelSelect");
