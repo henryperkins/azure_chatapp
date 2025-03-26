@@ -1271,3 +1271,10 @@ window.initProjectDashboard = initProjectDashboard;
 window.ModalManager = ModalManager;
 window.AnimationUtils = AnimationUtils;
 window.UIUtils = UIUtils;
+
+// Initialize dashboard when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.getElementById('projectManagerPanel')) {
+    initProjectDashboard();
+  }
+});
