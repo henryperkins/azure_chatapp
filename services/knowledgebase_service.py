@@ -437,6 +437,9 @@ async def upload_file_to_project(
         if project_file.metadata and 'search_processing' in project_file.metadata:
             existing_chunks = project_file.metadata['search_processing'].get('chunk_count', 0)
         
+        # Initialize with default failure state
+        search_results = {"success": False}
+        
         # Only process if new (existing_chunks == 0) or if we're forcing reindex (process_for_search=True)
         if existing_chunks == 0 or process_for_search:
             search_results = await process_file_for_search(

@@ -8,7 +8,6 @@ HTTP and WebSocket connections.
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
-from urllib.parse import unquote
 
 from jwt import encode, decode
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
@@ -75,6 +74,10 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
     Raises:
         HTTPException: If token validation fails
     """
+    # Initialize variables that may be referenced in error handling
+    decoded = None
+    token_id = None
+    
     try:
         decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
@@ -116,17 +119,19 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
 
     except ExpiredSignatureError:
         now = datetime.utcnow().timestamp()
+        exp_time = decoded.get('exp') if decoded else None
+        diff = now - exp_time if exp_time else None
         logger.warning(
             f"Token expired - jti: {token_id}, "
-            f"exp: {decoded.get('exp')}, now: {now}, "
-            f"diff: {now - decoded.get('exp')}s"
+            f"exp: {exp_time}, now: {now}, "
+            f"diff: {diff}s" if diff is not None else "diff: N/A"
         )
         raise HTTPException(status_code=401, detail="Token has expired")
     except InvalidTokenError as e:
         logger.warning(
             f"Invalid token - jti: {token_id}, error: {str(e)}, "
-            f"headers: {decoded.get('headers', {})}, "
-            f"payload: {decoded.get('payload', {})}"
+            f"headers: {decoded.get('headers') if decoded else 'N/A'}, "
+            f"payload: {decoded.get('payload') if decoded else 'N/A'}"
         )
         raise HTTPException(status_code=401, detail="Invalid token")
 

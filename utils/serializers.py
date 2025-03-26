@@ -5,8 +5,7 @@ Provides standardized functions for serializing database models to dictionaries.
 Ensures consistent response formats across endpoints.
 """
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Union
-from uuid import UUID
+from typing import Dict, Any, Optional, List, Sequence
 
 from models.project import Project
 from models.conversation import Conversation
@@ -23,7 +22,7 @@ def serialize_datetime(dt: Optional[datetime]) -> Optional[str]:
     return None
 
 
-def serialize_uuid(id_value: Optional[UUID]) -> Optional[str]:
+def serialize_uuid(id_value: Any) -> Optional[str]:
     """Convert UUID to string if not None"""
     if id_value is not None:
         return str(id_value)
@@ -137,13 +136,18 @@ def serialize_artifact(artifact: Artifact, include_content: bool = True) -> Dict
     return result
 
 
-def serialize_project_file(file: ProjectFile, include_content: bool = False) -> Dict[str, Any]:
+def serialize_project_file(
+    file: ProjectFile,
+    include_content: bool = False,
+    include_file_path: bool = False
+) -> Dict[str, Any]:
     """
     Serialize a ProjectFile model to a dictionary.
     
     Args:
         file: ProjectFile database model
         include_content: Whether to include the content
+        include_file_path: Whether to include the file path
         
     Returns:
         Dictionary with serialized file data
@@ -152,7 +156,6 @@ def serialize_project_file(file: ProjectFile, include_content: bool = False) -> 
         "id": serialize_uuid(file.id),
         "project_id": serialize_uuid(file.project_id),
         "filename": file.filename,
-        "file_path": file.file_path,
         "file_size": file.file_size,
         "file_type": file.file_type,
         "created_at": serialize_datetime(file.created_at),
@@ -160,13 +163,16 @@ def serialize_project_file(file: ProjectFile, include_content: bool = False) -> 
         "extra_data": file.extra_data
     }
     
+    if include_file_path:
+        result["file_path"] = file.file_path
+    
     if include_content and file.content:
         result["content"] = file.content
     
     return result
 
 
-def serialize_list(items: List[Any], serializer_func, **kwargs) -> List[Dict[str, Any]]:
+def serialize_list(items: Sequence[Any], serializer_func, **kwargs) -> List[Dict[str, Any]]:
     """
     Serialize a list of items using the provided serializer function.
     

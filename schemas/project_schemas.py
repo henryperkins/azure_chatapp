@@ -4,7 +4,7 @@ project_schemas.py
 Contains Pydantic models related to projects, used by FastAPI routes and services.
 """
 
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -39,22 +39,23 @@ class ProjectUpdate(BaseModel):
     )
 
 class ArtifactCreate(BaseModel):
-   name: str = Field(..., min_length=1, max_length=200)
-   content_type: str = Field(..., description="Type of content: code, document, etc.")
-   content: str = Field(..., description="The actual content of the artifact")
-   conversation_id: Optional[UUID] = None
+    name: str = Field(..., min_length=1, max_length=200)
+    content_type: str = Field(..., description="Type of content: code, document, etc.")
+    content: str = Field(..., description="The actual content of the artifact")
+    conversation_id: Optional[UUID] = None
 
 class ArtifactResponse(BaseModel):
-   id: UUID
-   project_id: UUID
-   conversation_id: Optional[UUID] = None
-   name: str
-   content_type: str
-   content: str
-   created_at: datetime
+    id: UUID
+    project_id: UUID
+    conversation_id: Optional[UUID] = None
+    name: str
+    content_type: str
+    content: str
+    created_at: datetime
 
-   class Config:
-       from_attributes = True
+class Config:
+    from_attributes = True
+
 class ProjectResponse(BaseModel):
     id: UUID
     name: str

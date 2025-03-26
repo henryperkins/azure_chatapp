@@ -12,7 +12,6 @@ This version has been trimmed to remove the general API request function that mo
 """
 
 import logging
-import os
 from typing import List, Dict, Optional, Any
 
 import httpx
@@ -159,7 +158,13 @@ async def get_completion(prompt: str, model_name: str = "o3-mini", max_tokens: i
         raise RuntimeError(f"Text completion failed: {str(e)}") from e
 
 
-async def claude_chat(messages: list, model_name: str, max_tokens: int = 1000, enable_thinking: bool = None, thinking_budget: int = None) -> dict:
+async def claude_chat(
+    messages: list,
+    model_name: str,
+    max_tokens: int = 1000,
+    enable_thinking: bool = False,
+    thinking_budget: Optional[int] = None
+) -> dict:
     """Handle Claude API requests"""
     from config import settings
     from fastapi import HTTPException

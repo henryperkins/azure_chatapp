@@ -31,7 +31,6 @@ from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
 from services.vector_db import get_vector_db, process_file_for_search, VECTOR_DB_STORAGE_PATH, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
 from services.file_storage import get_file_storage
-from models.project_file import ProjectFile
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -112,12 +111,12 @@ async def list_projects(
     
     # Handle filter parameter from UI
     if filter == "pinned":
-        conditions.append(Project.pinned == True)
-        conditions.append(Project.archived == False)
+        conditions.append(Project.pinned.is_(True))
+        conditions.append(Project.archived.is_(False))
     elif filter == "archived":
-        conditions.append(Project.archived == True)
+        conditions.append(Project.archived.is_(True))
     elif filter == "active":
-        conditions.append(Project.archived == False)
+        conditions.append(Project.archived.is_(False))
     # 'all' filter shows everything
     
     # Use consolidated function for database query
@@ -409,6 +408,7 @@ async def create_project_knowledge_base(
         await db.commit()
         
         # Process existing files if requested
+        files = {"files": []}  # Default empty files dict
         processed_files = 0
         if kb_data.process_existing_files:
             # Get files
@@ -425,8 +425,11 @@ async def create_project_knowledge_base(
                     
                     if file_record:
                         # Process file for search
+                        model_name = kb.embedding_model or "all-MiniLM-L6-v2"
+                        if kb.embedding_model is None:
+                            logger.info(f"Using default embedding model for project {project_id}")
                         vector_db = await get_vector_db(
-                            model_name=kb.embedding_model,
+                            model_name=model_name,
                             storage_path=os.path.join(
                                 VECTOR_DB_STORAGE_PATH, 
                                 str(project_id)
@@ -460,7 +463,7 @@ async def create_project_knowledge_base(
             "name": kb.name,
             "project_id": str(project_id),
             "processed_files": processed_files,
-            "total_files": len(files.get("files", [])) if kb_data.process_existing_files else 0
+            **({"total_files": len(files["files"])} if kb_data.process_existing_files else {})
         }, "Knowledge base created and associated with project successfully")
     
     except Exception as e:

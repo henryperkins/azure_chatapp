@@ -17,4 +17,8 @@ class FileUploadResponse(BaseModel):
     purpose: str
     created_at: int
     status: str
-    object_type: str = Field(default="file", example="file", description="Type of uploaded object")
+    object_type: str = Field(
+        default="file",
+        examples=["file"],
+        description="Type of uploaded object"
+    )

@@ -7,12 +7,12 @@ background cleanup operations, and other database maintenance functions.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
-from typing import Callable, Awaitable, Any, List, Type, Optional, TypeVar, Union
+from datetime import datetime
+from typing import Callable, Awaitable, Any, List, Type, Optional, TypeVar, Union, Protocol
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select, asc, desc
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import BinaryExpression
 from sqlalchemy.sql import ColumnElement  # Add this import
@@ -23,8 +23,15 @@ from utils.auth_utils import clean_expired_tokens
 
 logger = logging.getLogger(__name__)
 
+# Base protocol for models with common attributes
+class BaseModelProtocol(Protocol):
+    id: Any
+    user_id: Any
+    archived: bool = False
+
+
 # Type variable for generic database models
-T = TypeVar('T')
+T = TypeVar('T', bound=BaseModelProtocol)
 
 # Global flag to manage concurrent runs of scheduled tasks
 _task_running = False

@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
+from schemas.chat_schemas import MessageCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import conversation_service, project_service
 
@@ -59,19 +60,6 @@ class ConversationUpdate(BaseModel):
     """
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
-
-
-class MessageCreate(BaseModel):
-    """
-    Pydantic model for creating a new message.
-    """
-    content: str = Field(..., min_length=1, description="The text content of the user message")
-    role: str = Field(
-        default="user",
-        description="The role: user, assistant, or system."
-    )
-    image_data: Optional[str] = None
-    vision_detail: Optional[str] = "auto"
 
 
 # ============================
