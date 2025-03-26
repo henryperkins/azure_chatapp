@@ -39,10 +39,11 @@ class Project(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
     knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True), 
+        UUID(as_uuid=True),
         ForeignKey("knowledge_bases.id", ondelete="SET NULL"), 
         nullable=True, 
         index=True,
+        unique=True,  # Ensures one KB per project
         comment="References knowledge base assets"
     )
     default_model: Mapped[str] = mapped_column(String(50), default="claude-3-sonnet-20240229", nullable=False, server_default="claude-3-sonnet-20240229")
