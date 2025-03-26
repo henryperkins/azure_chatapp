@@ -109,7 +109,7 @@
   <div class="flex flex-1 overflow-hidden">
     <!-- Enhanced Sidebar Interface (hidden on mobile by default) -->
     <nav aria-label="Main navigation" id="mainSidebar" role="navigation"
-         class="md:block w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 overflow-y-auto fixed md:relative inset-0 z-50 -translate-x-full md:translate-x-0 sidebar-transition">
+         class="md:block w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 overflow-y-auto fixed md:relative inset-0 z-50 -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
       <!-- Mobile close button -->
       <button class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700" onclick="toggleSidebar()">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -460,8 +460,8 @@
   </div>
 
   <!-- Project Creation/Edit Modal -->
-  <div id="projectFormModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+  <div id="projectFormModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto transition-all duration-300">
       <div class="flex justify-between items-center mb-4">
         <h3 id="projectFormTitle" class="text-xl font-semibold">Create New Project</h3>
         <button id="closeProjectFormBtn" class="text-gray-500 hover:text-gray-700">

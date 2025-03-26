@@ -22,7 +22,14 @@ module.exports = {
       animation: {
         'spin-slow': 'spin 3s linear infinite',
         'slide-in': 'slideIn 0.2s ease-out forwards',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'count-up': 'countUp 0.3s ease-out'
+      },
+      keyframes: {
+        countUp: {
+          'from': { opacity: 0.5, transform: 'translateY(5px)' },
+          'to': { opacity: 1, transform: 'translateY(0)' }
+        }
       },
       transitionProperty: {
         'transform': 'transform'
