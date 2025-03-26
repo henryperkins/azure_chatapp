@@ -188,8 +188,8 @@ function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
   
   // Set initial state
   if (isExpanded) {
-    panel.style.maxHeight = panel.scrollHeight + 'px';
-    chevron.style.transform = 'rotate(180deg)';
+    panel.classList.add('max-h-[999px]');
+    chevron.classList.add('rotate-180');
     
     // Call onExpand callback if provided and panel is expanded
     if (typeof onExpand === 'function') {
