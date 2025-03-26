@@ -712,6 +712,9 @@ async function initializeApplication() {
   try {
     console.log("Starting main application initialization");
     
+    // Initialize auth first
+    await initAuth();
+    
     // Initialize base URL
     const baseUrl = window.getBaseUrl();
     console.log("API base URL set to:", baseUrl);
