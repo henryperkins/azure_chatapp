@@ -38,7 +38,7 @@ CREATE TABLE knowledge_bases (
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
     last_used TIMESTAMP,
     version INTEGER DEFAULT 1 NOT NULL,
-    project_id UUID,
+    project_id UUID NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
