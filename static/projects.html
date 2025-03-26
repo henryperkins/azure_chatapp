@@ -924,9 +924,17 @@
 <script src="/static/js/modelConfig.js"></script>
 
 <!-- Consolidated scripts -->
-<script src="/static/js/projectDashboard.js"></script>
-<script src="/static/js/chat.js"></script>
+<script src="/static/js/chat.js" type="module"></script>
 <script src="/static/js/sidebar.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.projectManager) {
+      const script = document.createElement('script');
+      script.src = '/static/js/projectDashboard.js';
+      document.body.appendChild(script);
+    }
+  });
+</script>
 
 </body>
 </html>
