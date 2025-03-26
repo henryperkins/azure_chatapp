@@ -131,9 +131,21 @@ async function initAuth() {
   }
 }
 
-// Export initialization function and token manager
+// Export all auth functions to window
+window.auth = {
+  init: initAuth,
+  verify: verifyAuthState,
+  updateStatus: updateAuthStatus,
+  login: loginUser,
+  logout: logout,
+  manager: TokenManager
+};
+
+// Legacy exports for backward compatibility
 window.initAuth = initAuth;
 window.TokenManager = TokenManager;
+window.verifyAuthState = verifyAuthState;
+window.updateAuthStatus = updateAuthStatus;
 
 // -------------------------
 // UI Event Listeners

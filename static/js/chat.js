@@ -26,10 +26,9 @@ class WebSocketService {
       this.chatId = chatId;
       
       try {
-        // Quick auth check
-        const authState = sessionStorage.getItem('auth_state');
-        const userInfo = sessionStorage.getItem('userInfo');
-        if (!authState || !userInfo) {
+        // Use centralized auth check
+        const authState = await window.auth.verify();
+        if (!authState) {
           this.connecting = false;
           this.useHttpFallback = true;
           return Promise.reject(new Error('Auth required'));
@@ -94,10 +93,9 @@ class WebSocketService {
         return;
       }
   
-      // Check if still authenticated before attempting reconnect
-      const authState = sessionStorage.getItem('auth_state');
-      const userInfo = sessionStorage.getItem('userInfo');
-      if (!authState || !userInfo) {
+      // Use centralized auth check
+      const authState = await window.auth.verify();
+      if (!authState) {
         this.useHttpFallback = true;
         this.onError(new Error('Authentication required for WebSocket'));
         return;

@@ -19,12 +19,9 @@
   function loadProjects(filter = "all") {
     console.log("[ProjectManager] Loading projects with filter:", filter);
     
-    // Check auth state
-    const isAuthenticated = window.API_CONFIG?.isAuthenticated || 
-                          (sessionStorage.getItem('userInfo') !== null && 
-                           sessionStorage.getItem('auth_state') !== null);
-    
-    if (!isAuthenticated) {
+    // Use centralized auth check
+    const authState = await window.auth.verify();
+    if (!authState) {
       console.warn("[ProjectManager] Not authenticated, skipping project load");
       return Promise.resolve([]);
     }
