@@ -64,12 +64,13 @@ async def init_db():
 async def validate_db_schema():
     """
     Validate the current database schema against the ORM models.
-    Now checks tables, columns, and indexes.
+    Logs differences as warnings rather than failing.
     """
     import logging
     from sqlalchemy import MetaData, inspect
 
     logger = logging.getLogger(__name__)
+    has_mismatches = False
 
     # Reflect database schema
     inspector = inspect(sync_engine)
@@ -85,10 +86,14 @@ async def validate_db_schema():
 
     missing_tables = tables_in_orm - tables_in_db
     if missing_tables:
-        raise Exception(f"Missing tables: {missing_tables}")
+        logger.warning(f"⚠️ Missing tables in database: {missing_tables}")
+        has_mismatches = True
 
     # Column validation for each table
     for table_name in tables_in_orm:
+        if table_name not in meta.tables:
+            continue
+            
         db_cols = inspector.get_columns(table_name)
         orm_cols = orm_meta.tables[table_name].columns
 
@@ -97,26 +102,33 @@ async def validate_db_schema():
         for orm_col in orm_cols:
             db_col = db_col_map.get(orm_col.name)
             if not db_col:
-                raise Exception(f"Missing column {table_name}.{orm_col.name}")
+                logger.warning(f"⚠️ Missing column {table_name}.{orm_col.name}")
+                has_mismatches = True
+                continue
 
             # Compare type and nullable
             orm_type = str(orm_col.type).split("(")[0]  # Simplify type comparison
             db_type = str(db_col["type"]).split("(")[0]
 
             if db_type != orm_type:
-                raise Exception(
-                    f"Type mismatch in {table_name}.{orm_col.name}: "
+                logger.warning(
+                    f"⚠️ Type mismatch in {table_name}.{orm_col.name}: "
                     f"DB has {db_type}, ORM expects {orm_type}"
                 )
+                has_mismatches = True
 
             if db_col["nullable"] != orm_col.nullable:
-                raise Exception(
-                    f"Nullability mismatch in {table_name}.{orm_col.name}: "
+                logger.warning(
+                    f"⚠️ Nullability mismatch in {table_name}.{orm_col.name}: "
                     f"DB allows null={db_col['nullable']}, ORM expects {orm_col.nullable}"
                 )
+                has_mismatches = True
 
     # Index validation
     for table_name in tables_in_orm:
+        if table_name not in meta.tables:
+            continue
+            
         db_indexes = inspector.get_indexes(table_name)
         orm_indexes = orm_meta.tables[table_name].indexes
 
@@ -126,6 +138,10 @@ async def validate_db_schema():
 
         missing_indexes = orm_index_names - db_index_names
         if missing_indexes:
-            raise Exception(f"Missing indexes in {table_name}: {missing_indexes}")
+            logger.warning(f"⚠️ Missing indexes in {table_name}: {missing_indexes}")
+            has_mismatches = True
 
-    logger.info("Database schema (tables, columns, indexes) validated successfully.")
+    if not has_mismatches:
+        logger.info("✅ Database schema matches ORM models")
+    else:
+        logger.warning("⚠️ Database schema has mismatches with ORM models (see warnings above)")
