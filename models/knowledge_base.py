@@ -50,13 +50,7 @@ class KnowledgeBase(Base):
         onupdate=text("CURRENT_TIMESTAMP")
     )
     
-    project = relationship(
-        "Project", 
-        back_populates="knowledge_bases",  # Changed from knowledge_base to knowledge_bases
-        foreign_keys=[project_id],
-        uselist=False,
-        single_parent=True
-    )
+    # Project relationship is handled by backref in Project model
     
     def __repr__(self):
         return f"<KnowledgeBase {self.name} (#{self.id})>"

@@ -5,6 +5,7 @@ Defines the Project model used to group files, notes, and references
 that can be attached to one or more conversations for context.
 """
 from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint, Index
+from sqlalchemy.orm import backref
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
@@ -62,13 +63,11 @@ class Project(Base):
     files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
     user = relationship("User", back_populates="projects")
     
-    # Relationship to knowledge base
-    knowledge_bases = relationship(  # Changed from knowledge_base to knowledge_bases
-        "KnowledgeBase", 
-        back_populates="project",
-        uselist=True,  # Changed to True since a project can have multiple knowledge bases
-        foreign_keys=[knowledge_base_id],
-        cascade="all, delete-orphan"
+    # Simple one-way relationship to knowledge base
+    knowledge_base = relationship(
+        "KnowledgeBase",
+        uselist=False,
+        foreign_keys=[knowledge_base_id]
     )
 
     def __repr__(self):
