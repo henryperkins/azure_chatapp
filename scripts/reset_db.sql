@@ -140,6 +140,7 @@ CREATE TABLE artifacts (
 CREATE INDEX ix_artifacts_project_id ON artifacts(project_id);
 
 -- Create function and trigger for automatic updated_at timestamps
+-- This function updates the updated_at column to CURRENT_TIMESTAMP on any row update
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
