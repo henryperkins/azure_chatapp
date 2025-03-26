@@ -382,52 +382,52 @@ async def get_knowledge_base_health(
     }
 
 @router.post("/projects/{project_id}/toggle", response_model=dict)
-    async def toggle_project_knowledge_base(
-        project_id: UUID,
-        enable: bool = Body(..., embed=True),
-        current_user: User = Depends(get_current_user_and_token),
-        db: AsyncSession = Depends(get_async_session)
-    ):
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        """
-        Enable/disable knowledge base for all conversations in a project.
-        Requires project's knowledge base to be active.
-        """
-        # Validate project access
-        project = await validate_resource_access(
-            project_id,
-            Project,
-            current_user,
-            db,
-            "Project"
+async def toggle_project_knowledge_base(
+    project_id: UUID,
+    enable: bool = Body(..., embed=True),
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    """
+    Enable/disable knowledge base for all conversations in a project.
+    Requires project's knowledge base to be active.
+    """
+    # Validate project access
+    project = await validate_resource_access(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project"
+    )
+
+    if enable and not project.knowledge_base_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no linked knowledge base"
         )
-    
-        if enable and not project.knowledge_base_id:
+
+    if enable:
+        # Verify knowledge base is active
+        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+        if not kb or not kb.is_active:
             raise HTTPException(
                 status_code=400,
-                detail="Project has no linked knowledge base"
+                detail="Project's knowledge base is not active"
             )
-    
-        if enable:
-            # Verify knowledge base is active
-            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
-            if not kb or not kb.is_active:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Project's knowledge base is not active"
-                )
 
-        # Update all conversations
-        await db.execute(
-            update(Conversation)
-            .where(Conversation.project_id == project_id)
-            .values(use_knowledge_base=enable)
-        )
-        await db.commit()
+    # Update all conversations
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.project_id == project_id)
+        .values(use_knowledge_base=enable)
+    )
+    await db.commit()
 
-        return await create_standard_response(
-            {"project_id": str(project_id), "knowledge_base_enabled": enable},
-            f"Knowledge base {'enabled' if enable else 'disabled'} for project"
-        )
+    return await create_standard_response(
+        {"project_id": str(project_id), "knowledge_base_enabled": enable},
+        f"Knowledge base {'enabled' if enable else 'disabled'} for project"
+    )
     
