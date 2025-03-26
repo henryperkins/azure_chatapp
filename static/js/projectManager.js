@@ -300,10 +300,10 @@
     
     console.log(`Uploading file ${file.name} (${file.size} bytes) to project ${projectId}`);
     
-    return fetch(`/api/projects/${projectId}/files`, {
-      method: "POST",
-      body: formData,
-      credentials: "include"
+    return window.apiRequest(`/api/projects/${projectId}/files`, "POST", formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     }).then((response) => {
       if (!response.ok) {
         console.error(`Upload failed with status: ${response.status}`);
