@@ -14,7 +14,7 @@ and response_utils.py.
 
 import logging
 import tiktoken
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,9 @@ from .openai import openai_chat
 
 
 logger = logging.getLogger(__name__)
+
+# Flag for tiktoken availability
+TIKTOKEN_AVAILABLE = True
 
 # Recommended token threshold for summarization
 CONVERSATION_TOKEN_LIMIT = 3000
@@ -115,7 +118,7 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
 
     total_tokens = estimate_token_count(messages)
     if total_tokens > CONVERSATION_TOKEN_LIMIT:
-        reduced = await manage_context(messages)
+        await manage_context(messages)
         # Replace older messages in DB or handle them as needed
         logger.info(
             f"Summarization triggered for chat_id={chat_id}, tokens={total_tokens}"
