@@ -92,7 +92,11 @@ class FileValidator:
         return cls.MAX_FILE_SIZE / (1024 * 1024)
 
     @classmethod
-    def validate_upload_file(cls, file: Union[BinaryIO, UploadFile]) -> Dict[str, Any]:
+    def validate_upload_file(
+        cls, 
+        file: Union[BinaryIO, UploadFile],
+        scan_content: bool = True
+    ) -> Dict[str, Any]:
         """
         Comprehensive validation for uploaded files.
         Returns file info dict or raises ValueError.
@@ -102,6 +106,23 @@ class FileValidator:
         
         if not cls.validate_extension(filename):
             raise ValueError(f"File type not allowed. Supported: {', '.join(cls.get_allowed_extensions_list())}")
+            
+        if scan_content:
+            # Sample first 1MB for content scanning
+            sample = await file.read(1024 * 1024)
+            await file.seek(0)
+            
+            # Check for common malicious patterns
+            malicious_patterns = [
+                b'<?php', 
+                b'<script', 
+                b'eval(', 
+                b'powershell',
+                b'cmd.exe'
+            ]
+            
+            if any(pattern in sample.lower() for pattern in malicious_patterns):
+                raise ValueError("File content appears to contain potentially malicious code")
             
         file_info = cls.get_file_info(filename)
         

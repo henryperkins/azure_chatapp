@@ -186,8 +186,72 @@ class VectorDB:
         self,
         chunks: List[str],
         metadatas: Optional[List[Dict[str, Any]]] = None,
-        ids: Optional[List[str]] = None
+        ids: Optional[List[str]] = None,
+        batch_size: int = 100
     ) -> List[str]:
+        """
+        Add documents in batches to avoid memory issues and provide better progress tracking.
+        Returns list of document IDs that were successfully added.
+        """
+        if not chunks:
+            return []
+
+        # Generate IDs if not provided
+        if ids is None:
+            ids = [str(uuid.uuid4()) for _ in range(len(chunks))]
+
+        # Use empty metadata if not provided
+        if metadatas is None:
+            metadatas = [{} for _ in range(len(chunks))]
+
+        successful_ids = []
+        total_chunks = len(chunks)
+        logger.info(f"Starting to add {total_chunks} chunks in batches of {batch_size}")
+
+        for i in range(0, total_chunks, batch_size):
+            batch_end = min(i + batch_size, total_chunks)
+            batch_chunks = chunks[i:batch_end]
+            batch_metadatas = metadatas[i:batch_end]
+            batch_ids = ids[i:batch_end]
+
+            try:
+                # Generate embeddings for this batch
+                embeddings = await self.generate_embeddings(batch_chunks)
+                if not embeddings:
+                    logger.error(f"Failed to generate embeddings for batch {i//batch_size}")
+                    continue
+
+                # Add to in-memory storage
+                for j, (doc_id, embedding, metadata) in enumerate(zip(batch_ids, embeddings, batch_metadatas)):
+                    self.vectors[doc_id] = embedding
+                    self.metadata[doc_id] = {
+                        **metadata,
+                        "text": batch_chunks[j]
+                    }
+                    successful_ids.append(doc_id)
+
+                # Update FAISS index if using it
+                if self.use_faiss:
+                    embeddings_np = np.array(embeddings, dtype=np.float32)
+                    if self.index is None:
+                        dimension = embeddings_np.shape[1]
+                        self.index = faiss.IndexFlatL2(dimension)
+                    if self.index is not None:
+                        self.index.add(embeddings_np)
+                    self.id_map.extend(batch_ids)
+
+                logger.debug(f"Processed batch {i//batch_size + 1}/{(total_chunks//batch_size)+1}")
+
+            except Exception as e:
+                logger.error(f"Error processing batch {i//batch_size}: {str(e)}")
+                # Continue with next batch even if one fails
+
+        # Persist to disk if storage path is provided
+        if self.storage_path and successful_ids:
+            await self._save_to_disk()
+
+        logger.info(f"Successfully added {len(successful_ids)}/{total_chunks} chunks")
+        return successful_ids
         """
         Add documents/chunks to the vector database.
 
