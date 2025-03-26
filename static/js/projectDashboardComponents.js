@@ -841,12 +841,12 @@ class KnowledgeBaseComponent {
         "PATCH", 
         { is_active: enabled }
       );
-      .then(() => {
-        uiUtilsInstance.showNotification(
-          `Knowledge base ${enabled ? "enabled" : "disabled"}`,
-          "success"
-        );
-        window.projectManager?.loadProjectStats(projectId);
+      
+      uiUtilsInstance.showNotification(
+        `Knowledge base ${enabled ? "enabled" : "disabled"}`,
+        "success"
+      );
+      window.projectManager?.loadProjectStats(project.id);
       })
       .catch(err => {
         console.error("Error toggling knowledge base:", err);
