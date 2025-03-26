@@ -12,8 +12,9 @@ BEGIN
 
     -- Check table count matches
     IF actual_table_count != expected_table_count THEN
-        RAISE NOTICE 'Database schema mismatch detected. Running reset script...';
-        \i scripts/reset_db.sql
+        RAISE NOTICE 'Database schema mismatch detected. Expected % tables but found %', 
+            expected_table_count, actual_table_count;
+        RAISE EXCEPTION 'Schema mismatch - run reset_db.sql manually';
     ELSE
         RAISE NOTICE 'Database schema is up to date. No action needed.';
     END IF;

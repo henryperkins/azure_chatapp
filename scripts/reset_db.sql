@@ -90,7 +90,7 @@ CREATE TABLE conversations (
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    extra_data JSONB DEFAULT '{}'::jsonb NOT NULL,
+    extra_data JSONB DEFAULT '{}'::jsonb,
     knowledge_base_id UUID REFERENCES knowledge_bases(id),
     use_knowledge_base BOOLEAN DEFAULT FALSE NOT NULL,
     search_results JSONB
