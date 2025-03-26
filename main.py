@@ -2,7 +2,7 @@
 main.py
 --------
 The FastAPI entrypoint for the Azure OpenAI Chat Application.
-- Initializes the app with middleware (CORS, logging).
+- Initializes the app with middleware (logging).
 - Includes routers (auth, conversations, projects, etc.).
 - Runs database init or migrations on startup.
 """
@@ -15,7 +15,6 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -54,10 +53,6 @@ os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 
 # Configure allowed hosts
 allowed_hosts = ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
-origins = ["*"] if settings.ENV != "production" else [
-    "https://put.photo",
-    "https://www.put.photo"
-]
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -127,81 +122,32 @@ if settings.ENV == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
-# CORS Configuration
-# Allow environment override
-if settings.CORS_ORIGINS:
-    # Fix: check if already a list or needs splitting
-    origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else settings.CORS_ORIGINS.split(",")
-else:
-    origins = [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
-    ] if settings.ENV != "production" else [
-        "https://put.photo",
-        "https://www.put.photo"
-    ]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Set-Cookie", "Content-Type", "Authorization"],
-    max_age=86400,  # Cache preflight requests for 24 hours
-)
-
-logger.info("CORS configured with origins: %s", origins)
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-# WebSocket CORS fix middleware
-@app.middleware("http")
-async def websocket_cors_fix(request: Request, call_next):
-    response = await call_next(request)
-    
-    # Only modify WebSocket upgrade requests
-    if request.scope.get("type") == "websocket":
-        if settings.ENV == "production":
-            response.headers["Access-Control-Allow-Origin"] = "https://put.photo"
-        else:
-            response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-    return response
-
 
 @app.get("/", include_in_schema=False)
 async def root():
     """Return the root HTML file."""
     return FileResponse("static/index.html")
 
-
 @app.get("/index.html", include_in_schema=False)
 async def index():
     """Return the index HTML file."""
     return FileResponse("static/index.html")
-
 
 @app.get("/projects", include_in_schema=False)
 async def projects():
     """Return the projects HTML file."""
     return FileResponse("static/projects.html")
 
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint to verify the application is running."""
     return {"status": "ok"}
 
-
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Return the favicon."""
     return FileResponse("static/favicon.ico")
-
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc):
@@ -211,14 +157,12 @@ async def validation_exception_handler(request: Request, exc):
         content={"detail": "Invalid request data", "errors": exc.errors()},
     )
 
-
 # Register routers
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(conversations_router, prefix="/api/chat/conversations", tags=["conversations"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(knowledge_base_router, prefix="/api/kb", tags=["knowledge-bases"])
-# Project files router should be included within project router, not separately
 
 # Include project sub-routers
 app.include_router(
@@ -238,7 +182,6 @@ app.include_router(
     prefix="/api/projects/{project_id}/conversations",
     tags=["project-conversations"]
 )
-
 
 @app.on_event("startup")
 async def on_startup():
@@ -275,7 +218,6 @@ async def on_startup():
     except Exception as e:
         logger.critical("Startup initialization failed: %s", e)
         raise
-        
         
 @app.on_event("shutdown")
 async def on_shutdown():

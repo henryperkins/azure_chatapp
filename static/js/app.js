@@ -138,16 +138,8 @@ window.apiRequest = apiRequest;
 // Helper to get base URL
 function getBaseUrl() {
   if (!API_CONFIG.baseUrl) {
-    // Check for global variable set by index.html
-    const envBackendHost = window.BACKEND_HOST || 'localhost:8000';
-    
-    // Use the configured host (with protocol if not included)
-    let protocol = envBackendHost.startsWith('http') ? '' : 'http://';
-    if (window.ENV === 'production') {
-      protocol = envBackendHost.startsWith('http') ? '' : window.location.protocol + '//';
-    }
-    API_CONFIG.baseUrl = protocol + envBackendHost;
-    
+    // Use same origin as frontend
+    API_CONFIG.baseUrl = window.location.origin;
     console.log('Set API base URL:', API_CONFIG.baseUrl);
   }
   return API_CONFIG.baseUrl;
@@ -184,7 +176,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       ...TokenManager.getAuthHeader()
     },
     credentials: 'include',
-    mode: 'cors',
     cache: 'no-store'
   };
 

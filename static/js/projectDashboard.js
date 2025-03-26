@@ -48,7 +48,16 @@ class ProjectDashboard {
       throw new Error('ProjectManager not available - required dependency');
     }
 
-    // Initialize components
+    // Ensure DOM elements exist or create fallbacks
+    const projectListEl = document.getElementById("projectList");
+    if (!projectListEl) {
+      console.warn("Project list element not found - creating fallback");
+      const container = document.createElement("div");
+      container.id = "projectList";
+      document.querySelector("#projectListView")?.appendChild(container);
+    }
+
+    // Initialize components with error handling
     this.components = {
       projectList: new ProjectListComponent({
         elementId: "projectList",
@@ -59,6 +68,12 @@ class ProjectDashboard {
       }),
       knowledgeBase: new KnowledgeBaseComponent()
     };
+
+    // Verify components initialized properly
+    if (!this.components.projectList.element) {
+      console.error("Failed to initialize ProjectListComponent");
+      throw new Error("ProjectListComponent initialization failed");
+    }
 
     // Process initial state
     this.processUrlParams();
@@ -355,17 +370,55 @@ export { ProjectDashboard, initProjectDashboard };
 // Automatic initialization when loaded in browser context
 if (typeof window !== 'undefined') {
   // Wait for both DOM and projectManager to be ready
-  const startInitialization = () => {
-    if (window.projectManager) {
-      initProjectDashboard().catch(console.error);
-    } else {
-      setTimeout(startInitialization, 100);
+  const startInitialization = async () => {
+    try {
+      if (!window.projectManager) {
+        throw new Error('projectManager not available');
+      }
+
+      // Additional check for required DOM elements
+      const requiredElements = ['projectList', 'projectListView'];
+      const missingElements = requiredElements.filter(id => !document.getElementById(id));
+      
+      if (missingElements.length > 0) {
+        console.warn('Missing required elements:', missingElements);
+        // Create fallback container if main one is missing
+        if (!document.getElementById('projectList')) {
+          const container = document.createElement('div');
+          container.id = 'projectList';
+          document.body.appendChild(container);
+        }
+      }
+
+      await initProjectDashboard();
+    } catch (error) {
+      console.error('Initialization failed:', error);
+      // Retry after delay
+      setTimeout(startInitialization, 300);
     }
   };
 
-  if (document.readyState === 'complete') {
-    startInitialization();
+  // Start initialization when both DOM and dependencies are ready
+  const startWhenReady = () => {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      startInitialization();
+    } else {
+      document.addEventListener('DOMContentLoaded', startInitialization);
+    }
+  };
+
+  // Check if projectManager is already available
+  if (window.projectManager) {
+    startWhenReady();
   } else {
-    document.addEventListener('DOMContentLoaded', startInitialization);
+    // Wait for projectManager to be available
+    const waitForProjectManager = () => {
+      if (window.projectManager) {
+        startWhenReady();
+      } else {
+        setTimeout(waitForProjectManager, 100);
+      }
+    };
+    waitForProjectManager();
   }
 }
