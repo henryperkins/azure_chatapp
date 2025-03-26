@@ -4,6 +4,24 @@ file_storage.py
 Service for handling file storage operations with both local and cloud options.
 Provides abstraction layer between storage mechanisms and application logic.
 """
+
+def format_bytes(size: int) -> str:
+    """Format bytes to human-readable string (matches frontend exactly)
+    
+    Args:
+        size: Size in bytes
+        
+    Returns:
+        Formatted string like "1.5 MB"
+    """
+    if size < 1024:
+        return f"{size} Bytes"
+    
+    units = ['KB', 'MB', 'GB', 'TB']
+    for unit in units:
+        size /= 1024.0
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}"
 import os
 import logging
 import hashlib
