@@ -31,34 +31,42 @@
 
     return window.apiRequest("/api/projects", "GET")
       .then((response) => {
-        console.log("[ProjectManager] API response:", response);
+        console.log("[ProjectManager] Raw API response:", response);
         
-        // Handle different response formats
+        // Standardize response format
         let projects = [];
-        if (Array.isArray(response)) {
+        if (response && typeof response === 'object') {
+          // Handle both { data: [...] } and { projects: [...] } formats
+          projects = response.data || response.projects || [];
+        } else if (Array.isArray(response)) {
           projects = response;
-        } else if (response?.data) {
-          projects = Array.isArray(response.data) ? response.data : [];
-        } else if (response?.projects) {
-          projects = Array.isArray(response.projects) ? response.projects : [];
+        }
+
+        if (!Array.isArray(projects)) {
+          console.error("[ProjectManager] Invalid projects data format:", projects);
+          projects = [];
         }
 
         console.log(`[ProjectManager] Found ${projects.length} projects before filtering`);
         
         // Apply filter
-        if (filter === "pinned") {
-          projects = projects.filter(p => p.pinned);
-        } else if (filter === "archived") {
-          projects = projects.filter(p => p.archived);
-        } else if (filter === "active") {
-          projects = projects.filter(p => !p.archived);
-        }
+        const filteredProjects = projects.filter(project => {
+          if (!project) return false;
+          if (filter === "pinned") return project.pinned;
+          if (filter === "archived") return project.archived;
+          if (filter === "active") return !project.archived;
+          return true; // 'all' filter
+        });
 
-        console.log(`[ProjectManager] Dispatching ${projects.length} projects after filtering`);
+        console.log(`[ProjectManager] Dispatching ${filteredProjects.length} projects after filtering`);
         document.dispatchEvent(
-          new CustomEvent("projectsLoaded", { detail: projects })
+          new CustomEvent("projectsLoaded", { 
+            detail: filteredProjects,
+            originalCount: projects.length,
+            filterApplied: filter
+          })
         );
-        return projects;
+        return filteredProjects;
       })
       .catch((err) => {
         console.error("[ProjectManager] Error loading projects:", err);
