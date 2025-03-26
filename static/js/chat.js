@@ -559,19 +559,24 @@ class UIComponents {
           msgDiv.appendChild(kb);
         }
 
-        // Add "thinking" section toggles if assistant message
+        // Enhanced thinking block display for Claude models
         if (role === 'assistant' && (thinking || redacted)) {
           const container = document.createElement('div');
           container.className = 'mt-3 border-t border-gray-200 pt-2';
 
           const toggle = document.createElement('button');
-          toggle.className = 'text-gray-600 text-xs flex items-center mb-1';
+          toggle.className = 'text-gray-600 text-xs flex items-center mb-1 hover:text-gray-800';
           toggle.innerHTML = `
-            <svg class="h-4 w-4 mr-1 thinking-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="h-4 w-4 mr-1 thinking-chevron transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
-            Show thinking process
+            ${thinking ? 'Show detailed reasoning' : 'Show safety notice'}
           `;
+            
+          // Add tooltip explaining thinking blocks
+          toggle.title = thinking 
+            ? "Claude's step-by-step reasoning process"
+            : "Some reasoning was redacted for safety";
 
           const contentDiv = document.createElement('div');
           contentDiv.className = 'bg-gray-50 p-2 rounded text-gray-800 text-sm hidden thinking-content';
