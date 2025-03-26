@@ -128,8 +128,7 @@ async def generate_ai_response(
         Created assistant Message object or None if error
     """
     # Handle vision data by selecting o1 when image is provided
-    # Handle vision data by selecting o1 when image is provided
-    chosen_model = "o1" if image_data else (model_id or "claude-3-7-sonnet-20250219")  # Default to Claude 3.7
+    chosen_model = "o1" if image_data else (model_id or "claude-3-7-sonnet-20250219")  # Default to Claude 3.7 Sonnet
     
     try:
         # Get conversation to check for project context
@@ -178,8 +177,8 @@ async def generate_ai_response(
                 "content": knowledge_context
             })
         
-        # Check if it's a Claude model
-        is_claude_model = chosen_model in settings.CLAUDE_MODELS
+        # Check if it's a Claude model (including 3.7 Sonnet)
+        is_claude_model = chosen_model in settings.CLAUDE_MODELS or chosen_model == "claude-3-7-sonnet-20250219"
         
         if is_claude_model:
             # Call Claude API

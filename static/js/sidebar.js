@@ -40,9 +40,13 @@ function initializeModelDropdownOnLoad() {
       initializeModelDropdown();
     }
     
-    // Set default value to Claude 3 Sonnet if not already set
+    // Set default value to Claude 3.7 Sonnet if not already set
     if (!modelDropdown.value) {
       modelDropdown.value = 'claude-3-7-sonnet-20250219';
+      // Update max tokens to match 128K context
+      if (window.MODEL_CONFIG) {
+        window.MODEL_CONFIG.maxTokens = 128000;
+      }
       
       // Persist the model selection
       if (typeof persistSettings === 'function') {
