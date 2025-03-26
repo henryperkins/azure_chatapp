@@ -585,21 +585,30 @@ async function checkAndHandleAuth() {
 // SIDEBAR MANAGEMENT
 // ---------------------------------------------------------------------
 function toggleSidebar() {
-  const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
+  const sidebarEl = document.getElementById('mainSidebar');
   if (!sidebarEl) return;
 
-  sidebarEl.classList.toggle("translate-x-0");
-  sidebarEl.classList.toggle("-translate-x-full");
-
-  const existingBackdrop = document.getElementById('sidebarBackdrop');
-  if (!existingBackdrop) {
+  const isHidden = sidebarEl.classList.contains('-translate-x-full');
+  
+  if (isHidden) {
+    sidebarEl.classList.remove('-translate-x-full');
+    sidebarEl.classList.add('translate-x-0');
+    
+    // Create backdrop
     const backdrop = document.createElement("div");
     backdrop.id = "sidebarBackdrop";
     backdrop.className = "fixed inset-0 bg-black/50 z-40 md:hidden";
     backdrop.onclick = toggleSidebar;
     document.body.appendChild(backdrop);
   } else {
-    existingBackdrop.remove();
+    sidebarEl.classList.remove('translate-x-0');
+    sidebarEl.classList.add('-translate-x-full');
+    
+    // Remove backdrop
+    const existingBackdrop = document.getElementById('sidebarBackdrop');
+    if (existingBackdrop) {
+      existingBackdrop.remove();
+    }
   }
 }
 
