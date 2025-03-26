@@ -156,7 +156,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   const options = {
     method,
     headers: { 
-      'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
@@ -167,8 +166,15 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     cache: 'no-store'
   };
 
+  // Handle FormData differently from JSON
   if (data) {
-    options.body = JSON.stringify(data);
+    if (data instanceof FormData) {
+      // Let the browser set Content-Type with boundary
+      options.body = data;
+    } else {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(data);
+    }
   }
 
   try {

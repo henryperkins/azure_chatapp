@@ -155,7 +155,7 @@ class WebSocketService {
       this.onSending = options.onSending || (() => {});
       this.wsService = options.wsService || null;
       this.currentChatId = null;
-      this.apiRequest = window.apiRequest || this._defaultApiRequest;
+      this.apiRequest = window.apiRequest;
     }
   
     initialize(chatId, wsService) {
@@ -323,7 +323,7 @@ class WebSocketService {
       this.onSending = options.onSending || (() => {});
       this.wsService = options.wsService || null;
       this.currentChatId = null;
-      this.apiRequest = window.apiRequest || this._defaultApiRequest;
+      this.apiRequest = window.apiRequest;
     }
   
     initialize(chatId, wsService) {
@@ -450,33 +450,7 @@ class WebSocketService {
       }
     }
   
-    async _defaultApiRequest(endpoint, method = "GET", data = null) {
-      const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
-      if (data) options.body = JSON.stringify(data);
-      const response = await fetch(endpoint, options);
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Handle 401 Unauthorized
-          if (window.TokenManager?.refreshTokens) {
-            try {
-              await window.TokenManager.refreshTokens();
-              // Retry the request
-              return this.sendMessage(content);
-            } catch (refreshError) {
-              // Token refresh failed, handle appropriately
-              console.error('Token refresh failed:', refreshError);
-              document.dispatchEvent(new CustomEvent('authStateChanged', { 
-                detail: { authenticated: false } 
-              }));
-              this.onError('Authentication failed. Please log in again.');
-              return false;
-            }
-          }
-        }
-        throw new Error(`API error (${response.status})`);
-      }
-      return response.json();
-    }
+    // Removed _defaultApiRequest - using window.apiRequest instead
   }
   
   // Conversation Service - Manages chat conversations
