@@ -26,7 +26,8 @@ except ImportError:
     
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, update, exists
+from models.conversation import Conversation
 from sqlalchemy.exc import SQLAlchemyError
 
 import config
