@@ -18,7 +18,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from models.project import Project
 from models.user import User
+from models.knowledge_base import KnowledgeBase
 from sqlalchemy import asc, desc
+from fastapi import HTTPException
+from uuid import UUID
+
+async def validate_knowledge_base_access(
+    project_id: UUID,
+    knowledge_base_id: UUID,
+    db: AsyncSession
+) -> KnowledgeBase:
+    """Validate KB exists, is active and belongs to project"""
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    
+    kb = await db.get(KnowledgeBase, knowledge_base_id)
+    if not kb or not kb.is_active or kb.id != project.knowledge_base_id:
+        raise HTTPException(400, "Knowledge base not available for this project")
+    return kb
 
 async def validate_project_access(project_id: UUID, user: User, db: AsyncSession) -> Project:
     """

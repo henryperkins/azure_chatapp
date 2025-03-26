@@ -375,6 +375,17 @@ async def _save_file_and_create_record(
 # 7. Public API Functions
 # -----------------------------------------------------------------------------
 @handle_service_errors("File upload failed")
+async def validate_knowledge_usage(
+    project: Project,
+    additional_tokens: int
+) -> None:
+    """Validate project has enough token capacity for KB operations"""
+    if project.token_usage + additional_tokens > project.max_tokens:
+        raise ValueError(
+            f"Knowledge operation requires {additional_tokens} tokens but only "
+            f"{project.max_tokens - project.token_usage} available"
+        )
+
 async def upload_file_to_project(
     project_id: UUID,
     file: UploadFile,
@@ -395,7 +406,7 @@ async def upload_file_to_project(
     # 2. Validate & read the file
     file_info = await _process_upload_file_info(file)
 
-    # 3. Estimate tokens
+    # 3. Estimate tokens and validate project capacity
     token_info = await _process_file_tokens(
         contents=file_info["contents"],
         filename=file_info["sanitized_filename"],

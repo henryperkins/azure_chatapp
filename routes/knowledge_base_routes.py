@@ -12,7 +12,8 @@ import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
+from sqlalchemy import update
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -309,4 +310,52 @@ async def search_project_knowledge(
     except Exception as e:
         logger.error(f"Error searching project knowledge: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching project knowledge: {str(e)}")
+
+    @router.post("/projects/{project_id}/toggle", response_model=dict)
+    async def toggle_project_knowledge_base(
+        project_id: UUID,
+        enable: bool = Body(..., embed=True),
+        current_user: User = Depends(get_current_user_and_token),
+        db: AsyncSession = Depends(get_async_session)
+    ):
+        """
+        Enable/disable knowledge base for all conversations in a project.
+        Requires project's knowledge base to be active.
+        """
+        # Validate project access
+        project = await validate_resource_access(
+            project_id,
+            Project,
+            current_user,
+            db,
+            "Project"
+        )
+    
+        if enable and not project.knowledge_base_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Project has no linked knowledge base"
+            )
+    
+        if enable:
+            # Verify knowledge base is active
+            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+            if not kb or not kb.is_active:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Project's knowledge base is not active"
+                )
+
+        # Update all conversations
+        await db.execute(
+            update(Conversation)
+            .where(Conversation.project_id == project_id)
+            .values(use_knowledge_base=enable)
+        )
+        await db.commit()
+
+        return await create_standard_response(
+            {"project_id": str(project_id), "knowledge_base_enabled": enable},
+            f"Knowledge base {'enabled' if enable else 'disabled'} for project"
+        )
     
