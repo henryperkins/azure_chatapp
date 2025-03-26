@@ -36,6 +36,7 @@ CREATE TABLE knowledge_bases (
     description TEXT,
     embedding_model VARCHAR(100),
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    version INTEGER DEFAULT 1 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
