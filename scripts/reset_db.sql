@@ -71,7 +71,7 @@ CREATE TABLE projects (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
     CONSTRAINT projects_max_tokens_check CHECK (max_tokens >= token_usage),
-    CONSTRAINT projects_archived_pinned_check CHECK (NOT (archived AND pinned)),
+    CONSTRAINT projects_archived_pinned_check CHECK (NOT (archived AND pinned))
     CONSTRAINT projects_archived_default_check CHECK (NOT (archived AND is_default)),
     CONSTRAINT projects_name_length CHECK (length(name) <= 200)
 );
@@ -166,13 +166,12 @@ CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Only update timestamp if actual data changed (excluding updated_at itself)
-    IF NEW IS DISTINCT FROM OLD AND 
-       (SELECT COUNT(*) FROM (
-          SELECT a.key, a.value 
-          FROM jsonb_each(to_jsonb(NEW)) a
-          JOIN jsonb_each(to_jsonb(OLD)) b ON a.key = b.key
-          WHERE a.key != 'updated_at' AND a.value IS DISTINCT FROM b.value
-       ) changes) > 0 THEN
+    IF (SELECT COUNT(*) FROM (
+        SELECT a.key, a.value 
+        FROM jsonb_each(to_jsonb(NEW)) a
+        JOIN jsonb_each(to_jsonb(OLD)) b ON a.key = b.key
+        WHERE a.key != 'updated_at' AND a.value IS DISTINCT FROM b.value
+    )) > 0 THEN
         NEW.updated_at = CURRENT_TIMESTAMP;
     END IF;
     RETURN NEW;
