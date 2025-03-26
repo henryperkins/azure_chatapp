@@ -17,10 +17,33 @@
    * Dispatches "projectsLoaded" with { detail: projectsArray }.
    */
   function loadProjects(filter = "all") {
-    window.apiRequest("/api/projects", "GET")
+    console.log("[ProjectManager] Loading projects with filter:", filter);
+    
+    // Check auth state
+    const isAuthenticated = window.API_CONFIG?.isAuthenticated || 
+                          (sessionStorage.getItem('userInfo') !== null && 
+                           sessionStorage.getItem('auth_state') !== null);
+    
+    if (!isAuthenticated) {
+      console.warn("[ProjectManager] Not authenticated, skipping project load");
+      return Promise.resolve([]);
+    }
+
+    return window.apiRequest("/api/projects", "GET")
       .then((response) => {
-        // Some APIs return { data: [ ... ] }, others return [ ... ] directly:
-        let projects = Array.isArray(response) ? response : (response.data || []);
+        console.log("[ProjectManager] API response:", response);
+        
+        // Handle different response formats
+        let projects = [];
+        if (Array.isArray(response)) {
+          projects = response;
+        } else if (response?.data) {
+          projects = Array.isArray(response.data) ? response.data : [];
+        } else if (response?.projects) {
+          projects = Array.isArray(response.projects) ? response.projects : [];
+        }
+
+        console.log(`[ProjectManager] Found ${projects.length} projects before filtering`);
         
         // Apply filter
         if (filter === "pinned") {
@@ -30,14 +53,17 @@
         } else if (filter === "active") {
           projects = projects.filter(p => !p.archived);
         }
-        
+
+        console.log(`[ProjectManager] Dispatching ${projects.length} projects after filtering`);
         document.dispatchEvent(
           new CustomEvent("projectsLoaded", { detail: projects })
         );
+        return projects;
       })
       .catch((err) => {
-        console.error("Error loading projects:", err);
+        console.error("[ProjectManager] Error loading projects:", err);
         window.showNotification?.("Failed to load projects", "error");
+        throw err;
       });
   }
 
