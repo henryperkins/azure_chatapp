@@ -400,7 +400,8 @@ async def _save_file_and_create_record(
                             "success": True,
                             "chunk_count": search_results["chunk_count"],
                             "added_ids": search_results["added_ids"],
-                            "processed_at": datetime.utcnow().isoformat()
+                            "processed_at": datetime.utcnow().isoformat(),
+                            "error": None  # Clear any previous errors
                         }
                         pf.metadata = pf_metadata
                     else:

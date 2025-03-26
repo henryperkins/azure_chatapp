@@ -867,6 +867,31 @@ class KnowledgeBaseComponent {
     if (this.elements.resultsSection) this.elements.resultsSection.classList.add("hidden");
     if (this.elements.noResultsSection) this.elements.noResultsSection.classList.remove("hidden");
   }
+
+  async reprocessFiles() {
+    const projectId = window.projectManager?.currentProject?.id;
+    if (!projectId) return;
+
+    try {
+      uiUtilsInstance.showNotification("Reprocessing files for search...", "info");
+      const response = await window.apiRequest(
+        `/api/projects/${projectId}/files/reprocess`,
+        "POST"
+      );
+      
+      uiUtilsInstance.showNotification(
+        `Reprocessed ${response.data.processed_success} files successfully`,
+        "success"
+      );
+      
+      // Refresh the file list and stats
+      window.projectManager.loadProjectFiles(projectId);
+      window.projectManager.loadProjectStats(projectId);
+    } catch (error) {
+      uiUtilsInstance.showNotification("Failed to reprocess files", "error");
+      console.error("Reprocessing error:", error);
+    }
+  }
   
   renderSearchResults(results) {
     if (!this.elements.resultsContainer) return;
@@ -926,12 +951,27 @@ class KnowledgeBaseComponent {
   renderKnowledgeBaseInfo(kb) {
     const activeContainer = document.getElementById("knowledgeBaseActive");
     const inactiveContainer = document.getElementById("knowledgeBaseInactive");
+    const modelSelect = document.getElementById("knowledgeBaseModelSelect");
     
     if (!activeContainer || !inactiveContainer) return;
     
     if (kb) {
       document.getElementById("knowledgeBaseName").textContent = kb.name || "Project Knowledge Base";
       document.getElementById("knowledgeBaseEnabled").checked = kb.is_active;
+      
+      if (modelSelect) {
+        modelSelect.innerHTML = `
+          <option value="all-MiniLM-L6-v2" ${kb.embedding_model === 'all-MiniLM-L6-v2' ? 'selected' : ''}>
+            all-MiniLM-L6-v2 (Default)
+          </option>
+          <option value="text-embedding-3-small" ${kb.embedding_model === 'text-embedding-3-small' ? 'selected' : ''}>
+            OpenAI text-embedding-3-small
+          </option>
+          <option value="embed-english-v3.0" ${kb.embedding_model === 'embed-english-v3.0' ? 'selected' : ''}>
+            Cohere embed-english-v3.0
+          </option>
+        `;
+      }
       
       // Update stats
       if (kb.stats) {
