@@ -1176,3 +1176,10 @@ class WebSocketService {
   window.setupWebSocket = setupWebSocket;
   window.testWebSocketConnection = testWebSocketConnection;
   window.initializeChat = initializeChat;
+
+  // Initialize chat when DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('chatUI')) {
+      initializeChat();
+    }
+  });
