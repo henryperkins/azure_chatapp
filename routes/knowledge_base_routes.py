@@ -17,6 +17,7 @@ from sqlalchemy import update
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from models.conversation import Conversation
 
 from db import get_async_session
 from models.user import User
