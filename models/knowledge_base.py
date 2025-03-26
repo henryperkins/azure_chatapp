@@ -25,8 +25,13 @@ class KnowledgeBase(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    last_used: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP,
+        nullable=True,
+        comment="Last time this knowledge base was accessed"
+    )
     project_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),

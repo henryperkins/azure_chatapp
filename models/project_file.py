@@ -23,8 +23,12 @@ class ProjectFile(Base):
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,  # Ensures one KB per project
         index=True
+    )
+    file_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="SHA-256 hash of file content for deduplication"
     )
     filename: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # local or S3 path

@@ -36,6 +36,7 @@ CREATE TABLE knowledge_bases (
     description TEXT,
     embedding_model VARCHAR(100),
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    last_used TIMESTAMP,
     version INTEGER DEFAULT 1 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -116,8 +117,9 @@ CREATE TABLE project_files (
     order_index INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    content TEXT,
-    extra_data JSONB
+    content TEXT CHECK (octet_length(content) <= 10485760), -- 10MB max
+    extra_data JSONB,
+    file_hash VARCHAR(64)
 );
 CREATE INDEX ix_project_files_project_id ON project_files(project_id);
 
