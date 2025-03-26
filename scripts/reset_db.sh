@@ -21,16 +21,12 @@ if [ "$confirmation" != "yes" ]; then
     exit 0
 fi
 
-# Get connection details from config.py
-DB_URL=$(grep -E "DATABASE_URL\s*=" config.py | sed -E 's/.*"(.*)".*/\1/')
-
-# Parse the SQLAlchemy URL into psql components
-# Format: postgresql+asyncpg://username:password@host:port/dbname
-DB_USER=$(echo $DB_URL | sed -n 's/.*\/\/\([^:]*\):.*/\1/p')
-DB_PASS=$(echo $DB_URL | sed -n 's/.*\/\/[^:]*:\([^@]*\)@.*/\1/p')
-DB_HOST=$(echo $DB_URL | sed -n 's/.*@\([^:]*\):.*/\1/p')
-DB_PORT=$(echo $DB_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
-DB_NAME=$(echo $DB_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
+# Use default PostgreSQL superuser credentials
+DB_USER="postgres"
+DB_PASS="postgres"  # Or your actual password if you've set one
+DB_HOST="localhost"
+DB_PORT="5432"
+DB_NAME="azure_chat_db"  # Or your database name
 
 # Build psql connection string
 PSQL_CONN="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
