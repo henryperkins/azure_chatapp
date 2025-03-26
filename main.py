@@ -32,7 +32,7 @@ from routes.projects.files import router as project_files_router
 from routes.projects.artifacts import router as project_artifacts_router
 from routes.projects.conversations import router as project_conversations_router
 # Import database utilities
-from db import init_db, validate_db_schema, get_async_session_context
+from db import init_db, validate_db_schema, fix_db_schema, get_async_session_context
 
 # Import utility functions
 from utils.auth_utils import load_revocation_list, clean_expired_tokens
