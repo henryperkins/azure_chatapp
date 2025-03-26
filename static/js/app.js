@@ -657,6 +657,19 @@ function safeInitialize() {
     elementMap[key] = document.querySelector(selector);
   });
 
+  // Initialize auth dropdown
+  const authButton = document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  
+  if (authButton && authDropdown) {
+    authButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      authDropdown.classList.toggle('hidden');
+      authDropdown.classList.toggle('slide-in');
+    });
+  }
+
   // Event listeners
   if (elementMap.NAV_TOGGLE_BTN) {
     elementMap.NAV_TOGGLE_BTN.addEventListener('click', toggleSidebar);

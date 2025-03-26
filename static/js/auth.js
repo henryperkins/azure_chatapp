@@ -146,22 +146,26 @@ function setupUIListeners() {
     authBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const isHidden = authDropdown.classList.toggle("hidden");
       
-      // Close other open dropdowns if showing this one
-      if (!isHidden) {
-        document.querySelectorAll('.dropdown-content').forEach(dropdown => {
-          if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
-            dropdown.classList.add("hidden");
-          }
-        });
-      }
+      // Toggle dropdown visibility with animation
+      authDropdown.classList.toggle("hidden");
+      authDropdown.classList.toggle("slide-in");
+      
+      // Close other open dropdowns
+      document.querySelectorAll('.dropdown-content').forEach(dropdown => {
+        if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
+          dropdown.classList.add("hidden");
+          dropdown.classList.remove("slide-in");
+        }
+      });
     });
 
     // Close when clicking outside
     document.addEventListener("click", (e) => {
-      if (!e.target.closest("#authContainer") && !e.target.closest("#authDropdown")) {
+      if (!e.target.closest("#authContainer") && 
+          !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
+        authDropdown.classList.remove("slide-in");
       }
     });
   }
