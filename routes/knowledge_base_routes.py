@@ -319,6 +319,8 @@ async def search_project_knowledge(
         current_user: User = Depends(get_current_user_and_token),
         db: AsyncSession = Depends(get_async_session)
     ):
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
         """
         Enable/disable knowledge base for all conversations in a project.
         Requires project's knowledge base to be active.
