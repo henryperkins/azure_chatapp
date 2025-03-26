@@ -9,6 +9,7 @@ WARNING: This will delete all existing data in the database.
 import asyncio
 import sys
 import os
+from db import validate_db_schema
 
 # Add the parent directory to the path so we can import from the root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from alembic import command
 from alembic.config import Config
 
-def reset_database():
+async def reset_database():
     """Reset the database using the latest migration."""
     print("WARNING: This will delete all existing data in the database!")
     confirmation = input("Are you sure you want to continue? (yes/no): ")
@@ -50,4 +51,4 @@ def reset_database():
         sys.exit(1)
 
 if __name__ == "__main__":
-    reset_database()
+    asyncio.run(reset_database())
