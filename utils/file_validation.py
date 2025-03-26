@@ -11,7 +11,7 @@ Centralized file validation utilities including:
 import os
 import re
 import logging
-from typing import Dict, Any, BinaryIO, Union, List
+from typing import Dict, Any, BinaryIO, Union, List, AsyncGenerator
 from fastapi import UploadFile
 import mimetypes
 from config import settings
@@ -92,7 +92,7 @@ class FileValidator:
         return cls.MAX_FILE_SIZE / (1024 * 1024)
 
     @classmethod
-    def validate_upload_file(
+    async def validate_upload_file(
         cls, 
         file: Union[BinaryIO, UploadFile],
         scan_content: bool = True
