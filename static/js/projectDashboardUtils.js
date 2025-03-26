@@ -232,7 +232,7 @@ class ModalManager {
     this.registry = {
       project: "projectFormModal",
       instructions: "instructionsModal",
-      confirm: "confirmActionModal",
+      confirm: "deleteConfirmModal",
       content: "contentViewModal",
       knowledge: "knowledgeBaseSettingsModal"
     };
