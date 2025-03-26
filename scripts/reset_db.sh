@@ -21,14 +21,22 @@ if [ "$confirmation" != "yes" ]; then
     exit 0
 fi
 
-# Get connection details from db.py
-DB_URL=$(grep -E "DATABASE_URL\s*=" db.py | sed -E 's/.*"(.*)".*/\1/')
-# Handle the asyncpg version - convert to standard psql URL
-DB_URL=$(echo $DB_URL | sed 's/+asyncpg//')
+# Get connection details from config.py
+DB_URL=$(grep -E "DATABASE_URL\s*=" config.py | sed -E 's/.*"(.*)".*/\1/')
 
-# Simply use the full connection string with psql
+# Parse the SQLAlchemy URL into psql components
+# Format: postgresql+asyncpg://username:password@host:port/dbname
+DB_USER=$(echo $DB_URL | sed -n 's/.*\/\/\([^:]*\):.*/\1/p')
+DB_PASS=$(echo $DB_URL | sed -n 's/.*\/\/[^:]*:\([^@]*\)@.*/\1/p')
+DB_HOST=$(echo $DB_URL | sed -n 's/.*@\([^:]*\):.*/\1/p')
+DB_PORT=$(echo $DB_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
+DB_NAME=$(echo $DB_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
+
+# Build psql connection string
+PSQL_CONN="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+
 echo "Executing SQL script to reset database structure..."
-psql "$DB_URL" -f scripts/reset_db.sql
+psql "$PSQL_CONN" -f scripts/reset_db.sql
 
 if [ $? -eq 0 ]; then
     echo ""
