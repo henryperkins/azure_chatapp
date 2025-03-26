@@ -40,7 +40,7 @@ CREATE TABLE knowledge_bases (
     version INTEGER DEFAULT 1 NOT NULL,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT knowledge_bases_project_unique UNIQUE (project_id)
 );
 CREATE INDEX ix_knowledge_bases_name ON knowledge_bases(name);
@@ -67,7 +67,7 @@ CREATE TABLE projects (
     extra_data JSONB,
     CONSTRAINT projects_check_token_limit CHECK (max_tokens >= token_usage),
     CONSTRAINT projects_check_archive_pin CHECK (NOT (archived AND pinned)),
-    CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default))
+    CONSTRAINT projects_check_archive_default CHECK (NOT (archived AND is_default)),
 );
 
 -- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
