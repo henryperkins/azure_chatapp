@@ -91,7 +91,6 @@ async def create_project(
     description: Optional[str] = None,
     goals: Optional[str] = None,
     max_tokens: int = 200000,
-    knowledge_base_id: Optional[UUID] = None,
     default_model: str = "claude-3-sonnet-20240229"
 ) -> Project:
     """
@@ -122,7 +121,6 @@ async def create_project(
         description=description,
         goals=goals,
         max_tokens=max_tokens,
-        knowledge_base_id=knowledge_base_id,
         default_model=default_model
     )
     

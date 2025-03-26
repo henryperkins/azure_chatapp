@@ -61,7 +61,7 @@ class Project(Base):
     user = relationship("User", back_populates="projects")
     
     # Relationship to knowledge base
-    knowledge_base = relationship("KnowledgeBase", back_populates="projects")
+    knowledge_base = relationship("KnowledgeBase", back_populates="project", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Project {self.name} (#{self.id}) user_id={self.user_id}>"
