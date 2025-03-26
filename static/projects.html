@@ -433,23 +433,25 @@
               </div>
             </div>
             
-            <!-- Enhanced tab navigation with active indicators -->
-            <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
-              <div class="flex flex-wrap -mb-px">
-                <button class="project-tab-btn inline-block px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium text-sm" role="tab" aria-selected="true" tabindex="0" data-tab="details">
+            <!-- Enhanced tab navigation with active indicators - mobile optimized -->
+            <div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+              <div class="flex whitespace-nowrap min-w-full -mb-px">
+                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium text-xs sm:text-sm" role="tab" aria-selected="true" tabindex="0" data-tab="details">
                   Details
                 </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="files">
+                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="files">
                   Files
                 </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="conversations">
-                  Conversations
+                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="conversations">
+                  <span class="hidden xs:inline">Conversations</span>
+                  <span class="xs:hidden">Convos</span>
                 </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
+                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
                   Artifacts
                 </button>
-                <button class="project-tab-btn inline-block px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="knowledge">
-                  Knowledge Base
+                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="knowledge">
+                  <span class="hidden xs:inline">Knowledge Base</span>
+                  <span class="xs:hidden">KB</span>
                 </button>
               </div>
             </div>
