@@ -62,15 +62,10 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     extra_data JSONB,
-    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage),
-    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)),
-    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default))
+    CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage) COMMENT 'Token usage cannot exceed allocated maximum',
+    CONSTRAINT check_archive_pin CHECK (NOT (archived AND pinned)) COMMENT 'Archived projects cannot be pinned',
+    CONSTRAINT check_archive_default CHECK (NOT (archived AND is_default)) COMMENT 'Archived projects cannot be default'
 );
-
--- Add constraint comments
-COMMENT ON CONSTRAINT check_token_limit ON projects IS 'Token usage cannot exceed allocated maximum';
-COMMENT ON CONSTRAINT check_archive_pin ON projects IS 'Archived projects cannot be pinned';
-COMMENT ON CONSTRAINT check_archive_default ON projects IS 'Archived projects cannot be default';
 
 -- CREATE INDEX ix_projects_knowledge_base_id ON projects(knowledge_base_id);
 CREATE INDEX ix_projects_user_id ON projects(user_id);
