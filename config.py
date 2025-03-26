@@ -34,6 +34,7 @@ class Settings:
         "DATABASE_URL",
         "postgresql+asyncpg://postgres:postgres@localhost:5432/azure_chat_db",
     )
+    # Format: postgresql+asyncpg://username:password@host:port/dbname
 
     JWT_SECRET = os.getenv("JWT_SECRET", "")
 
