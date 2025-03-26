@@ -527,63 +527,19 @@ let authCheckInProgress = false;
 let authCheckPromise = null;
 
 async function checkAndHandleAuth() {
-  // If a check is already in progress, return the existing promise
-  if (authCheckInProgress && authCheckPromise) {
-    return authCheckPromise;
-  }
-  
   try {
-    authCheckInProgress = true;
-    window.API_CONFIG.authCheckInProgress = true;
-    
-    // Create a new promise for this check
-    authCheckPromise = new Promise(async (resolve, reject) => {
-      try {
-        // Verify token with the server
-        const response = await fetch('/api/auth/verify', {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Auth verification failed: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        // Update session info
-        sessionStorage.setItem('userInfo', JSON.stringify({
-          username: data.username,
-          roles: data.roles || [],
-          lastVerified: Date.now()
-        }));
-        
-        updateAuthUI(true);
-        setupTokenRefresh();
-        broadcastAuth(true, data.username);
-        resolve(true);
-      } catch (error) {
-        console.error('Auth verification failed:', error);
-        TokenManager.clearTokens();
-        clearSession();
-        updateAuthUI(false);
-        broadcastAuth(false);
-        reject(error);
-      } finally {
-        authCheckInProgress = false;
-        window.API_CONFIG.authCheckInProgress = false;
-        authCheckPromise = null;
-      }
-    });
-    
-    return await authCheckPromise;
+    const authState = await window.auth.verify();
+    if (authState) {
+      updateAuthUI(true);
+      broadcastAuth(true, authState.username);
+      return true;
+    }
+    return false;
   } catch (error) {
-    authCheckInProgress = false;
-    window.API_CONFIG.authCheckInProgress = false;
-    throw error;
+    console.error('Auth verification failed:', error);
+    updateAuthUI(false);
+    broadcastAuth(false);
+    return false;
   }
 }
 
