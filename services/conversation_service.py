@@ -6,9 +6,11 @@ for conversation management and acts as mediator between routes
 and database models.
 """
 import logging
+from typing import Dict, List, Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.conversation import Conversation
+from models.project import Project
 from fastapi import HTTPException
 from config import settings
 from services.context_integration import augment_with_knowledge
