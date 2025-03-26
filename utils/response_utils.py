@@ -13,15 +13,20 @@ AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
 API_VERSION = "2025-02-01-preview"
 
 
-async def create_standard_response(data=None, message="Success", success=True):
-    """Ensure consistent response structure"""
-    return {
+async def create_standard_response(data=None, message="Success", success=True, status_code=200, headers=None):
+    """Ensure consistent response structure with support for headers"""
+    response_data = {
         "status": "success" if success else "error",
         "message": message,
         "data": data if data is not None else ([] if isinstance(data, list) else {}),
         "timestamp": datetime.now().isoformat(),
         "request_id": str(uuid4())  # Add unique ID for tracking
     }
+    return JSONResponse(
+        content=response_data,
+        status_code=status_code,
+        headers=headers or {}
+    )
 
 
 async def azure_api_request(
