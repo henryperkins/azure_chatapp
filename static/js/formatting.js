@@ -161,15 +161,23 @@ function autoFormatExistingElements() {
  * @param {Number} decimals - Decimal places
  * @returns {String} - Formatted size (e.g., "1.5 MB")
  */
-window.formatBytes = function(bytes, decimals = 2) {
+window.formatBytes = function(bytes, decimals = 1) {
   if (bytes === 0) return '0 Bytes';
+  if (bytes < 1024) return `${bytes} Bytes`;
   
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unit = '';
   
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  for (let i = 0; i < units.length; i++) {
+    size /= 1024;
+    unit = units[i];
+    if (size < 1024 || i === units.length - 1) {
+      break;
+    }
+  }
+  
+  return `${size.toFixed(decimals)} ${unit}`;
 };
 
 /**
