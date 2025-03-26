@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.conversation import Conversation
 from models.project import Project
+from models.knowledge_base import KnowledgeBase
 from fastapi import HTTPException
 from config import settings
 from services.context_integration import augment_with_knowledge
@@ -116,8 +117,8 @@ async def create_conversation(
             user_id=user_id,
             title=title,
             model_id=model_id,
-            use_knowledge_base=use_knowledge_base and bool(kb_id),
-            knowledge_base_id=kb_id if use_knowledge_base else None
+            use_knowledge_base=use_knowledge_base and bool(project.knowledge_base_id),
+            knowledge_base_id=project.knowledge_base_id if use_knowledge_base else None
         )
         logger.info("Conversation object created")
         

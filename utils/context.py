@@ -67,7 +67,11 @@ async def do_summarization(
         return "Summary not available due to error."
 
 
-async def manage_context(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+async def manage_context(
+    messages: List[Dict[str, str]],
+    user_message: Optional[str] = None,
+    search_results: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, str]]:
     """
     Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
     This modifies the conversation in-place by replacing older messages with a single summary if needed.
