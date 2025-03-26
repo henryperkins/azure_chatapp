@@ -582,19 +582,12 @@
   </script>
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/sidebar.js"></script>
-  <script src="/static/js/formatting.js"></script> 
+  <script src="/static/js/formatting.js"></script>
   <script src="/static/js/modelConfig.js"></script>
+  <script src="/static/js/projectManager.js" type="module"></script>
+  <script src="/static/js/projectDashboard.js"></script>
   <script src="/static/js/app.js"></script>
   <script src="/static/js/chat.js" type="module"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.projectManager) {
-        const script = document.createElement('script');
-        script.src = '/static/js/projectDashboard.js';
-        document.body.appendChild(script);
-      }
-    });
-  </script>
 
   <!-- Project Files Modal -->
   <div id="projectFilesModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">

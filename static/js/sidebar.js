@@ -287,23 +287,33 @@ function setupCustomInstructions() {
 }
 
 /**
- * Set up new chat button functionality
+ * Set up new chat/project button functionality
  */
 function setupNewChatButton() {
-  // Try both possible button IDs for backward compatibility
-  const newChatBtn = document.querySelector('#sidebarNewProjectBtn, #sidebarNewChatBtn');
-
-  if (!newChatBtn) {
-    console.warn('New chat/project button not found in DOM - projects page may not function correctly');
-    return;
+  // Handle new chat button
+  const newChatBtn = document.getElementById('sidebarNewChatBtn');
+  if (newChatBtn) {
+    newChatBtn.addEventListener('click', newChatClickHandler);
   }
 
-  // Update button text if it's the projects page version
-  if (newChatBtn.id === 'sidebarNewProjectBtn') {
-    newChatBtn.textContent = 'New Project';
+  // Handle new project button separately
+  const newProjectBtn = document.getElementById('sidebarNewProjectBtn');
+  if (newProjectBtn) {
+    newProjectBtn.addEventListener('click', () => {
+      if (typeof ModalManager !== 'undefined' && ModalManager.show) {
+        ModalManager.show('project');
+      } else {
+        console.error('ModalManager not available');
+        if (typeof window.showNotification === 'function') {
+          window.showNotification('Failed to open project form', 'error');
+        }
+      }
+    });
   }
 
-  newChatBtn.addEventListener('click', newChatClickHandler);
+  if (!newChatBtn && !newProjectBtn) {
+    console.warn('New chat/project buttons not found in DOM');
+  }
 }
 
 async function newChatClickHandler() {

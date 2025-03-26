@@ -16,74 +16,101 @@
    * Load a list of projects from the server (optionally filtered).
    * Dispatches "projectsLoaded" with { detail: projectsArray }.
    */
-  function loadProjects(filter = "all") {
+  async function loadProjects(filter = "all") {
     console.log("[ProjectManager] Loading projects with filter:", filter);
     
-    // Use centralized auth check
-    const authState = await window.auth.verify();
-    if (!authState) {
-      console.warn("[ProjectManager] Not authenticated, skipping project load");
-      return Promise.resolve([]);
-    }
-
-    return window.apiRequest(`/api/projects?filter=${filter}`, "GET")
-      .then((response) => {
-        console.log("[ProjectManager] Raw API response:", response);
-        
-        // Standardize response format - updated to match backend
-        let projects = [];
-        if (response?.data?.projects) {
-          projects = response.data.projects;
-        } else if (Array.isArray(response?.data)) {
-          projects = response.data;
-        } else if (Array.isArray(response)) {
-          projects = response;
+    try {
+      // Use centralized auth check with retry
+      let authState;
+      let retries = 3;
+      
+      while (retries > 0) {
+        try {
+          authState = await window.auth.verify();
+          if (authState) break;
+          
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 300));
+          retries--;
+        } catch (e) {
+          console.warn("[ProjectManager] Auth check error, retrying...", e);
+          await new Promise(resolve => setTimeout(resolve, 300));
+          retries--;
         }
+      }
+      
+      if (!authState) {
+        console.warn("[ProjectManager] Not authenticated after retries, skipping project load");
+        return [];
+      }
 
-        if (!Array.isArray(projects)) {
-          console.error("[ProjectManager] Invalid projects data format:", projects);
-          projects = [];
-        }
+      const response = await window.apiRequest(`/api/projects?filter=${filter}`, "GET");
+      console.log("[ProjectManager] Raw API response:", response);
+      
+      // Standardize response format
+      let projects = [];
+      if (response?.data?.projects) {
+        projects = response.data.projects;
+      } else if (Array.isArray(response?.data)) {
+        projects = response.data;
+      } else if (Array.isArray(response)) {
+        projects = response;
+      }
 
-        console.log(`[ProjectManager] Found ${projects.length} projects before filtering`);
-        
-        // Apply filter
-        const filteredProjects = projects.filter(project => {
-          if (!project) return false;
-          if (filter === "pinned") return project.pinned;
-          if (filter === "archived") return project.archived;
-          if (filter === "active") return !project.archived;
-          return true; // 'all' filter
-        });
+      if (!Array.isArray(projects)) {
+        console.error("[ProjectManager] Invalid projects data format:", projects);
+        projects = [];
+      }
 
-        console.log(`[ProjectManager] Dispatching ${filteredProjects.length} projects after filtering`);
-        document.dispatchEvent(
-          new CustomEvent("projectsLoaded", { 
-            detail: filteredProjects,
-            originalCount: projects.length,
-            filterApplied: filter
-          })
-        );
-        return filteredProjects;
-      })
-      .catch((err) => {
-        console.error("[ProjectManager] Error loading projects:", err);
-        const errorMsg = err?.response?.data?.message || 
-                        err?.message || 
-                        "Failed to load projects";
-        window.showNotification?.(errorMsg, "error");
-        
-        // Dispatch empty projects to clear UI
-        document.dispatchEvent(
-          new CustomEvent("projectsLoaded", { 
-            detail: [],
-            originalCount: 0,
-            filterApplied: filter,
-            error: true
-          })
-        );
-        throw err;
+      console.log(`[ProjectManager] Found ${projects.length} projects before filtering`);
+      
+      // Apply filter
+      const filteredProjects = projects.filter(project => {
+        if (!project) return false;
+        if (filter === "pinned") return project.pinned;
+        if (filter === "archived") return project.archived;
+        if (filter === "active") return !project.archived;
+        return true; // 'all' filter
       });
+
+      console.log(`[ProjectManager] Dispatching ${filteredProjects.length} projects after filtering`);
+      
+      // Dispatch event with projects data
+      document.dispatchEvent(new CustomEvent("projectsLoaded", {
+        detail: {
+          projects: filteredProjects,
+          filter,
+          count: response.data?.count || projects.length,
+          originalCount: projects.length,
+          filterApplied: filter
+        }
+      }));
+      
+      return filteredProjects;
+    } catch (error) {
+      console.error("[ProjectManager] Error loading projects:", error);
+      const errorMsg = error?.response?.data?.message || 
+                      error?.message || 
+                      "Failed to load projects";
+      
+      document.dispatchEvent(new CustomEvent("projectsError", {
+        detail: { error }
+      }));
+      
+      // Dispatch empty projects to clear UI
+      document.dispatchEvent(new CustomEvent("projectsLoaded", {
+        detail: {
+          projects: [],
+          filter,
+          count: 0,
+          originalCount: 0,
+          filterApplied: filter,
+          error: true
+        }
+      }));
+      
+      return [];
+    }
   }
 
   /**
@@ -411,7 +438,7 @@
     // Loads
     loadProjects,
     loadProjectDetails,
-    loadProjectStats,
+    loadProjectStats, 
     loadProjectFiles,
     loadProjectConversations,
     loadProjectArtifacts,
@@ -421,7 +448,7 @@
     togglePinProject,
     toggleArchiveProject,
     saveCustomInstructions,
-    // File/Artifact CRUD
+    // File/Artifact CRUD  
     uploadFile,
     deleteFile,
     deleteArtifact,
