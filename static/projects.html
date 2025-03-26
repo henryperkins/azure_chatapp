@@ -436,20 +436,20 @@
             <!-- Enhanced tab navigation with active indicators - mobile optimized -->
             <div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
               <div class="flex whitespace-nowrap min-w-full -mb-px">
-                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium text-xs sm:text-sm" role="tab" aria-selected="true" tabindex="0" data-tab="details">
+                <button class="project-tab-btn active" role="tab" aria-selected="true" tabindex="0" data-tab="details">
                   Details
                 </button>
-                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="files">
+                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="files">
                   Files
                 </button>
-                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="conversations">
+                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="conversations">
                   <span class="hidden xs:inline">Conversations</span>
                   <span class="xs:hidden">Convos</span>
                 </button>
-                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
+                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
                   Artifacts
                 </button>
-                <button class="project-tab-btn inline-block px-2 sm:px-4 py-2 text-gray-500 hover:text-gray-700 font-medium text-xs sm:text-sm" role="tab" aria-selected="false" tabindex="-1" data-tab="knowledge">
+                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="knowledge">
                   <span class="hidden xs:inline">Knowledge Base</span>
                   <span class="xs:hidden">KB</span>
                 </button>
@@ -460,23 +460,23 @@
             <div id="projectTabContent">
               <!-- Details tab -->
               <div id="detailsTab" class="project-tab-content" role="tabpanel" tabindex="0">
-                <div class="mb-4">
-                  <h3 class="font-medium mb-2">Description</h3>
-                  <p id="projectDescription" class="text-gray-700 dark:text-gray-300">
+                <div class="tab-section">
+                  <h3 class="tab-heading">Description</h3>
+                  <p id="projectDescription" class="tab-content">
                     Project description will appear here.
                   </p>
                 </div>
-                <div class="mb-4">
-                  <h3 class="font-medium mb-2">Goals</h3>
-                  <p id="projectGoals" class="text-gray-700 dark:text-gray-300">
+                <div class="tab-section">
+                  <h3 class="tab-heading">Goals</h3>
+                  <p id="projectGoals" class="tab-content">
                     Project goals will appear here.
                   </p>
                 </div>
-                <div class="mb-4">
-                  <h3 class="font-medium mb-2">Custom Instructions</h3>
-                  <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded">
-                    <p id="projectInstructions" class="text-gray-700 dark:text-gray-300">No custom instructions set.</p>
-                    <button id="editInstructionsBtn" class="mt-2 text-sm text-blue-600 hover:underline">
+                <div class="tab-section">
+                  <h3 class="tab-heading">Custom Instructions</h3>
+                  <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded">
+                    <p id="projectInstructions" class="tab-content">No custom instructions set.</p>
+                    <button id="editInstructionsBtn" class="mt-3 text-sm text-blue-600 hover:underline">
                       Edit Instructions
                     </button>
                   </div>
@@ -485,8 +485,8 @@
               
               <!-- Files tab -->
               <div id="filesTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
-                <div class="mb-4 flex justify-between items-center">
-                  <h3 class="font-medium">Project Files</h3>
+                <div class="tab-section flex justify-between items-center">
+                  <h3 class="tab-heading">Project Files</h3>
                   <div>
                     <input type="file" id="fileInput" class="hidden" multiple />
                     <button id="uploadFileBtn" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex items-center">
@@ -523,8 +523,8 @@
               
               <!-- Enhanced conversations tab -->
               <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
-                <div class="mb-4 flex justify-between items-center">
-                  <h3 class="font-medium">Conversations</h3>
+                <div class="tab-section flex justify-between items-center">
+                  <h3 class="tab-heading">Conversations</h3>
                   <button id="newConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -541,9 +541,9 @@
               
               <!-- Enhanced artifacts tab -->
               <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
-                <div class="mb-4">
-                  <h3 class="font-medium">Generated Artifacts</h3>
-                  <p class="text-sm text-gray-500 mt-1">
+                <div class="tab-section">
+                  <h3 class="tab-heading">Generated Artifacts</h3>
+                  <p class="tab-content mt-1">
                     Artifacts are automatically created during conversations when you ask the AI to generate code, documents, or other content.
                   </p>
                 </div>
@@ -555,8 +555,8 @@
               
               <!-- Knowledge Base tab -->
               <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
-                <div class="mb-4 flex justify-between items-center">
-                  <h3 class="font-medium">Knowledge Base</h3>
+                <div class="tab-section flex justify-between items-center">
+                  <h3 class="tab-heading">Knowledge Base</h3>
                   <div id="knowledgeBaseActions" class="flex space-x-2">
                     <button id="searchKnowledgeBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
