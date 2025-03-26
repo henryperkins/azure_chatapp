@@ -783,6 +783,10 @@ class KnowledgeBaseComponent {
       const query = this.elements.searchInput?.value?.trim();
       if (query) this.searchKnowledgeBase(query);
     });
+
+    document.getElementById("reprocessFilesBtn")?.addEventListener("click", () => {
+      this.reprocessFiles();
+    });
     
     document.getElementById("knowledgeBaseEnabled")?.addEventListener("change", (e) => {
       this.toggleKnowledgeBase(e.target.checked);
@@ -822,18 +826,21 @@ class KnowledgeBaseComponent {
       });
   }
   
-  toggleKnowledgeBase(enabled) {
-    const projectId = window.projectManager?.currentProject?.id;
-    if (!projectId) return;
+  async toggleKnowledgeBase(enabled) {
+    const project = window.projectManager?.currentProject;
+    if (!project?.knowledge_base_id) return;
     
     uiUtilsInstance.showNotification(
       `${enabled ? "Enabling" : "Disabling"} knowledge base...`,
       "info"
     );
     
-    window.apiRequest(`/api/projects/${projectId}/knowledge-base/toggle`, "POST", {
-      enabled
-     })
+    try {
+      await window.apiRequest(
+        `/api/knowledge-base/${project.knowledge_base_id}`, 
+        "PATCH", 
+        { is_active: enabled }
+      );
       .then(() => {
         uiUtilsInstance.showNotification(
           `Knowledge base ${enabled ? "enabled" : "disabled"}`,
