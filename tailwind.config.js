@@ -10,6 +10,7 @@ module.exports = {
   // The 'content' array tells Tailwind which files to scan for class names.
   content: [
     './static/index.html',
+    './static/projects.html',
     './static/js/**/*.js',
     './static/css/**/*.css',
     // If you have additional subdirectories or template files:
