@@ -13,6 +13,9 @@ from datetime import datetime
 
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
+    __table_args__ = (
+        Index('ix_knowledge_bases_is_active', 'is_active'),
+    )
     
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), 
@@ -23,6 +26,7 @@ class KnowledgeBase(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     project_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
