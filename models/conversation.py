@@ -8,6 +8,9 @@ Defines the Conversation model, representing a conversation's metadata:
 - title for display
 """
 from sqlalchemy import String, Integer, Boolean, TIMESTAMP, text, ForeignKey
+from sqlalchemy.ext.asyncio import AsyncSession
+from models.project import Project
+from models.knowledge_base import KnowledgeBase
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
