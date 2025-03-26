@@ -22,6 +22,7 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    is_verified BOOLEAN DEFAULT FALSE NOT NULL,
     last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL
 );
 
@@ -88,7 +89,7 @@ CREATE INDEX ix_conversations_is_deleted ON conversations(is_deleted);
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    role VARCHAR NOT NULL,
+    role VARCHAR NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
     content TEXT NOT NULL,
     extra_data JSONB DEFAULT '{selectedText}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
