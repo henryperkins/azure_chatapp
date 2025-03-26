@@ -18,6 +18,7 @@
    */
   async function loadProjects(filter = "all") {
     console.log("[ProjectManager] Loading projects with filter:", filter);
+    console.trace("[DEBUG] Project load call stack");
     
     try {
       // Use centralized auth check with retry
@@ -55,6 +56,8 @@
         projects = response.data;
       } else if (Array.isArray(response)) {
         projects = response;
+      } else if (response?.projects) {
+        projects = response.projects;
       }
 
       if (!Array.isArray(projects)) {
@@ -64,26 +67,24 @@
 
       console.log(`[ProjectManager] Found ${projects.length} projects before filtering`);
       
-      // Apply filter
-      const filteredProjects = projects.filter(project => {
-        if (!project) return false;
-        if (filter === "pinned") return project.pinned;
-        if (filter === "archived") return project.archived;
-        if (filter === "active") return !project.archived;
-        return true; // 'all' filter
-      });
+      // Server is expected to handle filtering via the 'filter' query parameter.
+      // No need to filter again on the client-side.
+      const filteredProjects = projects;
 
       console.log(`[ProjectManager] Dispatching ${filteredProjects.length} projects after filtering`);
       
       // Dispatch event with projects data
+      console.log('[DEBUG] Dispatching projectsLoaded with:', filteredProjects);
+      const eventDetail = {
+        projects: filteredProjects,
+        filter,
+        count: response?.count || filteredProjects.length,
+        originalCount: projects.length,
+        filterApplied: filter
+      };
+      console.log('[DEBUG] Event detail:', eventDetail);
       document.dispatchEvent(new CustomEvent("projectsLoaded", {
-        detail: {
-          projects: filteredProjects,
-          filter,
-          count: response.data?.count || projects.length,
-          originalCount: projects.length,
-          filterApplied: filter
-        }
+        detail: eventDetail
       }));
       
       return filteredProjects;
@@ -98,6 +99,7 @@
       }));
       
       // Dispatch empty projects to clear UI
+      console.error("Failed to load projects - clearing UI");
       document.dispatchEvent(new CustomEvent("projectsLoaded", {
         detail: {
           projects: [],
@@ -177,11 +179,37 @@
   function loadProjectStats(projectId) {
     window.apiRequest(`/api/projects/${projectId}/stats`, "GET")
       .then((response) => {
+        // Ensure stats object has required counts
+        const stats = response.data || {};
+        if (typeof stats.file_count === 'undefined') {
+          stats.file_count = 0;
+        }
+        if (typeof stats.conversation_count === 'undefined') {
+          stats.conversation_count = 0;
+        }
+        if (typeof stats.artifact_count === 'undefined') {
+          stats.artifact_count = 0;
+        }
+
         document.dispatchEvent(
-          new CustomEvent("projectStatsLoaded", { detail: response.data })
+          new CustomEvent("projectStatsLoaded", { detail: stats })
         );
       })
-      .catch((err) => console.error("Error loading project stats:", err));
+      .catch((err) => {
+        console.error("Error loading project stats:", err);
+        // Dispatch empty stats to prevent UI issues
+        document.dispatchEvent(
+          new CustomEvent("projectStatsLoaded", {
+            detail: {
+              token_usage: 0,
+              max_tokens: 0,
+              file_count: 0,
+              conversation_count: 0,
+              artifact_count: 0
+            }
+          })
+        );
+      });
   }
 
   /**

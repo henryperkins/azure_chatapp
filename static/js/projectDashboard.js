@@ -87,7 +87,12 @@ class ProjectDashboard {
    */
   registerEventListeners() {
     // Data events
-    document.addEventListener("projectsLoaded", this.handleProjectsLoaded.bind(this));
+    console.log('[DEBUG] Registering projectsLoaded listener');
+    document.addEventListener("projectsLoaded", (event) => {
+      console.log('[DEBUG] Received projectsLoaded event with:',
+        event.detail?.projects?.length || 0, 'projects');
+      this.handleProjectsLoaded(event);
+    });
     document.addEventListener("projectLoaded", this.handleProjectLoaded.bind(this));
     document.addEventListener("projectStatsLoaded", this.handleProjectStatsLoaded.bind(this));
     document.addEventListener("projectFilesLoaded", this.handleFilesLoaded.bind(this));
@@ -106,7 +111,11 @@ class ProjectDashboard {
       if (!e.target.files?.length) return;
       const projectId = this.state.currentProject?.id;
       if (projectId) {
-        this.components.projectDetails.uploadFiles(projectId, e.target.files);
+        this.components.projectDetails.uploadFiles(projectId, e.target.files)
+          .then(() => {
+            // Refresh stats after successful upload
+            window.projectManager.loadProjectStats(projectId);
+          });
       }
     });
 
@@ -159,9 +168,10 @@ class ProjectDashboard {
         throw new Error('projectManager not initialized');
       }
       
-      console.log('Loading projects with filter:', filter);
+      console.log('[DEBUG] Loading projects with filter:', filter);
       const response = await window.projectManager.loadProjects(filter);
-      console.log('Projects loaded successfully', response);
+      console.log('[DEBUG] Projects loaded - response:', response);
+      console.log('[DEBUG] Projects data:', response?.data?.projects || response?.projects);
       return response;
     } catch (error) {
       console.error("Failed to load projects:", error);
@@ -179,11 +189,16 @@ class ProjectDashboard {
    * Event handlers
    */
   handleProjectsLoaded(event) {
+    console.log('[DEBUG] Handling projectsLoaded event');
+    console.log('[DEBUG] Full event:', event);
+    console.log('[DEBUG] Event detail:', event.detail);
     try {
       let projects = [];
       let originalCount = 0;
       let filter = 'all';
       let hasError = false;
+      
+      console.log('[DEBUG] Raw event detail:', event.detail);
 
       // Normalize different response formats
       if (Array.isArray(event.detail)) {
@@ -199,6 +214,7 @@ class ProjectDashboard {
       }
 
       hasError = event.detail.error || false;
+      console.log('[DEBUG] Calling renderProjects with:', projects.length, 'projects');
       this.components.projectList.renderProjects(projects);
 
       // Update empty state message
@@ -226,11 +242,20 @@ class ProjectDashboard {
     const project = event.detail;
     this.state.currentProject = project;
     this.components.projectDetails.renderProject(project);
-    this.components.knowledgeBase.loadData(project.id);
+    // Knowledge base info is loaded via stats, no separate load needed here.
   }
 
   handleProjectStatsLoaded(event) {
-    this.components.projectDetails.renderStats(event.detail);
+    const stats = event.detail;
+    this.components.projectDetails.renderStats(stats);
+    
+    // Pass knowledge base info from stats to the KB component
+    if (stats && stats.knowledge_base) {
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(stats.knowledge_base);
+    } else {
+      // Render KB as inactive if no info is present in stats
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(null);
+    }
   }
 
   handleFilesLoaded(event) {
@@ -250,6 +275,11 @@ class ProjectDashboard {
     }
     
     this.components.projectDetails.renderConversations(conversations);
+    
+    // Refresh stats when conversations are loaded
+    if (this.state.currentProject?.id) {
+      window.projectManager.loadProjectStats(this.state.currentProject.id);
+    }
   }
 
   handleArtifactsLoaded(event) {

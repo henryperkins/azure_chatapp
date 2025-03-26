@@ -4,6 +4,13 @@
  * Main application initialization with improved code organization
  */
 
+// API Configuration
+window.API_CONFIG = {
+  baseUrl: null,
+  isAuthenticated: false,
+  authCheckInProgress: false
+};
+
 // ---------------------------------------------------------------------
 // GLOBAL SELECTORS & CONSTANTS
 // ---------------------------------------------------------------------
@@ -117,27 +124,36 @@ function updateAuthUI(authenticated) {
 }
 
 // API Configuration
-// Export API_CONFIG and utilities to window so other modules can access it
-window.API_CONFIG = {
-  baseUrl: null,  // Will be set on first use
+const API_CONFIG = {
+  baseUrl: null,
   isAuthenticated: false,
   authCheckInProgress: false
 };
 
-// Helper to get base URL
-window.getBaseUrl = function() {
-  if (!window.API_CONFIG.baseUrl) {
-    // Get URL from current page
-    const baseUrl = window.location.origin ||
-                   (window.location.protocol + '//' + window.location.host);
-    window.API_CONFIG.baseUrl = baseUrl;
-    console.log('Set API base URL:', baseUrl);
-  }
-  return window.API_CONFIG.baseUrl;
-};
+// Export to window for legacy access
+window.API_CONFIG = API_CONFIG;
+window.getBaseUrl = getBaseUrl;
+window.apiRequest = apiRequest;
 
-// Alias for local use
-const API_CONFIG = window.API_CONFIG;
+// Helper to get base URL
+function getBaseUrl() {
+  if (!API_CONFIG.baseUrl) {
+    // Check for global variable set by index.html
+    const envBackendHost = window.BACKEND_HOST || 'localhost:8000';
+    
+    // Use the configured host (with protocol if not included)
+    let protocol = envBackendHost.startsWith('http') ? '' : 'http://';
+    if (window.ENV === 'production') {
+      protocol = envBackendHost.startsWith('http') ? '' : window.location.protocol + '//';
+    }
+    API_CONFIG.baseUrl = protocol + envBackendHost;
+    
+    console.log('Set API base URL:', API_CONFIG.baseUrl);
+  }
+  return API_CONFIG.baseUrl;
+}
+window.apiRequest = apiRequest;
+window.getBaseUrl = getBaseUrl;
 
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
@@ -532,6 +548,25 @@ function loadConversationList() {
     });
 }
 
+function handleAPIError(context, error) {
+  console.error(`[${context}] API Error:`, error);
+  
+  let message = 'An error occurred';
+  if (error instanceof TypeError) {
+    message = 'Network error - please check your connection';
+  } else if (error.response && error.response.status === 401) {
+    message = 'Session expired - please log in again';
+  } else if (error.message) {
+    message = error.message;
+  }
+
+  if (typeof UIUtils !== 'undefined' && UIUtils.showNotification) {
+    UIUtils.showNotification(message, 'error');
+  } else {
+    alert(message);
+  }
+}
+
 function renderConversationList(data) {
   const container = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
   if (!container) return;
@@ -844,6 +879,18 @@ async function initializeAllModules() {
         console.info("Auth module not available - user will need to log in");
         // Still continue with other modules since we can function without auth initially
         API_CONFIG.isAuthenticated = false;
+      }
+      coreModulesCount++;
+    }
+
+    // Initialize projects immediately after auth
+    if (window.initProjectDashboard) {
+      try {
+        await initProjectDashboard();
+        console.log("✓ Project dashboard initialized");
+        coreSuccesses++;
+      } catch (error) {
+        console.warn("Project dashboard initialization failed:", error);
       }
       coreModulesCount++;
     }

@@ -471,7 +471,7 @@
               </div>
               
               <!-- Files tab -->
-              <div id="filesTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
+              <div id="filesTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
                 <div class="mb-4 flex justify-between items-center">
                   <h3 class="font-medium">Project Files</h3>
                   <div>
@@ -509,7 +509,7 @@
               </div>
               
               <!-- Enhanced conversations tab -->
-              <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
+              <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
                 <div class="mb-4 flex justify-between items-center">
                   <h3 class="font-medium">Conversations</h3>
                   <button id="newConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
@@ -537,7 +537,7 @@
               </div>
               
               <!-- Enhanced artifacts tab -->
-              <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
+              <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
                 <div class="mb-4">
                   <h3 class="font-medium">Generated Artifacts</h3>
                   <p class="text-sm text-gray-500 mt-1">
@@ -551,7 +551,7 @@
               </div>
               
               <!-- Knowledge Base tab -->
-              <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel" tabindex="0" aria-hidden="true">
+              <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
                 <div class="mb-4 flex justify-between items-center">
                   <h3 class="font-medium">Knowledge Base</h3>
                   <div id="knowledgeBaseActions" class="flex space-x-2">
@@ -929,16 +929,28 @@
   </div>
 
  <!-- Core scripts -->
+ <script>
+   console.log('Base scripts loading...');
+ </script>
  <script src="/static/js/formatting.js"></script>
  <script src="/static/js/auth.js"></script>
  <script src="/static/js/modelConfig.js"></script>
- <script src="/static/js/projectManager.js" type="module"></script>
- <script src="/static/js/projectDashboard.js" type="module"></script>
  
+ <!-- Project scripts -->
+ <script type="module">
+   console.log('Initializing project modules...');
+   import '/static/js/projectManager.js';
+   import '/static/js/projectDashboard.js';
+   import '/static/js/projectDashboardComponents.js';
+ </script>
+   
  <!-- Consolidated scripts -->
  <script src="/static/js/chat.js" type="module"></script>
  <script src="/static/js/sidebar.js"></script>
  <script src="/static/js/app.js"></script>
+ <script>
+   console.log('All scripts loaded');
+ </script>
 
 </body>
 </html>

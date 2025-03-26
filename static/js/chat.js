@@ -465,8 +465,10 @@ class ConversationService {
 // --------------------------
 class UIComponents {
   constructor(options = {}) {
+    // Allow message container selector to be passed in
+    const messageContainerSelector = options.messageContainerSelector || '#conversationArea';
     this.messageList = {
-      container: document.querySelector(options.containerSelector || '#conversationArea'),
+      container: document.querySelector(messageContainerSelector),
       thinkingId: 'thinkingIndicator',
       formatText: window.formatText || this._defaultFormatter,
 
@@ -783,6 +785,8 @@ class ChatInterface {
     this.notificationFunction = options.showNotification || window.showNotification || console.log;
     this.container = document.querySelector(options.containerSelector || '#chatUI');
     this.titleEl = document.querySelector(options.titleSelector || '#chatTitle');
+    // Store the selector for potential changes later
+    this.messageContainerSelector = options.messageContainerSelector || '#conversationArea';
 
     this.wsService = null;
     this.messageService = null;
@@ -818,8 +822,9 @@ class ChatInterface {
       showNotification: this.notificationFunction
     });
 
-    // Create UI components
+    // Create UI components, passing the message container selector
     this.ui = new UIComponents({
+      messageContainerSelector: this.messageContainerSelector, // Pass the selector
       onSend: this._handleSendMessage.bind(this),
       onImageChange: (imageData) => this.currentImage = imageData,
       showNotification: this.notificationFunction
@@ -890,6 +895,23 @@ class ChatInterface {
       throw error;
     }
   }
+  
+  // Allows changing the target container for message rendering after initialization.
+  setTargetContainer(selector) {
+    if (!this.ui || !this.ui.messageList) {
+      console.error("UI components not initialized yet.");
+      return;
+    }
+    const newContainer = document.querySelector(selector);
+    if (newContainer) {
+      this.ui.messageList.container = newContainer;
+      console.log(`Chat message container set to: ${selector}`);
+      // Optionally re-render if needed, or clear the new container
+      // this.ui.messageList.clear();
+    } else {
+      console.error(`Failed to find container with selector: ${selector}`);
+    }
+  }; // Add semicolon after method definition
 
   _handleConversationLoaded(conversation) {
     if (this.titleEl) {
@@ -977,6 +999,7 @@ function initializeChat() {
   _addMarkdownStyles();
   chatInterface = new ChatInterface();
   chatInterface.initialize();
+  window.projectChatInterface = chatInterface; // Expose the instance globally
 }
 
 function loadConversation(chatId) {

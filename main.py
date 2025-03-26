@@ -28,9 +28,10 @@ from routes.conversations import router as conversations_router
 from routes.file_upload import router as file_upload_router
 from routes.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
-from routes.projects.projects import router as projects_router
 from routes.projects.files import router as project_files_router
 
+from routes.projects.artifacts import router as project_artifacts_router
+from routes.projects.conversations import router as project_conversations_router
 # Import database utilities
 from db import init_db, validate_db_schema, get_async_session_context
 
@@ -132,7 +133,12 @@ if settings.CORS_ORIGINS:
     # Fix: check if already a list or needs splitting
     origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else settings.CORS_ORIGINS.split(",")
 else:
-    origins = ["*"] if settings.ENV != "production" else [
+    origins = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ] if settings.ENV != "production" else [
         "https://put.photo",
         "https://www.put.photo"
     ]
@@ -143,7 +149,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Set-Cookie", "*"],  # Allow frontend to access all headers
+    expose_headers=["Set-Cookie", "Content-Type", "Authorization"],
     max_age=86400,  # Cache preflight requests for 24 hours
 )
 
@@ -212,10 +218,7 @@ app.include_router(conversations_router, prefix="/api/chat/conversations", tags=
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(knowledge_base_router, prefix="/api/kb", tags=["knowledge-bases"])
-
 # Project files router should be included within project router, not separately
-from routes.projects.artifacts import router as project_artifacts_router
-from routes.projects.conversations import router as project_conversations_router
 
 # Include project sub-routers
 app.include_router(

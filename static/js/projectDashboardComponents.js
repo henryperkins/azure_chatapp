@@ -1,82 +1,35 @@
-import { AnimationUtils, ModalManager } from './projectDashboardUtils.js';
+// Import necessary utility classes directly using ES module syntax
+import {
+  UIUtils as UIUtilsClass,
+  AnimationUtils as AnimationUtilsClass,
+  ModalManager
+} from './projectDashboardUtils.js';
 
-// Fallback UIUtils implementation if import fails
-let UIUtils = {
-  toggleVisibility(elementOrId, isVisible) {
-    const el = typeof elementOrId === 'string'
-      ? document.getElementById(elementOrId)
-      : elementOrId;
-    if (el) {
-      el.classList.toggle('hidden', !isVisible);
-    }
-  },
-  
-  createElement(type, attributes = {}, children = []) {
-    const element = document.createElement(type);
-    
-    // Set attributes
-    if (attributes.class || attributes.className) {
-      element.className = attributes.class || attributes.className;
-    }
-    if (attributes.style && typeof attributes.style === 'object') {
-      Object.assign(element.style, attributes.style);
-    }
-    if (attributes.textContent) {
-      element.textContent = attributes.textContent;
-    }
-    if (attributes.innerHTML) {
-      element.innerHTML = attributes.innerHTML;
-    }
-    
-    return element;
-  },
-  
-  formatNumber(num) {
-    return num?.toLocaleString() || '0';
-  },
-  
-  formatDate(date) {
-    if (!date) return '';
-    return new Date(date).toLocaleDateString();
-  },
-  
-  formatBytes(bytes) {
-    if (!bytes) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  },
-  
-  fileIcon(fileType) {
-    return '📄'; // Default file icon
-  },
-  
-  showNotification(message, type = 'info') {
-    console.log(`[${type}] ${message}`);
-  }
-};
+// Create instances of utility classes for use within this module
+const uiUtilsInstance = new UIUtilsClass();
+const animationUtilsInstance = new AnimationUtilsClass();
 
-// Try to import the real UIUtils if available
-try {
-  const importedUtils = await import('./projectDashboardUtils.js');
-  if (importedUtils.UIUtils) {
-    UIUtils = importedUtils.UIUtils;
-    console.debug('Using imported UIUtils');
-  }
-} catch (err) {
-  console.warn('Failed to import UIUtils, using fallback implementation:', err);
+// Ensure instances are available globally if other scripts rely on them (optional, but safer for now)
+if (typeof window !== 'undefined') {
+  if (!window.UIUtils) window.UIUtils = uiUtilsInstance;
+  if (!window.AnimationUtils) window.AnimationUtils = animationUtilsInstance;
 }
+
+console.log('UIUtils instance created:', !!uiUtilsInstance?.createElement);
+console.log('AnimationUtils instance created:', !!animationUtilsInstance?.animateProgress);
 
 /**
  * Project List Component - Handles the project list view
  */
 class ProjectListComponent {
   constructor(options) {
+    console.log('[DEBUG] Initializing ProjectListComponent');
     this.elementId = options.elementId;
     this.element = document.getElementById(this.elementId);
+    console.log(`[DEBUG] projectList element found: ${!!this.element}`);
     this.onViewProject = options.onViewProject;
     this.messageEl = document.getElementById("noProjectsMessage");
+    console.log(`[DEBUG] noProjectsMessage element found: ${!!this.messageEl}`);
     
     // Debug check and fallback container creation
     if (!this.element) {
@@ -84,10 +37,17 @@ class ProjectListComponent {
       this.element = document.createElement('div');
       this.element.id = this.elementId;
       this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3';
+      this.element.style.minHeight = '200px'; // Ensure visible empty state
       const listView = document.getElementById('projectListView');
+      console.log(`[DEBUG] projectListView parent found: ${!!listView}`);
       if (listView) {
         listView.appendChild(this.element);
+        console.log('[DEBUG] Created fallback projectList container');
       }
+    } else {
+      // Ensure existing container has proper classes
+      this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3';
+      this.element.style.minHeight = '200px';
     }
     
     this.bindFilterEvents();
@@ -103,14 +63,16 @@ class ProjectListComponent {
   }
 
   hide() {
-    UIUtils.toggleVisibility("projectListView", false);
+    uiUtilsInstance.toggleVisibility("projectListView", false);
   }
 
   renderProjects(eventOrProjects) {
     try {
+      console.log('[DEBUG] renderProjects received:', eventOrProjects);
       const projects = Array.isArray(eventOrProjects)
         ? eventOrProjects
         : eventOrProjects?.detail?.data?.projects || [];
+      console.log('[DEBUG] Projects to render:', projects);
         
       if (!this.element) {
         console.error('Project list container element not found');
@@ -159,13 +121,22 @@ class ProjectListComponent {
   }
 
   createProjectCard(project) {
+    console.log('[DEBUG] Creating card for project:', project);
+    if (!project) {
+      console.error('[DEBUG] Project is null/undefined');
+      return null;
+    }
+    if (!project.id) {
+      console.error('[DEBUG] Project missing required id field:', project);
+      return null;
+    }
     const usage = project.token_usage || 0;
     const maxTokens = project.max_tokens || 0;
     const usagePct = maxTokens > 0 ? Math.min(100, (usage / maxTokens) * 100).toFixed(1) : 0;
     
     let card;
-    if (UIUtils && UIUtils.createElement) {
-      card = UIUtils.createElement("div", {
+    if (UIUtils && uiUtilsInstance.createElement) {
+      card = uiUtilsInstance.createElement("div", {
         className: `bg-white dark:bg-gray-700 rounded-lg shadow-md p-4
           border-2 ${project.pinned ? "border-yellow-400" : "border-blue-400"}
           ${project.archived ? "opacity-75" : ""}
@@ -186,12 +157,12 @@ class ProjectListComponent {
     }
     
     // Header
-    const header = UIUtils.createElement("div", { className: "flex justify-between mb-2" });
-    const title = UIUtils.createElement("h3", { 
+    const header = uiUtilsInstance.createElement("div", { className: "flex justify-between mb-2" });
+    const title = uiUtilsInstance.createElement("h3", { 
       className: "font-semibold text-md", 
       textContent: project.name 
     });
-    const badges = UIUtils.createElement("div", { 
+    const badges = uiUtilsInstance.createElement("div", { 
       className: "text-xs text-gray-500",
       textContent: `${project.pinned ? "📌 " : ""}${project.archived ? "🗃️ " : ""}`
     });
@@ -201,24 +172,24 @@ class ProjectListComponent {
     card.appendChild(header);
     
     // Description
-    const desc = UIUtils.createElement("p", {
+    const desc = uiUtilsInstance.createElement("p", {
       className: "text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2",
       textContent: project.description || "No description"
     });
     card.appendChild(desc);
     
     // Token usage
-    const tokenWrapper = UIUtils.createElement("div", { className: "mb-2" });
-    const tokenHeader = UIUtils.createElement("div", { 
+    const tokenWrapper = uiUtilsInstance.createElement("div", { className: "mb-2" });
+    const tokenHeader = uiUtilsInstance.createElement("div", { 
       className: "flex justify-between mb-1 text-xs",
       innerHTML: `
-        <span>Tokens: ${UIUtils.formatNumber(usage)} / ${UIUtils.formatNumber(maxTokens)}</span>
+        <span>Tokens: ${uiUtilsInstance.formatNumber(usage)} / ${uiUtilsInstance.formatNumber(maxTokens)}</span>
         <span>${usagePct}%</span>
       `
     });
     
-    const progressOuter = UIUtils.createElement("div", { className: "w-full bg-gray-200 rounded-full h-1.5" });
-    const progressInner = UIUtils.createElement("div", { 
+    const progressOuter = uiUtilsInstance.createElement("div", { className: "w-full bg-gray-200 rounded-full h-1.5" });
+    const progressInner = uiUtilsInstance.createElement("div", { 
       className: "bg-blue-600 h-1.5 rounded-full",
       style: { width: `${usagePct}%` }
     });
@@ -229,16 +200,16 @@ class ProjectListComponent {
     card.appendChild(tokenWrapper);
     
     // Footer
-    const footer = UIUtils.createElement("div", { className: "flex justify-between mt-3" });
-    const createdInfo = UIUtils.createElement("div", {
+    const footer = uiUtilsInstance.createElement("div", { className: "flex justify-between mt-3" });
+    const createdInfo = uiUtilsInstance.createElement("div", {
       className: "text-xs text-gray-500",
-      textContent: `Created ${UIUtils.formatDate(project.created_at)}`
+      textContent: `Created ${uiUtilsInstance.formatDate(project.created_at)}`
     });
     
-    const actions = UIUtils.createElement("div", { className: "flex space-x-1" });
+    const actions = uiUtilsInstance.createElement("div", { className: "flex space-x-1" });
     
     // View button
-    const viewBtn = UIUtils.createElement("button", {
+    const viewBtn = uiUtilsInstance.createElement("button", {
       className: "p-1 text-blue-600 hover:text-blue-800 view-project-btn",
       innerHTML: `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -253,7 +224,7 @@ class ProjectListComponent {
     });
     
     // Delete button
-    const deleteBtn = UIUtils.createElement("button", {
+    const deleteBtn = uiUtilsInstance.createElement("button", {
       className: "p-1 text-red-600 hover:text-red-800 delete-project-btn",
       innerHTML: `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -285,12 +256,12 @@ class ProjectListComponent {
       onConfirm: () => {
         window.projectManager?.deleteProject(project.id)
           .then(() => {
-            UIUtils.showNotification("Project deleted", "success");
+            uiUtilsInstance.showNotification("Project deleted", "success");
             window.projectManager?.loadProjects();
           })
           .catch(err => {
             console.error("Error deleting project:", err);
-            UIUtils.showNotification("Failed to delete project", "error");
+            uiUtilsInstance.showNotification("Failed to delete project", "error");
           });
       }
     });
@@ -346,12 +317,12 @@ class ProjectDetailsComponent {
   }
 
   show() {
-    UIUtils.toggleVisibility(this.elements.container, true);
+    uiUtilsInstance.toggleVisibility(this.elements.container, true);
   }
 
   hide() {
-    if (UIUtils && UIUtils.toggleVisibility) {
-      UIUtils.toggleVisibility(this.elements.container, false);
+    if (UIUtils && uiUtilsInstance.toggleVisibility) {
+      uiUtilsInstance.toggleVisibility(this.elements.container, false);
     } else {
       // Fallback implementation
       if (this.elements.container) {
@@ -379,10 +350,10 @@ class ProjectDetailsComponent {
 
   renderStats(stats) {
     if (this.elements.tokenUsage) {
-      this.elements.tokenUsage.textContent = UIUtils.formatNumber(stats.token_usage || 0);
+      this.elements.tokenUsage.textContent = uiUtilsInstance.formatNumber(stats.token_usage || 0);
     }
     if (this.elements.maxTokens) {
-      this.elements.maxTokens.textContent = UIUtils.formatNumber(stats.max_tokens || 0);
+      this.elements.maxTokens.textContent = uiUtilsInstance.formatNumber(stats.max_tokens || 0);
     }
     
     const usage = stats.token_usage || 0;
@@ -394,11 +365,27 @@ class ProjectDetailsComponent {
     }
     
     if (this.elements.tokenProgressBar) {
-      AnimationUtils.animateProgress(
-        this.elements.tokenProgressBar, 
-        parseFloat(this.elements.tokenProgressBar.style.width || "0"), 
+      animationUtilsInstance.animateProgress(
+        this.elements.tokenProgressBar,
+        parseFloat(this.elements.tokenProgressBar.style.width || "0"),
         pct
       );
+    }
+
+    // Update file, conversation and artifact counts
+    if (stats.file_count !== undefined) {
+      const fileCountEl = document.getElementById('projectFileCount');
+      if (fileCountEl) fileCountEl.textContent = uiUtilsInstance.formatNumber(stats.file_count);
+    }
+    
+    if (stats.conversation_count !== undefined) {
+      const convoCountEl = document.getElementById('projectConversationCount');
+      if (convoCountEl) convoCountEl.textContent = uiUtilsInstance.formatNumber(stats.conversation_count);
+    }
+    
+    if (stats.artifact_count !== undefined) {
+      const artifactCountEl = document.getElementById('projectArtifactCount');
+      if (artifactCountEl) artifactCountEl.textContent = uiUtilsInstance.formatNumber(stats.artifact_count);
     }
   }
 
@@ -415,33 +402,33 @@ class ProjectDetailsComponent {
     this.elements.filesList.innerHTML = "";
     
     files.forEach(file => {
-      const item = UIUtils.createElement("div", {
+      const item = uiUtilsInstance.createElement("div", {
         className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2"
       });
       
       // Info section
-      const infoDiv = UIUtils.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(UIUtils.createElement("span", {
+      const infoDiv = uiUtilsInstance.createElement("div", { className: "flex items-center" });
+      infoDiv.appendChild(uiUtilsInstance.createElement("span", {
         className: "text-lg mr-2",
-        textContent: UIUtils.fileIcon(file.file_type)
+        textContent: uiUtilsInstance.fileIcon(file.file_type)
       }));
       
-      const detailDiv = UIUtils.createElement("div", { className: "flex flex-col" });
-      detailDiv.appendChild(UIUtils.createElement("div", {
+      const detailDiv = uiUtilsInstance.createElement("div", { className: "flex flex-col" });
+      detailDiv.appendChild(uiUtilsInstance.createElement("div", {
         className: "font-medium",
         textContent: file.filename
       }));
-      detailDiv.appendChild(UIUtils.createElement("div", {
+      detailDiv.appendChild(uiUtilsInstance.createElement("div", {
         className: "text-xs text-gray-500",
-        textContent: `${UIUtils.formatBytes(file.file_size)} · ${UIUtils.formatDate(file.created_at)}`
+        textContent: `${uiUtilsInstance.formatBytes(file.file_size)} · ${uiUtilsInstance.formatDate(file.created_at)}`
       }));
       
       infoDiv.appendChild(detailDiv);
       item.appendChild(infoDiv);
       
       // Actions section
-      const actions = UIUtils.createElement("div", { className: "flex space-x-2" });
-      actions.appendChild(UIUtils.createElement("button", {
+      const actions = uiUtilsInstance.createElement("div", { className: "flex space-x-2" });
+      actions.appendChild(uiUtilsInstance.createElement("button", {
         className: "text-red-600 hover:text-red-800",
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -472,31 +459,37 @@ class ProjectDetailsComponent {
     this.elements.conversationsList.innerHTML = "";
     
     conversations.forEach(conversation => {
-      const convoEl = UIUtils.createElement("div", {
+      const convoEl = uiUtilsInstance.createElement("div", {
         className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
         onclick: () => {
           const chatContainer = document.getElementById('projectChatContainer');
           if (chatContainer) chatContainer.classList.remove('hidden');
-          if (window.projectChatInterface) {
+          
+          // Ensure the chat interface exists and set the correct target container
+          if (window.projectChatInterface && typeof window.projectChatInterface.setTargetContainer === 'function') {
+            window.projectChatInterface.setTargetContainer('#projectChatMessages'); // Set target for messages
             window.projectChatInterface.loadConversation(conversation.id);
+          } else {
+            console.error("projectChatInterface or setTargetContainer not available.");
+            // Optionally show an error to the user
           }
         }
       });
       
-      const infoDiv = UIUtils.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(UIUtils.createElement("span", {
+      const infoDiv = uiUtilsInstance.createElement("div", { className: "flex items-center" });
+      infoDiv.appendChild(uiUtilsInstance.createElement("span", {
         className: "text-lg mr-2",
         textContent: "💬"
       }));
       
-      const textDiv = UIUtils.createElement("div");
-      textDiv.appendChild(UIUtils.createElement("div", {
+      const textDiv = uiUtilsInstance.createElement("div");
+      textDiv.appendChild(uiUtilsInstance.createElement("div", {
         className: "font-medium",
         textContent: conversation.title || "Untitled conversation"
       }));
-      textDiv.appendChild(UIUtils.createElement("div", {
+      textDiv.appendChild(uiUtilsInstance.createElement("div", {
         className: "text-xs text-gray-500",
-        textContent: UIUtils.formatDate(conversation.created_at)
+        textContent: uiUtilsInstance.formatDate(conversation.created_at)
       }));
       
       infoDiv.appendChild(textDiv);
@@ -585,18 +578,22 @@ class ProjectDetailsComponent {
       this.elements.uploadStatus.textContent = `Uploading 0/${files.length} files...`;
     }
     
-    Array.from(files).forEach(file => {
-      window.projectManager?.uploadFile(projectId, file)
-        .then(() => {
-          this.fileUploadStatus.completed++;
-          this.updateUploadProgress();
-        })
-        .catch(() => {
-          this.fileUploadStatus.failed++;
-          this.fileUploadStatus.completed++;
-          this.updateUploadProgress();
-        });
-    });
+    // Return a Promise that resolves when all uploads complete
+    return Promise.all(
+      Array.from(files).map(file =>
+        window.projectManager?.uploadFile(projectId, file)
+          .then(() => {
+            this.fileUploadStatus.completed++;
+            this.updateUploadProgress();
+          })
+          .catch(() => {
+            this.fileUploadStatus.failed++;
+            this.fileUploadStatus.completed++;
+            this.updateUploadProgress();
+            throw new Error('File upload failed');
+          })
+      )
+    );
   }
 
   updateUploadProgress() {
@@ -604,7 +601,7 @@ class ProjectDetailsComponent {
     const percentage = Math.round((completed / total) * 100);
     
     if (this.elements.progressBar) {
-      AnimationUtils.animateProgress(
+      animationUtilsInstance.animateProgress(
         this.elements.progressBar,
         parseFloat(this.elements.progressBar.style.width || "0"),
         percentage
@@ -623,9 +620,9 @@ class ProjectDetailsComponent {
         }
         
         if (failed === 0) {
-          UIUtils.showNotification("Files uploaded successfully", "success");
+          uiUtilsInstance.showNotification("Files uploaded successfully", "success");
         } else {
-          UIUtils.showNotification(`${failed} file(s) failed to upload`, "error");
+          uiUtilsInstance.showNotification(`${failed} file(s) failed to upload`, "error");
         }
         
         if (window.projectManager?.currentProject) {
@@ -650,13 +647,16 @@ class ProjectDetailsComponent {
         
         window.projectManager?.deleteFile(projectId, file.id)
           .then(() => {
-            UIUtils.showNotification("File deleted", "success");
-            window.projectManager.loadProjectFiles(projectId);
-            window.projectManager.loadProjectStats(projectId);
+            uiUtilsInstance.showNotification("File deleted", "success");
+            // Refresh both files and stats
+            return Promise.all([
+              window.projectManager.loadProjectFiles(projectId),
+              window.projectManager.loadProjectStats(projectId)
+            ]);
           })
           .catch(err => {
             console.error("Error deleting file:", err);
-            UIUtils.showNotification("Failed to delete file", "error");
+            uiUtilsInstance.showNotification("Failed to delete file", "error");
           });
       }
     });
@@ -668,7 +668,7 @@ class ProjectDetailsComponent {
     
     window.projectManager?.togglePinProject(project.id)
       .then(() => {
-        UIUtils.showNotification(
+        uiUtilsInstance.showNotification(
           project.pinned ? "Project unpinned" : "Project pinned",
           "success"
         );
@@ -676,7 +676,7 @@ class ProjectDetailsComponent {
       })
       .catch(err => {
         console.error("Error toggling pin:", err);
-        UIUtils.showNotification("Failed to update project", "error");
+        uiUtilsInstance.showNotification("Failed to update project", "error");
       });
   }
 }
@@ -716,22 +716,13 @@ class KnowledgeBaseComponent {
     });
   }
   
-  loadData(projectId) {
-    if (!projectId) return;
-    
-    window.apiRequest(`/api/projects/${projectId}/knowledge-base`)
-      .then(response => {
-        this.renderKnowledgeBaseInfo(response.data);
-      })
-      .catch(err => {
-        console.error("Error loading knowledge base:", err);
-      });
-  }
+  // loadData method removed as KB info is now passed via renderKnowledgeBaseInfo
+  // from the project stats payload in projectDashboard.js
   
   searchKnowledgeBase(query) {
     const projectId = window.projectManager?.currentProject?.id;
     if (!projectId) {
-      UIUtils.showNotification("No project selected", "error");
+      uiUtilsInstance.showNotification("No project selected", "error");
       return;
     }
     
@@ -746,7 +737,7 @@ class KnowledgeBaseComponent {
       })
       .catch(err => {
         console.error("Error searching knowledge base:", err);
-        UIUtils.showNotification("Search failed", "error");
+        uiUtilsInstance.showNotification("Search failed", "error");
         this.showNoResults();
       });
   }
@@ -755,7 +746,7 @@ class KnowledgeBaseComponent {
     const projectId = window.projectManager?.currentProject?.id;
     if (!projectId) return;
     
-    UIUtils.showNotification(
+    uiUtilsInstance.showNotification(
       `${enabled ? "Enabling" : "Disabling"} knowledge base...`,
       "info"
     );
@@ -764,7 +755,7 @@ class KnowledgeBaseComponent {
       enabled
      })
       .then(() => {
-        UIUtils.showNotification(
+        uiUtilsInstance.showNotification(
           `Knowledge base ${enabled ? "enabled" : "disabled"}`,
           "success"
         );
@@ -772,7 +763,7 @@ class KnowledgeBaseComponent {
       })
       .catch(err => {
         console.error("Error toggling knowledge base:", err);
-        UIUtils.showNotification("Operation failed", "error");
+        uiUtilsInstance.showNotification("Operation failed", "error");
         document.getElementById("knowledgeBaseEnabled").checked = !enabled;
       });
   }
@@ -810,27 +801,27 @@ class KnowledgeBaseComponent {
     this.elements.noResultsSection.classList.add("hidden");
     
     results.forEach(result => {
-      const item = UIUtils.createElement("div", {
+      const item = uiUtilsInstance.createElement("div", {
         className: "bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow"
       });
       
       // Header with file info and match score
-      const header = UIUtils.createElement("div", {
+      const header = uiUtilsInstance.createElement("div", {
         className: "flex justify-between items-center border-b border-gray-200 pb-2 mb-2"
       });
       
-      const fileInfo = UIUtils.createElement("div", { className: "flex items-center" });
-      fileInfo.appendChild(UIUtils.createElement("span", {
+      const fileInfo = uiUtilsInstance.createElement("div", { className: "flex items-center" });
+      fileInfo.appendChild(uiUtilsInstance.createElement("span", {
         className: "text-lg mr-2",
-        textContent: UIUtils.fileIcon(result.file_type || "txt")
+        textContent: uiUtilsInstance.fileIcon(result.file_type || "txt")
       }));
-      fileInfo.appendChild(UIUtils.createElement("div", {
+      fileInfo.appendChild(uiUtilsInstance.createElement("div", {
         className: "font-medium",
         textContent: result.filename || result.file_path || "Unknown source"
       }));
       
       header.appendChild(fileInfo);
-      header.appendChild(UIUtils.createElement("div", {
+      header.appendChild(uiUtilsInstance.createElement("div", {
         className: "text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded",
         textContent: `${Math.round(result.score * 100)}% match`
       }));
@@ -838,7 +829,7 @@ class KnowledgeBaseComponent {
       item.appendChild(header);
       
       // Content snippet
-      const snippet = UIUtils.createElement("div", {
+      const snippet = uiUtilsInstance.createElement("div", {
         className: "text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-3"
       });
       
@@ -867,7 +858,7 @@ class KnowledgeBaseComponent {
         const fileCountEl = document.getElementById("knowledgeFileCount");
         if (fileCountEl) fileCountEl.textContent = kb.stats.file_count || 0;
         const totalSizeEl = document.getElementById("knowledgeFileSize");
-        if (totalSizeEl) totalSizeEl.textContent = UIUtils.formatBytes(kb.stats.total_size || 0);
+        if (totalSizeEl) totalSizeEl.textContent = uiUtilsInstance.formatBytes(kb.stats.total_size || 0);
       }
       
       activeContainer.classList.remove("hidden");
