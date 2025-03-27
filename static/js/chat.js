@@ -242,6 +242,13 @@ class MessageService {
 
   async sendMessage(content) {
     try {
+      // Validate conversation ID first
+      if (!this.isValidUUID(this.chatId)) {
+        console.warn('Invalid conversation ID, creating new conversation');
+        const newConvo = await this.createNewConversation();
+        this.chatId = newConvo.id;
+      }
+
       this.onSending();
 
       if (this.wsService && this.wsService.isConnected()) {
@@ -383,6 +390,9 @@ class ConversationService {
   async createNewConversation(maxRetries = 2) {
     const projectId = localStorage.getItem("selectedProjectId");
     const model = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
+    
+    // Generate a default title with timestamp
+    const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -997,17 +1007,23 @@ class ChatInterface {
     );
   }
 
+  isValidUUID(uuid) {
+    return uuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  }
+
   async _handleSendMessage(userMsg) {
     if (!userMsg && !this.currentImage) {
       this.notificationFunction("Cannot send empty message", "error");
       return;
     }
 
-    // Ensure we have a chat
-    if (!this.currentChatId) {
+    // Ensure we have a valid chat ID
+    if (!this.isValidUUID(this.currentChatId)) {
       try {
         const conversation = await this.createNewConversation();
         this.currentChatId = conversation.id;
+        // Update URL to reflect new conversation
+        window.history.pushState({}, '', `/?chatId=${conversation.id}`);
       } catch (err) {
         handleError('Creating conversation failed', err, this.notificationFunction);
         return;
