@@ -438,7 +438,7 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
               window.showNotification?.("Failed to create conversation", "error");
               throw fallbackErr; // Re-throw to ensure caller can handle the error
             });
-        });
+        }
     }
 
   /**
