@@ -459,12 +459,21 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
    * Check the API endpoint to determine which URL format works
    * for project conversations. This helps adapt to different backend configurations.
    */
+  /**
+   * Check the API endpoint to determine which URL format works
+   * for project conversations. This helps adapt to different backend configurations.
+   * @param {string} projectId - The project ID to test endpoints for
+   * @returns {Promise<string>} Resolves to "standard", "simple" or "unknown"
+   */
   function checkProjectApiEndpoint(projectId) {
     if (!projectId) {
       return Promise.reject(new Error('Project ID is required'));
     }
+    
+    // First try standard endpoint format
     return window.apiRequest(`/api/projects/${projectId}/`, "GET")
       .then(() => {
+        console.log("API endpoint format is /api/projects/{id}/");
         console.log("API endpoint format is /api/projects/{id}/");
         return "standard";
       })
@@ -484,10 +493,15 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
   /**
    * Get the current project object
    */
+  /**
+   * Get the current project object
+   * @returns {Object|null} The current project object or null if none loaded
+   */
   function getCurrentProject() {
     return currentProject;
   }
 
+  // Expose the manager as a global object
   // Expose the manager as a global object
   window.projectManager = {
     // Data
