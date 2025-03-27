@@ -577,18 +577,24 @@ function handleNavigationChange() {
 // SIDEBAR MANAGEMENT
 // ---------------------------------------------------------------------
 
-function toggleSidebar() {
+window.toggleSidebar = function() {
+  console.log("Toggle sidebar called");
   const sidebarEl = document.getElementById('mainSidebar');
-  if (!sidebarEl) return;
+  if (!sidebarEl) {
+    console.error("Sidebar element not found");
+    return;
+  }
   
   const isHidden = sidebarEl.classList.contains('-translate-x-full');
+  console.log("Sidebar is currently hidden:", isHidden);
+  
   if (isHidden) {
     sidebarEl.classList.remove('-translate-x-full');
     sidebarEl.classList.add('translate-x-0');
     const backdrop = document.createElement("div");
     backdrop.id = "sidebarBackdrop";
     backdrop.className = "fixed inset-0 bg-black/50 z-40 md:hidden";
-    backdrop.onclick = toggleSidebar;
+    backdrop.onclick = window.toggleSidebar;
     document.body.appendChild(backdrop);
   } else {
     sidebarEl.classList.remove('translate-x-0');
@@ -668,7 +674,13 @@ function safeInitialize() {
 
   // Toggle sidebar
   if (elementMap.NAV_TOGGLE_BTN) {
-    elementMap.NAV_TOGGLE_BTN.addEventListener('click', toggleSidebar);
+    console.log("Setting up nav toggle button");
+    elementMap.NAV_TOGGLE_BTN.addEventListener('click', function() {
+      console.log("Nav toggle button clicked");
+      window.toggleSidebar();
+    });
+  } else {
+    console.error("Nav toggle button not found");
   }
 
   // Project search
