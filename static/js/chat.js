@@ -251,12 +251,21 @@ class MessageService {
 
       this.onSending();
 
+      const projectId = localStorage.getItem("selectedProjectId");
+      const messagePayload = {
+        content: content,
+        model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229"
+      };
+
+      if (projectId) {
+        messagePayload.project_id = projectId;  // Explicitly include project_id
+      }
+
       if (this.wsService && this.wsService.isConnected()) {
         const wsResponse = await this.wsService.send({
           type: 'message',
           chatId: this.chatId,
-          content: content,
-          model_id: localStorage.getItem("modelName") || "claude-3-7-sonnet-20250219"
+          ...messagePayload
         });
         this.onMessageReceived({
           role: 'assistant',
@@ -267,18 +276,14 @@ class MessageService {
         });
       } else {
         // HTTP fallback
-        const projectId = localStorage.getItem("selectedProjectId");
-        const url = projectId
+        const endpoint = projectId
           ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
           : `/api/chat/conversations/${this.chatId}/messages`;
 
-        const response = await fetch(url, {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: content,
-            model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229"
-          }),
+          body: JSON.stringify(messagePayload),
           credentials: 'include'
         });
 
@@ -353,15 +358,20 @@ class ConversationService {
 
     try {
       const projectId = localStorage.getItem("selectedProjectId");
-      const convUrl = projectId
-        ? `/api/projects/${projectId}/conversations/${chatId}`
-        : `/api/chat/conversations/${chatId}`;
-      const msgUrl = projectId
-        ? `/api/projects/${projectId}/conversations/${chatId}/messages`
-        : `/api/chat/conversations/${chatId}/messages`;
+      let convUrl, msgUrl;
 
-      const conversation = await this.apiRequest(convUrl);
-      const messages = await this.apiRequest(msgUrl);
+      if (projectId) {
+        convUrl = `/api/projects/${projectId}/conversations/${chatId}`;
+        msgUrl = `/api/projects/${projectId}/conversations/${chatId}/messages`;
+      } else {
+        convUrl = `/api/chat/conversations/${chatId}`;
+        msgUrl = `/api/chat/conversations/${chatId}/messages`;
+      }
+
+      // Include project_id in request if available
+      const options = projectId ? { project_id: projectId } : {};
+      const conversation = await this.apiRequest(convUrl, "GET", options);
+      const messages = await this.apiRequest(msgUrl, "GET", options);
 
       this.currentConversation = {
         id: chatId,
