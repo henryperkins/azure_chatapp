@@ -141,6 +141,13 @@ async function initAuth() {
         window.API_CONFIG.isAuthenticated = true;
       }
 
+      // Get user info from session if available
+      const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
+      const username = userInfo?.username;
+
+      // Always broadcast authenticated state when tokens exist
+      broadcastAuth(true, username);
+
       // Optionally verify from server to ensure they're still valid
       await verifyAuthState();
     } else {
@@ -258,7 +265,18 @@ function setupUIListeners() {
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
-      window.location.href = '/';
+      
+      // Instead of reloading page, which causes the blank page issue,
+      // directly update the UI and load conversations
+      if (typeof window.loadConversationList === 'function') {
+        window.loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+      }
+      if (typeof window.loadSidebarProjects === 'function') {
+        window.loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+      }
+      if (typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
+        window.createNewChat().catch(err => console.warn("Failed to create chat:", err));
+      }
     } catch (error) {
       console.error("Login failed:", error);
       notify(error.message || "Login failed", "error");
@@ -598,3 +616,9 @@ function notify(message, type = "info") {
     }
   }
 }
+
+// Ensure initAuth runs on page load
+document.addEventListener('DOMContentLoaded', () => {
+  console.log("DOMContentLoaded - Running initAuth");
+  initAuth().catch(err => console.error("Failed to initialize auth on page load:", err));
+});
