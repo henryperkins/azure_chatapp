@@ -2,6 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fix slideIn animation consistency */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+/* Fix z-index layering */
+#authDropdown {
+  z-index: 1010;
+  position: absolute;
+}
+
+#mainSidebar {
+  z-index: 999;
+}
+
+#sidebarBackdrop {
+  z-index: 998;
+}
+
+.modal {
+  z-index: 1000;
+}
+
+#notificationArea {
+  z-index: 1030;
+}
+
+/* Fix mobile sidebar handling */
+@media (max-width: 767px) {
+  #mainSidebar {
+    @apply fixed inset-0 z-50 -translate-x-full transition-transform duration-300;
+  }
+  
+  #mainSidebar.translate-x-0 {
+    @apply z-999;
+  }
+}
+
+/* Mobile-specific enhancements */
+@media (max-width: 767px) {
+  .dropdown-content {
+    position: fixed !important;
+    top: 4rem;
+    left: 1rem;
+    right: 1rem;
+    transform-origin: top center;
+  }
+}
+
 @layer components {
   /* Toggle switch component using only Tailwind classes */
   .toggle-checkbox:checked {
