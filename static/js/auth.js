@@ -237,7 +237,9 @@ function setupUIListeners() {
 
   // Login form submission
   document.getElementById("loginForm")?.addEventListener("submit", async function(e) {
-    e.preventDefault();
+    e.preventDefault(); // Make sure this is working
+    console.log("Login form submitted via JS handler"); // Add logging
+    
     const formData = new FormData(e.target);
     const username = formData.get("username");
     const password = formData.get("password");
@@ -260,8 +262,12 @@ function setupUIListeners() {
     `;
 
     try {
+      console.log("Calling loginUser with:", username);
       await loginUser(username, password);
+      console.log("Login successful");
+      
       // Hide dropdown
+      const authDropdown = document.getElementById("authDropdown");
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
@@ -358,10 +364,13 @@ async function handleRegister(formData) {
 
 async function loginUser(username, password) {
   try {
+    console.log("Making login API request");
     const data = await window.apiRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password
     });
+    console.log("Login API response:", data);
+    
     if (!data.access_token) {
       throw new Error("Invalid response from server");
     }
@@ -384,9 +393,7 @@ async function loginUser(username, password) {
 
     return data;
   } catch (error) {
-    if (!error.expected) {
-      console.error("loginUser error:", error);
-    }
+    console.error("loginUser error details:", error);
     let message = "Login failed";
     if (error.status === 401) {
       message = "Invalid username or password";
