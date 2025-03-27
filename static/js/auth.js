@@ -201,13 +201,22 @@ function setupUIListeners() {
       e.preventDefault();
       e.stopPropagation();
       console.log("Auth button clicked");
-      authDropdown.classList.toggle("hidden");
       
-      // Make sure the animation class exists in your CSS
+      // Force correct z-index and positioning
+      authDropdown.style.zIndex = "1000";
+      authDropdown.style.position = "absolute";
+      
+      // Toggle visibility directly instead of using classes
       if (authDropdown.classList.contains("hidden")) {
-        authDropdown.classList.remove("slide-in");
+        authDropdown.classList.remove("hidden");
+        setTimeout(() => {
+          authDropdown.classList.add("slide-in");
+        }, 10);
       } else {
-        authDropdown.classList.add("slide-in");
+        authDropdown.classList.remove("slide-in");
+        setTimeout(() => {
+          authDropdown.classList.add("hidden");
+        }, 200);
       }
       
       // Close any other open dropdowns
