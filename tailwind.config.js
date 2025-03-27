@@ -27,10 +27,26 @@ module.exports = {
         'count-up': 'countUp 0.3s ease-out'
       },
       keyframes: {
+        slideIn: {
+          'from': { opacity: '0', transform: 'translateY(-10px)' },
+          'to': { opacity: '1', transform: 'translateY(0)' }
+        },
         countUp: {
-          'from': { opacity: 0.5, transform: 'translateY(5px)' },
-          'to': { opacity: 1, transform: 'translateY(0)' }
+          'from': { opacity: '0.5', transform: 'translateY(5px)' },
+          'to': { opacity: '1', transform: 'translateY(0)' }
         }
+      },
+      // Add proper z-index values
+      zIndex: {
+        '60': '60',
+        '70': '70',
+        '80': '80',
+        '90': '90',
+        '100': '100',
+        'modal': '1000',
+        'dropdown': '1010',
+        'tooltip': '1020',
+        'notification': '1030'
       },
       transitionProperty: {
         'transform': 'transform'
