@@ -258,8 +258,7 @@ function setupUIListeners() {
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
-      // Reload to ensure app state picks up new tokens
-      window.location.reload();
+      window.location.href = '/';
     } catch (error) {
       console.error("Login failed:", error);
       notify(error.message || "Login failed", "error");
