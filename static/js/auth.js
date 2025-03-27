@@ -196,28 +196,48 @@ function setupUIListeners() {
 
   if (authBtn && authDropdown) {
     console.log("Setting up auth button click handler");
+    console.log("Auth button element:", authBtn);
+    console.log("Auth dropdown element:", authDropdown);
     
     authBtn.addEventListener("click", function(e) {
       e.preventDefault();
       e.stopPropagation();
-      console.log("Auth button clicked");
+      
+      console.group("Auth Button Click Debug");
+      console.log("1. Auth button clicked");
+      console.log("2. Current dropdown classes:", authDropdown.className);
+      console.log("3. Dropdown computed display:", window.getComputedStyle(authDropdown).display);
+      console.log("4. Dropdown computed visibility:", window.getComputedStyle(authDropdown).visibility);
       
       // Force correct z-index and positioning
       authDropdown.style.zIndex = "1000";
       authDropdown.style.position = "absolute";
+      console.log("5. Set z-index and position");
       
-      // Toggle visibility directly instead of using classes
+      // Clean up animation classes
+      authDropdown.classList.remove("animate-slide-in", "slide-in");
+      console.log("6. Removed animation classes");
+      
       if (authDropdown.classList.contains("hidden")) {
+        console.log("7. Dropdown is hidden - showing it");
         authDropdown.classList.remove("hidden");
+        console.log("8. Removed hidden class");
+        
         setTimeout(() => {
-          authDropdown.classList.add("slide-in");
+          console.log("9. Adding animate-slide-in class");
+          authDropdown.classList.add("animate-slide-in");
+          console.log("10. Current classes after add:", authDropdown.className);
+          console.log("11. Dropdown computed display:", window.getComputedStyle(authDropdown).display);
         }, 10);
       } else {
-        authDropdown.classList.remove("slide-in");
+        console.log("7. Dropdown is visible - hiding it");
         setTimeout(() => {
           authDropdown.classList.add("hidden");
+          console.log("8. Added hidden class");
         }, 200);
       }
+      
+      console.groupEnd();
       
       // Close any other open dropdowns
       document.querySelectorAll('.dropdown-content').forEach(dropdown => {

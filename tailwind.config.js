@@ -12,7 +12,7 @@ module.exports = {
     './static/index.html',
     './static/projects.html',
     './static/js/*.js',
-    './static/css/**/*.css',
+    './static/css/*.css',
     // If you have additional subdirectories or template files:
     '../backend/**/*.html',
     // Adjust or add paths to match your project structure:

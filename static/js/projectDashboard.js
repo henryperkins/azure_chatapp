@@ -409,21 +409,18 @@ if (typeof window !== 'undefined') {
       // Wait briefly for DOM to settle
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Additional check for required DOM elements
+      // Ensure required DOM elements exist (create if missing)
       const requiredElements = ['projectList', 'projectListView'];
       const missingElements = requiredElements.filter(id => !document.getElementById(id));
       
-      if (missingElements.length > 0) {
-        console.warn('Missing required elements:', missingElements);
-        // Create fallback containers for missing elements
-        missingElements.forEach(id => {
-          if (!document.getElementById(id)) {
-            const container = document.createElement('div');
-            container.id = id;
-            document.body.appendChild(container);
-          }
-        });
-      }
+      // Create fallback containers for missing elements
+      missingElements.forEach(id => {
+        if (!document.getElementById(id)) {
+          const container = document.createElement('div');
+          container.id = id;
+          document.body.appendChild(container);
+        }
+      });
 
       await initProjectDashboard();
     } catch (error) {
