@@ -406,6 +406,9 @@ if (typeof window !== 'undefined') {
         throw new Error('projectManager not available');
       }
 
+      // Wait briefly for DOM to settle
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       // Additional check for required DOM elements
       const requiredElements = ['projectList', 'projectListView'];
       const missingElements = requiredElements.filter(id => !document.getElementById(id));

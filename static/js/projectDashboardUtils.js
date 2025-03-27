@@ -1,85 +1,74 @@
 /**
- * Animation utilities for counters and progress bars
+ * projectDashboardUtils.js
+ * -----------------------
+ * Utility classes for the project dashboard
  */
-class AnimationUtils {
+
+// Basic utility class for UI operations
+export class UIUtils {
+  constructor() {
+    console.log('UIUtils initialized');
+  }
+
   /**
-   * Animate a counter from start to end value
+   * Create an HTML element with attributes and content
    */
-  animateCounter(element, start, end, duration = 500) {
-    if (!element) return;
+  createElement(tag, options = {}) {
+    const element = document.createElement(tag);
     
-    const startTime = performance.now();
-    const update = (timestamp) => {
-      const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const value = Math.floor(progress * (end - start) + start);
-      
-      element.textContent = value.toLocaleString();
-      
-      if (progress < 1) requestAnimationFrame(update);
-    };
+    // Set attributes
+    if (options.className) element.className = options.className;
+    if (options.id) element.id = options.id;
+    if (options.textContent !== undefined) element.textContent = options.textContent;
+    if (options.innerHTML !== undefined) element.innerHTML = options.innerHTML;
+    if (options.onclick) element.addEventListener('click', options.onclick);
     
-    requestAnimationFrame(update);
+    // Set any other attributes
+    for (const [attr, value] of Object.entries(options)) {
+      if (!['className', 'id', 'textContent', 'innerHTML', 'onclick'].includes(attr)) {
+        element.setAttribute(attr, value);
+      }
+    }
+    
+    return element;
   }
   
   /**
-   * Animate a progress bar
+   * Toggle visibility of an element
    */
-  animateProgress(element, start, end, duration = 500) {
+  toggleVisibility(element, visible) {
     if (!element) return;
     
-    const startTime = performance.now();
-    const update = (timestamp) => {
-      const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const value = start + (progress * (end - start));
-      
-      element.style.width = `${value}%`;
-      
-      if (progress < 1) requestAnimationFrame(update);
-    };
-    
-    requestAnimationFrame(update);
-  }
-}
-
-/**
- * UI utilities for common operations
- */
-class UIUtils {
-  /**
-   * Show notification
-   */
-  showNotification(message, type = "info") {
-    try {
-      if (window.showNotification) {
-        window.showNotification(message, type);
-      } else {
-        // Fallback implementation
-        const notificationArea = document.getElementById('notificationArea');
-        if (notificationArea) {
-          const notification = document.createElement('div');
-          notification.className = `notification ${type}`;
-          notification.textContent = message;
-          notification.classList.add('animate-slide-in');
-          notificationArea.appendChild(notification);
-          
-          // Auto-remove after 5 seconds
-          setTimeout(() => {
-            notification.remove();
-          }, 5000);
-        } else {
-          console.log(`[${type}] ${message}`);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to show notification:', err);
-      console.log(`[${type}] ${message}`);
+    if (visible) {
+      element.classList.remove('hidden');
+    } else {
+      element.classList.add('hidden');
     }
   }
   
   /**
-   * Format file size
+   * Format a number with commas
+   */
+  formatNumber(number) {
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  
+  /**
+   * Format a date string to a human-readable format
+   */
+  formatDate(dateString) {
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    } catch (e) {
+      return dateString;
+    }
+  }
+  
+  /**
+   * Format file size in bytes to human-readable format
    */
   formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
@@ -87,257 +76,217 @@ class UIUtils {
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   }
   
   /**
-   * Format date
-   */
-  formatDate(date, includeTime = false) {
-    if (!date) return '';
-    
-    const d = new Date(date);
-    const options = {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    };
-    
-    if (includeTime) {
-      options.hour = '2-digit';
-      options.minute = '2-digit';
-    }
-    
-    return d.toLocaleDateString(undefined, options);
-  }
-  
-  /**
-   * Format large numbers
-   */
-  formatNumber(num) {
-    return num.toLocaleString();
-  }
-  
-  /**
-   * Create DOM element
-   */
-  createElement(type, attributes = {}, children = []) {
-    const element = document.createElement(type);
-    
-    // Set attributes
-    Object.entries(attributes).forEach(([key, value]) => {
-      if (key === 'class' || key === 'className') {
-        element.className = value;
-      } else if (key === 'style' && typeof value === 'object') {
-        Object.entries(value).forEach(([prop, val]) => {
-          element.style[prop] = val;
-        });
-      } else if (key.startsWith('on') && typeof value === 'function') {
-        const eventType = key.substring(2).toLowerCase();
-        element.addEventListener(eventType, value);
-      } else if (key === 'textContent') {
-        element.textContent = value;
-      } else if (key === 'innerHTML') {
-        element.innerHTML = value;
-      } else {
-        element.setAttribute(key, value);
-      }
-    });
-    
-    // Add children
-    if (typeof children === 'string') {
-      element.textContent = children;
-    } else if (Array.isArray(children)) {
-      children.forEach(child => {
-        if (typeof child === 'string') {
-          element.appendChild(document.createTextNode(child));
-        } else if (child instanceof HTMLElement) {
-          element.appendChild(child);
-        }
-      });
-    }
-    
-    return element;
-  }
-  
-  /**
-   * Get file icon based on file type
+   * Get an icon based on file type
    */
   fileIcon(fileType) {
-    const icons = {
-      pdf: '📄',
-      doc: '📝',
-      docx: '📝',
-      txt: '📄',
-      csv: '📊',
-      json: '📊',
-      jpg: '🖼️',
-      jpeg: '🖼️',
-      png: '🖼️',
-      default: '📄'
+    const iconMap = {
+      'pdf': '📄',
+      'doc': '📝',
+      'docx': '📝',
+      'txt': '📄',
+      'csv': '📊',
+      'json': '📋',
+      'md': '📄',
+      'xlsx': '📊',
+      'pptx': '📊',
+      'html': '🌐',
+      'jpg': '🖼️',
+      'jpeg': '🖼️',
+      'png': '🖼️'
     };
     
-    return icons[fileType?.toLowerCase()] || icons.default;
+    return iconMap[fileType] || '📄';
   }
   
   /**
-   * Get artifact icon based on content type
+   * Show a notification
    */
-  artifactIcon(contentType) {
-    const icons = {
-      code: '📝',
-      document: '📄',
-      image: '🖼️',
-      default: '📦'
-    };
-    
-    return icons[contentType?.toLowerCase()] || icons.default;
-  }
-  
-  /**
-   * Escape HTML to prevent XSS
-   */
-  escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>"']/g, (m) => {
-      return {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-      }[m];
-    });
-  }
-
-  /**
-   * Toggle element visibility by adding/removing the 'hidden' class
-   */
-  toggleVisibility(elementOrId, isVisible) {
-    const el = typeof elementOrId === 'string' 
-      ? document.getElementById(elementOrId) 
-      : elementOrId;
-    if (el) {
-      el.classList.toggle('hidden', !isVisible);
+  showNotification(message, type = "info") {
+    const notificationArea = document.getElementById('notificationArea');
+    if (!notificationArea) {
+      console.error('Notification area not found');
+      return;
     }
+    
+    const notification = document.createElement('div');
+    notification.className = `p-3 mb-2 rounded shadow-md transition-all duration-300 transform translate-x-0 opacity-100 flex items-center justify-between`;
+    
+    // Style based on type
+    switch (type) {
+      case 'success':
+        notification.classList.add('bg-green-100', 'text-green-800', 'border-green-300');
+        break;
+      case 'error':
+        notification.classList.add('bg-red-100', 'text-red-800', 'border-red-300');
+        break;
+      case 'warning':
+        notification.classList.add('bg-yellow-100', 'text-yellow-800', 'border-yellow-300');
+        break;
+      default:
+        notification.classList.add('bg-blue-100', 'text-blue-800', 'border-blue-300');
+    }
+    
+    notification.innerHTML = `
+      <div class="mr-2">${message}</div>
+      <button class="text-gray-500 hover:text-gray-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    `;
+    
+    // Add close handler
+    notification.querySelector('button').addEventListener('click', () => {
+      notification.classList.add('opacity-0', 'translate-x-full');
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    });
+    
+    notificationArea.appendChild(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.classList.add('opacity-0', 'translate-x-full');
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   }
 }
 
-/**
- * Modal Manager for handling modal displays
- */
-class ModalManager {
+// Animation utility
+export class AnimationUtils {
   constructor() {
-    this.registry = {
-      project: "projectFormModal",
-      instructions: "instructionsModal",
-      confirm: "deleteConfirmModal",
-      content: "contentViewModal",
-      knowledge: "knowledgeBaseSettingsModal"
+    console.log('AnimationUtils initialized');
+  }
+  
+  /**
+   * Animate a progress bar
+   */
+  animateProgress(element, fromPercent, toPercent, duration = 500) {
+    if (!element) return;
+    
+    const start = performance.now();
+    const change = toPercent - fromPercent;
+    
+    function update(timestamp) {
+      const elapsed = timestamp - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const currentValue = fromPercent + change * progress;
+      
+      element.style.width = `${currentValue}%`;
+      
+      if (progress < 1) {
+        requestAnimationFrame(update);
+      }
+    }
+    
+    requestAnimationFrame(update);
+  }
+}
+
+// Modal manager utility
+export class ModalManager {
+  constructor() {
+    this.modals = {
+      project: document.getElementById('projectFormModal'),
+      instructions: document.getElementById('instructionsModal'),
+      delete: document.getElementById('deleteConfirmModal'),
+      knowledge: document.getElementById('projectFilesModal')
     };
+    
+    console.log('ModalManager initialized with modals:', Object.keys(this.modals));
   }
   
   /**
    * Show a modal by ID
    */
-  show(id, data = {}) {
-    const modalId = this.registry[id] || id;
-    const modal = document.getElementById(modalId);
-    if (!modal) return null;
-    
-    // Handle specific modal types
-    if (id === "project" && data.project) {
-      this._populateProjectForm(data.project);
-    } else if (id === "content" && data.content) {
-      this._setContentModalData(data.title, data.content);
+  show(modalId) {
+    const modal = this.modals[modalId];
+    if (!modal) {
+      console.error(`Modal with ID "${modalId}" not found`);
+      return;
     }
     
-    modal.classList.remove("hidden");
-    return modal;
+    modal.classList.remove('hidden');
   }
   
   /**
    * Hide a modal by ID
    */
-  hide(id) {
-    const modalId = this.registry[id] || id;
-    document.getElementById(modalId)?.classList.add("hidden");
-  }
-  
-  /**
-   * Show project form
-   */
-  showProjectForm(project = null) {
-    this._populateProjectForm(project);
-    this.show("project");
+  hide(modalId) {
+    const modal = this.modals[modalId];
+    if (!modal) {
+      console.error(`Modal with ID "${modalId}" not found`);
+      return;
+    }
+    
+    modal.classList.add('hidden');
   }
   
   /**
    * Show a confirmation dialog
    */
-  confirmAction(options) {
-    const {
-      title = "Confirm Action",
-      message = "Are you sure you want to proceed with this action?",
-      confirmText = "Confirm",
-      cancelText = "Cancel",
-      confirmClass = "bg-blue-600",
-      onConfirm = () => {},
-      onCancel = () => {}
-    } = options;
+  static confirmAction(config) {
+    const modal = document.getElementById('deleteConfirmModal');
+    if (!modal) {
+      console.error('Confirmation modal not found');
+      return;
+    }
     
-    const modal = document.getElementById(this.registry.confirm);
-    if (!modal) return;
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    const cancelBtn = document.getElementById('cancelDeleteBtn');
+    const confirmText = document.getElementById('deleteConfirmText');
     
-    // Update content
-    document.getElementById("confirmActionTitle").textContent = title;
-    document.getElementById("confirmActionContent").textContent = message;
-    document.getElementById("confirmActionBtn").textContent = confirmText;
-    document.getElementById("confirmActionBtn").className = `px-4 py-2 rounded text-white hover:bg-opacity-90 ${confirmClass}`;
-    document.getElementById("confirmCancelBtn").textContent = cancelText;
+    // Set text
+    if (confirmText) {
+      confirmText.textContent = config.message || 'Are you sure you want to delete this item?';
+    }
     
-    // Set up event handlers
-    document.getElementById("confirmActionBtn").onclick = () => {
-      onConfirm();
-      this.hide("confirm");
-    };
+    // Set button text
+    if (confirmBtn) {
+      confirmBtn.textContent = config.confirmText || 'Delete';
+      confirmBtn.className = config.confirmClass || 'px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700';
+    }
     
-    document.getElementById("confirmCancelBtn").onclick = () => {
-      onCancel();
-      this.hide("confirm");
-    };
+    if (cancelBtn) {
+      cancelBtn.textContent = config.cancelText || 'Cancel';
+    }
     
-    modal.classList.remove("hidden");
-    return modal;
-  }
-  
-  // Helper methods
-  _populateProjectForm(project) {
-    const formTitle = document.getElementById("projectFormTitle");
-    const idInput = document.getElementById("projectIdInput");
-    const nameInput = document.getElementById("projectNameInput");
-    const descInput = document.getElementById("projectDescInput");
-    const goalsInput = document.getElementById("projectGoalsInput");
-    const maxTokensInput = document.getElementById("projectMaxTokensInput");
+    // Clear previous handlers
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
     
-    if (formTitle) formTitle.textContent = project ? "Edit Project" : "Create Project";
-    if (idInput) idInput.value = project ? project.id : "";
-    if (nameInput) nameInput.value = project ? project.name || "" : "";
-    if (descInput) descInput.value = project ? project.description || "" : "";
-    if (goalsInput) goalsInput.value = project ? project.goals || "" : "";
-    if (maxTokensInput) maxTokensInput.value = project ? project.max_tokens || 200000 : 200000;
-  }
-  
-  _setContentModalData(title, content) {
-    const titleEl = document.getElementById("contentViewModalTitle");
-    const contentEl = document.getElementById("contentViewModalContent");
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
     
-    if (titleEl) titleEl.textContent = title || "Content";
-    if (contentEl) contentEl.innerHTML = content || "";
+    // Set new handlers
+    newConfirmBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      if (config.onConfirm) config.onConfirm();
+    });
+    
+    newCancelBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      if (config.onCancel) config.onCancel();
+    });
+    
+    // Show modal
+    modal.classList.remove('hidden');
   }
 }
 
-// Export the utility classes
-export { AnimationUtils, UIUtils, ModalManager };
+// Export for usage in other modules
+export default { UIUtils, AnimationUtils, ModalManager };

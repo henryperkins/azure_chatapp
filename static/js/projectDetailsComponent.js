@@ -1,9 +1,59 @@
-// Import necessary utility classes directly using ES module syntax
-import {
-  UIUtils as UIUtilsClass,
-  AnimationUtils as AnimationUtilsClass,
-  ModalManager
-} from './projectDashboardUtils.js';
+// Define utility classes with fallbacks
+// Using regular imports so we don't need top-level await
+import { UIUtils, AnimationUtils, ModalManager } from './projectDashboardUtils.js';
+
+// Fallback classes if the imports don't work
+class FallbackUIUtils {
+  constructor() { 
+    console.log('Fallback UIUtils created in projectDetailsComponent'); 
+  }
+  toggleVisibility(element, visible) {
+    if (!element) return;
+    element.classList.toggle('hidden', !visible);
+  }
+  createElement(tag, options = {}) {
+    const el = document.createElement(tag);
+    if (options.className) el.className = options.className;
+    if (options.textContent) el.textContent = options.textContent;
+    if (options.innerHTML) el.innerHTML = options.innerHTML;
+    if (options.onclick) el.addEventListener('click', options.onclick);
+    return el;
+  }
+  formatNumber(num) { return num?.toString() || '0'; }
+  formatDate(date) { return date || ''; }
+  formatBytes(bytes) { return (bytes || 0) + ' bytes'; }
+  fileIcon() { return '📄'; }
+  showNotification(msg, type) { 
+    console.log(`${type}: ${msg}`);
+    if (window.showNotification) {
+      window.showNotification(msg, type);
+    } else {
+      alert(`${type}: ${msg}`);
+    }
+  }
+}
+
+class FallbackAnimationUtils {
+  constructor() { 
+    console.log('Fallback AnimationUtils created in projectDetailsComponent'); 
+  }
+  animateProgress(el, from, to) { 
+    if (el) el.style.width = to + '%'; 
+  }
+}
+
+// Try to use the imported classes, fall back to our defined ones if they don't exist
+const UIUtilsClass = UIUtils || FallbackUIUtils;
+const AnimationUtilsClass = AnimationUtils || FallbackAnimationUtils;
+const ModalManagerClass = ModalManager || class {
+  static confirmAction(config) {
+    if (confirm(config.message || 'Are you sure?')) {
+      config.onConfirm?.();
+    } else {
+      config.onCancel?.();
+    }
+  }
+};
 
 // Create instances of utility classes for use within this module
 const uiUtilsInstance = new UIUtilsClass();
@@ -453,12 +503,29 @@ class ProjectDetailsComponent {
       return Promise.all(
         validFiles.map(file => {
           return window.projectManager?.uploadFile(projectId, file)
-            .then(() => {
+            .then(response => {
+              console.log(`Upload successful for ${file.name}:`, response);
               this.fileUploadStatus.completed++;
               this.updateUploadProgress();
             })
             .catch(error => {
-              uiUtilsInstance.showNotification(`Failed to upload ${file.name}: ${error.message}`, 'error');
+              console.error(`Upload error for ${file.name}:`, error);
+              
+              // Determine the specific error message based on error type
+              let errorMessage = error.message || "Upload failed";
+              
+              // Handle specific error types
+              if (errorMessage.includes("validation") || errorMessage.includes("format")) {
+                errorMessage = "File format not supported or validation failed";
+              } else if (errorMessage.includes("too large")) {
+                errorMessage = "File exceeds size limit";
+              } else if (errorMessage.includes("token")) {
+                errorMessage = "Project token limit exceeded";
+              } else if (error.response?.status === 422) {
+                errorMessage = "File validation failed - unsupported format or content";
+              }
+              
+              uiUtilsInstance.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
               this.fileUploadStatus.failed++;
               this.fileUploadStatus.completed++;
               this.updateUploadProgress();
