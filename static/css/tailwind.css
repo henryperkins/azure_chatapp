@@ -45,7 +45,7 @@
   }
   
   #mainSidebar.translate-x-0 {
-    @apply z-999;
+    z-index: 999;
   }
 }
 
