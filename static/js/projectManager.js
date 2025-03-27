@@ -144,17 +144,31 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
    */
   function loadProjectDetails(projectId) {
     // Always use the standard API endpoint format for consistency
-    const projectEndpoint = `/api/projects/${projectId}`;
+    const projectEndpoint = `/api/projects/${projectId}/`;
     console.log(`[ProjectManager] Loading project details from ${projectEndpoint}`);
       
     window.apiRequest(projectEndpoint, "GET")
       .then((response) => {
-        if (!response || !response.data) {
+        // Handle different response formats
+        let projectData = null;
+        
+        if (response?.data) {
+          // Format: { data: { project details } }
+          projectData = response.data;
+        } else if (response?.success && response?.data) {
+          // Format: { success: true, data: { project details } }
+          projectData = response.data;
+        } else if (response?.id) {
+          // Format: { id: "uuid", name: "project name", ... }
+          projectData = response;
+        }
+        
+        if (!projectData || !projectData.id) {
           console.error("Invalid response format:", response);
           throw new Error("Invalid response format");
         }
         
-        currentProject = response.data;
+        currentProject = projectData;
         console.log(`[ProjectManager] Project loaded successfully:`, currentProject);
         localStorage.setItem('selectedProjectId', currentProject.id); // Store projectId
         
