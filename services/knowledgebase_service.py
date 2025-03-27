@@ -382,9 +382,14 @@ async def _save_file_and_create_record(
                         load_existing=True
                     )
                 
+                    # Ensure we have file content for processing
                     file_content = file_info["contents"]
-                    if not file_content and file_info["file_size"] > STREAM_THRESHOLD:
+                    if not file_content or len(file_content) == 0:
+                        # Reset file pointer and read content if needed
+                        await file.seek(0)
                         file_content = await file.read()
+                        # Store content for possible later use
+                        file_info["contents"] = file_content
                 
                     search_results = await process_file_for_search(
                         project_file=pf,
@@ -434,9 +439,10 @@ async def validate_knowledge_usage(
 ) -> None:
     """Validate project has enough token capacity for KB operations"""
     if project.token_usage + additional_tokens > project.max_tokens:
-        raise ValueError(
-            f"Knowledge operation requires {additional_tokens} tokens but only "
-            f"{project.max_tokens - project.token_usage} available"
+        raise HTTPException(
+            status_code=422,  # Use 422 Unprocessable Entity for validation failures
+            detail=f"Knowledge operation requires {additional_tokens} tokens but only "
+                  f"{project.max_tokens - project.token_usage} available"
         )
 
 async def upload_file_to_project(
@@ -478,56 +484,9 @@ async def upload_file_to_project(
         process_for_search=process_for_search
     )
 
-    # 5. Optionally index for search
-    if process_for_search:
-        # Retrieve vector DB
-        model_name = (
-            project.knowledge_base.embedding_model
-            if project.knowledge_base
-            else DEFAULT_EMBEDDING_MODEL
-        )
-        vector_db = await get_vector_db(
-            model_name=model_name,
-            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-            load_existing=True
-        )
-
-        # Reuse existing process_file_for_search from vector_db.py
-        file_content = file_info["contents"]
-        if not file_content and file_info["file_size"] > STREAM_THRESHOLD:
-            file_content = await file.read()  # for large file streaming fallback
-
-        # Check if file was previously indexed
-        existing_chunks = 0
-        if project_file.metadata and 'search_processing' in project_file.metadata:
-            existing_chunks = project_file.metadata['search_processing'].get('chunk_count', 0)
-        
-        # Initialize with default failure state
-        search_results = {"success": False}
-        
-        # Only process if new (existing_chunks == 0) or if we're forcing reindex (process_for_search=True)
-        if existing_chunks == 0 or process_for_search:
-            search_results = await process_file_for_search(
-                project_file=project_file,
-                vector_db=vector_db,
-                file_content=file_content,
-                chunk_size=DEFAULT_CHUNK_SIZE,
-                chunk_overlap=DEFAULT_CHUNK_OVERLAP
-            )
-
-        if search_results.get("success"):
-            # Save chunk indexing info into file metadata
-            pf_metadata = project_file.metadata or {}
-            pf_metadata["search_processing"] = {
-                "success": True,
-                "chunk_count": search_results["chunk_count"],
-                "added_ids": search_results["added_ids"],
-                "processed_at": datetime.utcnow().isoformat()
-            }
-            project_file.metadata = pf_metadata
-            await db.commit()
-        else:
-            logger.warning(f"Search indexing failed for file {project_file.id}: {search_results.get('error')}")
+    # We don't need to reprocess the file for search here as it was already done in _save_file_and_create_record
+    # if that was requested. This avoids duplicate processing and potential race conditions.
+    # Just return the result with the file metadata.
 
     return {
         "message": "File uploaded successfully",

@@ -1,9 +1,71 @@
-// Import necessary utility classes directly using ES module syntax
-import {
-  UIUtils as UIUtilsClass,
-  AnimationUtils as AnimationUtilsClass,
-  ModalManager as ModalManagerClass
-} from './projectDashboardUtils.js';
+// Define utility classes with fallbacks
+// Using regular imports so we don't need top-level await
+import { UIUtils, AnimationUtils, ModalManager } from './projectDashboardUtils.js';
+
+// Fallback classes if the imports don't work
+class FallbackUIUtils {
+  constructor() { 
+    console.log('Fallback UIUtils created'); 
+  }
+  toggleVisibility(element, visible) {
+    if (!element) return;
+    element.classList.toggle('hidden', !visible);
+  }
+  createElement(tag, options = {}) {
+    const el = document.createElement(tag);
+    if (options.className) el.className = options.className;
+    if (options.textContent) el.textContent = options.textContent;
+    if (options.innerHTML) el.innerHTML = options.innerHTML;
+    if (options.onclick) el.addEventListener('click', options.onclick);
+    return el;
+  }
+  formatNumber(num) { return num?.toString() || '0'; }
+  formatDate(date) { return date || ''; }
+  formatBytes(bytes) { return (bytes || 0) + ' bytes'; }
+  fileIcon() { return '📄'; }
+  showNotification(msg, type) { 
+    console.log(`${type}: ${msg}`);
+    if (window.showNotification) {
+      window.showNotification(msg, type);
+    } else {
+      alert(`${type}: ${msg}`);
+    }
+  }
+}
+
+class FallbackAnimationUtils {
+  constructor() { 
+    console.log('Fallback AnimationUtils created'); 
+  }
+  animateProgress(el, from, to) { 
+    if (el) el.style.width = to + '%'; 
+  }
+}
+
+class FallbackModalManager {
+  constructor() { 
+    console.log('Fallback ModalManager created'); 
+    this.modals = {};
+  }
+  show(id) { 
+    document.getElementById(id)?.classList.remove('hidden'); 
+  }
+  hide(id) { 
+    document.getElementById(id)?.classList.add('hidden'); 
+  }
+  static confirmAction(config) {
+    if (confirm(config.message || 'Are you sure?')) {
+      if (config.onConfirm) config.onConfirm();
+    } else {
+      if (config.onCancel) config.onCancel();
+    }
+  }
+}
+
+// Try to use the imported classes, fall back to our defined ones if they don't exist
+const UIUtilsClass = UIUtils || FallbackUIUtils;
+const AnimationUtilsClass = AnimationUtils || FallbackAnimationUtils;
+const ModalManagerClass = ModalManager || FallbackModalManager;
 
 // Create instances of utility classes for use within this module
 const uiUtilsInstance = new UIUtilsClass();
@@ -67,11 +129,18 @@ class KnowledgeBaseComponent {
       
       const form = e.target;
       const formData = new FormData(form);
-      // Get project ID - fail if not available
-      const projectId = window.projectManager?.currentProject?.id;
+      // Get project ID from multiple possible sources
+      const projectId = localStorage.getItem('selectedProjectId') ||
+                       window.projectManager?.currentProject?.id;
+      
       if (!projectId) {
-        uiUtilsInstance.showNotification("Please open a project before setting up knowledge base", "error");
+        uiUtilsInstance.showNotification("Please select a project first", "error");
         window.modalManager?.hide("knowledge");
+        console.error('No project ID found in:', {
+          localStorage: localStorage.getItem('selectedProjectId'),
+          projectManager: window.projectManager?.currentProject,
+          pathname: window.location.pathname
+        });
         return;
       }
 
@@ -223,7 +292,19 @@ class KnowledgeBaseComponent {
       window.projectManager.loadProjectFiles(projectId);
       window.projectManager.loadProjectStats(projectId);
     } catch (error) {
-      uiUtilsInstance.showNotification("Failed to reprocess files", "error");
+      // Handle specific status codes
+      const status = error?.response?.status;
+      let errorMessage = "Failed to reprocess files";
+      
+      if (status === 422) {
+        errorMessage = "Cannot process files: validation failed";
+      } else if (status === 404) {
+        errorMessage = "Project or knowledge base not found";
+      } else if (error?.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      
+      uiUtilsInstance.showNotification(errorMessage, "error");
       console.error("Reprocessing error:", error);
     }
   }

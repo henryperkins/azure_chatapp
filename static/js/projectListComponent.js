@@ -1,9 +1,59 @@
-// Import necessary utility classes directly using ES module syntax
-import {
-  UIUtils as UIUtilsClass,
-  AnimationUtils as AnimationUtilsClass,
-  ModalManager
-} from './projectDashboardUtils.js';
+// Define utility classes with fallbacks
+// Using regular imports so we don't need top-level await
+import { UIUtils, AnimationUtils, ModalManager } from './projectDashboardUtils.js';
+
+// Fallback classes if the imports don't work
+class FallbackUIUtils {
+  constructor() { 
+    console.log('Fallback UIUtils created in projectListComponent'); 
+  }
+  toggleVisibility(element, visible) {
+    if (!element) return;
+    element.classList.toggle('hidden', !visible);
+  }
+  createElement(tag, options = {}) {
+    const el = document.createElement(tag);
+    if (options.className) el.className = options.className;
+    if (options.textContent) el.textContent = options.textContent;
+    if (options.innerHTML) el.innerHTML = options.innerHTML;
+    if (options.onclick) el.addEventListener('click', options.onclick);
+    return el;
+  }
+  formatNumber(num) { return num?.toString() || '0'; }
+  formatDate(date) { return date || ''; }
+  formatBytes(bytes) { return (bytes || 0) + ' bytes'; }
+  fileIcon() { return '📄'; }
+  showNotification(msg, type) { 
+    console.log(`${type}: ${msg}`);
+    if (window.showNotification) {
+      window.showNotification(msg, type);
+    } else {
+      alert(`${type}: ${msg}`);
+    }
+  }
+}
+
+class FallbackAnimationUtils {
+  constructor() { 
+    console.log('Fallback AnimationUtils created in projectListComponent'); 
+  }
+  animateProgress(el, from, to) { 
+    if (el) el.style.width = to + '%'; 
+  }
+}
+
+// Try to use the imported classes, fall back to our defined ones if they don't exist
+const UIUtilsClass = UIUtils || FallbackUIUtils;
+const AnimationUtilsClass = AnimationUtils || FallbackAnimationUtils;
+const ModalManagerClass = ModalManager || class {
+  static confirmAction(config) {
+    if (confirm(config.message || 'Are you sure?')) {
+      config.onConfirm?.();
+    } else {
+      config.onCancel?.();
+    }
+  }
+};
 
 // Create instances of utility classes for use within this module
 const uiUtilsInstance = new UIUtilsClass();
