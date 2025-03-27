@@ -204,7 +204,7 @@ export class ModalManager {
       project: document.getElementById('projectFormModal'),
       instructions: document.getElementById('instructionsModal'),
       delete: document.getElementById('deleteConfirmModal'),
-      knowledge: document.getElementById('projectFilesModal')
+      knowledge: document.getElementById('knowledgeBaseSettingsModal')
     };
     
     console.log('ModalManager initialized with modals:', Object.keys(this.modals));

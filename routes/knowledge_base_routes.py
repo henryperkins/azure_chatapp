@@ -10,7 +10,7 @@ Provides endpoints for:
 
 import logging
 import os
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from uuid import UUID
 
 from fastapi import (
@@ -23,7 +23,6 @@ from fastapi import (
     UploadFile,
     File
 )
-from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select, update, func
@@ -95,7 +94,7 @@ class SearchRequest(BaseModel):
 # Knowledge Base Endpoints
 # ============================
 
-@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/knowledge-bases", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_knowledge_base(
     knowledge_base_data: KnowledgeBaseCreate,
     current_user: User = Depends(get_current_user_and_token),
@@ -143,7 +142,7 @@ async def create_knowledge_base(
         raise HTTPException(status_code=500, detail=f"Failed to create knowledge base: {str(e)}")
 
 
-@router.get("", response_model=dict)
+@router.get("/knowledge-bases", response_model=dict)
 async def list_knowledge_bases(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
@@ -192,7 +191,7 @@ async def list_knowledge_bases(
         )
 
 
-@router.get("/{knowledge_base_id}", response_model=dict)
+@router.get("/knowledge-bases/{knowledge_base_id}", response_model=dict)
 async def get_knowledge_base(
     knowledge_base_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -231,7 +230,7 @@ async def get_knowledge_base(
         raise HTTPException(status_code=500, detail=f"Error retrieving knowledge base: {str(e)}")
 
 
-@router.patch("/{knowledge_base_id}", response_model=dict)
+@router.patch("/knowledge-bases/{knowledge_base_id}", response_model=dict)
 async def update_knowledge_base(
     knowledge_base_id: UUID,
     update_data: KnowledgeBaseUpdate,
@@ -282,7 +281,7 @@ async def update_knowledge_base(
         raise HTTPException(status_code=500, detail=f"Error updating knowledge base: {str(e)}")
 
 
-@router.delete("/{knowledge_base_id}", response_model=dict)
+@router.delete("/knowledge-bases/{knowledge_base_id}", response_model=dict)
 async def delete_knowledge_base(
     knowledge_base_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -317,7 +316,7 @@ async def delete_knowledge_base(
 # Search Endpoints
 # ============================
 
-@router.post("/projects/{project_id}/search", response_model=dict)
+@router.post("/projects/{project_id}/knowledge-bases/search", response_model=dict)
 @limiter.limit("10/minute")
 async def search_project_knowledge(
     request: Request,
@@ -360,7 +359,7 @@ async def search_project_knowledge(
         raise HTTPException(status_code=500, detail=f"Error searching project knowledge: {str(e)}")
 
 
-@router.get("/{knowledge_base_id}/health", response_model=dict)
+@router.get("/knowledge-bases/{knowledge_base_id}/health", response_model=dict)
 async def get_knowledge_base_health(
     knowledge_base_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -374,8 +373,8 @@ async def get_knowledge_base_health(
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     # Get vector DB status
-    vector_db = await get_vector_db(
-        model_name=kb.embedding_model,
+    _ = await get_vector_db(
+        model_name=kb.embedding_model or "all-MiniLM-L6-v2",  # Provide default if None
         storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(kb.project_id)),
         load_existing=True
     )
@@ -396,7 +395,7 @@ async def get_knowledge_base_health(
     }
 
 
-@router.post("/projects/{project_id}/knowledgebase/files", response_model=dict)
+@router.post("/projects/{project_id}/knowledge-bases/files", response_model=dict)
 async def upload_file_to_knowledge_base(
     project_id: UUID,
     file: UploadFile = File(...),
@@ -455,7 +454,7 @@ async def upload_file_to_knowledge_base(
         )
 
 
-@router.post("/projects/{project_id}/toggle", response_model=dict)
+@router.post("/projects/{project_id}/knowledge-bases/toggle", response_model=dict)
 async def toggle_project_knowledge_base(
     project_id: UUID,
     enable: bool = Body(..., embed=True),

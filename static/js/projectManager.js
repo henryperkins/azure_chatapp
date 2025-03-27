@@ -63,7 +63,7 @@ if (cleanFilter) params.append('filter', cleanFilter);
 params.append('skip', '0');
 params.append('limit', '100');
 
-const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
+const endpoint = `/api/projects/`.replace(/^https?:\/\/[^/]+/i, '');
 console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
   headers: TokenManager.getAuthHeader()
 });
@@ -375,7 +375,7 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
     
     // Add any required metadata fields to formData
     formData.append('project_id', projectId);
-    
+    return window.apiRequest(`/api/projects/${projectId}/knowledge-bases/files`, "POST", formData)
     return window.apiRequest(`/api/projects/${projectId}/knowledgebase/files`, "POST", formData)
     .then((response) => {
       console.log("File upload response:", response);
