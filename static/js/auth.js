@@ -195,11 +195,21 @@ function setupUIListeners() {
   const authDropdown = document.getElementById("authDropdown");
 
   if (authBtn && authDropdown) {
-    authBtn.addEventListener("click", (e) => {
+    console.log("Setting up auth button click handler");
+    
+    authBtn.addEventListener("click", function(e) {
       e.preventDefault();
       e.stopPropagation();
+      console.log("Auth button clicked");
       authDropdown.classList.toggle("hidden");
-      authDropdown.classList.toggle("slide-in");
+      
+      // Make sure the animation class exists in your CSS
+      if (authDropdown.classList.contains("hidden")) {
+        authDropdown.classList.remove("slide-in");
+      } else {
+        authDropdown.classList.add("slide-in");
+      }
+      
       // Close any other open dropdowns
       document.querySelectorAll('.dropdown-content').forEach(dropdown => {
         if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
