@@ -460,9 +460,12 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
    * for project conversations. This helps adapt to different backend configurations.
    */
   function checkProjectApiEndpoint(projectId) {
-    return window.apiRequest(`/api/projects/${projectId}`, "GET")
+    if (!projectId) {
+      return Promise.reject(new Error('Project ID is required'));
+    }
+    return window.apiRequest(`/api/projects/${projectId}/`, "GET")
       .then(() => {
-        console.log("API endpoint format is /api/projects/{id}");
+        console.log("API endpoint format is /api/projects/{id}/");
         return "standard";
       })
       .catch(() => {
@@ -478,10 +481,17 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
       });
   }
 
+  /**
+   * Get the current project object
+   */
+  function getCurrentProject() {
+    return currentProject;
+  }
+
   // Expose the manager as a global object
   window.projectManager = {
     // Data
-    currentProject,
+    currentProject: getCurrentProject,
     // Loads
     loadProjects,
     loadProjectDetails,
