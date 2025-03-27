@@ -2,62 +2,106 @@
 project_service.py
 ------------------
 Centralizes logic for validating and retrieving project records.
-We provide two different helpers for backwards compatibility:
-
-• get_valid_project(project_id: int, user: User, db: AsyncSession) - For cases where the code still expects an integer project_id
-  - Accepts a User object, from which we extract user.id
-
-• validate_project_access(project_id: UUID, user: User, db: AsyncSession) -> Project
-  - For cases using a UUID-based project ID
-  - Also accepts a User object, from which we extract user.id
+We now clarify:
+ - How to handle archived projects (400 vs. 403 vs. 422).
+ - A 'get_valid_project' for integer-based IDs (legacy).
+ - A 'validate_project_access' for UUID-based IDs (preferred).
 """
+
 from uuid import UUID
 from typing import Optional, Any, List, Dict, Type
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import asc, desc
+
 from models.project import Project
 from models.user import User
 from models.knowledge_base import KnowledgeBase
-from sqlalchemy import asc, desc
-from fastapi import HTTPException
-from uuid import UUID
+from models.conversation import Conversation
+from models.artifact import Artifact
+
+# =======================================================
+#  Knowledge Base Validation
+# =======================================================
 
 async def validate_knowledge_base_access(
     project_id: UUID,
     knowledge_base_id: UUID,
     db: AsyncSession
 ) -> KnowledgeBase:
-    """Validate KB exists, is active and belongs to project"""
+    """
+    Validate KB exists, is active, and belongs to the given project.
+    Raises 404 if project or KB not found, 400 if KB isn't active or mismatched.
+    """
     project = await db.get(Project, project_id)
     if not project:
-        raise HTTPException(404, "Project not found")
-    
+        raise HTTPException(status_code=404, detail="Project not found")
+
     kb = await db.get(KnowledgeBase, knowledge_base_id)
-    if not kb or not kb.is_active or kb.id != project.knowledge_base_id:
-        raise HTTPException(400, "Knowledge base not available for this project")
+    # kb.is_active ensures we can't use an inactive knowledge base
+    if not kb or not kb.is_active or (kb.id != project.knowledge_base_id):
+        raise HTTPException(status_code=400, detail="Knowledge base not available for this project")
+
     return kb
 
-async def validate_project_access(project_id: UUID, user: User, db: AsyncSession) -> Project:
+# =======================================================
+#  Project Access
+# =======================================================
+
+async def validate_project_access(
+    project_id: UUID,
+    user: User,
+    db: AsyncSession
+) -> Project:
     """
-    Ensures the project with UUID-based ID belongs to the user and is not archived.
-    Raises HTTPException on access issues.
+    Ensures the project with UUID-based ID belongs to the user
+    and is not archived. Raises 404 if not found, 400 if archived.
     """
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id, Project.user_id == user.id)
+        select(Project).where(Project.id == project_id, Project.user_id == user.id)
     )
     project = result.scalars().first()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found or unauthorized access")
-    
+
     if project.archived:
         raise HTTPException(status_code=400, detail="Project is archived")
-    
+
     return project
 
-async def get_default_project(user: User, db: AsyncSession) -> Project:
+async def get_valid_project(
+    project_id: int,
+    user: User,
+    db: AsyncSession
+) -> Project:
+    """
+    Legacy approach for integer-based project IDs. 
+    Some older code may still rely on an int ID. 
+    Raises 404 if not found, 400 if archived.
+    """
+    result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.user_id == user.id)
+    )
+    project = result.scalars().first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or unauthorized access")
+
+    if project.archived:
+        raise HTTPException(status_code=400, detail="Project is archived")
+
+    return project
+
+# =======================================================
+#  Default Project
+# =======================================================
+
+async def get_default_project(
+    user: User, 
+    db: AsyncSession
+) -> Project:
     """
     Retrieves the default project for a user, or creates one if none exists.
     """
@@ -67,9 +111,8 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
         .limit(1)
     )
     default_project = result.scalars().first()
-    
+
     if not default_project:
-        # Create a default project if none exists
         default_project = Project(
             user_id=user.id,
             name="Default Project",
@@ -81,8 +124,12 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
         db.add(default_project)
         await db.commit()
         await db.refresh(default_project)
-    
+
     return default_project
+
+# =======================================================
+#  Project Creation
+# =======================================================
 
 async def create_project(
     user_id: int,
@@ -95,26 +142,12 @@ async def create_project(
 ) -> Project:
     """
     Creates a new project with the given parameters.
-    
-    Args:
-        user_id: ID of the owner
-        name: Project name
-        description: Optional project description
-        goals: Optional project goals
-        max_tokens: Maximum token limit for the project
-        knowledge_base_id: Optional knowledge base to link
-        default_model: Default AI model to use (defaults to Claude 3.7 Sonnet)
-        db: Database session
-        
-    Returns:
-        Newly created Project object
+    Raises ValueError if name is empty or invalid.
     """
-    # Validate project name
     name = name.strip()
     if not name:
         raise ValueError("Project name cannot be empty")
-    
-    # Create project object
+
     project = Project(
         user_id=user_id,
         name=name,
@@ -123,39 +156,54 @@ async def create_project(
         max_tokens=max_tokens,
         default_model=default_model
     )
-    
+
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    
+
     return project
+
+# =======================================================
+#  Token Usage
+# =======================================================
 
 async def validate_project_token_usage(
     project: Project, 
     additional_tokens: int
 ) -> None:
-    """Validate project has enough token capacity"""
+    """
+    Raises ValueError if the project doesn't have enough capacity 
+    for additional_tokens. Return 400 or 422 in routes if desired.
+    """
     if project.token_usage + additional_tokens > project.max_tokens:
+        # We typically consider this a 400 "Bad Request"
         raise ValueError(
-            f"Operation requires {additional_tokens} tokens but only " 
-            f"{project.max_tokens - project.token_usage} available"
+            f"Operation requires {additional_tokens} tokens, "
+            f"but only {project.max_tokens - project.token_usage} available"
         )
 
-async def get_project_token_usage(project_id: UUID, db: AsyncSession) -> dict:
+async def get_project_token_usage(
+    project_id: UUID,
+    db: AsyncSession
+) -> dict:
     """
-    Retrieves token usage statistics for a project.
+    Retrieves token usage statistics for a project. Raises 404 if not found.
     """
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
+    usage_percentage = (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
     return {
         "token_usage": project.token_usage,
         "max_tokens": project.max_tokens,
         "available_tokens": project.max_tokens - project.token_usage,
-        "usage_percentage": (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
+        "usage_percentage": usage_percentage
     }
 
+# =======================================================
+#  Generic Resource Validation
+# =======================================================
 
 async def validate_resource_access(
     resource_id: UUID,
@@ -167,54 +215,53 @@ async def validate_resource_access(
 ) -> Any:
     """
     Generic method for validating access to any resource.
-    All services can use this for projects, artifacts, files, etc.
-
-    Args:
-        resource_id: UUID of the resource
-        model_class: The SQLAlchemy model class of the resource
-        user: User object
-        db: Database session
-        resource_name: Human-readable name for error messages
-        additional_conditions: Optional additional conditions for the query
-
-    Returns:
-        The resource object if found and accessible
-
-    Raises:
-        HTTPException: If resource not found or user lacks permission
+    We check:
+      - Resource with given UUID
+      - resource.user_id == user.id (if user_id is a field)
+      - Not archived (if archived is a field)
+    Raises 404 if not found, 400 if archived.
     """
-    # Build the query
     query = select(model_class).where(model_class.id == resource_id)
-    
-    # Add user ID check if the model has a user_id field
+
     if hasattr(model_class, 'user_id'):
         query = query.where(model_class.user_id == user.id)
-        
-    # Add additional conditions if provided
+
     if additional_conditions:
         for condition in additional_conditions:
             query = query.where(condition)
-    
-    # Execute the query
+
     result = await db.execute(query)
     resource = result.scalars().first()
-    
+
     if not resource:
         raise HTTPException(status_code=404, detail=f"{resource_name} not found or unauthorized access")
-    
-    # Check if the resource is archived (if applicable)
+
     if hasattr(resource, 'archived') and resource.archived:
         raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
-    
+
     return resource
 
-async def get_project_conversations(project_id: UUID, db: AsyncSession):
+# =======================================================
+#  Project Conversations
+# =======================================================
+
+async def get_project_conversations(
+    project_id: UUID, 
+    db: AsyncSession
+):
+    """
+    Return all conversations for a project. 
+    Could eventually add skip/limit if needed.
+    """
     from models.conversation import Conversation
     result = await db.execute(
-        select(Conversation)
-        .where(Conversation.project_id == project_id)
+        select(Conversation).where(Conversation.project_id == project_id)
     )
     return result.scalars().all()
+
+# =======================================================
+#  Paginated Resource Query
+# =======================================================
 
 async def get_paginated_resources(
     db: AsyncSession,
@@ -226,6 +273,10 @@ async def get_paginated_resources(
     limit: int = 100,
     additional_filters: Optional[Any] = None
 ) -> List[Dict[str, Any]]:
+    """
+    Generic method to retrieve items for a given project,
+    sorted & paginated. We assume the model has a project_id field.
+    """
     query = select(model_class).where(model_class.project_id == project_id)
 
     if additional_filters:
@@ -235,10 +286,11 @@ async def get_paginated_resources(
         sort_field = getattr(model_class, sort_by)
         query = query.order_by(desc(sort_field) if sort_desc else asc(sort_field))
     else:
-        query = query.order_by(desc(model_class.created_at) if sort_desc else asc(model_class.created_at))
+        query = query.order_by(
+            desc(model_class.created_at) if sort_desc else asc(model_class.created_at)
+        )
 
     query = query.offset(skip).limit(limit)
-
     result = await db.execute(query)
     items = result.scalars().all()
 

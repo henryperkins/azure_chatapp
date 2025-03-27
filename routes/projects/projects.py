@@ -10,8 +10,9 @@ from uuid import UUID
 from typing import Optional, Dict
 import os
 from datetime import datetime
+from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -34,7 +35,6 @@ from services.file_storage import get_file_storage
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
 
 # ============================
 # Pydantic Schemas
@@ -67,7 +67,13 @@ class ProjectUpdate(BaseModel):
         le=500000
     )
 
+class ProjectFilter(str, Enum):
+    all = "all"
+    pinned = "pinned"
+    archived = "archived"
+    active = "active"
 
+    
 # ============================
 # Project CRUD Operations
 # ============================
@@ -100,53 +106,84 @@ async def create_project(
 
 @router.get("/", response_model=Dict)
 async def list_projects(
-    filter: Optional[str] = None, 
-    skip: int = 0,
-    limit: int = 100,
+    request: Request,
+    # 1) Validate filter as an enum of allowed values
+    filter: ProjectFilter = Query(ProjectFilter.all, description="Filter for projects"),
+    # 2) Validate skip & limit
+    skip: int = Query(0, ge=0, description="Pagination start index"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of projects to return"),
+
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """List all projects owned by the current user with optional filtering"""
+    """
+    List all projects owned by the current user with optional filtering by pinned/archived/active.
+    Pagination is controlled via skip/limit.
+    """
+    logger.info(f"Listing projects for user {current_user.id} with filter: {filter}")
+    logger.debug(f"Request headers: {request.headers}")
+
+    if not current_user:
+        logger.error("No current user found in list_projects")
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     conditions = [Project.user_id == current_user.id]
-    
-    # Handle filter parameter from UI
-    if filter == "pinned":
+
+    # Apply filter logic
+    if filter == ProjectFilter.pinned:
         conditions.append(Project.pinned.is_(True))
         conditions.append(Project.archived.is_(False))
-    elif filter == "archived":
+    elif filter == ProjectFilter.archived:
         conditions.append(Project.archived.is_(True))
-    elif filter == "active":
+    elif filter == ProjectFilter.active:
         conditions.append(Project.archived.is_(False))
-    # 'all' filter shows everything
-    
-    # Use consolidated function for database query
-    projects = await get_all_by_condition(
-        db,
-        Project,
-        *conditions,
-        limit=limit,
-        offset=skip,
-        order_by=Project.created_at.desc()
-    )
-    
-    # Log the projects being returned
+    # 'all' -> no additional conditions
+
+    try:
+        projects = await get_all_by_condition(
+            db,
+            Project,
+            *conditions,
+            limit=limit,
+            offset=skip,
+            order_by=Project.created_at.desc()
+        )
+    except ValueError as ve:
+        # If there's some reason your DB code raises ValueError for invalid conditions
+        logger.error(f"Validation error listing projects: {str(ve)}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid request parameters: {str(ve)}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error listing projects: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while retrieving projects"
+        )
+
     logger.info(f"Retrieved {len(projects)} projects for user {current_user.id}")
-    
-    # Serialize projects to dict for JSON response
     serialized_projects = [serialize_project(project) for project in projects]
-    
-    # Return standardized response format
-    return await create_standard_response({
+
+    response_data = {
         "projects": serialized_projects,
         "count": len(serialized_projects),
         "filter": {
-            "type": filter or "all",
+            "type": filter.value,
             "applied": {
-                "archived": filter == "archived",
-                "pinned": filter == "pinned"
+                "archived": (filter == ProjectFilter.archived),
+                "pinned": (filter == ProjectFilter.pinned)
             }
         }
-    })
+    }
+
+    logger.debug(f"Prepared response data: {response_data}")
+
+    if not isinstance(response_data["projects"], list):
+        logger.error("Invalid projects data format in response")
+        raise HTTPException(500, "Internal server error: invalid data format")
+
+    return await create_standard_response(response_data)
 
 
 @router.get("/{project_id}/", response_model=Dict)
@@ -335,7 +372,7 @@ async def get_project_stats(
             # Get processed files count
             indexed_files_query = select(func.count()).where(
                 ProjectFile.project_id == project_id,
-                ProjectFile.metadata.has_key("search_processing"),
+                ProjectFile.metadata["search_processing"].is_not(None),
                 ProjectFile.metadata["search_processing"]["success"].astext == "true"
             )
             indexed_result = await db.execute(indexed_files_query)
@@ -398,6 +435,7 @@ async def create_project_knowledge_base(
         # Create knowledge base
         kb = await knowledgebase_service.create_knowledge_base(
             name=kb_data.name,
+            project_id=project_id,
             description=kb_data.description,
             embedding_model=kb_data.embedding_model,
             db=db

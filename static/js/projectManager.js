@@ -16,11 +16,21 @@
    * Load a list of projects from the server (optionally filtered).
    * Dispatches "projectsLoaded" with { detail: projectsArray }.
    */
-  async function loadProjects(filter = "all") {
-    console.log("[ProjectManager] Loading projects with filter:", filter);
+  async function loadProjects(filter = null) {
+    // Validate filter parameter
+    const validFilters = ["all", "pinned", "archived", "active"];
+    const cleanFilter = validFilters.includes(filter) ? filter : "all";
+    
+    console.log("[ProjectManager] Loading projects with filter:", cleanFilter);
     console.trace("[DEBUG] Project load call stack");
     
     try {
+      // Verify auth state before proceeding
+      if (!TokenManager.accessToken && !sessionStorage.getItem('auth_state')) {
+        console.warn("[ProjectManager] No auth tokens available, skipping project load");
+        return [];
+      }
+      
       // Use centralized auth check with retry
       let authState;
       let retries = 3;
@@ -42,10 +52,22 @@
       
       if (!authState) {
         console.warn("[ProjectManager] Not authenticated after retries, skipping project load");
+        document.dispatchEvent(new CustomEvent("authError", {
+          detail: { message: "Session expired - please log in again" }
+        }));
         return [];
       }
+// Ensure we use a relative path for the API request
+const params = new URLSearchParams();
+if (cleanFilter) params.append('filter', cleanFilter);
+params.append('skip', '0');
+params.append('limit', '100');
 
-      const response = await window.apiRequest(`/api/projects?filter=${filter}`, "GET");
+const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
+console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
+  headers: TokenManager.getAuthHeader()
+});
+      const response = await window.apiRequest(endpoint, "GET");
       console.log("[ProjectManager] Raw API response:", response);
       
       // Standardize response format
@@ -121,55 +143,54 @@
    * If not archived, also loads stats, files, conversations, artifacts.
    */
   function loadProjectDetails(projectId) {
-    // First check which API endpoint format works
-    checkProjectApiEndpoint(projectId).then(endpointType => {
-      // Use the appropriate endpoint format based on what works
-      let projectEndpoint = endpointType === "standard" ? 
-        `/api/projects/${projectId}` : `/api/${projectId}`;
+    // Always use the standard API endpoint format for consistency
+    const projectEndpoint = `/api/projects/${projectId}`;
+    console.log(`[ProjectManager] Loading project details from ${projectEndpoint}`);
       
-      window.apiRequest(projectEndpoint, "GET")
-        .then((response) => {
-          currentProject = response.data;
-          localStorage.setItem('selectedProjectId', currentProject.id); // Store projectId
-          document.dispatchEvent(
-            new CustomEvent("projectLoaded", { detail: currentProject })
-          );
+    window.apiRequest(projectEndpoint, "GET")
+      .then((response) => {
+        if (!response || !response.data) {
+          console.error("Invalid response format:", response);
+          throw new Error("Invalid response format");
+        }
+        
+        currentProject = response.data;
+        console.log(`[ProjectManager] Project loaded successfully:`, currentProject);
+        localStorage.setItem('selectedProjectId', currentProject.id); // Store projectId
+        
+        document.dispatchEvent(
+          new CustomEvent("projectLoaded", { detail: currentProject })
+        );
 
-          // If project is archived, skip loading extra data
-          if (currentProject.archived) {
-            console.warn("Project is archived, skipping additional loads.");
-            window.showNotification?.("This project is archived", "warning");
-            return;
-          }
+        // If project is archived, skip loading extra data
+        if (currentProject.archived) {
+          console.warn("Project is archived, skipping additional loads.");
+          window.showNotification?.("This project is archived", "warning");
+          return;
+        }
 
-          loadProjectStats(projectId);
-          loadProjectFiles(projectId);
-          loadProjectConversations(projectId);
-          loadProjectArtifacts(projectId);
-        })
-        .catch((err) => {
-          console.error("Error loading project details:", err);
-          window.showNotification?.("Failed to load project details", "error");
+        // Load all project details in parallel
+        Promise.all([
+          loadProjectStats(projectId),
+          loadProjectFiles(projectId),
+          loadProjectConversations(projectId),
+          loadProjectArtifacts(projectId)
+        ]).catch(err => {
+          console.warn("Error loading some project details:", err);
         });
-    }).catch(() => {
-      // If endpoint check fails, try the standard endpoint anyway
-      window.apiRequest(`/api/projects/${projectId}`, "GET")
-        .then((response) => {
-          currentProject = response.data;
-          document.dispatchEvent(
-            new CustomEvent("projectLoaded", { detail: currentProject })
-          );
-          
-          loadProjectStats(projectId);
-          loadProjectFiles(projectId);
-          loadProjectConversations(projectId);
-          loadProjectArtifacts(projectId);
-        })
-        .catch((err) => {
-          console.error("Error loading project details:", err);
+      })
+      .catch((err) => {
+        console.error("Error loading project details:", err);
+        // Check for specific status codes
+        const status = err?.response?.status;
+        if (status === 422) {
+          window.showNotification?.("Project details validation failed", "error");
+        } else if (status === 404) {
+          window.showNotification?.("Project not found", "error");
+        } else {
           window.showNotification?.("Failed to load project details", "error");
-        });
-    });
+        }
+      });
   }
 
   /**
@@ -357,23 +378,22 @@
     
     return window.apiRequest(`/api/projects/${projectId}/knowledgebase/files`, "POST", formData)
     .then((response) => {
-      if (!response.ok) {
-        console.error(`Upload failed with status: ${response.status}`);
-        return response.text().then(text => {
-          try {
-            // Try to parse as JSON for better error info
-            const errorJson = JSON.parse(text);
-            throw new Error(errorJson.detail || errorJson.message || "Upload failed");
-          } catch (e) {
-            // If it's not parseable as JSON, use the text directly
-            throw new Error(`Upload failed: ${text || response.statusText}`);
-          }
-        });
-      }
-      return response.json();
+      console.log("File upload response:", response);
+      return response; // Just return the response to be handled by caller
     }).catch(err => {
       console.error("File upload error:", err);
-      throw err; // Re-throw to allow caller to handle it
+      // Handle specific error status codes
+      const status = err?.response?.status;
+      if (status === 422) {
+        throw new Error("File validation failed: The file format may be unsupported or the file is corrupted");
+      } else if (status === 413) {
+        throw new Error("File too large: The file exceeds the maximum allowed size");
+      } else if (status === 400) {
+        const detail = err?.response?.data?.detail || "Invalid file";
+        throw new Error(`Bad request: ${detail}`);
+      } else {
+        throw new Error(err?.response?.data?.detail || err.message || "Upload failed");
+      }
     });
   }
 

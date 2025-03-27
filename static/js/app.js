@@ -1,19 +1,24 @@
 /**
- * app.js - Refactored with deduplicated code
- * ------------------------
- * Main application initialization with improved code organization
+ * app.js - REMEDIATED VERSION
+ * ---------------------------
+ * - Maintains a single API_CONFIG global object (no more double definitions).
+ * - Uses one fetch wrapper (apiRequest).
+ * - Listens for authStateChanged to manage the authenticated vs. logged-out UI.
+ * - Minimizes overlap with auth.js token logic. (auth.js will call apiRequest and dispatch events.)
  */
 
-// API Configuration
+// ---------------------------------------------------------------------
+// GLOBAL APP CONFIG & CONSTANTS
+// ---------------------------------------------------------------------
+
+// Consolidated global config (no second "const API_CONFIG")
 window.API_CONFIG = {
-  baseUrl: null,
+  baseUrl: "",
   isAuthenticated: false,
-  authCheckInProgress: false
+  authCheckInProgress: false,
+  lastErrorStatus: null
 };
 
-// ---------------------------------------------------------------------
-// GLOBAL SELECTORS & CONSTANTS
-// ---------------------------------------------------------------------
 window.SELECTORS = {
   MAIN_SIDEBAR: '#mainSidebar',
   NAV_TOGGLE_BTN: '#navToggleBtn',
@@ -62,8 +67,9 @@ const Notifications = {
 };
 
 // ---------------------------------------------------------------------
-// UTILITY FUNCTIONS (Refactored)
+// UTILITY FUNCTIONS
 // ---------------------------------------------------------------------
+
 function getElement(selector) {
   return document.querySelector(selector);
 }
@@ -90,68 +96,61 @@ function setChatUIVisibility(visible) {
   }
 }
 
-function updateAuthUI(authenticated) {
-  const elements = {
-    authButton: getElement(SELECTORS.AUTH_BUTTON),
-    userMenu: getElement(SELECTORS.USER_MENU),
-    chatUI: getElement(SELECTORS.CHAT_UI),
-    loginRequiredMessage: getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE),
-    noChatMsg: getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE),
-    authStatus: getElement(SELECTORS.AUTH_STATUS)
-  };
+/**
+ * Main UI toggling function for authenticated vs. not-authenticated state.
+ * Called whenever "authStateChanged" is dispatched from auth.js.
+ */
+function updateAuthUI(authenticated, username = null) {
+  const authButton   = getElement(SELECTORS.AUTH_BUTTON);
+  const userMenu     = getElement(SELECTORS.USER_MENU);
+  const loginReqMsg  = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+  const noChatMsg    = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
+  const chatUI       = getElement(SELECTORS.CHAT_UI);
+  const authStatus   = getElement(SELECTORS.AUTH_STATUS);
 
   if (authenticated) {
-    elements.authButton?.classList?.add('hidden');
-    elements.userMenu?.classList?.remove('hidden');
-    elements.loginRequiredMessage?.classList?.add('hidden');
-    elements.chatUI?.classList?.remove('hidden');
-    elements.noChatMsg?.classList?.add('hidden');
-    if (elements.authStatus) {
-      elements.authStatus.textContent = 'Authenticated';
-      elements.authStatus.classList.replace('text-red-600', 'text-green-600');
+    authButton?.classList.add('hidden');
+    userMenu?.classList.remove('hidden');
+    loginReqMsg?.classList.add('hidden');
+    chatUI?.classList.remove('hidden');
+    noChatMsg?.classList.add('hidden');
+    
+    if (authStatus) {
+      authStatus.textContent = username || 'Authenticated';
+      authStatus.classList.remove('text-red-600');
+      authStatus.classList.add('text-green-600');
     }
+    
+    window.API_CONFIG.isAuthenticated = true;
   } else {
-    elements.authButton?.classList?.remove('hidden');
-    elements.userMenu?.classList?.add('hidden');
-    elements.loginRequiredMessage?.classList?.remove('hidden');
-    elements.chatUI?.classList?.add('hidden');
-    elements.noChatMsg?.classList?.add('hidden');
-    if (elements.authStatus) {
-      elements.authStatus.textContent = 'Not Authenticated';
-      elements.authStatus.classList.replace('text-green-600', 'text-red-600');
+    authButton?.classList.remove('hidden');
+    userMenu?.classList.add('hidden');
+    loginReqMsg?.classList.remove('hidden');
+    chatUI?.classList.add('hidden');
+    noChatMsg?.classList.add('hidden');
+    
+    if (authStatus) {
+      authStatus.textContent = 'Not Authenticated';
+      authStatus.classList.remove('text-green-600');
+      authStatus.classList.add('text-red-600');
     }
+    
+    window.API_CONFIG.isAuthenticated = false;
   }
 }
 
-// API Configuration
-const API_CONFIG = {
-  baseUrl: null,
-  isAuthenticated: false,
-  authCheckInProgress: false
-};
-
-// Export to window for legacy access
-window.API_CONFIG = API_CONFIG;
-window.getBaseUrl = getBaseUrl;
-window.apiRequest = apiRequest;
-
-// Helper to get base URL
-function getBaseUrl() {
-  if (!API_CONFIG.baseUrl) {
-    // Use same origin as frontend
-    API_CONFIG.baseUrl = window.location.origin;
-    console.log('Set API base URL:', API_CONFIG.baseUrl);
-  }
-  return API_CONFIG.baseUrl;
-}
-window.apiRequest = apiRequest;
-window.getBaseUrl = getBaseUrl;
-
+// ---------------------------------------------------------------------
+// SINGLE FETCH WRAPPER (apiRequest)
+// ---------------------------------------------------------------------
+/**
+ * The one and only fetch wrapper used by the app. Auth refresh logic is
+ * in auth.js (TokenManager.refreshTokens), but we'll call it here if 401.
+ */
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
-  
-  // Don't make API calls if authentication check is in progress
-  if (API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
+
+  // If an auth check is in progress, we wait. (Kept for backward-compat.)
+  if (window.API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
     if (retryCount > 5) {
       console.warn('Too many auth check delays, proceeding with request anyway');
     } else {
@@ -161,28 +160,36 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     }
   }
 
-  // Clean and normalize the endpoint
+  // Normalize endpoint if full URL was passed
+  if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
+    console.warn('Full URL detected in endpoint, normalizing:', endpoint);
+    const urlObj = new URL(endpoint);
+    endpoint = urlObj.pathname + urlObj.search;
+  }
+
+  // Clean up double slashes
   const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
-  const url = cleanEndpoint.startsWith('/')
-    ? `${window.getBaseUrl()}${cleanEndpoint}`
-    : `${window.getBaseUrl()}/${cleanEndpoint}`;
+  const baseUrl = getBaseUrl();
+
+  const finalUrl = cleanEndpoint.startsWith('/')
+    ? `${baseUrl}${cleanEndpoint}`
+    : `${baseUrl}/${cleanEndpoint}`;
 
   const options = {
     method,
-    headers: { 
+    headers: {
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
-      ...TokenManager.getAuthHeader()
+      ...TokenManager.getAuthHeader() // from auth.js
     },
     credentials: 'include',
     cache: 'no-store'
   };
 
-  // Handle FormData differently from JSON
   if (data) {
     if (data instanceof FormData) {
-      // Let the browser set Content-Type with boundary
+      // Let the browser set Content-Type for FormData
       options.body = data;
     } else {
       options.headers['Content-Type'] = 'application/json';
@@ -191,89 +198,81 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   }
 
   try {
-    const response = await fetch(url, options);
-    
+    console.log(`Making ${method} request to: ${finalUrl}`);
+    const response = await fetch(finalUrl, options);
+
     if (!response.ok) {
-      // Handle auth errors with token refresh
+      window.API_CONFIG.lastErrorStatus = response.status;
+      console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
+
+      // Handle 401 with token refresh
       if (response.status === 401 && retryCount < maxRetries) {
         try {
-          // If we have a token manager with refresh capability, use it
           if (window.TokenManager?.refreshTokens) {
             await window.TokenManager.refreshTokens();
-            
-            // Update auth headers with new token
-            options.headers = { 
-              ...options.headers,
-              ...TokenManager.getAuthHeader()
-            };
-            
-            // Retry the request
+            // Retry the request once the token is refreshed
             return apiRequest(endpoint, method, data, retryCount + 1);
           }
-        } catch (error) {
-          console.error('Token refresh failed:', error);
-          // If refresh fails, proceed to throw the original error
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
         }
       }
-      
-      // Handle specific error status codes
-      if (response.status === 401) {
-        // Clear auth state on 401 errors
+
+      // Handle 422 (validation) or 404 in special contexts
+      if (response.status === 422) {
+        try {
+          const errorData = await response.json();
+          console.error('Validation error details:', errorData);
+        } catch (parseErr) {
+          console.error('Could not parse validation error', parseErr);
+        }
+      } else if (response.status === 401) {
+        // Clear auth
         sessionStorage.removeItem('userInfo');
         sessionStorage.removeItem('auth_state');
-        API_CONFIG.isAuthenticated = false;
-        
-        document.dispatchEvent(new CustomEvent('authStateChanged', { 
-          detail: { authenticated: false } 
+        window.API_CONFIG.isAuthenticated = false;
+        document.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: { authenticated: false }
         }));
       }
-      
+
       throw new Error(`API error (${response.status}): ${response.statusText}`);
     }
 
-    const data = await response.json();
-  
-    // Update tokens if present in response
-    if (data.access_token) {
-      TokenManager.setTokens(data.access_token, data.refresh_token);
+    // Attempt to parse JSON
+    const jsonData = await response.json();
+    // If tokens come back in any endpoint, set them
+    if (jsonData.access_token && window.TokenManager?.setTokens) {
+      TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
     }
-  
-    return data;
+
+    return jsonData;
   } catch (error) {
-    console.error(`API request failed:`, error);
+    console.error('API request failed:', error);
     throw error;
   }
 }
 
-// ---------------------------------------------------------------------
-// USER SESSION MANAGEMENT
-// ---------------------------------------------------------------------
-function updateUserSessionState() {
-  try {
-    // Get stored user info
-    const userInfo = sessionStorage.getItem('userInfo');
-    if (userInfo) {
-      const { username } = JSON.parse(userInfo);
-      updateAuthUI(true);
-      console.log('Session restored for user:', username);
-    } else {
-      updateAuthUI(false);
-      console.log('No active session found');
-    }
-  } catch (error) {
-    console.error('Error updating session state:', error);
-    // Clear potentially corrupted session data
-    sessionStorage.clear();
-    updateAuthUI(false);
+// Helpers
+function getBaseUrl() {
+  if (!window.API_CONFIG.baseUrl) {
+    // Always use same protocol as the page
+    window.API_CONFIG.baseUrl = window.location.origin;
+    console.log('Set API base URL:', window.API_CONFIG.baseUrl);
   }
+  return window.API_CONFIG.baseUrl;
 }
 
+// Expose so other modules can use it
+window.apiRequest = apiRequest;
+window.getBaseUrl = getBaseUrl;
+
 // ---------------------------------------------------------------------
-// UI COMPONENT CREATION
+// DATA LOADING & RENDERING
 // ---------------------------------------------------------------------
+
 function createProjectListItem(project) {
   try {
-    // Handle both direct project object and nested API response
     const projectData = project.data || project;
     if (!projectData?.id || !projectData?.name) {
       console.error('Invalid project data:', project);
@@ -310,15 +309,43 @@ function createProjectListItem(project) {
   }
 }
 
+function renderConversationList(data) {
+  const container = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
+  if (!container) return;
+  container.innerHTML = '';
+
+  window.chatConfig = window.chatConfig || {};
+  
+  let conversations = [];
+  if (data?.data?.conversations) {
+    conversations = data.data.conversations;
+  } else if (data?.conversations) {
+    conversations = data.conversations;
+  } else if (data?.data && Array.isArray(data.data)) {
+    conversations = data.data;
+  } else if (Array.isArray(data)) {
+    conversations = data;
+  }
+  
+  window.chatConfig.conversations = conversations;
+
+  if (conversations.length > 0) {
+    conversations.forEach(item => {
+      container.appendChild(createConversationListItem(item));
+    });
+  } else {
+    showEmptyState(container, MESSAGES.NO_CONVERSATIONS, 'py-4');
+  }
+}
+
 function createConversationListItem(item) {
   const li = document.createElement('li');
   li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
 
-  // Main container for the two-line layout
   const container = document.createElement('div');
   container.className = 'flex flex-col';
 
-  // First line - Conversation title and star button
+  // First line
   const firstLine = document.createElement('div');
   firstLine.className = 'flex items-center justify-between';
 
@@ -340,7 +367,7 @@ function createConversationListItem(item) {
             .3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976
             2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914
             a1 1 0 00.951-.69l1.519-4.674z"/>
-  `;
+    </svg>`;
   starBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (window.sidebar?.toggleStarConversation) {
@@ -351,19 +378,16 @@ function createConversationListItem(item) {
   });
   firstLine.appendChild(starBtn);
 
-  // Second line - Metadata
+  // Second line
   const secondLine = document.createElement('div');
   secondLine.className = 'flex items-center text-xs text-gray-500 mt-1';
 
-  // Model info
   if (item.model_id) {
     const modelSpan = document.createElement('span');
     modelSpan.className = 'truncate';
     modelSpan.textContent = item.model_id;
     secondLine.appendChild(modelSpan);
   }
-
-  // Project indicator
   if (item.project_id) {
     if (item.model_id) {
       const separator = document.createElement('span');
@@ -377,23 +401,18 @@ function createConversationListItem(item) {
     secondLine.appendChild(projectSpan);
   }
 
-  // Add both lines to container
   container.appendChild(firstLine);
   container.appendChild(secondLine);
   li.appendChild(container);
 
   li.addEventListener('click', () => navigateToConversation(item.id));
-
   return li;
 }
 
-// ---------------------------------------------------------------------
-// NAVIGATION & STATE MANAGEMENT
-// ---------------------------------------------------------------------
 function navigateToConversation(conversationId) {
   window.history.pushState({}, '', `/?chatId=${conversationId}`);
   setChatUIVisibility(true);
-  
+
   if (typeof window.loadConversation === 'function') {
     return window.loadConversation(conversationId).catch(error => {
       handleAPIError('loading conversation', error);
@@ -403,84 +422,67 @@ function navigateToConversation(conversationId) {
   return Promise.resolve();
 }
 
-function handleNavigationChange() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const chatId = urlParams.get('chatId');
-
-  apiRequest(API_ENDPOINTS.AUTH_VERIFY)
-    .then(() => {
-      try {
-        if (chatId) {
-          setChatUIVisibility(true);
-          if (typeof window.loadConversation === 'function') {
-            window.loadConversation(chatId).catch(error => {
-              handleAPIError('loading conversation', error);
-              setChatUIVisibility(false);
-            });
-          }
-        } else {
-          if (typeof window.createNewChat === 'function') {
-            window.createNewChat().catch(error => {
-              handleAPIError('creating new chat', error);
-              setChatUIVisibility(false);
-            });
-          } else {
-            setChatUIVisibility(false);
-          }
-        }
-      } catch (error) {
-        handleAPIError('handling navigation', error);
-        setChatUIVisibility(false);
-      }
-    })
-    .catch((error) => {
-      handleAPIError('auth verification', error);
-    });
+function handleAPIError(context, error) {
+  console.error(`[${context}] API Error:`, error);
+  let message = 'An error occurred';
+  if (error instanceof TypeError) {
+    message = 'Network error - please check your connection';
+  } else if (error.response && error.response.status === 401) {
+    message = 'Session expired - please log in again';
+  } else if (error.message) {
+    message = error.message;
+  }
+  if (typeof UIUtils !== 'undefined' && UIUtils.showNotification) {
+    UIUtils.showNotification(message, 'error');
+  } else {
+    alert(message);
+  }
 }
 
-// ---------------------------------------------------------------------
-// DATA LOADING FUNCTIONS
-// ---------------------------------------------------------------------
 function loadSidebarProjects() {
-  // Skip if not authenticated
-  const isAuthenticated = API_CONFIG?.isAuthenticated || 
-                        (sessionStorage.getItem('userInfo') !== null && 
-                         sessionStorage.getItem('auth_state') !== null);
+  const isAuthenticated = window.API_CONFIG?.isAuthenticated ||
+    (sessionStorage.getItem('userInfo') !== null && sessionStorage.getItem('auth_state') !== null);
   
   if (!isAuthenticated) {
     console.log("Not authenticated, skipping sidebar projects load");
     return Promise.resolve([]);
   }
-  
-  // Also skip if auth check is in progress
-  if (API_CONFIG.authCheckInProgress) {
+
+  if (window.API_CONFIG.authCheckInProgress) {
     console.log("Auth check in progress, deferring sidebar projects load");
     return Promise.resolve([]);
   }
+
+  // Add query parameters to match backend validation requirements
+  const params = new URLSearchParams({
+    filter: 'all',
+    skip: '0',
+    limit: '100'
+  });
   
-  return apiRequest(API_ENDPOINTS.PROJECTS)
+  const endpoint = `${API_ENDPOINTS.PROJECTS.replace(/^https?:\/\/[^/]+/, '')}?${params}`;
+  console.log("Loading sidebar projects from:", endpoint);
+  
+  return apiRequest(endpoint)
     .then(response => {
-      console.log('Projects API response:', response);
-      // Handle both direct array and nested response structure
+      const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
+      if (!sidebarProjects) return [];
+      
+      // If response.data is an array, it's probably { data: [projects] }
+      // Or it might be { data: { projects: [] } }
       const projects = Array.isArray(response.data)
         ? response.data
         : response.data?.projects || [];
-        
-      const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
-      if (!sidebarProjects) return projects;
-      
+
       sidebarProjects.innerHTML = '';
-      
       if (projects.length === 0) {
         showEmptyState(sidebarProjects, MESSAGES.NO_PROJECTS);
-        return projects;
+        return [];
       }
-      
-      projects.forEach(project => {
-        const item = createProjectListItem(project);
+      projects.forEach(proj => {
+        const item = createProjectListItem(proj);
         if (item) sidebarProjects.appendChild(item);
       });
-      
       return projects;
     })
     .catch(err => {
@@ -490,22 +492,19 @@ function loadSidebarProjects() {
 }
 
 function loadConversationList() {
-  // Skip if not authenticated
-  const isAuthenticated = API_CONFIG?.isAuthenticated || 
-                        (sessionStorage.getItem('userInfo') !== null && 
-                         sessionStorage.getItem('auth_state') !== null);
+  const isAuthenticated = window.API_CONFIG?.isAuthenticated ||
+    (sessionStorage.getItem('userInfo') !== null && sessionStorage.getItem('auth_state') !== null);
   
   if (!isAuthenticated) {
     console.log("Not authenticated, skipping conversation list load");
     return Promise.resolve([]);
   }
-  
-  // Also skip if auth check is in progress
-  if (API_CONFIG.authCheckInProgress) {
+
+  if (window.API_CONFIG.authCheckInProgress) {
     console.log("Auth check in progress, deferring conversation list load");
     return Promise.resolve([]);
   }
-  
+
   const selectedProjectId = localStorage.getItem('selectedProjectId');
   if (!selectedProjectId) {
     return apiRequest(API_ENDPOINTS.CONVERSATIONS)
@@ -518,7 +517,7 @@ function loadConversationList() {
         return [];
       });
   }
-  
+
   const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', selectedProjectId);
   return apiRequest(endpoint)
     .then(data => {
@@ -530,7 +529,7 @@ function loadConversationList() {
       if (err.message.includes('404')) {
         localStorage.removeItem('selectedProjectId');
         Notifications.projectNotFound();
-        loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+        loadSidebarProjects().catch(e => console.warn("Failed to load sidebar projects:", e));
         return loadConversationList();
       } else {
         handleAPIError('loading project conversations', err);
@@ -539,95 +538,53 @@ function loadConversationList() {
     });
 }
 
-function handleAPIError(context, error) {
-  console.error(`[${context}] API Error:`, error);
-  
-  let message = 'An error occurred';
-  if (error instanceof TypeError) {
-    message = 'Network error - please check your connection';
-  } else if (error.response && error.response.status === 401) {
-    message = 'Session expired - please log in again';
-  } else if (error.message) {
-    message = error.message;
-  }
+// ---------------------------------------------------------------------
+// NAVIGATION & STATE MANAGEMENT
+// ---------------------------------------------------------------------
 
-  if (typeof UIUtils !== 'undefined' && UIUtils.showNotification) {
-    UIUtils.showNotification(message, 'error');
-  } else {
-    alert(message);
-  }
-}
+function handleNavigationChange() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const chatId = urlParams.get('chatId');
 
-function renderConversationList(data) {
-  const container = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
-  if (!container) return;
-  container.innerHTML = '';
-
-  window.chatConfig = window.chatConfig || {};
-  
-  // Normalize conversation data
-  let conversations = [];
-  if (data?.data?.conversations) {
-    conversations = data.data.conversations;
-  } else if (data?.conversations) {
-    conversations = data.conversations;
-  } else if (data?.data && Array.isArray(data.data)) {
-    conversations = data.data;
-  } else if (Array.isArray(data)) {
-    conversations = data;
-  }
-  
-  window.chatConfig.conversations = conversations;
-
-  if (conversations?.length > 0) {
-    conversations.forEach(item => {
-      container.appendChild(createConversationListItem(item));
+  // We still might do a verify, but typically we'd rely on authStateChanged
+  apiRequest(API_ENDPOINTS.AUTH_VERIFY)
+    .then(() => {
+      if (chatId) {
+        setChatUIVisibility(true);
+        if (typeof window.loadConversation === 'function') {
+          window.loadConversation(chatId).catch(err => {
+            handleAPIError('loading conversation', err);
+            setChatUIVisibility(false);
+          });
+        }
+      } else {
+        if (typeof window.createNewChat === 'function') {
+          window.createNewChat().catch(err => {
+            handleAPIError('creating new chat', err);
+            setChatUIVisibility(false);
+          });
+        } else {
+          setChatUIVisibility(false);
+        }
+      }
+    })
+    .catch(error => {
+      handleAPIError('auth verification', error);
     });
-  } else {
-    showEmptyState(container, MESSAGES.NO_CONVERSATIONS, 'py-4');
-  }
-}
-
-// ---------------------------------------------------------------------
-// AUTH MANAGEMENT
-// ---------------------------------------------------------------------
-let authCheckInProgress = false;
-let authCheckPromise = null;
-
-async function checkAndHandleAuth() {
-  try {
-    const authState = await window.auth.verify();
-    if (authState) {
-      updateAuthUI(true);
-      broadcastAuth(true, authState.username);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    // Only log unexpected errors (not 401s)
-    if (!error.expected) {
-      console.error('Auth verification failed:', error);
-    }
-    updateAuthUI(false);
-    broadcastAuth(false);
-    return false;
-  }
 }
 
 // ---------------------------------------------------------------------
 // SIDEBAR MANAGEMENT
 // ---------------------------------------------------------------------
+
 function toggleSidebar() {
   const sidebarEl = document.getElementById('mainSidebar');
   if (!sidebarEl) return;
-
-  const isHidden = sidebarEl.classList.contains('-translate-x-full');
   
+  const isHidden = sidebarEl.classList.contains('-translate-x-full');
   if (isHidden) {
     sidebarEl.classList.remove('-translate-x-full');
     sidebarEl.classList.add('translate-x-0');
-    
-    // Create backdrop
     const backdrop = document.createElement("div");
     backdrop.id = "sidebarBackdrop";
     backdrop.className = "fixed inset-0 bg-black/50 z-40 md:hidden";
@@ -636,8 +593,6 @@ function toggleSidebar() {
   } else {
     sidebarEl.classList.remove('translate-x-0');
     sidebarEl.classList.add('-translate-x-full');
-    
-    // Remove backdrop
     const existingBackdrop = document.getElementById('sidebarBackdrop');
     if (existingBackdrop) {
       existingBackdrop.remove();
@@ -654,8 +609,9 @@ function handleWindowResize() {
 }
 
 // ---------------------------------------------------------------------
-// UTILITY FUNCTIONS (Continued)
+// UTILITY: Search
 // ---------------------------------------------------------------------
+
 function searchSidebarProjects(query) {
   const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
   if (!sidebarProjects) return;
@@ -668,10 +624,8 @@ function searchSidebarProjects(query) {
     project.classList.toggle('hidden', !projectName.includes(searchTerm));
   });
 
-  // Show empty state if no matches
   const hasVisibleProjects = Array.from(projects).some(p => !p.classList.contains('hidden'));
   const existingEmptyState = sidebarProjects.querySelector('.text-center');
-  
   if (!hasVisibleProjects) {
     if (!existingEmptyState) {
       showEmptyState(sidebarProjects, 'No matching projects found');
@@ -684,16 +638,17 @@ function searchSidebarProjects(query) {
 // ---------------------------------------------------------------------
 // INITIALIZATION
 // ---------------------------------------------------------------------
+
 function safeInitialize() {
+  // Map SELECTORS to elements
   const elementMap = {};
   Object.entries(SELECTORS).forEach(([key, selector]) => {
     elementMap[key] = document.querySelector(selector);
   });
 
-  // Initialize auth dropdown
+  // Auth dropdown toggling
   const authButton = document.getElementById('authButton');
   const authDropdown = document.getElementById('authDropdown');
-  
   if (authButton && authDropdown) {
     authButton.addEventListener('click', (e) => {
       e.preventDefault();
@@ -703,17 +658,27 @@ function safeInitialize() {
     });
   }
 
-  // Event listeners
+  // Close dropdown on outside click
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#authContainer') && !e.target.closest('#authDropdown')) {
+      authDropdown?.classList.add('hidden');
+      authDropdown?.classList.remove('slide-in');
+    }
+  });
+
+  // Toggle sidebar
   if (elementMap.NAV_TOGGLE_BTN) {
     elementMap.NAV_TOGGLE_BTN.addEventListener('click', toggleSidebar);
   }
 
+  // Project search
   if (elementMap.SIDEBAR_PROJECT_SEARCH) {
     elementMap.SIDEBAR_PROJECT_SEARCH.addEventListener('input', (e) => {
       searchSidebarProjects(e.target.value);
     });
   }
 
+  // New project button
   if (elementMap.SIDEBAR_NEW_PROJECT_BTN) {
     elementMap.SIDEBAR_NEW_PROJECT_BTN.addEventListener('click', () => {
       if (window.projectManager?.showProjectCreateForm) {
@@ -724,12 +689,14 @@ function safeInitialize() {
     });
   }
 
+  // Show login
   if (elementMap.SHOW_LOGIN_BTN && elementMap.AUTH_BUTTON) {
     elementMap.SHOW_LOGIN_BTN.addEventListener('click', () => {
       elementMap.AUTH_BUTTON.click();
     });
   }
 
+  // New conversation
   document.addEventListener('click', function(event) {
     if (event.target.closest('#newConversationBtn')) {
       const projectId = localStorage.getItem('selectedProjectId');
@@ -751,6 +718,7 @@ function safeInitialize() {
 function setupGlobalKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      // NOTE: This hijacks Ctrl+R
       if (e.key.toLowerCase() === 'r') {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('regenerateChat'));
@@ -763,51 +731,29 @@ function setupGlobalKeyboardShortcuts() {
   });
 }
 
+// Example main initialization
 async function initializeApplication() {
   try {
     console.log("Starting main application initialization");
-    
-    // Initialize auth first
-    await initAuth();
-    
+    // We do not call initAuth here; it's called in auth.js
+    // or we might rely on "auth.js" to call it prior or afterwards.
+
     // Initialize base URL
-    const baseUrl = window.getBaseUrl();
-    console.log("API base URL set to:", baseUrl);
-    
-    // Initialize UI and handlers
+    getBaseUrl(); // sets window.API_CONFIG.baseUrl if not set
     safeInitialize();
+
+    // Example default localStorage settings
     if (!localStorage.getItem("modelName")) {
       localStorage.setItem("modelName", "claude-3-7-sonnet-20250219");
-      // Set extended thinking budget for Claude 3.7
       if (!localStorage.getItem("thinkingBudget")) {
         localStorage.setItem("thinkingBudget", "16000");
       }
     }
-    
-    updateUserSessionState();
+
     setupGlobalKeyboardShortcuts();
-    
-    // Perform auth check and load initial data
-    const authSuccess = await checkAndHandleAuth();
-    if (!authSuccess) {
-      // Changed from warning to info - this is expected when not logged in
-      console.info("User not authenticated - showing login UI");
-      
-      // Make sure login UI is visible
-      const loginRequiredMsg = document.getElementById('loginRequiredMessage');
-      if (loginRequiredMsg) loginRequiredMsg.classList.remove('hidden');
-      
-      // We're returning true here since the app initialized correctly, just without auth
-      return true;
-    }
-    
-    // Set up window event handlers
-    window.addEventListener('popstate', handleNavigationChange);
-    window.addEventListener('resize', handleWindowResize);
-    
+
     console.log("✅ Main application initialization complete");
     return true;
-
   } catch (error) {
     console.error("❌ Main application initialization failed:", error);
     Notifications.apiError("Failed to initialize application");
@@ -815,14 +761,12 @@ async function initializeApplication() {
   }
 }
 
-// ---------------------------------------------------------------------
-// INITIALIZATION UTILITIES
-// ---------------------------------------------------------------------
+// Some minimal module init approach
 const InitUtils = {
   async initModule(name, initFn, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        console.log(`Initializing ${name} module (attempt ${i + 1}/${maxRetries})...`);
+        console.log(`Initializing ${name} module (attempt ${i+1}/${maxRetries})...`);
         await initFn();
         console.log(`✅ ${name} module initialized`);
         return true;
@@ -833,221 +777,102 @@ const InitUtils = {
       }
     }
   },
-
   coreModules: [
-    { name: 'auth', init: () => window.initAuth?.() },
-    { name: 'formatting', init: () => window.initFormatting?.() },
-    { name: 'model config', init: () => window.initModelConfig?.() },
-    { name: 'components', init: () => window.initComponents?.() }
+    // You can define a list of core modules if needed
   ],
-
   featureModules: [
-    { name: 'chat extensions', init: () => window.initChatExtensions?.() },
-    { name: 'project enhancements', init: () => window.initProjectEnhancements?.() },
-    { name: 'project dashboard', init: () => window.initProjectDashboard?.() }
+    // List your optional feature modules if needed
   ]
 };
-
-// ---------------------------------------------------------------------
-// MAIN INITIALIZATION SEQUENCE
-// ---------------------------------------------------------------------
-/**
- * Initialize all application modules in the correct order
- * Returns true if successful, false if failed
- */
 
 async function initializeAllModules() {
   try {
     console.log("Starting application initialization sequence");
+    // Initialize any modules in whatever order you prefer
+    // e.g. initAuth from auth.js, project dashboard, etc.
 
-    // Initialize required core modules first
-    let coreSuccesses = 0;
-    let coreModulesCount = 0;
-    
-    // Try auth initialization first
-    if (window.initAuth) {
-      try {
-        await InitUtils.initModule('auth', window.initAuth);
-        console.log("✓ Auth module initialized");
-        coreSuccesses++;
-      } catch (error) {
-        console.info("Auth module not available - user will need to log in");
-        // Still continue with other modules since we can function without auth initially
-        API_CONFIG.isAuthenticated = false;
-      }
-      coreModulesCount++;
-    }
+    // Then main app init
+    await initializeApplication();
 
-    // Initialize projects immediately after auth
-    if (window.initProjectDashboard) {
-      try {
-        await initProjectDashboard();
-        console.log("✓ Project dashboard initialized");
-        coreSuccesses++;
-      } catch (error) {
-        console.warn("Project dashboard initialization failed:", error);
-      }
-      coreModulesCount++;
-    }
-
-    // Initialize other core modules
-    for (const module of InitUtils.coreModules) {
-      if (module.name !== 'auth' && module.init) {
-        coreModulesCount++;
-        try {
-          await InitUtils.initModule(module.name, module.init);
-          console.log(`✓ Core module ${module.name} initialized`);
-          coreSuccesses++;
-        } catch (error) {
-          console.warn(`Core module ${module.name} failed:`, error);
-        }
-      }
-    }
-
-    // Check if enough core modules initialized
-    if (coreSuccesses / coreModulesCount < 0.5) {
-      console.warn("Less than half of core modules initialized successfully");
-    }
-    
-    // Initialize feature modules
+    // Possibly init other feature modules
     for (const module of InitUtils.featureModules) {
       if (module.init) {
-        try {
-          // Skip project dashboard if components aren't available
-          if (module.name === 'project dashboard') {
-            // Just check if they exist, not if they're fully functional
-            if (!window.ProjectListComponent || !window.ProjectDetailsComponent) {
-              console.info('Skipping project dashboard - required components not found');
-              continue;
-            }
-          }
-          
-          await InitUtils.initModule(module.name, module.init);
-          console.log(`✓ Feature module ${module.name} initialized`);
-        } catch (error) {
-          console.warn(`Feature module ${module.name} initialization skipped:`, error.message);
-        }
+        await InitUtils.initModule(module.name, module.init);
       }
     }
 
-    // Initialize main application
-    console.log("Initializing main application...");
-    try {
-      await initializeApplication();
-      console.log("✅ Application initialized successfully");
-    } catch (error) {
-      console.warn("Application initialized with warnings:", error);
-    }
-    
+    console.log("✅ Application initialization sequence complete");
     return true;
   } catch (error) {
     console.error("❌ Module initialization failed:", error);
     Notifications.apiError("Application initialization failed");
-
-    // Attempt to show a user-friendly error message
     const loginRequiredMsg = document.getElementById('loginRequiredMessage');
     if (loginRequiredMsg) {
       loginRequiredMsg.classList.remove('hidden');
     }
+    return false;
   }
 }
 
 // ---------------------------------------------------------------------
-// EVENT LISTENERS & EXPORTS
+// BOOTSTRAPPING
 // ---------------------------------------------------------------------
 
-// Start initialization when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Initialize all core and feature modules
-    const success = await initializeAllModules();
-    if (!success) {
-      throw new Error("Module initialization failed");
-    }
-
-    // Initialize additional UI components after core initialization
-    if (typeof initializeModelDropdown === 'function') {
-      await InitUtils.initModule('model dropdown', initializeModelDropdown);
-    }
-
+    // Initialize everything
+    await initializeAllModules();
+    // If you have additional UI components:
     if (typeof window.initializeChat === 'function') {
       await InitUtils.initModule('chat', window.initializeChat);
     }
-
-    console.log("✅ Application initialization sequence complete");
+    console.log("✅ DOMContentLoaded: App initialization complete");
   } catch (error) {
-    console.error("❌ Application initialization failed:", error);
+    console.error("❌ DOMContentLoaded: App initialization error:", error);
     Notifications.apiError("Application initialization failed");
-
-    // Attempt to show a user-friendly error message
-    const loginRequiredMsg = document.getElementById('loginRequiredMessage');
-    if (loginRequiredMsg) {
-      loginRequiredMsg.classList.remove('hidden');
-    }
   }
 });
 
-// Handle authentication state changes
+// ---------------------------------------------------------------------
+// AUTH EVENT LISTENER (Single place for UI toggle on login/logout)
+// ---------------------------------------------------------------------
+
 document.addEventListener('authStateChanged', (e) => {
-  updateAuthUI(e.detail.authenticated);
-  
-  if (e.detail.authenticated) {
-    // Only load data if we actually have auth tokens
-    const hasTokens = window.TokenManager?.accessToken || 
-                     (sessionStorage.getItem('auth_state') && 
-                      JSON.parse(sessionStorage.getItem('auth_state'))?.hasTokens);
-    
-    if (hasTokens) {
-      // Add small delay to ensure token propagation
-      setTimeout(() => {
-        try {
-          // Load conversations first since they're most important
-          loadConversationList().catch(err => {
-            console.warn("Failed to load conversations:", err);
-          });
-          
-          // Then load project data if the project manager is available
-          if (window.projectManager?.loadProjects) {
-            window.projectManager.loadProjects().then(() => {
-              loadSidebarProjects().catch(err => {
-                console.warn("Failed to load sidebar projects:", err);
-              });
-            }).catch(err => {
-              console.warn("Failed to load projects:", err);
-            });
-          }
-          
-          // Finally load the conversation if it's in the URL
-          const urlParams = new URLSearchParams(window.location.search);
-          const chatId = urlParams.get('chatId') || window.CHAT_CONFIG?.chatId;
-          if (chatId && window.loadConversation) {
-            window.loadConversation(chatId).catch(err => {
-              console.warn("Failed to load conversation:", err);
-            });
-          }
-        } catch (error) {
-          console.error('Error loading initial data after auth:', error);
-        }
-      }, 300);
-    } else {
-      console.warn('Auth event received but no tokens available - skipping data loading');
+  const { authenticated, username } = e.detail;
+  updateAuthUI(authenticated, username);
+
+  if (authenticated) {
+    // If user is logged in, load side data
+    loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+    loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+
+    // Also handle chatId if needed
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatId = urlParams.get('chatId');
+    if (chatId && typeof window.loadConversation === 'function') {
+      window.loadConversation(chatId).catch(err => {
+        console.warn("Failed to load conversation:", err);
+      });
     }
   } else {
-    // Clear UI for logged out state
+    // Clear the conversation area if you want
     const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
     if (conversationArea) {
       conversationArea.innerHTML = '';
     }
-    
-    // Show login required message
+    // Show login required UI
     const loginMsg = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
-    if (loginMsg) {
-      loginMsg.classList.remove('hidden');
-    }
+    loginMsg?.classList.remove('hidden');
   }
 });
 
-// Expose public methods
+// ---------------------------------------------------------------------
+// PUBLIC EXPORTS
+// ---------------------------------------------------------------------
+
+// Make apiRequest available globally for all other scripts
+window.apiRequest = apiRequest;
+
 window.App = {
   apiRequest,
   showNotification: Notifications,
@@ -1055,6 +880,5 @@ window.App = {
   searchSidebarProjects,
   loadConversationList,
   renderConversationList,
-  checkAndHandleAuth,
   initialize: initializeApplication
 };

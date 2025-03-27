@@ -28,9 +28,9 @@ from routes.file_upload import router as file_upload_router
 from routes.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
-
 from routes.projects.artifacts import router as project_artifacts_router
 from routes.projects.conversations import router as project_conversations_router
+
 # Import database utilities
 from db import init_db, validate_db_schema, fix_db_schema, get_async_session_context
 
@@ -111,17 +111,16 @@ file uploads, and more.
 )
 
 # Enforce HTTPS in production
-# Always enable HTTPS redirection in production
 if settings.ENV == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
     
-    # Add HSTS header
     @app.middleware("http")
     async def add_hsts_header(request: Request, call_next):
         response = await call_next(request)
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
+# Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", include_in_schema=False)
@@ -143,28 +142,42 @@ async def projects():
 async def health_check():
     """Health check endpoint to verify the application is running."""
     return {"status": "ok"}
+    
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Return the favicon."""
     return FileResponse("static/favicon.ico")
 
+
+# --------------------------------
+# CUSTOM 422 HANDLER
+# --------------------------------
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc):
-    """Handles validation exceptions with custom error messages."""
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Handles validation exceptions with a custom JSON error message.
+    This is where 422 Unprocessable Entity gets triggered if the request
+    doesn't match the parameter or body schemas.
+    """
+    logger.warning(f"Validation error for request {request.url} - {exc.errors()}")
     return JSONResponse(
         status_code=422,
-        content={"detail": "Invalid request data", "errors": exc.errors()},
+        content={
+            "detail": "Invalid request data",
+            "errors": exc.errors()
+        },
     )
 
-# Register routers
+# -------------------------
+# Register Routers
+# -------------------------
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(conversations_router, prefix="/api/chat/conversations", tags=["conversations"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
-app.include_router(knowledge_base_router, prefix="/api/kb", tags=["knowledge-bases"])
+app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 
-# Include project sub-routers
 app.include_router(
     project_files_router,
     prefix="/api/projects/{project_id}/files", 
@@ -183,12 +196,15 @@ app.include_router(
     tags=["project-conversations"]
 )
 
+
+# -------------------------
+# Startup & Shutdown Events
+# -------------------------
 @app.on_event("startup")
 async def on_startup():
-    """Performs necessary startup tasks such as database initialization and directory setup."""
-    # Clean environment first
+    """Performs necessary startup tasks: database init, migrations, token cleanup."""
     os.environ.pop("AZUREML_ENVIRONMENT_UPDATE", None)
-
+    
     try:
         # Initialize database and run migrations
         await init_db()
@@ -196,46 +212,36 @@ async def on_startup():
         if has_mismatches:
             logger.warning("Attempting to fix schema mismatches...")
             await fix_db_schema()
-            await validate_db_schema()  # Validate again after fixes
+            await validate_db_schema()
         logger.info("Database schema validated and fixed")
 
-        # Create uploads directory with proper permissions
+        # Create uploads directory
         upload_path = Path("./uploads/project_files")
         upload_path.mkdir(parents=True, exist_ok=True)
-        upload_path.chmod(0o755)  # Ensure proper permissions
+        upload_path.chmod(0o755)
         logger.info("Upload directories initialized with secure permissions")
         
-        # Initialize auth system
-        # Get a database session
+        # Auth system
         async with get_async_session_context() as session:
-            # Clean up expired tokens
             deleted_count = await clean_expired_tokens(session)
             logger.info(f"Cleaned {deleted_count} expired tokens during startup")
-            
-            # Load active revoked tokens into memory
             await load_revocation_list(session)
-        
-        # Schedule periodic token cleanup (every 30 minutes)
+
+        # Schedule periodic token cleanup
         await schedule_token_cleanup(interval_minutes=30)
-            
         logger.info("Authentication system initialized")
     except Exception as e:
         logger.critical("Startup initialization failed: %s", e)
         raise
-        
+
 @app.on_event("shutdown")
 async def on_shutdown():
     """Performs cleanup tasks when the application is shutting down."""
     logger.info("Application shutting down")
-    
-    # Any cleanup logic here
     try:
-        # Clean up expired tokens one final time
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
             logger.info(f"Cleaned {deleted_count} expired tokens during shutdown")
-            
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
-    
     logger.info("Shutdown complete")
