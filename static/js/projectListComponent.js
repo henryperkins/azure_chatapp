@@ -113,7 +113,12 @@ class ProjectListComponent {
   }
 
   hide() {
-    uiUtilsInstance.toggleVisibility("projectListView", false);
+    const element = document.getElementById("projectListView");
+    if (element) {
+      uiUtilsInstance.toggleVisibility(element, false);
+    } else {
+      console.error('projectListView element not found');
+    }
   }
 
   renderProjects(eventOrProjects) {

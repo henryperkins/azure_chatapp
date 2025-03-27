@@ -113,8 +113,8 @@ class KnowledgeBaseComponent {
     });
 
     document.getElementById("setupKnowledgeBaseBtn")?.addEventListener("click", () => {
-      // Show modal first
-      modalManagerInstance?.show("knowledge");
+      // Show modal directly
+      document.getElementById('knowledgeBaseSettingsModal')?.classList.remove('hidden');
       
       // Try to get and store project ID if available
       const projectId = window.projectManager?.currentProject?.id;
@@ -148,7 +148,7 @@ class KnowledgeBaseComponent {
         uiUtilsInstance.showNotification("Setting up knowledge base...", "info");
         
         const response = await window.apiRequest(
-          `/api/projects/${projectId}/knowledge-base`,
+          `/api/projects/${projectId}/knowledge-bases`,
           "POST",
           Object.fromEntries(formData)
         );
@@ -183,8 +183,8 @@ class KnowledgeBaseComponent {
     }
     
     this.showSearchLoading();
-    
-    window.apiRequest(`/api/projects/${projectId}/knowledge-base/search`, "POST", {
+    window.apiRequest(`/api/projects/${projectId}/knowledge-bases/search`, "POST", {
+      query,
       query,
       top_k: 5
     })
@@ -214,8 +214,8 @@ class KnowledgeBaseComponent {
     
     try {
       const response = await window.apiRequest(
-        `/api/knowledge-base/${project.knowledge_base_id}`, 
-        "PATCH", 
+        `/api/knowledge-bases/${project.knowledge_base_id}`,
+        "PATCH",
         { is_active: enabled }
       );
       
@@ -243,7 +243,7 @@ class KnowledgeBaseComponent {
   async loadKnowledgeBaseHealth(kbId) {
     try {
       const health = await window.apiRequest(
-        `/api/knowledge-base/${kbId}/health`,
+        `/api/knowledge-bases/${kbId}/health`,
         "GET"
       );
       this.renderHealthStatus(health);

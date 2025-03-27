@@ -175,17 +175,22 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     ? `${baseUrl}${cleanEndpoint}`
     : `${baseUrl}/${cleanEndpoint}`;
 
+  console.log('Constructing API request for endpoint:', endpoint);
+  const authHeaders = TokenManager.getAuthHeader();
+  console.log('Using auth headers:', authHeaders);
+  
   const options = {
     method,
     headers: {
       'Accept': 'application/json',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
-      ...TokenManager.getAuthHeader() // from auth.js
+      ...authHeaders
     },
     credentials: 'include',
     cache: 'no-store'
   };
+  console.log('Request options:', options);
 
   if (data) {
     if (data instanceof FormData) {
@@ -453,14 +458,8 @@ function loadSidebarProjects() {
     return Promise.resolve([]);
   }
 
-  // Add query parameters to match backend validation requirements
-  const params = new URLSearchParams({
-    filter: 'all',
-    skip: '0',
-    limit: '100'
-  });
-  
-  const endpoint = `${API_ENDPOINTS.PROJECTS.replace(/^https?:\/\/[^/]+/, '')}?${params}`;
+  // Use base projects endpoint without any parameters
+  const endpoint = API_ENDPOINTS.PROJECTS.replace(/^https?:\/\/[^/]+/, '');
   console.log("Loading sidebar projects from:", endpoint);
   
   return apiRequest(endpoint)
@@ -665,25 +664,7 @@ function safeInitialize() {
     elementMap[key] = document.querySelector(selector);
   });
 
-  // Auth dropdown toggling
-  const authButton = document.getElementById('authButton');
-  const authDropdown = document.getElementById('authDropdown');
-  if (authButton && authDropdown) {
-    authButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      authDropdown.classList.toggle('hidden');
-      authDropdown.classList.toggle('slide-in');
-    });
-  }
-
-  // Close dropdown on outside click
-  document.addEventListener('click', function(e) {
-    if (!e.target.closest('#authContainer') && !e.target.closest('#authDropdown')) {
-      authDropdown?.classList.add('hidden');
-      authDropdown?.classList.remove('slide-in');
-    }
-  });
+  // Auth dropdown handling is done in auth.js
 
   // Toggle sidebar
   if (elementMap.NAV_TOGGLE_BTN) {
