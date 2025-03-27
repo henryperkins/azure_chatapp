@@ -1,1 +1,0 @@
-// file is no longer used, see projectListComponent.js, projectDetailsComponent.js etc
