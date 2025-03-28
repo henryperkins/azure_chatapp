@@ -203,43 +203,25 @@
   @apply bg-gray-800 text-gray-200;
 }
 
-/* Sidebar performance optimization */
-#mainSidebar:not(.translate-x-0) {
-  @apply will-change-transform;
-  transform: translate3d(-100%, 0, 0); /* Force hardware acceleration */
-}
-
-/* Mobile sidebar handling */
+/* Mobile-specific sidebar transitions */
 @media (max-width: 767px) {
   #mainSidebar {
-    @apply fixed inset-0 z-50 -translate-x-full transition-sidebar;
-    @apply -translate-x-full; /* Ensure default hidden state */
+    will-change: transform;
+    transform: translate3d(-100%, 0, 0);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   }
   
-  #mainSidebar.sidebar-open {
-    @apply translate-x-0;
-  }
-  
-  .auth-dropdown {
-    @apply fixed top-16 inset-x-4 z-50;
-  }
-  
-  .dropdown-content {
-    position: fixed !important;
-    top: 4rem;
-    left: 1rem;
-    right: 1rem;
-    transform-origin: top center;
+  #mainSidebar.translate-x-0 {
+    transform: translate3d(0, 0, 0);
   }
 }
 
+/* Disable transforms on desktop */
 @media (min-width: 768px) {
   #mainSidebar {
-    @apply translate-x-0 relative;
-  }
-  
-  #sidebarBackdrop {
-    @apply hidden;
+    transform: none !important;
+    transition: none !important;
+    z-index: auto;
   }
 }
 
