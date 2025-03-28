@@ -13,7 +13,10 @@
 
 // Consolidated global config (no second "const API_CONFIG")
 window.API_CONFIG = {
-  baseUrl: "",
+  baseUrl: '',
+  isAuthenticated: false,
+  authCheckInProgress: false,
+  lastErrorStatus: null,
   isAuthenticated: false,
   authCheckInProgress: false,
   lastErrorStatus: null

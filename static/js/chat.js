@@ -239,34 +239,38 @@ class MessageService {
       wsService.onMessage = this._handleWsMessage.bind(this);
     }
   }
+// Helper function to validate UUIDs in MessageService
+_isValidUUID(uuid) {
+  if (!uuid) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+}
 
-  async sendMessage(content) {
-    try {
-      // Validate conversation ID first
-      if (!this.chatId || !this.isValidUUID(this.chatId)) {
-        console.warn('Invalid conversation ID, creating new conversation');
-        const newConvo = await this.createNewConversation();
-        this.chatId = newConvo.id;
-      }
+async sendMessage(content) {
+  try {
+    // Validate conversation ID first
+    if (!this.chatId || !this._isValidUUID(this.chatId)) {
+      console.warn('Invalid conversation ID, cannot send message');
+      throw new Error('Invalid conversation ID');
+    }
 
-      this.onSending();
+    this.onSending();
 
-      // Determine if we're in project context or standalone chat
-      const isProjectContext = window.location.pathname.includes('/projects');
-      const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
-      
-      const messagePayload = {
-        content: content,
-        model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
-        enable_thinking: true  // Enable thinking blocks for Claude
-      };
+    // Determine if we're in project context or standalone chat
+    const isProjectContext = window.location.pathname.includes('/projects');
+    const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
+    
+    const messagePayload = {
+      content: content,
+      model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
+      enable_thinking: true  // Enable thinking blocks for Claude
+    };
 
-      // Only include project_id if we're in project context
-      if (isProjectContext && projectId) {
-        messagePayload.project_id = projectId;
-      }
+    // Only include project_id if we're in project context
+    if (isProjectContext && projectId) {
+      messagePayload.project_id = projectId;
+    }
 
-      if (this.wsService && this.wsService.isConnected()) {
+  if (this.wsService && this.wsService.isConnected()) {
         const wsResponse = await this.wsService.send({
           type: 'message',
           chatId: this.chatId,
@@ -280,20 +284,31 @@ class MessageService {
           metadata: wsResponse.metadata || {}
         });
       } else {
+        // Validate chatId before proceeding
+        if (!this.chatId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.chatId)) {
+          throw new Error('Invalid conversation ID');
+        }
+        
         // HTTP fallback
         // Determine correct endpoint based on context, not just projectId
         const endpoint = isProjectContext && projectId
-          ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
-          : `/api/chat/conversations/${this.chatId}/messages`;
+          ? `${window.API_CONFIG.baseUrl}/api/projects/${projectId}/conversations/${this.chatId}/messages`
+          : `${window.API_CONFIG.baseUrl}/api/chat/conversations/${this.chatId}/messages`;
 
-        const response = await fetch(endpoint, {
+        // Force local API usage - prevent any external URL requests
+        const apiUrl = endpoint.startsWith('http')
+          ? endpoint.replace(/^https?:\/\/[^/]+/, window.API_CONFIG.baseUrl || '')
+          : (window.API_CONFIG.baseUrl || '') + endpoint;
+        
+        const response = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             ...TokenManager.getAuthHeader()
           },
           body: JSON.stringify(messagePayload),
-          credentials: 'include'
+          credentials: 'include',
+          mode: 'cors'
         });
 
         if (!response.ok) {
@@ -651,7 +666,7 @@ class UIComponents {
         try {
           // Create message container
           const msgDiv = document.createElement('div');
-          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.messageList.getClass(role)}`;
+          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.getClass(role)}`;
           if (id) msgDiv.id = id;
           
           // Add data attributes for message metadata
@@ -683,7 +698,7 @@ class UIComponents {
           let processedContent = content;
           try {
             // Check if content is JSON string
-            if (typeof content === 'string' && 
+            if (typeof content === 'string' &&
                 (content.trim().startsWith('{') || content.trim().startsWith('['))) {
               const parsed = JSON.parse(content);
               if (parsed.answer || parsed.content || parsed.message) {
@@ -716,113 +731,117 @@ class UIComponents {
           
           msgDiv.appendChild(contentDiv);
 
-        // Add copy buttons to code blocks
-        msgDiv.querySelectorAll('pre code').forEach(block => {
-          const btn = document.createElement('button');
-          btn.className = 'copy-code-btn';
-          btn.textContent = 'Copy';
-          btn.onclick = () => {
-            navigator.clipboard.writeText(block.textContent)
-              .then(() => {
-                btn.textContent = 'Copied!';
-                setTimeout(() => btn.textContent = 'Copy', 2000);
-              });
-          };
+          // Add copy buttons to code blocks
+          msgDiv.querySelectorAll('pre code').forEach(block => {
+            const btn = document.createElement('button');
+            btn.className = 'copy-code-btn';
+            btn.textContent = 'Copy';
+            btn.onclick = () => {
+              navigator.clipboard.writeText(block.textContent)
+                .then(() => {
+                  btn.textContent = 'Copied!';
+                  setTimeout(() => btn.textContent = 'Copy', 2000);
+                });
+            };
 
-          const wrapper = document.createElement('div');
-          wrapper.className = 'code-block-wrapper';
-          wrapper.appendChild(block.cloneNode(true));
-          wrapper.appendChild(btn);
-          block.replaceWith(wrapper);
-        });
+            const wrapper = document.createElement('div');
+            wrapper.className = 'code-block-wrapper';
+            wrapper.appendChild(block.cloneNode(true));
+            wrapper.appendChild(btn);
+            block.replaceWith(wrapper);
+          });
 
-        // Add knowledge base indicator if metadata indicates usage
-        if (role === 'assistant' && metadata?.used_knowledge_context) {
-          const kb = document.createElement('div');
-          kb.className = 'mt-2 bg-blue-50 text-blue-800 rounded p-2 text-xs flex items-center';
-          kb.innerHTML = `
-            <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>Response includes information from project files</span>
-          `;
-          msgDiv.appendChild(kb);
-        }
-
-        // Enhanced thinking block display for Claude models
-        if (role === 'assistant' && (thinking || redacted)) {
-          const container = document.createElement('div');
-          container.className = 'mt-3 border-t border-gray-200 pt-2';
-          
-          // Add model metadata indicator if available
-          if (metadata && (metadata.model || metadata.tokens)) {
-            const metaIndicator = document.createElement('div');
-            metaIndicator.className = 'text-xs text-gray-500 mb-2';
-            let metaText = '';
-            if (metadata.model) metaText += `Model: ${metadata.model}`;
-            if (metadata.tokens) {
-              if (metaText) metaText += ' • ';
-              metaText += `Tokens: ${metadata.tokens}`;
-            }
-            metaIndicator.textContent = metaText;
-            container.appendChild(metaIndicator);
-          }
-
-          const toggle = document.createElement('button');
-          toggle.className = 'text-gray-600 text-xs flex items-center mb-1 hover:text-gray-800';
-          toggle.innerHTML = `
-            <svg class="h-4 w-4 mr-1 thinking-chevron transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-            ${thinking ? 'Show detailed reasoning' : 'Show safety notice'}
-          `;
-            
-          // Add tooltip explaining thinking blocks
-          toggle.title = thinking 
-            ? "Claude's step-by-step reasoning process"
-            : "Some reasoning was redacted for safety";
-
-          const contentDiv = document.createElement('div');
-          contentDiv.className = 'bg-gray-50 p-2 rounded text-gray-800 text-sm hidden thinking-content';
-
-          if (thinking) {
-            // Format thinking blocks with proper line breaks
-            const formattedThinking = thinking.replace(/\n/g, '<br>');
-            contentDiv.innerHTML = window.formatText ? 
-                window.formatText(formattedThinking) : 
-                formattedThinking;
-          } else if (redacted) {
-            contentDiv.innerHTML = `
-                <div class="flex items-center text-yellow-700">
-                    <svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                    </svg>
-                    Claude's full reasoning is encrypted for safety but will be used internally
-                </div>
+          // Add knowledge base indicator if metadata indicates usage
+          if (role === 'assistant' && metadata?.used_knowledge_context) {
+            const kb = document.createElement('div');
+            kb.className = 'mt-2 bg-blue-50 text-blue-800 rounded p-2 text-xs flex items-center';
+            kb.innerHTML = `
+              <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Response includes information from project files</span>
             `;
+            msgDiv.appendChild(kb);
           }
 
-          toggle.onclick = () => {
-            contentDiv.classList.toggle('hidden');
-            const chevron = toggle.querySelector('.thinking-chevron');
-            if (contentDiv.classList.contains('hidden')) {
-              toggle.innerHTML = toggle.innerHTML.replace('Hide', 'Show');
-              if (chevron) chevron.style.transform = '';
-            } else {
-              toggle.innerHTML = toggle.innerHTML.replace('Show', 'Hide');
-              if (chevron) chevron.style.transform = 'rotate(180deg)';
+          // Enhanced thinking block display for Claude models
+          if (role === 'assistant' && (thinking || redacted)) {
+            const container = document.createElement('div');
+            container.className = 'mt-3 border-t border-gray-200 pt-2';
+            
+            // Add model metadata indicator if available
+            if (metadata && (metadata.model || metadata.tokens)) {
+              const metaIndicator = document.createElement('div');
+              metaIndicator.className = 'text-xs text-gray-500 mb-2';
+              let metaText = '';
+              if (metadata.model) metaText += `Model: ${metadata.model}`;
+              if (metadata.tokens) {
+                if (metaText) metaText += ' • ';
+                metaText += `Tokens: ${metadata.tokens}`;
+              }
+              metaIndicator.textContent = metaText;
+              container.appendChild(metaIndicator);
             }
-          };
 
-          container.appendChild(toggle);
-          container.appendChild(contentDiv);
-          msgDiv.appendChild(container);
+            const toggle = document.createElement('button');
+            toggle.className = 'text-gray-600 text-xs flex items-center mb-1 hover:text-gray-800';
+            toggle.innerHTML = `
+              <svg class="h-4 w-4 mr-1 thinking-chevron transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+              ${thinking ? 'Show detailed reasoning' : 'Show safety notice'}
+            `;
+              
+            // Add tooltip explaining thinking blocks
+            toggle.title = thinking
+              ? "Claude's step-by-step reasoning process"
+              : "Some reasoning was redacted for safety";
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'bg-gray-50 p-2 rounded text-gray-800 text-sm hidden thinking-content';
+
+            if (thinking) {
+              // Format thinking blocks with proper line breaks
+              const formattedThinking = thinking.replace(/\n/g, '<br>');
+              contentDiv.innerHTML = window.formatText ?
+                  window.formatText(formattedThinking) :
+                  formattedThinking;
+            } else if (redacted) {
+              contentDiv.innerHTML = `
+                  <div class="flex items-center text-yellow-700">
+                      <svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                      </svg>
+                      Claude's full reasoning is encrypted for safety but will be used internally
+                  </div>
+              `;
+            }
+
+            toggle.onclick = () => {
+              contentDiv.classList.toggle('hidden');
+              const chevron = toggle.querySelector('.thinking-chevron');
+              if (contentDiv.classList.contains('hidden')) {
+                toggle.innerHTML = toggle.innerHTML.replace('Hide', 'Show');
+                if (chevron) chevron.style.transform = '';
+              } else {
+                toggle.innerHTML = toggle.innerHTML.replace('Show', 'Hide');
+                if (chevron) chevron.style.transform = 'rotate(180deg)';
+              }
+            };
+
+            container.appendChild(toggle);
+            container.appendChild(contentDiv);
+            msgDiv.appendChild(container);
+          }
+
+          this.container.appendChild(msgDiv);
+          this.container.scrollTop = this.container.scrollHeight;
+          return msgDiv;
+        } catch (error) {
+          console.error('Error appending message:', error);
+          return null;
         }
-
-        this.container.appendChild(msgDiv);
-        this.container.scrollTop = this.container.scrollHeight;
-        return msgDiv;
       },
 
       addImageIndicator: function(imageUrl) {
@@ -1143,6 +1162,9 @@ class ChatInterface {
   async createNewConversation() {
     // Simply delegate to ConversationService
     try {
+      if (!this.conversationService) {
+        throw new Error("Conversation service not initialized");
+      }
       const conversation = await this.conversationService.createNewConversation();
       this.currentChatId = conversation.id;
       return conversation;
@@ -1219,8 +1241,25 @@ class ChatInterface {
       }
     }
 
+    // Verify UI is initialized before proceeding
+    if (!this.ui || !this.ui.messageList) {
+      this.notificationFunction("UI not properly initialized", "error");
+      return;
+    }
+
     // Append user's message to UI
-    this.ui.messageList.appendMessage("user", userMsg || "Analyze this image");
+    try {
+      this.ui.messageList.appendMessage("user", userMsg || "Analyze this image");
+    } catch (error) {
+      console.error("Error displaying message:", error);
+      // Continue anyway to try sending message
+    }
+
+    // Verify message service is initialized
+    if (!this.messageService) {
+      this.notificationFunction("Message service not properly initialized", "error");
+      return;
+    }
 
     // Send message
     await this.messageService.sendMessage(userMsg || "Analyze this image");
@@ -1334,15 +1373,12 @@ async function testWebSocketConnection() {
     }
   }
   
-  // Export ChatInterface globally
-  if (typeof window !== 'undefined') {
-    window.ChatInterface = window.ChatInterface || ChatInterface;
-  }
-  
-  // Expose ChatInterface globally
-  if (typeof window !== 'undefined') {
-    window.ChatInterface = window.ChatInterface || ChatInterface;
-  }
+  return { success: false, message: "WebSocket service not initialized" };
+}
+
+// Export ChatInterface globally
+if (typeof window !== 'undefined') {
+  window.ChatInterface = window.ChatInterface || ChatInterface;
 }
 
 // Attach to window
@@ -1371,3 +1407,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 // Ensure ChatInterface is directly available globally
 window.ChatInterface = ChatInterface;
+
