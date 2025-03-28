@@ -9,22 +9,62 @@
  * - Starred conversations management
  */
 
+function initializeSidebarToggle() {
+  const sidebar = document.getElementById('mainSidebar');
+  const toggleBtn = document.getElementById('navToggleBtn');
+  
+  if (!sidebar || !toggleBtn) return;
+
+  // Set initial state
+  sidebar.classList.add('-translate-x-full');
+  sidebar.classList.remove('translate-x-0', 'hidden');
+
+  toggleBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    const isHidden = sidebar.classList.contains('-translate-x-full');
+    
+    if (isHidden) {
+      sidebar.classList.remove('-translate-x-full');
+      sidebar.classList.add('translate-x-0');
+      createBackdrop();
+    } else {
+      sidebar.classList.add('-translate-x-full');
+      sidebar.classList.remove('translate-x-0');
+      removeBackdrop();
+    }
+  });
+
+  function createBackdrop() {
+    if (document.getElementById('sidebarBackdrop')) return;
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sidebarBackdrop';
+    backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden';
+    backdrop.addEventListener('click', () => {
+      sidebar.classList.add('-translate-x-full');
+      sidebar.classList.remove('translate-x-0');
+      removeBackdrop();
+    });
+    document.body.appendChild(backdrop);
+  }
+
+  function removeBackdrop() {
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (backdrop) backdrop.remove();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initializeSidebarToggle();
   // Initialize sidebar tabs
   setupSidebarTabs();
-
   // Initialize collapsible sections
   setupCollapsibleSections();
-
   // Set up pin sidebar functionality
   setupPinningSidebar();
-
   // Set up custom instructions
   setupCustomInstructions();
-
   // Set up new chat button
   setupNewChatButton();
-
   // Initialize model dropdown
   initializeModelDropdownOnLoad();
 });
