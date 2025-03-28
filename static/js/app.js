@@ -592,42 +592,7 @@ function handleNavigationChange() {
 // SIDEBAR MANAGEMENT
 // ---------------------------------------------------------------------
 
-window.toggleSidebar = function() {
-  console.log("Toggle sidebar called");
-  const sidebarEl = document.getElementById('mainSidebar');
-  if (!sidebarEl) {
-    console.error("Sidebar element not found");
-    return;
-  }
-
-  const existingBackdrop = document.getElementById('sidebarBackdrop');
-  const isHidden = sidebarEl.classList.contains('-translate-x-full');
-  
-  if (isHidden) {
-    // Remove any existing backdrop first
-    if (existingBackdrop) {
-      existingBackdrop.remove();
-    }
-
-    // Create new backdrop
-    const backdrop = document.createElement("div");
-    backdrop.id = "sidebarBackdrop";
-    backdrop.className = "fixed inset-0 bg-black/50 z-40 md:hidden";
-    backdrop.onclick = window.toggleSidebar;
-    document.body.appendChild(backdrop);
-
-    sidebarEl.classList.remove('-translate-x-full');
-    sidebarEl.classList.add('translate-x-0');
-  } else {
-    sidebarEl.classList.remove('translate-x-0');
-    sidebarEl.classList.add('-translate-x-full');
-
-    // Remove backdrop immediately when closing
-    if (existingBackdrop) {
-      existingBackdrop.remove();
-    }
-  }
-}
+// Removed duplicate toggleSidebar function - now handled in sidebar.js
 
 function handleWindowResize() {
   const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
