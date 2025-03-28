@@ -170,12 +170,31 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   // Clean up double slashes
   const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
   const baseUrl = getBaseUrl();
+  method = method.toUpperCase();
 
-  const finalUrl = cleanEndpoint.startsWith('/')
-    ? `${baseUrl}${cleanEndpoint}`
-    : `${baseUrl}/${cleanEndpoint}`;
+  // Handle data for GET/HEAD/DELETE requests
+  let finalUrl;
+  if (data && ['GET', 'HEAD', 'DELETE'].includes(method)) {
+    // Convert data to URL query parameters
+    const queryParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value)) {
+        value.forEach(v => queryParams.append(key, v));
+      } else {
+        queryParams.append(key, value);
+      }
+    }
+    const queryString = queryParams.toString();
+    finalUrl = cleanEndpoint.startsWith('/')
+      ? `${baseUrl}${cleanEndpoint}${cleanEndpoint.includes('?') ? '&' : '?'}${queryString}`
+      : `${baseUrl}/${cleanEndpoint}${cleanEndpoint.includes('?') ? '&' : '?'}${queryString}`;
+  } else {
+    finalUrl = cleanEndpoint.startsWith('/')
+      ? `${baseUrl}${cleanEndpoint}`
+      : `${baseUrl}/${cleanEndpoint}`;
+  }
 
-  console.log('Constructing API request for endpoint:', endpoint);
+  console.log('Constructing API request for endpoint:', finalUrl);
   const authHeaders = TokenManager.getAuthHeader();
   console.log('Using auth headers:', authHeaders);
   
@@ -190,9 +209,8 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     credentials: 'include',
     cache: 'no-store'
   };
-  console.log('Request options:', options);
 
-  if (data) {
+  if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
     if (data instanceof FormData) {
       // Let the browser set Content-Type for FormData
       options.body = data;
@@ -206,16 +224,15 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     console.log(`Making ${method} request to: ${finalUrl}`);
     const response = await fetch(finalUrl, options);
 
+    // The rest of the error handling remains unchanged
     if (!response.ok) {
       window.API_CONFIG.lastErrorStatus = response.status;
       console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
-      // Handle 401 with token refresh
       if (response.status === 401 && retryCount < maxRetries) {
         try {
           if (window.TokenManager?.refreshTokens) {
             await window.TokenManager.refreshTokens();
-            // Retry the request once the token is refreshed
             return apiRequest(endpoint, method, data, retryCount + 1);
           }
         } catch (refreshError) {
@@ -223,7 +240,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
         }
       }
 
-      // Handle 422 (validation) or 404 in special contexts
       if (response.status === 422) {
         try {
           const errorData = await response.json();
@@ -232,7 +248,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
           console.error('Could not parse validation error', parseErr);
         }
       } else if (response.status === 401) {
-        // Clear auth
         sessionStorage.removeItem('userInfo');
         sessionStorage.removeItem('auth_state');
         window.API_CONFIG.isAuthenticated = false;
@@ -244,9 +259,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       throw new Error(`API error (${response.status}): ${response.statusText}`);
     }
 
-    // Attempt to parse JSON
     const jsonData = await response.json();
-    // If tokens come back in any endpoint, set them
     if (jsonData.access_token && window.TokenManager?.setTokens) {
       TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
     }
