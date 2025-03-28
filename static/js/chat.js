@@ -651,7 +651,7 @@ class UIComponents {
         try {
           // Create message container
           const msgDiv = document.createElement('div');
-          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this._getClass(role)}`;
+          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.getClass(role)}`;
           if (id) msgDiv.id = id;
           
           // Add data attributes for message metadata
@@ -702,9 +702,9 @@ class UIComponents {
           
           // Ensure newlines are preserved and apply formatting
           try {
-            contentDiv.innerHTML = this.formatText(
-              processedContent.replace(/\\n/g, '<br>')
-            );
+            contentDiv.innerHTML = this.formatText ? 
+              this.formatText(processedContent.replace(/\\n/g, '<br>')) :
+              this._defaultFormatter(processedContent.replace(/\\n/g, '<br>'));
           } catch (err) {
             console.error('Error formatting message content:', err);
             contentDiv.textContent = processedContent; // Fallback to plain text
@@ -844,7 +844,7 @@ class UIComponents {
         }
       },
 
-      _getClass: function(role) {
+      getClass: function(role) {
         switch (role) {
           case "user":
             return "bg-blue-50 text-blue-900";
@@ -888,6 +888,10 @@ class UIComponents {
         return escaped;
       }
     };
+    
+    // Bind methods to ensure proper 'this' context
+    this.messageList.getClass = this.messageList.getClass.bind(this.messageList);
+    this.messageList._defaultFormatter = this.messageList._defaultFormatter.bind(this.messageList);
 
     // Input component
     this.input = {
