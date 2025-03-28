@@ -96,8 +96,7 @@ class ProjectListComponent {
       }
     } else {
       // Ensure existing container has proper classes
-      this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3';
-      this.element.style.minHeight = '200px';
+      this.element.className = 'grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4 min-h-[200px]';
     }
     
     this.bindFilterEvents();
@@ -147,7 +146,7 @@ class ProjectListComponent {
 
       if (projects.length === 0) {
         const emptyMsg = document.createElement('div');
-        emptyMsg.className = 'text-gray-500 text-center py-8 col-span-3';
+        emptyMsg.className = 'text-gray-500 dark:text-gray-400 text-center py-8 col-span-3 transition-colors duration-200';
         emptyMsg.textContent = 'No projects available';
         this.element.appendChild(emptyMsg);
         if (this.messageEl) this.messageEl.classList.add("hidden");
@@ -234,8 +233,8 @@ class ProjectListComponent {
     
     const progressOuter = uiUtilsInstance.createElement("div", { className: "progress-outer" });
     const progressInner = uiUtilsInstance.createElement("div", { 
-      className: "progress-inner",
-      style: { width: `${usagePct}%` }
+      className: "progress-inner h-full transition-all duration-500 ease-out",
+      style: { '--width': `${usagePct}%` }
     });
     
     progressOuter.appendChild(progressInner);
@@ -254,7 +253,7 @@ class ProjectListComponent {
     
     // View button
     const viewBtn = uiUtilsInstance.createElement("button", {
-      className: "p-1 text-blue-600 hover:text-blue-800 view-project-btn",
+      className: "p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors duration-150 view-project-btn",
       innerHTML: `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
