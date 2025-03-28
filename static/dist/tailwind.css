@@ -1187,6 +1187,9 @@ video {
      -moz-user-select: none;
           user-select: none;
 }
+.resize {
+  resize: both;
+}
 .appearance-none {
   -webkit-appearance: none;
      -moz-appearance: none;
@@ -1995,12 +1998,16 @@ video {
   color: rgb(229 231 235 / var(--tw-text-opacity));
 }
 
-/* Mobile-specific sidebar transitions */
+/* Sidebar transitions */
+#mainSidebar {
+  will-change: transform;
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Mobile specific behavior */
 @media (max-width: 767px) {
   #mainSidebar {
-    will-change: transform;
     transform: translate3d(-100%, 0, 0);
-    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   }
   
   #mainSidebar.translate-x-0 {
@@ -2008,12 +2015,10 @@ video {
   }
 }
 
-/* Disable transforms on desktop */
+/* Desktop behavior - always visible */
 @media (min-width: 768px) {
   #mainSidebar {
-    transform: none !important;
-    transition: none !important;
-    z-index: auto;
+    transform: translate3d(0, 0, 0) !important;
   }
 }
 
@@ -2424,6 +2429,12 @@ video {
 
   .md\:p-6 {
     padding: 1.5rem;
+  }
+
+  .md\:shadow-none {
+    --tw-shadow: 0 0 #0000;
+    --tw-shadow-colored: 0 0 #0000;
+    box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
   }
 }
 
