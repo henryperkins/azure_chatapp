@@ -367,23 +367,20 @@ async def create_message(
                 # Include metadata (thinking blocks) if available
                 metadata = assistant_msg.get_metadata_dict()
                 
-                # Add the assistant_message as a proper object instead of a JSON string
-                # The frontend expects a JSON string that it will parse
-                # Include metadata (thinking blocks) if available
-                metadata = assistant_msg.get_metadata_dict()
-                
-                # Add the assistant_message as a proper object instead of a JSON string
+                # Add the assistant_message as a proper object
                 response_payload["assistant_message"] = {
                     "id": str(assistant_msg.id),
                     "role": assistant_msg.role,
                     "content": assistant_msg.content,
+                    "message": assistant_msg.content,  # Add message field for compatibility
                     "metadata": metadata
                 }
                 
                 # Add direct content field for older clients
                 response_payload["content"] = assistant_msg.content
+                response_payload["message"] = assistant_msg.content  # Add message field for compatibility
                 
-                # Add thinking metadata if available
+                # Add thinking metadata at root level for direct access
                 if metadata:
                     if "thinking" in metadata:
                         response_payload["thinking"] = metadata["thinking"]
@@ -523,19 +520,46 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
 
                     if assistant_msg:
                         # Prepare response with thinking blocks if available
+                        metadata = assistant_msg.get_metadata_dict()
+                        
                         response_data = {
                             "type": "message", 
-                            "content": assistant_msg.content
+                            "content": assistant_msg.content,
+                            "message": assistant_msg.content,  # Add message field for compatibility
+                            "role": "assistant"
                         }
                         
                         # Include thinking blocks if available
-                        metadata = assistant_msg.get_metadata_dict()
-                        if metadata.get("has_thinking"):
+                        if metadata:
                             if "thinking" in metadata:
                                 response_data["thinking"] = metadata["thinking"]
                             if "redacted_thinking" in metadata:
                                 response_data["redacted_thinking"] = metadata["redacted_thinking"]
+                            if "model" in metadata:
+                                response_data["model"] = metadata["model"]
+                            if "tokens" in metadata:
+                                response_data["token_count"] = metadata["tokens"]
+                                
+                            # Include all metadata
+                            response_data["metadata"] = metadata
                         
+                        # For Claude responses, also send a claude_response type
+                        if "claude" in (conversation.model_id or "").lower():
+                            claude_data = {
+                                "type": "claude_response",
+                                "answer": assistant_msg.content,
+                                "role": "assistant"
+                            }
+                            
+                            # Add thinking if available
+                            if metadata and "thinking" in metadata:
+                                claude_data["thinking"] = metadata["thinking"]
+                            if metadata and "redacted_thinking" in metadata:
+                                claude_data["redacted_thinking"] = metadata["redacted_thinking"]
+                                
+                            await websocket.send_text(json.dumps(claude_data))
+                        
+                        # Send standard message response
                         await websocket.send_text(json.dumps(response_data))
 
         except WebSocketDisconnect:

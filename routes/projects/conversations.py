@@ -338,7 +338,14 @@ async def project_websocket_chat_endpoint(
                 )
 
                 if message.role == "user":
-                    await handle_websocket_response(conversation_id, db, websocket)
+                    try:
+                        await handle_websocket_response(conversation_id, db, websocket)
+                    except Exception as e:
+                        logger.error(f"Error handling websocket response: {str(e)}")
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": f"Error generating response: {str(e)}"
+                        })
 
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
@@ -421,11 +428,13 @@ async def create_message(
                     "id": str(assistant_msg.id),
                     "role": assistant_msg.role,
                     "content": assistant_msg.content,
+                    "message": assistant_msg.content,  # Add message field for compatibility
                     "metadata": metadata
                 }
                 
                 # Add direct content field for older clients
                 response_payload["content"] = assistant_msg.content
+                response_payload["message"] = assistant_msg.content  # Add message field for compatibility
                 
                 # Add thinking metadata if available
                 if metadata:
