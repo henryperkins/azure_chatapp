@@ -15,15 +15,24 @@ function initializeSidebarToggle() {
   
   if (!sidebar || !toggleBtn) return;
 
-  // Set initial state
-  sidebar.classList.add('-translate-x-full');
-  sidebar.classList.remove('translate-x-0', 'hidden');
+  // Single source of truth for state
+  let isOpen = window.innerWidth >= 768;
 
-  toggleBtn.addEventListener('click', function(e) {
+  // Sync initial state
+  if (isOpen) {
+    sidebar.classList.remove('-translate-x-full');
+    sidebar.classList.add('translate-x-0');
+  } else {
+    sidebar.classList.add('-translate-x-full');
+    sidebar.classList.remove('translate-x-0');
+  }
+
+  // Toggle handler
+  toggleBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    const isHidden = sidebar.classList.contains('-translate-x-full');
+    isOpen = !isOpen;
     
-    if (isHidden) {
+    if (isOpen) {
       sidebar.classList.remove('-translate-x-full');
       sidebar.classList.add('translate-x-0');
       createBackdrop();
@@ -34,23 +43,45 @@ function initializeSidebarToggle() {
     }
   });
 
+  // Backdrop functions
   function createBackdrop() {
     if (document.getElementById('sidebarBackdrop')) return;
     const backdrop = document.createElement('div');
     backdrop.id = 'sidebarBackdrop';
-    backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden';
+    backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300';
     backdrop.addEventListener('click', () => {
+      isOpen = false;
       sidebar.classList.add('-translate-x-full');
       sidebar.classList.remove('translate-x-0');
       removeBackdrop();
     });
     document.body.appendChild(backdrop);
+    setTimeout(() => backdrop.classList.add('opacity-100'), 10);
   }
 
   function removeBackdrop() {
     const backdrop = document.getElementById('sidebarBackdrop');
-    if (backdrop) backdrop.remove();
+    if (backdrop) {
+      backdrop.classList.remove('opacity-100');
+      setTimeout(() => backdrop.remove(), 300);
+    }
   }
+
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    const shouldBeOpen = window.innerWidth >= 768;
+    if (shouldBeOpen !== isOpen) {
+      isOpen = shouldBeOpen;
+      if (isOpen) {
+        sidebar.classList.remove('-translate-x-full');
+        sidebar.classList.add('translate-x-0');
+        removeBackdrop();
+      } else {
+        sidebar.classList.add('-translate-x-full');
+        sidebar.classList.remove('translate-x-0');
+      }
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
