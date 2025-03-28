@@ -43,7 +43,7 @@
 /* Fix mobile sidebar handling */
 @media (max-width: 767px) {
   #mainSidebar {
-    @apply fixed inset-0 z-50 -translate-x-full transition-transform duration-300;
+    @apply fixed inset-0 z-50 -translate-x-full transition-sidebar;
   }
   
   #mainSidebar.translate-x-0 {
@@ -179,6 +179,8 @@
   /* Transition utilities */
   .transition-sidebar {
     @apply transition-transform duration-300 ease-in-out;
+    will-change: transform;
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
   }
   
   .transition-opacity-custom {
