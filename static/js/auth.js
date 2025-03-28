@@ -3,8 +3,8 @@
 if (!window.apiRequest) {
   // Temporary fallback apiRequest implementation
   window.apiRequest = async function(url, method = "GET", data = null) {
-    const baseUrl = "";
-    const fullUrl = url.startsWith("/") ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
+    const baseUrl = window.API_CONFIG?.baseUrl || "";
+    const fullUrl = url.startsWith("http") ? url : (url.startsWith("/") ? `${baseUrl}${url}` : `${baseUrl}/${url}`);
     
     const options = {
       method: method,
