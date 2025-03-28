@@ -202,6 +202,7 @@
 @media (max-width: 767px) {
   #mainSidebar {
     @apply fixed inset-0 z-50 -translate-x-full transition-sidebar;
+    @apply -translate-x-full; /* Ensure default hidden state */
   }
   
   #mainSidebar.sidebar-open {
