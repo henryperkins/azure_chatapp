@@ -99,48 +99,20 @@ function setChatUIVisibility(visible) {
   }
 }
 
-/**
- * Main UI toggling function for authenticated vs. not-authenticated state.
- * Called whenever "authStateChanged" is dispatched from auth.js.
- */
-function updateAuthUI(authenticated, username = null) {
-  const authButton   = getElement(SELECTORS.AUTH_BUTTON);
-  const userMenu     = getElement(SELECTORS.USER_MENU);
-  const loginReqMsg  = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
-  const noChatMsg    = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
-  const chatUI       = getElement(SELECTORS.CHAT_UI);
-  const authStatus   = getElement(SELECTORS.AUTH_STATUS);
-
-  if (authenticated) {
-    authButton?.classList.add('hidden');
-    userMenu?.classList.remove('hidden');
-    loginReqMsg?.classList.add('hidden');
-    chatUI?.classList.remove('hidden');
-    noChatMsg?.classList.add('hidden');
-    
-    if (authStatus) {
-      authStatus.textContent = username || 'Authenticated';
-      authStatus.classList.remove('text-red-600');
-      authStatus.classList.add('text-green-600');
-    }
-    
-    window.API_CONFIG.isAuthenticated = true;
-  } else {
-    authButton?.classList.remove('hidden');
-    userMenu?.classList.add('hidden');
-    loginReqMsg?.classList.remove('hidden');
-    chatUI?.classList.add('hidden');
-    noChatMsg?.classList.add('hidden');
-    
-    if (authStatus) {
-      authStatus.textContent = 'Not Authenticated';
-      authStatus.classList.remove('text-green-600');
-      authStatus.classList.add('text-red-600');
-    }
-    
-    window.API_CONFIG.isAuthenticated = false;
+// Auth UI updates are now handled by auth.js's broadcastAuth
+// Listen for auth state changes from auth.js
+document.addEventListener('authStateChanged', (e) => {
+  const { authenticated, username } = e.detail;
+  const authStatus = getElement(SELECTORS.AUTH_STATUS);
+  
+  if (authStatus) {
+    authStatus.textContent = authenticated ? (username || 'Authenticated') : 'Not Authenticated';
+    authStatus.classList.toggle('text-green-600', authenticated);
+    authStatus.classList.toggle('text-red-600', !authenticated);
   }
-}
+  
+  window.API_CONFIG.isAuthenticated = authenticated;
+});
 
 // ---------------------------------------------------------------------
 // SINGLE FETCH WRAPPER (apiRequest)
