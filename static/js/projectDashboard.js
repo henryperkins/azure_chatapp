@@ -351,10 +351,9 @@ class ProjectDashboard {
     try {
       await window.projectManager.createOrUpdateProject(projectId, formData);
       // Check for UIUtils before calling showNotification
-      if (window.UIUtils?.showNotification) {
-        window.UIUtils.showNotification(
-          isEditing ? "Project updated" : "Project created",
-          "success"
+      if (window.Notifications?.apiSuccess) {
+        window.Notifications.apiSuccess(
+          isEditing ? "Project updated" : "Project created"
         );
       } else {
         console.log(isEditing ? "Project updated" : "Project created");
@@ -363,8 +362,8 @@ class ProjectDashboard {
       this.loadProjects();
     } catch (error) {
       console.error("Error saving project:", error);
-      if (window.UIUtils?.showNotification) {
-        window.UIUtils.showNotification("Failed to save project", "error");
+      if (window.Notifications?.apiError) {
+        window.Notifications.apiError("Failed to save project");
       } else {
         console.error("Failed to save project");
       }

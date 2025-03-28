@@ -22,13 +22,13 @@ async function isAuthenticated() {
 
 /**
  * Standardized error handling.
- * Logs the error and optionally displays a notification.
+ * Logs the error and displays notification using standard Notifications.
  */
-function handleError(context, error, notificationFn = window.showNotification) {
+function handleError(context, error) {
   const msg = `[${context}] ${error?.message || error}`;
   console.error(msg);
-  if (notificationFn) {
-    notificationFn(msg, 'error');
+  if (window.Notifications?.apiError) {
+    window.Notifications.apiError(msg);
   }
 }
 
@@ -161,11 +161,13 @@ class WebSocketService {
     );
     await new Promise(resolve => setTimeout(resolve, delay));
 
-    try {
-      await this.connect(this.chatId);
-    } catch (e) {
-      // Will retry if attempts remain
-      console.warn(`WebSocket reconnect attempt ${this.reconnectAttempts} failed: ${e.message}`);
+    // Only attempt reconnect if we haven't exceeded max retries
+    if (this.reconnectAttempts <= this.maxRetries) {
+      try {
+        await this.connect(this.chatId);
+      } catch (e) {
+        console.warn(`WebSocket reconnect attempt ${this.reconnectAttempts} failed: ${e.message}`);
+      }
     }
   }
 
@@ -606,7 +608,7 @@ class UIComponents {
     this.messageList = {
       container: document.querySelector(messageContainerSelector),
       thinkingId: 'thinkingIndicator',
-      formatText: window.formatText || this._defaultFormatter,
+      formatText: window.formatText || function(text) { return text; },
 
       clear: function() {
         if (this.container) this.container.innerHTML = '';
@@ -879,36 +881,7 @@ class UIComponents {
             return "bg-white";
         }
       },
-
-      _defaultFormatter: function(text) {
-        // First do basic HTML escaping
-        let escaped = text
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-          
-        // Then handle markdown-like formatting
-        escaped = escaped
-          // Code blocks with language
-          .replace(/```(\w+)\n([\s\S]+?)```/g, '<pre><code class="language-$1">$2</code></pre>')
-          // Code blocks without language
-          .replace(/```([\s\S]+?)```/g, '<pre><code>$1</code></pre>')
-          // Inline code
-          .replace(/`([^`]+)`/g, '<code>$1</code>')
-          // Bold
-          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-          // Italic
-          .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-          // Headers
-          .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
-          .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
-          .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
-          // Line breaks
-          .replace(/\n/g, '<br>');
-          
-        return escaped;
+_defaultFormatter: window.formatText
       }
     };
 
@@ -1029,7 +1002,7 @@ class UIComponents {
         if (this.preview) this.preview.classList.add("hidden");
       }
     };
-  }
+  };
 
   init() {
     this.input.init();
@@ -1041,7 +1014,16 @@ class UIComponents {
 // Main Chat Interface class
 class ChatInterface {
   constructor(options = {}) {
-    this.notificationFunction = options.showNotification || window.showNotification || console.log;
+    this.notificationFunction = (message, type) => {
+      if (window.Notifications) {
+        switch(type) {
+          case 'error': return window.Notifications.apiError(message);
+          case 'success': return window.Notifications.apiSuccess?.(message);
+          default: return console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+      }
+      return (options.showNotification || window.showNotification || console.log)(message, type);
+    };
     this.container = document.querySelector(options.containerSelector || '#chatUI');
     this.titleEl = document.querySelector(options.titleSelector || '#chatTitle');
     // Store the selector for potential changes later

@@ -106,63 +106,28 @@ export class UIUtils {
   }
   
   /**
-   * Show a notification
+   * Show a notification using standard Notifications object
    */
   showNotification(message, type = "info") {
-    const notificationArea = document.getElementById('notificationArea');
-    if (!notificationArea) {
-      console.error('Notification area not found');
-      return;
-    }
-    
-    const notification = document.createElement('div');
-    notification.className = `p-3 mb-2 rounded shadow-md transition-all duration-300 transform translate-x-0 opacity-100 flex items-center justify-between`;
-    
-    // Style based on type
-    switch (type) {
-      case 'success':
-        notification.classList.add('bg-green-100', 'text-green-800', 'border-green-300');
-        break;
-      case 'error':
-        notification.classList.add('bg-red-100', 'text-red-800', 'border-red-300');
-        break;
-      case 'warning':
-        notification.classList.add('bg-yellow-100', 'text-yellow-800', 'border-yellow-300');
-        break;
-      default:
-        notification.classList.add('bg-blue-100', 'text-blue-800', 'border-blue-300');
-    }
-    
-    notification.innerHTML = `
-      <div class="mr-2">${message}</div>
-      <button class="text-gray-500 hover:text-gray-700">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    `;
-    
-    // Add close handler
-    notification.querySelector('button').addEventListener('click', () => {
-      notification.classList.add('opacity-0', 'translate-x-full');
-      setTimeout(() => {
-        notification.remove();
-      }, 300);
-    });
-    
-    notificationArea.appendChild(notification);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.classList.add('opacity-0', 'translate-x-full');
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.remove();
-          }
-        }, 300);
+    if (window.Notifications) {
+      switch(type) {
+        case 'error':
+          window.Notifications.apiError(message);
+          break;
+        case 'success':
+          window.Notifications.apiSuccess?.(message) ||
+            console.log(`[SUCCESS] ${message}`);
+          break;
+        case 'warning':
+          window.Notifications.projectNotFound?.(message) ||
+            console.warn(`[WARNING] ${message}`);
+          break;
+        default:
+          console.log(`[INFO] ${message}`);
       }
-    }, 5000);
+    } else {
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    }
   }
 }
 
