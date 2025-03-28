@@ -414,11 +414,26 @@ async def create_message(
                 db=db
             )
             if assistant_msg:
+                # Get metadata from the message
+                metadata = assistant_msg.get_metadata_dict() if hasattr(assistant_msg, 'get_metadata_dict') else {}
+                
                 response_payload["assistant_message"] = {
                     "id": str(assistant_msg.id),
                     "role": assistant_msg.role,
-                    "content": assistant_msg.content
+                    "content": assistant_msg.content,
+                    "metadata": metadata
                 }
+                
+                # Add direct content field for older clients
+                response_payload["content"] = assistant_msg.content
+                
+                # Add thinking metadata if available
+                if metadata:
+                    if "thinking" in metadata:
+                        response_payload["thinking"] = metadata["thinking"]
+                    if "redacted_thinking" in metadata:
+                        response_payload["redacted_thinking"] = metadata["redacted_thinking"]
+                
                 token_estimate = len(assistant_msg.content) // 4
                 await update_project_token_usage(conversation, token_estimate, db)
             else:
