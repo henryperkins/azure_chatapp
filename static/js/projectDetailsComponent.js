@@ -500,9 +500,11 @@ class ProjectDetailsComponent {
 
     // Process valid files
     if (validFiles.length > 0) {
+      // Store projectId for use in completion handler
+      const currentProjectId = projectId;
       return Promise.all(
         validFiles.map(file => {
-          return window.projectManager?.uploadFile(projectId, file)
+          return window.projectManager?.uploadFile(currentProjectId, file)
             .then(response => {
               console.log(`Upload successful for ${file.name}:`, response);
               this.fileUploadStatus.completed++;
@@ -510,10 +512,10 @@ class ProjectDetailsComponent {
             })
             .catch(error => {
               console.error(`Upload error for ${file.name}:`, error);
-              
+               
               // Determine the specific error message based on error type
               let errorMessage = error.message || "Upload failed";
-              
+               
               // Handle specific error types
               if (errorMessage.includes("validation") || errorMessage.includes("format")) {
                 errorMessage = "File format not supported or validation failed";
@@ -524,14 +526,24 @@ class ProjectDetailsComponent {
               } else if (error.response?.status === 422) {
                 errorMessage = "File validation failed - unsupported format or content";
               }
-              
+               
               uiUtilsInstance.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
               this.fileUploadStatus.failed++;
               this.fileUploadStatus.completed++;
               this.updateUploadProgress();
             });
         })
-      );
+      ).finally(() => {
+        // Use the stored project ID for refresh
+        const pid = currentProjectId || (window.projectManager?.currentProject?.id);
+        
+        if (pid) {
+          window.projectManager.loadProjectFiles(pid);
+          window.projectManager.loadProjectStats(pid);
+        } else {
+          console.warn('Cannot refresh project data - no valid project ID available');
+        }
+      });
     }
     return Promise.resolve();
   }
@@ -564,12 +576,6 @@ class ProjectDetailsComponent {
           uiUtilsInstance.showNotification("Files uploaded successfully", "success");
         } else {
           uiUtilsInstance.showNotification(`${failed} file(s) failed to upload`, "error");
-        }
-        
-        if (window.projectManager?.currentProject) {
-          const pid = window.projectManager.currentProject.id;
-          window.projectManager.loadProjectFiles(pid);
-          window.projectManager.loadProjectStats(pid);
         }
       }, 1000);
     }

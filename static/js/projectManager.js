@@ -390,7 +390,6 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
     // Add any required metadata fields to formData
     formData.append('project_id', projectId);
     return window.apiRequest(`/api/projects/${projectId}/knowledge-bases/files`, "POST", formData)
-    return window.apiRequest(`/api/projects/${projectId}/knowledgebase/files`, "POST", formData)
     .then((response) => {
       console.log("File upload response:", response);
       return response; // Just return the response to be handled by caller
@@ -452,42 +451,60 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
               window.showNotification?.("Failed to create conversation", "error");
               throw fallbackErr; // Re-throw to ensure caller can handle the error
             });
-        }
     }
 
   /**
-   * Check the API endpoint to determine which URL format works
-   * for project conversations. This helps adapt to different backend configurations.
+   * Checks API endpoint compatibility for a project with timeout and retries.
+   * @param {string} projectId - ID of the project to test
+   * @param {number} [timeout=2000] - Request timeout in ms
+   * @returns {Promise<"standard"|"simple"|"unknown">} Resolves to endpoint format
    */
-  /**
-   * Check the API endpoint to determine which URL format works
-   * for project conversations. This helps adapt to different backend configurations.
-   * @param {string} projectId - The project ID to test endpoints for
-   * @returns {Promise<string>} Resolves to "standard", "simple" or "unknown"
-   */
-  function checkProjectApiEndpoint(projectId) {
-    if (!projectId) {
-      return Promise.reject(new Error('Project ID is required'));
+  async function checkProjectApiEndpoint(projectId, timeout = 2000) {
+    if (!projectId) throw new Error('Project ID required');
+    
+    const controllers = [];
+    const signals = [];
+    
+    try {
+      // Try standard endpoint first
+      const stdCtrl = new AbortController();
+      controllers.push(stdCtrl);
+      signals.push(stdCtrl.signal);
+      
+      const stdResponse = await Promise.race([
+        window.apiRequest(`/api/projects/${projectId}/`, "GET", null, { signal: stdCtrl.signal }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+      ]);
+      
+      if (stdResponse?.id === projectId) {
+        console.debug("[ProjectManager] Using standard endpoint format");
+        return "standard";
+      }
+    } catch (e) {
+      console.debug("[ProjectManager] Standard endpoint check failed:", e.message);
+    } 
+    
+    try {
+      // Fallback to simple format
+      const simpleCtrl = new AbortController();
+      controllers.push(simpleCtrl);
+      signals.push(simpleCtrl.signal);
+      
+      const simpleResponse = await Promise.race([
+        window.apiRequest(`/api/${projectId}`, "GET", null, { signal: simpleCtrl.signal }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+      ]);
+      
+      if (simpleResponse?.id === projectId) {
+        console.debug("[ProjectManager] Using simple endpoint format");
+        return "simple";
+      }
+    } catch (e) {
+      console.debug("[ProjectManager] Simple endpoint check failed:", e.message);
     }
     
-    // First try standard endpoint format
-    return window.apiRequest(`/api/projects/${projectId}/`, "GET")
-      .then(() => {
-        console.log("API endpoint format is /api/projects/{id}/");
-        console.log("API endpoint format is /api/projects/{id}/");
-        return "standard";
-      })
-      .catch(() => {
-        return window.apiRequest(`/api/${projectId}`, "GET")
-          .then(() => {
-            console.log("API endpoint format is /api/{id}");
-            return "simple";
-          })
-          .catch(() => {
-            console.log("Could not determine API endpoint format");
-            return "unknown";
-          });
-      });
+    console.warn("[ProjectManager] Could not determine API endpoint format");
+    return "unknown";
   }
 
   /**
