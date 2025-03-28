@@ -40,27 +40,6 @@
   z-index: 1030;
 }
 
-/* Fix mobile sidebar handling */
-@media (max-width: 767px) {
-  #mainSidebar {
-    @apply fixed inset-0 z-50 -translate-x-full transition-sidebar;
-  }
-  
-  #mainSidebar.translate-x-0 {
-    z-index: 999;
-  }
-}
-
-/* Mobile-specific enhancements */
-@media (max-width: 767px) {
-  .dropdown-content {
-    position: fixed !important;
-    top: 4rem;
-    left: 1rem;
-    right: 1rem;
-    transform-origin: top center;
-  }
-}
 
 @layer components {
   /* Toggle switch component using only Tailwind classes */
@@ -216,7 +195,8 @@
 /* Mobile sidebar handling */
 @media (max-width: 767px) {
   #mainSidebar {
-    @apply fixed inset-0 z-50 -translate-x-full transition-transform duration-300;
+    @apply fixed inset-0 z-50 -translate-x-full transition-sidebar;
+    will-change: transform;
   }
   
   #mainSidebar.sidebar-open {
@@ -225,6 +205,14 @@
   
   .auth-dropdown {
     @apply fixed top-16 inset-x-4 z-50;
+  }
+  
+  .dropdown-content {
+    position: fixed !important;
+    top: 4rem;
+    left: 1rem;
+    right: 1rem;
+    transform-origin: top center;
   }
 }
 
