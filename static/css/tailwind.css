@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Dropdown animation */
+/* Animation utilities - consolidated */
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -42,6 +42,20 @@
 
 
 @layer components {
+  /* Loading spinner component */
+  .loading-spinner {
+    @apply animate-spin rounded-full border-2 border-gray-300 border-t-blue-500;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  
+  .loading-spinner-lg {
+    @apply loading-spinner;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-width: 3px;
+  }
+
   /* Toggle switch component using only Tailwind classes */
   .toggle-checkbox:checked {
     @apply translate-x-full border-blue-500;
@@ -128,18 +142,15 @@
 }
 
 @layer utilities {
-  /* Animation utilities */
-  @keyframes slideIn {
-    from { 
-      @apply opacity-0 -translate-y-2;
-    }
-    to { 
-      @apply opacity-100 translate-y-0;
-    }
+  /* Smooth scrolling */
+  .scroll-smooth {
+    scroll-behavior: smooth;
   }
-
-  .animate-slide-in {
-    animation: slideIn 0.2s ease-out forwards;
+  
+  /* Dark mode transition */
+  .transition-colors-slow {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 500ms;
   }
   
   @keyframes countUp {
