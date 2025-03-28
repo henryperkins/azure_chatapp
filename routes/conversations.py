@@ -369,12 +369,26 @@ async def create_message(
                 
                 # Add the assistant_message as a proper object instead of a JSON string
                 # The frontend expects a JSON string that it will parse
-                response_payload["assistant_message"] = json.dumps({
+                # Include metadata (thinking blocks) if available
+                metadata = assistant_msg.get_metadata_dict()
+                
+                # Add the assistant_message as a proper object instead of a JSON string
+                response_payload["assistant_message"] = {
                     "id": str(assistant_msg.id),
                     "role": assistant_msg.role,
                     "content": assistant_msg.content,
                     "metadata": metadata
-                })
+                }
+                
+                # Add direct content field for older clients
+                response_payload["content"] = assistant_msg.content
+                
+                # Add thinking metadata if available
+                if metadata:
+                    if "thinking" in metadata:
+                        response_payload["thinking"] = metadata["thinking"]
+                    if "redacted_thinking" in metadata:
+                        response_payload["redacted_thinking"] = metadata["redacted_thinking"]
             else:
                 response_payload["assistant_error"] = "Failed to generate response"
         except Exception as exc:
