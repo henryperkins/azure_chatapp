@@ -282,7 +282,10 @@ class MessageService {
 
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...TokenManager.getAuthHeader()
+          },
           body: JSON.stringify(messagePayload),
           credentials: 'include'
         });
@@ -292,12 +295,43 @@ class MessageService {
         }
         const data = await response.json();
         const responseData = data.data || data;
+        
+        // Handle both response format variations
+        let assistantContent = '';
+        let assistantThinking = null;
+        let assistantRedactedThinking = null;
+        let assistantMetadata = {};
+        
+        if (responseData.assistant_message) {
+          try {
+            // Try to parse the assistant_message if it's a string
+            const assistantMsg = typeof responseData.assistant_message === 'string' 
+              ? JSON.parse(responseData.assistant_message) 
+              : responseData.assistant_message;
+              
+            assistantContent = assistantMsg.content || '';
+            assistantThinking = assistantMsg.metadata?.thinking;
+            assistantRedactedThinking = assistantMsg.metadata?.redacted_thinking;
+            assistantMetadata = assistantMsg.metadata || {};
+          } catch (e) {
+            console.warn('Failed to parse assistant_message:', e);
+            // Fallback to direct fields
+            assistantContent = responseData.assistant_content || responseData.content || '';
+          }
+        } else {
+          // Use direct fields
+          assistantContent = responseData.content || responseData.message || '';
+          assistantThinking = responseData.thinking;
+          assistantRedactedThinking = responseData.redacted_thinking;
+          assistantMetadata = responseData.metadata || {};
+        }
+        
         this.onMessageReceived({
           role: 'assistant',
-          content: responseData.content || responseData.message || '',
-          thinking: responseData.thinking,
-          redacted_thinking: responseData.redacted_thinking,
-          metadata: responseData.metadata || {}
+          content: assistantContent,
+          thinking: assistantThinking,
+          redacted_thinking: assistantRedactedThinking,
+          metadata: assistantMetadata
         });
       }
     } catch (error) {
@@ -308,6 +342,7 @@ class MessageService {
   _handleWsMessage(event) {
     try {
       const data = JSON.parse(event.data);
+      
       // If it's a plain message broadcast from the server
       if (data.type === 'message') {
         this.onMessageReceived({
@@ -317,6 +352,26 @@ class MessageService {
           redacted_thinking: data.redacted_thinking,
           metadata: data.metadata || {}
         });
+      }
+      
+      // Handle assistant message with specific role
+      else if (data.role === 'assistant') {
+        this.onMessageReceived({
+          role: 'assistant',
+          content: data.content || '',
+          thinking: data.thinking,
+          redacted_thinking: data.redacted_thinking,
+          metadata: {
+            model: data.model_id,
+            tokens: data.token_count,
+            ...data.metadata
+          }
+        });
+      }
+      
+      // Add status updates
+      else if (data.type === 'status') {
+        console.log('WebSocket status update:', data.message);
       }
     } catch (error) {
       this.onError('Failed to process WebSocket message', error);
@@ -559,6 +614,14 @@ class UIComponents {
         const msgDiv = document.createElement('div');
         msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this._getClass(role)}`;
         if (id) msgDiv.id = id;
+        
+        // Add data attributes for message metadata
+        if (metadata) {
+          msgDiv.dataset.thinking = metadata.thinking || '';
+          msgDiv.dataset.redactedThinking = metadata.redacted_thinking || '';
+          msgDiv.dataset.model = metadata.model || '';
+          msgDiv.dataset.tokens = metadata.tokens || '';
+        }
 
         // Add header with role indicator
         const header = document.createElement('div');
@@ -576,7 +639,10 @@ class UIComponents {
         // Add main content
         const contentDiv = document.createElement('div');
         contentDiv.className = 'prose max-w-none';
-        contentDiv.innerHTML = this.formatText(content);
+        // Ensure newlines are preserved
+        contentDiv.innerHTML = this.formatText(
+          content.replace(/\\n/g, '<br>')
+        );
         msgDiv.appendChild(contentDiv);
 
         // Add copy buttons to code blocks
@@ -617,6 +683,20 @@ class UIComponents {
         if (role === 'assistant' && (thinking || redacted)) {
           const container = document.createElement('div');
           container.className = 'mt-3 border-t border-gray-200 pt-2';
+          
+          // Add model metadata indicator if available
+          if (metadata && (metadata.model || metadata.tokens)) {
+            const metaIndicator = document.createElement('div');
+            metaIndicator.className = 'text-xs text-gray-500 mb-2';
+            let metaText = '';
+            if (metadata.model) metaText += `Model: ${metadata.model}`;
+            if (metadata.tokens) {
+              if (metaText) metaText += ' • ';
+              metaText += `Tokens: ${metadata.tokens}`;
+            }
+            metaIndicator.textContent = metaText;
+            container.appendChild(metaIndicator);
+          }
 
           const toggle = document.createElement('button');
           toggle.className = 'text-gray-600 text-xs flex items-center mb-1 hover:text-gray-800';
