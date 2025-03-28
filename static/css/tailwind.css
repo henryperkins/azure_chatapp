@@ -18,6 +18,27 @@
   animation: slideIn 0.2s ease-out forwards;
 }
 
+/* Modal styles */
+.confirm-modal {
+  @apply fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1030]; /* Higher than sidebar */
+}
+
+.confirm-modal-content {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6;
+}
+
+.confirm-modal-header {
+  @apply text-lg font-semibold mb-4 dark:text-gray-100;
+}
+
+.confirm-modal-body {
+  @apply text-gray-600 dark:text-gray-300 mb-6;
+}
+
+.confirm-modal-footer {
+  @apply flex justify-end space-x-3;
+}
+
 /* Fix z-index layering */
 #authDropdown {
   z-index: 1010;
