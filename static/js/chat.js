@@ -243,7 +243,7 @@ class MessageService {
   async sendMessage(content) {
     try {
       // Validate conversation ID first
-      if (!this.isValidUUID(this.chatId)) {
+      if (!this.chatId || !this.isValidUUID(this.chatId)) {
         console.warn('Invalid conversation ID, creating new conversation');
         const newConvo = await this.createNewConversation();
         this.chatId = newConvo.id;
@@ -251,14 +251,19 @@ class MessageService {
 
       this.onSending();
 
-      const projectId = localStorage.getItem("selectedProjectId");
+      // Determine if we're in project context or standalone chat
+      const isProjectContext = window.location.pathname.includes('/projects');
+      const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
+      
       const messagePayload = {
         content: content,
-        model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229"
+        model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
+        enable_thinking: true  // Enable thinking blocks for Claude
       };
 
-      if (projectId) {
-        messagePayload.project_id = projectId;  // Explicitly include project_id
+      // Only include project_id if we're in project context
+      if (isProjectContext && projectId) {
+        messagePayload.project_id = projectId;
       }
 
       if (this.wsService && this.wsService.isConnected()) {
@@ -276,7 +281,8 @@ class MessageService {
         });
       } else {
         // HTTP fallback
-        const endpoint = projectId
+        // Determine correct endpoint based on context, not just projectId
+        const endpoint = isProjectContext && projectId
           ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
           : `/api/chat/conversations/${this.chatId}/messages`;
 
@@ -296,6 +302,8 @@ class MessageService {
         const data = await response.json();
         const responseData = data.data || data;
         
+        console.log('API response data:', responseData);
+        
         // Handle both response format variations
         let assistantContent = '';
         let assistantThinking = null;
@@ -309,14 +317,22 @@ class MessageService {
               ? JSON.parse(responseData.assistant_message) 
               : responseData.assistant_message;
               
-            assistantContent = assistantMsg.content || '';
-            assistantThinking = assistantMsg.metadata?.thinking;
-            assistantRedactedThinking = assistantMsg.metadata?.redacted_thinking;
-            assistantMetadata = assistantMsg.metadata || {};
+            assistantContent = assistantMsg.content || assistantMsg.message || '';
+            
+            // Check for thinking in both places
+            assistantThinking = assistantMsg.metadata?.thinking || assistantMsg.thinking;
+            assistantRedactedThinking = assistantMsg.metadata?.redacted_thinking || assistantMsg.redacted_thinking;
+            
+            // Merge metadata from all possible sources
+            assistantMetadata = {
+              ...(assistantMsg.metadata || {}),
+              thinking: assistantThinking,
+              redacted_thinking: assistantRedactedThinking
+            };
           } catch (e) {
             console.warn('Failed to parse assistant_message:', e);
             // Fallback to direct fields
-            assistantContent = responseData.assistant_content || responseData.content || '';
+            assistantContent = responseData.assistant_content || responseData.content || responseData.message || '';
           }
         } else {
           // Use direct fields
@@ -324,6 +340,11 @@ class MessageService {
           assistantThinking = responseData.thinking;
           assistantRedactedThinking = responseData.redacted_thinking;
           assistantMetadata = responseData.metadata || {};
+        }
+        
+        // Additional fallback for direct root-level fields
+        if (!assistantContent && responseData.assistant_content) {
+          assistantContent = responseData.assistant_content;
         }
         
         this.onMessageReceived({
@@ -342,6 +363,7 @@ class MessageService {
   _handleWsMessage(event) {
     try {
       const data = JSON.parse(event.data);
+      console.log('WebSocket message received:', data);
       
       // If it's a plain message broadcast from the server
       if (data.type === 'message') {
@@ -354,11 +376,27 @@ class MessageService {
         });
       }
       
+      // Handle Claude-specific response format
+      else if (data.type === 'claude_response') {
+        this.onMessageReceived({
+          role: 'assistant',
+          content: data.answer || data.content || '',
+          thinking: data.thinking,
+          redacted_thinking: data.redacted_thinking,
+          metadata: {
+            model: data.model || '',
+            tokens: data.token_count || 0,
+            thinking: data.thinking,
+            redacted_thinking: data.redacted_thinking
+          }
+        });
+      }
+      
       // Handle assistant message with specific role
       else if (data.role === 'assistant') {
         this.onMessageReceived({
           role: 'assistant',
-          content: data.content || '',
+          content: data.content || data.message || '',
           thinking: data.thinking,
           redacted_thinking: data.redacted_thinking,
           metadata: {
@@ -610,40 +648,69 @@ class UIComponents {
       appendMessage: function(role, content, id = null, thinking = null, redacted = null, metadata = null) {
         if (!this.container) return null;
 
-        // Create message container
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this._getClass(role)}`;
-        if (id) msgDiv.id = id;
-        
-        // Add data attributes for message metadata
-        if (metadata) {
-          msgDiv.dataset.thinking = metadata.thinking || '';
-          msgDiv.dataset.redactedThinking = metadata.redacted_thinking || '';
-          msgDiv.dataset.model = metadata.model || '';
-          msgDiv.dataset.tokens = metadata.tokens || '';
-        }
+        try {
+          // Create message container
+          const msgDiv = document.createElement('div');
+          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this._getClass(role)}`;
+          if (id) msgDiv.id = id;
+          
+          // Add data attributes for message metadata
+          if (metadata) {
+            msgDiv.dataset.thinking = metadata.thinking || '';
+            msgDiv.dataset.redactedThinking = metadata.redacted_thinking || '';
+            msgDiv.dataset.model = metadata.model || '';
+            msgDiv.dataset.tokens = metadata.tokens || '';
+          }
 
-        // Add header with role indicator
-        const header = document.createElement('div');
-        header.className = 'flex items-center mb-2';
-        header.innerHTML = `
-          <span class="font-medium ${role === 'assistant' ? 'text-green-700' : 'text-blue-700'}">
-            ${role === 'assistant' ? 'Claude' : 'You'}
-          </span>
-          <span class="ml-2 text-xs text-gray-500">
-            ${new Date().toLocaleTimeString()}
-          </span>
-        `;
-        msgDiv.appendChild(header);
+          // Add header with role indicator
+          const header = document.createElement('div');
+          header.className = 'flex items-center mb-2';
+          header.innerHTML = `
+            <span class="font-medium ${role === 'assistant' ? 'text-green-700' : 'text-blue-700'}">
+              ${role === 'assistant' ? 'Claude' : 'You'}
+            </span>
+            <span class="ml-2 text-xs text-gray-500">
+              ${new Date().toLocaleTimeString()}
+            </span>
+          `;
+          msgDiv.appendChild(header);
 
-        // Add main content
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'prose max-w-none';
-        // Ensure newlines are preserved
-        contentDiv.innerHTML = this.formatText(
-          content.replace(/\\n/g, '<br>')
-        );
-        msgDiv.appendChild(contentDiv);
+          // Add main content
+          const contentDiv = document.createElement('div');
+          contentDiv.className = 'prose max-w-none';
+          
+          // Handle potential JSON responses
+          let processedContent = content;
+          try {
+            // Check if content is JSON string
+            if (typeof content === 'string' && 
+                (content.trim().startsWith('{') || content.trim().startsWith('['))) {
+              const parsed = JSON.parse(content);
+              if (parsed.answer || parsed.content || parsed.message) {
+                processedContent = parsed.answer || parsed.content || parsed.message;
+                
+                // Extract thinking if available
+                if (!thinking && parsed.thinking) {
+                  thinking = parsed.thinking;
+                }
+              }
+            }
+          } catch (e) {
+            // Not JSON, use as is
+            console.log('Content is not JSON, using as is');
+          }
+          
+          // Ensure newlines are preserved and apply formatting
+          try {
+            contentDiv.innerHTML = this.formatText(
+              processedContent.replace(/\\n/g, '<br>')
+            );
+          } catch (err) {
+            console.error('Error formatting message content:', err);
+            contentDiv.textContent = processedContent; // Fallback to plain text
+          }
+          
+          msgDiv.appendChild(contentDiv);
 
         // Add copy buttons to code blocks
         msgDiv.querySelectorAll('pre code').forEach(block => {
@@ -791,13 +858,34 @@ class UIComponents {
       },
 
       _defaultFormatter: function(text) {
-        return text
+        // First do basic HTML escaping
+        let escaped = text
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
+          .replace(/'/g, '&#39;');
+          
+        // Then handle markdown-like formatting
+        escaped = escaped
+          // Code blocks with language
+          .replace(/```(\w+)\n([\s\S]+?)```/g, '<pre><code class="language-$1">$2</code></pre>')
+          // Code blocks without language
+          .replace(/```([\s\S]+?)```/g, '<pre><code>$1</code></pre>')
+          // Inline code
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          // Bold
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          // Italic
+          .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+          // Headers
+          .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+          .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+          .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
+          // Line breaks
           .replace(/\n/g, '<br>');
+          
+        return escaped;
       }
     };
 
@@ -1098,7 +1186,14 @@ class ChatInterface {
   }
 
   isValidUUID(uuid) {
-    return uuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+    if (!uuid) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  }
+  
+  // More permissive check for conversation IDs that allows null/undefined
+  // for new conversations that haven't been created yet
+  isValidConversationId(id) {
+    return !id || this.isValidUUID(id);
   }
 
   async _handleSendMessage(userMsg) {
