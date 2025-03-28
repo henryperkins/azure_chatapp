@@ -578,6 +578,39 @@ video {
     max-width: 2560px;
   }
 }
+/* Loading spinner component */
+@keyframes spin {
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  border-radius: 9999px;
+  border-width: 2px;
+  border-color: rgb(209 213 219 / var(--tw-border-opacity));
+  --tw-border-opacity: 1;
+  border-top-color: rgb(59 130 246 / var(--tw-border-opacity));
+    width: 1.5rem;
+    height: 1.5rem;
+}
+@keyframes spin {
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loading-spinner-lg {
+  animation: spin 1s linear infinite;
+  border-radius: 9999px;
+  border-color: rgb(209 213 219 / var(--tw-border-opacity));
+  --tw-border-opacity: 1;
+  border-top-color: rgb(59 130 246 / var(--tw-border-opacity));
+    width: 2.5rem;
+    height: 2.5rem;
+    border-width: 3px;
+}
 /* Toggle switch component using only Tailwind classes */
 .toggle-checkbox:checked {
   --tw-translate-x: 100%;
@@ -1223,6 +1256,9 @@ video {
 .overflow-y-auto {
   overflow-y: auto;
 }
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1734,21 +1770,14 @@ video {
 .ease-out {
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
 }
-/* Animation utilities */
-@keyframes slideIn {
-    from {
-    --tw-translate-y: -0.5rem;
-    transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
-    opacity: 0;
+/* Smooth scrolling */
+.scroll-smooth {
+    scroll-behavior: smooth;
   }
-    to {
-    --tw-translate-y: 0px;
-    transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
-    opacity: 1;
-  }
-  }
-.animate-slide-in {
-    animation: slideIn 0.2s ease-out forwards;
+/* Dark mode transition */
+.transition-colors-slow {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 500ms;
   }
 @keyframes countUp {
     from {
@@ -1770,6 +1799,8 @@ video {
   transition-property: transform;
   transition-duration: 300ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 .transition-opacity-custom {
     transition-property: opacity;
@@ -1831,7 +1862,7 @@ video {
   background-color: rgb(55 65 81 / var(--tw-bg-opacity));
 }
 
-/* Dropdown animation */
+/* Animation utilities - consolidated */
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -1869,35 +1900,6 @@ video {
   z-index: 1030;
 }
 
-/* Fix mobile sidebar handling */
-@media (max-width: 767px) {
-  #mainSidebar {
-    position: fixed;
-    inset: 0px;
-    z-index: 50;
-    --tw-translate-x: -100%;
-    transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
-    transition-property: transform;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 300ms;
-  }
-  
-  #mainSidebar.translate-x-0 {
-    z-index: 999;
-  }
-}
-
-/* Mobile-specific enhancements */
-@media (max-width: 767px) {
-  .dropdown-content {
-    position: fixed !important;
-    top: 4rem;
-    left: 1rem;
-    right: 1rem;
-    transform-origin: top center;
-  }
-}
-
 /* Dark mode specific styles */
 .dark .file-item,
 .dark .artifact-item,
@@ -1908,29 +1910,35 @@ video {
   color: rgb(229 231 235 / var(--tw-text-opacity));
 }
 
+/* Sidebar performance optimization */
+#mainSidebar:not(.translate-x-0) {
+  will-change: transform;
+  transform: translate3d(-100%, 0, 0); /* Force hardware acceleration */
+}
+
 /* Mobile sidebar handling */
 @media (max-width: 767px) {
   #mainSidebar {
     position: fixed;
     inset: 0px;
     z-index: 50;
-    --tw-translate-x: -100%;
-    transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
     transition-property: transform;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 300ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+    --tw-translate-x: -100%;
+    transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y)); /* Ensure default hidden state */
   }
   
   #mainSidebar.sidebar-open {
     --tw-translate-x: 0px;
     transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
   }
-@media (max-width: 767px) {
-  
-  #mainSidebar#mainSidebar.sidebar-open {
-    z-index: 999;
+#mainSidebar:not(#mainSidebar.sidebar-open) {
+    will-change: transform;
+  transform: translate3d(-100%, 0, 0); /* Force hardware acceleration */
   }
-}
   
   .auth-dropdown {
     position: fixed;
@@ -1938,6 +1946,14 @@ video {
     right: 1rem;
     top: 4rem;
     z-index: 50;
+  }
+  
+  .dropdown-content {
+    position: fixed !important;
+    top: 4rem;
+    left: 1rem;
+    right: 1rem;
+    transform-origin: top center;
   }
 }
 
@@ -1947,12 +1963,10 @@ video {
     --tw-translate-x: 0px;
     transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
   }
-@media (max-width: 767px) {
-  
-  #mainSidebar#mainSidebar {
-    z-index: 999;
+#mainSidebar:not(#mainSidebar) {
+    will-change: transform;
+  transform: translate3d(-100%, 0, 0); /* Force hardware acceleration */
   }
-}
   
   #sidebarBackdrop {
     display: none;
