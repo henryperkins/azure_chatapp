@@ -1,47 +1,8 @@
 // auth.js - Updated to rely on app.js's apiRequest and a single refresh approach
-// Ensure window.apiRequest is available or provide a fallback implementation
+// Rely on app.js's apiRequest implementation
 if (!window.apiRequest) {
-  // Temporary fallback apiRequest implementation
-  window.apiRequest = async function(url, method = "GET", data = null) {
-    const baseUrl = window.API_CONFIG?.baseUrl || "";
-    const fullUrl = url.startsWith("http") ? url : (url.startsWith("/") ? `${baseUrl}${url}` : `${baseUrl}/${url}`);
-    
-    const options = {
-      method: method,
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      },
-      credentials: "include"
-    };
-    
-    // Add authorization header if we have a token
-    if (window.TokenManager && window.TokenManager.accessToken) {
-      options.headers["Authorization"] = `Bearer ${window.TokenManager.accessToken}`;
-    }
-    
-    // Add body for non-GET requests
-    if (method !== "GET" && data) {
-      options.body = JSON.stringify(data);
-    }
-    
-    const response = await fetch(fullUrl, options);
-    
-    if (!response.ok) {
-      const error = new Error(`Request failed with status ${response.status}`);
-      error.status = response.status;
-      error.response = response;
-      throw error;
-    }
-    
-    // Handle empty responses
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      return await response.json();
-    }
-    
-    return { ok: true };
-  };
+  console.error('apiRequest not available - app.js must be loaded first');
+  throw new Error('Missing apiRequest implementation');
 }
 
 // -------------------------
@@ -179,11 +140,6 @@ window.auth = {
   manager: TokenManager
 };
 
-// Legacy exports for backward compatibility
-window.initAuth = initAuth;
-window.TokenManager = TokenManager;
-window.verifyAuthState = verifyAuthState;
-window.updateAuthStatus = updateAuthStatus;
 
 /**
  * UI Event Listeners: Toggle login/register forms, handle login submission, etc.
@@ -608,58 +564,22 @@ function clearSession() {
   clearTokenTimers();
 }
 
-/**
- * Basic notification wrapper that calls showNotification if available.
- */
+// Use standard Notifications from app.js
 function notify(message, type = "info") {
-  // Add a fallback if showNotification is not available
-  if (window.showNotification) {
-    window.showNotification(message, type);
-  } else {
-    // Simple fallback notification
-    console.log(`[${type.toUpperCase()}] ${message}`);
-    
-    // Create a temporary notification element if it doesn't exist
-    if (!document.getElementById('tempNotification')) {
-      const notificationArea = document.getElementById('notificationArea') || document.body;
-      const notification = document.createElement('div');
-      notification.id = 'tempNotification';
-      notification.style.cssText = `
-        position: fixed;
-        top: 16px;
-        right: 16px;
-        padding: 12px 16px;
-        border-radius: 4px;
-        font-size: 14px;
-        z-index: 9999;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        transition: all 0.3s ease;
-      `;
-      
-      if (type === 'error') {
-        notification.style.backgroundColor = '#f8d7da';
-        notification.style.color = '#721c24';
-      } else if (type === 'success') {
-        notification.style.backgroundColor = '#d4edda';
-        notification.style.color = '#155724';
-      } else {
-        notification.style.backgroundColor = '#cce5ff';
-        notification.style.color = '#004085';
-      }
-      
-      notification.textContent = message;
-      notificationArea.appendChild(notification);
-      
-      // Remove after 3 seconds
-      setTimeout(() => {
-        notification.style.opacity = '0';
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-          }
-        }, 300);
-      }, 3000);
+  if (window.Notifications) {
+    switch(type) {
+      case 'error':
+        window.Notifications.apiError(message);
+        break;
+      case 'success':
+        window.Notifications.apiSuccess?.(message) ||
+          console.log(`[SUCCESS] ${message}`);
+        break;
+      default:
+        console.log(`[${type.toUpperCase()}] ${message}`);
     }
+  } else {
+    console.log(`[${type.toUpperCase()}] ${message}`);
   }
 }
 

@@ -179,7 +179,8 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
         // If project is archived, skip loading extra data
         if (currentProject.archived) {
           console.warn("Project is archived, skipping additional loads.");
-          window.showNotification?.("This project is archived", "warning");
+          window.Notifications?.projectNotFound?.() ||
+            console.warn("This project is archived");
           return;
         }
 
