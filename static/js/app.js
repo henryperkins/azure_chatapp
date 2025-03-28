@@ -298,7 +298,7 @@ function createProjectListItem(project) {
     }
 
     const li = document.createElement('li');
-    li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center';
+    li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded cursor-pointer flex items-center transition-colors duration-150';
     li.dataset.projectId = projectData.id;
 
     const nameSpan = document.createElement('span');
