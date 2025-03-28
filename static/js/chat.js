@@ -651,7 +651,7 @@ class UIComponents {
         try {
           // Create message container
           const msgDiv = document.createElement('div');
-          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.getClass(role)}`;
+          msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.messageList.getClass(role)}`;
           if (id) msgDiv.id = id;
           
           // Add data attributes for message metadata
@@ -702,9 +702,13 @@ class UIComponents {
           
           // Ensure newlines are preserved and apply formatting
           try {
-            contentDiv.innerHTML = this.formatText ? 
-              this.formatText(processedContent.replace(/\\n/g, '<br>')) :
-              this._defaultFormatter(processedContent.replace(/\\n/g, '<br>'));
+            if (this.formatText) {
+              contentDiv.innerHTML = this.formatText(processedContent.replace(/\\n/g, '<br>'));
+            } else if (this.messageList && this.messageList._defaultFormatter) {
+              contentDiv.innerHTML = this.messageList._defaultFormatter(processedContent.replace(/\\n/g, '<br>'));
+            } else {
+              contentDiv.textContent = processedContent; // Fallback to plain text
+            }
           } catch (err) {
             console.error('Error formatting message content:', err);
             contentDiv.textContent = processedContent; // Fallback to plain text
@@ -888,10 +892,6 @@ class UIComponents {
         return escaped;
       }
     };
-    
-    // Bind methods to ensure proper 'this' context
-    this.messageList.getClass = this.messageList.getClass.bind(this.messageList);
-    this.messageList._defaultFormatter = this.messageList._defaultFormatter.bind(this.messageList);
 
     // Input component
     this.input = {
