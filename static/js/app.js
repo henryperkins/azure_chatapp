@@ -596,38 +596,33 @@ window.toggleSidebar = function() {
     console.error("Sidebar element not found");
     return;
   }
-  
-  // Ensure proper z-index and transition
-  sidebarEl.style.zIndex = "999";
-  
+
+  const existingBackdrop = document.getElementById('sidebarBackdrop');
   const isHidden = sidebarEl.classList.contains('-translate-x-full');
-  console.log("Sidebar is currently hidden:", isHidden);
   
   if (isHidden) {
-    // First create backdrop for visual feedback
+    // Remove any existing backdrop first
+    if (existingBackdrop) {
+      existingBackdrop.remove();
+    }
+
+    // Create new backdrop
     const backdrop = document.createElement("div");
     backdrop.id = "sidebarBackdrop";
     backdrop.className = "fixed inset-0 bg-black/50 z-40 md:hidden";
     backdrop.onclick = window.toggleSidebar;
     document.body.appendChild(backdrop);
-    
-    // Then animate sidebar after a tiny delay
-    setTimeout(() => {
-      sidebarEl.classList.remove('-translate-x-full');
-      sidebarEl.classList.add('translate-x-0');
-    }, 10);
+
+    sidebarEl.classList.remove('-translate-x-full');
+    sidebarEl.classList.add('translate-x-0');
   } else {
-    // Animate out first
     sidebarEl.classList.remove('translate-x-0');
     sidebarEl.classList.add('-translate-x-full');
-    
-    // Then remove backdrop after animation completes
-    setTimeout(() => {
-      const existingBackdrop = document.getElementById('sidebarBackdrop');
-      if (existingBackdrop) {
-        existingBackdrop.remove();
-      }
-    }, 300);
+
+    // Remove backdrop immediately when closing
+    if (existingBackdrop) {
+      existingBackdrop.remove();
+    }
   }
 }
 
