@@ -226,12 +226,16 @@
   @apply bg-gray-800 text-gray-200;
 }
 
-/* Mobile-specific sidebar transitions */
+/* Sidebar transitions */
+#mainSidebar {
+  will-change: transform;
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Mobile specific behavior */
 @media (max-width: 767px) {
   #mainSidebar {
-    will-change: transform;
     transform: translate3d(-100%, 0, 0);
-    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   }
   
   #mainSidebar.translate-x-0 {
@@ -239,12 +243,10 @@
   }
 }
 
-/* Disable transforms on desktop */
+/* Desktop behavior - always visible */
 @media (min-width: 768px) {
   #mainSidebar {
-    transform: none !important;
-    transition: none !important;
-    z-index: auto;
+    transform: translate3d(0, 0, 0) !important;
   }
 }
 
