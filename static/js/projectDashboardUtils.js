@@ -220,6 +220,8 @@ export class ModalManager {
       return;
     }
     
+    // Add modal overlay classes
+    modal.classList.add('confirm-modal');
     modal.classList.remove('hidden');
   }
   
@@ -228,11 +230,10 @@ export class ModalManager {
    */
   hide(modalId) {
     const modal = this.modals[modalId];
-    if (!modal) {
-      console.error(`Modal with ID "${modalId}" not found`);
-      return;
-    }
+    if (!modal) return;
     
+    // Remove modal overlay classes
+    modal.classList.remove('confirm-modal');
     modal.classList.add('hidden');
   }
   
@@ -245,45 +246,38 @@ export class ModalManager {
       console.error('Confirmation modal not found');
       return;
     }
-    
-    const confirmBtn = document.getElementById('confirmDeleteBtn');
-    const cancelBtn = document.getElementById('cancelDeleteBtn');
-    const confirmText = document.getElementById('deleteConfirmText');
-    
-    // Set text
-    if (confirmText) {
-      confirmText.textContent = config.message || 'Are you sure you want to delete this item?';
-    }
-    
-    // Set button text
-    if (confirmBtn) {
-      confirmBtn.textContent = config.confirmText || 'Delete';
-      confirmBtn.className = config.confirmClass || 'px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700';
-    }
-    
-    if (cancelBtn) {
-      cancelBtn.textContent = config.cancelText || 'Cancel';
-    }
-    
-    // Clear previous handlers
-    const newConfirmBtn = confirmBtn.cloneNode(true);
-    const newCancelBtn = cancelBtn.cloneNode(true);
-    
-    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-    
-    // Set new handlers
-    newConfirmBtn.addEventListener('click', () => {
+
+    // Update modal structure
+    modal.innerHTML = `
+      <div class="confirm-modal-content">
+        <h3 class="confirm-modal-header">${config.title || 'Confirm Action'}</h3>
+        <div class="confirm-modal-body">
+          ${config.message || 'Are you sure you want to perform this action?'}
+        </div>
+        <div class="confirm-modal-footer">
+          <button id="cancelDeleteBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
+            ${config.cancelText || 'Cancel'}
+          </button>
+          <button id="confirmDeleteBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ${config.confirmClass || ''}">
+            ${config.confirmText || 'Confirm'}
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Set up event handlers
+    modal.querySelector('#confirmDeleteBtn').addEventListener('click', () => {
       modal.classList.add('hidden');
       if (config.onConfirm) config.onConfirm();
     });
     
-    newCancelBtn.addEventListener('click', () => {
+    modal.querySelector('#cancelDeleteBtn').addEventListener('click', () => {
       modal.classList.add('hidden');
       if (config.onCancel) config.onCancel();
     });
     
     // Show modal
+    modal.classList.add('confirm-modal');
     modal.classList.remove('hidden');
   }
 }
