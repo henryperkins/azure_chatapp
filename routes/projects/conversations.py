@@ -294,8 +294,16 @@ async def project_websocket_chat_endpoint(
                 logger.debug("No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
                 return
 
+            # Validate user and token version
             user = await get_user_from_token(token, db, "access")
+            db_user = await db.get(User, user.id)
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            
+            if db_user.token_version != decoded.get("version", 0):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
+            # Validate project access
             project = await project_service.validate_project_access(project_id, user, db)
             if not project:
                 logger.warning("WebSocket rejected: Invalid project access")
@@ -322,16 +330,22 @@ async def project_websocket_chat_endpoint(
                 return
 
             # Validate all access before accepting connection
+            # Validate conversation belongs to project
             conversation = await validate_resource_access(
                 conversation_id,
                 Conversation,
                 user,
                 db,
                 "Conversation",
-                [Conversation.project_id.is_(None), Conversation.is_deleted.is_(False)],
+                [
+                    Conversation.project_id == project_id,  # ✅ Correct filter
+                    Conversation.is_deleted.is_(False)
+                ]
             )
 
+            # All validations complete - now accept connection
             await websocket.accept()
+            
             while True:
                 raw_data = await websocket.receive_text()
                 try:
@@ -484,7 +498,14 @@ async def project_websocket_endpoint(
                 logger.debug("Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
                 return
 
+            # Validate user and token version
             user = await get_user_from_token(token, db, "access")
+            db_user = await db.get(User, user.id)
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            
+            if db_user.token_version != decoded.get("version", 0):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
             additional_filters_project = [
                 Project.user_id == user.id,

@@ -123,6 +123,9 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
       : `/api/chat/conversations/${this.chatId}/messages`;
     
+    // Ensure projectId is included in request if available
+    const options = projectId ? { project_id: projectId } : {};
+    
     // Use window.apiRequest instead of direct fetch
     const data = await window.apiRequest(endpoint, 'POST', messagePayload);
     const responseData = data.data || data;
