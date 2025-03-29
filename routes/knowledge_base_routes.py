@@ -34,6 +34,7 @@ from models.conversation import Conversation
 from models.user import User
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
+from services.knowledgebase_service import DEFAULT_EMBEDDING_MODEL
 
 from db import get_async_session
 from utils.auth_utils import get_current_user_and_token
@@ -93,6 +94,80 @@ class SearchRequest(BaseModel):
 # ============================
 # Knowledge Base Endpoints
 # ============================
+
+class ProjectKnowledgeBaseCreate(BaseModel):
+    """
+    Schema for creating a new knowledge base under a project.
+    """
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Embedding model to use",
+        json_schema_extra={
+            "options": [
+                "all-MiniLM-L6-v2",
+                "text-embedding-3-small",
+                "embed-english-v3.0"
+            ]
+        }
+    )
+
+@router.post("/projects/{project_id}/knowledge-bases", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_project_knowledge_base(
+    project_id: UUID,
+    knowledge_base_data: ProjectKnowledgeBaseCreate,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    Creates a new knowledge base associated with a project (alternative endpoint).
+    Uses project_id from path parameter, ignoring any project_id in request body.
+    """
+    # Convert to dict and remove project_id if present
+    request_data = knowledge_base_data.dict(exclude={'project_id'})
+    # Ensure required fields are present
+    if not request_data.get('name'):
+        raise HTTPException(status_code=400, detail="Name is required")
+    try:
+        # Validate the user has access to the project
+        await validate_resource_access(
+            project_id,
+            Project,
+            current_user,
+            db,
+            "Project"
+        )
+
+        # Create knowledge base with project_id from path parameter
+        knowledge_base = await knowledgebase_service.create_knowledge_base(
+            name=knowledge_base_data.name,  # Required field from original model
+            project_id=project_id,  # From path parameter
+            description=request_data.get('description'),  # Optional
+            embedding_model=request_data.get('embedding_model') or DEFAULT_EMBEDDING_MODEL,  # Optional with default
+            db=db
+        )
+
+        return await create_standard_response(
+            {
+                "id": str(knowledge_base.id),
+                "name": knowledge_base.name,
+                "description": knowledge_base.description,
+                "embedding_model": knowledge_base.embedding_model,
+                "is_active": knowledge_base.is_active,
+                "project_id": str(knowledge_base.project_id),
+                "created_at": knowledge_base.created_at.isoformat()
+                if knowledge_base.created_at
+                else None
+            },
+            "Knowledge base created successfully"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating knowledge base: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create knowledge base: {str(e)}")
+
 
 @router.post("/knowledge-bases", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_knowledge_base(

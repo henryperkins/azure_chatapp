@@ -7,7 +7,7 @@
 window.MessageService = function(options = {}) {
   this.onMessageReceived = options.onMessageReceived || (() => {});
   this.onSending = options.onSending || (() => {});
-  this.onError = options.onError || console.error;
+  this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error));
   this.chatId = null;
   this.wsService = null;
 };
@@ -18,25 +18,39 @@ window.MessageService.prototype.initialize = function(chatId, wsService) {
   this.wsService = wsService;
   if (wsService) {
     // Assign a default WebSocket 'onmessage' -> funnel to our handler
+    // But note that 'send()' uses an internal event listener for request correlation
     wsService.onMessage = this._handleWsMessage.bind(this);
   }
 };
 
 // Helper function to validate UUIDs in MessageService
 window.MessageService.prototype._isValidUUID = function(uuid) {
-  if (!uuid) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  if (!uuid) {
+    console.warn('UUID validation failed: UUID is null or undefined');
+    return false;
+  }
+  const isValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  if (!isValid) {
+    console.warn(`UUID validation failed for: ${uuid}`);
+  }
+  return isValid;
 };
 
 // Send message using WebSocket or HTTP fallback
 window.MessageService.prototype.sendMessage = async function(content) {
   try {
-    // Validate conversation ID first
-    if (!this.chatId || !this._isValidUUID(this.chatId)) {
-      console.warn('Invalid conversation ID, cannot send message');
-      throw new Error('Invalid conversation ID');
+    // Validate conversation ID first with better error message
+    if (!this.chatId) {
+      console.error('Cannot send message: No conversation ID set');
+      throw new Error('Invalid conversation ID: No conversation ID set');
+    }
+    
+    if (!this._isValidUUID(this.chatId)) {
+      console.error(`Cannot send message: Invalid conversation ID format: ${this.chatId}`);
+      throw new Error(`Invalid conversation ID: ${this.chatId}`);
     }
 
+    console.log(`Sending message to conversation: ${this.chatId}`);
     this.onSending();
 
     // Determine if we're in project context or standalone chat
@@ -46,16 +60,21 @@ window.MessageService.prototype.sendMessage = async function(content) {
     const messagePayload = {
       content: content,
       model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
-      enable_thinking: true  // Enable thinking blocks for Claude
+      enable_thinking: localStorage.getItem("extendedThinking") === "true" || true
     };
 
     // Only include project_id if we're in project context
     if (isProjectContext && projectId) {
       messagePayload.project_id = projectId;
     }
+    
+    // Add thinking budget if available and model supports it
+    const thinkingBudget = localStorage.getItem("thinkingBudget");
+    if (thinkingBudget) {
+      messagePayload.thinking_budget = parseInt(thinkingBudget, 10);
+    }
 
     if (this.wsService && this.wsService.isConnected()) {
-      // Use WebSocket if available
       try {
         const wsResponse = await this.wsService.send({
           type: 'message',
@@ -71,20 +90,19 @@ window.MessageService.prototype.sendMessage = async function(content) {
           metadata: wsResponse.metadata || {}
         });
       } catch (wsError) {
-        // Use fallback if WebSocket fails
+        // Use standardized error handling, then fall back to HTTP
+        window.ChatUtils?.handleError?.('WebSocket message', wsError);
         console.warn('WebSocket message failed, using HTTP fallback:', wsError);
-        this._sendMessageHttp(messagePayload);
+        await this._sendMessageHttp(messagePayload);
       }
     } else {
       // Use HTTP if WebSocket not available
       await this._sendMessageHttp(messagePayload);
     }
   } catch (error) {
-    if (window.handleAPIError) {
-      window.handleAPIError('chat messaging', error);
-    } else {
-      this.onError('Failed to send message', error);
-    }
+    // Use standardized error handling
+    window.ChatUtils?.handleError?.('Sending message', error) || 
+    this.onError('Sending message', error);
   }
 };
 
@@ -162,12 +180,9 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       metadata: assistantMetadata
     });
   } catch (error) {
-    // Use existing error handling from app.js
-    if (window.handleAPIError) {
-      window.handleAPIError('sending message', error);
-    } else {
-      this.onError('Failed to send message via HTTP', error);
-    }
+    // Use standardized error handling
+    window.ChatUtils?.handleError?.('HTTP message', error) || 
+    this.onError('HTTP message', error);
   }
 };
 
@@ -224,6 +239,8 @@ window.MessageService.prototype._handleWsMessage = function(event) {
       console.log('WebSocket status update:', data.message);
     }
   } catch (error) {
-    this.onError('Failed to process WebSocket message', error);
+    // Use standardized error handling
+    window.ChatUtils?.handleError?.('Processing WebSocket message', error) || 
+    this.onError('Processing WebSocket message', error);
   }
 };

@@ -11,7 +11,7 @@ Centralized file validation utilities including:
 import os
 import re
 import logging
-from typing import Dict, Any, BinaryIO, Union, List, AsyncGenerator
+from typing import Dict, Any, BinaryIO, Union, List
 from fastapi import UploadFile
 import mimetypes
 from config import settings
@@ -46,8 +46,22 @@ class FileValidator:
 
     @classmethod
     def validate_extension(cls, filename: str) -> bool:
-        """Validate file has allowed extension."""
-        _, ext = os.path.splitext(filename.lower())
+        """Validate file has allowed extension, handling edge cases."""
+        if not filename:
+            return False
+            
+        # Handle multiple dots and case sensitivity
+        filename = filename.strip()
+        parts = filename.split('.')
+        if len(parts) < 2:
+            return False
+            
+        ext = f".{parts[-1].lower()}"
+        
+        # Debug log validation attempts
+        logger.debug(f"Validating extension: {ext} in {cls.ALLOWED_EXTENSIONS.keys()}")
+        
+        return ext in cls.ALLOWED_EXTENSIONS
         return ext in cls.ALLOWED_EXTENSIONS
 
     @classmethod
@@ -93,38 +107,68 @@ class FileValidator:
 
     @classmethod
     async def validate_upload_file(
-        cls, 
+        cls,
         file: Union[BinaryIO, UploadFile],
-        scan_content: bool = True
+        scan_content: bool = True,
+        preserve_spaces: bool = True
     ) -> Dict[str, Any]:
+        """
+        Comprehensive validation for uploaded files with enhanced security.
+        Features:
+        - Preserves spaces in filenames when requested
+        - Content scanning for malicious patterns
+        - Detailed error messages
+        - Size validation
+        """
         """
         Comprehensive validation for uploaded files.
         Returns file info dict or raises ValueError.
         """
-        filename = getattr(file, "filename", "untitled")
+        original_filename = getattr(file, "filename", "untitled")
         file_size = getattr(file, "size", None)
         
-        if not cls.validate_extension(filename):
-            raise ValueError(f"File type not allowed. Supported: {', '.join(cls.get_allowed_extensions_list())}")
+        # Validate extension first
+        if not cls.validate_extension(original_filename):
+            raise ValueError(
+                f"File type not allowed. Supported: {', '.join(cls.get_allowed_extensions_list())}\n"
+                f"Attempted to upload: {original_filename}"
+            )
+
+        # Handle filename spaces
+        if not preserve_spaces:
+            original_filename = original_filename.replace(" ", "_")
             
         if scan_content:
-            # Sample first 1MB for content scanning
-            sample = await file.read(1024 * 1024)
+            # Sample first 2MB for deeper content scanning
+            sample = await file.read(2 * 1024 * 1024)
             await file.seek(0)
             
-            # Check for common malicious patterns
+            # Enhanced malicious pattern detection
             malicious_patterns = [
-                b'<?php', 
-                b'<script', 
-                b'eval(', 
-                b'powershell',
-                b'cmd.exe'
+                # Web exploits
+                b'<?php', b'<script', b'eval(', b'document.cookie',
+                # System commands
+                b'powershell', b'cmd.exe', b'/bin/bash', b'wget', b'curl',
+                # Suspicious patterns
+                b'base64_decode', b'exec(', b'system(', b'passthru(',
+                # Dangerous file operations
+                b'file_put_contents', b'fopen(', b'unlink('
             ]
             
-            if any(pattern in sample.lower() for pattern in malicious_patterns):
-                raise ValueError("File content appears to contain potentially malicious code")
+            lower_sample = sample.lower()
+            found_patterns = [
+                pattern.decode('utf-8', errors='ignore')
+                for pattern in malicious_patterns
+                if pattern in lower_sample
+            ]
             
-        file_info = cls.get_file_info(filename)
+            if found_patterns:
+                raise ValueError(
+                    "File content contains potentially dangerous patterns:\n" +
+                    "\n".join(f"- {p}" for p in found_patterns)
+                )
+            
+        file_info = cls.get_file_info(original_filename)
         
         if file_size is not None and not cls.validate_size(file_size):
             raise ValueError(f"File too large (max {cls.get_max_file_size_mb()}MB)")
