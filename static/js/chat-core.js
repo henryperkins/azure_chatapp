@@ -3,106 +3,178 @@
  * Main entry point for chat functionality
  */
 
-// Main entry point - this replaces the original chat.js
-// Load dependent modules first if not using <script> tags
-(function() {
-  // Helper to add markdown styles
-  function addMarkdownStyles() {
-    if (document.getElementById('markdown-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'markdown-styles';
-    style.textContent = `
-      .markdown-table{width:100%;border-collapse:collapse;margin:1em 0}
-      .markdown-table th,.markdown-table td{padding:.5em;border:1px solid #ddd}
-      .markdown-code{background:#f5f5f5;padding:.2em .4em;border-radius:3px}
-      .markdown-pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto}
-      .markdown-quote{border-left:3px solid #ddd;padding:0 1em;color:#666}
-      .code-block-wrapper{position:relative}
-      .copy-code-btn{position:absolute;right:.5em;top:.5em;padding:.25em .5em;background:#fff;border:1px solid #ddd;
-        border-radius:3px;cursor:pointer;font-size:.8em}
-      .copy-code-btn:hover{background:#f5f5f5}
-    `;
-    document.head.appendChild(style);
-  }
+// Helper to add markdown styles
+function addMarkdownStyles() {
+  if (document.getElementById('markdown-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'markdown-styles';
+  style.textContent = `
+    .markdown-table{width:100%;border-collapse:collapse;margin:1em 0}
+    .markdown-table th,.markdown-table td{padding:.5em;border:1px solid #ddd}
+    .markdown-code{background:#f5f5f5;padding:.2em .4em;border-radius:3px}
+    .markdown-pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto}
+    .markdown-quote{border-left:3px solid #ddd;padding:0 1em;color:#666}
+    .code-block-wrapper{position:relative}
+    .copy-code-btn{position:absolute;right:.5em;top:.5em;padding:.25em .5em;background:#fff;border:1px solid #ddd;
+      border-radius:3px;cursor:pointer;font-size:.8em}
+    .copy-code-btn:hover{background:#f5f5f5}
+  `;
+  document.head.appendChild(style);
+}
 
-  // Main chat interface
-  window.ChatInterface = function(options = {}) {
-    this.notificationFunction = (message, type) => {
-      if (window.Notifications) {
-        switch(type) {
-          case 'error': return window.Notifications.apiError(message);
-          case 'success': return window.Notifications.apiSuccess?.(message);
-          default: return console.log(`[${type.toUpperCase()}] ${message}`);
-        }
-      }
-      return (options.showNotification || window.showNotification || console.log)(message, type);
-    };
-    
-    this.container = document.querySelector(options.containerSelector || '#chatUI');
-    this.titleEl = document.querySelector(options.titleSelector || '#chatTitle');
-    this.messageContainerSelector = options.messageContainerSelector || '#conversationArea';
-
-    this.wsService = null;
-    this.messageService = null;
-    this.conversationService = null;
-    this.ui = null;
-
-    this.currentChatId = null;
-    this.currentImage = null;
+// Check if modules are loaded, load if not
+function ensureModulesLoaded() {
+  const requiredModules = [
+    { name: 'ChatUtils', path: '/static/js/chat-utils.js' },
+    { name: 'WebSocketService', path: '/static/js/chat-websocket.js' },
+    { name: 'MessageService', path: '/static/js/chat-messages.js' },
+    { name: 'ConversationService', path: '/static/js/chat-conversations.js' },
+    { name: 'UIComponents', path: '/static/js/chat-ui.js' },
+    { name: 'ChatInterface', path: '/static/js/chat-interface.js' }
+  ];
+  
+  const missingModules = requiredModules.filter(mod => !window[mod.name]);
+  
+  if (missingModules.length === 0) return Promise.resolve();
+  
+  // Function to load a script
+  const loadScript = (path) => {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = path;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
   };
+  
+  // Load missing modules sequentially
+  return missingModules.reduce((promise, module) => {
+    return promise.then(() => loadScript(module.path));
+  }, Promise.resolve());
+}
 
-  // Add ChatInterface methods imported from chat-interface.js
-  // Include initialize(), loadConversation(), createNewConversation(), etc.
-  // Those are implemented in other modules and attached to the ChatInterface prototype
-})();
-
-// Maintain same public API for backward compatibility
-// These are global functions exposed on the window object
+// For maintaining backward compatibility with global functions
 let chatInterface = null;
 
 // Initialize the chat functionality
-window.initializeChat = function() {
-  addMarkdownStyles();
-  chatInterface = new window.ChatInterface();
-  chatInterface.initialize();
-  window.projectChatInterface = chatInterface; // Expose the instance globally
+window.initializeChat = async function() {
+  try {
+    console.log("Initializing chat system...");
+    
+    // Ensure required modules are loaded
+    await ensureModulesLoaded();
+    
+    // Add markdown styles
+    addMarkdownStyles();
+    
+    // Create the chat interface
+    chatInterface = new window.ChatInterface();
+    chatInterface.initialize();
+    
+    // Expose the instance globally for project page
+    window.projectChatInterface = chatInterface;
 
-  // Listen for model configuration changes
-  document.addEventListener('modelConfigChanged', (e) => {
-    if (chatInterface && chatInterface.messageService) {
-      const modelName = e.detail?.modelName || localStorage.getItem('modelName');
-      if (modelName) {
-        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-        window.MODEL_CONFIG.modelName = modelName;
-        window.MODEL_CONFIG.maxTokens = Number(e.detail?.maxTokens) || 200000;
-        window.MODEL_CONFIG.thinkingBudget = Number(e.detail?.thinkingBudget) || 10000;
+    // Listen for model configuration changes
+    document.addEventListener('modelConfigChanged', (e) => {
+      if (chatInterface && chatInterface.messageService) {
+        const modelName = e.detail?.modelName || localStorage.getItem('modelName');
+        if (modelName) {
+          window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+          window.MODEL_CONFIG.modelName = modelName;
+          window.MODEL_CONFIG.maxTokens = Number(e.detail?.maxTokens) || 200000;
+          window.MODEL_CONFIG.thinkingBudget = Number(e.detail?.thinkingBudget) || 10000;
+        }
+      }
+    });
+    
+    // Set up global keyboard shortcuts
+    setupGlobalKeyboardShortcuts();
+    
+    console.log("Chat system initialized successfully");
+    return chatInterface;
+  } catch (error) {
+    console.error("Failed to initialize chat system:", error);
+    window.ChatUtils?.handleError?.('Initializing chat', error);
+    throw error;
+  }
+};
+
+// Set up keyboard shortcuts
+function setupGlobalKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Avoid capturing key events in input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      // NOTE: This hijacks Ctrl+R - only use if needed
+      if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent('regenerateChat'));
+      }
+      // Ctrl+C for copying current message
+      if (e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent('copyMessage'));
+      }
+      // Ctrl+N for new chat
+      if (e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        window.createNewChat();
       }
     }
   });
-};
+}
 
-// Load an existing conversation
+// Public API for backward compatibility
 window.loadConversation = function(chatId) {
-  if (!chatInterface) window.initializeChat();
+  if (!chatInterface) {
+    // Create a promise that resolves when chat is initialized
+    return window.initializeChat().then(() => chatInterface.loadConversation(chatId));
+  }
   return chatInterface.loadConversation(chatId);
 };
 
-// Create a new chat conversation
 window.createNewChat = async function() {
-  if (!chatInterface) window.initializeChat();
+  if (!chatInterface) {
+    // Create a promise that resolves when chat is initialized
+    return window.initializeChat().then(() => chatInterface.createNewConversation());
+  }
   return chatInterface.createNewConversation();
 };
 
-// Send a message to a specific chat
 window.sendMessage = async function(chatId, userMsg) {
-  if (!chatInterface) window.initializeChat();
+  if (!chatInterface) {
+    // Create a promise that resolves when chat is initialized
+    return window.initializeChat().then(() => {
+      chatInterface.currentChatId = chatId;
+      return chatInterface._handleSendMessage(userMsg);
+    });
+  }
   chatInterface.currentChatId = chatId;
   return chatInterface._handleSendMessage(userMsg);
 };
 
-// Set up WebSocket connection for a chat
 window.setupWebSocket = async function(chatId) {
-  if (!chatInterface) window.initializeChat();
+  if (!chatInterface) {
+    // Create a promise that resolves when chat is initialized
+    return window.initializeChat().then(() => {
+      if (!chatId && chatInterface.currentChatId) {
+        chatId = chatInterface.currentChatId;
+      }
+      if (chatId && chatInterface.wsService) {
+        return chatInterface.wsService.connect(chatId).then(connected => {
+          if (connected) {
+            chatInterface.messageService.initialize(chatId, chatInterface.wsService);
+            return true;
+          }
+          return false;
+        }).catch(() => false);
+      }
+      return false;
+    });
+  }
+  
   if (!chatId && chatInterface.currentChatId) {
     chatId = chatInterface.currentChatId;
   }
@@ -113,15 +185,58 @@ window.setupWebSocket = async function(chatId) {
         chatInterface.messageService.initialize(chatId, chatInterface.wsService);
         return true;
       }
-    } catch (error) {}
+    } catch (error) {
+      console.warn("Failed to set up WebSocket:", error);
+    }
   }
   return false;
+};
+
+window.testWebSocketConnection = async function() {
+  await ensureModulesLoaded();
+  
+  const isAuthenticated = await window.ChatUtils?.isAuthenticated?.() || 
+                          (window.auth?.verify ? await window.auth.verify() : false);
+                          
+  if (!isAuthenticated) {
+    return { success: false, authenticated: false, message: "Authentication required" };
+  }
+  
+  try {
+    // Check if we can construct a valid WebSocket URL
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const host = window.location.host;
+    if (!host) {
+      throw new Error('Cannot determine host for WebSocket connection');
+    }
+    const chatId = window.CHAT_CONFIG?.chatId;
+    if (!chatId) {
+      throw new Error('No chatId available for WebSocket connection');
+    }
+    const wsUrl = `${wsProtocol}${host}/ws?chatId=${chatId}`;
+    
+    return {
+      success: true,
+      authenticated: true,
+      wsUrl,
+      message: "WebSocket prerequisites passed"
+    };
+  } catch (error) {
+    window.ChatUtils?.handleError?.('WebSocket test', error);
+    return { 
+      success: false, 
+      error: error.message, 
+      message: "WebSocket test failed" 
+    };
+  }
 };
 
 // Auto-initialize chat if #chatUI is present in DOM
 document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('chatUI')) {
-    window.initializeChat();
+    window.initializeChat().catch(error => {
+      console.error("Failed to auto-initialize chat:", error);
+    });
   }
   
   // Always set up the nav toggle button handler regardless of page
@@ -130,7 +245,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Setting up additional nav toggle button handler");
     navToggleBtn.addEventListener('click', function() {
       console.log("Nav toggle button clicked (direct handler)");
-      window.toggleSidebar();
+      if (typeof window.toggleSidebar === 'function') {
+        window.toggleSidebar();
+      }
     });
   }
 });

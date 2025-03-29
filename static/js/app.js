@@ -791,6 +791,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 // AUTH EVENT LISTENER (Single place for UI toggle on login/logout)
 // ---------------------------------------------------------------------
 
+function updateAuthUI(authenticated, username = null) {
+  const authBtn = document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  const userMenu = document.getElementById('userMenu');
+  const authStatus = document.getElementById('authStatus');
+  const userStatus = document.getElementById('userStatus');
+
+  if (authenticated) {
+    // Update UI for logged in state
+    if (authBtn) authBtn.classList.add('hidden');
+    if (userMenu) userMenu.classList.remove('hidden');
+    if (authStatus) authStatus.textContent = username || 'Authenticated';
+    if (userStatus) {
+      userStatus.textContent = 'Online';
+      userStatus.classList.remove('text-gray-500');
+      userStatus.classList.add('text-green-500');
+    }
+    if (authDropdown) authDropdown.classList.add('hidden');
+  } else {
+    // Update UI for logged out state
+    if (authBtn) authBtn.classList.remove('hidden');
+    if (userMenu) userMenu.classList.add('hidden');
+    if (authStatus) authStatus.textContent = 'Not Authenticated';
+    if (userStatus) {
+      userStatus.textContent = 'Offline';
+      userStatus.classList.remove('text-green-500');
+      userStatus.classList.add('text-gray-500');
+    }
+  }
+}
+
 document.addEventListener('authStateChanged', (e) => {
   const { authenticated, username } = e.detail;
   updateAuthUI(authenticated, username);
@@ -826,6 +857,10 @@ document.addEventListener('authStateChanged', (e) => {
 
 // Make apiRequest available globally for all other scripts
 window.apiRequest = apiRequest;
+
+// Expose functions directly on window for backward compatibility
+window.loadConversationList = loadConversationList;
+window.loadSidebarProjects = loadSidebarProjects;
 
 window.App = {
   apiRequest,

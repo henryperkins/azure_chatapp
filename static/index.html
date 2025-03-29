@@ -569,15 +569,17 @@
   -->
   <!-- Introduce global configs -->
   <script>
+    console.log('Initializing global configs');
     window.CHAT_CONFIG = {
       chatId: new URLSearchParams(window.location.search).get('chatId') || ""
     };
     window.BACKEND_HOST = window.location.host; // Use same host as frontend
     window.ENV = 'development'; // Matches config.py default
+    console.log('BACKEND_HOST set to:', window.BACKEND_HOST);
   </script>
-  <script src="/static/js/formatting.js"></script>
-  <script src="/static/js/auth.js"></script>
-  <script src="/static/js/sidebar.js"></script>
+  <script src="/static/js/formatting.js?t=<?=time()?>"></script>
+  <script src="/static/js/auth.js?t=<?=time()?>"></script>
+  <script src="/static/js/sidebar.js?t=<?=time()?>"></script>
   <script src="/static/js/modelConfig.js"></script>
   <!-- Ensure all module scripts load correctly -->
   <script src="/static/js/app.js" type="module"></script>
@@ -585,8 +587,13 @@
   <script src="/static/js/projectDashboard.js" type="module"></script>
   <script src="/static/js/projectDetailsComponent.js" type="module"></script>
   <script src="/static/js/projectDashboardUtils.js" type="module"></script>
-  <script src="/static/js/chat.js" type="module"></script>
-
+  <script src="/static/js/chat-utils.js"></script>
+  <script src="/static/js/chat-websocket.js"></script>
+  <script src="/static/js/chat-messages.js"></script>
+  <script src="/static/js/chat-conversations.js"></script>
+  <script src="/static/js/chat-ui.js"></script>
+  <script src="/static/js/chat-interface.js"></script>
+  <script src="/static/js/chat-core.js"></script>
   <!-- Project Files Modal -->
   <div id="projectFilesModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
