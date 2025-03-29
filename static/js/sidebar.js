@@ -567,9 +567,38 @@ document.addEventListener('conversationDeleted', (e) => {
   }
 });
 
+// Track sidebar state
+let sidebarState = {
+  isOpen: window.innerWidth >= 768
+};
+
+// Toggle sidebar function
+function toggleSidebar() {
+  const sidebar = document.getElementById('mainSidebar');
+  const toggleBtn = document.getElementById('navToggleBtn');
+  
+  if (!sidebar || !toggleBtn) return;
+  
+  sidebarState.isOpen = !sidebarState.isOpen;
+  
+  if (sidebarState.isOpen) {
+    sidebar.classList.remove('-translate-x-full');
+    sidebar.classList.add('translate-x-0');
+    createBackdrop();
+  } else {
+    sidebar.classList.add('-translate-x-full');
+    sidebar.classList.remove('translate-x-0');
+    removeBackdrop();
+  }
+}
+
 // Expose key functions globally
 window.sidebar = {
   toggleStarConversation,
   isConversationStarred,
-  loadStarredConversations
+  loadStarredConversations,
+  toggle: toggleSidebar
 };
+
+// Make toggle function directly available
+window.toggleSidebar = toggleSidebar;
