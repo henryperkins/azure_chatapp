@@ -55,6 +55,7 @@ window.WebSocketService.prototype.connect = async function(chatId) {
   // Prevent connection attempts if auth system is not initialized or in progress
   if (window.API_CONFIG?.authCheckInProgress || this.authCheckInProgress) {
     console.warn('[WebSocketService] Auth check in progress, deferring connection');
+    this.connecting = false;
     return Promise.reject(new Error('Auth check in progress'));
   }
 
@@ -86,17 +87,11 @@ window.WebSocketService.prototype.connect = async function(chatId) {
       this.authCheckInProgress = false;
     }
 
-    // Build URL
-    const baseUrl = window.location.origin;
+    // Build URL parameters
     const params = new URLSearchParams();
     if (chatId) params.append('chatId', chatId);
     if (this.projectId) {
         params.append('projectId', this.projectId);
-        // For project chats, use the project-specific endpoint
-        this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/ws/${chatId}?${params.toString()}`;
-        return new Promise((resolve, reject) => {
-            // ... existing connection logic
-        });
     }
     
     // Improved token acquisition that doesn't try to initialize auth
@@ -160,6 +155,7 @@ window.WebSocketService.prototype.connect = async function(chatId) {
       this.useHttpFallback = true;
       console.warn('[WebSocketService] Using HTTP fallback due to token issue');
       // Return an error that signals we should use HTTP, not a connection failure
+      this.connecting = false;
       return Promise.reject(new Error('Using HTTP fallback'));
     }
     
@@ -179,8 +175,7 @@ window.WebSocketService.prototype.connect = async function(chatId) {
       // Standalone conversation endpoint
       this.wsUrl = `${wsProtocol}${host}/ws?${params.toString()}`;
     }
-    console.log('[WebSocketService] Final WebSocket URL:', this.wsUrl);
-    console.log('[WebSocketService] Constructed URL:', this.wsUrl);
+    console.log('[WebSocketService] WebSocket URL:', this.wsUrl);
     if (!this.wsUrl.startsWith('ws://') && !this.wsUrl.startsWith('wss://')) {
       throw new Error('Invalid WebSocket URL');
     }
@@ -322,6 +317,12 @@ window.WebSocketService.prototype.isConnected = function() {
 
 // Send message with unique ID for correlation
 window.WebSocketService.prototype.send = function(payload) {
+  if (this.useHttpFallback) {
+    console.log('[WebSocketService] Using HTTP fallback');
+    return window.MessageService?.httpSend?.(payload) || 
+           Promise.reject(new Error('HTTP fallback not available'));
+  }
+  
   if (!this.isConnected()) {
     return Promise.reject(new Error('WebSocket not connected'));
   }
