@@ -66,7 +66,6 @@ class ProjectDashboard {
     }
 
     // Initialize components with error handling
-    // Initialize UIUtils first
     this.uiUtils = new UIUtils();
     
     this.components = {
@@ -86,11 +85,18 @@ class ProjectDashboard {
       throw new Error("ProjectListComponent initialization failed");
     }
 
-    // Process initial state
-    this.processUrlParams();
+    // Register listeners first
     this.registerEventListeners();
     
-    // Load initial data
+    // Process initial state
+    this.processUrlParams();
+
+    // Set initialization flag
+    window.projectDashboardInitialized = true;
+    document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+    
+    // Load data last after everything is set up
+    console.log('[DEBUG] Dashboard initialized, now loading projects...');
     await this.loadProjects();
   }
 
