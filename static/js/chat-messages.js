@@ -116,9 +116,9 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       throw new Error('Invalid conversation ID');
     }
     
-    // Determine if we're in project context or standalone chat
-    const isProjectContext = window.location.pathname.includes('/projects');
-    const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
+    // Get project context from URL or localStorage
+    const projectId = localStorage.getItem("selectedProjectId") ||
+      (window.location.pathname.match(/projects\/([^/]+)/) || [])[1];
         
     // Determine correct endpoint based on context
     const endpoint = projectId 

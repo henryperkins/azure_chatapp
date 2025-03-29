@@ -5,6 +5,16 @@
 
 // Initialize the interface
 window.ChatInterface = function(options = {}) {
+  this._setupProjectContext = function() {
+    this.isProjectsPage = window.location.pathname.includes('/projects');
+    if (this.isProjectsPage) {
+      const pathSegments = window.location.pathname.split('/');
+      this.projectId = pathSegments[pathSegments.indexOf('projects') + 1];
+      if (this.projectId) {
+        localStorage.setItem('selectedProjectId', this.projectId);
+      }
+    }
+  };
   this.notificationFunction = (message, type) => {
     if (window.Notifications) {
       switch(type) {
@@ -40,11 +50,11 @@ window.ChatInterface.prototype.initialize = function() {
     return;
   }
   
-  // Determine page context and set selectors
-  const isProjectsPage = window.location.pathname.includes('/projects');
+  // Initialize project context
+  this._setupProjectContext();
   
   // Update selectors based on page context
-  if (isProjectsPage) {
+  if (this.isProjectsPage) {
     this.containerSelector = '#projectChatUI';
     this.messageContainerSelector = '#projectChatMessages';
     this.inputSelector = '#projectChatInput';

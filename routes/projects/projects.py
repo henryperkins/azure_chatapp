@@ -375,7 +375,7 @@ async def get_project_stats(
                 select(func.count(ProjectFile.id))
                 .where(
                     ProjectFile.project_id == project_id,
-                    text("project_files.metadata->'search_processing'->>'success' = 'true'")
+                    text("project_files.config->'search_processing'->>'success' = 'true'")
                 )
             )
             
