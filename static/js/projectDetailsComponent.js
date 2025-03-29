@@ -456,10 +456,48 @@ class ProjectDetailsComponent {
   }
 
   uploadFiles(projectId, files) {
+    // Check knowledge base exists with tooltip explanation
+    if (!window.projectManager?.currentProject?.knowledge_base_id) {
+      const tooltip = document.getElementById('kbRequirementTooltip');
+      if (tooltip) {
+        tooltip.classList.remove('hidden');
+        setTimeout(() => tooltip.classList.add('hidden'), 5000);
+      }
+      uiUtilsInstance.showNotification(
+        "Please setup a knowledge base before uploading files",
+        "error"
+      );
+      return Promise.reject("Knowledge base not configured");
+    }
+
     this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-    const allowedExtensions = ['.txt', '.pdf', '.doc', '.docx', '.csv', '.json', '.md', '.xlsx', '.html'];
+    const allowedExtensions = ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'];
     const maxSizeMB = 30;
     
+    // Update KB status indicator
+    const kbStatus = document.getElementById('kbStatusIndicator');
+    if (kbStatus) {
+      kbStatus.textContent = window.projectManager?.currentProject?.knowledge_base_id
+        ? "✓ Knowledge Base Ready"
+        : "✗ Knowledge Base Required";
+      kbStatus.className = window.projectManager?.currentProject?.knowledge_base_id
+        ? "text-green-600 text-sm"
+        : "text-red-600 text-sm";
+    }
+
+    // Show supported file types
+    const fileTypesInfo = document.getElementById('supportedFileTypes');
+    if (fileTypesInfo) {
+      fileTypesInfo.innerHTML = `
+        <div class="text-xs text-gray-500 mt-2">
+          Supported: ${allowedExtensions.join(', ')} (Max ${maxSizeMB}MB)
+          <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">
+            ℹ️
+          </span>
+        </div>
+      `;
+    }
+
     if (this.elements.uploadProgress) {
       this.elements.uploadProgress.classList.remove("hidden");
       this.elements.progressBar.style.width = "0%";
