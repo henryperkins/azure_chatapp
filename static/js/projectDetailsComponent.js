@@ -441,21 +441,18 @@ class ProjectDetailsComponent {
           return;
         }
         
-        window.projectChatInterface.deleteConversation(conversation.id)
+        // Pass projectId explicitly to the deletion method
+        window.projectChatInterface.deleteConversation(conversation.id, projectId)
           .then(success => {
             if (success) {
               // Remove the element from the list
               const convoElement = this.elements.conversationsList.querySelector(`[data-conversation-id="${conversation.id}"]`);
               if (convoElement) {
-                 convoElement.remove();
-              } else {
-                 // Fallback: re-render if direct removal fails
-                 window.projectManager.loadProjectConversations(projectId);
+                convoElement.remove();
               }
               // Refresh stats
               window.projectManager.loadProjectStats(projectId);
             }
-            // Notification is handled by deleteConversation method itself
           })
           .catch(err => {
             console.error("Error deleting conversation:", err);
