@@ -9,79 +9,72 @@
  * - Starred conversations management
  */
 
-function initializeSidebarToggle() {
-  const sidebar = document.getElementById('mainSidebar');
-  const toggleBtn = document.getElementById('navToggleBtn');
-  
-  if (!sidebar || !toggleBtn) return;
+// Global variables
+let sidebar = null;
+let isOpen = false;
+let toggleBtn = null;
+let closeBtn = null;
 
-  // Single source of truth for state
-  let isOpen = window.innerWidth >= 768;
-
-  // Sync initial state
-  if (isOpen) {
-    sidebar.classList.remove('-translate-x-full');
-    sidebar.classList.add('translate-x-0');
-  } else {
-    sidebar.classList.add('-translate-x-full');
-    sidebar.classList.remove('translate-x-0');
-  }
-
-  // Toggle handler
-  toggleBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    isOpen = !isOpen;
-    
-    if (isOpen) {
-      sidebar.classList.remove('-translate-x-full');
-      sidebar.classList.add('translate-x-0');
-      createBackdrop();
-    } else {
-      sidebar.classList.add('-translate-x-full');
-      sidebar.classList.remove('translate-x-0');
-      removeBackdrop();
-    }
-  });
-
-  // Backdrop functions
-  function createBackdrop() {
+// Global backdrop functions
+function createBackdrop() {
     if (document.getElementById('sidebarBackdrop')) return;
     const backdrop = document.createElement('div');
     backdrop.id = 'sidebarBackdrop';
-    backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300';
-    backdrop.addEventListener('click', () => {
-      isOpen = false;
-      sidebar.classList.add('-translate-x-full');
-      sidebar.classList.remove('translate-x-0');
-      removeBackdrop();
-    });
+    backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 opacity-0';
+    backdrop.addEventListener('click', toggleSidebar);
     document.body.appendChild(backdrop);
     setTimeout(() => backdrop.classList.add('opacity-100'), 10);
-  }
+}
 
-  function removeBackdrop() {
+function removeBackdrop() {
     const backdrop = document.getElementById('sidebarBackdrop');
     if (backdrop) {
-      backdrop.classList.remove('opacity-100');
-      setTimeout(() => backdrop.remove(), 300);
+        backdrop.classList.remove('opacity-100');
+        setTimeout(() => backdrop.remove(), 300);
     }
-  }
+}
 
-  // Handle window resize
-  window.addEventListener('resize', () => {
-    const shouldBeOpen = window.innerWidth >= 768;
-    if (shouldBeOpen !== isOpen) {
-      isOpen = shouldBeOpen;
-      if (isOpen) {
+function toggleSidebar() {
+    if (!sidebar) return;
+    
+    isOpen = !isOpen;
+    if (isOpen) {
         sidebar.classList.remove('-translate-x-full');
         sidebar.classList.add('translate-x-0');
-        removeBackdrop();
-      } else {
+        createBackdrop();
+    } else {
         sidebar.classList.add('-translate-x-full');
         sidebar.classList.remove('translate-x-0');
-      }
+        removeBackdrop();
     }
-  });
+}
+
+function initializeSidebarToggle() {
+    sidebar = document.getElementById('mainSidebar');
+    toggleBtn = document.getElementById('navToggleBtn');
+    closeBtn = document.querySelector('#mainSidebar .md\\:hidden');
+
+    if (!sidebar || !toggleBtn) return;
+
+    isOpen = window.innerWidth >= 768;
+    sidebar.classList.toggle('-translate-x-full', !isOpen);
+    sidebar.classList.toggle('translate-x-0', isOpen);
+
+    // Event listeners
+    toggleBtn.addEventListener('click', toggleSidebar);
+    if (closeBtn) {
+        closeBtn.addEventListener('click', toggleSidebar);
+    }
+
+    window.addEventListener('resize', () => {
+        const shouldBeOpen = window.innerWidth >= 768;
+        if (shouldBeOpen !== isOpen) {
+            isOpen = shouldBeOpen;
+            sidebar.classList.toggle('-translate-x-full', !isOpen);
+            sidebar.classList.toggle('translate-x-0', isOpen);
+            if (!isOpen) removeBackdrop();
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -566,31 +559,6 @@ document.addEventListener('conversationDeleted', (e) => {
     }
   }
 });
-
-// Track sidebar state
-let sidebarState = {
-  isOpen: window.innerWidth >= 768
-};
-
-// Toggle sidebar function
-function toggleSidebar() {
-  const sidebar = document.getElementById('mainSidebar');
-  const toggleBtn = document.getElementById('navToggleBtn');
-  
-  if (!sidebar || !toggleBtn) return;
-  
-  sidebarState.isOpen = !sidebarState.isOpen;
-  
-  if (sidebarState.isOpen) {
-    sidebar.classList.remove('-translate-x-full');
-    sidebar.classList.add('translate-x-0');
-    createBackdrop();
-  } else {
-    sidebar.classList.add('-translate-x-full');
-    sidebar.classList.remove('translate-x-0');
-    removeBackdrop();
-  }
-}
 
 // Expose key functions globally
 window.sidebar = {

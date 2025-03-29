@@ -15,6 +15,9 @@ from models.knowledge_base import KnowledgeBase
 from fastapi import HTTPException
 from config import settings
 from services.context_integration import augment_with_knowledge
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload  # ADD THIS LINE
+from datetime import datetime  # ADD THIS LINE
 
 # Import utilities
 from utils.db_utils import get_all_by_condition, save_model
