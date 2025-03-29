@@ -69,4 +69,7 @@ class Settings:
     EMBEDDING_API = os.getenv("EMBEDDING_API", "")
     COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
 
+    # Migration control
+    ALWAYS_APPLY_MIGRATIONS = os.getenv("ALWAYS_APPLY_MIGRATIONS", "false").lower() == "true"
+
 settings = Settings()
