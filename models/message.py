@@ -6,7 +6,7 @@ Tracks role ("user", "assistant", "system"), content, metadata for tokens.
 """
 from sqlalchemy import Integer, String, Text, TIMESTAMP, text, ForeignKey, event, CheckConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from typing import Optional
 import uuid
 from datetime import datetime

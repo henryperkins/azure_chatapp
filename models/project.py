@@ -6,7 +6,7 @@ that can be attached to one or more conversations for context.
 """
 from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint, Index
 from sqlalchemy.orm import backref
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
 from typing import Optional
