@@ -1,389 +1,469 @@
-/**
- * chat-websocket.js
- * WebSocket service for real-time chat communication
- */
+(function() {
+  // Prevent multiple executions
+  if (window.__webSocketServiceLoaded) {
+    console.warn('chat-websocket.js already loaded');
+    return;
+  }
 
-// Define WebSocketService as a constructor function attached to the window
-window.WebSocketService = function(options = {}) {
+  // Mark as loaded
+  window.__webSocketServiceLoaded = true;
+
+  /**
+   * chat-websocket.js
+   * Robust WebSocket service for real-time chat communication with:
+   * - Automatic reconnection
+   * - Authentication handling
+   * - HTTP fallback
+   * - State management
+   */
+
+  /// <reference types="@types/node" />
+
+  /**
+   * @typedef {{
+   *  WebSocketService: typeof WebSocketService,
+   *  ChatUtils: typeof import('./chat-utils'),
+   *  API_CONFIG: { WS_ENDPOINT?: string },
+   *  TokenManager: {
+   *    accessToken?: string,
+   *    isExpired: () => boolean,
+   *    refresh: () => Promise<void>
+   *  },
+   *  auth: { verify?: () => Promise<boolean> },
+   *  BACKEND_HOST?: string,
+   *  MessageService: { httpSend: (payload: any) => Promise<any> }
+   * }} AugmentedWindow
+   */
+
+  // Only define WebSocketService if it doesn't exist
+  if (window.WebSocketService) {
+    console.warn('WebSocketService already defined');
+    return;
+  }
+
+  // Connection state constants
+const CONNECTION_STATES = {
+  DISCONNECTED: 'disconnected',
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
+  RECONNECTING: 'reconnecting',
+  ERROR: 'error'
+};
+
+/**
+ * Authentication Manager
+ * Centralizes all authentication logic
+ */
+class AuthManager {
+  constructor() {
+    this.authCheckInProgress = false;
+  }
+
+  async getValidToken() {
+    if (this.authCheckInProgress) {
+      throw new Error('Auth check already in progress');
+    }
+
+    this.authCheckInProgress = true;
+    try {
+      // Check for existing valid token
+      if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
+        return window.TokenManager.accessToken;
+      }
+
+      // Attempt token refresh if available
+      if (window.TokenManager?.refresh) {
+        await window.TokenManager.refresh();
+        if (window.TokenManager.accessToken) {
+          return window.TokenManager.accessToken;
+        }
+      }
+
+      // Final fallback to auth verification
+      if (window.auth?.verify) {
+        const verified = await window.auth.verify();
+        if (verified && window.TokenManager?.accessToken) {
+          return window.TokenManager.accessToken;
+        }
+      }
+
+      throw new Error('Unable to obtain valid token');
+    } finally {
+      this.authCheckInProgress = false;
+    }
+  }
+}
+
+/**
+ * WebSocket Service
+ * Handles real-time communication with automatic reconnection
+ */
+window.WebSocketService = function (options = {}) {
+  // Configuration
+  this.maxRetries = options.maxRetries || 3;
+  this.reconnectInterval = options.reconnectInterval || 3000;
+  this.connectionTimeout = options.connectionTimeout || 10000;
+  this.messageTimeout = options.messageTimeout || 30000;
+
+  // State
+  this.state = CONNECTION_STATES.DISCONNECTED;
   this.socket = null;
   this.chatId = null;
   this.projectId = localStorage.getItem("selectedProjectId");
   this.reconnectAttempts = 0;
-  this.maxRetries = options.maxRetries || 3;
-  this.reconnectInterval = options.reconnectInterval || 3000;
   this.useHttpFallback = false;
-  this.connecting = false;
   this.wsUrl = null;
-  this.authCheckInProgress = false;
+  this.pendingMessages = new Map();
+
+  // Dependencies
+  this.authManager = new AuthManager();
 
   // Event handlers
-  this.onMessage = options.onMessage || (() => {});
-  this.onError = options.onError || (err => window.ChatUtils?.handleError?.('WebSocket', err) || console.error(err));
-  this.onConnect = options.onConnect || (() => {});
-  this.onDisconnect = options.onDisconnect || (() => {});
+  this.onMessage = options.onMessage || (() => { });
+  this.onError = options.onError || ((err) => console.error('WebSocket Error:', err));
+  this.onConnect = options.onConnect || (() => { });
+  this.onDisconnect = options.onDisconnect || (() => { });
 };
 
-// Connect method
-window.WebSocketService.prototype.connect = async function(chatId) {
-  if (!chatId) {
-    return Promise.reject(new Error('Invalid request: missing chatId'));
+// State management
+window.WebSocketService.prototype.setState = function (newState) {
+  if (this.state === newState) return;
+
+  console.debug(`Connection state: ${this.state} → ${newState}`);
+  this.state = newState;
+
+  switch (newState) {
+    case CONNECTION_STATES.CONNECTED:
+      this.onConnect();
+      break;
+    case CONNECTION_STATES.DISCONNECTED:
+      this.onDisconnect();
+      break;
+    case CONNECTION_STATES.ERROR:
+      this.onError(new Error('Connection error'));
+      break;
+  }
+};
+
+// Connection management
+window.WebSocketService.prototype.connect = async function (chatId) {
+  if (!chatId) throw new Error('Invalid chatId');
+
+  // Prevent duplicate connections
+  if (
+    this.state === CONNECTION_STATES.CONNECTING ||
+    this.state === CONNECTION_STATES.RECONNECTING
+  ) {
+    throw new Error('Connection already in progress');
   }
 
-  // Handle concurrent connection attempts
-  if (this.connecting) {
-    return new Promise((resolve, reject) => {
-      const maxWait = 10000; // Increased timeout to 10 seconds
-      const start = Date.now();
-      
-      const checkConnection = () => {
-        if (!this.connecting) {
-          this.connect(chatId).then(resolve).catch(reject);
-        } else if (Date.now() - start < maxWait) {
-          setTimeout(checkConnection, 100);
-        } else {
-          console.warn('WebSocket connection attempt timed out');
-          this.connecting = false; // Reset connecting state on timeout
-          this.useHttpFallback = true;
-          reject(new Error('Connection timeout'));
-        }
-      };
-      
-      checkConnection();
-    });
+  if (this.state === CONNECTION_STATES.CONNECTED && this.chatId === chatId) {
+    return true;
   }
 
-  // Prevent connection attempts if auth system is not initialized or in progress
-  if (window.API_CONFIG?.authCheckInProgress || this.authCheckInProgress) {
-    console.warn('[WebSocketService] Auth check in progress, deferring connection');
-    this.connecting = false;
-    return Promise.reject(new Error('Auth check in progress'));
-  }
-
-  this.connecting = true;
+  this.setState(CONNECTION_STATES.CONNECTING);
   this.chatId = chatId;
+  this.useHttpFallback = false;
 
   try {
-    // First check if auth module is initialized
-    if (!window.TokenManager && !window.auth) {
-      console.warn('[WebSocketService] Auth modules not detected, delaying connection');
-      this.connecting = false;
-      this.useHttpFallback = true;
-      return Promise.reject(new Error('Auth system not initialized'));
-    }
+    const token = await this.authManager.getValidToken();
+    const params = new URLSearchParams({
+      chatId,
+      token,
+      ...(this.projectId && { projectId: this.projectId })
+    });
 
-    // Use standard authentication check from ChatUtils or auth.js
-    this.authCheckInProgress = true;
-    try {
-      const authState = await window.ChatUtils?.isAuthenticated?.() || 
-                      (window.auth?.verify ? await window.auth.verify() : false);
-      
-      if (!authState) {
-        this.connecting = false;
-        this.useHttpFallback = true;
-        console.warn('WebSocket connection failed: Not authenticated');
-        return Promise.reject(new Error('Authentication required'));
-      }
-    } finally {
-      this.authCheckInProgress = false;
-    }
-
-    // Build URL parameters
-    const params = new URLSearchParams();
-    if (chatId) params.append('chatId', chatId);
-    if (this.projectId) {
-        params.append('projectId', this.projectId);
-    }
+    // Use configured WS_ENDPOINT or fall back to production domain
+    let host = window.API_CONFIG?.WS_ENDPOINT || 'put.photo';
     
-    // Improved token acquisition that doesn't try to initialize auth
-    // and instead immediately falls back to HTTP when TokenManager isn't ready
-    const getToken = async () => {
-      // If token is immediately available, return it
-      if (window.TokenManager?.accessToken) {
-        console.log('[WebSocketService] Token available, using it for connection');
-        return window.TokenManager.accessToken;
-      }
+    // Force HTTPS/secure WebSocket in production
+    const isLocalhost = host.includes('localhost') ||
+                       host.includes('127.0.0.1') ||
+                       host.includes('0.0.0.0');
+    
+    // Remove protocol if present
+    host = host.replace(/^https?:\/\//, '');
+
+    // Validate host
+    if (!host) {
+      console.error('Empty WebSocket host - using HTTP fallback');
+      this.useHttpFallback = true;
+      throw new Error('Empty WebSocket host');
+    }
+
+    // Log connection attempt details
+    console.log('Attempting WebSocket connection to host:', host);
+    
+    // Force wss:// for production domain, ws:// for localhost
+    let protocol = host.includes('put.photo') ? 'wss://' : 'ws://';
+
+    try {
+      // Use /ws/ path for both standalone and project conversations
+      this.wsUrl = `${protocol}${host}/ws/${chatId}?${params}`;
       
-      // Important change: DON'T try to initialize auth or wait for TokenManager
-      // Just immediately throw an error to trigger HTTP fallback
-      if (!window.TokenManager) {
-        console.warn('[WebSocketService] TokenManager not initialized, using HTTP fallback');
-        throw new Error('TokenManager not initialized');
+      console.log('Constructed WebSocket URL:', this.wsUrl);
+      if (this.projectId) {
+        console.warn('Project ID detected but using standard WebSocket path');
       }
-      
-      // If we got here, TokenManager exists but access token isn't available yet
-      // Wait for a short time (3 seconds max) for token to become available
-      // This is a much shorter wait than before (15s → 3s)
+    } catch (error) {
+      console.error('Error constructing WebSocket URL:', error);
+      this.useHttpFallback = true;
+      throw new Error('Invalid WebSocket endpoint configuration');
+    }
+
+    // Validate the WebSocket URL before attempting connection
+    if (!validateWebSocketUrl(this.wsUrl)) {
+      throw new Error(`Invalid WebSocket URL: ${this.wsUrl}`);
+    }
+
+    await this.establishConnection();
+    this.setState(CONNECTION_STATES.CONNECTED);
+    return true;
+  } catch (error) {
+    console.error('Connection failed:', error);
+    this.setState(CONNECTION_STATES.ERROR);
+    this.useHttpFallback = true;
+    throw error;
+  }
+};
+
+window.WebSocketService.prototype.establishConnection = function () {
+  return new Promise((resolve, reject) => {
+    // Validate URL again right before connection as a safety check
+    if (!validateWebSocketUrl(this.wsUrl)) {
+      return reject(new Error(`Invalid WebSocket URL: ${this.wsUrl}`));
+    }
+
+    const socket = new WebSocket(this.wsUrl);
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error('Connection timeout'));
+    }, this.connectionTimeout);
+
+    socket.onopen = () => {
+      clearTimeout(timeout);
+      this.socket = socket;
+      this.reconnectAttempts = 0;
+      resolve();
+    };
+
+    socket.onmessage = (event) => {
       try {
-        console.log('[WebSocketService] TokenManager exists, waiting briefly for token');
-        await new Promise((resolve, reject) => {
-          const tokenTimeout = setTimeout(() => {
-            reject(new Error('Token not available in time'));
-          }, 3000); // Shorter 3 second timeout
-          
-          let attempts = 0;
-          const maxAttempts = 15; // 3 seconds with 200ms checks
-          
-          const check = () => {
-            if (window.TokenManager?.accessToken) {
-              clearTimeout(tokenTimeout);
-              console.log('[WebSocketService] Token became available');
-              resolve();
-            } else if (attempts++ < maxAttempts) {
-              setTimeout(check, 200);
-            } else {
-              clearTimeout(tokenTimeout);
-              reject(new Error('Token not available after checks'));
-            }
-          };
-          check();
-        });
-        
-        return window.TokenManager.accessToken;
-      } catch (tokenError) {
-        console.warn('[WebSocketService] Token not available in time, using HTTP fallback');
-        throw tokenError;
+        const data = JSON.parse(event.data);
+
+        // Handle token refresh messages
+        if (data.type === 'token_refresh_required') {
+          this.handleTokenRefresh().catch(err => {
+            console.error('Token refresh failed:', err);
+            this.socket.close(1000, 'Token refresh failed');
+          });
+          return;
+        }
+
+        // Handle pending message responses
+        if (data.messageId && this.pendingMessages.has(data.messageId)) {
+          const { resolve, reject, timeout } = this.pendingMessages.get(data.messageId);
+          clearTimeout(timeout);
+          this.pendingMessages.delete(data.messageId);
+
+          data.type === 'error'
+            ? reject(new Error(data.message || 'WebSocket error'))
+            : resolve(data);
+        }
+
+        // Forward to general message handler
+        this.onMessage(event);
+      } catch (err) {
+        console.error('Message parsing error:', err);
       }
     };
 
-    // Get token without too much waiting
-    let token;
-    try {
-      token = await getToken();
-      params.append('token', token);
-    } catch (tokenError) {
-      this.connecting = false;
-      this.useHttpFallback = true;
-      console.warn('[WebSocketService] Using HTTP fallback due to token issue');
-      // Return an error that signals we should use HTTP, not a connection failure
-      this.connecting = false;
-      return Promise.reject(new Error('Using HTTP fallback'));
-    }
-    
-    // Only log token if we got one
-    if (token) {
-      console.log('[WebSocketService] Using auth token:', token.substring(0, 6) + '...');
-    }
-    
-    // Get proper protocol and host
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const host = window.location.host;
+    socket.onerror = (error) => {
+      clearTimeout(timeout);
+      this.handleConnectionError(error);
+      reject(error);
+    };
 
-    if (this.projectId) {
-      // Project-specific WebSocket endpoint
-      this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/conversations/${chatId}/ws?${params.toString()}`;
-    } else {
-      // Standalone conversation endpoint
-      this.wsUrl = `${wsProtocol}${host}/ws/${chatId}?${params.toString()}`;
-    }
-    console.log('[WebSocketService] WebSocket URL:', this.wsUrl);
-    if (!this.wsUrl.startsWith('ws://') && !this.wsUrl.startsWith('wss://')) {
-      throw new Error('Invalid WebSocket URL');
-    }
+    socket.onclose = (event) => {
+      clearTimeout(timeout);
+      if (event.code !== 1000) { // 1000 = normal closure
+        this.handleConnectionError(new Error(`Connection closed: ${event.code}`));
+      }
+      this.setState(CONNECTION_STATES.DISCONNECTED);
+    };
+  });
+};
 
-    return new Promise((resolve, reject) => {
-      // Set a connection timeout
-      const wsConnectionTimeout = setTimeout(() => {
-        if (this.connecting) {
-          this.connecting = false;
-          this.useHttpFallback = true;
-          console.warn('WebSocket connection timed out after 10 seconds');
-          reject(new Error('WebSocket connection timed out'));
-        }
-      }, 10000); // 10 second timeout for the socket connection
+window.WebSocketService.prototype.handleTokenRefresh = async function() {
+  try {
+    if (window.TokenManager?.refresh) {
+      await window.TokenManager.refresh();
       
-      try {
-        // Initialize the socket
-        this.socket = new WebSocket(this.wsUrl);
-        
-        this.socket.onopen = () => {
-          console.log('[DEBUG] WebSocket connection established');
-          clearTimeout(wsConnectionTimeout);
-          this.reconnectAttempts = 0;
-          this.connecting = false;
-          
-          // Send debug handshake
-          try {
-            this.socket.send(JSON.stringify({
-              type: 'debug',
-              message: 'Connection established',
-              timestamp: new Date().toISOString()
-            }));
-          } catch (e) {
-            console.error('Failed to send debug handshake:', e);
-          }
-          
-          try {
-            this.socket.send(JSON.stringify({
-              type: 'auth',
-              chatId: this.chatId,
-              projectId: this.projectId || null
-            }));
-            
-            console.log('WebSocket connection established successfully');
-            this.onConnect();
-            resolve(true);
-          } catch (sendError) {
-            console.error('Failed to send authentication message:', sendError);
-            this.socket.close();
-            reject(new Error('Failed to authenticate WebSocket connection'));
-          }
-        };
-        
-        // Attach message handler
-        this.socket.onmessage = this.onMessage;
-        
-        this.socket.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          clearTimeout(wsConnectionTimeout);
-          
-          if (this.connecting) {
-            reject(error);
-            this.connecting = false;
-          }
-          this._handleReconnect();
-        };
-        
-        this.socket.onclose = (event) => {
-          clearTimeout(wsConnectionTimeout);
-          console.log(`WebSocket connection closed: Code ${event.code}`);
-          
-          if (event.code !== 1000) {
-            this._handleReconnect();
-          }
-          
-          this.onDisconnect(event);
-          
-          if (this.connecting) {
-            reject(new Error(`Connection closed with code ${event.code}`));
-            this.connecting = false;
-          }
-        };
-      } catch (error) {
-        clearTimeout(wsConnectionTimeout);
-        this.connecting = false;
-        this.reconnectAttempts++;
-        console.error('Failed to create WebSocket:', error);
-        reject(error);
+      // Send refreshed token to server if we have a connection
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
+          type: 'token_refresh',
+          token: window.TokenManager.accessToken
+        }));
+      }
+    }
+  } catch (error) {
+    console.error('Failed to refresh token:', error);
+    throw error;
+  }
+};
+
+window.WebSocketService.prototype.handleConnectionError = function (error) {
+  console.error('WebSocket connection error:', {
+    error: error.message || error.type,
+    url: this.wsUrl,
+    state: this.state,
+    chatId: this.chatId,
+    reconnectAttempt: this.reconnectAttempts
+  });
+  
+  this.socket = null;
+  this.setState(CONNECTION_STATES.ERROR);
+
+  // Only attempt reconnection if not already in progress
+  // and we haven't exceeded max retries
+  if (this.state !== CONNECTION_STATES.RECONNECTING &&
+      this.reconnectAttempts < this.maxRetries) {
+    this.attemptReconnection();
+  } else {
+    console.warn('Max reconnection attempts reached or already reconnecting - using HTTP fallback');
+    this.useHttpFallback = true;
+    if (this.onError) {
+      this.onError(new Error('WebSocket connection failed - using HTTP fallback'));
+    }
+  }
+};
+
+window.WebSocketService.prototype.attemptReconnection = function () {
+  if (this.reconnectAttempts >= this.maxRetries) {
+    console.warn('Max reconnection attempts reached');
+    this.useHttpFallback = true;
+    return;
+  }
+
+  this.setState(CONNECTION_STATES.RECONNECTING);
+  this.reconnectAttempts++;
+
+  // Calculate delay with exponential backoff and jitter
+  const delay = Math.min(
+    30000, // Max 30 seconds
+    this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1) * (1 + Math.random() * 0.5)
+  );
+
+  console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+
+  setTimeout(() => {
+    // Validate URL before reconnection attempt
+    if (!validateWebSocketUrl(this.wsUrl)) {
+      console.error(`Invalid WebSocket URL for reconnection: ${this.wsUrl}`);
+      this.useHttpFallback = true;
+      return;
+    }
+
+    this.connect(this.chatId).catch(() => {
+      if (this.reconnectAttempts < this.maxRetries) {
+        this.attemptReconnection();
       }
     });
-  } catch (error) {
-    this.connecting = false;
-    this.useHttpFallback = true;
-    return Promise.reject(error);
-  }
+  }, delay);
 };
 
-// Handles reconnection with exponential backoff
-window.WebSocketService.prototype._handleReconnect = async function() {
-  // Don't attempt reconnection if TokenManager isn't available
-  if (!window.TokenManager) {
-    console.warn('[WebSocketService] TokenManager not available, skipping reconnection');
-    this.useHttpFallback = true;
-    return;
-  }
-
-  // Limit reconnection attempts based on authentication state
-  if (this.reconnectAttempts++ >= this.maxRetries) {
-    this.useHttpFallback = true;
-    console.warn('[WebSocketService] Maximum reconnect attempts reached, using HTTP fallback');
-    return;
-  }
-
-  // Only check auth state if we have access to TokenManager
-  let authState = false;
-  try {
-    authState = window.TokenManager?.accessToken ? true : 
-                (await window.ChatUtils?.isAuthenticated?.() || 
-                (window.auth?.verify ? await window.auth.verify() : false));
-  } catch (e) {
-    console.warn('[WebSocketService] Auth check failed:', e);
-  }
-  
-  if (!authState) {
-    this.useHttpFallback = true;
-    console.warn('[WebSocketService] Not authenticated, skipping reconnection');
-    return;
-  }
-
-  // Exponential backoff
-  const delay = Math.min(
-    30000,
-    this.reconnectInterval * Math.pow(1.5, this.reconnectAttempts - 1)
-  );
-  await new Promise(resolve => setTimeout(resolve, delay));
-
-  // Only attempt reconnect if we haven't exceeded max retries
-  if (this.reconnectAttempts <= this.maxRetries) {
-    try {
-      await this.connect(this.chatId);
-    } catch (e) {
-      console.warn(`[WebSocketService] Reconnect attempt ${this.reconnectAttempts} failed: ${e.message}`);
-    }
-  }
-};
-
-// Connection status check
-window.WebSocketService.prototype.isConnected = function() {
-  return this.socket && this.socket.readyState === WebSocket.OPEN;
-};
-
-// Send message with unique ID for correlation
-window.WebSocketService.prototype.send = function(payload) {
+// Message handling
+window.WebSocketService.prototype.send = function (payload) {
   if (this.useHttpFallback) {
-    console.log('[WebSocketService] Using HTTP fallback');
-    return window.MessageService?.httpSend?.(payload) || 
-           Promise.reject(new Error('HTTP fallback not available'));
+    console.warn('Using HTTP fallback');
+    return window.MessageService?.httpSend?.(payload) ||
+      Promise.reject(new Error('HTTP fallback unavailable'));
   }
-  
+
   if (!this.isConnected()) {
     return Promise.reject(new Error('WebSocket not connected'));
   }
 
-  const messageId = crypto.randomUUID?.() || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  payload.messageId = messageId;
-
   return new Promise((resolve, reject) => {
-    // Set up timeout for response
-    const timeout = setTimeout(() => {
-      this.socket.removeEventListener('message', messageHandler);
-      reject(new Error('WebSocket message timed out after 30 seconds'));
-    }, 30000);
+    const messageId = crypto.randomUUID?.() || `msg-${Date.now()}`;
     
-    // Temporary handler for matching response
-    const messageHandler = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.messageId && data.messageId === messageId) {
-          this.socket.removeEventListener('message', messageHandler);
-          clearTimeout(timeout);
-          
-          if (data.type === 'error') {
-            reject(new Error(data.message || 'WebSocket error'));
-          } else {
-            resolve(data);
-          }
-        }
-      } catch (err) {
-        // If JSON parse fails or no matching ID, ignore
+    // Set up timeout for this message
+    const messageTmout = setTimeout(() => {
+      if (this.pendingMessages.has(messageId)) {
+        this.pendingMessages.delete(messageId);
+        reject(new Error('Message timeout'));
       }
-    };
+    }, this.messageTimeout);
 
-    this.socket.addEventListener('message', messageHandler);
-    
+    this.pendingMessages.set(messageId, { 
+      resolve, 
+      reject,
+      timeout: messageTmout 
+    });
+
     try {
-      this.socket.send(JSON.stringify(payload));
+      this.socket.send(JSON.stringify({
+        ...payload,
+        messageId,
+        timestamp: new Date().toISOString()
+      }));
     } catch (err) {
-      clearTimeout(timeout);
-      this.socket.removeEventListener('message', messageHandler);
+      clearTimeout(messageTmout);
+      this.pendingMessages.delete(messageId);
       reject(err);
     }
   });
 };
 
-// Disconnect and cleanup
-window.WebSocketService.prototype.disconnect = function() {
+// Connection status
+window.WebSocketService.prototype.isConnected = function () {
+  return this.socket && this.socket.readyState === WebSocket.OPEN;
+};
+
+// Clean disconnection
+window.WebSocketService.prototype.disconnect = function () {
   if (this.socket) {
+    // Clear any pending messages
+    this.pendingMessages.forEach(({ reject, timeout }) => {
+      clearTimeout(timeout);
+      reject(new Error('Connection closed'));
+    });
+    this.pendingMessages.clear();
+
+    // Close the socket
     this.socket.close();
     this.socket = null;
   }
+
+  this.setState(CONNECTION_STATES.DISCONNECTED);
 };
+
+// Cleanup on instance destruction
+window.WebSocketService.prototype.destroy = function () {
+  this.disconnect();
+  this.onMessage = () => { };
+  this.onError = () => { };
+  this.onConnect = () => { };
+  this.onDisconnect = () => { };
+};
+
+/**
+ * Utility function to validate WebSocket URL
+ * @param {string} url - URL to validate
+ * @returns {boolean} - Whether the URL is a valid WebSocket URL
+ */
+function validateWebSocketUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'ws:' || parsed.protocol === 'wss:';
+  } catch {
+    return false;
+  }
+}
+
+  // Export for Node.js environments if needed
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = WebSocketService;
+  }
+})(); // End of IIFE
