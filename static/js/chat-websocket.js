@@ -224,7 +224,7 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     console.log('Attempting WebSocket connection to host:', host);
     
     // Force wss:// for production domain, ws:// for localhost
-    let protocol = host.includes('put.photo') ? 'wss://' : 'ws://';
+    const finalProtocol = host.includes('put.photo') ? 'wss://' : 'ws://';
 
     try {
       // Use project-aware URL construction
@@ -233,7 +233,7 @@ window.WebSocketService.prototype.connect = async function (chatId) {
         `/ws/${chatId}`;
       
       const debugParam = localStorage.getItem('debugWS') ? '&debug=1' : '';
-      this.wsUrl = `${protocol}${host}${basePath}?${params}${debugParam}`;
+      this.wsUrl = `${finalProtocol}${host}${basePath}?${params}${debugParam}`;
       
       console.log('Constructed WebSocket URL:', this.wsUrl);
     } catch (error) {
