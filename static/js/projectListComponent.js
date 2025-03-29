@@ -143,6 +143,8 @@ class ProjectListComponent {
         projects = extractProjects(eventOrProjects);
       }
       
+      console.log('[PROJECTS] Raw projects data:', projects);
+      projects.forEach(p => console.log(`Project ${p.id} - pinned:${p.pinned}, archived:${p.archived}`));
       console.log('[DEBUG] Projects to render:', projects?.length || 0);
         
       if (!this.element) {
@@ -238,6 +240,8 @@ class ProjectListComponent {
                   project.pinned ? "Pinned" : "Active"
     });
     
+    const badges = uiUtilsInstance.createElement("div", { className: "flex items-center" });
+    badges.appendChild(statusIndicator);
     header.appendChild(title);
     header.appendChild(badges);
     card.appendChild(header);
@@ -349,8 +353,8 @@ class ProjectListComponent {
         });
         
         // Set active state on clicked button
-        button.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
-        button.classList.remove('text-gray-600');
+        button.classList.add('project-tab-btn-active');
+        button.classList.remove('text-gray-500');
         
         // Get filter from data attribute
         const filter = button.dataset.filter;
