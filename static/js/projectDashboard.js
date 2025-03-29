@@ -1,7 +1,7 @@
-import ProjectListComponent from './projectListComponent.js';
-import ProjectDetailsComponent from './projectDetailsComponent.js';
-import KnowledgeBaseComponent from './knowledgeBaseComponent.js';
-import { UIUtils, ModalManager } from './projectDashboardUtils.js';
+const ProjectListComponent = require('./projectListComponent');
+const ProjectDetailsComponent = require('./projectDetailsComponent'); 
+const KnowledgeBaseComponent = require('./knowledgeBaseComponent');
+const { UIUtils, ModalManager } = require('./projectDashboardUtils');
 
 /**
  * Project Dashboard - Main controller class
@@ -391,7 +391,10 @@ async function initProjectDashboard() {
 }
 
 // Export for module usage
-export { ProjectDashboard, initProjectDashboard };
+module.exports = { 
+  ProjectDashboard, 
+  initProjectDashboard 
+};
 
 // Automatic initialization when loaded in browser context
 if (typeof window !== 'undefined') {
