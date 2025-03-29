@@ -79,7 +79,7 @@ class ProjectDetailsComponent {
 
     // Add this event listener
     document.addEventListener("projectConversationsLoaded", (e) => {
-      this.renderConversations(e.detail.conversations);
+      this.renderConversations(e.detail); // Use e.detail directly instead of e.detail.conversations
     });
     
     // Initialize chat interface only if available
@@ -453,7 +453,6 @@ class ProjectDetailsComponent {
 
         window.projectManager.deleteProjectConversation(projectId, conversation.id)
           .then(() => {
-            // Instead of directly manipulating DOM, reload the list
             return Promise.all([
               window.projectManager.loadProjectStats(projectId),
               window.projectManager.loadProjectConversations(projectId)
@@ -463,8 +462,12 @@ class ProjectDetailsComponent {
             uiUtilsInstance.showNotification("Conversation deleted", "success");
           })
           .catch(err => {
-            console.error("Delete error:", err);
-            uiUtilsInstance.showNotification("Failed to delete conversation", "error");
+            console.error("Delete error - Details:", err); // Add detailed logging
+            if (err?.message?.includes("404")) {
+              uiUtilsInstance.showNotification("Conversation not found", "error");
+            } else {
+              uiUtilsInstance.showNotification("Failed to delete conversation", "error");
+            }
           });
       }
     });
