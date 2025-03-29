@@ -191,7 +191,17 @@ async def list_projects(
         logger.error("Invalid projects data format in response")
         raise HTTPException(500, "Internal server error: invalid data format")
 
-    return await create_standard_response(response_data)
+    return {
+        "projects": serialized_projects,
+        "count": len(serialized_projects),
+        "filter": {
+            "type": filter.value,
+            "applied": {
+                "archived": (filter == ProjectFilter.archived),
+                "pinned": (filter == ProjectFilter.pinned)
+            }
+        }
+    }
 
 
 @router.get("/{project_id}/", response_model=Dict)
