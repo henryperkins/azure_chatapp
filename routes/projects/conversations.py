@@ -306,6 +306,15 @@ async def project_websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
+            # Validate user and token version
+            user = await get_user_from_token(token, db, "access")
+            db_user = await db.get(User, user.id)
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            
+            if db_user.token_version != decoded.get("version", 0):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
             # Validate project access
             project = await project_service.validate_project_access(project_id, user, db)
             if not project:
