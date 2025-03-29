@@ -119,7 +119,7 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
     const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
         
     // Determine correct endpoint based on context
-    const endpoint = isProjectContext && projectId
+    const endpoint = projectId 
       ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
       : `/api/chat/conversations/${this.chatId}/messages`;
     
