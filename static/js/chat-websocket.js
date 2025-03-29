@@ -195,12 +195,10 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     const token = await this.authManager.getValidToken();
 
     const params = new URLSearchParams({
-      chatId: chatId,
-      token: token,
-      ...(this.projectId && { projectId: this.projectId })
+      token: token
     });
 
-    let host = window.API_CONFIG?.WS_ENDPOINT || 'put.photo';
+    let host = window.API_CONFIG?.WS_ENDPOINT || window.location.host;
     host = host.replace(/^https?:\/\//, '');
 
     if (!host) {
@@ -209,10 +207,9 @@ window.WebSocketService.prototype.connect = async function (chatId) {
       throw new Error('Empty WebSocket host');
     }
 
-    const finalProtocol = 'wss://';
-    const basePath = "/ws";
+    const finalProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const basePath = `/api/projects/${this.projectId}/conversations/${chatId}/ws`;
     this.wsUrl = `${finalProtocol}${host}${basePath}?${params}`;
-    console.log('Constructed WebSocket URL (forced wss):', this.wsUrl);
     console.log('Constructed WebSocket URL:', this.wsUrl);
   } catch (error) {
     console.error('Error constructing WebSocket URL:', error);

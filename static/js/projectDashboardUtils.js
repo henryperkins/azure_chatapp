@@ -206,44 +206,57 @@ export class ModalManager {
    * Show a confirmation dialog
    */
   static confirmAction(config) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('deleteConfirmModal');
+      if (!modal) {
+        console.error('Confirmation modal not found');
+        resolve(false);
+        return;
+      }
+
+      // Update modal structure
+      modal.innerHTML = `
+        <div class="confirm-modal-content">
+          <h3 class="confirm-modal-header">${config.title || 'Confirm Action'}</h3>
+          <div class="confirm-modal-body">
+            ${config.message || 'Are you sure you want to perform this action?'}
+          </div>
+          <div class="confirm-modal-footer">
+            <button id="cancelDeleteBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
+              ${config.cancelText || 'Cancel'}
+            </button>
+            <button id="confirmDeleteBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ${config.confirmClass || ''}">
+              ${config.confirmText || 'Confirm'}
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Set up event handlers
+      modal.querySelector('#confirmDeleteBtn').addEventListener('click', () => {
+        modal.classList.add('hidden');
+        if (typeof config.onConfirm === 'function') config.onConfirm();
+        resolve(true);
+      });
+      
+      modal.querySelector('#cancelDeleteBtn').addEventListener('click', () => {
+        modal.classList.add('hidden');
+        if (typeof config.onCancel === 'function') config.onCancel();
+        resolve(false);
+      });
+      
+      // Show modal
+      modal.classList.add('confirm-modal');
+      modal.classList.remove('hidden');
+    });
+  }
+
+  static closeActiveModal() {
     const modal = document.getElementById('deleteConfirmModal');
-    if (!modal) {
-      console.error('Confirmation modal not found');
-      return;
+    if (modal) {
+      modal.classList.remove('confirm-modal');
+      modal.classList.add('hidden');
     }
-
-    // Update modal structure
-    modal.innerHTML = `
-      <div class="confirm-modal-content">
-        <h3 class="confirm-modal-header">${config.title || 'Confirm Action'}</h3>
-        <div class="confirm-modal-body">
-          ${config.message || 'Are you sure you want to perform this action?'}
-        </div>
-        <div class="confirm-modal-footer">
-          <button id="cancelDeleteBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
-            ${config.cancelText || 'Cancel'}
-          </button>
-          <button id="confirmDeleteBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ${config.confirmClass || ''}">
-            ${config.confirmText || 'Confirm'}
-          </button>
-        </div>
-      </div>
-    `;
-
-    // Set up event handlers
-    modal.querySelector('#confirmDeleteBtn').addEventListener('click', () => {
-      modal.classList.add('hidden');
-      if (config.onConfirm) config.onConfirm();
-    });
-    
-    modal.querySelector('#cancelDeleteBtn').addEventListener('click', () => {
-      modal.classList.add('hidden');
-      if (config.onCancel) config.onCancel();
-    });
-    
-    // Show modal
-    modal.classList.add('confirm-modal');
-    modal.classList.remove('hidden');
   }
 }
 
