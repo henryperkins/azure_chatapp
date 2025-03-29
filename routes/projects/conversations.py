@@ -510,11 +510,6 @@ async def debug_conversation(
         "message_count": len(conversation.messages) if conversation.messages else 0
     }
 
-        if not token:
-            logger.warning("WebSocket rejected: No token provided")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            logger.debug("Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
-            return
 
         # Validate user and token version
         user = await get_user_from_token(token, db, "access")
