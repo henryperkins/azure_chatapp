@@ -69,7 +69,16 @@ window.UIComponents = function(options = {}) {
     },
 
     appendMessage: function(role, content, id = null, thinking = null, redacted = null, metadata = null) {
-      if (!this.container) return null;
+      if (!this.container) {
+        console.error('Message container not found! Selector:', this.messageContainerSelector);
+        return null;
+      }
+      
+      try {
+        console.log(`[UI] Appending ${role} message (${content.length} chars)`);
+        if (content.length > 50) {
+          console.debug('Message preview:', content.substring(0, 50) + '...');
+        }
 
       try {
         // Create message container
