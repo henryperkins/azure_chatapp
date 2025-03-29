@@ -198,13 +198,15 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     let protocol = host.includes('put.photo') ? 'wss://' : 'ws://';
 
     try {
-      // Use /ws/ path for both standalone and project conversations
-      this.wsUrl = `${protocol}${host}/ws/${chatId}?${params}`;
+      // Use project-aware URL construction
+      const basePath = this.projectId ? 
+        `/projects/${this.projectId}/conversations/${chatId}/ws` : 
+        `/ws/${chatId}`;
+      
+      const debugParam = localStorage.getItem('debugWS') ? '&debug=1' : '';
+      this.wsUrl = `${protocol}${host}${basePath}?${params}${debugParam}`;
       
       console.log('Constructed WebSocket URL:', this.wsUrl);
-      if (this.projectId) {
-        console.warn('Project ID detected but using standard WebSocket path');
-      }
     } catch (error) {
       console.error('Error constructing WebSocket URL:', error);
       this.useHttpFallback = true;
@@ -227,8 +229,25 @@ window.WebSocketService.prototype.connect = async function (chatId) {
   }
 };
 
+window.WebSocketService.prototype.startHeartbeat = function() {
+  if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+  
+  this.heartbeatInterval = setInterval(() => {
+    if (this.isConnected()) {
+      this.socket.send(JSON.stringify({ type: 'ping' }));
+      this.pendingPongs++;
+      
+      if (this.pendingPongs > 2) {
+        console.warn('Missed pongs - forcing reconnect');
+        this.handleConnectionError(new Error('Heartbeat timeout'));
+      }
+    }
+  }, 30000);
+};
+
 window.WebSocketService.prototype.establishConnection = function () {
   return new Promise((resolve, reject) => {
+    this.pendingPongs = 0;
     // Validate URL again right before connection as a safety check
     if (!validateWebSocketUrl(this.wsUrl)) {
       return reject(new Error(`Invalid WebSocket URL: ${this.wsUrl}`));
@@ -251,8 +270,10 @@ window.WebSocketService.prototype.establishConnection = function () {
       try {
         const data = JSON.parse(event.data);
 
-        // Handle token refresh messages
-        if (data.type === 'token_refresh_required') {
+        // Handle special message types
+        if (data.type === 'pong') {
+          this.pendingPongs = Math.max(0, this.pendingPongs - 1);
+        } else if (data.type === 'token_refresh_required') {
           this.handleTokenRefresh().catch(err => {
             console.error('Token refresh failed:', err);
             this.socket.close(1000, 'Token refresh failed');
@@ -320,13 +341,27 @@ window.WebSocketService.prototype.handleTokenRefresh = async function() {
 };
 
 window.WebSocketService.prototype.handleConnectionError = function (error) {
+  const errorDetails = {
+    code: error.code || 'unknown',
+    reason: error.reason || error.message || 'unknown',
+    wasClean: error.wasClean || false
+  };
+
   console.error('WebSocket connection error:', {
-    error: error.message || error.type,
+    error: errorDetails,
     url: this.wsUrl,
     state: this.state,
     chatId: this.chatId,
+    projectId: this.projectId,
     reconnectAttempt: this.reconnectAttempts
   });
+
+  // Handle specific error codes
+  if (error.code === 1006) {
+    console.warn('Abnormal closure detected - resetting connection state');
+    this.state = CONNECTION_STATES.DISCONNECTED;
+    this.socket = null;
+  }
   
   this.socket = null;
   this.setState(CONNECTION_STATES.ERROR);

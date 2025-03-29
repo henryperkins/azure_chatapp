@@ -296,6 +296,8 @@ async def project_websocket_chat_endpoint(
     token: str = Query(None),
     chatId: str = Query(None)
 ):
+    import asyncio
+    
     """Real-time chat updates for project conversations."""
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
@@ -374,6 +376,18 @@ async def project_websocket_chat_endpoint(
                 return
 
             try:
+                # Start heartbeat
+                async def heartbeat():
+                    while True:
+                        await asyncio.sleep(25)
+                        try:
+                            await websocket.send_json({"type": "pong"})
+                        except Exception as e:
+                            logger.warning(f"Heartbeat failed: {str(e)}")
+                            break
+                
+                heartbeat_task = asyncio.create_task(heartbeat())
+
                 # Send a connection success message
                 await manager.send_personal_message({
                     "type": "connected", 
@@ -508,6 +522,14 @@ async def project_websocket_chat_endpoint(
 
             except WebSocketDisconnect:
                 logger.info(f"WebSocket disconnected for user {user.id}, conversation {conversation_id}")
+            finally:
+                # Cancel heartbeat task
+                if 'heartbeat_task' in locals():
+                    heartbeat_task.cancel()
+                    try:
+                        await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
             finally:
                 # Always disconnect properly
                 await manager.disconnect(websocket)
