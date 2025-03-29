@@ -514,12 +514,6 @@ async def debug_conversation(
 # WebSocket for Real-time Chat 
 # ============================
 
-@router.websocket("/ws/{conversation_id}")
-async def project_websocket_endpoint(
-    websocket: WebSocket,
-    project_id: UUID,
-    conversation_id: UUID
-):
     """Alternate real-time chat endpoint for a project conversation."""
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
@@ -579,6 +573,32 @@ async def project_websocket_endpoint(
             while True:
                 try:
                     data = await websocket.receive_text()
+                    try {
+                        data_dict = json.loads(data)
+                    } catch (e) {
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Invalid JSON format"
+                        })
+                        continue
+                    }
+
+                    # Validate required fields
+                    if !data_dict.content || !data_dict.content.trim() {
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Message content cannot be empty"
+                        })
+                        continue
+                    }
+
+                    if !["user", "system"].includes(data_dict.role) {
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Invalid role - must be 'user' or 'system'"
+                        })
+                        continue
+                    }
                     try:
                         data_dict = json.loads(data)
                     except json.JSONDecodeError as e:

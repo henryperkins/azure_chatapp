@@ -170,7 +170,7 @@ window.WebSocketService.prototype.connect = async function(chatId) {
 
     if (this.projectId) {
       // Project-specific WebSocket endpoint
-      this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/conversations/ws/${chatId}?${params.toString()}`;
+      this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/conversations/${chatId}/ws?${params.toString()}`;
     } else {
       // Standalone conversation endpoint
       this.wsUrl = `${wsProtocol}${host}/ws/${chatId}?${params.toString()}`;
