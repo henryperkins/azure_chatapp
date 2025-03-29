@@ -127,7 +127,7 @@ class ProjectListComponent {
       console.log('[DEBUG] renderProjects received:', eventOrProjects);
       const projects = Array.isArray(eventOrProjects)
         ? eventOrProjects
-        : eventOrProjects?.detail?.data?.projects || [];
+        : eventOrProjects?.detail?.projects || eventOrProjects?.detail?.data?.projects || [];
       console.log('[DEBUG] Projects to render:', projects);
         
       if (!this.element) {
