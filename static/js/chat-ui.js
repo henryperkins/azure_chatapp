@@ -79,8 +79,6 @@ window.UIComponents = function(options = {}) {
         if (content.length > 50) {
           console.debug('Message preview:', content.substring(0, 50) + '...');
         }
-
-      try {
         // Create message container
         const msgDiv = document.createElement('div');
         msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.getClass(role)}`;

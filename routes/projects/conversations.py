@@ -495,7 +495,7 @@ async def debug_conversation(
         current_user,
         db,
         "Conversation",
-        [Conversation.project_id == project_id, Conversation.is_deleted.is_(False)],
+        [Conversation.project_id == project_id, Conversation.is_deleted.is_(False)],  # project_id comes from path parameter
     )
     
     return {
