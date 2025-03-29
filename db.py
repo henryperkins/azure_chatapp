@@ -62,32 +62,22 @@ async def init_db():
     async with async_engine.begin() as conn:
         # Create all tables first
         await conn.run_sync(Base.metadata.create_all)
-        
-    # Then run schema fixes with separate connection
+    
+    # Run schema fixes in the same engine context
     await fix_db_schema()
 
 async def fix_db_schema(conn=None):
     """Advanced schema fixing without alembic"""
     from sqlalchemy import inspect, text, DDL
 
-    # 1. Proper decorator for connection handling
-    def run_with_conn(func):
-        async def wrapper(*args, **kwargs):
-            nonlocal conn
-            if conn:
-                return await func(*args, conn=conn, **kwargs)
-            else:
-                async with async_engine.begin() as new_conn:
-                    return await func(*args, conn=new_conn, **kwargs)
-        return wrapper
-
-    # 2. Add missing columns
-    @run_with_conn
-    async def add_missing_columns(conn): 
-        inspector = inspect(conn.sync_engine)
+    async with async_engine.begin() as conn:
+        # Use direct async inspection
+        inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
+        
+        # 1. Add missing columns
         for table_name in Base.metadata.tables.keys():
             # Get database columns
-            db_cols = {c['name'] for c in inspector.get_columns(table_name)}
+            db_cols = {c['name'] for c in (await conn.run_sync(lambda sync_conn: inspector.get_columns(table_name)))}
             
             # Get ORM columns
             orm_cols = set(Base.metadata.tables[table_name].columns.keys())
@@ -102,13 +92,10 @@ async def fix_db_schema(conn=None):
                 await conn.execute(text(ddl))
                 logger.info(f"Added missing column: {table_name}.{col_name}")
 
-    # 3. Create missing indexes
-    @run_with_conn 
-    async def create_missing_indexes(conn):
-        inspector = inspect(conn.sync_engine)
+        # 2. Create missing indexes
         for table_name, table in Base.metadata.tables.items():
             # Get existing indexes
-            db_indexes = {idx['name'] for idx in inspector.get_indexes(table_name)}
+            db_indexes = {idx['name'] for idx in (await conn.run_sync(lambda sync_conn: inspector.get_indexes(table_name)))}
             
             # Check ORM indexes
             for idx in table.indexes:
@@ -116,31 +103,20 @@ async def fix_db_schema(conn=None):
                     await conn.execute(DDL(str(idx.create(async_engine))))
                     logger.info(f"Created missing index: {idx.name}")
 
-    # 4. Handle column type changes
-    @run_with_conn
-    async def update_column_types(conn):
-        inspector = inspect(conn.sync_engine)
+        # 3. Handle column type changes
         for table_name, table in Base.metadata.tables.items():
-            db_cols = inspector.get_columns(table_name)
+            db_cols = await conn.run_sync(lambda sync_conn: inspector.get_columns(table_name))
             for db_col in db_cols:
                 orm_col = table.columns.get(db_col['name'])
                 if orm_col:
-                    db_type = str(db_col['type']).split("(")[0]  # simplified
+                    db_type = str(db_col['type']).split("(")[0]  
                     orm_type = str(orm_col.type).split("(")[0]
                     if db_type != orm_type:
-                        logger.warning(f"Type mismatch: {table_name}.{orm_col.name} "
-                                      f"(DB: {db_type} vs ORM: {orm_type})")
-                        # Handle simple type upgrades
+                        logger.warning(f"Type mismatch: {table_name}.{orm_col.name} (DB: {db_type} vs ORM: {orm_type})")
                         if 'VARCHAR' in db_type and 'TEXT' in orm_type:
                             await conn.execute(text(
-                                f"ALTER TABLE {table_name} "
-                                f"ALTER COLUMN {orm_col.name} TYPE TEXT"
+                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
                             ))
-
-    # Run all fix stages
-    await add_missing_columns()
-    await create_missing_indexes()
-    await update_column_types()
 
 async def validate_db_schema():
     """
