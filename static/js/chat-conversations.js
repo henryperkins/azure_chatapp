@@ -125,13 +125,12 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
 };
 
 // Delete a conversation (soft delete)
-window.ConversationService.prototype.deleteConversation = async function(chatId) {
+window.ConversationService.prototype.deleteConversation = async function(chatId, projectId = null) {
   if (!chatId || !this._isValidUUID(chatId)) {
     this.onError('Deleting conversation', new Error('Invalid conversation ID'));
     return false;
   }
 
-  // Use standardized auth check
   const authState = await window.ChatUtils?.isAuthenticated?.() ||
                    (window.auth?.verify ? await window.auth.verify() : false);
     
@@ -143,20 +142,19 @@ window.ConversationService.prototype.deleteConversation = async function(chatId)
   this.onLoadingStart();
 
   try {
-    const projectId = localStorage.getItem("selectedProjectId");
+    // Use passed projectId or fallback to localStorage
+    const finalProjectId = projectId || localStorage.getItem("selectedProjectId");
     let deleteUrl;
 
-    if (projectId) {
-      deleteUrl = `/api/projects/${projectId}/conversations/${chatId}`;
+    if (finalProjectId) {
+      deleteUrl = `/api/projects/${finalProjectId}/conversations/${chatId}`;
     } else {
       deleteUrl = `/api/chat/conversations/${chatId}`;
     }
 
-    // Use window.apiRequest for API request
     await window.apiRequest(deleteUrl, "DELETE");
 
-    // If the deleted conversation is the current one, clear it
-    if (this.currentConversation && this.currentConversation.id === chatId) {
+    if (this.currentConversation?.id === chatId) {
       this.currentConversation = null;
     }
 
@@ -166,11 +164,8 @@ window.ConversationService.prototype.deleteConversation = async function(chatId)
     return true;
   } catch (error) {
     this.onLoadingEnd();
-    
-    // Use standardized error handling
     window.ChatUtils?.handleError?.('Deleting conversation', error, this.showNotification) ||
     this.onError('Deleting conversation', error);
-    
     return false;
   }
 };
