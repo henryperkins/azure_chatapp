@@ -67,12 +67,13 @@ async def create_user_message(
     """
     try:
         # Create message
+        if not content:
+            raise ValueError("Message content cannot be empty")
+            
         message = Message(
             conversation_id=conversation_id,
             role=role.lower().strip(),
-            if not content:
-                raise ValueError("Message content cannot be empty")
-            content = content.strip()
+            content=content.strip()
         )
         
         # Save using utility function from db_utils
