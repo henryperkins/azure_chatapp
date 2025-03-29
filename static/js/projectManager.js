@@ -28,6 +28,12 @@
       // Simplified auth check with better logging
       let authState = false;
       try {
+        const authValid = await window.ChatUtils?.isAuthenticated?.();
+        if (!authValid) {
+          document.dispatchEvent(new CustomEvent("authCheckFailed"));
+          return [];
+        }
+        
         if (TokenManager.accessToken || sessionStorage.getItem('auth_state')) {
           console.log("[ProjectManager] Found tokens, verifying auth state");
           authState = await window.auth.verify().catch(e => {
