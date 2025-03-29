@@ -482,8 +482,9 @@ async def create_message(
 # Debug Endpoints
 # ============================
 
-@router.post("/{conversation_id}/debug")
+@router.post("/{project_id}/{conversation_id}/debug")
 async def debug_conversation(
+    project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
@@ -495,7 +496,7 @@ async def debug_conversation(
         current_user,
         db,
         "Conversation",
-        [Conversation.project_id == project_id, Conversation.is_deleted.is_(False)],  # project_id comes from path parameter
+        [Conversation.project_id == project_id, Conversation.is_deleted.is_(False)],
     )
     
     return {
