@@ -15,7 +15,7 @@ from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from db import get_async_session
 from models.user import User
@@ -370,12 +370,23 @@ async def get_project_stats(
     if project.knowledge_base_id:
         try:
             # Get processed files count
-            indexed_files_query = select(func.count()).where(
-                ProjectFile.project_id == project_id,
-                ProjectFile.metadata.op("->>")("search_processing").contains({"success": "true"})
+            # Get processed files count using safer query
+            processed_count = await db.scalar(
+                select(func.count(ProjectFile.id))
+                .where(
+                    ProjectFile.project_id == project_id,
+                    text("project_files.metadata->'search_processing'->>'success' = 'true'")
+                )
             )
-            indexed_result = await db.execute(indexed_files_query)
-            indexed_files_count = indexed_result.scalar() or 0
+            
+            knowledge_base_info = {
+                "id": str(project.knowledge_base_id),
+                "name": project.knowledge_base.name if project.knowledge_base else None,
+                "embedding_model": project.knowledge_base.embedding_model if project.knowledge_base else None,
+                "is_active": project.knowledge_base.is_active if project.knowledge_base else False,
+                "indexed_files": processed_count or 0,
+                "pending_files": file_count - (processed_count or 0)
+            }
             
             knowledge_base_info = {
                 "id": str(project.knowledge_base_id),
