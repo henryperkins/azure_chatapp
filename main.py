@@ -232,7 +232,7 @@ async def on_startup():
             }
             
             # Get database metadata using run_sync
-            async def get_db_metadata(sync_session):
+            def get_db_metadata(sync_session):
                 inspector = inspect(sync_session.get_bind())
                 return {
                     table: {col["name"] for col in sync_session.get_bind().execute(
