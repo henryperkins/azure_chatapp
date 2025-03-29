@@ -510,14 +510,6 @@ async def debug_conversation(
         "message_count": len(conversation.messages) if conversation.messages else 0
     }
 
-# ============================
-# WebSocket for Real-time Chat 
-# ============================
-
-    """Alternate real-time chat endpoint for a project conversation."""
-    from db import AsyncSessionLocal
-    async with AsyncSessionLocal() as db:
-        token = extract_token(websocket)
         if not token:
             logger.warning("WebSocket rejected: No token provided")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -660,5 +652,3 @@ async def debug_conversation(
                     break
 
         finally:
-            await manager.disconnect(websocket)
-            await db.close()
