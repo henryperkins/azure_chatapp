@@ -5,7 +5,7 @@ Stores files attached to a Project.
 Each record can hold the filename, path, inline content, etc.
 """
 from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
 from typing import Optional

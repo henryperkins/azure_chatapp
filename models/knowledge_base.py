@@ -5,7 +5,7 @@ Defines the KnowledgeBase model for managing vector embeddings and semantic sear
 capabilities that can be attached to projects.
 """
 from sqlalchemy import String, Text, TIMESTAMP, text, Boolean, ForeignKey, Integer, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
 from typing import Optional
