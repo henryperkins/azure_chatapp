@@ -565,58 +565,58 @@ async def project_websocket_endpoint(
             if not await manager.connect(websocket):
                 return
 
-                try:
-                    while True:
-                        data = await websocket.receive_text()
-                        try:
-                            data_dict = json.loads(data)
-                        except json.JSONDecodeError as e:
-                            logger.warning(f"Invalid JSON payload: {data} - {str(e)}")
-                            await websocket.send_json({
-                                "type": "error", 
-                                "content": "Invalid JSON format"
-                            })
-                            continue
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    try:
+                        data_dict = json.loads(data)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Invalid JSON payload: {data} - {str(e)}")
+                        await websocket.send_json({
+                            "type": "error", 
+                            "content": "Invalid JSON format"
+                        })
+                        continue
 
-                        # Validate required fields
-                        required_fields = ["content", "role"]
-                        missing_fields = [field for field in required_fields if field not in data_dict]
-                        if missing_fields:
-                            await websocket.send_json({
-                                "type": "error",
-                                "content": f"Missing required fields: {', '.join(missing_fields)}"
-                            })
-                            continue
+                    # Validate required fields
+                    required_fields = ["content", "role"]
+                    missing_fields = [field for field in required_fields if field not in data_dict]
+                    if missing_fields:
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": f"Missing required fields: {', '.join(missing_fields)}"
+                        })
+                        continue
 
-                        if data_dict["role"] not in ("user", "system"):
-                            await websocket.send_json({
-                                "type": "error",
-                                "content": "Invalid role - must be 'user' or 'system'"
-                            })
-                            continue
+                    if data_dict["role"] not in ("user", "system"):
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Invalid role - must be 'user' or 'system'"
+                        })
+                        continue
 
-                        if not data_dict["content"].strip():
-                            await websocket.send_json({
-                                "type": "error", 
-                                "content": "Message content cannot be empty"
-                            })
-                            continue
+                    if not data_dict["content"].strip():
+                        await websocket.send_json({
+                            "type": "error", 
+                            "content": "Message content cannot be empty"
+                        })
+                        continue
 
-                        try:
-                            message = await create_user_message(
-                                conversation_id=conversation_id,
-                                content=data_dict["content"],
-                                role=data_dict["role"],
-                                db=db
-                            )
-                            if message.role == "user":
-                                await handle_websocket_response(conversation_id, db, websocket)
-                        except Exception as e:
-                            logger.error(f"Error creating message: {str(e)}")
-                            await websocket.send_json({
-                                "type": "error",
-                                "content": f"Error creating message: {str(e)}"
-                            })
+                    try:
+                        message = await create_user_message(
+                            conversation_id=conversation_id,
+                            content=data_dict["content"],
+                            role=data_dict["role"],
+                            db=db
+                        )
+                        if message.role == "user":
+                            await handle_websocket_response(conversation_id, db, websocket)
+                    except Exception as e:
+                        logger.error(f"Error creating message: {str(e)}")
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": f"Error creating message: {str(e)}"
+                        })
 
             except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
