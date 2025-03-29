@@ -519,8 +519,10 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                         )
 
                     if assistant_msg:
-                        # Prepare response with thinking blocks if available
+                        logger.info(f"Preparing WebSocket response for conversation {conversation_id}")
                         metadata = assistant_msg.get_metadata_dict()
+                        logger.debug(f"Response metadata: {metadata}")
+                        logger.debug(f"Response content (first 100 chars): {assistant_msg.content[:100]}")
                         
                         response_data = {
                             "type": "message", 

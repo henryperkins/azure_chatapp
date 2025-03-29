@@ -193,7 +193,14 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
 window.MessageService.prototype._handleWsMessage = function(event) {
   try {
     const data = JSON.parse(event.data);
-    console.log('WebSocket message received:', data);
+    console.log('[WS IN] Raw message:', event.data);
+    console.debug('[WS IN] Parsed:', data);
+
+    // Log ping/pong messages
+    if (data.type === 'ping' || data.type === 'pong') {
+      console.debug('[WS] Keepalive:', data.type);
+      return;
+    }
     
     // If it's a plain message broadcast from the server
     if (data.type === 'message') {

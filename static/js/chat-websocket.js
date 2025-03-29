@@ -196,9 +196,21 @@ window.WebSocketService.prototype.connect = async function(chatId) {
         this.socket = new WebSocket(this.wsUrl);
         
         this.socket.onopen = () => {
+          console.log('[DEBUG] WebSocket connection established');
           clearTimeout(wsConnectionTimeout);
           this.reconnectAttempts = 0;
           this.connecting = false;
+          
+          // Send debug handshake
+          try {
+            this.socket.send(JSON.stringify({
+              type: 'debug',
+              message: 'Connection established',
+              timestamp: new Date().toISOString()
+            }));
+          } catch (e) {
+            console.error('Failed to send debug handshake:', e);
+          }
           
           try {
             this.socket.send(JSON.stringify({
