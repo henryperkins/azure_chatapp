@@ -43,7 +43,7 @@ window.ChatInterface = function(options = {}) {
 };
 
 // Initialize the interface
-window.ChatInterface.prototype.initialize = function() {
+window.ChatInterface.prototype.initialize = async function() {
   // Check dependencies
   if (!window.WebSocketService) {
     console.warn('WebSocketService dependency not loaded - attempting dynamic load');
