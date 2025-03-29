@@ -41,9 +41,32 @@
     return;
   }
 
-  // Helper methods
-  window.WebSocketService.prototype.isValidUUID = function(uuid) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  // 1. Define the constructor FIRST
+  window.WebSocketService = function (options = {}) {
+    // Configuration
+    this.maxRetries = options.maxRetries || 3;
+    this.reconnectInterval = options.reconnectInterval || 3000;
+    this.connectionTimeout = options.connectionTimeout || 10000;
+    this.messageTimeout = options.messageTimeout || 30000;
+
+    // State
+    this.state = CONNECTION_STATES.DISCONNECTED;
+    this.socket = null;
+    this.chatId = null;
+    this.projectId = localStorage.getItem("selectedProjectId");
+    this.reconnectAttempts = 0;
+    this.useHttpFallback = false;
+    this.wsUrl = null;
+    this.pendingMessages = new Map();
+
+    // Dependencies
+    this.authManager = new AuthManager();
+
+    // Event handlers
+    this.onMessage = options.onMessage || (() => { });
+    this.onError = options.onError || ((err) => console.error('WebSocket Error:', err));
+    this.onConnect = options.onConnect || (() => { });
+    this.onDisconnect = options.onDisconnect || (() => { });
   };
 
   // Connection state constants

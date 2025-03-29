@@ -44,6 +44,11 @@ window.ChatInterface = function(options = {}) {
 
 // Initialize the interface
 window.ChatInterface.prototype.initialize = function() {
+  // Check dependencies
+  if (!window.WebSocketService) {
+    throw new Error('WebSocketService dependency not loaded');
+  }
+
   // Prevent double initialization
   if (this.initialized) {
     console.warn("Chat interface already initialized");
