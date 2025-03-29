@@ -321,6 +321,16 @@ async def project_websocket_chat_endpoint(
                 logger.debug("Invalid conversation access for user_id=%s, conv_id=%s", user.id, conversation_id)
                 return
 
+            # Validate all access before accepting connection
+            conversation = await validate_resource_access(
+                conversation_id,
+                Conversation,
+                user,
+                db,
+                "Conversation",
+                [Conversation.project_id.is_(None), Conversation.is_deleted.is_(False)],
+            )
+
             await websocket.accept()
             while True:
                 raw_data = await websocket.receive_text()
@@ -457,8 +467,8 @@ async def create_message(
 # WebSocket for Real-time Chat
 # ============================
 
-@router.websocket("/ws/{conversation_id}")
-async def websocket_chat_endpoint(
+@router.websocket("/{project_id}/ws/{conversation_id}")
+async def project_websocket_endpoint(
     websocket: WebSocket,
     project_id: UUID,
     conversation_id: UUID
