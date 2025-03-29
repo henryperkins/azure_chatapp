@@ -30,6 +30,8 @@ from utils.message_handlers import (
     validate_image_data,
     update_project_token_usage
 )
+from utils.websocket_manager import ConnectionManager
+manager = ConnectionManager()
 from utils.ai_response import (
     generate_ai_response,
     handle_websocket_response
@@ -565,8 +567,8 @@ async def project_websocket_endpoint(
             if not await manager.connect(websocket):
                 return
 
-            try:
-                while True:
+            while True:
+                try:
                     data = await websocket.receive_text()
                     try:
                         data_dict = json.loads(data)
