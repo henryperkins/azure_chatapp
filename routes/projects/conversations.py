@@ -467,7 +467,7 @@ async def create_message(
 # WebSocket for Real-time Chat
 # ============================
 
-@router.websocket("/{project_id}/ws/{conversation_id}")
+@router.websocket("/ws/{conversation_id}")
 async def project_websocket_endpoint(
     websocket: WebSocket,
     project_id: UUID,
