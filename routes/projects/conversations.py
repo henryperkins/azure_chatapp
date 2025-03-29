@@ -484,10 +484,10 @@ async def create_message(
 
 @router.post("/{conversation_id}/debug")
 async def debug_conversation(
+    request: Request,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-    request: Request
+    db: AsyncSession = Depends(get_async_session)
 ):
     # Get project_id from the parent router's path
     project_id = request.path_params["project_id"]
