@@ -197,29 +197,32 @@ async def update_conversation(
 
 @router.delete("/{conversation_id}", response_model=dict)
 async def delete_conversation(
-    project_id: UUID,
+    project_id: UUID,  # Add project_id as path parameter
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
     """Soft-deletes a conversation by setting is_deleted = True."""
-    additional_filters_project = [
-        Project.user_id == current_user.id,
-        Project.archived.is_(False)
-    ]
-    await validate_resource_access(project_id, Project, current_user, db, "Project", additional_filters_project)
+    # Change validation to use the Path parameter
+    await validate_resource_access(
+        project_id,
+        Project,
+        current_user,
+        db,
+        "Project",
+        [Project.user_id == current_user.id, Project.archived.is_(False)]
+    )
 
-    additional_filters_conv = [
-        Conversation.project_id == project_id,
-        Conversation.is_deleted.is_(False)
-    ]
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
         current_user,
         db,
         "Conversation",
-        additional_filters_conv
+        additional_filters=[
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
     )
 
     conversation.is_deleted = True
