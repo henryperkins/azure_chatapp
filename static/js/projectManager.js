@@ -25,38 +25,36 @@
     console.trace("[DEBUG] Project load call stack");
     
     try {
-      // Verify auth state before proceeding
-      if (!TokenManager.accessToken && !sessionStorage.getItem('auth_state')) {
-        console.warn("[ProjectManager] No auth tokens available, skipping project load");
-        return [];
-      }
-      
-      // Use centralized auth check with retry
-      let authState;
-      let retries = 3;
-      
-      while (retries > 0) {
-        try {
-          authState = await window.auth.verify();
-          if (authState) break;
-          
-          // Wait a bit before retrying
-          await new Promise(resolve => setTimeout(resolve, 300));
-          retries--;
-        } catch (e) {
-          console.warn("[ProjectManager] Auth check error, retrying...", e);
-          await new Promise(resolve => setTimeout(resolve, 300));
-          retries--;
+      // Simplified auth check with better logging
+      let authState = false;
+      try {
+        if (TokenManager.accessToken || sessionStorage.getItem('auth_state')) {
+          console.log("[ProjectManager] Found tokens, verifying auth state");
+          authState = await window.auth.verify().catch(e => {
+            console.warn("[ProjectManager] Auth verification failed:", e);
+            return false;
+          });
         }
+      } catch (e) {
+        console.error("[ProjectManager] Auth check error:", e);
       }
-      
+    
+      // Handle unauthenticated state first
       if (!authState) {
-        console.warn("[ProjectManager] Not authenticated after retries, skipping project load");
-        document.dispatchEvent(new CustomEvent("authError", {
-          detail: { message: "Session expired - please log in again" }
+        console.warn("[ProjectManager] Not authenticated, dispatching empty projects list");
+        document.dispatchEvent(new CustomEvent("projectsLoaded", {
+          detail: {
+            projects: [],
+            filter: cleanFilter,
+            count: 0,
+            originalCount: 0,
+            filterApplied: cleanFilter
+          }
         }));
         return [];
       }
+
+      console.log("[ProjectManager] Authentication confirmed, proceeding with project load");
 // Build query parameters for filtering
 const params = new URLSearchParams();
 if (cleanFilter) params.append('filter', cleanFilter);
