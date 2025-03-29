@@ -19,6 +19,11 @@ const TokenManager = {
     this.accessToken = access;
     this.refreshToken = refresh;
     
+    // Notify WebSocket connections of token refresh
+    if (typeof this.onTokenRefresh === 'function') {
+      this.onTokenRefresh(access);
+    }
+    
     try {
       // Parse token to get version
       const payload = access.split('.')[1];
@@ -644,6 +649,23 @@ function waitForApiRequest() {
     }
   });
 }
+
+// Initialize WebSocket token refresh handler
+TokenManager.onTokenRefresh = (newToken) => {
+  const wsServices = [
+    window.chatInterface?.wsService, 
+    window.projectChatInterface?.wsService
+  ].filter(Boolean);
+  
+  wsServices.forEach(ws => {
+    if (ws?.socket?.readyState === WebSocket.OPEN) {
+      ws.socket.send(JSON.stringify({
+        type: 'token_refresh',
+        token: newToken
+      }));
+    }
+  });
+};
 
 // Ensure initAuth runs when ready
 document.addEventListener('DOMContentLoaded', async () => {
