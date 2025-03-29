@@ -479,7 +479,34 @@ async def create_message(
     return await create_standard_response(response_payload)
 
 # ============================
-# WebSocket for Real-time Chat
+# Debug Endpoints
+# ============================
+
+@router.post("/{conversation_id}/debug")
+async def debug_conversation(
+    conversation_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Debug endpoint to test conversation flow"""
+    conversation = await validate_resource_access(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        [Conversation.project_id == project_id, Conversation.is_deleted.is_(False)],
+    )
+    
+    return {
+        "status": "ok",
+        "conversation_id": str(conversation_id),
+        "model": conversation.model_id,
+        "message_count": len(conversation.messages) if conversation.messages else 0
+    }
+
+# ============================
+# WebSocket for Real-time Chat 
 # ============================
 
 @router.websocket("/ws/{conversation_id}")
