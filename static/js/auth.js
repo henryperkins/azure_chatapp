@@ -18,6 +18,16 @@ const TokenManager = {
     console.log('TokenManager: Setting new access token');
     this.accessToken = access;
     this.refreshToken = refresh;
+    
+    try {
+      // Parse token to get version
+      const payload = access.split('.')[1];
+      const decoded = JSON.parse(atob(payload));
+      this.version = decoded.version;
+      console.log(`TokenManager: Set token version to ${this.version}`);
+    } catch (e) {
+      console.warn('Failed to parse token version:', e);
+    }
     this.isInitialized = true;
 
     // Also store tokens in session for reload persistence
