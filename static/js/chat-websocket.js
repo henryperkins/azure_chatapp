@@ -177,6 +177,9 @@ window.WebSocketService.prototype.setState = function (newState) {
 window.WebSocketService.prototype.connect = async function (chatId) {
   if (!chatId) throw new Error('Invalid chatId');
 
+  // Add token version check
+  const currentTokenVersion = window.TokenManager?.version || 0;
+
   // Prevent duplicate connections
   if (
     this.state === CONNECTION_STATES.CONNECTING ||
@@ -204,14 +207,12 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     // Use configured WS_ENDPOINT or fall back to production domain
     let host = window.API_CONFIG?.WS_ENDPOINT || 'put.photo';
     
-    // Force HTTPS/secure WebSocket in production
-    const isLocalhost = host.includes('localhost') ||
-                       host.includes('127.0.0.1') ||
-                       host.includes('0.0.0.0');
+    // Use current page's protocol for WebSocket
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     
-    // Remove protocol if present
+    // Remove protocol if present and get clean host
     host = host.replace(/^https?:\/\//, '');
-
+    
     // Validate host
     if (!host) {
       console.error('Empty WebSocket host - using HTTP fallback');
@@ -389,6 +390,14 @@ window.WebSocketService.prototype.handleConnectionError = function (error) {
     console.warn('Abnormal closure detected - resetting connection state');
     this.state = CONNECTION_STATES.DISCONNECTED;
     this.socket = null;
+  } else if (error.message.includes('403') || error.message.includes('version mismatch')) {
+    console.log('Auth-related error - triggering token refresh');
+    try {
+      await window.TokenManager.refreshTokens();
+      this.attemptReconnection();
+    } catch (refreshError) {
+      console.error('Token refresh failed:', refreshError);
+    }
   }
   
   this.socket = null;
