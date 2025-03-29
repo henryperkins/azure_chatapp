@@ -18,7 +18,6 @@ from datetime import datetime
 from functools import wraps
 from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator
 from uuid import UUID
-import uuid
 try:
     from werkzeug.utils import secure_filename
 except ImportError:
@@ -26,7 +25,8 @@ except ImportError:
     
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func, update, exists
+from sqlalchemy import select, delete, func
+from utils.file_validation import FileValidator, sanitize_filename
 from models.conversation import Conversation
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -90,9 +90,6 @@ def get_kb_config() -> Dict[str, Any]:
         "vector_db_storage_path": getattr(config, "VECTOR_DB_STORAGE_PATH", "./data/vector_db"),
         "default_chunk_size": getattr(config, "DEFAULT_CHUNK_SIZE", 1000),
         "default_chunk_overlap": getattr(config, "DEFAULT_CHUNK_OVERLAP", 200),
-        "allowed_file_extensions": {
-            ".txt", ".pdf", ".doc", ".docx", ".csv", ".json", ".md", ".xlsx", ".html"
-        },
         "allowed_sort_fields": {"created_at", "filename", "file_size"}
     }
 
@@ -104,7 +101,6 @@ DEFAULT_EMBEDDING_MODEL = KB_CONFIG["default_embedding_model"]
 VECTOR_DB_STORAGE_PATH = KB_CONFIG["vector_db_storage_path"]
 DEFAULT_CHUNK_SIZE = KB_CONFIG["default_chunk_size"]
 DEFAULT_CHUNK_OVERLAP = KB_CONFIG["default_chunk_overlap"]
-ALLOWED_FILE_EXTENSIONS = KB_CONFIG["allowed_file_extensions"]
 ALLOWED_SORT_FIELDS = KB_CONFIG["allowed_sort_fields"]
 
 # -----------------------------------------------------------------------------
@@ -217,42 +213,34 @@ def extract_file_metadata(
 # -----------------------------------------------------------------------------
 # 6. File Upload & Processing
 # -----------------------------------------------------------------------------
-def _sanitize_filename(filename: str) -> str:
-    """
-    Safely sanitize a filename to avoid path traversal or injection.
-    Appends a short unique suffix to reduce collisions.
-    """
-    base_name = secure_filename(filename) if secure_filename else "untitled"
-    if not base_name:
-        base_name = "untitled"
-    unique_suffix = uuid.uuid4().hex[:8]
-    return f"{base_name}_{unique_suffix}"
-
-def validate_file_extension(filename: str) -> bool:
-    """Check if the file has an allowed extension."""
-    _, ext = os.path.splitext(filename.lower())
-    return ext in ALLOWED_FILE_EXTENSIONS
-
 async def _process_upload_file_info(file: UploadFile) -> Dict[str, Any]:
     """
-    Validate and read UploadFile data:
+    Validate and read UploadFile data using centralized FileValidator:
+    - validate extension and size
     - sanitize filename
-    - ensure valid extension
     - read content for size check if needed
     """
-    sanitized_filename = _sanitize_filename(file.filename or "untitled")
-    if not validate_file_extension(sanitized_filename):
-        raise ValueError(
-            f"File type not allowed. Supported: {', '.join(ALLOWED_FILE_EXTENSIONS)}"
-        )
-
-    file_size = getattr(file, 'size', None)
-    contents = b""
-    if file_size is None:
-        # If size not provided, read entire content
-        contents = await file.read()
-        file_size = len(contents)
-        await file.seek(0)
+    try:
+        # Use FileValidator for comprehensive validation
+        file_info = await FileValidator.validate_upload_file(file)
+        
+        # Sanitize filename while preserving extension
+        filename, ext = os.path.splitext(file.filename or "untitled")
+        sanitized_filename = f"{sanitize_filename(filename)}{ext}"
+        
+        return {
+            "sanitized_filename": sanitized_filename,
+            "file_size": file_info.get("size", 0),
+            "file_ext": ext[1:].lower() if ext else "",
+            "file_type": file_info.get("category", "unknown"),
+            "contents": file_info.get("contents", b"")
+        }
+    except ValueError as e:
+        logger.error(f"File validation failed: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during file validation: {str(e)}")
+        raise ValueError(f"File validation failed: {str(e)}")
 
     if file_size > MAX_FILE_BYTES:
         raise ValueError(

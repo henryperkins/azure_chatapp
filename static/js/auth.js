@@ -1,9 +1,5 @@
 // auth.js - Updated to rely on app.js's apiRequest and a single refresh approach
-// Rely on app.js's apiRequest implementation
-if (!window.apiRequest) {
-  console.error('apiRequest not available - app.js must be loaded first');
-  throw new Error('Missing apiRequest implementation');
-}
+// apiRequest availability will be checked when actually needed
 
 // -------------------------
 // Token Management
@@ -11,6 +7,7 @@ if (!window.apiRequest) {
 const TokenManager = {
   accessToken: null,
   refreshToken: null,
+  isInitialized: false, // Add initialization flag
 
   setTokens(access, refresh) {
     if (!access) {
@@ -21,6 +18,7 @@ const TokenManager = {
     console.log('TokenManager: Setting new access token');
     this.accessToken = access;
     this.refreshToken = refresh;
+    this.isInitialized = true;
 
     // Also store tokens in session for reload persistence
     sessionStorage.setItem('auth_state', JSON.stringify({
@@ -69,6 +67,10 @@ const TokenManager = {
       sessionStorage.setItem('refreshing', 'true');
       console.log('TokenManager: Attempting token refresh...');
       // Use app.js's single fetch wrapper
+      if (!window.apiRequest) {
+        console.error('apiRequest not available - cannot refresh tokens');
+        throw new Error('Missing apiRequest implementation');
+      }
       const data = await window.apiRequest('/api/auth/refresh', 'POST');
 
       if (!data.access_token) {
@@ -86,22 +88,33 @@ const TokenManager = {
   }
 };
 
+// Make TokenManager directly available on window for easier access
+window.TokenManager = TokenManager;
+
 // ---------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------
 async function initAuth() {
+  // Add guard against double initialization
+  if (window.auth && window.auth.isInitialized) {
+    console.log("Auth module already initialized, skipping");
+    return true;
+  }
+  
+  // Track that initialization is in progress
+  if (window.API_CONFIG) {
+    window.API_CONFIG.authCheckInProgress = true;
+  }
+
   try {
     console.log("Initializing auth module");
 
     // If we have saved tokens in session, rehydrate them
     const authState = JSON.parse(sessionStorage.getItem('auth_state'));
     if (authState?.accessToken) {
-      TokenManager.accessToken = authState.accessToken;
-      TokenManager.refreshToken = authState.refreshToken;
-      if (window.API_CONFIG) {
-        window.API_CONFIG.isAuthenticated = true;
-      }
-
+      TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+      console.log("TokenManager initialized from session storage");
+      
       // Get user info from session if available
       const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
       const username = userInfo?.username;
@@ -118,13 +131,24 @@ async function initAuth() {
     }
 
     setupUIListeners();
-    console.log("Auth module initialized");
+    
+    // Mark as initialized before completing
+    if (window.auth) {
+      window.auth.isInitialized = true;
+    }
+    
+    console.log("Auth module initialized successfully");
     return true;
   } catch (error) {
     console.error("Auth initialization failed:", error);
     clearSession();
     broadcastAuth(false);
     return false;
+  } finally {
+    // Clear the in-progress flag
+    if (window.API_CONFIG) {
+      window.API_CONFIG.authCheckInProgress = false;
+    }
   }
 }
 
@@ -137,7 +161,8 @@ window.auth = {
   updateStatus: updateAuthStatus,
   login: loginUser,
   logout: logout,
-  manager: TokenManager
+  manager: TokenManager,
+  isInitialized: false  // Track initialization state
 };
 
 
@@ -360,6 +385,9 @@ async function handleRegister(formData) {
 async function loginUser(username, password) {
   try {
     console.log("Making login API request");
+    if (!window.apiRequest) {
+      throw new Error('Cannot login - apiRequest not available');
+    }
     const data = await window.apiRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password
@@ -407,7 +435,9 @@ async function logout(e) {
     if (TokenManager.accessToken) {
       try {
         // Attempt to inform the server
-        await window.apiRequest('/api/auth/logout', 'POST');
+        if (window.apiRequest) {
+          await window.apiRequest('/api/auth/logout', 'POST');
+        }
       } catch (apiErr) {
         console.warn("Logout API error:", apiErr);
       }
@@ -500,6 +530,9 @@ async function verifyAuthState() {
     }
 
     // Check with server
+    if (!window.apiRequest) {
+      return !!TokenManager.accessToken;
+    }
     const response = await window.apiRequest('/api/auth/verify');
     // If server says we're authenticated
     if (response.authenticated && !TokenManager.accessToken) {
@@ -526,6 +559,9 @@ async function verifyAuthState() {
 
 async function updateAuthStatus() {
   try {
+    if (!window.apiRequest) {
+      return false;
+    }
     const data = await window.apiRequest('/api/auth/verify');
     if (data.access_token) {
       TokenManager.setTokens(data.access_token, data.refresh_token);
@@ -583,8 +619,30 @@ function notify(message, type = "info") {
   }
 }
 
-// Ensure initAuth runs on page load
-document.addEventListener('DOMContentLoaded', () => {
-  console.log("DOMContentLoaded - Running initAuth");
-  initAuth().catch(err => console.error("Failed to initialize auth on page load:", err));
+// Defer initialization until apiRequest is available
+function waitForApiRequest() {
+  return new Promise((resolve) => {
+    if (window.apiRequest) {
+      resolve();
+    } else {
+      const checkInterval = setInterval(() => {
+        if (window.apiRequest) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    }
+  });
+}
+
+// Ensure initAuth runs when ready
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log("DOMContentLoaded - Waiting for apiRequest");
+  try {
+    await waitForApiRequest();
+    console.log("apiRequest available - Running initAuth");
+    await initAuth();
+  } catch (err) {
+    console.error("Failed to initialize auth:", err);
+  }
 });

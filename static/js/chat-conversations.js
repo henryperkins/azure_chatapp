@@ -6,7 +6,7 @@
 // Define ConversationService as a constructor function attached to window
 window.ConversationService = function(options = {}) {
   this.onConversationLoaded = options.onConversationLoaded || (() => {});
-  this.onError = options.onError || console.error;
+  this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error, options.showNotification));
   this.onLoadingStart = options.onLoadingStart || (() => {});
   this.onLoadingEnd = options.onLoadingEnd || (() => {});
   this.showNotification = options.showNotification || window.showNotification || console.log;
@@ -21,17 +21,14 @@ window.ConversationService.prototype._isValidUUID = function(uuid) {
 
 // Load an existing conversation
 window.ConversationService.prototype.loadConversation = async function(chatId) {
-  if (
-    !chatId ||
-    !this._isValidUUID(chatId)
-  ) {
-    this.onError('Invalid conversation ID');
+  if (!chatId || !this._isValidUUID(chatId)) {
+    this.onError('Loading conversation', new Error('Invalid conversation ID'));
     return false;
   }
 
-  // Check auth using auth.js functionality
-  const authState = await window.auth?.verify?.() || 
-    !!(sessionStorage.getItem('auth_state') && sessionStorage.getItem('userInfo'));
+  // Use standardized auth check
+  const authState = await window.ChatUtils?.isAuthenticated?.() || 
+                   (window.auth?.verify ? await window.auth.verify() : false);
     
   if (!authState) {
     this.showNotification("Please log in to access conversations", "error");
@@ -55,7 +52,7 @@ window.ConversationService.prototype.loadConversation = async function(chatId) {
     // Include project_id in request if available
     const options = projectId ? { project_id: projectId } : {};
     
-    // Use window.apiRequest instead of direct fetch
+    // Use window.apiRequest for API requests
     const conversation = await window.apiRequest(convUrl, "GET", options);
     const messages = await window.apiRequest(msgUrl, "GET", options);
 
@@ -71,17 +68,10 @@ window.ConversationService.prototype.loadConversation = async function(chatId) {
   } catch (error) {
     this.onLoadingEnd();
     
-    // Use existing error handling
-    if (window.handleAPIError) {
-      window.handleAPIError("loading conversation", error);
-    } else {
-      if (error.message === 'Resource not found') {
-        this.showNotification("Conversation not found or inaccessible.", "error");
-      } else if (error.message.includes('401')) {
-        this.showNotification("Please log in to access this conversation", "error");
-        window.TokenManager?.clearTokens?.();
-      }
-    }
+    // Use standardized error handling
+    window.ChatUtils?.handleError?.('Loading conversation', error, this.showNotification) || 
+    this.onError('Loading conversation', error);
+    
     return false;
   }
 };
@@ -100,9 +90,9 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
         ? `/api/projects/${projectId}/conversations`
         : `/api/chat/conversations`;
 
-      // Use window.apiRequest instead of direct fetch
+      // Use window.apiRequest for API requests
       const data = await window.apiRequest(url, "POST", {
-        title: `New Chat ${new Date().toLocaleDateString()}`,
+        title: defaultTitle,
         model_id: model
       });
 
@@ -118,11 +108,15 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
       this.currentConversation = conversation;
       return conversation;
     } catch (error) {
-      console.error(`Conversation creation attempt ${attempt + 1} failed:`, error);
       if (attempt === maxRetries) {
-        this.showNotification("Failed to create conversation", "error");
+        // Use standardized error handling on final attempt
+        window.ChatUtils?.handleError?.('Creating conversation', error, this.showNotification) ||
+        this.onError('Creating conversation', error);
         throw error;
       }
+      
+      console.warn(`Conversation creation attempt ${attempt + 1} failed:`, error);
+      
       // Exponential-ish backoff
       await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
