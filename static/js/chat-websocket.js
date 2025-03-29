@@ -173,7 +173,7 @@ window.WebSocketService.prototype.connect = async function(chatId) {
       this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/conversations/ws/${chatId}?${params.toString()}`;
     } else {
       // Standalone conversation endpoint
-      this.wsUrl = `${wsProtocol}${host}/ws?${params.toString()}`;
+      this.wsUrl = `${wsProtocol}${host}/ws/${chatId}?${params.toString()}`;
     }
     console.log('[WebSocketService] WebSocket URL:', this.wsUrl);
     if (!this.wsUrl.startsWith('ws://') && !this.wsUrl.startsWith('wss://')) {
