@@ -72,7 +72,7 @@ async def create_artifact(
         Created Artifact object
     """
     # Validate project exists and user has access
-    project_result = await db.execute(select(Project).where(Project.id == project_id)))
+    project_result = await db.execute(select(Project).where(Project.id == project_id))
     project = project_result.scalars().first()
     
     if not project:
@@ -324,7 +324,7 @@ async def update_artifact(
     
     return artifact
 
-async def delete_artifact
+async def delete_artifact(
     db: AsyncSession,
     artifact_id: UUID,
     project_id: UUID,
@@ -355,7 +355,7 @@ async def delete_artifact
         "artifact_id": str(artifact_id)
     }
 
-async def export_artifact
+async def export_artifact(
     db: AsyncSession,
     artifact_id: UUID,
     project_id: UUID,
@@ -485,7 +485,7 @@ async def export_artifact
             "filename": f"{artifact.name.replace(' ', '_').lower()}.txt"
         }
 
-async def get_artifact_stats
+async def get_artifact_stats(
     project_id: UUID,
     db: AsyncSession,
     user_id: Optional[int] = None
