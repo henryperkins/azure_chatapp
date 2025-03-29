@@ -76,6 +76,11 @@ class ProjectDetailsComponent {
     this.onBack = options.onBack;
     this.state = { currentProject: null };
     this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
+
+    // Add this event listener
+    document.addEventListener("projectConversationsLoaded", (e) => {
+      this.renderConversations(e.detail.conversations);
+    });
     
     // Initialize chat interface only if available
     if (typeof window.ChatInterface === 'function') {
@@ -257,7 +262,12 @@ class ProjectDetailsComponent {
   renderConversations(conversations) {
     if (!this.elements.conversationsList) return;
     
-    if (!conversations || conversations.length === 0) {
+    // Handle both raw array and event detail format
+    const convos = Array.isArray(conversations) ? 
+      conversations : 
+      (conversations.data || conversations.detail?.conversations || []);
+    
+    if (!convos || convos.length === 0) {
       this.elements.conversationsList.innerHTML = `
         <div class="text-gray-500 text-center py-8">No conversations yet.</div>
       `;
@@ -436,14 +446,20 @@ class ProjectDetailsComponent {
       confirmClass: "bg-red-600",
       onConfirm: () => {
         const projectId = this.state.currentProject?.id;
-        if (!projectId) return;
+        if (!projectId) {
+          uiUtilsInstance.showNotification("Project context missing", "error");
+          return;
+        }
 
         window.projectManager.deleteProjectConversation(projectId, conversation.id)
           .then(() => {
-            const convoElement = this.elements.conversationsList.querySelector(
-              `[data-conversation-id="${conversation.id}"]`
-            );
-            if (convoElement) convoElement.remove();
+            // Instead of directly manipulating DOM, reload the list
+            return Promise.all([
+              window.projectManager.loadProjectStats(projectId),
+              window.projectManager.loadProjectConversations(projectId)
+            ]);
+          })
+          .then(() => {
             uiUtilsInstance.showNotification("Conversation deleted", "success");
           })
           .catch(err => {
