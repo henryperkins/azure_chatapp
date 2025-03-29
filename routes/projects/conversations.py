@@ -482,13 +482,14 @@ async def create_message(
 # Debug Endpoints
 # ============================
 
-@router.post("/{project_id}/{conversation_id}/debug")
+@router.post("/{conversation_id}/debug")
 async def debug_conversation(
-    project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
+    # Get project_id from the parent router's path
+    project_id = request.path_params["project_id"]
     """Debug endpoint to test conversation flow"""
     conversation = await validate_resource_access(
         conversation_id,
