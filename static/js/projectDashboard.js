@@ -85,19 +85,23 @@ class ProjectDashboard {
       throw new Error("ProjectListComponent initialization failed");
     }
 
-    // Register listeners first
+    // Set initialization flag first
+    window.projectDashboardInitialized = true;
+    document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+
+    // Register listeners
     this.registerEventListeners();
     
     // Process initial state
     this.processUrlParams();
-
-    // Set initialization flag
-    window.projectDashboardInitialized = true;
-    document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
     
-    // Load data last after everything is set up
-    console.log('[DEBUG] Dashboard initialized, now loading projects...');
-    await this.loadProjects();
+    // Load data after brief timeout to ensure DOM is ready
+    setTimeout(() => {
+      console.log('[DEBUG] Loading projects after initialization...');
+      this.loadProjects().catch(err => {
+        console.error('Initial project load failed:', err);
+      });
+    }, 100);
   }
 
   /**
@@ -230,25 +234,24 @@ class ProjectDashboard {
    * Event handlers
    */
   handleProjectsLoaded(event) {
-    console.log('[DEBUG] Handling projectsLoaded event');
+    console.log('[DEBUG] Handling projectsLoaded event with detail:', event.detail);
     try {
-      const detail = event.detail;
+      const { data } = event.detail;
       let projects = [];
       let originalCount = 0;
       let filter = 'all';
       let hasError = false;
 
-      // Normalize different response formats
-      if (Array.isArray(detail)) {
-        projects = detail;
-      } else if (detail?.data?.projects) {
-        projects = detail.data.projects;
-        originalCount = detail.data.count || projects.length;
-        filter = detail.data.filter?.type || detail.filterApplied || 'all';
-      } else if (detail?.projects) {
-        projects = detail.projects;
-        originalCount = detail.count || projects.length;
-        filter = detail.filter?.type || detail.filterApplied || 'all';
+      // Standard response format from backend
+      if (data?.projects) {
+        projects = data.projects;
+        originalCount = data.count || projects.length;
+        filter = data.filter?.type || 'all';
+      } 
+      // Fallback for direct array
+      else if (Array.isArray(event.detail)) {
+        projects = event.detail;
+        originalCount = projects.length;
       }
 
       hasError = detail.error || false;
