@@ -28,7 +28,8 @@ from models.user import User
 from utils.auth_utils import (
     get_current_user_and_token,
     extract_token,
-    get_user_from_token
+    get_user_from_token,
+    verify_token
 )
 from utils.db_utils import save_model, get_all_by_condition, validate_resource_access
 from utils.message_handlers import (
