@@ -72,7 +72,7 @@ async def create_artifact(
         Created Artifact object
     """
     # Validate project exists and user has access
-    project_result = await db.execute(select(Project).where(Project.id == project_id))
+    project_result = await db.execute(select(Project).where(Project.id == project_id)))
     project = project_result.scalars().first()
     
     if not project:
@@ -113,6 +113,7 @@ async def create_artifact(
     
     # Create artifact
     new_artifact = Artifact(
+    (
         project_id=project_id,
         conversation_id=conversation_id,
         name=name,
@@ -126,6 +127,7 @@ async def create_artifact(
     await db.refresh(new_artifact)
     
     return new_artifact
+
 async def get_artifact(
     db: AsyncSession,
     artifact_id: UUID,
@@ -175,7 +177,6 @@ async def get_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     return artifact
-    return artifact
 
 async def list_artifacts(
     project_id: UUID,
@@ -190,7 +191,7 @@ async def list_artifacts(
     user_id: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
-    List artifacts with filtering, searching and pagination.
+    List artifacts with filtering, search, and pagination.
     
     Args:
         project_id: UUID of the project
@@ -205,14 +206,17 @@ async def list_artifacts(
         user_id: Optional user ID for permission checks
         
     Returns:
-        List of artifact dictionaries (without full content for efficiency)
+        List of artifact dictionaries
     """
     from services.project_service import get_paginated_resources
     
     # If user_id is provided, validate user's access
     if user_id is not None:
         user_project = await db.execute(
-            select(Project).where(Project.id == project_id)
+            select(Project).where(
+                Project.id == project_id,
+                Project.user_id == user_id
+            )
         )
         project = user_project.scalars().first()
         if not project:
@@ -224,12 +228,6 @@ async def list_artifacts(
         project = await db.get(Project, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Optionally validate access more thoroughly
-    # if user_id is not None:
-    #     user = await db.get(User, user_id)
-    #     if user:
-    #         await validate_project_access(project_id, user, db)
     
     # Build additional filters
     filters = []
@@ -246,7 +244,6 @@ async def list_artifacts(
                     Artifact.content_type == content_type,
                     Artifact.content_type.in_(subtypes)
                 )
-            )
         else:
             filters.append(Artifact.content_type == content_type)
     
@@ -259,7 +256,7 @@ async def list_artifacts(
             )
         )
     
-    additional_filters = and_(*filters) if filters else None
+    additional_filter = and_(*filters) if filters else None
     
     # Use shared pagination function and return SQLAlchemy objects directly
     return await get_paginated_resources(
@@ -270,7 +267,7 @@ async def list_artifacts(
         sort_desc=sort_desc,
         skip=skip,
         limit=limit,
-        additional_filters=additional_filters
+        additional_filters=additional_filter
     )
 
 async def update_artifact(
@@ -293,7 +290,7 @@ async def update_artifact(
     Returns:
         Updated Artifact object
     """
-    # Get artifact - adjusting parameters to match new order
+    # Get artifact
     artifact = await get_artifact(db, artifact_id, project_id, user_id)
     
     # Update fields
@@ -327,7 +324,7 @@ async def update_artifact(
     
     return artifact
 
-async def delete_artifact(
+async def delete_artifact
     db: AsyncSession,
     artifact_id: UUID,
     project_id: UUID,
@@ -345,7 +342,7 @@ async def delete_artifact(
     Returns:
         Dictionary with deletion status
     """
-    # First check if artifact exists and user has permission - adjusting parameters to match new order
+    # Check if artifact exists and user has permission
     artifact = await get_artifact(db, artifact_id, project_id, user_id)
     
     # Delete the artifact
@@ -358,7 +355,7 @@ async def delete_artifact(
         "artifact_id": str(artifact_id)
     }
 
-async def export_artifact(
+async def export_artifact
     db: AsyncSession,
     artifact_id: UUID,
     project_id: UUID,
@@ -378,7 +375,7 @@ async def export_artifact(
     Returns:
         Dictionary with export data and format
     """
-    # Get artifact - adjusting parameters to match new order
+    # Get artifact
     artifact = await get_artifact(db, artifact_id, project_id, user_id)
     
     # Basic artifact info
@@ -462,11 +459,22 @@ async def export_artifact(
         content_bytes = artifact.content.encode('utf-8')
         base64_content = base64.b64encode(content_bytes).decode('utf-8')
         
+        # Determine file extension based on content type
+        file_extension = "txt"
+        for main_type, subtypes in ARTIFACT_TYPES.items():
+            if artifact.content_type == main_type or artifact.content_type in subtypes:
+                if main_type == "document":
+                    file_extension = "txt"
+                elif main_type == "image":
+                    file_extension = "png"
+                elif main_type == "code":
+                    file_extension = "txt"
+                break
+        
         return {
             "format": "base64",
             "content": base64_content,
-            "original_format": "text",
-            "filename": f"{artifact.name.replace(' ', '_').lower()}.txt"
+            "filename": f"{artifact.name.replace(' ', '_').lower()}.{file_extension}"
         }
         
     else:
@@ -477,7 +485,7 @@ async def export_artifact(
             "filename": f"{artifact.name.replace(' ', '_').lower()}.txt"
         }
 
-async def get_artifact_stats(
+async def get_artifact_stats
     project_id: UUID,
     db: AsyncSession,
     user_id: Optional[int] = None
@@ -495,10 +503,12 @@ async def get_artifact_stats(
     """
     # Check user permission if user_id provided
     if user_id is not None:
-        project_result = await db.execute(select(Project).where(
-            Project.id == project_id,
-            Project.user_id == user_id
-        ))
+        project_result = await db.execute(
+            select(Project).where(
+                Project.id == project_id,
+                Project.user_id == user_id
+            )
+        )
         project = project_result.scalars().first()
         
         if not project:
