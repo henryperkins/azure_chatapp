@@ -418,8 +418,9 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
             # Get user from token
             try:
                 user = await get_user_from_token(token, db, "access")
-                if not user:
+                if not user or not user.is_active:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    logger.warning(f"Inactive user attempting connection: {user.id if user else 'unknown'}")
                     return
                 logger.debug("WebSocket authentication successful for user: %s", user.username)
             except Exception as e:
