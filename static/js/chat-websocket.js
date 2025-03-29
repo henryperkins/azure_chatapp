@@ -177,10 +177,10 @@ window.WebSocketService.prototype.setState = function (newState) {
 window.WebSocketService.prototype.connect = async function (chatId) {
   if (!chatId) throw new Error('Invalid chatId');
 
-  // Add token version check
-  const currentTokenVersion = window.TokenManager?.version || 0;
-
   // Prevent duplicate connections
+  if (this.state === CONNECTION_STATES.CONNECTED && this.chatId === chatId) {
+    return true;
+  }
   if (
     this.state === CONNECTION_STATES.CONNECTING ||
     this.state === CONNECTION_STATES.RECONNECTING
@@ -244,9 +244,26 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     this.setState(CONNECTION_STATES.CONNECTED);
     return true;
   } catch (error) {
-    console.error('Connection failed:', error);
+    console.error('WebSocket connection failed:', {
+      error: error.message,
+      chatId,
+      state: this.state,
+      wsUrl: this.wsUrl,
+      reconnectAttempts: this.reconnectAttempts
+    });
+    
     this.setState(CONNECTION_STATES.ERROR);
     this.useHttpFallback = true;
+    
+    // Special handling for auth errors
+    if (error.message.includes('403') || error.message.includes('token')) {
+      try {
+        await this.handleTokenRefresh();
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+      }
+    }
+    
     throw error;
   }
 };
@@ -549,4 +566,6 @@ function validateWebSocketUrl(url) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = WebSocketService;
   }
+  // Export version for debugging
+  WebSocketService.version = '1.0.0';
 })(); // End of IIFE
