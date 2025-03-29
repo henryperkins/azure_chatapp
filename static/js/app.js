@@ -872,7 +872,8 @@ window.apiRequest = apiRequest;
 window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
 
-window.App = {
+// CommonJS exports
+module.exports = {
   apiRequest,
   showNotification: Notifications,
   loadSidebarProjects,
