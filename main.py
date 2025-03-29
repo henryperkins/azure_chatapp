@@ -233,11 +233,14 @@ async def on_startup():
             
             # Get database metadata using run_sync
             db_metadata = await session.run_sync(lambda sync_session: {
-                table: {col["name"] for col in sync_session.get_bind().execute(
-                    text(f"SELECT column_name as name FROM information_schema.columns WHERE table_name = '{table}'")
-                ).mappings().all()}
-                for table in required_columns.keys()
-                if sync_session.get_bind().dialect.has_table(sync_session.get_bind(), table)
+                inspector = inspect(sync_session.get_bind())
+                return {
+                    table: {col["name"] for col in sync_session.get_bind().execute(
+                        text(f"SELECT column_name as name FROM information_schema.columns WHERE table_name = '{table}'")
+                    ).mappings().all()}
+                    for table in required_columns.keys()
+                    if inspector.has_table(table)
+                }
             })
             
             for table, cols in required_columns.items():
