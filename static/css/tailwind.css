@@ -108,8 +108,12 @@
            transition-colors duration-200 focus:outline-none;
   }
   
-  .project-tab-btn.active {
-    @apply border-blue-600 text-blue-600;
+  .project-tab-btn-active {
+    @apply border-blue-600 text-blue-600 dark:text-blue-400;
+  }
+        
+  .projects-grid:has(.project-card-pinned) {
+    @apply bg-yellow-50/20 dark:bg-yellow-900/10;
   }
   
   .project-tab-btn:not(.active) {
