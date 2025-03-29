@@ -424,6 +424,23 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
   }
 
   /**
+   * Delete a conversation from a project.
+   * Returns a promise that resolves after refreshing stats and conversations.
+   */
+  function deleteProjectConversation(projectId, conversationId) {
+    return window.apiRequest(
+      `/api/projects/${projectId}/conversations/${conversationId}`,
+      "DELETE"
+    ).then(() => {
+      // Refresh both project stats and conversations list
+      return Promise.all([
+        loadProjectStats(projectId),
+        loadProjectConversations(projectId)
+      ]);
+    });
+  }
+
+  /**
    * Delete an artifact from a project.
    * Returns a promise.
    */
