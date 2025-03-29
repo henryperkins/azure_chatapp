@@ -518,20 +518,6 @@ async def debug_conversation(
         "model": conversation.model_id,
         "message_count": len(conversation.messages) if conversation.messages else 0
     }
-        await validate_resource_access(project_id, Project, user, db, "Project", additional_filters_project)
-
-        additional_filters_conv = [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
-        validated_conversation = await validate_resource_access(
-            conversation_id,
-            Conversation,
-            user,
-            db,
-            "Conversation",
-            additional_filters_conv
-        )
         if not validated_conversation:
             logger.warning("WebSocket rejected: Invalid conversation")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
