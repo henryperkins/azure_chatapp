@@ -564,6 +564,7 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
     deleteArtifact,
     // Conversation
     createConversation,
+    deleteProjectConversation,
     // API utilities
     checkProjectApiEndpoint
   };
