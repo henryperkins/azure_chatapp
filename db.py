@@ -67,14 +67,23 @@ async def init_db():
         # Create all tables first
         await conn.run_sync(Base.metadata.create_all)
     
-    # Run schema fixes in the same engine context
+    # Run comprehensive schema alignment
     await fix_db_schema()
+    
+    # Verify alignment after fixes
+    mismatches = await validate_db_schema()
+    if mismatches:
+        logger.warning("Some schema mismatches couldn't be automatically fixed")
+    else:
+        logger.info("Database schema fully aligned with ORM models")
 
-async def fix_db_schema(conn=None):
-    """Advanced schema fixing without alembic"""
+async def fix_db_schema():
+    """Comprehensive schema alignment without alembic"""
     from sqlalchemy import inspect, text, DDL
     from db import sync_engine  # For SQL compilation
 
+    logger.info("Starting comprehensive schema alignment...")
+    
     async with async_engine.begin() as conn:
         # Use direct async inspection
         inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
@@ -104,6 +113,8 @@ async def fix_db_schema(conn=None):
                         col_spec += " DEFAULT false"
                     elif str(col.type).startswith('INTEGER'):
                         col_spec += " DEFAULT 0"
+                    elif str(col.type).startswith('UUID'):
+                        col_spec += " DEFAULT gen_random_uuid()"
                     else:
                         col_spec += " DEFAULT ''"  # Default empty string for other types
                 
@@ -126,28 +137,96 @@ async def fix_db_schema(conn=None):
                 if idx.name not in db_indexes:
                     await conn.execute(DDL(str(idx.create(async_engine))))
                     logger.info(f"Created missing index: {idx.name}")
-
+        
         # 3. Handle column type changes
         for table_name, table in Base.metadata.tables.items():
             db_cols = await conn.run_sync(lambda sync_conn: inspector.get_columns(table_name))
-            for db_col in db_cols:
-                orm_col = table.columns.get(db_col['name'])
-                if orm_col is not None:  # Explicit None check
-                    db_type = str(db_col['type']).split("(")[0]  
-                    orm_type = str(orm_col.type).split("(")[0]
-                    if db_type != orm_type:
-                        logger.warning(f"Type mismatch: {table_name}.{orm_col.name} (DB: {db_type} vs ORM: {orm_type})")
-                        if 'VARCHAR' in db_type and 'TEXT' in orm_type:
-                            await conn.execute(text(
-                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
-                            ))
+            db_col_dict = {c['name']: c for c in db_cols}
+            
+            for col_name, orm_col in table.columns.items():
+                if col_name not in db_col_dict:
+                    continue  # Skip columns that don't exist yet
+                    
+                db_col = db_col_dict[col_name]
+                db_type = str(db_col['type']).split("(")[0]  
+                orm_type = str(orm_col.type).split("(")[0]
                 
-                    # Check nullability only if column exists
-                    if db_col["nullable"] != orm_col.nullable:
-                        logger.warning(
-                            f"Nullability mismatch in {table_name}.{orm_col.name}: "
-                            f"DB allows null={db_col['nullable']}, ORM expects {orm_col.nullable}"
-                        )
+                # Handle type conversion
+                if db_type != orm_type:
+                    logger.warning(f"Type mismatch: {table_name}.{orm_col.name} (DB: {db_type} vs ORM: {orm_type})")
+                    # Handle common type conversions safely
+                    if 'VARCHAR' in db_type and 'TEXT' in orm_type:
+                        await conn.execute(text(
+                            f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
+                        ))
+                        logger.info(f"Converted {table_name}.{orm_col.name} from VARCHAR to TEXT")
+                    elif 'INTEGER' in db_type and 'BIGINT' in orm_type:
+                        await conn.execute(text(
+                            f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE BIGINT"
+                        ))
+                        logger.info(f"Converted {table_name}.{orm_col.name} from INTEGER to BIGINT")
+                
+                # Fix nullability if needed
+                if db_col["nullable"] != orm_col.nullable:
+                    try:
+                        if orm_col.nullable and not db_col["nullable"]:
+                            # Make column nullable (easy)
+                            await conn.execute(text(
+                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} DROP NOT NULL"
+                            ))
+                            logger.info(f"Made {table_name}.{orm_col.name} nullable")
+                        elif not orm_col.nullable and db_col["nullable"]:
+                            # Add default value first if needed
+                            if not orm_col.server_default:
+                                default_val = "0" if "INT" in orm_type else "''" if "VARCHAR" in orm_type else "false" if "BOOL" in orm_type else "'{}'::jsonb" if "JSONB" in orm_type else "NULL"
+                                await conn.execute(text(
+                                    f"UPDATE {table_name} SET {orm_col.name} = {default_val} WHERE {orm_col.name} IS NULL"
+                                ))
+                            # Make not nullable
+                            await conn.execute(text(
+                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} SET NOT NULL"
+                            ))
+                            logger.info(f"Made {table_name}.{orm_col.name} NOT NULL")
+                    except Exception as e:
+                        logger.error(f"Failed to fix nullability for {table_name}.{orm_col.name}: {e}")
+        
+        # 4. Handle check constraints
+        for table_name, table in Base.metadata.tables.items():
+            db_constraints = await conn.run_sync(lambda sync_conn: inspector.get_check_constraints(table_name))
+            db_constraint_names = {c['name'] for c in db_constraints}
+            
+            # Add missing check constraints
+            for constraint in table.constraints:
+                if hasattr(constraint, 'name') and constraint.name and 'check' in constraint.name.lower():
+                    if constraint.name not in db_constraint_names:
+                        try:
+                            await conn.execute(DDL(str(constraint.create(async_engine))))
+                            logger.info(f"Added check constraint: {constraint.name}")
+                        except Exception as e:
+                            logger.error(f"Failed to add check constraint {constraint.name}: {e}")
+        
+        # 5. Handle foreign key constraints
+        for table_name, table in Base.metadata.tables.items():
+            db_fks = await conn.run_sync(lambda sync_conn: inspector.get_foreign_keys(table_name))
+            db_fk_cols = {(fk['constrained_columns'][0], fk['referred_table']) for fk in db_fks if fk['constrained_columns']}
+            
+            for fk in table.foreign_keys:
+                col_name = fk.parent.name
+                referred_table = fk.column.table.name
+                
+                if (col_name, referred_table) not in db_fk_cols:
+                    # FK doesn't exist, try to add it
+                    try:
+                        constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
+                        await conn.execute(text(
+                            f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
+                            f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
+                        ))
+                        logger.info(f"Added foreign key constraint: {table_name}.{col_name} -> {referred_table}")
+                    except Exception as e:
+                        logger.error(f"Failed to add foreign key constraint for {table_name}.{col_name}: {e}")
+
+    logger.info("Schema alignment process completed")
 
 async def validate_db_schema():
     """
