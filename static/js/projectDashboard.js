@@ -225,30 +225,27 @@ class ProjectDashboard {
    */
   handleProjectsLoaded(event) {
     console.log('[DEBUG] Handling projectsLoaded event');
-    console.log('[DEBUG] Full event:', event);
-    console.log('[DEBUG] Event detail:', event.detail);
     try {
+      const detail = event.detail;
       let projects = [];
       let originalCount = 0;
       let filter = 'all';
       let hasError = false;
-      
-      console.log('[DEBUG] Raw event detail:', event.detail);
 
       // Normalize different response formats
-      if (Array.isArray(event.detail)) {
-        projects = event.detail;
-      } else if (event.detail?.data?.projects) {
-        projects = event.detail.data.projects;
-        originalCount = event.detail.data.count || projects.length;
-        filter = event.detail.data.filter?.type || 'all';
-      } else if (event.detail?.projects) {
-        projects = event.detail.projects;
-        originalCount = event.detail.count || projects.length;
-        filter = event.detail.filter?.type || 'all';
+      if (Array.isArray(detail)) {
+        projects = detail;
+      } else if (detail?.data?.projects) {
+        projects = detail.data.projects;
+        originalCount = detail.data.count || projects.length;
+        filter = detail.data.filter?.type || detail.filterApplied || 'all';
+      } else if (detail?.projects) {
+        projects = detail.projects;
+        originalCount = detail.count || projects.length;
+        filter = detail.filter?.type || detail.filterApplied || 'all';
       }
 
-      hasError = event.detail.error || false;
+      hasError = detail.error || false;
       console.log('[DEBUG] Calling renderProjects with:', projects.length, 'projects');
       this.components.projectList.renderProjects(projects);
 
@@ -261,10 +258,10 @@ class ProjectDashboard {
           noProjectsMsg.textContent = "Error loading projects";
           noProjectsMsg.classList.add('text-red-600');
         } else if (projects.length === 0 && originalCount > 0) {
-          noProjectsMsg.textContent = `No projects match the "${filter}" filter`;
+          noProjectsMsg.textContent = `No ${filter} projects found`;
           noProjectsMsg.classList.remove('text-red-600');
         } else if (projects.length === 0) {
-          noProjectsMsg.textContent = "No projects found";
+          noProjectsMsg.textContent = `No ${filter} projects found`;
           noProjectsMsg.classList.remove('text-red-600');
         }
       }
