@@ -87,7 +87,7 @@ async def fix_db_schema(conn=None):
             missing = orm_cols - db_cols
             for col_name in missing:
                 col = Base.metadata.tables[table_name].columns[col_name]
-                ddl = f"ALTER TABLE {table_name} ADD COLUMN {col.compile(sync_engine.dialect)}"
+                ddl = f"ALTER TABLE {table_name} ADD COLUMN {col.compile(sync_engine)}"
                 if col.server_default:
                     ddl += f" DEFAULT {col.server_default.arg}"
                 await conn.execute(text(ddl))
