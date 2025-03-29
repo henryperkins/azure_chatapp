@@ -118,7 +118,7 @@
   
   /* Project card component */
   .project-card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-4
+    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 h-full
       border-2 hover:shadow-lg transition-all duration-200 ease-in-out
       w-full min-w-[300px] min-h-[200px] mb-4
       hover:border-blue-500 dark:hover:border-blue-400

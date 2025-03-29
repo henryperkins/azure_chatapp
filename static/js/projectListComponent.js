@@ -124,6 +124,10 @@ class ProjectListComponent {
 
   renderProjects(eventOrProjects) {
     try {
+      if (!this.element) {
+        console.error('ProjectListComponent: Missing container element');
+        return;
+      }
       console.log('[DEBUG] renderProjects received:', eventOrProjects);
       let projects = [];
     
@@ -146,6 +150,12 @@ class ProjectListComponent {
         return;
       }
 
+      console.log('[DEBUG] Projects data before render:', {
+        count: projects.length,
+        firstProject: projects[0] || null,
+        lastProject: projects[projects.length - 1] || null
+      });
+      
       this.element.innerHTML = "";
 
       if (projects.error) {

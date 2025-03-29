@@ -93,18 +93,22 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
 
       console.log(`[ProjectManager] Dispatching ${filteredProjects.length} projects after filtering`);
       
-      // Dispatch event with projects data
-      console.log('[DEBUG] Dispatching projectsLoaded with:', filteredProjects);
-      const eventDetail = {
-        projects: filteredProjects,
-        filter,
-        count: response?.count || filteredProjects.length,
-        originalCount: projects.length,
-        filterApplied: filter
-      };
-      console.log('[DEBUG] Event detail:', eventDetail);
+      // Dispatch event maintaining backend response structure
+      console.log('[DEBUG] Dispatching projectsLoaded with response:', response);
       document.dispatchEvent(new CustomEvent("projectsLoaded", {
-        detail: eventDetail
+        detail: {
+          data: {
+            projects: filteredProjects,
+            count: filteredProjects.length,
+            filter: {
+              type: filter,
+              applied: {
+                archived: filter === 'archived',
+                pinned: filter === 'pinned'
+              }
+            }
+          }
+        }
       }));
       
       return filteredProjects;
