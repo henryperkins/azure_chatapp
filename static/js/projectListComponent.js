@@ -131,16 +131,16 @@ class ProjectListComponent {
       console.log('[DEBUG] renderProjects received:', eventOrProjects);
       let projects = [];
     
+      const extractProjects = (obj) => {
+        return obj?.data?.projects || obj?.projects || [];
+      };
+
       if (Array.isArray(eventOrProjects)) {
         projects = eventOrProjects;
-      } else if (eventOrProjects?.detail?.projects) {
-        projects = eventOrProjects.detail.projects;
-      } else if (eventOrProjects?.detail?.data?.projects) {
-        projects = eventOrProjects.detail.data.projects;
-      } else if (eventOrProjects?.projects) {
-        projects = eventOrProjects.projects;
-      } else if (eventOrProjects?.data?.projects) {
-        projects = eventOrProjects.data.projects;
+      } else if (eventOrProjects instanceof Event) {
+        projects = extractProjects(eventOrProjects.detail);
+      } else {
+        projects = extractProjects(eventOrProjects);
       }
       
       console.log('[DEBUG] Projects to render:', projects?.length || 0);
@@ -228,9 +228,14 @@ class ProjectListComponent {
       className: "font-semibold text-md", 
       textContent: project.name 
     });
-    const badges = uiUtilsInstance.createElement("div", { 
-      className: "text-xs text-gray-500",
-      textContent: `${project.pinned ? "📌 " : ""}${project.archived ? "🗃️ " : ""}`
+    const statusIndicator = uiUtilsInstance.createElement("div", {
+      className: "text-xs ml-2 px-2 py-1 rounded-full " + (
+        project.archived ? "bg-gray-100 text-gray-600" :
+        project.pinned ? "bg-yellow-100 text-yellow-700" : 
+        "bg-blue-100 text-blue-700"
+      ),
+      textContent: project.archived ? "Archived" : 
+                  project.pinned ? "Pinned" : "Active"
     });
     
     header.appendChild(title);
@@ -337,15 +342,26 @@ class ProjectListComponent {
     const filterButtons = document.querySelectorAll('.project-filter-btn');
     filterButtons.forEach(button => {
       button.addEventListener('click', () => {
+        // Remove existing active classes
         filterButtons.forEach(btn => {
           btn.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
           btn.classList.add('text-gray-600');
         });
+        
+        // Set active state on clicked button
         button.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
         button.classList.remove('text-gray-600');
         
+        // Get filter from data attribute
         const filter = button.dataset.filter;
+        
+        // Reload projects with filter
         window.projectManager?.loadProjects(filter);
+        
+        // Update URL without reload
+        const url = new URL(window.location);
+        url.searchParams.set('filter', filter);
+        window.history.replaceState({}, '', url);
       });
     });
   }
