@@ -387,15 +387,6 @@ async def get_project_stats(
                 "indexed_files": processed_count or 0,
                 "pending_files": file_count - (processed_count or 0)
             }
-            
-            knowledge_base_info = {
-                "id": str(project.knowledge_base_id),
-                "name": project.knowledge_base.name if project.knowledge_base else None,
-                "embedding_model": project.knowledge_base.embedding_model if project.knowledge_base else None,
-                "is_active": project.knowledge_base.is_active if project.knowledge_base else False,
-                "indexed_files": indexed_files_count,
-                "pending_files": file_count - indexed_files_count
-            }
         except Exception as e:
             logger.error(f"Error getting knowledge base info: {str(e)}")
             knowledge_base_info = {
