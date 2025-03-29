@@ -168,26 +168,17 @@ window.WebSocketService.prototype.connect = async function(chatId) {
       console.log('[WebSocketService] Using auth token:', token.substring(0, 6) + '...');
     }
     
-    // Determine WebSocket host based on environment
-    let host;
-    console.log('[WebSocketService] API_CONFIG.baseUrl:', window.API_CONFIG?.baseUrl);
-    console.log('[WebSocketService] window.location.host:', window.location.host);
-    
-    if (window.API_CONFIG?.baseUrl?.includes('put.photo') || window.location.host.includes('put.photo')) {
-      // Production environment - use configured host
-      host = window.location.host;
-      console.log('[WebSocketService] Using production host:', host);
-    } else {
-      // Development environment - use localhost with same port
-      host = `localhost:${window.location.port || (window.location.protocol === 'https:' ? 443 : 80)}`;
-      console.log('[WebSocketService] Using development host:', host);
-    }
-    
-    if (!host) {
-      throw new Error('Cannot determine host for WebSocket connection');
-    }
+    // Get proper protocol and host
     const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    this.wsUrl = `${wsProtocol}${host}/ws?${params.toString()}`;
+    const host = window.location.host;
+
+    if (this.projectId) {
+      // Project-specific WebSocket endpoint
+      this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/ws/${chatId}?${params.toString()}`;
+    } else {
+      // Standalone conversation endpoint
+      this.wsUrl = `${wsProtocol}${host}/ws?${params.toString()}`;
+    }
     console.log('[WebSocketService] Final WebSocket URL:', this.wsUrl);
     console.log('[WebSocketService] Constructed URL:', this.wsUrl);
     if (!this.wsUrl.startsWith('ws://') && !this.wsUrl.startsWith('wss://')) {
