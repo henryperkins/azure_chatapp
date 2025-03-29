@@ -357,9 +357,17 @@
         <section id="chatUI"
                  class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
           <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Chat Interface</h2>
-          <div class="flex items-center mb-2">
-            <span id="chatTitle" class="font-medium mr-2">Chat Title</span>
-            <button id="chatTitleEditBtn" class="text-sm text-blue-600 hover:underline dark:text-blue-400">Edit</button>
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center">
+              <span id="chatTitle" class="font-medium mr-2">Chat Title</span>
+              <button id="chatTitleEditBtn" class="text-sm text-blue-600 hover:underline dark:text-blue-400 mr-2">Edit</button>
+            </div>
+            <button id="deleteConversationBtn" class="text-sm text-red-600 hover:text-red-700 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete
+            </button>
           </div>
           <!-- conversationArea or chat bubbles displayed here -->
           <div role="log" aria-live="polite" id="conversationArea"

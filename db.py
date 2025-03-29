@@ -62,22 +62,27 @@ async def get_async_session_context():
 async def init_db():
     """
     Initialize database and handle schema alignment using SQLAlchemy metadata.
+    This function ensures the database schema is fully aligned with ORM models,
+    creating tables, adding missing columns, adjusting types, and setting up constraints
+    without requiring Alembic migrations.
     """
-    # Primero, intenta crear todas las tablas
+    logger.info("Starting database initialization and schema alignment")
+    
+    # First, create all tables if they don't exist
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    # Ejecuta la alineación completa del esquema
+    # Execute comprehensive schema alignment to handle any discrepancies
     await fix_db_schema()
     
-    # Verifica la alineación después de las correcciones
+    # Final verification of schema alignment
     mismatches = await validate_db_schema()
     if mismatches:
-        logger.warning("Some schema mismatches couldn't be automatically fixed")
+        logger.warning("Some schema mismatches couldn't be automatically fixed but application can continue")
     else:
         logger.info("Database schema fully aligned with ORM models")
         
-    # Registra lista de tablas verificadas
+    # Log list of verified tables for debugging
     async with async_engine.connect() as conn:
         result = await conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
         tables = [row[0] for row in result.fetchall()]
@@ -211,8 +216,12 @@ async def fix_db_schema():
                 if hasattr(constraint, 'name') and constraint.name and 'check' in constraint.name.lower():
                     if constraint.name not in db_constraint_names:
                         try:
-                            await conn.execute(DDL(str(constraint.create(async_engine))))
-                            logger.info(f"Added check constraint: {constraint.name}")
+                            # Create a proper DDL statement manually for check constraints
+                            if hasattr(constraint, 'sqltext'):
+                                sql_condition = str(constraint.sqltext)
+                                ddl = f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint.name} CHECK ({sql_condition})"
+                                await conn.execute(text(ddl))
+                                logger.info(f"Added check constraint: {constraint.name}")
                         except Exception as e:
                             logger.error(f"Failed to add check constraint {constraint.name}: {e}")
         

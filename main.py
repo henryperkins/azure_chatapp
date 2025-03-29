@@ -221,7 +221,7 @@ async def on_startup():
         # Initialize database with enhanced schema alignment
         await init_db()
         
-        # Additional validation - using run_sync to properly handle asyncpg inspections
+        # Additional validation after schema alignment has been applied
         async with get_async_session_context() as session:
             # Use run_sync to perform inspection operations
             required_columns = {
@@ -234,13 +234,22 @@ async def on_startup():
             # Get database metadata using run_sync
             def get_db_metadata(sync_session):
                 inspector = inspect(sync_session.get_bind())
-                return {
-                    table: {col["name"] for col in sync_session.get_bind().execute(
-                        text(f"SELECT column_name as name FROM information_schema.columns WHERE table_name = '{table}'")
-                    ).mappings().all()}
-                    for table in required_columns.keys()
-                    if inspector.has_table(table)
-                }
+                metadata = {}
+                
+                try:
+                    conn = sync_session.connection()
+                    for table in required_columns.keys():
+                        if not inspector.has_table(table):
+                            continue
+                            
+                        result = conn.execute(
+                            text(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'")
+                        )
+                        metadata[table] = {row[0] for row in result}
+                finally:
+                    sync_session.close()
+                    
+                return metadata
             
             db_metadata = await session.run_sync(get_db_metadata)
             
