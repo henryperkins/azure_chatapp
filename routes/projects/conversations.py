@@ -523,51 +523,50 @@ async def project_websocket_endpoint(
     """Alternate real-time chat endpoint for a project conversation."""
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
+        token = extract_token(websocket)
+        if not token:
+            logger.warning("WebSocket rejected: No token provided")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            logger.debug("Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
+            return
+
+        # Validate user and token version
+        user = await get_user_from_token(token, db, "access")
+        db_user = await db.get(User, user.id)
+        decoded = jwt.decode(token, options={"verify_signature": False})
+        
+        if db_user.token_version != decoded.get("version", 0):
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        additional_filters_project = [
+            Project.user_id == user.id,
+            Project.archived.is_(False)
+        ]
+        await validate_resource_access(project_id, Project, user, db, "Project", additional_filters_project)
+
+        additional_filters_conv = [
+            Conversation.project_id == project_id,
+            Conversation.is_deleted.is_(False)
+        ]
+        validated_conversation = await validate_resource_access(
+            conversation_id,
+            Conversation,
+            user,
+            db,
+            "Conversation",
+            additional_filters_conv
+        )
+        if not validated_conversation:
+            logger.warning("WebSocket rejected: Invalid conversation")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            logger.debug("conversation_id=%s, project_id=%s, user_id=%s", conversation_id, project_id, user.id)
+            return
+
+        if not await manager.connect(websocket):
+            return
+
         try:
-            token = extract_token(websocket)
-            if not token:
-                logger.warning("WebSocket rejected: No token provided")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
-                return
-
-            # Validate user and token version
-            user = await get_user_from_token(token, db, "access")
-            db_user = await db.get(User, user.id)
-            decoded = jwt.decode(token, options={"verify_signature": False})
-            
-            if db_user.token_version != decoded.get("version", 0):
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            additional_filters_project = [
-                Project.user_id == user.id,
-                Project.archived.is_(False)
-            ]
-            await validate_resource_access(project_id, Project, user, db, "Project", additional_filters_project)
-
-            additional_filters_conv = [
-                Conversation.project_id == project_id,
-                Conversation.is_deleted.is_(False)
-            ]
-            validated_conversation = await validate_resource_access(
-                conversation_id,
-                Conversation,
-                user,
-                db,
-                "Conversation",
-                additional_filters_conv
-            )
-            if not validated_conversation:
-                logger.warning("WebSocket rejected: Invalid conversation")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("conversation_id=%s, project_id=%s, user_id=%s", conversation_id, project_id, user.id)
-                return
-
-            if not await manager.connect(websocket):
-                return
-
-            try:
                 while True:
                     try:
                         data = await websocket.receive_text()
