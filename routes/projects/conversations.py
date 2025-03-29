@@ -96,10 +96,7 @@ async def list_conversations(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of items to return")
 ):
-    """
-    List project conversations using the conversation service.
-    Enforces skip >= 0 and 1 <= limit <= 500 to prevent 422 errors for out-of-range values.
-    """
+    """List project conversations using the conversation service."""
     logger.info(f"Loading project conversations for project {project_id} (user {current_user.id})")
     
     try:
@@ -306,15 +303,6 @@ async def project_websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Validate user and token version
-            user = await get_user_from_token(token, db, "access")
-            db_user = await db.get(User, user.id)
-            decoded = jwt.decode(token, options={"verify_signature": False})
-            
-            if db_user.token_version != decoded.get("version", 0):
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
             # Validate project access
             project = await project_service.validate_project_access(project_id, user, db)
             if not project:
@@ -340,20 +328,6 @@ async def project_websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 logger.debug("Invalid conversation access for user_id=%s, conv_id=%s", user.id, conversation_id)
                 return
-
-            # Validate all access before accepting connection
-            # Validate conversation belongs to project
-            conversation = await validate_resource_access(
-                conversation_id,
-                Conversation,
-                user,
-                db,
-                "Conversation",
-                [
-                    Conversation.project_id == project_id,  # ✅ Correct filter
-                    Conversation.is_deleted.is_(False)
-                ]
-            )
 
             # All validations complete - now accept connection
             await websocket.accept()
@@ -500,9 +474,10 @@ async def debug_conversation(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
+    """Debug endpoint to test conversation flow"""
     # Get project_id from the parent router's path
     project_id = request.path_params["project_id"]
-    """Debug endpoint to test conversation flow"""
+    
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
@@ -518,112 +493,3 @@ async def debug_conversation(
         "model": conversation.model_id,
         "message_count": len(conversation.messages) if conversation.messages else 0
     }
-        if not validated_conversation:
-            logger.warning("WebSocket rejected: Invalid conversation")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            logger.debug("conversation_id=%s, project_id=%s, user_id=%s", conversation_id, project_id, user.id)
-            return
-
-        # Add token version check
-        if int(decoded.get("version", 0)) != db_user.token_version:
-            logger.warning(f"Token version mismatch for {user.username} (Database: {db_user.token_version} vs Token: {decoded['version']})")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-
-        # Explicitly accept WebSocket connection after all validations pass
-        await websocket.accept()
-
-        if not await manager.connect(websocket):
-            return
-
-        try:
-            while True:
-                try:
-                    data = await websocket.receive_text()
-                    try:
-                        data_dict = json.loads(data)
-                    except json.JSONDecodeError as e:
-                        await websocket.send_json({
-                            "type": "error", 
-                            "content": "Invalid JSON format"
-                        })
-                        continue
-
-                    # Validate required fields
-                    if not data_dict.get("content") or not data_dict["content"].strip():
-                        await websocket.send_json({
-                            "type": "error",
-                            "content": "Message content cannot be empty"
-                        })
-                        continue
-
-                    if data_dict.get("role") not in ("user", "system"):
-                        await websocket.send_json({
-                            "type": "error",
-                            "content": "Invalid role - must be 'user' or 'system'"
-                        })
-                        continue
-                    try:
-                        data_dict = json.loads(data)
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"Invalid JSON payload: {data} - {str(e)}")
-                        await websocket.send_json({
-                            "type": "error", 
-                            "content": "Invalid JSON format"
-                        })
-                        continue
-
-                    # Validate required fields
-                    required_fields = ["content", "role"]
-                    missing_fields = [field for field in required_fields if field not in data_dict]
-                    if missing_fields:
-                        await websocket.send_json({
-                            "type": "error",
-                            "content": f"Missing required fields: {', '.join(missing_fields)}"
-                        })
-                        continue
-
-                    if data_dict["role"] not in ("user", "system"):
-                        await websocket.send_json({
-                            "type": "error",
-                            "content": "Invalid role - must be 'user' or 'system'"
-                        })
-                        continue
-
-                    if not data_dict["content"].strip():
-                        await websocket.send_json({
-                            "type": "error", 
-                            "content": "Message content cannot be empty"
-                        })
-                        continue
-
-                    try:
-                        message = await create_user_message(
-                            conversation_id=conversation_id,
-                            content=data_dict["content"],
-                            role=data_dict["role"],
-                            db=db
-                        )
-                        if message.role == "user":
-                            await handle_websocket_response(conversation_id, db, websocket)
-                    except Exception as e:
-                        logger.error(f"Error creating message: {str(e)}")
-                        await websocket.send_json({
-                            "type": "error",
-                            "content": f"Error creating message: {str(e)}"
-                        })
-                        break
-
-                except WebSocketDisconnect:
-                    logger.info("WebSocket disconnected")
-                    break
-                except HTTPException as he:
-                    logger.error(f"WebSocket HTTP error: {str(he)}")
-                    await websocket.close(code=he.status_code)
-                    break
-                except Exception as e:
-                    logger.error(f"WebSocket error: {str(e)}")
-                    await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-                    break
-
-        finally:
