@@ -12,7 +12,7 @@ from uuid import UUID
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query, Request
 from pydantic import BaseModel, Field
 from schemas.chat_schemas import MessageCreate
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -486,7 +486,8 @@ async def create_message(
 async def debug_conversation(
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    request: Request
 ):
     # Get project_id from the parent router's path
     project_id = request.path_params["project_id"]
