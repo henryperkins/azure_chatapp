@@ -132,7 +132,7 @@ async def fix_db_schema(conn=None):
             db_cols = await conn.run_sync(lambda sync_conn: inspector.get_columns(table_name))
             for db_col in db_cols:
                 orm_col = table.columns.get(db_col['name'])
-                if orm_col:
+                if orm_col is not None:  # Explicit None check
                     db_type = str(db_col['type']).split("(")[0]  
                     orm_type = str(orm_col.type).split("(")[0]
                     if db_type != orm_type:
@@ -141,6 +141,13 @@ async def fix_db_schema(conn=None):
                             await conn.execute(text(
                                 f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
                             ))
+                
+                    # Check nullability only if column exists
+                    if db_col["nullable"] != orm_col.nullable:
+                        logger.warning(
+                            f"Nullability mismatch in {table_name}.{orm_col.name}: "
+                            f"DB allows null={db_col['nullable']}, ORM expects {orm_col.nullable}"
+                        )
 
 async def validate_db_schema():
     """
