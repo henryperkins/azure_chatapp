@@ -1,6 +1,8 @@
-// Define utility classes with fallbacks
-// Using regular imports so we don't need top-level await
-const { UIUtils, AnimationUtils, ModalManager } = require('./projectDashboardUtils');
+// Define utility classes with fallbacks  
+const projectDashboardUtils = require('./projectDashboardUtils');
+const UIUtils = projectDashboardUtils.UIUtils;
+const AnimationUtils = projectDashboardUtils.AnimationUtils;
+const ModalManager = projectDashboardUtils.ModalManager;
 
 // Fallback classes if the imports don't work
 class FallbackUIUtils {
