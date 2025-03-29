@@ -20,7 +20,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 # Import routers
 from auth import router as auth_router
