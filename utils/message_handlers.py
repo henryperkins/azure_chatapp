@@ -47,6 +47,19 @@ async def validate_image_data(image_data: Optional[str]) -> bool:
         raise HTTPException(status_code=400, detail="Invalid image data")
 
 
+async def validate_websocket_message(data: dict) -> dict:
+    """Validate WebSocket message structure and content."""
+    if not data or not isinstance(data, dict):
+        raise ValueError("Invalid message format")
+    if "content" not in data or not data["content"].strip():
+        raise ValueError("Message content cannot be empty")
+    if data.get("role", "user").lower() not in ["user", "system"]:
+        raise ValueError("Invalid message role - must be 'user' or 'system'")
+    return {
+        "content": data["content"].strip(),
+        "role": data.get("role", "user").lower()
+    }
+
 async def create_user_message(
     conversation_id: UUID,
     content: str,

@@ -296,20 +296,26 @@ window.WebSocketService.prototype.establishConnection = function () {
 
 window.WebSocketService.prototype.handleTokenRefresh = async function() {
   try {
-    if (window.TokenManager?.refresh) {
-      await window.TokenManager.refresh();
+    await window.TokenManager.refreshTokens();
+    
+    // Add token to current connection
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({
+        type: 'token_refresh',
+        token: window.TokenManager.accessToken
+      }));
       
-      // Send refreshed token to server if we have a connection
-      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({
-          type: 'token_refresh',
-          token: window.TokenManager.accessToken
-        }));
-      }
+      // Reset reconnect attempts and try reconnecting
+      this.reconnectAttempts = 0;
+      await this.attemptReconnection();
     }
   } catch (error) {
-    console.error('Failed to refresh token:', error);
-    throw error;
+    console.error('Token refresh failed:', error);
+    // Graceful degradation
+    this.useHttpFallback = true;
+    if (this.onError) {
+      this.onError(new Error('Session expired - please reload'));
+    }
   }
 };
 
