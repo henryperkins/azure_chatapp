@@ -430,32 +430,24 @@ class ProjectDetailsComponent {
   confirmDeleteConversation(conversation) {
     ModalManagerClass.confirmAction({
       title: "Delete Conversation",
-      message: `Are you sure you want to delete "${conversation.title || 'this conversation'}"? This cannot be undone.`,
+      message: `Are you sure you want to delete "${conversation.title || 'this conversation'}"?`,
       confirmText: "Delete",
       cancelText: "Cancel",
       confirmClass: "bg-red-600",
       onConfirm: () => {
         const projectId = this.state.currentProject?.id;
-        if (!projectId || !window.projectChatInterface) {
-          uiUtilsInstance.showNotification("Cannot delete conversation: context missing", "error");
-          return;
-        }
-        
-        // Pass projectId explicitly to the deletion method
-        window.projectChatInterface.deleteConversation(conversation.id, projectId)
-          .then(success => {
-            if (success) {
-              // Remove the element from the list
-              const convoElement = this.elements.conversationsList.querySelector(`[data-conversation-id="${conversation.id}"]`);
-              if (convoElement) {
-                convoElement.remove();
-              }
-              // Refresh stats
-              window.projectManager.loadProjectStats(projectId);
-            }
+        if (!projectId) return;
+
+        window.projectManager.deleteProjectConversation(projectId, conversation.id)
+          .then(() => {
+            const convoElement = this.elements.conversationsList.querySelector(
+              `[data-conversation-id="${conversation.id}"]`
+            );
+            if (convoElement) convoElement.remove();
+            uiUtilsInstance.showNotification("Conversation deleted", "success");
           })
           .catch(err => {
-            console.error("Error deleting conversation:", err);
+            console.error("Delete error:", err);
             uiUtilsInstance.showNotification("Failed to delete conversation", "error");
           });
       }
