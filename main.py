@@ -143,6 +143,17 @@ async def projects():
 async def health_check():
     """Health check endpoint to verify the application is running."""
     return {"status": "ok"}
+
+@app.get("/debug/schema-check")
+async def debug_schema_check():
+    """Debug endpoint to verify database schema alignment"""
+    from sqlalchemy import inspect
+    async with get_async_session_context() as session:
+        inspector = inspect(session.get_bind())
+        return {
+            "project_files_columns": inspector.get_columns("project_files"),
+            "knowledge_bases_columns": inspector.get_columns("knowledge_bases")
+        }
     
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -207,19 +218,42 @@ async def on_startup():
     os.environ.pop("AZUREML_ENVIRONMENT_UPDATE", None)
     
     try:
-        # Initialize database and run migrations
+        # Initialize Alembic
+        from alembic.config import Config
+        from alembic import command
+        
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option(
+            "sqlalchemy.url", 
+            settings.DATABASE_URL.replace("+asyncpg", "")  # Remove async driver
+        )
+
+        # Check for required migrations
+        if settings.ALWAYS_APPLY_MIGRATIONS:
+            logger.info("Applying pending migrations...")
+            command.upgrade(alembic_cfg, "head")
+        
+        # Initialize database
         await init_db()
         
-        # Verify schema matches models
-        async with get_async_session_context() as session:
-            inspector = inspect(session.get_bind())
-            columns = [col['name'] for col in inspector.get_columns('project_files')]
-            if 'config' not in columns:
-                logger.error("❌ Database schema mismatch: missing 'config' column in project_files")
-                raise RuntimeError("Database schema validation failed")
-            logger.info("✅ Database schema matches ORM models")
+        # Validate exact schema match
+        from sqlalchemy import inspect
+        inspector = inspect(sync_engine)
+        
+        required_columns = {
+            "project_files": ["config"],
+            "knowledge_bases": ["config"],
+            "users": ["token_version"],
+            "messages": ["context_used"]
+        }
+        
+        for table, columns in required_columns.items():
+            tbl_columns = [c["name"] for c in inspector.get_columns(table)]
+            missing = [col for col in columns if col not in tbl_columns]
+            if missing:
+                raise RuntimeError(f"Missing columns in {table}: {missing}")
 
-        has_mismatches = await validate_db_schema()
+        logger.info("✅ Database schema validated")
         if has_mismatches:
             logger.warning("Attempting to fix schema mismatches...")
             await fix_db_schema()
