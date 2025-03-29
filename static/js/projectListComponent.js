@@ -125,10 +125,21 @@ class ProjectListComponent {
   renderProjects(eventOrProjects) {
     try {
       console.log('[DEBUG] renderProjects received:', eventOrProjects);
-      const projects = Array.isArray(eventOrProjects)
-        ? eventOrProjects
-        : eventOrProjects?.detail?.projects || eventOrProjects?.detail?.data?.projects || [];
-      console.log('[DEBUG] Projects to render:', projects);
+      let projects = [];
+    
+      if (Array.isArray(eventOrProjects)) {
+        projects = eventOrProjects;
+      } else if (eventOrProjects?.detail?.projects) {
+        projects = eventOrProjects.detail.projects;
+      } else if (eventOrProjects?.detail?.data?.projects) {
+        projects = eventOrProjects.detail.data.projects;
+      } else if (eventOrProjects?.projects) {
+        projects = eventOrProjects.projects;
+      } else if (eventOrProjects?.data?.projects) {
+        projects = eventOrProjects.data.projects;
+      }
+      
+      console.log('[DEBUG] Projects to render:', projects?.length || 0);
         
       if (!this.element) {
         console.error('Project list container element not found');
