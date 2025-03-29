@@ -49,6 +49,8 @@ async def validate_knowledge_base_access(
 #  Project Access
 # =======================================================
 
+from sqlalchemy.orm import joinedload
+
 async def validate_project_access(
     project_id: UUID,
     user: User,
@@ -59,7 +61,9 @@ async def validate_project_access(
     and is not archived. Raises 404 if not found, 400 if archived.
     """
     result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.user_id == user.id)
+        select(Project)
+        .where(Project.id == project_id, Project.user_id == user.id)
+        .options(joinedload(Project.knowledge_base))
     )
     project = result.scalars().first()
 

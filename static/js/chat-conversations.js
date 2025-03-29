@@ -9,6 +9,7 @@ window.ConversationService = function(options = {}) {
   this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error, options.showNotification));
   this.onLoadingStart = options.onLoadingStart || (() => {});
   this.onLoadingEnd = options.onLoadingEnd || (() => {});
+  this.onConversationDeleted = options.onConversationDeleted || (() => {});
   this.showNotification = options.showNotification || window.showNotification || console.log;
   this.currentConversation = null;
 };
@@ -120,5 +121,56 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
       // Exponential-ish backoff
       await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
+  }
+};
+
+// Delete a conversation (soft delete)
+window.ConversationService.prototype.deleteConversation = async function(chatId) {
+  if (!chatId || !this._isValidUUID(chatId)) {
+    this.onError('Deleting conversation', new Error('Invalid conversation ID'));
+    return false;
+  }
+
+  // Use standardized auth check
+  const authState = await window.ChatUtils?.isAuthenticated?.() ||
+                   (window.auth?.verify ? await window.auth.verify() : false);
+    
+  if (!authState) {
+    this.showNotification("Please log in to delete conversations", "error");
+    return false;
+  }
+
+  this.onLoadingStart();
+
+  try {
+    const projectId = localStorage.getItem("selectedProjectId");
+    let deleteUrl;
+
+    if (projectId) {
+      deleteUrl = `/api/projects/${projectId}/conversations/${chatId}`;
+    } else {
+      deleteUrl = `/api/chat/conversations/${chatId}`;
+    }
+
+    // Use window.apiRequest for API request
+    await window.apiRequest(deleteUrl, "DELETE");
+
+    // If the deleted conversation is the current one, clear it
+    if (this.currentConversation && this.currentConversation.id === chatId) {
+      this.currentConversation = null;
+    }
+
+    this.onLoadingEnd();
+    this.onConversationDeleted(chatId);
+    this.showNotification("Conversation deleted successfully", "success");
+    return true;
+  } catch (error) {
+    this.onLoadingEnd();
+    
+    // Use standardized error handling
+    window.ChatUtils?.handleError?.('Deleting conversation', error, this.showNotification) ||
+    this.onError('Deleting conversation', error);
+    
+    return false;
   }
 };

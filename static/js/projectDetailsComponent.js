@@ -320,14 +320,38 @@ class ProjectDetailsComponent {
         textContent: uiUtilsInstance.formatDate(conversation.created_at)
       }));
       
+      
       infoDiv.appendChild(textDiv);
+      
+      // Create delete button
+      const deleteBtn = uiUtilsInstance.createElement("button", {
+        className: "text-red-600 hover:text-red-800 ml-4",
+        innerHTML: `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
+                     a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
+                     a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        `,
+        onclick: (e) => {
+          e.stopPropagation(); // Prevent loading the conversation
+          this.confirmDeleteConversation(conversation);
+        }
+      });
+
       convoEl.appendChild(infoDiv);
+      convoEl.appendChild(deleteBtn); // Add the delete button
+      
+      // Add data attribute for easy selection later
+      convoEl.dataset.conversationId = conversation.id;
+      
       this.elements.conversationsList.appendChild(convoEl);
     });
   }
 
   bindEvents() {
-    if (this.elements.backBtn) {
+    if (this.elements.backBtn) { // Check if backBtn exists before adding listener
       this.elements.backBtn.addEventListener("click", () => {
         if (this.onBack) this.onBack();
       });
@@ -401,6 +425,44 @@ class ProjectDetailsComponent {
         }
       });
     }
+  }
+  
+  confirmDeleteConversation(conversation) {
+    ModalManagerClass.confirmAction({
+      title: "Delete Conversation",
+      message: `Are you sure you want to delete "${conversation.title || 'this conversation'}"? This cannot be undone.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      confirmClass: "bg-red-600",
+      onConfirm: () => {
+        const projectId = this.state.currentProject?.id;
+        if (!projectId || !window.projectChatInterface) {
+          uiUtilsInstance.showNotification("Cannot delete conversation: context missing", "error");
+          return;
+        }
+        
+        window.projectChatInterface.deleteConversation(conversation.id)
+          .then(success => {
+            if (success) {
+              // Remove the element from the list
+              const convoElement = this.elements.conversationsList.querySelector(`[data-conversation-id="${conversation.id}"]`);
+              if (convoElement) {
+                 convoElement.remove();
+              } else {
+                 // Fallback: re-render if direct removal fails
+                 window.projectManager.loadProjectConversations(projectId);
+              }
+              // Refresh stats
+              window.projectManager.loadProjectStats(projectId);
+            }
+            // Notification is handled by deleteConversation method itself
+          })
+          .catch(err => {
+            console.error("Error deleting conversation:", err);
+            uiUtilsInstance.showNotification("Failed to delete conversation", "error");
+          });
+      }
+    });
   }
 
   switchTab(tabName) {
