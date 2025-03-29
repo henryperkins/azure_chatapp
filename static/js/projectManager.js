@@ -57,14 +57,14 @@
         }));
         return [];
       }
-// Ensure we use a relative path for the API request
+// Build query parameters for filtering
 const params = new URLSearchParams();
 if (cleanFilter) params.append('filter', cleanFilter);
 params.append('skip', '0');
 params.append('limit', '100');
 
-const endpoint = `/api/projects/`.replace(/^https?:\/\/[^/]+/i, '');
-console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
+const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
+console.log("[ProjectManager] Making filtered API request:", endpoint, {
   headers: TokenManager.getAuthHeader()
 });
       const response = await window.apiRequest(endpoint, "GET");
