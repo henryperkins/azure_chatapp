@@ -149,19 +149,20 @@ async def delete_conversation(
     """
     logger.info(f"Attempting to delete conversation {conversation_id} in project {project_id}")
     
+    # First validate project ownership
+    project = await db.get(Project, project_id)
+    if not project or project.user_id != user_id:
+        raise HTTPException(403, "Unauthorized to delete resources in this project")
+
     # Get conversation with project relationship
     conv = await db.get(Conversation, conversation_id)
     if not conv or conv.is_deleted:
         raise HTTPException(404, "Conversation not found")
     
     # Validate project association
-    if str(conv.project_id) != str(project_id):
+    if str(conv.project_id) != str(project_id):  # Added string conversion for UUID safety
         raise HTTPException(400, "Conversation does not belong to specified project")
-    
-    # Validate user ownership
-    if conv.user_id != user_id:
-        raise HTTPException(403, "Unauthorized to delete this conversation")
-    
+
     # Soft delete
     conv.is_deleted = True
     await save_model(db, conv)
