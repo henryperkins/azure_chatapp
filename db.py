@@ -94,14 +94,24 @@ async def fix_db_schema(conn=None):
                 
                 # Construct proper column specification
                 col_spec = f"{col_name} {col.type.compile(sync_engine.dialect)}"
-                if col.nullable:
-                    col_spec += " NULL"
-                else:
-                    col_spec += " NOT NULL"
+                
+                # Handle NOT NULL constraints with existing data
+                if not col.nullable and col.server_default is None:
+                    # Create default value based on type for existing rows
+                    if str(col.type) == 'JSONB':
+                        col_spec += " DEFAULT '{}'::jsonb"
+                    elif str(col.type) == 'BOOLEAN':
+                        col_spec += " DEFAULT false"
+                    elif str(col.type).startswith('INTEGER'):
+                        col_spec += " DEFAULT 0"
+                    else:
+                        col_spec += " DEFAULT ''"  # Default empty string for other types
+                
+                col_spec += " NOT NULL" if not col.nullable else " NULL"
                 
                 if col.server_default:
                     col_spec += f" DEFAULT {col.server_default.arg}"
-                    
+                
                 ddl = f"ALTER TABLE {table_name} ADD COLUMN {col_spec}"
                 await conn.execute(text(ddl))
                 logger.info(f"Added missing column: {table_name}.{col_name}")
