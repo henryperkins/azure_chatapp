@@ -11,6 +11,7 @@ import logging
 from uuid import UUID
 from typing import Optional
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query
 from pydantic import BaseModel, Field
 from schemas.chat_schemas import MessageCreate
