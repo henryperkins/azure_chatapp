@@ -244,13 +244,18 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     this.setState(CONNECTION_STATES.CONNECTED);
     return true;
   } catch (error) {
-    console.error('WebSocket connection failed:', {
-      error: error.message,
-      chatId,
+    const errorDetails = {
+      name: error.name || 'WebSocketError',
+      message: error.message,
+      stack: error.stack,
+      chatId: this.chatId,
       state: this.state,
       wsUrl: this.wsUrl,
-      reconnectAttempts: this.reconnectAttempts
-    });
+      reconnectAttempts: this.reconnectAttempts,
+      timestamp: new Date().toISOString()
+    };
+
+    console.error('WebSocket connection failed:', errorDetails);
     
     this.setState(CONNECTION_STATES.ERROR);
     this.useHttpFallback = true;
@@ -258,13 +263,25 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     // Special handling for auth errors
     if (error.message.includes('403') || error.message.includes('token')) {
       try {
+        console.log('Attempting token refresh due to auth error');
         await this.handleTokenRefresh();
+        // If refresh succeeds, try reconnecting once
+        if (this.reconnectAttempts < this.maxRetries) {
+          return this.connect(chatId);
+        }
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
+        console.error('Token refresh failed:', {
+          error: refreshError.message,
+          stack: refreshError.stack
+        });
       }
     }
     
-    throw error;
+    // Create enriched error object
+    const wsError = new Error(`WebSocket connection failed: ${error.message}`);
+    wsError.details = errorDetails;
+    wsError.originalError = error;
+    throw wsError;
   }
 };
 
@@ -566,6 +583,7 @@ function validateWebSocketUrl(url) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = WebSocketService;
   }
-  // Export version for debugging
-  WebSocketService.version = '1.0.0';
+  // Export version and constants for debugging
+  WebSocketService.version = '1.0.1';
+  WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
 })(); // End of IIFE
