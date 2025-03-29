@@ -218,7 +218,7 @@ async def on_startup():
     os.environ.pop("AZUREML_ENVIRONMENT_UPDATE", None)
     
     try:
-        # Initialize database with enhanced alignment
+        # Initialize database with enhanced schema alignment
         await init_db()
         
         # Additional validation
