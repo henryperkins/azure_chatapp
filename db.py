@@ -60,23 +60,28 @@ async def init_db():
     Initialize database and handle schema alignment using SQLAlchemy metadata.
     """
     async with async_engine.begin() as conn:
-        # Create all tables
+        # Create all tables first
         await conn.run_sync(Base.metadata.create_all)
         
-        # Use enhanced schema fixing
-        await fix_db_schema(conn)
+    # Then run schema fixes with separate connection
+    await fix_db_schema()
 
 async def fix_db_schema(conn=None):
     """Advanced schema fixing without alembic"""
     from sqlalchemy import inspect, text, DDL
-    
-    async def run_with_conn(fn):
-        if conn:
-            return await fn(conn)
-        async with async_engine.begin() as c:
-            return await fn(c)
 
-    # 1. Add missing columns
+    # 1. Proper decorator for connection handling
+    def run_with_conn(func):
+        async def wrapper(*args, **kwargs):
+            nonlocal conn
+            if conn:
+                return await func(*args, conn=conn, **kwargs)
+            else:
+                async with async_engine.begin() as new_conn:
+                    return await func(*args, conn=new_conn, **kwargs)
+        return wrapper
+
+    # 2. Add missing columns
     @run_with_conn
     async def add_missing_columns(conn): 
         inspector = inspect(conn.sync_engine)
@@ -97,7 +102,7 @@ async def fix_db_schema(conn=None):
                 await conn.execute(text(ddl))
                 logger.info(f"Added missing column: {table_name}.{col_name}")
 
-    # 2. Create missing indexes
+    # 3. Create missing indexes
     @run_with_conn 
     async def create_missing_indexes(conn):
         inspector = inspect(conn.sync_engine)
@@ -111,7 +116,7 @@ async def fix_db_schema(conn=None):
                     await conn.execute(DDL(str(idx.create(async_engine))))
                     logger.info(f"Created missing index: {idx.name}")
 
-    # 3. Handle column type changes
+    # 4. Handle column type changes
     @run_with_conn
     async def update_column_types(conn):
         inspector = inspect(conn.sync_engine)
