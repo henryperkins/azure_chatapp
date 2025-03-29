@@ -336,8 +336,14 @@ async def project_websocket_chat_endpoint(
                 raw_data = await websocket.receive_text()
                 try:
                     data_dict = json.loads(raw_data)
-                except json.JSONDecodeError:
-                    data_dict = {"content": raw_data, "role": "user"}
+                    if "content" not in data_dict:
+                        raise ValueError("Message missing required 'content' field")
+                except (json.JSONDecodeError, ValueError) as e:
+                    await websocket.send_json({
+                        "type": "error", 
+                        "message": f"Invalid message format: {str(e)}"
+                    })
+                    continue
 
                 # Create message
                 message = await create_user_message(

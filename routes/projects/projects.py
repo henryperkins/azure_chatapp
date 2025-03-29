@@ -372,8 +372,7 @@ async def get_project_stats(
             # Get processed files count
             indexed_files_query = select(func.count()).where(
                 ProjectFile.project_id == project_id,
-                ProjectFile.metadata["search_processing"].is_not(None),
-                ProjectFile.metadata["search_processing"]["success"].astext == "true"
+                ProjectFile.metadata.op("->>")("search_processing").contains({"success": "true"})
             )
             indexed_result = await db.execute(indexed_files_query)
             indexed_files_count = indexed_result.scalar() or 0

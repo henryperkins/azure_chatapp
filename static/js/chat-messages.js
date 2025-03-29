@@ -58,9 +58,11 @@ window.MessageService.prototype.sendMessage = async function(content) {
     const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
     
     const messagePayload = {
+      type: "user_message",
       content: content,
       model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
-      enable_thinking: localStorage.getItem("extendedThinking") === "true" || true
+      enable_thinking: localStorage.getItem("extendedThinking") === "true" || true,
+      project_id: isProjectContext ? projectId : null
     };
 
     // Only include project_id if we're in project context
