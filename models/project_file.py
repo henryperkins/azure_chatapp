@@ -41,8 +41,13 @@ class ProjectFile(Base):
     # Optional content field for inline content
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
-    # Metadata field for token count and other info
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    # Configuration and processed metadata
+    config: Mapped[Optional[dict]] = mapped_column(
+        JSONB(none_as_null=True),
+        name="config",
+        nullable=True,
+        comment="Configuration and processed metadata"
+    )
     
     # Relationship to project
     project = relationship("Project", back_populates="files")
