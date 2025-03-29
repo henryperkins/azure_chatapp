@@ -203,6 +203,38 @@ async def update_conversation(
         "Conversation updated successfully"
     )
 
+@router.post("/{conversation_id}/restore", response_model=dict)
+async def restore_conversation(
+    project_id: UUID,
+    conversation_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Restores a soft-deleted conversation"""
+    additional_filters = [
+        Conversation.project_id == project_id,
+        Conversation.is_deleted.is_(True)  # Only restore deleted conversations
+    ]
+    
+    conversation = await validate_resource_access(
+        conversation_id,
+        Conversation,
+        current_user,
+        db,
+        "Conversation",
+        additional_filters
+    )
+
+    conversation.is_deleted = False
+    conversation.deleted_at = None
+    await save_model(db, conversation)
+    
+    logger.info(f"Conversation {conversation_id} restored by user {current_user.id}")
+    return await create_standard_response(
+        {"id": str(conversation.id)},
+        "Conversation restored successfully"
+    )
+
 @router.delete("/{conversation_id}", response_model=dict)
 async def delete_conversation(
     project_id: UUID,
