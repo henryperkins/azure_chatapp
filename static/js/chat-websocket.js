@@ -41,6 +41,11 @@
     return;
   }
 
+  // Helper methods
+  window.WebSocketService.prototype.isValidUUID = function(uuid) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  };
+
   // Connection state constants
 const CONNECTION_STATES = {
   DISCONNECTED: 'disconnected',
