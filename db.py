@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 # Use the DATABASE_URL from config settings
 DATABASE_URL = settings.DATABASE_URL
 
-async_engine = create_async_engine(DATABASE_URL, echo=False)
+async_engine = create_async_engine(
+    DATABASE_URL,
+    echo=True,  # Show SQL statements
+    pool_pre_ping=True
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine, autocommit=False, autoflush=False, expire_on_commit=False
@@ -87,9 +91,18 @@ async def fix_db_schema(conn=None):
             missing = orm_cols - db_cols
             for col_name in missing:
                 col = Base.metadata.tables[table_name].columns[col_name]
-                ddl = f"ALTER TABLE {table_name} ADD COLUMN {col.compile(sync_engine)}"
+                
+                # Construct proper column specification
+                col_spec = f"{col_name} {col.type.compile(sync_engine.dialect)}"
+                if col.nullable:
+                    col_spec += " NULL"
+                else:
+                    col_spec += " NOT NULL"
+                
                 if col.server_default:
-                    ddl += f" DEFAULT {col.server_default.arg}"
+                    col_spec += f" DEFAULT {col.server_default.arg}"
+                    
+                ddl = f"ALTER TABLE {table_name} ADD COLUMN {col_spec}"
                 await conn.execute(text(ddl))
                 logger.info(f"Added missing column: {table_name}.{col_name}")
 
