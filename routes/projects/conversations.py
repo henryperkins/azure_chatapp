@@ -338,6 +338,16 @@ async def project_websocket_chat_endpoint(
                     data_dict = json.loads(raw_data)
                     if "content" not in data_dict:
                         raise ValueError("Message missing required 'content' field")
+                    
+                    # Validate role
+                    role = data_dict.get("role", "user")
+                    if role not in ["user", "system"]:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Invalid message role - must be 'user' or 'system'"
+                        })
+                        continue
+
                 except (json.JSONDecodeError, ValueError) as e:
                     await websocket.send_json({
                         "type": "error", 
@@ -345,11 +355,11 @@ async def project_websocket_chat_endpoint(
                     })
                     continue
 
-                # Create message
+                # Create message with validated role
                 message = await create_user_message(
                     conversation_id=conversation_id,
                     content=data_dict["content"],
-                    role=data_dict["role"],
+                    role=role,
                     db=db
                 )
 
