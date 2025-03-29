@@ -144,30 +144,40 @@ async def delete_conversation(
     user_id: int
 ) -> UUID:
     """
-    Soft-deletes a conversation by setting is_deleted=True.
-    Validates the conversation belongs to the specified project.
+    Soft-deletes a conversation with enhanced validation and logging.
     """
     logger.info(f"Attempting to delete conversation {conversation_id} in project {project_id}")
     
     # First validate project ownership
     project = await db.get(Project, project_id)
     if not project or project.user_id != user_id:
+        logger.warning(f"User {user_id} unauthorized to delete from project {project_id}")
         raise HTTPException(403, "Unauthorized to delete resources in this project")
 
-    # Get conversation with project relationship
-    conv = await db.get(Conversation, conversation_id)
-    if not conv or conv.is_deleted:
-        raise HTTPException(404, "Conversation not found")
+    # Get conversation with project relationship loaded
+    stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.is_deleted.is_(False)
+    ).options(joinedload(Conversation.project))
     
+    result = await db.execute(stmt)
+    conv = result.scalar_one_or_none()
+    
+    if not conv:
+        logger.warning(f"Conversation {conversation_id} not found or already deleted")
+        raise HTTPException(404, "Conversation not found")
+
     # Validate project association
-    if str(conv.project_id) != str(project_id):  # Added string conversion for UUID safety
+    if str(conv.project_id) != str(project_id):
+        logger.error(f"Conversation {conversation_id} belongs to project {conv.project_id} not {project_id}")
         raise HTTPException(400, "Conversation does not belong to specified project")
 
-    # Soft delete
+    # Soft delete with timestamp
     conv.is_deleted = True
+    conv.deleted_at = datetime.utcnow()
     await save_model(db, conv)
     
-    logger.info(f"Successfully soft-deleted conversation {conversation_id}")
+    logger.info(f"Conversation {conversation_id} soft-deleted by user {user_id}")
     return conv.id
 
 @handle_service_errors("Failed to list project conversations")
