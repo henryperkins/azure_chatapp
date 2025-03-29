@@ -20,6 +20,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy import inspect
 
 # Import routers
 from auth import router as auth_router
@@ -208,6 +209,16 @@ async def on_startup():
     try:
         # Initialize database and run migrations
         await init_db()
+        
+        # Verify schema matches models
+        async with get_async_session_context() as session:
+            inspector = inspect(session.get_bind())
+            columns = [col['name'] for col in inspector.get_columns('project_files')]
+            if 'config' not in columns:
+                logger.error("❌ Database schema mismatch: missing 'config' column in project_files")
+                raise RuntimeError("Database schema validation failed")
+            logger.info("✅ Database schema matches ORM models")
+
         has_mismatches = await validate_db_schema()
         if has_mismatches:
             logger.warning("Attempting to fix schema mismatches...")
