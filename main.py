@@ -218,48 +218,28 @@ async def on_startup():
     os.environ.pop("AZUREML_ENVIRONMENT_UPDATE", None)
     
     try:
-        # Initialize Alembic
-        from alembic.config import Config
-        from alembic import command
-        
-        alembic_cfg = Config("alembic.ini")
-        alembic_cfg.set_main_option(
-            "sqlalchemy.url", 
-            settings.DATABASE_URL.replace("+asyncpg", "")  # Remove async driver
-        )
-
-        # Check for required migrations
-        if settings.ALWAYS_APPLY_MIGRATIONS:
-            logger.info("Applying pending migrations...")
-            command.upgrade(alembic_cfg, "head")
-        
-        # Initialize database
+        # Initialize database with enhanced alignment
         await init_db()
         
-        # Validate exact schema match
-        from sqlalchemy import inspect
-        inspector = inspect(sync_engine)
-        
-        required_columns = {
-            "project_files": ["config"],
-            "knowledge_bases": ["config"],
-            "users": ["token_version"],
-            "messages": ["context_used"]
-        }
-        
-        for table, columns in required_columns.items():
-            tbl_columns = [c["name"] for c in inspector.get_columns(table)]
-            missing = [col for col in columns if col not in tbl_columns]
-            if missing:
-                raise RuntimeError(f"Missing columns in {table}: {missing}")
+        # Additional validation
+        async with get_async_session_context() as session:
+            inspector = inspect(session.get_bind())
+            required_columns = {
+                "project_files": ["config"],
+                "knowledge_bases": ["config"],
+                "users": ["token_version"],
+                "messages": ["context_used"]
+            }
+            
+            for table, cols in required_columns.items():
+                if not inspector.has_table(table):
+                    raise RuntimeError(f"Missing critical table: {table}")
+                existing = {c["name"] for c in inspector.get_columns(table)}
+                missing = set(cols) - existing
+                if missing:
+                    raise RuntimeError(f"Missing columns in {table}: {missing}")
 
-        logger.info("✅ Database schema validated")
-        has_mismatches = await validate_db_schema()
-        if has_mismatches:
-            logger.warning("Attempting to fix schema mismatches...")
-            await fix_db_schema()
-            has_mismatches = await validate_db_schema()
-        logger.info("Database schema validated and fixed")
+        logger.info("✅ Database schema validated and aligned")
 
         # Create uploads directory
         upload_path = Path("./uploads/project_files")
