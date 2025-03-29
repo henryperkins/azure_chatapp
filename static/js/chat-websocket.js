@@ -198,16 +198,16 @@ window.WebSocketService.prototype.connect = async function (chatId) {
 
   try {
     const token = await this.authManager.getValidToken();
+    
+    // Simplified params with server-expected format
     const params = new URLSearchParams({
-      token,
-      ...(this.projectId && { projectId: this.projectId }) // Only include if project exists
+      chatId: chatId,  // Main change: Send chatId as query param
+      token: token,
+      ...(this.projectId && { projectId: this.projectId })
     });
 
     // Use configured WS_ENDPOINT or fall back to production domain
     let host = window.API_CONFIG?.WS_ENDPOINT || 'put.photo';
-    
-    // Use current page's protocol for WebSocket
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     
     // Remove protocol if present and get clean host
     host = host.replace(/^https?:\/\//, '');
@@ -219,23 +219,16 @@ window.WebSocketService.prototype.connect = async function (chatId) {
       throw new Error('Empty WebSocket host');
     }
 
-    // Log connection attempt details
-    console.log('Attempting WebSocket connection to host:', host);
-    
     // Force wss:// for production domain, ws:// for localhost
     const finalProtocol = host.includes('put.photo') ? 'wss://' : 'ws://';
 
-    try {
-      // Use project-aware URL construction
-      // Project-chat: chat ID in path for RESTful structure
-      const basePath = this.projectId
-        ? `/projects/${this.projectId}/conversations/${chatId}/ws`
-        : `/ws/${chatId}`; // Regular chat: chat ID in path only
-      
-      const debugParam = localStorage.getItem('debugWS') ? '&debug=1' : '';
-      this.wsUrl = `${finalProtocol}${host}${basePath}?${params}${debugParam}`;
-      
-      console.log('Constructed WebSocket URL:', this.wsUrl);
+    // Always use unified path format
+    const basePath = "/ws"; // Server expects all WS connections at /ws
+    
+    // Build final URL
+    this.wsUrl = `${finalProtocol}${host}${basePath}?${params}`;
+
+    console.log('Constructed WebSocket URL:', this.wsUrl);
     } catch (error) {
       console.error('Error constructing WebSocket URL:', error);
       this.useHttpFallback = true;
@@ -405,14 +398,26 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
 
   // Only attempt reconnection if not already in progress
   // and we haven't exceeded max retries
+  // Add debug logging
+  console.debug('Connection error details:', {
+    error: error,
+    wsUrl: this.wsUrl,
+    state: this.state
+  });
+
+  // Maximum reasonable retries before full fallback
+  const MAX_RETRIES = 4; 
+  
+  // Modify this condition:
   if (this.state !== CONNECTION_STATES.RECONNECTING &&
-      this.reconnectAttempts < this.maxRetries) {
+      this.reconnectAttempts < MAX_RETRIES) {
     this.attemptReconnection();
   } else {
-    console.warn('Max reconnection attempts reached or already reconnecting - using HTTP fallback');
+    console.warn('Permanent connection failure - switching to HTTP only');
     this.useHttpFallback = true;
+    this.setState(CONNECTION_STATES.DISCONNECTED);
     if (this.onError) {
-      this.onError(new Error('WebSocket connection failed - using HTTP fallback'));
+      this.onError(new Error('Real-time connection unavailable. Using reliable HTTP fallback.'));
     }
   }
 };
