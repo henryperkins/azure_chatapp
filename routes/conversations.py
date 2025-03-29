@@ -442,136 +442,159 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Accept connection only after both auth and access validation succeed
-            await websocket.accept()
+            # Use connection manager for WebSocket management
+            from utils.websocket_manager import manager
+            connection_success = await manager.connect(websocket, str(conversation_id), str(user.id))
+            if not connection_success:
+                logger.warning(f"WebSocket connection failed for user {user.id}, conversation {conversation_id}")
+                return
 
-            while True:
-                raw_data = await websocket.receive_text()
-                try:
-                    data = json.loads(raw_data)
-                except json.JSONDecodeError:
-                    data = {"content": raw_data, "role": "user"}
+            try:
+                # Send connection confirmation
+                await manager.send_personal_message({
+                    "type": "connected", 
+                    "message": "WebSocket connection established",
+                    "conversation_id": str(conversation_id)
+                }, websocket)
 
-                # Create message using existing function
-                message = await create_user_message(
-                    conversation_id=UUID(str(conversation.id)),
-                    content=data["content"],
-                    role=data["role"],
-                    db=db,
-                )
-
-                # Generate AI response if user message
-                if message.role == "user":
-                    msg_dicts = await get_conversation_messages(UUID(str(conversation.id)), db)
-                    # Stream AI response through websocket
-                    # Get and stream AI response
-                    # Handle Claude and OpenAI models differently
-                    from config import settings
-                    from utils.openai import claude_chat
-                    from models.message import Message
-
-                    if conversation.model_id in settings.CLAUDE_MODELS:
-                        try:
-                            # Call Claude API
-                            claude_response = await claude_chat(
-                                messages=msg_dicts,
-                                model_name=conversation.model_id,
-                                max_tokens=1500,
-                                enable_thinking=settings.CLAUDE_EXTENDED_THINKING_ENABLED,
-                                thinking_budget=settings.CLAUDE_EXTENDED_THINKING_BUDGET
-                            )
-
-                            # Extract content from Claude response
-                            content = claude_response["choices"][0]["message"]["content"]
-
-                            # Extract thinking blocks if available
-                            message_metadata = {}
-                            if claude_response.get("has_thinking"):
-                                message_metadata["has_thinking"] = True
-                                
-                                if "thinking" in claude_response:
-                                    message_metadata["thinking"] = claude_response["thinking"]
-                                    
-                                if "redacted_thinking" in claude_response:
-                                    message_metadata["redacted_thinking"] = claude_response["redacted_thinking"]
-                            
-                            # Create and save message
-                            assistant_msg = Message(
-                                conversation_id=conversation.id,
-                                role="assistant",
-                                content=content,
-                                extra_data=message_metadata if message_metadata else None
-                            )
-                            db.add(assistant_msg)
-                            await db.commit()
-                            await db.refresh(assistant_msg)
-                        except Exception as e:
-                            logger.error(f"Claude API error in WebSocket: {str(e)}")
-                            await websocket.send_text(
-                                json.dumps({"type": "error", "content": f"Error with Claude: {str(e)}"})
-                            )
+                # Process messages
+                while True:
+                    raw_data = await websocket.receive_text()
+                    try:
+                        data = json.loads(raw_data)
+                        
+                        # Check for token refresh
+                        if data.get("type") == "token_refresh" and data.get("token"):
+                            try:
+                                # Validate the new token
+                                new_token = data.get("token")
+                                await verify_token(new_token, "access", db)
+                                logger.info(f"Token refreshed via WebSocket for user {user.id}")
+                                await manager.send_personal_message({
+                                    "type": "token_refresh_success",
+                                    "message": "Token refreshed successfully"
+                                }, websocket)
+                                continue
+                            except Exception as token_error:
+                                logger.error(f"Token refresh error: {str(token_error)}")
+                                await manager.send_personal_message({
+                                    "type": "error",
+                                    "message": "Token refresh failed"
+                                }, websocket)
+                                continue
+                        
+                        # Validate basic message content
+                        if "content" not in data:
+                            raise ValueError("Message missing required 'content' field")
+                        
+                        # Validate role
+                        role = data.get("role", "user").lower()
+                        if role not in ["user", "system"]:
+                            await manager.send_personal_message({
+                                "type": "error",
+                                "message": "Invalid message role - must be 'user' or 'system'"
+                            }, websocket)
                             continue
-                    else:
-                        # Use standard OpenAI response generation
-                        assistant_msg = await generate_ai_response(
-                            conversation_id=UUID(str(conversation.id)),
-                            messages=msg_dicts,
-                            model_id=conversation.model_id,
-                            db=db,
-                        )
+                    except (json.JSONDecodeError, ValueError) as e:
+                        await manager.send_personal_message({
+                            "type": "error", 
+                            "message": f"Invalid message format: {str(e)}"
+                        }, websocket)
+                        continue
 
-                    if assistant_msg:
-                        logger.info(f"Preparing WebSocket response for conversation {conversation_id}")
-                        metadata = assistant_msg.get_metadata_dict()
-                        logger.debug(f"Response metadata: {metadata}")
-                        logger.debug(f"Response content (first 100 chars): {assistant_msg.content[:100]}")
-                        
-                        response_data = {
-                            "type": "message", 
-                            "content": assistant_msg.content,
-                            "message": assistant_msg.content,  # Add message field for compatibility
-                            "role": "assistant"
-                        }
-                        
-                        # Include thinking blocks if available
-                        if metadata:
-                            if "thinking" in metadata:
-                                response_data["thinking"] = metadata["thinking"]
-                            if "redacted_thinking" in metadata:
-                                response_data["redacted_thinking"] = metadata["redacted_thinking"]
-                            if "model" in metadata:
-                                response_data["model"] = metadata["model"]
-                            if "tokens" in metadata:
-                                response_data["token_count"] = metadata["tokens"]
-                                
-                            # Include all metadata
-                            response_data["metadata"] = metadata
-                        
-                        # For Claude responses, also send a claude_response type
-                        if "claude" in (conversation.model_id or "").lower():
-                            claude_data = {
-                                "type": "claude_response",
-                                "answer": assistant_msg.content,
-                                "role": "assistant"
-                            }
-                            
-                            # Add thinking if available
-                            if metadata and "thinking" in metadata:
-                                claude_data["thinking"] = metadata["thinking"]
-                            if metadata and "redacted_thinking" in metadata:
-                                claude_data["redacted_thinking"] = metadata["redacted_thinking"]
-                                
-                            await websocket.send_text(json.dumps(claude_data))
-                        
-                        # Send standard message response
-                        await websocket.send_text(json.dumps(response_data))
+                    # Create message using existing function
+                    message_id = data.get("messageId")
+                    message = await create_user_message(
+                        conversation_id=UUID(str(conversation.id)),
+                        content=data["content"],
+                        role=role,
+                        db=db,
+                    )
 
-        except WebSocketDisconnect:
-            logger.info("WebSocket disconnected")
-        except HTTPException as he:
-            await websocket.close(code=he.status_code)
+                    # Acknowledge message receipt
+                    if message_id:
+                        await manager.send_personal_message({
+                            "type": "message_received",
+                            "messageId": message_id,
+                            "message": "Message received and stored"
+                        }, websocket)
+
+                    # Generate AI response if user message
+                    if message.role == "user":
+                        msg_dicts = await get_conversation_messages(UUID(str(conversation.id)), db)
+                        try:
+                            # Get model parameters from request
+                            image_data = data.get("image_data")
+                            vision_detail = data.get("vision_detail", "auto")
+                            enable_thinking = data.get("enable_thinking", True)
+                            thinking_budget = data.get("thinking_budget")
+
+                            # Generate AI response 
+                            assistant_msg = await generate_ai_response(
+                                conversation_id=UUID(str(conversation.id)),
+                                messages=msg_dicts,
+                                model_id=conversation.model_id,
+                                image_data=image_data,
+                                vision_detail=vision_detail,
+                                enable_thinking=enable_thinking,
+                                thinking_budget=thinking_budget,
+                                db=db,
+                            )
+
+                            if assistant_msg:
+                                # Get metadata from the message
+                                metadata = assistant_msg.get_metadata_dict() if hasattr(assistant_msg, 'get_metadata_dict') else {}
+                                
+                                # Prepare response
+                                response_data = {
+                                    "type": "message",
+                                    "role": "assistant",
+                                    "content": assistant_msg.content,
+                                    "message": assistant_msg.content,
+                                    "timestamp": assistant_msg.created_at.isoformat()
+                                }
+                                
+                                # Add thinking if available
+                                if metadata:
+                                    if "thinking" in metadata:
+                                        response_data["thinking"] = metadata["thinking"]
+                                    if "redacted_thinking" in metadata:
+                                        response_data["redacted_thinking"] = metadata["redacted_thinking"]
+                                    if "model" in metadata:
+                                        response_data["model"] = metadata["model"]
+                                    response_data["metadata"] = metadata
+                                
+                                # Add message ID if present in original request
+                                if message_id:
+                                    response_data["messageId"] = message_id
+                                
+                                # Send response to client
+                                await manager.send_personal_message(response_data, websocket)
+                            else:
+                                await manager.send_personal_message({
+                                    "type": "error",
+                                    "messageId": message_id,
+                                    "message": "Failed to generate AI response"
+                                }, websocket)
+                        except Exception as e:
+                            logger.error(f"Error generating AI response: {str(e)}")
+                            await manager.send_personal_message({
+                                "type": "error",
+                                "messageId": message_id,
+                                "message": f"Error generating response: {str(e)}"
+                            }, websocket)
+
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for user {user.id}, conversation {conversation_id}")
+            finally:
+                # Always disconnect properly
+                await manager.disconnect(websocket)
+
         except Exception as e:
             logger.error(f"WebSocket error: {str(e)}")
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            except Exception:
+                pass
         finally:
             await db.close()
