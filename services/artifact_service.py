@@ -113,7 +113,6 @@ async def create_artifact(
     
     # Create artifact
     new_artifact = Artifact(
-    (
         project_id=project_id,
         conversation_id=conversation_id,
         name=name,
@@ -244,6 +243,7 @@ async def list_artifacts(
                     Artifact.content_type == content_type,
                     Artifact.content_type.in_(subtypes)
                 )
+            )
         else:
             filters.append(Artifact.content_type == content_type)
     
