@@ -540,6 +540,33 @@ function isConversationStarred(conversationId) {
   return starredIds.includes(conversationId);
 }
 
+// Listen for conversation deletion events
+document.addEventListener('conversationDeleted', (e) => {
+  if (e.detail && e.detail.id) {
+    const deletedId = e.detail.id;
+    
+    // Remove from starred conversations if needed
+    const starredIds = JSON.parse(localStorage.getItem('starredConversations') || '[]');
+    const starredIndex = starredIds.indexOf(deletedId);
+    if (starredIndex !== -1) {
+      starredIds.splice(starredIndex, 1);
+      localStorage.setItem('starredConversations', JSON.stringify(starredIds));
+      
+      // Reload starred view if it's currently visible
+      const starredSection = document.getElementById('starredChatsSection');
+      if (starredSection && !starredSection.classList.contains('hidden')) {
+        loadStarredConversations();
+      }
+    }
+    
+    // Remove from recent conversations sidebar
+    const conversationElement = document.querySelector(`#sidebarConversations [data-conversation-id="${deletedId}"]`);
+    if (conversationElement) {
+      conversationElement.remove();
+    }
+  }
+});
+
 // Expose key functions globally
 window.sidebar = {
   toggleStarConversation,

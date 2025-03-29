@@ -615,12 +615,11 @@ async def search_project_context(
     # Validate project
     project = await _validate_user_and_project(project_id, None, db)
     
-    # Get vector DB
-    model_name = (
-        project.knowledge_base.embedding_model
-        if project.knowledge_base
-        else DEFAULT_EMBEDDING_MODEL
-    )
+    # Get vector DB - ensure knowledge_base is loaded and properly configured
+    await db.refresh(project, ["knowledge_base"])
+    model_name = DEFAULT_EMBEDDING_MODEL
+    if project.knowledge_base and project.knowledge_base.embedding_model:
+        model_name = project.knowledge_base.embedding_model
     
     vector_db = await get_vector_db(
         model_name=model_name,

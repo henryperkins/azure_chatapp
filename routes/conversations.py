@@ -408,8 +408,10 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
         try:
             # Extract and validate token before accepting connection
             token = extract_token(websocket)
+            logger.debug(f"Extracted WebSocket token: {token}")
             if not token:
-                logger.warning("WebSocket connection rejected: No token provided")
+                logger.warning("WebSocket connection rejected: No token provided. Headers: %s, Query: %s",
+                             websocket.headers, websocket.query_params)
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 

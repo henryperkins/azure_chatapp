@@ -122,6 +122,30 @@ window.ChatInterface.prototype.initialize = function() {
   // Set up custom event handlers
   this._setupEventListeners();
 
+  // Set up delete conversation button
+  const deleteBtn = document.getElementById('deleteConversationBtn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => {
+      if (!this.currentChatId) {
+        this.notificationFunction("No conversation selected", "error");
+        return;
+      }
+      
+      // Confirm before deleting
+      if (confirm("Are you sure you want to delete this conversation? This cannot be undone.")) {
+        this.deleteConversation(this.currentChatId)
+          .then(success => {
+            if (success) {
+              this.notificationFunction("Conversation deleted successfully", "success");
+            }
+          })
+          .catch(error => {
+            window.ChatUtils?.handleError?.('Deleting conversation', error, this.notificationFunction);
+          });
+      }
+    });
+  }
+
   // Initial load or creation
   this._handleInitialConversation();
   
@@ -398,6 +422,56 @@ window.ChatInterface.prototype._handleMessageReceived = function(message) {
 window.ChatInterface.prototype.isValidUUID = function(uuid) {
   if (!uuid) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+};
+
+// Delete the current conversation
+window.ChatInterface.prototype.deleteConversation = async function(chatId) {
+  if (!chatId && this.currentChatId) {
+    chatId = this.currentChatId;
+  }
+  
+  if (!this.isValidUUID(chatId)) {
+    this.notificationFunction("Invalid conversation ID", "error");
+    return false;
+  }
+  
+  try {
+    const success = await this.conversationService.deleteConversation(chatId);
+    
+    if (success) {
+      // If we deleted the current conversation, clear the UI
+      if (chatId === this.currentChatId) {
+        this.currentChatId = null;
+        this.ui.messageList.clear();
+        if (this.titleEl) this.titleEl.textContent = "";
+        
+        // Update URL to remove chatId
+        window.history.pushState({}, '', '/');
+        
+        // Show "no chat selected" message if it exists
+        const noChatMsg = document.getElementById("noChatSelectedMessage");
+        if (noChatMsg) {
+          noChatMsg.classList.remove('hidden');
+        }
+        
+        // Hide chat UI if applicable
+        if (this.container) {
+          this.container.classList.add('hidden');
+        }
+      }
+      
+      // Trigger event so sidebar can update
+      document.dispatchEvent(new CustomEvent('conversationDeleted', {
+        detail: { id: chatId }
+      }));
+      
+      return true;
+    }
+    return false;
+  } catch (error) {
+    window.ChatUtils?.handleError?.('Deleting conversation', error, this.notificationFunction);
+    return false;
+  }
 };
 
 // Send a message
