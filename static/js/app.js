@@ -150,7 +150,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
 
   // Handle data for GET/HEAD/DELETE requests
   let finalUrl;
-  if (data && ['GET', 'HEAD', 'DELETE'].includes(method)) {
+  if (data && ['GET', 'HEAD'].includes(method)) {
     // Convert data to URL query parameters
     const queryParams = new URLSearchParams();
     for (const [key, value] of Object.entries(data)) {
@@ -232,11 +232,20 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
         }));
       }
 
-      throw new Error(`API error (${response.status}): ${response.statusText}`);
+      const errorBody = await response.text();
+      const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
+      error.status = response.status;
+      throw error;
     }
 
-    const jsonData = await response.json();
-    if (jsonData.access_token && window.TokenManager?.setTokens) {
+    let jsonData;
+    try {
+      jsonData = response.status !== 204 ? await response.json() : null;
+    } catch (error) {
+      jsonData = null;
+    }
+
+    if (jsonData?.access_token && window.TokenManager?.setTokens) {
       TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
     }
 
