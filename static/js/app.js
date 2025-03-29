@@ -451,6 +451,17 @@ function loadSidebarProjects() {
     return Promise.resolve([]);
   }
 
+  // NEW: Ensure sidebar element exists with retry logic
+  const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
+  if (!sidebarProjects) {
+    console.warn("Sidebar projects container not found, retrying in 100ms");
+    return new Promise(resolve => {
+      setTimeout(() => {
+        loadSidebarProjects().then(resolve);
+      }, 100);
+    });
+  }
+
   if (window.API_CONFIG.authCheckInProgress) {
     console.log("Auth check in progress, deferring sidebar projects load");
     return Promise.resolve([]);
@@ -462,9 +473,6 @@ function loadSidebarProjects() {
   
   return apiRequest(endpoint)
     .then(response => {
-      const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
-      if (!sidebarProjects) return [];
-      
       // If response.data is an array, it's probably { data: [projects] }
       // Or it might be { data: { projects: [] } }
       const projects = Array.isArray(response.data)
