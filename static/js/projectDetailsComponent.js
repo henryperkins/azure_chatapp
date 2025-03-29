@@ -45,15 +45,7 @@ class FallbackAnimationUtils {
 // Try to use the imported classes, fall back to our defined ones if they don't exist
 const UIUtilsClass = UIUtils || FallbackUIUtils;
 const AnimationUtilsClass = AnimationUtils || FallbackAnimationUtils;
-const ModalManagerClass = ModalManager || class {
-  static confirmAction(config) {
-    if (confirm(config.message || 'Are you sure?')) {
-      config.onConfirm?.();
-    } else {
-      config.onCancel?.();
-    }
-  }
-};
+const ModalManagerClass = ModalManager;
 
 // Create instances of utility classes for use within this module
 const uiUtilsInstance = new UIUtilsClass();
@@ -445,7 +437,7 @@ class ProjectDetailsComponent {
         confirmClass: "bg-red-600",
         destructive: true
       });
-      
+
       if (!confirmed) return;
 
       const projectId = this.state.currentProject?.id;
@@ -461,36 +453,35 @@ class ProjectDetailsComponent {
 
       try {
         await window.projectManager.deleteProjectConversation(projectId, conversation.id);
-        
+
         // Refresh data
         await Promise.all([
           window.projectManager.loadProjectStats(projectId),
           window.projectManager.loadProjectConversations(projectId)
         ]);
 
-        // Show success with undo option for 5 seconds
-        const notification = uiUtilsInstance.showNotification(
-          "Conversation deleted",
-          "success",
-          {
-            action: "Undo",
-            onAction: async () => {
-              try {
-                await window.apiRequest(
-                  `/api/projects/${projectId}/conversations/${conversation.id}/restore`,
-                  "POST"
-                );
-                await Promise.all([
-                  window.projectManager.loadProjectStats(projectId),
-                  window.projectManager.loadProjectConversations(projectId)
-                ]);
-              } catch (err) {
-                console.error("Restore failed:", err);
-              }
-            },
-            timeout: 5000
-          }
-        );
+        // ✅ Close the modal immediately after successful deletion
+        ModalManagerClass.closeActiveModal();
+
+        // Then show the notification with undo
+        uiUtilsInstance.showNotification("Conversation deleted", "success", {
+          action: "Undo",
+          onAction: async () => {
+            try {
+              await window.apiRequest(
+                `/api/projects/${projectId}/conversations/${conversation.id}/restore`,
+                "POST"
+              );
+              await Promise.all([
+                window.projectManager.loadProjectStats(projectId),
+                window.projectManager.loadProjectConversations(projectId)
+              ]);
+            } catch (err) {
+              console.error("Restore failed:", err);
+            }
+          },
+          timeout: 5000
+        });
 
       } finally {
         // Reset button state
@@ -500,7 +491,7 @@ class ProjectDetailsComponent {
 
     } catch (error) {
       console.error("Delete failed:", error);
-      
+
       let errorMsg = "Failed to delete conversation";
       if (error?.response?.status === 403) {
         errorMsg = "You don't have permission to delete this";
