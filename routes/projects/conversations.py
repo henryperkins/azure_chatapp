@@ -42,7 +42,10 @@ from utils.response_utils import create_standard_response
 from utils.serializers import serialize_message, serialize_conversation
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(
+    prefix="/projects/{project_id}/conversations", 
+    tags=["Project Conversations"]
+)
 
 # ============================
 # Pydantic Schemas
