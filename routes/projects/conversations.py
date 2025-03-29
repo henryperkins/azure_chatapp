@@ -513,16 +513,11 @@ async def debug_conversation(
     )
     
     return {
-        "status": "ok",
+        "status": "ok", 
         "conversation_id": str(conversation_id),
         "model": conversation.model_id,
         "message_count": len(conversation.messages) if conversation.messages else 0
     }
-
-        additional_filters_project = [
-            Project.user_id == user.id,
-            Project.archived.is_(False)
-        ]
         await validate_resource_access(project_id, Project, user, db, "Project", additional_filters_project)
 
         additional_filters_conv = [
