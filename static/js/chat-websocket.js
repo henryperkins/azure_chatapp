@@ -369,7 +369,7 @@ window.WebSocketService.prototype.handleTokenRefresh = async function() {
   }
 };
 
-window.WebSocketService.prototype.handleConnectionError = function (error) {
+window.WebSocketService.prototype.handleConnectionError = async function (error) {
   const errorDetails = {
     code: error.code || 'unknown',
     reason: error.reason || error.message || 'unknown',
@@ -394,7 +394,7 @@ window.WebSocketService.prototype.handleConnectionError = function (error) {
     console.log('Auth-related error - triggering token refresh');
     try {
       await window.TokenManager.refreshTokens();
-      this.attemptReconnection();
+      await this.attemptReconnection();
     } catch (refreshError) {
       console.error('Token refresh failed:', refreshError);
     }
