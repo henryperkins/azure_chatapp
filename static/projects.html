@@ -511,10 +511,20 @@
                 </div>
                 
                 <div id="filesUploadProgress" class="hidden mb-4 bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
+                  <div class="flex items-center justify-between mb-2">
+                    <span id="kbStatusIndicator" class="text-sm font-medium"></span>
+                    <div id="kbRequirementTooltip" class="hidden text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      Files are indexed in Knowledge Base for AI search
+                    </div>
+                  </div>
                   <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
                     <div id="fileProgressBar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                   </div>
                   <p id="uploadStatus" class="text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                  <div id="supportedFileTypes" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Supported: .txt, .md, .csv, .json, .pdf, .doc, .docx, .py, .js, .html, .css (Max 30MB)
+                    <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">ℹ️</span>
+                  </div>
                 </div>
                 
                 <div id="projectFilesList" class="grid grid-cols-1 gap-2 mt-4">

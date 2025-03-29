@@ -400,11 +400,15 @@ console.log("[ProjectManager] Making API request to endpoint:", endpoint, {
       const status = err?.response?.status;
       if (status === 422) {
         throw new Error("File validation failed: The file format may be unsupported or the file is corrupted");
-      } else if (status === 413) {
+     } else if (status === 413) {
         throw new Error("File too large: The file exceeds the maximum allowed size");
-      } else if (status === 400) {
+     } else if (status === 400) {
         const detail = err?.response?.data?.detail || "Invalid file";
         throw new Error(`Bad request: ${detail}`);
+     } else if (status === 404) {
+        throw new Error("Project knowledge base not found - please configure it first");
+     } else if (status === 403) {
+        throw new Error("Knowledge base not active for this project");
       } else {
         throw new Error(err?.response?.data?.detail || err.message || "Upload failed");
       }
