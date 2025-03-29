@@ -519,16 +519,6 @@ async def debug_conversation(
         "message_count": len(conversation.messages) if conversation.messages else 0
     }
 
-
-        # Validate user and token version
-        user = await get_user_from_token(token, db, "access")
-        db_user = await db.get(User, user.id)
-        decoded = jwt.decode(token, options={"verify_signature": False})
-        
-        if db_user.token_version != decoded.get("version", 0):
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-
         additional_filters_project = [
             Project.user_id == user.id,
             Project.archived.is_(False)
