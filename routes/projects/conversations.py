@@ -523,14 +523,14 @@ async def project_websocket_chat_endpoint(
             except WebSocketDisconnect:
                 logger.info(f"WebSocket disconnected for user {user.id}, conversation {conversation_id}")
             finally:
-                # Cancel heartbeat task
+                # Cancel heartbeat task if it exists
                 if 'heartbeat_task' in locals():
                     heartbeat_task.cancel()
                     try:
                         await heartbeat_task
                     except asyncio.CancelledError:
                         pass
-            finally:
+                
                 # Always disconnect properly
                 await manager.disconnect(websocket)
 
