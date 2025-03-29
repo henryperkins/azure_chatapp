@@ -15,7 +15,17 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     """Manages active WebSocket connections and message broadcasting."""
     
+    _instance = None
+    
+    def __new__(cls):
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+            cls._instance.__init__()
+        return cls._instance
+        
     def __init__(self):
+        if hasattr(self, 'active_connections'):  # Prevent re-initialization
+            return
         # Map of conversation_id -> list of active WebSocket connections
         self.active_connections: Dict[str, List[WebSocket]] = {}
         # Track user IDs for each connection

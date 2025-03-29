@@ -306,8 +306,17 @@ async def project_websocket_chat_endpoint(
             # Validate user and token version
             try:
                 user = await get_user_from_token(user_token, db, "access")
+                if not user or not user.is_active:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    logger.warning(f"Inactive user attempting connection: {user.id if user else 'unknown'}")
+                    return
+                
                 db_user = await db.get(User, user.id)
                 decoded = jwt.decode(user_token, options={"verify_signature": False})
+                if db_user.token_version != decoded.get("version", 0):
+                    logger.warning(f"Token version mismatch for {user.id}")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
                 
                 if db_user.token_version != decoded.get("version", 0):
                     logger.warning(f"WebSocket rejected: Token version mismatch for user {db_user.username}")
