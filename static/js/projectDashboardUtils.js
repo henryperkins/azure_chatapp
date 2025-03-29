@@ -5,7 +5,7 @@
  */
 
 // Basic utility class for UI operations
-export class UIUtils {
+class UIUtils {
   constructor() {
     console.log('UIUtils initialized');
   }
@@ -132,7 +132,7 @@ export class UIUtils {
 }
 
 // Animation utility
-export class AnimationUtils {
+class AnimationUtils {
   constructor() {
     console.log('AnimationUtils initialized');
   }
@@ -163,7 +163,7 @@ export class AnimationUtils {
 }
 
 // Modal manager utility
-export class ModalManager {
+class ModalManager {
   constructor() {
     this.modals = {
       project: document.getElementById('projectFormModal'),
@@ -261,4 +261,8 @@ export class ModalManager {
 }
 
 // Export for usage in other modules
-export default { UIUtils, AnimationUtils, ModalManager };
+module.exports = { 
+  UIUtils, 
+  AnimationUtils, 
+  ModalManager 
+};

@@ -1,6 +1,6 @@
 // Define utility classes with fallbacks
 // Using regular imports so we don't need top-level await
-import { UIUtils, AnimationUtils, ModalManager } from './projectDashboardUtils.js';
+const { UIUtils, AnimationUtils, ModalManager } = require('./projectDashboardUtils');
 
 // Fallback classes if the imports don't work
 class FallbackUIUtils {
@@ -769,4 +769,4 @@ class ProjectDetailsComponent {
 }
 
 // Export the ProjectDetailsComponent as default
-export default ProjectDetailsComponent;
+module.exports = ProjectDetailsComponent;
