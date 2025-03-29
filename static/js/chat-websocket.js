@@ -199,9 +199,8 @@ window.WebSocketService.prototype.connect = async function (chatId) {
   try {
     const token = await this.authManager.getValidToken();
     const params = new URLSearchParams({
-      chatId,
       token,
-      ...(this.projectId && { projectId: this.projectId })
+      ...(this.projectId && { projectId: this.projectId }) // Only include if project exists
     });
 
     // Use configured WS_ENDPOINT or fall back to production domain
@@ -228,9 +227,10 @@ window.WebSocketService.prototype.connect = async function (chatId) {
 
     try {
       // Use project-aware URL construction
-      const basePath = this.projectId ? 
-        `/projects/${this.projectId}/conversations/${chatId}/ws` : 
-        `/ws/${chatId}`;
+      // Project-chat: chat ID in path for RESTful structure
+      const basePath = this.projectId
+        ? `/projects/${this.projectId}/conversations/${chatId}/ws`
+        : `/ws/${chatId}`; // Regular chat: chat ID in path only
       
       const debugParam = localStorage.getItem('debugWS') ? '&debug=1' : '';
       this.wsUrl = `${finalProtocol}${host}${basePath}?${params}${debugParam}`;
