@@ -69,31 +69,50 @@ class ConnectionManager:
             return False
 
     async def disconnect(self, websocket: WebSocket) -> None:
-        """Unregister a connection and close it."""
+        """Improved disconnect with state checks and error filtering"""
         try:
-            # Find which conversation this WebSocket belongs to
             conversation_id = None
+            user_id = None
+            
+            # Find and remove from active connections
             for cid, connections in self.active_connections.items():
                 if websocket in connections:
                     conversation_id = cid
                     connections.remove(websocket)
-                    # Remove empty conversation lists
                     if not connections:
                         del self.active_connections[cid]
                     break
-            
+
             # Remove user tracking
             if websocket in self.connection_users:
                 user_id = self.connection_users[websocket]
                 del self.connection_users[websocket]
-                self.connection_count -= 1
-                logger.info(f"WebSocket disconnected for conversation {conversation_id}, user {user_id}. Total connections: {self.connection_count}")
-            
-            # Close the WebSocket if it's not already closed
-            if websocket.client_state != 0:  # WebSocketState.DISCONNECTED
-                await websocket.close()
+                self.connection_count = max(0, self.connection_count - 1)
+
+            # Check connection states before closing
+            if not self._is_connection_closed(websocket):
+                try:
+                    await websocket.close()
+                except RuntimeError as e:
+                    if "Unexpected ASGI message" not in str(e):
+                        logger.warning(f"WebSocket close error: {str(e)}")
+                except Exception as e:
+                    logger.debug(f"Non-critical close error: {str(e)}")
+
+            logger.info(
+                f"WebSocket cleanup completed for {f'conversation {conversation_id}, ' if conversation_id else ''}"
+                f"user {user_id or 'unknown'}. Remaining connections: {self.connection_count}"
+            )
+
         except Exception as e:
             logger.warning(f"Error during WebSocket disconnect: {str(e)}")
+
+    def _is_connection_closed(self, websocket: WebSocket) -> bool:
+        """Check if connection is in a closed/closing state"""
+        return (
+            websocket.client_state == websocket.client_state.DISCONNECTED
+            or websocket.application_state == websocket.application_state.DISCONNECTED
+        )
             
     async def broadcast(self, message: Any, conversation_id: str) -> None:
         """
