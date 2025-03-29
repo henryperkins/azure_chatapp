@@ -5,11 +5,14 @@ Sets up the PostgreSQL database connection using SQLAlchemy.
 Defines the async init_db process for migrations or table creation.
 """
 
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 # Use the DATABASE_URL from config settings
 DATABASE_URL = settings.DATABASE_URL
