@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css --config postcss.config.cjs",
-    "dev:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css --watch --config postcss.config.cjs"
+    "build:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css",
+    "dev:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css --watch"
   },
   "repository": {
     "type": "git",
