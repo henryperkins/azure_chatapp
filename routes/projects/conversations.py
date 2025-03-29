@@ -48,7 +48,7 @@ from utils.serializers import serialize_message, serialize_conversation
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
-    prefix="/projects/{project_id}/conversations", 
+    prefix="/api/projects/{project_id}/conversations", 
     tags=["Project Conversations"]
 )
 
@@ -205,42 +205,36 @@ async def update_conversation(
 
 @router.delete("/{conversation_id}", response_model=dict)
 async def delete_conversation(
-    project_id: UUID,  # Add project_id as path parameter
+    project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Soft-deletes a conversation by setting is_deleted = True."""
-    # Change validation to use the Path parameter
-    await validate_resource_access(
-        project_id,
-        Project,
-        current_user,
-        db,
-        "Project",
-        [Project.user_id == current_user.id, Project.archived.is_(False)]
-    )
-
-    conversation = await validate_resource_access(
-        conversation_id,
-        Conversation,
-        current_user,
-        db,
-        "Conversation",
-        additional_filters=[
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False)
-        ]
-    )
-
-    conversation.is_deleted = True
-    await save_model(db, conversation)
-    logger.info(f"Conversation {conversation_id} soft-deleted by user {current_user.id}")
-
-    return await create_standard_response(
-        {"conversation_id": str(conversation.id)},
-        "Conversation deleted successfully"
-    )
+    """Soft-deletes a conversation through the service layer."""
+    try:
+        # Service handles all validation and deletion
+        deleted_id = await conversation_service.delete_conversation(
+            project_id=project_id,
+            conversation_id=conversation_id,
+            db=db,
+            user_id=current_user.id
+        )
+        
+        logger.info(f"Conversation {deleted_id} deleted via service by user {current_user.id}")
+        
+        return await create_standard_response(
+            {"conversation_id": str(deleted_id)},
+            "Conversation deleted successfully"
+        )
+    except HTTPException as he:
+        # Pass through HTTP exceptions from service layer
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting conversation {conversation_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete conversation due to internal error"
+        )
 
 # ============================
 # Message Endpoints

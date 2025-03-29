@@ -451,7 +451,8 @@ window.ChatInterface.prototype.deleteConversation = async function(chatId) {
   }
   
   try {
-    const success = await this.conversationService.deleteConversation(chatId);
+    const projectId = localStorage.getItem("selectedProjectId");
+    const success = await this.conversationService.deleteConversation(chatId, projectId);
     
     if (success) {
       // If we deleted the current conversation, clear the UI

@@ -177,7 +177,6 @@ window.WebSocketService.prototype.setState = function (newState) {
 window.WebSocketService.prototype.connect = async function (chatId) {
   if (!chatId) throw new Error('Invalid chatId');
 
-  // Prevent duplicate connections
   if (this.state === CONNECTION_STATES.CONNECTED && this.chatId === chatId) {
     return true;
   }
@@ -188,58 +187,44 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     throw new Error('Connection already in progress');
   }
 
-  if (this.state === CONNECTION_STATES.CONNECTED && this.chatId === chatId) {
-    return true;
-  }
-
   this.setState(CONNECTION_STATES.CONNECTING);
   this.chatId = chatId;
   this.useHttpFallback = false;
 
   try {
     const token = await this.authManager.getValidToken();
-    
-    // Simplified params with server-expected format
+
     const params = new URLSearchParams({
-      chatId: chatId,  // Main change: Send chatId as query param
+      chatId: chatId,
       token: token,
       ...(this.projectId && { projectId: this.projectId })
     });
 
-    // Use configured WS_ENDPOINT or fall back to production domain
     let host = window.API_CONFIG?.WS_ENDPOINT || 'put.photo';
-    
-    // Remove protocol if present and get clean host
     host = host.replace(/^https?:\/\//, '');
-    
-    // Validate host
+
     if (!host) {
       console.error('Empty WebSocket host - using HTTP fallback');
       this.useHttpFallback = true;
       throw new Error('Empty WebSocket host');
     }
 
-    // Force wss:// for production domain, ws:// for localhost
-    const finalProtocol = host.includes('put.photo') ? 'wss://' : 'ws://';
-
-    // Always use unified path format
-    const basePath = "/ws"; // Server expects all WS connections at /ws
-    
-    // Build final URL
+    const finalProtocol = 'wss://';
+    const basePath = "/ws";
     this.wsUrl = `${finalProtocol}${host}${basePath}?${params}`;
-
+    console.log('Constructed WebSocket URL (forced wss):', this.wsUrl);
     console.log('Constructed WebSocket URL:', this.wsUrl);
-    } catch (error) {
-      console.error('Error constructing WebSocket URL:', error);
-      this.useHttpFallback = true;
-      throw new Error('Invalid WebSocket endpoint configuration');
-    }
+  } catch (error) {
+    console.error('Error constructing WebSocket URL:', error);
+    this.useHttpFallback = true;
+    throw new Error('Invalid WebSocket endpoint configuration');
+  }
 
-    // Validate the WebSocket URL before attempting connection
-    if (!validateWebSocketUrl(this.wsUrl)) {
-      throw new Error(`Invalid WebSocket URL: ${this.wsUrl}`);
-    }
+  if (!validateWebSocketUrl(this.wsUrl)) {
+    throw new Error(`Invalid WebSocket URL: ${this.wsUrl}`);
+  }
 
+  try {
     await this.establishConnection();
     this.setState(CONNECTION_STATES.CONNECTED);
     return true;
@@ -417,7 +402,7 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
     console.warn('Abnormal closure detected - resetting connection state');
     this.state = CONNECTION_STATES.DISCONNECTED;
     this.socket = null;
-  } else if ((error?.message || '').includes('403') || (error?.message || '').includes('version mismatch')) {
+  } else if ((error?.message || '').includes('403') || (error?.message || '').includes('401') || (error?.message || '').includes('version mismatch')) {
     console.log('Auth-related error - triggering token refresh');
     try {
       await window.TokenManager.refreshTokens();
