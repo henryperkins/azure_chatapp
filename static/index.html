@@ -581,7 +581,10 @@
     window.CHAT_CONFIG = {
       chatId: new URLSearchParams(window.location.search).get('chatId') || ""
     };
-    window.BACKEND_HOST = window.location.host; // Use same host as frontend
+    // Set backend host to API endpoint if available, otherwise fall back to current host
+    window.BACKEND_HOST = window.API_ENDPOINT ?
+      new URL(window.API_ENDPOINT).host :
+      'api.example.com'; // Default fallback
     window.ENV = 'development'; // Matches config.py default
     console.log('BACKEND_HOST set to:', window.BACKEND_HOST);
   </script>

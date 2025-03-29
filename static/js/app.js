@@ -14,6 +14,7 @@
 // Consolidated global config (no second "const API_CONFIG")
 window.API_CONFIG = {
   baseUrl: '',
+  WS_ENDPOINT: window.location.hostname, // Use current host for WebSocket
   isAuthenticated: false,
   authCheckInProgress: false,
   lastErrorStatus: null,

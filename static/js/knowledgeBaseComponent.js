@@ -95,6 +95,15 @@ class KnowledgeBaseComponent {
       resultsSection: document.getElementById("knowledgeSearchResults"),
       noResultsSection: document.getElementById("knowledgeNoResults")
     };
+
+    // Apply consistent button styles
+    if (this.elements.searchButton) {
+      this.elements.searchButton.className =
+        'px-4 py-2.5 bg-blue-600 text-white rounded-lg ' +
+        'hover:bg-blue-700 transition-colors duration-200 ' +
+        'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 ' +
+        'text-sm font-medium';
+    }
     
     this.bindEvents();
   }
@@ -104,25 +113,39 @@ class KnowledgeBaseComponent {
       if (query) this.searchKnowledgeBase(query);
     });
 
-    document.getElementById("reprocessFilesBtn")?.addEventListener("click", () => {
-      this.reprocessFiles();
-    });
+    const reprocessBtn = document.getElementById("reprocessFilesBtn");
+    if (reprocessBtn) {
+      reprocessBtn.className =
+        'px-4 py-2.5 bg-gray-600 text-white rounded-lg ' +
+        'hover:bg-gray-700 transition-colors duration-200 ' +
+        'focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 ' +
+        'text-sm font-medium';
+      reprocessBtn.addEventListener("click", () => this.reprocessFiles());
+    }
     
     document.getElementById("knowledgeBaseEnabled")?.addEventListener("change", (e) => {
       this.toggleKnowledgeBase(e.target.checked);
     });
 
-    document.getElementById("setupKnowledgeBaseBtn")?.addEventListener("click", () => {
-      // Show modal directly
-      document.getElementById('knowledgeBaseSettingsModal')?.classList.remove('hidden');
-      
-      // Try to get and store project ID if available
-      const projectId = window.projectManager?.currentProject?.id;
-      const form = document.getElementById("knowledgeBaseForm");
-      if (form && projectId) {
-        form.dataset.projectId = projectId;
-      }
-    });
+    const setupBtn = document.getElementById("setupKnowledgeBaseBtn");
+    if (setupBtn) {
+      setupBtn.className =
+        'px-4 py-2.5 bg-green-600 text-white rounded-lg ' +
+        'hover:bg-green-700 transition-colors duration-200 ' +
+        'focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 ' +
+        'text-sm font-medium';
+      setupBtn.addEventListener("click", () => {
+        // Show modal directly
+        document.getElementById('knowledgeBaseSettingsModal')?.classList.remove('hidden');
+        
+        // Try to get and store project ID if available
+        const projectId = window.projectManager?.currentProject?.id;
+        const form = document.getElementById("knowledgeBaseForm");
+        if (form && projectId) {
+          form.dataset.projectId = projectId;
+        }
+      });
+    }
 
     document.getElementById("knowledgeBaseForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -184,7 +207,6 @@ class KnowledgeBaseComponent {
     
     this.showSearchLoading();
     window.apiRequest(`/api/projects/${projectId}/knowledge-bases/search`, "POST", {
-      query,
       query,
       top_k: 5
     })

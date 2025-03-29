@@ -46,8 +46,11 @@ from config import settings
 sys.path.append(str(Path(__file__).resolve().parent))
 
 # Configure Logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+# Configure SQLAlchemy logging to be less verbose
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
@@ -216,7 +219,6 @@ app.include_router(
 async def on_startup():
     """Performs necessary startup tasks: database init, migrations, token cleanup."""
     os.environ.pop("AZUREML_ENVIRONMENT_UPDATE", None)
-    
     try:
         # Initialize database with enhanced schema alignment
         await init_db()
@@ -262,22 +264,23 @@ async def on_startup():
                 if missing:
                     raise RuntimeError(f"Missing columns in {table}: {missing}")
 
-        logger.info("✅ Database schema validated and aligned")
-
         # Create uploads directory
         upload_path = Path("./uploads/project_files")
         upload_path.mkdir(parents=True, exist_ok=True)
         upload_path.chmod(0o755)
-        logger.info("Upload directories initialized with secure permissions")
         
         # Auth system
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
-            logger.info(f"Cleaned {deleted_count} expired tokens during startup")
             await load_revocation_list(session)
 
         # Schedule periodic token cleanup
         await schedule_token_cleanup(interval_minutes=30)
+        
+        logger.info("Startup completed: Database validated, uploads ready, auth initialized")
+    except Exception as e:
+        logger.critical("Startup initialization failed: %s", e)
+        raise
         logger.info("Authentication system initialized")
     except Exception as e:
         logger.critical("Startup initialization failed: %s", e)
