@@ -46,7 +46,17 @@ window.ChatInterface = function(options = {}) {
 window.ChatInterface.prototype.initialize = function() {
   // Check dependencies
   if (!window.WebSocketService) {
-    throw new Error('WebSocketService dependency not loaded');
+    console.warn('WebSocketService dependency not loaded - attempting dynamic load');
+    await new Promise(resolve => {
+      const script = document.createElement('script');
+      script.src = '/static/js/chat-websocket.js';
+      script.onload = resolve;
+      document.head.appendChild(script);
+    });
+    
+    if (!window.WebSocketService) {
+      throw new Error('WebSocketService dependency not loaded after dynamic load');
+    }
   }
 
   // Prevent double initialization
