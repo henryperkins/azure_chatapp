@@ -1,9 +1,9 @@
-import tailwindcss from 'tailwindcss';
-import autoprefixer from 'autoprefixer';
+const tailwindcss = require('tailwindcss');
+const autoprefixer = require('autoprefixer');
 
-export default {
+module.exports = {
   plugins: [
     tailwindcss,
-    autoprefixer,
-  ],
+    autoprefixer
+  ]
 };
