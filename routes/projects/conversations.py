@@ -573,32 +573,29 @@ async def debug_conversation(
             while True:
                 try:
                     data = await websocket.receive_text()
-                    try {
+                    try:
                         data_dict = json.loads(data)
-                    } catch (e) {
+                    except json.JSONDecodeError as e:
                         await websocket.send_json({
-                            "type": "error",
+                            "type": "error", 
                             "content": "Invalid JSON format"
                         })
                         continue
-                    }
 
                     # Validate required fields
-                    if !data_dict.content || !data_dict.content.trim() {
+                    if not data_dict.get("content") or not data_dict["content"].strip():
                         await websocket.send_json({
                             "type": "error",
                             "content": "Message content cannot be empty"
                         })
                         continue
-                    }
 
-                    if !["user", "system"].includes(data_dict.role) {
+                    if data_dict.get("role") not in ("user", "system"):
                         await websocket.send_json({
                             "type": "error",
                             "content": "Invalid role - must be 'user' or 'system'"
                         })
                         continue
-                    }
                     try:
                         data_dict = json.loads(data)
                     except json.JSONDecodeError as e:
