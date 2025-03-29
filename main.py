@@ -204,7 +204,7 @@ app.include_router(
 
 app.include_router(
     project_conversations_router,
-    prefix="/api",  # Matches with router's own prefix
+    prefix="/api/projects",  # Combined with router's own prefix
     tags=["project-conversations"]
 )
 
