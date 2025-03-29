@@ -12,7 +12,6 @@ router = APIRouter()
 # Project-associated resources (include first)
 router.include_router(
     conversations.router,
-    prefix="/{project_id}/conversations",
     tags=["project-conversations"]
 )
 router.include_router(
