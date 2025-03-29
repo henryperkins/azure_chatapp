@@ -18,6 +18,7 @@ const TokenManager = {
     console.log('TokenManager: Setting new access token');
     this.accessToken = access;
     this.refreshToken = refresh;
+    this.tokenExpiry = Date.now() + (30 * 60 * 1000); // Default 30 minute expiry
     
     // Notify WebSocket connections of token refresh
     if (typeof this.onTokenRefresh === 'function') {
@@ -58,6 +59,12 @@ const TokenManager = {
     return this.accessToken
       ? { "Authorization": `Bearer ${this.accessToken}` }
       : {};
+  },
+
+  isExpired() {
+    if (!this.accessToken) return true;
+    if (!this.tokenExpiry) return false; // If no expiry set, assume not expired
+    return Date.now() >= this.tokenExpiry;
   },
 
   /**
