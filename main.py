@@ -221,9 +221,9 @@ async def on_startup():
         # Initialize database with enhanced schema alignment
         await init_db()
         
-        # Additional validation
+        # Additional validation - using run_sync to properly handle asyncpg inspections
         async with get_async_session_context() as session:
-            inspector = inspect(session.get_bind())
+            # Use run_sync to perform inspection operations
             required_columns = {
                 "project_files": ["config"],
                 "knowledge_bases": ["config"],
@@ -231,10 +231,18 @@ async def on_startup():
                 "messages": ["context_used"]
             }
             
+            # Get database metadata using run_sync
+            db_metadata = await session.run_sync(lambda sync_conn: {
+                table: {col["name"] for col in inspect(sync_conn).get_columns(table)}
+                for table in required_columns.keys()
+                if inspect(sync_conn).has_table(table)
+            })
+            
             for table, cols in required_columns.items():
-                if not inspector.has_table(table):
+                if table not in db_metadata:
                     raise RuntimeError(f"Missing critical table: {table}")
-                existing = {c["name"] for c in inspector.get_columns(table)}
+                
+                existing = db_metadata[table]
                 missing = set(cols) - existing
                 if missing:
                     raise RuntimeError(f"Missing columns in {table}: {missing}")
