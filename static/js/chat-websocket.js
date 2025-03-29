@@ -390,7 +390,7 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
     console.warn('Abnormal closure detected - resetting connection state');
     this.state = CONNECTION_STATES.DISCONNECTED;
     this.socket = null;
-  } else if (error.message.includes('403') || error.message.includes('version mismatch')) {
+  } else if ((error?.message || '').includes('403') || (error?.message || '').includes('version mismatch')) {
     console.log('Auth-related error - triggering token refresh');
     try {
       await window.TokenManager.refreshTokens();
