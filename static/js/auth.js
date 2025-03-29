@@ -550,6 +550,10 @@ async function verifyAuthState() {
       authVerificationCache.set(false);
       return false;
     }
+    if (TokenManager.isExpired()) {
+      console.log('verifyAuthState: Refreshing token because it is expired');
+      await TokenManager.refreshTokens();
+    }
 
     // Check with server
     if (!window.apiRequest) {

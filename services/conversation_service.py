@@ -136,6 +136,39 @@ async def create_conversation(
         logger.error(f"Error in create_conversation: {str(e)}", exc_info=True)
         raise
 
+@handle_service_errors("Failed to delete conversation")
+async def delete_conversation(
+    project_id: UUID,
+    conversation_id: UUID,
+    db: AsyncSession,
+    user_id: int
+) -> UUID:
+    """
+    Soft-deletes a conversation by setting is_deleted=True.
+    Validates the conversation belongs to the specified project.
+    """
+    logger.info(f"Attempting to delete conversation {conversation_id} in project {project_id}")
+    
+    # Get conversation with project relationship
+    conv = await db.get(Conversation, conversation_id)
+    if not conv or conv.is_deleted:
+        raise HTTPException(404, "Conversation not found")
+    
+    # Validate project association
+    if str(conv.project_id) != str(project_id):
+        raise HTTPException(400, "Conversation does not belong to specified project")
+    
+    # Validate user ownership
+    if conv.user_id != user_id:
+        raise HTTPException(403, "Unauthorized to delete this conversation")
+    
+    # Soft delete
+    conv.is_deleted = True
+    await save_model(db, conv)
+    
+    logger.info(f"Successfully soft-deleted conversation {conversation_id}")
+    return conv.id
+
 @handle_service_errors("Failed to list project conversations")
 async def list_project_conversations(
     project_id: UUID,

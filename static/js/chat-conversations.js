@@ -125,7 +125,7 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
 };
 
 // Delete a conversation (soft delete)
-window.ConversationService.prototype.deleteConversation = async function(chatId, projectId = null) {
+window.ConversationService.prototype.deleteConversation = async function(chatId, projectId = localStorage.getItem("selectedProjectId")) {
   if (!chatId || !this._isValidUUID(chatId)) {
     this.onError('Deleting conversation', new Error('Invalid conversation ID'));
     return false;
@@ -143,14 +143,11 @@ window.ConversationService.prototype.deleteConversation = async function(chatId,
 
   try {
     // Use passed projectId or fallback to localStorage
-    const finalProjectId = projectId || localStorage.getItem("selectedProjectId");
-    let deleteUrl;
-
-    if (finalProjectId) {
-      deleteUrl = `/api/projects/${finalProjectId}/conversations/${chatId}`;
-    } else {
-      deleteUrl = `/api/chat/conversations/${chatId}`;
+    const finalProjectId = projectId;
+    if (!finalProjectId) {
+      throw new Error("Project ID is required for conversation deletion");
     }
+    const deleteUrl = `/api/projects/${finalProjectId}/conversations/${chatId}`;
 
     await window.apiRequest(deleteUrl, "DELETE");
 
