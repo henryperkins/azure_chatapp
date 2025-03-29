@@ -17,6 +17,8 @@ class KnowledgeBase(Base):
         Index('ix_knowledge_bases_is_active', 'is_active'),
     )
     
+    config: Mapped[dict] = mapped_column(JSONB(none_as_null=True), default=dict)
+    
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), 
         primary_key=True,
