@@ -263,9 +263,7 @@ class ProjectDetailsComponent {
     if (!this.elements.conversationsList) return;
     
     // Handle both raw array and event detail format
-    const convos = Array.isArray(conversations) ? 
-      conversations : 
-      (conversations.data || conversations.detail?.conversations || []);
+    const convos = Array.isArray(conversations) ? conversations : [];
     
     if (!convos || convos.length === 0) {
       this.elements.conversationsList.innerHTML = `
@@ -447,7 +445,7 @@ class ProjectDetailsComponent {
       onConfirm: () => {
         const projectId = this.state.currentProject?.id;
         if (!projectId) {
-          uiUtilsInstance.showNotification("Project context missing", "error");
+          uiUtilsInstance.showNotification("Could not determine current project", "error");
           return;
         }
 
@@ -462,12 +460,17 @@ class ProjectDetailsComponent {
             uiUtilsInstance.showNotification("Conversation deleted", "success");
           })
           .catch(err => {
-            console.error("Delete error - Details:", err); // Add detailed logging
-            if (err?.message?.includes("404")) {
-              uiUtilsInstance.showNotification("Conversation not found", "error");
-            } else {
-              uiUtilsInstance.showNotification("Failed to delete conversation", "error");
-            }
+            console.error("Delete error:", {
+              error: err,
+              projectId: projectId,
+              conversationId: conversation.id
+            });
+            uiUtilsInstance.showNotification(
+              err?.response?.status === 404 
+                ? "Conversation not found" 
+                : "Failed to delete conversation. Check console for details.",
+              "error"
+            );
           });
       }
     });
