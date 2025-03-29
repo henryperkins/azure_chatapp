@@ -63,19 +63,25 @@ async def init_db():
     """
     Initialize database and handle schema alignment using SQLAlchemy metadata.
     """
+    # Primero, intenta crear todas las tablas
     async with async_engine.begin() as conn:
-        # Create all tables first
         await conn.run_sync(Base.metadata.create_all)
     
-    # Run comprehensive schema alignment
+    # Ejecuta la alineación completa del esquema
     await fix_db_schema()
     
-    # Verify alignment after fixes
+    # Verifica la alineación después de las correcciones
     mismatches = await validate_db_schema()
     if mismatches:
         logger.warning("Some schema mismatches couldn't be automatically fixed")
     else:
         logger.info("Database schema fully aligned with ORM models")
+        
+    # Registra lista de tablas verificadas
+    async with async_engine.connect() as conn:
+        result = await conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
+        tables = [row[0] for row in result.fetchall()]
+        logger.info(f"Verified tables in database: {', '.join(tables)}")
 
 async def fix_db_schema():
     """Comprehensive schema alignment without alembic"""
