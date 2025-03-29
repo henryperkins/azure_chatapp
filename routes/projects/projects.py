@@ -129,15 +129,23 @@ async def list_projects(
 
     conditions = [Project.user_id == current_user.id]
 
-    # Apply filter logic
+    # Get all projects first, then filter in memory for more complex logic
+    projects = await get_all_by_condition(
+        db,
+        Project,
+        Project.user_id == current_user.id,
+        limit=limit,
+        offset=skip,
+        order_by=Project.created_at.desc()
+    )
+
+    # Apply filter logic after retrieval
     if filter == ProjectFilter.pinned:
-        conditions.append(Project.pinned.is_(True))
-        conditions.append(Project.archived.is_(False))
+        projects = [p for p in projects if p.pinned]
     elif filter == ProjectFilter.archived:
-        conditions.append(Project.archived.is_(True))
+        projects = [p for p in projects if p.archived]
     elif filter == ProjectFilter.active:
-        conditions.append(Project.archived.is_(False))
-    # 'all' -> no additional conditions
+        projects = [p for p in projects if not p.archived]
 
     try:
         projects = await get_all_by_condition(

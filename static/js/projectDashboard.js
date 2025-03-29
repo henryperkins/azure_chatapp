@@ -254,7 +254,7 @@ class ProjectDashboard {
         originalCount = projects.length;
       }
 
-      hasError = detail.error || false;
+      hasError = event.detail.error || false;
       console.log('[DEBUG] Calling renderProjects with:', projects.length, 'projects');
       this.components.projectList.renderProjects(projects);
 
