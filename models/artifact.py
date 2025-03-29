@@ -8,7 +8,7 @@ Defines the Artifact model, representing content generated within a project:
 """
 from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, CheckConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from typing import Optional, Dict, Any
 from datetime import datetime
 
