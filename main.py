@@ -232,7 +232,7 @@ async def on_startup():
             }
             
             # Get database metadata using run_sync
-            db_metadata = await session.run_sync(lambda sync_session: {
+            async def get_db_metadata(sync_session):
                 inspector = inspect(sync_session.get_bind())
                 return {
                     table: {col["name"] for col in sync_session.get_bind().execute(
@@ -241,7 +241,8 @@ async def on_startup():
                     for table in required_columns.keys()
                     if inspector.has_table(table)
                 }
-            })
+            
+            db_metadata = await session.run_sync(get_db_metadata)
             
             for table, cols in required_columns.items():
                 if table not in db_metadata:
