@@ -619,7 +619,7 @@ async def project_websocket_endpoint(
                         })
 
             except WebSocketDisconnect:
-            logger.info("WebSocket disconnected")
+                logger.info("WebSocket disconnected")
         except HTTPException as he:
             logger.error(f"WebSocket HTTP error: {str(he)}")
             await websocket.close(code=he.status_code)
