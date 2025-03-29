@@ -563,6 +563,15 @@ async def project_websocket_endpoint(
             logger.debug("conversation_id=%s, project_id=%s, user_id=%s", conversation_id, project_id, user.id)
             return
 
+        # Add token version check
+        if int(decoded.get("version", 0)) != db_user.token_version:
+            logger.warning(f"Token version mismatch for {user.username} (Database: {db_user.token_version} vs Token: {decoded['version']})")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Explicitly accept WebSocket connection after all validations pass
+        await websocket.accept()
+
         if not await manager.connect(websocket):
             return
 
