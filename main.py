@@ -254,10 +254,11 @@ async def on_startup():
                 raise RuntimeError(f"Missing columns in {table}: {missing}")
 
         logger.info("✅ Database schema validated")
+        has_mismatches = await validate_db_schema()
         if has_mismatches:
             logger.warning("Attempting to fix schema mismatches...")
             await fix_db_schema()
-            await validate_db_schema()
+            has_mismatches = await validate_db_schema()
         logger.info("Database schema validated and fixed")
 
         # Create uploads directory
