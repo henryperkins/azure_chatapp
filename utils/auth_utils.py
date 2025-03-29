@@ -103,6 +103,11 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
                 logger.warning(f"Token ID '{token_id}' is revoked (database)")
                 raise HTTPException(status_code=401, detail="Token is revoked")
 
+        # Validate required JWT claims
+        if not decoded.get("jti"):
+            logger.warning("Token missing required jti claim")
+            raise HTTPException(status_code=401, detail="Invalid token: missing jti")
+
         # Check token version if available
         token_version = decoded.get("version")
         username = decoded.get("sub")
@@ -200,15 +205,18 @@ def extract_token(request_or_websocket):
     # Check if it's a WebSocket
     is_websocket = hasattr(request_or_websocket, 'query_params') and not hasattr(request_or_websocket, 'cookies')
     
-    # Try cookies first
+    # For WebSockets, check query params first
     if is_websocket:
-        cookie_header = request_or_websocket.headers.get("cookie", "")
-        if cookie_header:
-            for cookie in cookie_header.split(";"):
-                parts = cookie.strip().split("=", 1)
-                if len(parts) == 2 and parts[0].strip() == "access_token":
-                    token = parts[1].strip()
-                    break
+        token = request_or_websocket.query_params.get("token")
+        if not token:
+            # Fall back to cookies if no token in query
+            cookie_header = request_or_websocket.headers.get("cookie", "")
+            if cookie_header:
+                for cookie in cookie_header.split(";"):
+                    parts = cookie.strip().split("=", 1)
+                    if len(parts) == 2 and parts[0].strip() == "access_token":
+                        token = parts[1].strip()
+                        break
     else:
         # Regular request
         token = request_or_websocket.cookies.get("access_token")

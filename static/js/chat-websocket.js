@@ -90,7 +90,14 @@ window.WebSocketService.prototype.connect = async function(chatId) {
     const baseUrl = window.location.origin;
     const params = new URLSearchParams();
     if (chatId) params.append('chatId', chatId);
-    if (this.projectId) params.append('projectId', this.projectId);
+    if (this.projectId) {
+        params.append('projectId', this.projectId);
+        // For project chats, use the project-specific endpoint
+        this.wsUrl = `${wsProtocol}${host}/api/projects/${this.projectId}/ws/${chatId}?${params.toString()}`;
+        return new Promise((resolve, reject) => {
+            // ... existing connection logic
+        });
+    }
     
     // Improved token acquisition that doesn't try to initialize auth
     // and instead immediately falls back to HTTP when TokenManager isn't ready
