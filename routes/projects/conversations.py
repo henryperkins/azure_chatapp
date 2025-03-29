@@ -287,106 +287,223 @@ async def list_conversation_messages(
 async def project_websocket_chat_endpoint(
     websocket: WebSocket,
     project_id: UUID,
-    conversation_id: UUID
+    conversation_id: UUID,
+    token: str = Query(None),
+    chatId: str = Query(None)
 ):
     """Real-time chat updates for project conversations."""
     from db import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
-            token = extract_token(websocket)
-            if not token:
+            # Extract token from query param, header, or cookie
+            user_token = token or extract_token(websocket)
+            if not user_token:
                 logger.warning("WebSocket rejected: No token provided")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 logger.debug("No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
                 return
 
             # Validate user and token version
-            user = await get_user_from_token(token, db, "access")
-            db_user = await db.get(User, user.id)
-            decoded = jwt.decode(token, options={"verify_signature": False})
-            
-            if db_user.token_version != decoded.get("version", 0):
+            try:
+                user = await get_user_from_token(user_token, db, "access")
+                db_user = await db.get(User, user.id)
+                decoded = jwt.decode(user_token, options={"verify_signature": False})
+                
+                if db_user.token_version != decoded.get("version", 0):
+                    logger.warning(f"WebSocket rejected: Token version mismatch for user {db_user.username}")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            except Exception as auth_error:
+                logger.warning(f"WebSocket authentication failed: {str(auth_error)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
             # Validate project access
-            project = await project_service.validate_project_access(project_id, user, db)
-            if not project:
-                logger.warning("WebSocket rejected: Invalid project access")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("Invalid project access for user_id=%s, project_id=%s", user.id, project_id)
+            try:
+                project = await project_service.validate_project_access(project_id, user, db)
+                if not project:
+                    logger.warning(f"WebSocket rejected: Invalid project access for user {user.id}, project {project_id}")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            except Exception as project_error:
+                logger.warning(f"WebSocket project access error: {str(project_error)}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION) 
                 return
 
+            # Validate conversation access
             additional_filters = [
                 Conversation.project_id == project_id,
                 Conversation.is_deleted.is_(False)
             ]
-            conversation = await validate_resource_access(
-                conversation_id,
-                Conversation,
-                user,
-                db,
-                "Conversation",
-                additional_filters
-            )
-            if not conversation:
-                logger.warning("WebSocket rejected: Invalid conversation access")
+            try:
+                conversation = await validate_resource_access(
+                    conversation_id,
+                    Conversation,
+                    user,
+                    db,
+                    "Conversation",
+                    additional_filters
+                )
+                if not conversation:
+                    logger.warning(f"WebSocket rejected: Invalid conversation access for user {user.id}, conversation {conversation_id}")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            except Exception as conversation_error:
+                logger.warning(f"WebSocket conversation access error: {str(conversation_error)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                logger.debug("Invalid conversation access for user_id=%s, conv_id=%s", user.id, conversation_id)
                 return
 
-            # All validations complete - now accept connection
-            await websocket.accept()
-            
-            while True:
-                raw_data = await websocket.receive_text()
-                try:
-                    data_dict = json.loads(raw_data)
-                    if "content" not in data_dict:
-                        raise ValueError("Message missing required 'content' field")
-                    
-                    # Validate role
-                    role = data_dict.get("role", "user")
-                    if role not in ["user", "system"]:
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": "Invalid message role - must be 'user' or 'system'"
-                        })
+            # Use the connection manager to handle this WebSocket connection
+            connection_success = await manager.connect(websocket, str(conversation_id), str(user.id))
+            if not connection_success:
+                logger.warning(f"WebSocket connection failed for user {user.id}, conversation {conversation_id}")
+                return
+
+            try:
+                # Send a connection success message
+                await manager.send_personal_message({
+                    "type": "connected", 
+                    "message": "WebSocket connection established",
+                    "conversation_id": str(conversation_id)
+                }, websocket)
+
+                # Process messages
+                while True:
+                    raw_data = await websocket.receive_text()
+                    try:
+                        data_dict = json.loads(raw_data)
+                        if "content" not in data_dict:
+                            raise ValueError("Message missing required 'content' field")
+                        
+                        # Validate role
+                        role = data_dict.get("role", "user")
+                        if role not in ["user", "system"]:
+                            await manager.send_personal_message({
+                                "type": "error",
+                                "message": "Invalid message role - must be 'user' or 'system'"
+                            }, websocket)
+                            continue
+
+                        # Check for token refresh
+                        if data_dict.get("type") == "token_refresh" and data_dict.get("token"):
+                            try:
+                                # Validate the new token
+                                new_token = data_dict.get("token")
+                                await verify_token(new_token, "access", db)
+                                logger.info(f"Token refreshed via WebSocket for user {user.id}")
+                                await manager.send_personal_message({
+                                    "type": "token_refresh_success",
+                                    "message": "Token refreshed successfully"
+                                }, websocket)
+                                continue
+                            except Exception as token_error:
+                                logger.error(f"Token refresh error: {str(token_error)}")
+                                await manager.send_personal_message({
+                                    "type": "error",
+                                    "message": "Token refresh failed"
+                                }, websocket)
+                                continue
+
+                    except (json.JSONDecodeError, ValueError) as e:
+                        await manager.send_personal_message({
+                            "type": "error", 
+                            "message": f"Invalid message format: {str(e)}"
+                        }, websocket)
                         continue
 
-                except (json.JSONDecodeError, ValueError) as e:
-                    await websocket.send_json({
-                        "type": "error", 
-                        "message": f"Invalid message format: {str(e)}"
-                    })
-                    continue
+                    # Create message with validated role
+                    message_id = data_dict.get("messageId")
+                    message = await create_user_message(
+                        conversation_id=conversation_id,
+                        content=data_dict["content"],
+                        role=role,
+                        db=db
+                    )
 
-                # Create message with validated role
-                message = await create_user_message(
-                    conversation_id=conversation_id,
-                    content=data_dict["content"],
-                    role=role,
-                    db=db
-                )
+                    # Acknowledge receipt
+                    if message_id:
+                        await manager.send_personal_message({
+                            "type": "message_received",
+                            "messageId": message_id,
+                            "message": "Message received and stored"
+                        }, websocket)
 
-                if message.role == "user":
-                    try:
-                        await handle_websocket_response(conversation_id, db, websocket)
-                    except Exception as e:
-                        logger.error(f"Error handling websocket response: {str(e)}")
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": f"Error generating response: {str(e)}"
-                        })
+                    if message.role == "user":
+                        try:
+                            # Get conversation history
+                            msg_dicts = await get_conversation_messages(conversation_id, db, include_system_prompt=True)
+                            
+                            # Generate AI response
+                            assistant_msg = await generate_ai_response(
+                                conversation_id=conversation_id,
+                                messages=msg_dicts,
+                                model_id=conversation.model_id,
+                                image_data=data_dict.get("image_data"),
+                                vision_detail=data_dict.get("vision_detail", "auto"),
+                                enable_thinking=data_dict.get("enable_thinking", False),
+                                thinking_budget=data_dict.get("thinking_budget"),
+                                db=db
+                            )
+                            
+                            if assistant_msg:
+                                # Get metadata from the message
+                                metadata = assistant_msg.get_metadata_dict() if hasattr(assistant_msg, 'get_metadata_dict') else {}
+                                
+                                # Prepare response
+                                response_data = {
+                                    "type": "message",
+                                    "role": "assistant",
+                                    "content": assistant_msg.content,
+                                    "message": assistant_msg.content,
+                                    "timestamp": assistant_msg.created_at.isoformat()
+                                }
+                                
+                                # Add thinking if available
+                                if metadata:
+                                    if "thinking" in metadata:
+                                        response_data["thinking"] = metadata["thinking"]
+                                    if "redacted_thinking" in metadata:
+                                        response_data["redacted_thinking"] = metadata["redacted_thinking"]
+                                    if "model" in metadata:
+                                        response_data["model"] = metadata["model"]
+                                    response_data["metadata"] = metadata
+                                
+                                # Add message ID if present in original request
+                                if message_id:
+                                    response_data["messageId"] = message_id
+                                
+                                # Send response to client
+                                await manager.send_personal_message(response_data, websocket)
+                                
+                                # Update token usage
+                                token_estimate = len(assistant_msg.content) // 4
+                                await update_project_token_usage(conversation, token_estimate, db)
+                            else:
+                                await manager.send_personal_message({
+                                    "type": "error",
+                                    "messageId": message_id,
+                                    "message": "Failed to generate AI response"
+                                }, websocket)
+                        except Exception as e:
+                            logger.error(f"Error handling WebSocket response: {str(e)}")
+                            await manager.send_personal_message({
+                                "type": "error",
+                                "messageId": message_id,
+                                "message": f"Error generating response: {str(e)}"
+                            }, websocket)
 
-        except WebSocketDisconnect:
-            logger.info("WebSocket disconnected")
-        except HTTPException as he:
-            logger.error(f"WebSocket HTTP error: {he.detail}")
-            await websocket.close(code=he.status_code)
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for user {user.id}, conversation {conversation_id}")
+            finally:
+                # Always disconnect properly
+                await manager.disconnect(websocket)
+
         except Exception as e:
-            logger.error(f"WebSocket error: {str(e)}")
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            logger.error(f"Unhandled WebSocket error: {str(e)}")
+            try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            except Exception:
+                pass
         finally:
             await db.close()
 
