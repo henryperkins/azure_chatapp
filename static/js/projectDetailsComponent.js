@@ -435,45 +435,83 @@ class ProjectDetailsComponent {
     }
   }
   
-  confirmDeleteConversation(conversation) {
-    ModalManagerClass.confirmAction({
-      title: "Delete Conversation",
-      message: `Are you sure you want to delete "${conversation.title || 'this conversation'}"?`,
-      confirmText: "Delete",
-      cancelText: "Cancel",
-      confirmClass: "bg-red-600",
-      onConfirm: () => {
-        const projectId = this.state.currentProject?.id;
-        if (!projectId) {
-          uiUtilsInstance.showNotification("Could not determine current project", "error");
-          return;
-        }
+  async confirmDeleteConversation(conversation) {
+    try {
+      const confirmed = await ModalManagerClass.confirmAction({
+        title: "Delete Conversation",
+        message: `Delete "${conversation.title || 'this conversation'}" and all its messages?`,
+        confirmText: "Delete Forever",
+        cancelText: "Cancel",
+        confirmClass: "bg-red-600",
+        destructive: true
+      });
+      
+      if (!confirmed) return;
 
-        window.projectManager.deleteProjectConversation(projectId, conversation.id)
-          .then(() => {
-            return Promise.all([
-              window.projectManager.loadProjectStats(projectId),
-              window.projectManager.loadProjectConversations(projectId)
-            ]);
-          })
-          .then(() => {
-            uiUtilsInstance.showNotification("Conversation deleted", "success");
-          })
-          .catch(err => {
-            console.error("Delete error:", {
-              error: err,
-              projectId: projectId,
-              conversationId: conversation.id
-            });
-            uiUtilsInstance.showNotification(
-              err?.response?.status === 404 
-                ? "Conversation not found" 
-                : "Failed to delete conversation. Check console for details.",
-              "error"
-            );
-          });
+      const projectId = this.state.currentProject?.id;
+      if (!projectId) {
+        throw new Error("No active project selected");
       }
-    });
+
+      // Show loading state
+      const deleteBtn = document.activeElement;
+      const originalText = deleteBtn.innerHTML;
+      deleteBtn.innerHTML = `<span class="animate-spin">⏳</span> Deleting...`;
+      deleteBtn.disabled = true;
+
+      try {
+        await window.projectManager.deleteProjectConversation(projectId, conversation.id);
+        
+        // Refresh data
+        await Promise.all([
+          window.projectManager.loadProjectStats(projectId),
+          window.projectManager.loadProjectConversations(projectId)
+        ]);
+
+        // Show success with undo option for 5 seconds
+        const notification = uiUtilsInstance.showNotification(
+          "Conversation deleted",
+          "success",
+          {
+            action: "Undo",
+            onAction: async () => {
+              try {
+                await window.apiRequest(
+                  `/api/projects/${projectId}/conversations/${conversation.id}/restore`,
+                  "POST"
+                );
+                await Promise.all([
+                  window.projectManager.loadProjectStats(projectId),
+                  window.projectManager.loadProjectConversations(projectId)
+                ]);
+              } catch (err) {
+                console.error("Restore failed:", err);
+              }
+            },
+            timeout: 5000
+          }
+        );
+
+      } finally {
+        // Reset button state
+        deleteBtn.innerHTML = originalText;
+        deleteBtn.disabled = false;
+      }
+
+    } catch (error) {
+      console.error("Delete failed:", error);
+      
+      let errorMsg = "Failed to delete conversation";
+      if (error?.response?.status === 403) {
+        errorMsg = "You don't have permission to delete this";
+      } else if (error?.response?.status === 404) {
+        errorMsg = "Conversation not found - may already be deleted";
+      } else if (error.message.includes("No active project")) {
+        errorMsg = "No project selected";
+      }
+
+      uiUtilsInstance.showNotification(errorMsg, "error");
+    }
   }
 
   switchTab(tabName) {
