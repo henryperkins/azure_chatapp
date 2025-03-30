@@ -72,7 +72,9 @@ class Conversation(Base):
             kb = await db.get(KnowledgeBase, project.knowledge_base_id)
             if not kb or not kb.is_active:
                 raise ValueError("Project's knowledge base is not active")
-            if not kb.metadata or not kb.metadata.get('index_stats', {}).get('chunk_count', 0) > 0:
+            
+            # Change this section - fix metadata access
+            if not kb.metadata or not kb.metadata.index_stats or kb.metadata.index_stats.chunk_count <= 0:
                 raise ValueError("Knowledge base has no indexed content")
 
     @validates('use_knowledge_base')
