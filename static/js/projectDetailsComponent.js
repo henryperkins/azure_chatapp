@@ -1,11 +1,12 @@
-// Use global utility classes
-const UIUtils = window.UIUtils;
-const AnimationUtils = window.AnimationUtils;
-const ModalManager = window.ModalManager;
+(function() {
+  // Use global utility classes with var instead of const
+  var UIUtils = window.UIUtils;
+  var AnimationUtils = window.AnimationUtils;
+  var ModalManager = window.ModalManager;
 
-/**
- * Project Details Component - Handles the project details view
- */
+  /**
+   * Project Details Component - Handles the project details view
+   */
 class ProjectDetailsComponent {
   constructor(options = {}) {
     this.onBack = options.onBack;
@@ -711,5 +712,6 @@ class ProjectDetailsComponent {
   }
 }
 
-// Export the ProjectDetailsComponent as default
-module.exports = ProjectDetailsComponent;
+  // Export to window instead of module.exports
+  window.ProjectDetailsComponent = ProjectDetailsComponent;
+})();
