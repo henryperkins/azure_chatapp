@@ -34,12 +34,21 @@ async def augment_with_knowledge(
     Returns:
         List of message dicts with injected knowledge context
     """
-    conversation = await db.get(Conversation, conversation_id)
-    if not conversation or not conversation.project_id:
-        return []  # No KB for standalone conversations
+    from sqlalchemy.orm import joinedload
+    from services import knowledgebase_service
 
-    if not conversation.use_knowledge_base:
-        return []
+    try:
+        # Load conversation with project relationship
+        conversation = await db.get(Conversation, conversation_id, [joinedload(Conversation.project)])
+        if not conversation or not conversation.project_id:
+            return []  # No KB for standalone conversations
+
+        if not conversation.use_knowledge_base:
+            return []
+
+        # Verify project has an active knowledge base
+        if not conversation.project.knowledge_base_id:
+            return []
 
     # Get project ID from conversation
     if not conversation.project_id:
