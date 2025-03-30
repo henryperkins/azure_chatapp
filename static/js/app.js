@@ -879,14 +879,3 @@ window.apiRequest = apiRequest;
 // Expose functions directly on window for backward compatibility
 window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
-
-// CommonJS exports
-module.exports = {
-  apiRequest,
-  showNotification: Notifications,
-  loadSidebarProjects,
-  searchSidebarProjects,
-  loadConversationList,
-  renderConversationList,
-  initialize: initializeApplication
-};

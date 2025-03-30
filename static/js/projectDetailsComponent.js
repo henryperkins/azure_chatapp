@@ -1,18 +1,7 @@
-// Import shared utility classes
-const { UIUtils, AnimationUtils, ModalManager } = require('./projectDashboardUtils');
-
-// Create instances of utility classes
-const uiUtilsInstance = new UIUtils();
-const animationUtilsInstance = new AnimationUtils();
-
-// Maintain global references for backward compatibility
-if (typeof window !== 'undefined') {
-  window.UIUtils = window.UIUtils || uiUtilsInstance;
-  window.AnimationUtils = window.AnimationUtils || animationUtilsInstance;
-}
-
-console.log('UIUtils instance created:', !!uiUtilsInstance?.createElement);
-console.log('AnimationUtils instance created:', !!animationUtilsInstance?.animateProgress);
+// Use global utility classes
+const UIUtils = window.UIUtils;
+const AnimationUtils = window.AnimationUtils;
+const ModalManager = window.ModalManager;
 
 /**
  * Project Details Component - Handles the project details view
