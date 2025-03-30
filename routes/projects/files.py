@@ -122,7 +122,7 @@ async def upload_project_file(
             logger.error("No file or filename provided")
             raise HTTPException(status_code=400, detail="No file provided")
         
-        project = await validate_resource_access(
+        await validate_resource_access(
             project_id,
             Project,
             current_user,
@@ -132,7 +132,7 @@ async def upload_project_file(
         
         # Validate file via centralized validator
         try:
-            file_info = FileValidator.validate_upload_file(file)
+            _ = await FileValidator.validate_upload_file(file)
         except ValueError as e:
             logger.error(f"File validation failed: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))

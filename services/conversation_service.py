@@ -181,7 +181,7 @@ async def delete_conversation(
     await save_model(db, conv)
     
     logger.info(f"Conversation {conversation_id} soft-deleted by user {user_id}")
-    return conv.id
+    return UUID(str(conv.id))
 
 @handle_service_errors("Failed to list project conversations")
 async def list_project_conversations(

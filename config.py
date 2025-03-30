@@ -72,4 +72,5 @@ class Settings:
     # Migration control
     ALWAYS_APPLY_MIGRATIONS = os.getenv("ALWAYS_APPLY_MIGRATIONS", "false").lower() == "true"
 
+
 settings = Settings()

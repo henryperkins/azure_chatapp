@@ -1,16 +1,35 @@
-const ProjectListComponent = window.ProjectListComponent;
-const ProjectDetailsComponent = window.ProjectDetailsComponent;
-const UIUtils = window.UIUtils;
-const ModalManager = window.ModalManager;
-
 /**
  * Project Dashboard - Main controller class
+ * Manages the overall dashboard UI and interactions between components
  */
 class ProjectDashboard {
+  /**
+   * Initialize the dashboard controller
+   */
   constructor() {
-    // Create a proper notification handler without relying on external dependencies
+    /* ===========================
+       STATE MANAGEMENT
+       =========================== */
+    this.components = {};
+    this.state = {
+      currentView: null, // 'list' or 'details'
+      currentProject: null
+    };
+    this.initAttempts = 0;
+    this.MAX_INIT_RETRIES = 5;
+    
+    /* ===========================
+       UTILITY DEPENDENCIES
+       =========================== */
+    this.modalManager = typeof window.ModalManager === 'function' 
+      ? new window.ModalManager() 
+      : window.modalManager;
+    
+    // Create a proper notification handler
     this.showNotification = (message, type = 'info') => {
-      if (window.UIUtils?.showNotification) {
+      if (window.showNotification) {
+        window.showNotification(message, type);
+      } else if (window.UIUtils?.showNotification) {
         window.UIUtils.showNotification(message, type);
       } else if (window.Notifications) {
         if (type === 'error') window.Notifications.apiError(message);
@@ -20,32 +39,13 @@ class ProjectDashboard {
         console.log(`[${type.toUpperCase()}] ${message}`);
       }
     };
-
-    // Check for ModalManager after setting up notifications
-    if (!window.ModalManager) {
-      // Create a minimal ModalManager if not available
-      console.warn('ModalManager dependency not loaded, creating minimal fallback');
-      window.ModalManager = {
-        show: () => console.log('Modal show called (fallback)'),
-        hide: () => console.log('Modal hide called (fallback)'),
-        confirmAction: (config) => Promise.resolve(confirm(config.message || 'Confirm?')),
-        isAvailable: () => false
-      };
-    }
-
-    this.components = {};
-    this.state = {
-      currentView: null, // 'list' or 'details'
-      currentProject: null
-    };
-    this.modalManager = typeof window.ModalManager === 'function' ?
-      new window.ModalManager() : window.ModalManager;
-    this.initAttempts = 0;
-    this.MAX_INIT_RETRIES = 5;
   }
 
   /**
    * Initialize the dashboard with enhanced error handling and retry logic
+   * @param {number} maxRetries - Maximum number of retry attempts
+   * @param {number} retryDelay - Delay between retries in ms
+   * @returns {Promise<boolean>} True if initialization succeeded
    */
   async init(maxRetries = 3, retryDelay = 300) {
     console.log('Initializing Project Dashboard...');
@@ -56,6 +56,30 @@ class ProjectDashboard {
         this.hideInitializationProgress();
         this._handleCriticalError(new Error(`Max initialization attempts (${this.MAX_INIT_RETRIES}) reached`));
         return false;
+      }
+
+      // Wait for dashboard utils to be ready
+      if (!window.dashboardUtilsReady) {
+        this.showInitializationProgress("Waiting for dashboard utilities...");
+        console.log('Dashboard utilities not ready, waiting...');
+        
+        // Wait for dashboardUtilsReady event
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Timeout waiting for dashboard utilities'));
+          }, 2000);
+          
+          const readyHandler = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          
+          if (window.dashboardUtilsReady) {
+            readyHandler();
+          } else {
+            document.addEventListener('dashboardUtilsReady', readyHandler, { once: true });
+          }
+        });
       }
 
       // Check for required global dependencies
@@ -156,6 +180,318 @@ class ProjectDashboard {
     }
   }
 
+  /* ===========================
+     VIEW MANAGEMENT
+     =========================== */
+  
+  /**
+   * Show the project list view
+   */
+  showProjectList() {
+    this.state.currentView = 'list';
+    this.components.projectList.show();
+    this.components.projectDetails.hide();
+    window.history.pushState({}, "", window.location.pathname);
+    this.loadProjects();
+  }
+
+  /**
+   * Show project details view for a specific project
+   * @param {string} projectId - Project ID to show
+   */
+  async showProjectDetails(projectId) {
+    this.state.currentView = 'details';
+    this.components.projectList.hide();
+    this.components.projectDetails.show();
+    window.history.pushState({}, "", `?project=${projectId}`);
+    
+    try {
+      await window.projectManager.loadProjectDetails(projectId);
+    } catch (error) {
+      console.error("Failed to load project details:", error);
+      this.showNotification("Failed to load project", "error");
+      this.showProjectList();
+    }
+  }
+
+  /**
+   * Process URL parameters to determine initial view
+   */
+  processUrlParams() {
+    // Only process project params if we're on the projects page
+    if (!window.location.pathname.includes('/projects')) {
+      return;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const projectId = urlParams.get("project");
+    
+    if (projectId) {
+      this.showProjectDetails(projectId);
+    } else {
+      this.showProjectList();
+    }
+  }
+
+  /**
+   * Load projects with optional filter
+   * @param {string} filter - Filter type ('all', 'pinned', 'archived')
+   * @returns {Promise} Promise that resolves with loaded projects
+   */
+  async loadProjects(filter = 'all') {
+    try {
+      if (!window.projectManager) {
+        console.error('projectManager not available on window');
+        throw new Error('projectManager not initialized');
+      }
+      
+      console.log('[DEBUG] Loading projects with filter:', filter);
+      const response = await window.projectManager.loadProjects(filter);
+      console.log('[DEBUG] Projects loaded - response:', response);
+      return response;
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+      document.dispatchEvent(new CustomEvent("projectsLoaded", {
+        detail: {
+          error: true,
+          message: error.message
+        }
+      }));
+      throw error;
+    }
+  }
+
+  /* ===========================
+     EVENT HANDLERS
+     =========================== */
+  
+  /**
+   * Handle a project being selected from the list
+   * @param {string} projectId - Selected project ID
+   */
+  handleViewProject(projectId) {
+    this.showProjectDetails(projectId);
+  }
+
+  /**
+   * Handle back button to return to project list
+   */
+  handleBackToList() {
+    this.showProjectList();
+  }
+  
+  /**
+   * Handle project form submit event
+   * @param {Event} e - Form submit event
+   */
+  async handleProjectFormSubmit(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const projectId = form.querySelector("#projectIdInput").value;
+    const isEditing = !!projectId;
+    
+    const formData = {
+      name: form.querySelector("#projectNameInput").value.trim(),
+      description: form.querySelector("#projectDescInput").value.trim(),
+      goals: form.querySelector("#projectGoalsInput").value.trim(),
+      max_tokens: parseInt(form.querySelector("#projectMaxTokensInput").value, 10)
+    };
+
+    if (!formData.name) {
+      this.showNotification("Project name is required", "error");
+      return;
+    }
+
+    try {
+      await window.projectManager.createOrUpdateProject(projectId, formData);
+      
+      // Use our consistent notification method
+      this.showNotification(
+        isEditing ? "Project updated" : "Project created",
+        "success"
+      );
+      
+      this.modalManager.hide("project");
+      this.loadProjects();
+    } catch (error) {
+      console.error("Error saving project:", error);
+      this.showNotification("Failed to save project", "error");
+    }
+  }
+
+  /**
+   * Handle projects loaded event
+   * @param {CustomEvent} event - Projects loaded event
+   */
+  handleProjectsLoaded(event) {
+    console.log('[DEBUG] Handling projectsLoaded event with detail:', event.detail);
+    try {
+      const { data } = event.detail;
+      let projects = [];
+      let originalCount = 0;
+      let filter = 'all';
+      let hasError = false;
+
+      // Standard response format from backend
+      if (data?.projects) {
+        projects = data.projects;
+        originalCount = data.count || projects.length;
+        filter = data.filter?.type || 'all';
+      } 
+      // Fallback for direct array
+      else if (Array.isArray(event.detail)) {
+        projects = event.detail;
+        originalCount = projects.length;
+      }
+
+      hasError = event.detail.error || false;
+      console.log('[DEBUG] Calling renderProjects with:', projects.length, 'projects');
+      this.components.projectList.renderProjects(projects);
+
+      // Update empty state message
+      const noProjectsMsg = document.getElementById('noProjectsMessage');
+      if (noProjectsMsg) {
+        noProjectsMsg.classList.toggle('hidden', projects.length > 0 || hasError);
+        
+        if (hasError) {
+          noProjectsMsg.textContent = "Error loading projects";
+          noProjectsMsg.classList.add('text-red-600');
+        } else if (projects.length === 0 && originalCount > 0) {
+          noProjectsMsg.textContent = `No ${filter} projects found`;
+          noProjectsMsg.classList.remove('text-red-600');
+        } else if (projects.length === 0) {
+          noProjectsMsg.textContent = `No ${filter} projects found`;
+          noProjectsMsg.classList.remove('text-red-600');
+        }
+      }
+    } catch (error) {
+      console.error("Error handling projects:", error);
+    }
+  }
+
+  /**
+   * Handle project loaded event
+   * @param {CustomEvent} event - Project loaded event
+   */
+  handleProjectLoaded(event) {
+    const project = event.detail;
+    this.state.currentProject = project;
+    this.components.projectDetails.renderProject(project);
+  }
+
+  /**
+   * Handle project stats loaded event
+   * @param {CustomEvent} event - Project stats loaded event
+   */
+  handleProjectStatsLoaded(event) {
+    const stats = event.detail;
+    this.components.projectDetails.renderStats(stats);
+    
+    // Pass knowledge base info from stats to the KB component
+    if (stats && stats.knowledge_base) {
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(stats.knowledge_base);
+    } else {
+      // Render KB as inactive if no info is present in stats
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(null);
+    }
+  }
+
+  /**
+   * Handle files loaded event
+   * @param {CustomEvent} event - Files loaded event
+   */
+  handleFilesLoaded(event) {
+    this.components.projectDetails.renderFiles(event.detail.files);
+  }
+
+  /**
+   * Handle conversations loaded event
+   * @param {CustomEvent} event - Conversations loaded event
+   */
+  handleConversationsLoaded(event) {
+    let conversations = [];
+    
+    // Normalize different response formats
+    if (Array.isArray(event.detail)) {
+      conversations = event.detail;
+    } else if (event.detail?.conversations) {
+      conversations = event.detail.conversations;
+    } else if (event.detail?.data?.conversations) {
+      conversations = event.detail.data.conversations;
+    }
+    
+    this.components.projectDetails.renderConversations(conversations);
+    
+    // Refresh stats when conversations are loaded
+    if (this.state.currentProject?.id) {
+      window.projectManager.loadProjectStats(this.state.currentProject.id);
+    }
+  }
+
+  /**
+   * Handle artifacts loaded event
+   * @param {CustomEvent} event - Artifacts loaded event
+   */
+  handleArtifactsLoaded(event) {
+    this.components.projectDetails.renderArtifacts?.(event.detail.artifacts);
+  }
+
+  /* ===========================
+     PRIVATE HELPER METHODS
+     =========================== */
+  
+  /**
+   * Check if document is ready
+   * @private
+   * @returns {boolean} True if document is ready
+   */
+  _isDocumentReady() {
+    return document.readyState === 'complete' ||
+           document.readyState === 'interactive';
+  }
+  
+  /**
+   * Show initialization progress indicator
+   * @private
+   * @param {string} message - Progress message
+   */
+  showInitializationProgress(message) {
+    // Create or update progress indicator
+    let progressEl = document.getElementById('dashboardInitProgress');
+    
+    if (!progressEl) {
+      progressEl = document.createElement('div');
+      progressEl.id = 'dashboardInitProgress';
+      progressEl.className = 'fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded shadow-md z-50 flex items-center';
+      document.body.appendChild(progressEl);
+    }
+    
+    progressEl.innerHTML = `
+      <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>${message || 'Initializing dashboard...'}</span>
+    `;
+  }
+  
+  /**
+   * Hide initialization progress indicator
+   * @private
+   */
+  hideInitializationProgress() {
+    const progressEl = document.getElementById('dashboardInitProgress');
+    if (progressEl) {
+      progressEl.remove();
+    }
+  }
+  
+  /**
+   * Handle critical initialization error
+   * @private
+   * @param {Error} error - The error that occurred
+   */
   _handleCriticalError(error) {
     console.error('💥 FATAL Init Failure:', error);
     if (this.showNotification) {
@@ -193,38 +529,10 @@ class ProjectDashboard {
     }
   }
 
-  _isDocumentReady() {
-    return document.readyState === 'complete' ||
-           document.readyState === 'interactive';
-  }
-  
-  showInitializationProgress(message) {
-    // Create or update progress indicator
-    let progressEl = document.getElementById('dashboardInitProgress');
-    
-    if (!progressEl) {
-      progressEl = document.createElement('div');
-      progressEl.id = 'dashboardInitProgress';
-      progressEl.className = 'fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded shadow-md z-50 flex items-center';
-      document.body.appendChild(progressEl);
-    }
-    
-    progressEl.innerHTML = `
-      <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-      <span>${message || 'Initializing dashboard...'}</span>
-    `;
-  }
-  
-  hideInitializationProgress() {
-    const progressEl = document.getElementById('dashboardInitProgress');
-    if (progressEl) {
-      progressEl.remove();
-    }
-  }
-  
+  /**
+   * Ensure fallback components are available if real ones aren't loaded
+   * @private
+   */
   ensureFallbackComponents() {
     // Create fallback components if needed
     if (typeof window.ProjectListComponent !== 'function') {
@@ -292,6 +600,10 @@ class ProjectDashboard {
     }
   }
 
+  /**
+   * Complete dashboard initialization
+   * @private
+   */
   async _completeInitialization() {
     // Verify required dependencies and route
     if (!window.projectManager) {
@@ -346,19 +658,9 @@ class ProjectDashboard {
       console.warn(`Missing dependencies detected: ${missingDeps.join(', ')}. Will use fallbacks.`);
       this.ensureFallbackComponents();
     }
-
-    // Initialize utilities - ensure it's a constructor
-    if (typeof UIUtils === 'function') {
-      this.uiUtils = new UIUtils();
-    } else {
-      // Fallback to global instance or simple object
-      this.uiUtils = window.uiUtilsInstance || {
-        showNotification: (msg) => console.log(msg)
-      };
-    }
     
     try {
-      // Create component instances with constructor safety checks
+      // Create component instances
       this.components = {};
 
       // ProjectListComponent
@@ -381,23 +683,15 @@ class ProjectDashboard {
       }
 
       // KnowledgeBaseComponent - treat as optional with fallback
-      try {
-        if (typeof window.KnowledgeBaseComponent === 'function') {
-          this.components.knowledgeBase = new window.KnowledgeBaseComponent();
-        } else {
-          console.warn("Using mock KnowledgeBaseComponent");
-          // Create a simple mock that implements the required interface
-          this.components.knowledgeBase = {
-            renderKnowledgeBaseInfo: function(kb) {
-              console.log("Mock KnowledgeBaseComponent.renderKnowledgeBaseInfo called", kb);
-            }
-          };
-        }
-      } catch (kbError) {
-        console.warn("KnowledgeBaseComponent failed to initialize:", kbError);
-        // Create minimal mock object
+      if (typeof window.KnowledgeBaseComponent === 'function') {
+        this.components.knowledgeBase = new window.KnowledgeBaseComponent();
+      } else {
+        console.warn("Using mock KnowledgeBaseComponent");
+        // Create a simple mock that implements the required interface
         this.components.knowledgeBase = {
-          renderKnowledgeBaseInfo: function() {}
+          renderKnowledgeBaseInfo: function(kb) {
+            console.log("Mock KnowledgeBaseComponent.renderKnowledgeBaseInfo called", kb);
+          }
         };
       }
 
@@ -443,35 +737,12 @@ class ProjectDashboard {
   }
 
   /**
-   * Process URL parameters to determine initial view
-   */
-  processUrlParams() {
-    // Only process project params if we're on the projects page
-    if (!window.location.pathname.includes('/projects')) {
-      return;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectId = urlParams.get("project");
-    
-    if (projectId) {
-      this.showProjectDetails(projectId);
-    } else {
-      this.showProjectList();
-    }
-  }
-
-  /**
    * Register all event listeners
    */
   registerEventListeners() {
     // Data events
-    console.log('[DEBUG] Registering projectsLoaded listener');
-    document.addEventListener("projectsLoaded", (event) => {
-      console.log('[DEBUG] Received projectsLoaded event with:',
-        event.detail?.projects?.length || 0, 'projects');
-      this.handleProjectsLoaded(event);
-    });
+    console.log('[DEBUG] Registering event listeners');
+    document.addEventListener("projectsLoaded", this.handleProjectsLoaded.bind(this));
     document.addEventListener("projectLoaded", this.handleProjectLoaded.bind(this));
     document.addEventListener("projectStatsLoaded", this.handleProjectStatsLoaded.bind(this));
     document.addEventListener("projectFilesLoaded", this.handleFilesLoaded.bind(this));
@@ -513,14 +784,31 @@ class ProjectDashboard {
             // Handle knowledge base configuration error specifically
             if (error === "Knowledge base not configured") {
               // Provide a more helpful message to guide the user
-              window.uiUtilsInstance.showNotification(
+              window.showNotification(
                 "You need to set up a knowledge base before uploading files. Click 'Setup KB' in the project details.",
                 "warning",
-                { action: "Setup KB", onAction: () => window.modalManager.show("knowledge") }
+                {
+                  action: "Setup KB",
+                  onAction: () => {
+                    if (window.modalManager && typeof window.modalManager.show === 'function') {
+                      console.log('[DEBUG] Using modal manager to show knowledge base modal');
+                      window.modalManager.show("knowledge");
+                    } else {
+                      console.log('[DEBUG] Modal manager not available, direct DOM manipulation');
+                      const modal = document.getElementById('knowledgeBaseSettingsModal');
+                      if (modal) {
+                        modal.classList.remove('hidden');
+                        modal.classList.add('confirm-modal');
+                      } else {
+                        console.error('[ERROR] Could not find knowledge base settings modal');
+                      }
+                    }
+                  }
+                }
               );
             } else {
               console.error("File upload failed:", error);
-              window.uiUtilsInstance.showNotification("File upload failed: " + error, "error");
+              window.showNotification("File upload failed: " + error, "error");
             }
           });
       }
@@ -538,249 +826,15 @@ class ProjectDashboard {
       }
     });
   }
-
-  /**
-   * View management methods
-   */
-  showProjectList() {
-    this.state.currentView = 'list';
-    this.components.projectList.show();
-    this.components.projectDetails.hide();
-    window.history.pushState({}, "", window.location.pathname);
-    this.loadProjects();
-  }
-
-  async showProjectDetails(projectId) {
-    this.state.currentView = 'details';
-    this.components.projectList.hide();
-    this.components.projectDetails.show();
-    window.history.pushState({}, "", `?project=${projectId}`);
-    
-    try {
-      await window.projectManager.loadProjectDetails(projectId);
-    } catch (error) {
-      console.error("Failed to load project details:", error);
-      this.showNotification("Failed to load project", "error");
-      this.showProjectList();
-    }
-  }
-
-  /**
-   * Data loading methods
-   */
-  showProjectCreateForm() {
-    this.modalManager.show('project');
-  }
-
-  async loadProjects(filter = 'all') {
-    try {
-      if (!window.projectManager) {
-        console.error('projectManager not available on window');
-        throw new Error('projectManager not initialized');
-      }
-      
-      console.log('[DEBUG] Loading projects with filter:', filter);
-      const response = await window.projectManager.loadProjects(filter);
-      console.log('[DEBUG] Projects loaded - response:', response);
-      console.log('[DEBUG] Projects data:', response?.data?.projects || response?.projects);
-      return response;
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-      document.dispatchEvent(new CustomEvent("projectsLoaded", {
-        detail: {
-          error: true,
-          message: error.message
-        }
-      }));
-      throw error;
-    }
-  }
-
-  /**
-   * Event handlers
-   */
-  handleProjectsLoaded(event) {
-    console.log('[DEBUG] Handling projectsLoaded event with detail:', event.detail);
-    try {
-      const { data } = event.detail;
-      let projects = [];
-      let originalCount = 0;
-      let filter = 'all';
-      let hasError = false;
-
-      // Standard response format from backend
-      if (data?.projects) {
-        projects = data.projects;
-        originalCount = data.count || projects.length;
-        filter = data.filter?.type || 'all';
-      } 
-      // Fallback for direct array
-      else if (Array.isArray(event.detail)) {
-        projects = event.detail;
-        originalCount = projects.length;
-      }
-
-      hasError = event.detail.error || false;
-      console.log('[DEBUG] Calling renderProjects with:', projects.length, 'projects');
-      this.components.projectList.renderProjects(projects);
-
-      // Update empty state message
-      const noProjectsMsg = document.getElementById('noProjectsMessage');
-      if (noProjectsMsg) {
-        noProjectsMsg.classList.toggle('hidden', projects.length > 0 || hasError);
-        
-        if (hasError) {
-          noProjectsMsg.textContent = "Error loading projects";
-          noProjectsMsg.classList.add('text-red-600');
-        } else if (projects.length === 0 && originalCount > 0) {
-          noProjectsMsg.textContent = `No ${filter} projects found`;
-          noProjectsMsg.classList.remove('text-red-600');
-        } else if (projects.length === 0) {
-          noProjectsMsg.textContent = `No ${filter} projects found`;
-          noProjectsMsg.classList.remove('text-red-600');
-        }
-      }
-    } catch (error) {
-      console.error("Error handling projects:", error);
-    }
-  }
-
-  handleProjectLoaded(event) {
-    const project = event.detail;
-    this.state.currentProject = project;
-    this.components.projectDetails.renderProject(project);
-    // Knowledge base info is loaded via stats, no separate load needed here.
-  }
-
-  handleProjectStatsLoaded(event) {
-    const stats = event.detail;
-    this.components.projectDetails.renderStats(stats);
-    
-    // Pass knowledge base info from stats to the KB component
-    if (stats && stats.knowledge_base) {
-      this.components.knowledgeBase.renderKnowledgeBaseInfo(stats.knowledge_base);
-    } else {
-      // Render KB as inactive if no info is present in stats
-      this.components.knowledgeBase.renderKnowledgeBaseInfo(null);
-    }
-  }
-
-  handleFilesLoaded(event) {
-    this.components.projectDetails.renderFiles(event.detail.files);
-  }
-
-  handleConversationsLoaded(event) {
-    let conversations = [];
-    
-    // Normalize different response formats
-    if (Array.isArray(event.detail)) {
-      conversations = event.detail;
-    } else if (event.detail?.conversations) {
-      conversations = event.detail.conversations;
-    } else if (event.detail?.data?.conversations) {
-      conversations = event.detail.data.conversations;
-    }
-    
-    this.components.projectDetails.renderConversations(conversations);
-    
-    // Refresh stats when conversations are loaded
-    if (this.state.currentProject?.id) {
-      window.projectManager.loadProjectStats(this.state.currentProject.id);
-    }
-  }
-
-  handleArtifactsLoaded(event) {
-    this.components.projectDetails.renderArtifacts?.(event.detail.artifacts);
-  }
-
-  handleViewProject(projectId) {
-    this.showProjectDetails(projectId);
-  }
-
-  handleBackToList() {
-    this.showProjectList();
-  }
-
-  async handleProjectFormSubmit(e) {
-    e.preventDefault();
-    
-    const form = e.target;
-    const projectId = form.querySelector("#projectIdInput").value;
-    const isEditing = !!projectId;
-    
-    const formData = {
-      name: form.querySelector("#projectNameInput").value.trim(),
-      description: form.querySelector("#projectDescInput").value.trim(),
-      goals: form.querySelector("#projectGoalsInput").value.trim(),
-      max_tokens: parseInt(form.querySelector("#projectMaxTokensInput").value, 10)
-    };
-
-    if (!formData.name) {
-      this.showNotification("Project name is required", "error");
-      return;
-    }
-
-    try {
-      await window.projectManager.createOrUpdateProject(projectId, formData);
-      
-      // Use our consistent notification method
-      this.showNotification(
-        isEditing ? "Project updated" : "Project created",
-        "success"
-      );
-      
-      this.modalManager.hide("project");
-      this.loadProjects();
-    } catch (error) {
-      console.error("Error saving project:", error);
-      this.showNotification("Failed to save project", "error");
-    }
-  }
 }
 
 /**
- * Initialize the project dashboard module
+ * Initialize the project dashboard
+ * @returns {Promise<ProjectDashboard>} Initialized dashboard
  */
 async function initProjectDashboard() {
   try {
-    // Check if required global dependencies exist or create fallbacks
-    if (!window.UIUtils) {
-      console.warn('UIUtils not available, creating minimal fallback');
-      window.UIUtils = {
-        showNotification: (message, type) => console.log(`[${type.toUpperCase()}] ${message}`),
-        isAvailable: () => false
-      };
-    }
-    
-    if (!window.ModalManager) {
-      console.warn('ModalManager not available, creating minimal fallback');
-      window.ModalManager = {
-        confirmAction: (config) => Promise.resolve(confirm(config.message || 'Confirm?')),
-        isAvailable: () => false
-      };
-    }
-    
-    // Create fallback components if needed
-    if (!window.ProjectListComponent) {
-      console.warn('ProjectListComponent not found, creating fallback');
-      window.ProjectListComponent = class {
-        constructor() { console.log('Using fallback ProjectListComponent'); }
-        show() {}
-        hide() {}
-        renderProjects() {}
-      };
-    }
-    
-    if (!window.ProjectDetailsComponent) {
-      console.warn('ProjectDetailsComponent not found, creating fallback');
-      window.ProjectDetailsComponent = class {
-        constructor() { console.log('Using fallback ProjectDetailsComponent'); }
-        show() {}
-        hide() {}
-        renderProject() {}
-      };
-    }
-    
+    console.log('Initializing project dashboard...');
     const dashboard = new ProjectDashboard();
     await dashboard.init();
     
@@ -790,63 +844,41 @@ async function initProjectDashboard() {
     return dashboard;
   } catch (error) {
     console.error("Failed to initialize project dashboard:", error);
-    if (window.UIUtils?.showNotification) {
-      window.UIUtils.showNotification("Failed to initialize dashboard", "error");
+    if (window.showNotification) {
+      window.showNotification("Failed to initialize dashboard", "error");
     }
     throw error;
   }
 }
 
-// Access globals with safety checks
-(function() {
-  // Initialize dashboard when document is ready
-  function initDashboard() {
-    try {
-      // Check for required utilities and components
-      if (!window.UIUtils) {
-        console.warn('UIUtils not found, waiting for initialization...');
-        setTimeout(initDashboard, 100);
-        return;
-      }
-      
-      if (!window.ProjectListComponent) {
-        console.warn('ProjectListComponent not found, waiting for initialization...');
-        setTimeout(initDashboard, 100);
-        return;
-      }
-      
-      // If components are available, initialize dashboard
-      if (window.initProjectDashboard) {
-        window.initProjectDashboard().catch(err => {
-          console.error('Dashboard initialization failed:', err);
-        });
-      }
-    } catch (err) {
-      console.error('Error in dashboard initialization:', err);
-    }
-  }
-  
-  // Start initialization process when DOM is loaded
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDashboard);
-  } else {
-    // DOM already loaded, run immediately
-    initDashboard();
-  }
-})();
-
-// Automatic initialization when loaded in browser context
-// Expose to window instead of module.exports
+// Automatic initialization in browser context
 if (typeof window !== 'undefined') {
   window.initProjectDashboard = initProjectDashboard;
   window.ProjectDashboard = ProjectDashboard;
-}
-if (typeof window !== 'undefined') {
-  // Wait for both DOM and projectManager to be ready
+  
+  // Wait for both DOM and dashboard utils to be ready before initializing
   const startInitialization = async () => {
     try {
       if (!window.projectManager) {
         throw new Error('projectManager not available');
+      }
+
+      if (!window.dashboardUtilsReady) {
+        console.log('Waiting for dashboard utils to be ready');
+        if (document.readyState === 'loading') {
+          await new Promise(resolve => document.addEventListener('dashboardUtilsReady', resolve, { once: true }));
+        } else if (!window.dashboardUtilsReady) {
+          await new Promise(resolve => {
+            const checkReady = () => {
+              if (window.dashboardUtilsReady) {
+                resolve();
+              } else {
+                setTimeout(checkReady, 50);
+              }
+            };
+            checkReady();
+          });
+        }
       }
 
       // Wait briefly for DOM to settle
@@ -873,27 +905,10 @@ if (typeof window !== 'undefined') {
     }
   };
 
-  // Start initialization when both DOM and dependencies are ready
-  const startWhenReady = () => {
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      startInitialization();
-    } else {
-      document.addEventListener('DOMContentLoaded', startInitialization);
-    }
-  };
-
-  // Check if projectManager is already available
-  if (window.projectManager) {
-    startWhenReady();
+  // Start initialization when the document is ready
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    startInitialization();
   } else {
-    // Wait for projectManager to be available
-    const waitForProjectManager = () => {
-      if (window.projectManager) {
-        startWhenReady();
-      } else {
-        setTimeout(waitForProjectManager, 100);
-      }
-    };
-    waitForProjectManager();
+    document.addEventListener('DOMContentLoaded', startInitialization);
   }
 }

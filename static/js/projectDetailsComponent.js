@@ -1,28 +1,523 @@
-(function() {
-  // Use global utility classes with var instead of const
-  var UIUtils = window.UIUtils;
-  var AnimationUtils = window.AnimationUtils;
-  var ModalManager = window.ModalManager || window.ModalManagerClass;
+/**
+ * projectDetailsComponent.js
+ * -----------------------
+ * Component for handling project details view and operations
+ */
 
+(function() {
   /**
    * Project Details Component - Handles the project details view
    */
-class ProjectDetailsComponent {
-  constructor(options = {}) {
-    this.onBack = options.onBack;
-    this.state = { currentProject: null };
-    this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
+  class ProjectDetailsComponent {
+    /**
+     * Initialize the project details component
+     * @param {Object} options - Configuration options
+     */
+    constructor(options = {}) {
+      /* ===========================
+         STATE MANAGEMENT
+         =========================== */
+      this.onBack = options.onBack;
+      this.state = { 
+        currentProject: null,
+        activeTab: 'files'
+      };
+      this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
 
-    // Add this event listener
-    document.addEventListener("projectConversationsLoaded", (e) => {
-      this.renderConversations(e.detail); // Use e.detail directly instead of e.detail.conversations
-    });
+      /* ===========================
+         ELEMENT REFERENCES
+         =========================== */
+      this.elements = {
+        container: document.getElementById("projectDetailsView"),
+        title: document.getElementById("projectTitle"),
+        description: document.getElementById("projectDescription"),
+        tokenUsage: document.getElementById("tokenUsage"),
+        maxTokens: document.getElementById("maxTokens"),
+        tokenPercentage: document.getElementById("tokenPercentage"),
+        tokenProgressBar: document.getElementById("tokenProgressBar"),
+        filesList: document.getElementById("projectFilesList"),
+        conversationsList: document.getElementById("projectConversationsList"),
+        artifactsList: document.getElementById("projectArtifactsList"),
+        uploadProgress: document.getElementById("filesUploadProgress"),
+        progressBar: document.getElementById("fileProgressBar"),
+        uploadStatus: document.getElementById("uploadStatus"),
+        pinBtn: document.getElementById("pinProjectBtn"),
+        backBtn: document.getElementById("backToProjectsBtn"),
+        dragZone: document.getElementById("dragDropZone")
+      };
+
+      console.log('ProjectDetailsComponent elements initialized');
+      
+      this._bindEvents();
+      this._setupDragDropHandlers();
+      
+      // Initialize chat interface only if available
+      this._initializeChatInterface();
+      
+      // Listen for conversation loaded events
+      document.addEventListener("projectConversationsLoaded", (e) => {
+        this.renderConversations(e.detail);
+      });
+    }
+
+    /* ===========================
+       PUBLIC METHODS
+       =========================== */
     
-    // Initialize chat interface only if available
-    if (typeof window.ChatInterface === 'function') {
-      if (!window.projectChatInterface) {
-        console.log('Initializing project chat interface');
-        try {
+    /**
+     * Show the project details view
+     */
+    show() {
+      window.uiUtilsInstance.toggleVisibility(this.elements.container, true);
+    }
+
+    /**
+     * Hide the project details view
+     */
+    hide() {
+      if (window.uiUtilsInstance?.toggleVisibility) {
+        window.uiUtilsInstance.toggleVisibility(this.elements.container, false);
+      } else {
+        // Fallback implementation
+        if (this.elements.container) {
+          this.elements.container.classList.add('hidden');
+        }
+      }
+    }
+
+    /**
+     * Render project information
+     * @param {Object} project - Project data to render
+     */
+    renderProject(project) {
+      this.state.currentProject = project;
+      
+      if (this.elements.title) {
+        this.elements.title.textContent = project.name;
+      }
+      if (this.elements.description) {
+        this.elements.description.textContent = project.description || "No description provided.";
+      }
+      
+      if (this.elements.pinBtn) {
+        const svg = this.elements.pinBtn.querySelector("svg");
+        if (svg) svg.setAttribute("fill", project.pinned ? "currentColor" : "none");
+        this.elements.pinBtn.classList.toggle("text-yellow-600", project.pinned);
+      }
+    }
+
+    /**
+     * Render project stats
+     * @param {Object} stats - Project stats data
+     */
+    renderStats(stats) {
+      if (this.elements.tokenUsage) {
+        this.elements.tokenUsage.textContent = window.uiUtilsInstance.formatNumber(stats.token_usage || 0);
+      }
+      if (this.elements.maxTokens) {
+        this.elements.maxTokens.textContent = window.uiUtilsInstance.formatNumber(stats.max_tokens || 0);
+      }
+      
+      const usage = stats.token_usage || 0;
+      const maxT = stats.max_tokens || 0;
+      const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
+      
+      if (this.elements.tokenPercentage) {
+        this.elements.tokenPercentage.textContent = `${pct}%`;
+      }
+      
+      if (this.elements.tokenProgressBar) {
+        this.elements.tokenProgressBar.style.width = "0%"; // Reset to ensure animation works
+        
+        // Add defensive check for animationUtilsInstance
+        if (window.animationUtilsInstance) {
+          window.animationUtilsInstance.animateProgress(
+            this.elements.tokenProgressBar,
+            0,
+            pct
+          );
+        } else {
+          // Fallback if animation utils not available
+          this.elements.tokenProgressBar.style.width = `${pct}%`;
+        }
+      }
+
+      // Update file, conversation and artifact counts
+      this._updateCounters(stats);
+    }
+
+    /**
+     * Render project files
+     * @param {Array} files - Project files to render
+     */
+    renderFiles(files) {
+      if (!this.elements.filesList) return;
+      
+      if (!files || files.length === 0) {
+        this.elements.filesList.innerHTML = `
+          <div class="text-gray-500 text-center py-8">No files uploaded yet.</div>
+        `;
+        return;
+      }
+      
+      this.elements.filesList.innerHTML = "";
+      
+      files.forEach(file => {
+        const item = window.uiUtilsInstance.createElement("div", {
+          className: "content-item"
+        });
+        
+        // Info section
+        const infoDiv = window.uiUtilsInstance.createElement("div", { className: "flex items-center" });
+        infoDiv.appendChild(window.uiUtilsInstance.createElement("span", {
+          className: "text-lg mr-2",
+          textContent: window.uiUtilsInstance.fileIcon(file.file_type)
+        }));
+        
+        const detailDiv = window.uiUtilsInstance.createElement("div", { className: "flex flex-col" });
+        detailDiv.appendChild(window.uiUtilsInstance.createElement("div", {
+          className: "font-medium",
+          textContent: file.filename
+        }));
+        detailDiv.appendChild(window.uiUtilsInstance.createElement("div", {
+          className: "text-xs text-gray-500",
+          textContent: `${window.uiUtilsInstance.formatBytes(file.file_size)} · ${window.uiUtilsInstance.formatDate(file.created_at)}`
+        }));
+        
+        infoDiv.appendChild(detailDiv);
+        item.appendChild(infoDiv);
+        
+        // Actions section
+        const actions = window.uiUtilsInstance.createElement("div", { className: "flex space-x-2" });
+        actions.appendChild(window.uiUtilsInstance.createElement("button", {
+          className: "text-red-600 hover:text-red-800",
+          innerHTML: `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
+                       a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
+                       a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          `,
+          onclick: () => this._confirmDeleteFile(file)
+        }));
+        
+        item.appendChild(actions);
+        this.elements.filesList.appendChild(item);
+      });
+    }
+
+    /**
+     * Render project conversations
+     * @param {Array} conversations - Project conversations to render
+     */
+    renderConversations(conversations) {
+      if (!this.elements.conversationsList) return;
+      
+      // Handle both raw array and event detail format
+      const convos = Array.isArray(conversations) ? conversations : [];
+      
+      if (!convos || convos.length === 0) {
+        this.elements.conversationsList.innerHTML = `
+          <div class="text-gray-500 text-center py-8">No conversations yet.</div>
+        `;
+        return;
+      }
+      
+      this.elements.conversationsList.innerHTML = "";
+      
+      conversations.forEach(conversation => {
+        this._renderConversationItem(conversation);
+      });
+    }
+    
+    /**
+     * Render project artifacts
+     * @param {Array} artifacts - Project artifacts to render
+     */
+    renderArtifacts(artifacts) {
+      if (!this.elements.artifactsList) return;
+      
+      if (!artifacts || artifacts.length === 0) {
+        this.elements.artifactsList.innerHTML = `
+          <div class="text-gray-500 text-center py-8">No artifacts created yet.</div>
+        `;
+        return;
+      }
+      
+      this.elements.artifactsList.innerHTML = "";
+      
+      artifacts.forEach(artifact => {
+        const item = window.uiUtilsInstance.createElement("div", {
+          className: "content-item"
+        });
+        
+        // Info section
+        const infoDiv = window.uiUtilsInstance.createElement("div", { className: "flex items-center" });
+        infoDiv.appendChild(window.uiUtilsInstance.createElement("span", {
+          className: "text-lg mr-2",
+          textContent: "📄"
+        }));
+        
+        const detailDiv = window.uiUtilsInstance.createElement("div", { className: "flex flex-col" });
+        detailDiv.appendChild(window.uiUtilsInstance.createElement("div", {
+          className: "font-medium",
+          textContent: artifact.title || "Untitled artifact"
+        }));
+        detailDiv.appendChild(window.uiUtilsInstance.createElement("div", {
+          className: "text-xs text-gray-500",
+          textContent: `${artifact.type || "Unknown type"} · ${window.uiUtilsInstance.formatDate(artifact.created_at)}`
+        }));
+        
+        infoDiv.appendChild(detailDiv);
+        item.appendChild(infoDiv);
+        
+        // Actions section
+        const actions = window.uiUtilsInstance.createElement("div", { className: "flex space-x-2" });
+        
+        // View button
+        actions.appendChild(window.uiUtilsInstance.createElement("button", {
+          className: "text-blue-600 hover:text-blue-800",
+          innerHTML: `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7
+                       -1.274 4.057-5.064 7-9.542 7
+                       -4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          `,
+          onclick: () => this._viewArtifact(artifact)
+        }));
+        
+        // Delete button
+        actions.appendChild(window.uiUtilsInstance.createElement("button", {
+          className: "text-red-600 hover:text-red-800",
+          innerHTML: `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
+                       a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
+                       a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          `,
+          onclick: () => this._confirmDeleteArtifact(artifact)
+        }));
+        
+        item.appendChild(actions);
+        this.elements.artifactsList.appendChild(item);
+      });
+    }
+    
+    /**
+     * Upload files to a project with enhanced KB handling
+     * @param {string} projectId - Project ID
+     * @param {FileList} files - Files to upload
+     * @returns {Promise} Promise that resolves when uploads complete
+     */
+    async uploadFiles(projectId, files) {
+      try {
+        // 1. Get current project and KB status
+        const project = window.projectManager?.currentProject;
+        let knowledgeBaseId = project?.knowledge_base_id;
+        let isKbActive = project?.knowledge_base?.is_active !== false;
+
+        // 2. New: Attempt to auto-create KB if missing
+        if (!knowledgeBaseId) {
+          try {
+            const newKb = await this._attemptAutoCreateKB(projectId);
+            if (newKb) {
+              knowledgeBaseId = newKb.id;
+              isKbActive = true;
+              window.showNotification("Created default knowledge base", "success");
+            }
+          } catch (kbErr) {
+            console.warn('KB auto-creation failed:', kbErr);
+          }
+        }
+
+        // 3. Enhanced KB check with options
+        if (!knowledgeBaseId || !isKbActive) {
+          return await this._handleMissingKB(projectId, files);
+        }
+
+        // 4. Proceed with normal upload flow
+        this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+        return this._processFiles(projectId, files);
+        
+      } catch (error) {
+        console.error('Upload failed:', error);
+        throw error;
+      }
+    }
+    /**
+     * Attempt to auto-create a default KB
+     * @private
+     */
+    async _attemptAutoCreateKB(projectId) {
+      try {
+        const defaultKb = {
+          name: 'Default Knowledge Base',
+          description: 'Automatically created for file uploads',
+          is_active: true
+        };
+        return await window.projectManager.createKnowledgeBase(projectId, defaultKb);
+      } catch (error) {
+        console.error('KB auto-creation failed:', error);
+        return null;
+      }
+    }
+
+    /**
+     * Handle missing KB scenario
+     * @private 
+     */
+    async _handleMissingKB(projectId, files) {
+      return new Promise((resolve, reject) => {
+        window.showNotification(
+          "Knowledge Base recommended for best results",
+          "warning",
+          {
+            action: "Create KB & Upload",
+            secondaryAction: "Upload Without KB",
+            onAction: async () => {
+              try {
+                const kb = await this._attemptAutoCreateKB(projectId);
+                if (kb) {
+                  await this._processFiles(projectId, files);
+                  resolve();
+                } else {
+                  reject(new Error("KB creation failed"));
+                }
+              } catch (error) {
+                reject(error);
+              }
+            },
+            onSecondaryAction: () => {
+              this._processFiles(projectId, files, {skipKb: true})
+                .then(resolve)
+                .catch(reject);
+            },
+            timeout: 15000
+          }
+        );
+      });
+    }
+    /**
+     * Switch between project detail tabs
+     * @param {string} tabName - Tab name to switch to
+     */
+    switchTab(tabName) {
+      document.querySelectorAll('.project-tab-content').forEach(tabContent => {
+        tabContent.classList.add('hidden');
+      });
+
+      const activeTab = document.getElementById(`${tabName}Tab`);
+      if (activeTab) activeTab.classList.remove('hidden');
+
+      document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
+        tabBtn.classList.remove('active');
+        tabBtn.setAttribute('aria-selected', 'false');
+      });
+
+      const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
+      if (activeTabBtn) {
+        activeTabBtn.classList.add('active');
+        activeTabBtn.setAttribute('aria-selected', 'true');
+      }
+      
+      this.state.activeTab = tabName;
+    }
+
+    /* ===========================
+       PRIVATE METHODS
+       =========================== */
+    
+    /**
+     * Initialize chat interface if available
+     * @private
+     */
+    _initializeChatInterface() {
+      if (typeof window.ChatInterface === 'function') {
+        if (!window.projectChatInterface) {
+          console.log('Initializing project chat interface');
+          try {
+            window.projectChatInterface = new window.ChatInterface({
+              containerSelector: '#projectChatUI',
+              messageContainerSelector: '#projectChatMessages',
+              inputSelector: '#projectChatInput',
+              sendButtonSelector: '#projectChatSendBtn'
+            });
+            window.projectChatInterface.initialize();
+          } catch (err) {
+            console.error('Failed to initialize chat interface:', err);
+          }
+        } else {
+          console.log('Project chat interface already exists');
+        }
+      } else {
+        console.warn('ChatInterface not available - chat functionality will be limited');
+      }
+    }
+
+    /**
+     * Bind all event listeners
+     * @private
+     */
+    _bindEvents() {
+      if (this.elements.backBtn) {
+        this.elements.backBtn.addEventListener("click", () => {
+          if (this.onBack) this.onBack();
+        });
+      }
+      
+      if (this.elements.pinBtn) {
+        this.elements.pinBtn.addEventListener("click", () => this._togglePin());
+      }
+
+      document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          const tabName = tabBtn.dataset.tab;
+          this.switchTab(tabName);
+        });
+      });
+      
+      // Minimize chat button
+      const minimizeChatBtn = document.getElementById('minimizeChatBtn');
+      if (minimizeChatBtn) {
+        minimizeChatBtn.addEventListener('click', () => {
+          const chatContainer = document.getElementById('projectChatContainer');
+          if (chatContainer) chatContainer.classList.add('hidden');
+        });
+      }
+
+      // New conversation button
+      const newConvoBtn = document.getElementById('newConversationBtn');
+      if (newConvoBtn) {
+        newConvoBtn.addEventListener('click', async (e) => this._handleNewConversation(e));
+      }
+    }
+    
+    /**
+     * Handle new conversation button click
+     * @private
+     * @param {Event} e - Click event
+     */
+    async _handleNewConversation(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const projectId = this.state.currentProject?.id;
+      if (!projectId) return;
+
+      try {
+        // Show the chat container
+        const chatContainer = document.getElementById('projectChatContainer');
+        if (chatContainer) chatContainer.classList.remove('hidden');
+
+        // Initialize or update chat interface with correct selectors
+        if (!window.projectChatInterface) {
           window.projectChatInterface = new window.ChatInterface({
             containerSelector: '#projectChatUI',
             messageContainerSelector: '#projectChatMessages',
@@ -30,196 +525,324 @@ class ProjectDetailsComponent {
             sendButtonSelector: '#projectChatSendBtn'
           });
           window.projectChatInterface.initialize();
-        } catch (err) {
-          console.error('Failed to initialize chat interface:', err);
         }
-      } else {
-        console.log('Project chat interface already exists');
-      }
-    } else {
-      console.warn('ChatInterface not available - chat functionality will be limited');
-    }
 
-    this.elements = {
-      container: document.getElementById("projectDetailsView"),
-      title: document.getElementById("projectTitle"),
-      description: document.getElementById("projectDescription"),
-      tokenUsage: document.getElementById("tokenUsage"),
-      maxTokens: document.getElementById("maxTokens"),
-      tokenPercentage: document.getElementById("tokenPercentage"),
-      tokenProgressBar: document.getElementById("tokenProgressBar"),
-      filesList: document.getElementById("projectFilesList"),
-      conversationsList: document.getElementById("projectConversationsList"),
-      artifactsList: document.getElementById("projectArtifactsList"),
-      uploadProgress: document.getElementById("filesUploadProgress"),
-      progressBar: document.getElementById("fileProgressBar"),
-      uploadStatus: document.getElementById("uploadStatus"),
-      pinBtn: document.getElementById("pinProjectBtn"),
-      backBtn: document.getElementById("backToProjectsBtn"),
-    };
+        // Create new conversation
+        const conversation = await window.projectChatInterface.createNewConversation();
+        
+        // Set target container and load conversation
+        if (window.projectChatInterface && typeof window.projectChatInterface.setTargetContainer === 'function') {
+          window.projectChatInterface.setTargetContainer('#projectChatMessages');
+          window.projectChatInterface.loadConversation(conversation.id);
+        }
 
-    console.log('ProjectDetailsComponent elements initialized');
-    
-    this.bindEvents();
-    this.setupDragDropHandlers();
-  }
+        // Update URL without reloading
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('chatId', conversation.id);
+        window.history.pushState({}, '', newUrl);
 
-  show() {
-    uiUtilsInstance.toggleVisibility(this.elements.container, true);
-  }
-
-  hide() {
-    if (UIUtils && uiUtilsInstance.toggleVisibility) {
-      uiUtilsInstance.toggleVisibility(this.elements.container, false);
-    } else {
-      // Fallback implementation
-      if (this.elements.container) {
-        this.elements.container.classList.add('hidden');
+        // Store project ID in localStorage for chat context
+        localStorage.setItem('selectedProjectId', projectId);
+      } catch (error) {
+        console.error('Error creating new conversation:', error);
+        window.showNotification('Failed to create conversation', 'error');
       }
     }
-  }
 
-  renderProject(project) {
-    this.state.currentProject = project;
-    
-    if (this.elements.title) {
-      this.elements.title.textContent = project.name;
-    }
-    if (this.elements.description) {
-      this.elements.description.textContent = project.description || "No description provided.";
-    }
-    
-    if (this.elements.pinBtn) {
-      const svg = this.elements.pinBtn.querySelector("svg");
-      if (svg) svg.setAttribute("fill", project.pinned ? "currentColor" : "none");
-      this.elements.pinBtn.classList.toggle("text-yellow-600", project.pinned);
-    }
-  }
-
-  renderStats(stats) {
-    if (this.elements.tokenUsage) {
-      this.elements.tokenUsage.textContent = uiUtilsInstance.formatNumber(stats.token_usage || 0);
-    }
-    if (this.elements.maxTokens) {
-      this.elements.maxTokens.textContent = uiUtilsInstance.formatNumber(stats.max_tokens || 0);
-    }
-    
-    const usage = stats.token_usage || 0;
-    const maxT = stats.max_tokens || 0;
-    const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
-    
-    if (this.elements.tokenPercentage) {
-      this.elements.tokenPercentage.textContent = `${pct}%`;
-    }
-    
-    if (this.elements.tokenProgressBar) {
-      this.elements.tokenProgressBar.style.width = "0%"; // Reset to ensure animation works
+    /**
+     * Setup drag and drop file upload handlers
+     * @private
+     */
+    _setupDragDropHandlers() {
+      const dragZone = this.elements.dragZone;
+      if (!dragZone) return;
       
-      // Add defensive check for animationUtilsInstance
-      if (window.animationUtilsInstance) {
-        window.animationUtilsInstance.animateProgress(
-          this.elements.tokenProgressBar,
-          0,
-          pct
-        );
-      } else {
-        // Fallback if animation utils not available
-        this.elements.tokenProgressBar.style.width = `${pct}%`;
-        console.warn("Animation utilities not available - using direct style");
-      }
-    }
-
-    // Update file, conversation and artifact counts
-    if (stats.file_count !== undefined) {
-      const fileCountEl = document.getElementById('fileCount');
-      if (fileCountEl) fileCountEl.textContent = uiUtilsInstance.formatNumber(stats.file_count);
-    }
-    
-    if (stats.conversation_count !== undefined) {
-      const convoCountEl = document.getElementById('conversationCount');
-      if (convoCountEl) convoCountEl.textContent = uiUtilsInstance.formatNumber(stats.conversation_count);
-    }
-    
-    if (stats.artifact_count !== undefined) {
-      const artifactCountEl = document.getElementById('artifactCount');
-      if (artifactCountEl) artifactCountEl.textContent = uiUtilsInstance.formatNumber(stats.artifact_count);
-    }
-  }
-
-  renderFiles(files) {
-    if (!this.elements.filesList) return;
-    
-    if (!files || files.length === 0) {
-      this.elements.filesList.innerHTML = `
-        <div class="text-gray-500 text-center py-8">No files uploaded yet.</div>
-      `;
-      return;
-    }
-    
-    this.elements.filesList.innerHTML = "";
-    
-    files.forEach(file => {
-      const item = uiUtilsInstance.createElement("div", {
-        className: "content-item"
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+        dragZone.addEventListener(event, e => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
       });
       
-      // Info section
-      const infoDiv = uiUtilsInstance.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(uiUtilsInstance.createElement("span", {
-        className: "text-lg mr-2",
-        textContent: uiUtilsInstance.fileIcon(file.file_type)
-      }));
+      ['dragenter', 'dragover'].forEach(event => {
+        dragZone.addEventListener(event, () => {
+          dragZone.classList.add('drag-zone-active');
+        });
+      });
       
-      const detailDiv = uiUtilsInstance.createElement("div", { className: "flex flex-col" });
-      detailDiv.appendChild(uiUtilsInstance.createElement("div", {
-        className: "font-medium",
-        textContent: file.filename
-      }));
-      detailDiv.appendChild(uiUtilsInstance.createElement("div", {
-        className: "text-xs text-gray-500",
-        textContent: `${uiUtilsInstance.formatBytes(file.file_size)} · ${uiUtilsInstance.formatDate(file.created_at)}`
-      }));
+      ['dragleave', 'drop'].forEach(event => {
+        dragZone.addEventListener(event, () => {
+          dragZone.classList.remove('drag-zone-active');
+        });
+      });
       
-      infoDiv.appendChild(detailDiv);
-      item.appendChild(infoDiv);
-      
-      // Actions section
-      const actions = uiUtilsInstance.createElement("div", { className: "flex space-x-2" });
-      actions.appendChild(uiUtilsInstance.createElement("button", {
-        className: "text-red-600 hover:text-red-800",
-        innerHTML: `
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
-                     a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
-                     a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        `,
-        onclick: () => this.confirmDeleteFile(file)
-      }));
-      
-      item.appendChild(actions);
-      this.elements.filesList.appendChild(item);
-    });
-  }
-
-  renderConversations(conversations) {
-    if (!this.elements.conversationsList) return;
-    
-    // Handle both raw array and event detail format
-    const convos = Array.isArray(conversations) ? conversations : [];
-    
-    if (!convos || convos.length === 0) {
-      this.elements.conversationsList.innerHTML = `
-        <div class="text-gray-500 text-center py-8">No conversations yet.</div>
-      `;
-      return;
+      dragZone.addEventListener('drop', async (e) => {
+        const files = e.dataTransfer.files;
+        const projectId = this.state.currentProject?.id;
+        
+        if (projectId && files.length > 0) {
+          try {
+            await this.uploadFiles(projectId, files);
+          } catch (error) {
+            console.error('Error uploading files:', error);
+          }
+        }
+      });
     }
     
-    this.elements.conversationsList.innerHTML = "";
-    
-    conversations.forEach(conversation => {
-      const convoEl = uiUtilsInstance.createElement("div", {
+    /**
+     * Show warning about knowledge base setup requirement
+     * @private
+     */
+    _showKnowledgeBaseWarning() {
+      window.showNotification(
+        "Knowledge Base required before uploading files",
+        "warning",
+        {
+          action: "Setup Now",
+          onAction: () => {
+            try {
+              if (window.modalManager && typeof window.modalManager.show === 'function') {
+                console.log('[DEBUG] Using modal manager to show knowledge base modal');
+                window.modalManager.show("knowledge");
+              } else {
+                console.warn('[DEBUG] Modal manager not available, attempting direct DOM manipulation');
+                const modal = document.getElementById('knowledgeBaseSettingsModal');
+                if (modal) {
+                  modal.classList.remove('hidden');
+                  modal.classList.add('confirm-modal');
+                } else {
+                  console.error('[DEBUG] Knowledge base modal not found in DOM');
+                  window.showNotification(
+                    'Failed to open knowledge base settings. Please refresh the page.', 
+                    'error'
+                  );
+                }
+              }
+            } catch (error) {
+              console.error('[DEBUG] Error showing knowledge base modal:', error);
+              window.showNotification(
+                'Error opening knowledge base settings. Please try again.', 
+                'error'
+              );
+            }
+          },
+          timeout: 10000
+        }
+      );
+      
+      // Highlight KB setup button
+      const kbSetupBtn = document.getElementById('setupKnowledgeBaseBtn');
+      if (kbSetupBtn) {
+        kbSetupBtn.classList.add('animate-pulse', 'ring-2', 'ring-blue-500');
+        setTimeout(() => {
+          kbSetupBtn.classList.remove('animate-pulse', 'ring-2', 'ring-blue-500');
+        }, 5000);
+      }
+    }
+
+    /**
+     * Process and upload file list
+     * @private
+     * @param {string} projectId - Project ID
+     * @param {FileList} files - Files to upload
+     * @returns {Promise} Promise that resolves when uploads complete
+     */
+    _processFiles(projectId, files) {
+      // Initialize fileUploadStatus if not already done
+      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+      
+      const allowedExtensions = ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'];
+      const maxSizeMB = 30;
+      
+      // Show supported file types
+      const fileTypesInfo = document.getElementById('supportedFileTypes');
+      if (fileTypesInfo) {
+        fileTypesInfo.innerHTML = `
+          <div class="text-xs text-gray-500 mt-2">
+            Supported: ${allowedExtensions.join(', ')} (Max ${maxSizeMB}MB)
+            <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">
+              ℹ️
+            </span>
+          </div>
+        `;
+      }
+
+      if (this.elements.uploadProgress) {
+        this.elements.uploadProgress.classList.remove("hidden");
+        this.elements.progressBar.style.width = "0%";
+        this.elements.uploadStatus.textContent = `Uploading 0/${files.length} files...`;
+      }
+
+      // Validate files first
+      const validFiles = [];
+      const invalidFiles = [];
+
+      Array.from(files).forEach(file => {
+        const fileExt = file.name.split('.').pop().toLowerCase();
+        const isValidExt = allowedExtensions.includes(`.${fileExt}`);
+        const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
+
+        if (isValidExt && isValidSize) {
+          validFiles.push(file);
+        } else {
+          let errorMsg = '';
+          if (!isValidExt) {
+            errorMsg = `Invalid file type (.${fileExt}). Allowed: ${allowedExtensions.join(', ')}`;
+          } else {
+            errorMsg = `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB limit)`;
+          }
+          invalidFiles.push({file, error: errorMsg});
+        }
+      });
+
+      // Show errors for invalid files
+      if (invalidFiles.length > 0) {
+        invalidFiles.forEach(({file, error}) => {
+          window.showNotification(`Skipped ${file.name}: ${error}`, 'error');
+          this.fileUploadStatus.failed++;
+          this.fileUploadStatus.completed++;
+        });
+        this._updateUploadProgress();
+      }
+
+      // Process valid files
+      if (validFiles.length > 0) {
+        // Store projectId for use in completion handler
+        const currentProjectId = projectId;
+        return Promise.all(
+          validFiles.map(file => {
+            return window.projectManager.uploadFile(currentProjectId, file)
+              .then(response => {
+                console.log(`Upload successful for ${file.name}:`, response);
+                this.fileUploadStatus.completed++;
+                
+                if (response.processing?.status === "pending") {
+                  window.showNotification(
+                    `${file.name} uploaded - processing for knowledge base`,
+                    "info",
+                    { timeout: 5000 }
+                  );
+                } else {
+                  window.showNotification(
+                    `${file.name} uploaded successfully`,
+                    "success",
+                    { timeout: 3000 }
+                  );
+                }
+                this._updateUploadProgress();
+                
+                // Refresh KB status if this was the first file
+                if (this.fileUploadStatus.completed === 1) {
+                  window.projectManager.loadKnowledgeBaseDetails(
+                    this.state.currentProject.knowledge_base_id
+                  );
+                }
+              })
+              .catch(error => {
+                console.error(`Upload error for ${file.name}:`, error);
+                 
+                // Determine the specific error message based on error type
+                let errorMessage = error.message || "Upload failed";
+                 
+                // Handle specific error types
+                if (errorMessage.includes("validation") || errorMessage.includes("format")) {
+                  errorMessage = "File format not supported or validation failed";
+                } else if (errorMessage.includes("too large")) {
+                  errorMessage = "File exceeds size limit";
+                } else if (errorMessage.includes("token")) {
+                  errorMessage = "Project token limit exceeded";
+                } else if (error.response?.status === 422) {
+                  errorMessage = "File validation failed - unsupported format or content";
+                }
+                 
+                window.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
+                this.fileUploadStatus.failed++;
+                this.fileUploadStatus.completed++;
+                this._updateUploadProgress();
+              });
+          })
+        ).finally(() => {
+          // Use the stored project ID for refresh
+          const pid = currentProjectId || (window.projectManager?.currentProject?.id);
+          
+          if (pid) {
+            window.projectManager.loadProjectFiles(pid);
+            window.projectManager.loadProjectStats(pid);
+          } else {
+            console.warn('Cannot refresh project data - no valid project ID available');
+          }
+        });
+      }
+      return Promise.resolve();
+    }
+
+    /**
+     * Update upload progress indicators
+     * @private
+     */
+    _updateUploadProgress() {
+      const { completed, failed, total } = this.fileUploadStatus;
+      const percentage = Math.round((completed / total) * 100);
+        
+      if (this.elements.progressBar) {
+        this.elements.progressBar.classList.add('transition-all', 'duration-300');
+        window.animationUtilsInstance.animateProgress(
+          this.elements.progressBar,
+          parseFloat(this.elements.progressBar.style.width || "0"),
+          percentage
+        );
+      }
+      
+      if (this.elements.uploadStatus) {
+        this.elements.uploadStatus.textContent = 
+          `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
+      }
+      
+      if (completed === total) {
+        setTimeout(() => {
+          if (this.elements.uploadProgress) {
+            this.elements.uploadProgress.classList.add("hidden");
+          }
+          
+          if (failed === 0) {
+            window.showNotification("Files uploaded successfully", "success");
+          } else {
+            window.showNotification(`${failed} file(s) failed to upload`, "error");
+          }
+        }, 1000);
+      }
+    }
+
+    /**
+     * Update counter elements with stats
+     * @private
+     * @param {Object} stats - Project stats
+     */
+    _updateCounters(stats) {
+      if (stats.file_count !== undefined) {
+        const fileCountEl = document.getElementById('fileCount');
+        if (fileCountEl) fileCountEl.textContent = window.uiUtilsInstance.formatNumber(stats.file_count);
+      }
+      
+      if (stats.conversation_count !== undefined) {
+        const convoCountEl = document.getElementById('conversationCount');
+        if (convoCountEl) convoCountEl.textContent = window.uiUtilsInstance.formatNumber(stats.conversation_count);
+      }
+      
+      if (stats.artifact_count !== undefined) {
+        const artifactCountEl = document.getElementById('artifactCount');
+        if (artifactCountEl) artifactCountEl.textContent = window.uiUtilsInstance.formatNumber(stats.artifact_count);
+      }
+    }
+
+    /**
+     * Render a single conversation item
+     * @private
+     * @param {Object} conversation - Conversation data
+     */
+    _renderConversationItem(conversation) {
+      const convoEl = window.uiUtilsInstance.createElement("div", {
         className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
         onclick: async () => {
           const chatContainer = document.getElementById('projectChatContainer');
@@ -251,32 +874,32 @@ class ProjectDetailsComponent {
             console.log('Conversation loaded successfully');
           } catch (err) {
             console.error('Failed to load conversation:', err);
-            window.UIUtils?.showNotification('Failed to load conversation', 'error');
+            window.showNotification('Failed to load conversation', 'error');
           }
         }
       });
       
-      const infoDiv = uiUtilsInstance.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(uiUtilsInstance.createElement("span", {
+      const infoDiv = window.uiUtilsInstance.createElement("div", { className: "flex items-center" });
+      infoDiv.appendChild(window.uiUtilsInstance.createElement("span", {
         className: "text-lg mr-2",
         textContent: "💬"
       }));
       
-      const textDiv = uiUtilsInstance.createElement("div");
-      textDiv.appendChild(uiUtilsInstance.createElement("div", {
+      const textDiv = window.uiUtilsInstance.createElement("div");
+      textDiv.appendChild(window.uiUtilsInstance.createElement("div", {
         className: "font-medium",
         textContent: conversation.title || "Untitled conversation"
       }));
-      textDiv.appendChild(uiUtilsInstance.createElement("div", {
+      textDiv.appendChild(window.uiUtilsInstance.createElement("div", {
         className: "text-xs text-gray-500",
-        textContent: uiUtilsInstance.formatDate(conversation.created_at)
+        textContent: window.uiUtilsInstance.formatDate(conversation.created_at)
       }));
       
       
       infoDiv.appendChild(textDiv);
       
       // Create delete button
-      const deleteBtn = uiUtilsInstance.createElement("button", {
+      const deleteBtn = window.uiUtilsInstance.createElement("button", {
         className: "text-red-600 hover:text-red-800 ml-4",
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -288,7 +911,7 @@ class ProjectDetailsComponent {
         `,
         onclick: (e) => {
           e.stopPropagation(); // Prevent loading the conversation
-          this.confirmDeleteConversation(conversation);
+          this._confirmDeleteConversation(conversation);
         }
       });
 
@@ -299,557 +922,195 @@ class ProjectDetailsComponent {
       convoEl.dataset.conversationId = conversation.id;
       
       this.elements.conversationsList.appendChild(convoEl);
-    });
-  }
-
-  bindEvents() {
-    if (this.elements.backBtn) { // Check if backBtn exists before adding listener
-      this.elements.backBtn.addEventListener("click", () => {
-        if (this.onBack) this.onBack();
-      });
     }
     
-    if (this.elements.pinBtn) {
-      this.elements.pinBtn.addEventListener("click", () => this.togglePin());
-    }
-
-    document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-      tabBtn.addEventListener('click', () => {
-        const tabName = tabBtn.dataset.tab;
-        this.switchTab(tabName);
-      });
-    });
-    
-    // Add this new code for the minimize chat button
-    const minimizeChatBtn = document.getElementById('minimizeChatBtn');
-    if (minimizeChatBtn) {
-      minimizeChatBtn.addEventListener('click', () => {
-        const chatContainer = document.getElementById('projectChatContainer');
-        if (chatContainer) chatContainer.classList.add('hidden');
-      });
-    }
-
-    // Handle new conversation button
-    const newConvoBtn = document.getElementById('newConversationBtn');
-    if (newConvoBtn) {
-      newConvoBtn.addEventListener('click', async (e) => {
-        e.preventDefault(); // Prevent default navigation
-        e.stopPropagation();
-        
-        const projectId = this.state.currentProject?.id;
-        if (!projectId) return;
-
-        try {
-          // Show the chat container
-          const chatContainer = document.getElementById('projectChatContainer');
-          if (chatContainer) chatContainer.classList.remove('hidden');
-
-          // Initialize or update chat interface with correct selectors
-          if (!window.projectChatInterface) {
-            window.projectChatInterface = new window.ChatInterface({
-              containerSelector: '#projectChatUI',
-              messageContainerSelector: '#projectChatMessages',
-              inputSelector: '#projectChatInput',
-              sendButtonSelector: '#projectChatSendBtn'
-            });
-            window.projectChatInterface.initialize();
-          }
-
-          // Create new conversation
-          const conversation = await window.projectChatInterface.createNewConversation();
-          
-          // Set target container and load conversation
-          if (window.projectChatInterface && typeof window.projectChatInterface.setTargetContainer === 'function') {
-            window.projectChatInterface.setTargetContainer('#projectChatMessages');
-            window.projectChatInterface.loadConversation(conversation.id);
-          }
-
-          // Update URL without reloading
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set('chatId', conversation.id);
-          window.history.pushState({}, '', newUrl);
-
-          // Store project ID in localStorage for chat context
-          localStorage.setItem('selectedProjectId', projectId);
-        } catch (error) {
-          console.error('Error creating new conversation:', error);
-          window.UIUtils?.showNotification('Failed to create conversation', 'error');
-        }
-      });
-    }
-  }
-  
-  async confirmDeleteConversation(conversation) {
-    try {
-      if (!ModalManager) {
-        throw new Error("Modal manager not available");
-      }
-      const confirmed = await ModalManager.confirmAction({
-        title: "Delete Conversation",
-        message: `Delete "${conversation.title || 'this conversation'}" and all its messages?`,
-        confirmText: "Delete Forever",
+    /**
+     * Show confirmation dialog for deleting a file
+     * @private
+     * @param {Object} file - File to delete
+     */
+    _confirmDeleteFile(file) {
+      window.ModalManager.confirmAction({
+        title: "Delete File",
+        message: `Delete "${file.filename}"?`,
+        confirmText: "Delete",
         cancelText: "Cancel",
         confirmClass: "bg-red-600",
-        destructive: true
-      });
-
-      if (!confirmed) return;
-
-      const projectId = this.state.currentProject?.id;
-      if (!projectId) {
-        throw new Error("No active project selected");
-      }
-
-      // Show loading state
-      const deleteBtn = document.activeElement;
-      const originalText = deleteBtn.innerHTML;
-      deleteBtn.innerHTML = `<span class="animate-spin">⏳</span> Deleting...`;
-      deleteBtn.disabled = true;
-
-      try {
-        await window.projectManager.deleteProjectConversation(projectId, conversation.id);
-
-        // Refresh data
-        await Promise.all([
-          window.projectManager.loadProjectStats(projectId),
-          window.projectManager.loadProjectConversations(projectId)
-        ]);
-
-        // ✅ Close the modal immediately after successful deletion
-        ModalManager?.closeActiveModal();
-
-        // Then show the notification with undo
-        uiUtilsInstance.showNotification("Conversation deleted", "success", {
-          action: "Undo",
-          onAction: async () => {
-            try {
-              await window.apiRequest(
-                `/api/projects/${projectId}/conversations/${conversation.id}/restore`,
-                "POST"
-              );
-              await Promise.all([
-                window.projectManager.loadProjectStats(projectId),
-                window.projectManager.loadProjectConversations(projectId)
+        onConfirm: () => {
+          const projectId = this.state.currentProject?.id;
+          if (!projectId) return;
+          
+          window.projectManager?.deleteFile(projectId, file.id)
+            .then(() => {
+              window.showNotification("File deleted", "success");
+              // Refresh both files and stats
+              return Promise.all([
+                window.projectManager.loadProjectFiles(projectId),
+                window.projectManager.loadProjectStats(projectId)
               ]);
-            } catch (err) {
-              console.error("Restore failed:", err);
-            }
-          },
-          timeout: 5000
-        });
-
-      } finally {
-        // Reset button state
-        deleteBtn.innerHTML = originalText;
-        deleteBtn.disabled = false;
-      }
-
-    } catch (error) {
-      console.error("Delete failed:", error);
-
-      let errorMsg = "Failed to delete conversation";
-      if (error?.response?.status === 403) {
-        errorMsg = "You don't have permission to delete this";
-      } else if (error?.response?.status === 404) {
-        errorMsg = "Conversation not found - may already be deleted";
-      } else if (error.message.includes("No active project")) {
-        errorMsg = "No project selected";
-      }
-
-      uiUtilsInstance.showNotification(errorMsg, "error");
-    }
-  }
-
-  switchTab(tabName) {
-    document.querySelectorAll('.project-tab-content').forEach(tabContent => {
-      tabContent.classList.add('hidden');
-    });
-
-    const activeTab = document.getElementById(`${tabName}Tab`);
-    if (activeTab) activeTab.classList.remove('hidden');
-
-    document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-      tabBtn.classList.remove('active');
-      tabBtn.setAttribute('aria-selected', 'false');
-    });
-
-    const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
-    if (activeTabBtn) {
-      activeTabBtn.classList.add('active');
-      activeTabBtn.setAttribute('aria-selected', 'true');
-    }
-  }
-
-  setupDragDropHandlers() {
-    const dragZone = document.getElementById('dragDropZone');
-    if (!dragZone) return;
-    
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
-      dragZone.addEventListener(event, e => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-    });
-    
-    ['dragenter', 'dragover'].forEach(event => {
-      dragZone.addEventListener(event, () => {
-        dragZone.classList.add('drag-zone-active');
-      });
-    });
-    
-    ['dragleave', 'drop'].forEach(event => {
-      dragZone.addEventListener(event, () => {
-        dragZone.classList.remove('drag-zone-active');
-      });
-    });
-    
-    dragZone.addEventListener('drop', async (e) => {
-      const files = e.dataTransfer.files;
-      const projectId = this.state.currentProject?.id;
-      
-      if (projectId && files.length > 0) {
-        // First check KB status
-        try {
-          await window.projectManager.loadProjectDetails(projectId);
-          const project = window.projectManager.currentProject;
-          const hasActiveKB = project?.knowledge_base_id && project?.kb_active === true;
-          
-          if (!hasActiveKB) {
-            this.showKBSetupWarning();
-            return;
-          }
-          
-          // KB exists, proceed with upload
-          this.uploadFiles(projectId, files);
-        } catch (error) {
-          console.error('Error checking KB status:', error);
-          uiUtilsInstance.showNotification('Failed to verify project setup', 'error');
-        }
-      }
-    });
-  }
-
-  showKBSetupWarning() {
-    uiUtilsInstance.showNotification(
-      "Knowledge Base required before uploading files",
-      "warning",
-      {
-        action: "Setup Now",
-        onAction: () => {
-          if (window.modalManager) {
-            window.modalManager.show("knowledge");
-          } else {
-            const modal = document.getElementById('knowledgeBaseSettingsModal');
-            if (modal) modal.classList.remove('hidden');
-          }
-        },
-        timeout: 10000
-      }
-    );
-    
-    // Highlight KB setup button
-    const kbSetupBtn = document.getElementById('setupKnowledgeBaseBtn');
-    if (kbSetupBtn) {
-      kbSetupBtn.classList.add('animate-pulse', 'ring-2', 'ring-blue-500');
-      setTimeout(() => {
-        kbSetupBtn.classList.remove('animate-pulse', 'ring-2', 'ring-blue-500');
-      }, 5000);
-    }
-  }
-
-  /**
-   * Processes and uploads files for a project
-   * @param {string} projectId - The ID of the project to upload files to
-   * @param {FileList} files - The list of files to upload
-   * @returns {Promise} A promise that resolves when all files are processed
-   */
-  processFiles(projectId, files) {
-    // Initialize fileUploadStatus if not already done
-    if (!this.fileUploadStatus) {
-      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-    }
-    
-    const allowedExtensions = ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'];
-    const maxSizeMB = 30;
-    
-    // Show supported file types
-    const fileTypesInfo = document.getElementById('supportedFileTypes');
-    if (fileTypesInfo) {
-      fileTypesInfo.innerHTML = `
-        <div class="text-xs text-gray-500 mt-2">
-          Supported: ${allowedExtensions.join(', ')} (Max ${maxSizeMB}MB)
-          <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">
-            ℹ️
-          </span>
-        </div>
-      `;
-    }
-
-    if (this.elements.uploadProgress) {
-      this.elements.uploadProgress.classList.remove("hidden");
-      this.elements.progressBar.style.width = "0%";
-      this.elements.uploadStatus.textContent = `Uploading 0/${files.length} files...`;
-    }
-
-    // Validate files first
-    const validFiles = [];
-    const invalidFiles = [];
-
-    Array.from(files).forEach(file => {
-      const fileExt = file.name.split('.').pop().toLowerCase();
-      const isValidExt = allowedExtensions.includes(`.${fileExt}`);
-      const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
-
-      if (isValidExt && isValidSize) {
-        validFiles.push(file);
-      } else {
-        let errorMsg = '';
-        if (!isValidExt) {
-          errorMsg = `Invalid file type (.${fileExt}). Allowed: ${allowedExtensions.join(', ')}`;
-        } else {
-          errorMsg = `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB limit)`;
-        }
-        invalidFiles.push({file, error: errorMsg});
-      }
-    });
-
-    // Show errors for invalid files
-    if (invalidFiles.length > 0) {
-      invalidFiles.forEach(({file, error}) => {
-        uiUtilsInstance.showNotification(`Skipped ${file.name}: ${error}`, 'error');
-        this.fileUploadStatus.failed++;
-        this.fileUploadStatus.completed++;
-      });
-      this.updateUploadProgress();
-    }
-
-    // Process valid files
-    if (validFiles.length > 0) {
-      // Store projectId for use in completion handler
-      const currentProjectId = projectId;
-      return Promise.all(
-        validFiles.map(file => {
-          return window.projectManager?.uploadFile(currentProjectId, file)
-            .then(response => {
-              console.log(`Upload successful for ${file.name}:`, response);
-              this.fileUploadStatus.completed++;
-              this.updateUploadProgress();
             })
-            .catch(error => {
-              console.error(`Upload error for ${file.name}:`, error);
-               
-              // Determine the specific error message based on error type
-              let errorMessage = error.message || "Upload failed";
-               
-              // Handle specific error types
-              if (errorMessage.includes("validation") || errorMessage.includes("format")) {
-                errorMessage = "File format not supported or validation failed";
-              } else if (errorMessage.includes("too large")) {
-                errorMessage = "File exceeds size limit";
-              } else if (errorMessage.includes("token")) {
-                errorMessage = "Project token limit exceeded";
-              } else if (error.response?.status === 422) {
-                errorMessage = "File validation failed - unsupported format or content";
-              }
-               
-              uiUtilsInstance.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
-              this.fileUploadStatus.failed++;
-              this.fileUploadStatus.completed++;
-              this.updateUploadProgress();
+            .catch(err => {
+              console.error("Error deleting file:", err);
+              window.showNotification("Failed to delete file", "error");
             });
+        }
+      });
+    }
+    
+    /**
+     * Toggle pinned status of current project
+     * @private
+     */
+    _togglePin() {
+      const project = this.state.currentProject;
+      if (!project) return;
+      
+      window.projectManager?.togglePinProject(project.id)
+        .then(() => {
+          window.showNotification(
+            project.pinned ? "Project unpinned" : "Project pinned",
+            "success"
+          );
+          window.projectManager.loadProjectDetails(project.id);
         })
-      ).finally(() => {
-        // Use the stored project ID for refresh
-        const pid = currentProjectId || (window.projectManager?.currentProject?.id);
-        
-        if (pid) {
-          window.projectManager.loadProjectFiles(pid);
-          window.projectManager.loadProjectStats(pid);
-        } else {
-          console.warn('Cannot refresh project data - no valid project ID available');
-        }
-      });
-    }
-    return Promise.resolve();
-  }
-
-  /**
-   * Uploads files to a project after verifying knowledge base status
-   * @param {string} projectId - The ID of the project
-   * @param {FileList} files - The files to upload
-   * @returns {Promise} - A promise that resolves when upload is complete
-   */
-  async uploadFiles(projectId, files) {
-    // Double-check KB status even if pre-checked
-    const project = window.projectManager?.currentProject;
-    
-    // Don't rely on kb_active property, instead check knowledge_base_id and knowledge_base.is_active
-    const knowledgeBaseId = project?.knowledge_base_id;
-    const isKbActive = project?.knowledge_base?.is_active !== false; // Consider active unless explicitly false
-    const hasActiveKB = knowledgeBaseId && isKbActive;
-    
-    console.log('[DEBUG] Knowledge base check before upload:', {
-      has_kb: !!knowledgeBaseId,
-      kb_active: isKbActive,
-      kb_id: knowledgeBaseId,
-      project_id: projectId
-    });
-    
-    // Explicitly fetch knowledge base information if we have an ID but no status
-    if (knowledgeBaseId && project?.knowledge_base === undefined) {
-      console.log('[DEBUG] Knowledge base status not available, fetching project details');
-      try {
-        await window.projectManager.loadProjectDetails(projectId);
-        // Re-check after loading details
-        const refreshedProject = window.projectManager?.currentProject;
-        const refreshedIsActive = refreshedProject?.knowledge_base?.is_active !== false;
-        
-        console.log('[DEBUG] Refreshed knowledge base status:', {
-          is_active: refreshedIsActive,
-          kb_obj: refreshedProject?.knowledge_base
+        .catch(err => {
+          console.error("Error toggling pin:", err);
+          window.showNotification("Failed to update project", "error");
         });
-        
-        if (refreshedIsActive) {
-          // Proceed with upload if we now have active status
-          this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-          return this.processFiles(projectId, files);
-        }
-      } catch (err) {
-        console.error('[ERROR] Failed to refresh project details:', err);
-      }
     }
     
-    if (!hasActiveKB) {
-      console.warn('[WARN] Knowledge base not configured for project:', projectId);
-      
-      // Check if there's a pending knowledge base creation
-      const tooltip = document.getElementById('kbRequirementTooltip');
-      if (tooltip) {
-        tooltip.classList.remove('hidden');
-        setTimeout(() => tooltip.classList.add('hidden'), 5000);
-      }
-      
-      // Show actionable notification with KB setup button
-      uiUtilsInstance.showNotification(
-        "Please setup a knowledge base before uploading files",
-        "warning",
-        {
-          action: "Setup KB",
-          onAction: () => {
-            console.log('[DEBUG] Opening KB setup modal from notification action');
-            if (window.modalManager) {
-              window.modalManager.show("knowledge");
-            } else {
-              // Fallback if modalManager isn't available
-              const modal = document.getElementById('knowledgeBaseSettingsModal');
-              if (modal) modal.classList.remove('hidden');
-            }
-          }
+    /**
+     * Show confirmation dialog for deleting a conversation
+     * @private
+     * @param {Object} conversation - Conversation to delete
+     */
+    async _confirmDeleteConversation(conversation) {
+      try {
+        if (!window.ModalManager) {
+          throw new Error("Modal manager not available");
         }
-      );
-      
-      // Highlight the KB setup button if it exists and force display KB inactive section
-      const kbSetupBtn = document.getElementById('setupKnowledgeBaseBtn');
-      const kbActiveSection = document.getElementById('knowledgeBaseActive');
-      const kbInactiveSection = document.getElementById('knowledgeBaseInactive');
-      
-      if (kbActiveSection) kbActiveSection.classList.add('hidden');
-      if (kbInactiveSection) kbInactiveSection.classList.remove('hidden');
-      
-      if (kbSetupBtn) {
-        kbSetupBtn.classList.add('animate-pulse', 'ring-2', 'ring-blue-500');
-        setTimeout(() => {
-          kbSetupBtn.classList.remove('animate-pulse', 'ring-2', 'ring-blue-500');
-        }, 3000);
-      }
-      
-      return Promise.reject("Knowledge base not configured");
-    }
-    
-    // We have an active knowledge base, so proceed with file processing
-    return this.processFiles(projectId, files);
-  }
+        const confirmed = await window.ModalManager.confirmAction({
+          title: "Delete Conversation",
+          message: `Delete "${conversation.title || 'this conversation'}" and all its messages?`,
+          confirmText: "Delete Forever",
+          cancelText: "Cancel",
+          confirmClass: "bg-red-600",
+          destructive: true
+        });
 
-  updateUploadProgress() {
-    const { completed, failed, total } = this.fileUploadStatus;
-    const percentage = Math.round((completed / total) * 100);
-      
-    if (this.elements.progressBar) {
-      this.elements.progressBar.classList.add('transition-all', 'duration-300');
-      window.animationUtilsInstance.animateProgress(
-        this.elements.progressBar,
-        parseFloat(this.elements.progressBar.style.width || "0"),
-        percentage
-      );
-    }
-    
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent = 
-        `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
-    }
-    
-    if (completed === total) {
-      setTimeout(() => {
-        if (this.elements.uploadProgress) {
-          this.elements.uploadProgress.classList.add("hidden");
-        }
-        
-        if (failed === 0) {
-          uiUtilsInstance.showNotification("Files uploaded successfully", "success");
-        } else {
-          uiUtilsInstance.showNotification(`${failed} file(s) failed to upload`, "error");
-        }
-      }, 1000);
-    }
-  }
+        if (!confirmed) return;
 
-  confirmDeleteFile(file) {
-    ModalManager.confirmAction({
-      title: "Delete File",
-      message: `Delete "${file.filename}"?`,
-      confirmText: "Delete",
-      cancelText: "Cancel",
-      confirmClass: "bg-red-600",
-      onConfirm: () => {
         const projectId = this.state.currentProject?.id;
-        if (!projectId) return;
-        
-        window.projectManager?.deleteFile(projectId, file.id)
-          .then(() => {
-            uiUtilsInstance.showNotification("File deleted", "success");
-            // Refresh both files and stats
-            return Promise.all([
-              window.projectManager.loadProjectFiles(projectId),
-              window.projectManager.loadProjectStats(projectId)
-            ]);
-          })
-          .catch(err => {
-            console.error("Error deleting file:", err);
-            uiUtilsInstance.showNotification("Failed to delete file", "error");
+        if (!projectId) {
+          throw new Error("No active project selected");
+        }
+
+        // Show loading state
+        const deleteBtn = document.activeElement;
+        const originalText = deleteBtn.innerHTML;
+        deleteBtn.innerHTML = `<span class="animate-spin">⏳</span> Deleting...`;
+        deleteBtn.disabled = true;
+
+        try {
+          await window.projectManager.deleteProjectConversation(projectId, conversation.id);
+
+          // Refresh data
+          await Promise.all([
+            window.projectManager.loadProjectStats(projectId),
+            window.projectManager.loadProjectConversations(projectId)
+          ]);
+
+          // Close the modal immediately after successful deletion
+          window.ModalManager.closeActiveModal();
+
+          // Then show the notification with undo
+          window.showNotification("Conversation deleted", "success", {
+            action: "Undo",
+            onAction: async () => {
+              try {
+                await window.apiRequest(
+                  `/api/projects/${projectId}/conversations/${conversation.id}/restore`,
+                  "POST"
+                );
+                await Promise.all([
+                  window.projectManager.loadProjectStats(projectId),
+                  window.projectManager.loadProjectConversations(projectId)
+                ]);
+              } catch (err) {
+                console.error("Restore failed:", err);
+              }
+            },
+            timeout: 5000
           });
+
+        } finally {
+          // Reset button state
+          deleteBtn.innerHTML = originalText;
+          deleteBtn.disabled = false;
+        }
+
+      } catch (error) {
+        console.error("Delete failed:", error);
+
+        let errorMsg = "Failed to delete conversation";
+        if (error?.response?.status === 403) {
+          errorMsg = "You don't have permission to delete this";
+        } else if (error?.response?.status === 404) {
+          errorMsg = "Conversation not found - may already be deleted";
+        } else if (error.message.includes("No active project")) {
+          errorMsg = "No project selected";
+        }
+
+        window.showNotification(errorMsg, "error");
       }
-    });
-  }
-
-  togglePin() {
-    const project = this.state.currentProject;
-    if (!project) return;
+    }
     
-    window.projectManager?.togglePinProject(project.id)
-      .then(() => {
-        uiUtilsInstance.showNotification(
-          project.pinned ? "Project unpinned" : "Project pinned",
-          "success"
-        );
-        window.projectManager.loadProjectDetails(project.id);
-      })
-      .catch(err => {
-        console.error("Error toggling pin:", err);
-        uiUtilsInstance.showNotification("Failed to update project", "error");
+    /**
+     * View an artifact (stub method - to be implemented)
+     * @private
+     * @param {Object} artifact - Artifact to view
+     */
+    _viewArtifact(artifact) {
+      // Implementation depends on artifact viewing capabilities
+      window.showNotification("Artifact viewing not yet implemented", "info");
+    }
+    
+    /**
+     * Show confirmation dialog for deleting an artifact
+     * @private
+     * @param {Object} artifact - Artifact to delete
+     */
+    _confirmDeleteArtifact(artifact) {
+      window.ModalManager.confirmAction({
+        title: "Delete Artifact",
+        message: `Delete "${artifact.title || 'this artifact'}"?`,
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        confirmClass: "bg-red-600",
+        onConfirm: () => {
+          const projectId = this.state.currentProject?.id;
+          if (!projectId) return;
+          
+          window.projectManager?.deleteArtifact(projectId, artifact.id)
+            .then(() => {
+              window.showNotification("Artifact deleted", "success");
+              // Refresh data
+              Promise.all([
+                window.projectManager.loadProjectStats(projectId),
+                window.projectManager.loadProjectArtifacts(projectId)
+              ]).catch(err => {
+                console.error("Error refreshing data:", err);
+              });
+            })
+            .catch(err => {
+              console.error("Error deleting artifact:", err);
+              window.showNotification("Failed to delete artifact", "error");
+            });
+        }
       });
+    }
   }
-}
 
-  // Export to window instead of module.exports
+  // Export to window
   window.ProjectDetailsComponent = ProjectDetailsComponent;
 })();

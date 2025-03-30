@@ -14,9 +14,6 @@ import warnings
 from pathlib import Path
 from cryptography.utils import CryptographyDeprecationWarning
 
-# Configure warnings filter
-warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning, module='pypdf')
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 
 # Import routers
 from auth import router as auth_router
@@ -39,7 +36,7 @@ from routes.projects.artifacts import router as project_artifacts_router
 from routes.projects.conversations import router as project_conversations_router
 
 # Import database utilities
-from db import init_db, validate_db_schema, fix_db_schema, get_async_session_context, sync_engine, async_engine
+from db import init_db, get_async_session_context, async_engine
 
 # Import utility functions
 from utils.auth_utils import load_revocation_list, clean_expired_tokens
@@ -47,6 +44,8 @@ from utils.db_utils import schedule_token_cleanup
 
 # Import configuration
 from config import settings
+
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning, module='pypdf')
 
 # Ensure Python recognizes config.py as a module
 sys.path.append(str(Path(__file__).resolve().parent))

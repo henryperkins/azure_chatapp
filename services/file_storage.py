@@ -5,12 +5,12 @@ import tempfile
 from pathlib import Path
 from io import IOBase
 from typing import (
-    TYPE_CHECKING,
     Any,
     Dict,
     Optional,
     Union,
-    cast
+    cast,
+    BinaryIO
 )
 from uuid import UUID
 
@@ -34,7 +34,6 @@ boto3 = None
 try:
     # Async Azure library
     from azure.storage.blob.aio import BlobServiceClient as AzureBlobServiceClient
-    from azure.storage.blob.aio import ContainerClient, BlobClient
     from azure.storage.blob import ContentSettings as AzureContentSettings
 except ImportError:
     AZURE_AVAILABLE = False
@@ -52,7 +51,6 @@ else:
 # ----------------------------------------------------
 # Define a clear union for the file content
 # ----------------------------------------------------
-from typing import BinaryIO
 FileContent = Union[bytes, bytearray, memoryview, BinaryIO]
 
 def ensure_bytes(file_content: FileContent) -> bytes:

@@ -49,7 +49,7 @@ async def augment_with_knowledge(
     try:
         # Search knowledge base
         search_results = await search_project_context(
-            project_id=conversation.project_id,
+            project_id=UUID(str(conversation.project_id)),
             query=user_message,
             db=db,
             top_k=5  # Default to 5 results
