@@ -82,11 +82,27 @@ class Conversation(Base):
             raise ValueError("Knowledge base requires project association")
         return value
 
-    @validates('project_id') 
+    @validates('project_id')
     def validate_knowledge_base_requirements(self, key, project_id):
-        """Auto-enable knowledge base if project has one"""
-        if project_id and not self.use_knowledge_base:
-            # This is a synchronous validator - we'll set the flag but actual validation
-            # will happen when the conversation is saved
-            self.use_knowledge_base = True
+        """Auto-enable KB if project has one"""
+        from sqlalchemy import select
+        from models.project import Project
+        
+        # Check if we're actually changing the project_id
+        if project_id == getattr(self, key, None):
+            return project_id
+
+        # Only attempt validation if we have a session
+        if hasattr(self, '_sa_instance_state') and self._sa_instance_state.session:
+            # Get fresh project info from DB
+            session = self._sa_instance_state.session
+            project = session.get(Project, project_id)
+            
+            # Enable KB only if project has one and model supports it
+            if project and project.knowledge_base_id:
+                self.use_knowledge_base = True
+                self.knowledge_base_id = project.knowledge_base_id
+            else:
+                self.use_knowledge_base = False
+                
         return project_id
