@@ -2,7 +2,7 @@
   // Use global utility classes with var instead of const
   var UIUtils = window.UIUtils;
   var AnimationUtils = window.AnimationUtils;
-  var ModalManager = window.ModalManager;
+  var ModalManager = window.ModalManager || window.ModalManagerClass;
 
   /**
    * Project Details Component - Handles the project details view
@@ -114,11 +114,19 @@ class ProjectDetailsComponent {
     
     if (this.elements.tokenProgressBar) {
       this.elements.tokenProgressBar.style.width = "0%"; // Reset to ensure animation works
-      animationUtilsInstance.animateProgress(
-        this.elements.tokenProgressBar,
-        0,
-        pct
-      );
+      
+      // Add defensive check for animationUtilsInstance
+      if (window.animationUtilsInstance) {
+        window.animationUtilsInstance.animateProgress(
+          this.elements.tokenProgressBar,
+          0,
+          pct
+        );
+      } else {
+        // Fallback if animation utils not available
+        this.elements.tokenProgressBar.style.width = `${pct}%`;
+        console.warn("Animation utilities not available - using direct style");
+      }
     }
 
     // Update file, conversation and artifact counts
@@ -373,7 +381,10 @@ class ProjectDetailsComponent {
   
   async confirmDeleteConversation(conversation) {
     try {
-      const confirmed = await ModalManagerClass.confirmAction({
+      if (!ModalManager) {
+        throw new Error("Modal manager not available");
+      }
+      const confirmed = await ModalManager.confirmAction({
         title: "Delete Conversation",
         message: `Delete "${conversation.title || 'this conversation'}" and all its messages?`,
         confirmText: "Delete Forever",
@@ -405,7 +416,7 @@ class ProjectDetailsComponent {
         ]);
 
         // ✅ Close the modal immediately after successful deletion
-        ModalManagerClass.closeActiveModal();
+        ModalManager?.closeActiveModal();
 
         // Then show the notification with undo
         uiUtilsInstance.showNotification("Conversation deleted", "success", {
@@ -492,45 +503,75 @@ class ProjectDetailsComponent {
       });
     });
     
-    dragZone.addEventListener('drop', (e) => {
+    dragZone.addEventListener('drop', async (e) => {
       const files = e.dataTransfer.files;
       const projectId = this.state.currentProject?.id;
+      
       if (projectId && files.length > 0) {
-        this.uploadFiles(projectId, files);
+        // First check KB status
+        try {
+          await window.projectManager.loadProjectDetails(projectId);
+          const project = window.projectManager.currentProject;
+          const hasActiveKB = project?.knowledge_base_id && project?.kb_active === true;
+          
+          if (!hasActiveKB) {
+            this.showKBSetupWarning();
+            return;
+          }
+          
+          // KB exists, proceed with upload
+          this.uploadFiles(projectId, files);
+        } catch (error) {
+          console.error('Error checking KB status:', error);
+          uiUtilsInstance.showNotification('Failed to verify project setup', 'error');
+        }
       }
     });
   }
 
-  uploadFiles(projectId, files) {
-    // Check knowledge base exists with tooltip explanation
-    if (!window.projectManager?.currentProject?.knowledge_base_id) {
-      const tooltip = document.getElementById('kbRequirementTooltip');
-      if (tooltip) {
-        tooltip.classList.remove('hidden');
-        setTimeout(() => tooltip.classList.add('hidden'), 5000);
+  showKBSetupWarning() {
+    uiUtilsInstance.showNotification(
+      "Knowledge Base required before uploading files",
+      "warning",
+      {
+        action: "Setup Now",
+        onAction: () => {
+          if (window.modalManager) {
+            window.modalManager.show("knowledge");
+          } else {
+            const modal = document.getElementById('knowledgeBaseSettingsModal');
+            if (modal) modal.classList.remove('hidden');
+          }
+        },
+        timeout: 10000
       }
-      uiUtilsInstance.showNotification(
-        "Please setup a knowledge base before uploading files",
-        "error"
-      );
-      return Promise.reject("Knowledge base not configured");
+    );
+    
+    // Highlight KB setup button
+    const kbSetupBtn = document.getElementById('setupKnowledgeBaseBtn');
+    if (kbSetupBtn) {
+      kbSetupBtn.classList.add('animate-pulse', 'ring-2', 'ring-blue-500');
+      setTimeout(() => {
+        kbSetupBtn.classList.remove('animate-pulse', 'ring-2', 'ring-blue-500');
+      }, 5000);
     }
+  }
 
-    this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+  /**
+   * Processes and uploads files for a project
+   * @param {string} projectId - The ID of the project to upload files to
+   * @param {FileList} files - The list of files to upload
+   * @returns {Promise} A promise that resolves when all files are processed
+   */
+  processFiles(projectId, files) {
+    // Initialize fileUploadStatus if not already done
+    if (!this.fileUploadStatus) {
+      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+    }
+    
     const allowedExtensions = ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'];
     const maxSizeMB = 30;
     
-    // Update KB status indicator
-    const kbStatus = document.getElementById('kbStatusIndicator');
-    if (kbStatus) {
-      kbStatus.textContent = window.projectManager?.currentProject?.knowledge_base_id
-        ? "✓ Knowledge Base Ready"
-        : "✗ Knowledge Base Required";
-      kbStatus.className = window.projectManager?.currentProject?.knowledge_base_id
-        ? "text-green-600 text-sm"
-        : "text-red-600 text-sm";
-    }
-
     // Show supported file types
     const fileTypesInfo = document.getElementById('supportedFileTypes');
     if (fileTypesInfo) {
@@ -632,13 +673,110 @@ class ProjectDetailsComponent {
     return Promise.resolve();
   }
 
+  /**
+   * Uploads files to a project after verifying knowledge base status
+   * @param {string} projectId - The ID of the project
+   * @param {FileList} files - The files to upload
+   * @returns {Promise} - A promise that resolves when upload is complete
+   */
+  async uploadFiles(projectId, files) {
+    // Double-check KB status even if pre-checked
+    const project = window.projectManager?.currentProject;
+    
+    // Don't rely on kb_active property, instead check knowledge_base_id and knowledge_base.is_active
+    const knowledgeBaseId = project?.knowledge_base_id;
+    const isKbActive = project?.knowledge_base?.is_active !== false; // Consider active unless explicitly false
+    const hasActiveKB = knowledgeBaseId && isKbActive;
+    
+    console.log('[DEBUG] Knowledge base check before upload:', {
+      has_kb: !!knowledgeBaseId,
+      kb_active: isKbActive,
+      kb_id: knowledgeBaseId,
+      project_id: projectId
+    });
+    
+    // Explicitly fetch knowledge base information if we have an ID but no status
+    if (knowledgeBaseId && project?.knowledge_base === undefined) {
+      console.log('[DEBUG] Knowledge base status not available, fetching project details');
+      try {
+        await window.projectManager.loadProjectDetails(projectId);
+        // Re-check after loading details
+        const refreshedProject = window.projectManager?.currentProject;
+        const refreshedIsActive = refreshedProject?.knowledge_base?.is_active !== false;
+        
+        console.log('[DEBUG] Refreshed knowledge base status:', {
+          is_active: refreshedIsActive,
+          kb_obj: refreshedProject?.knowledge_base
+        });
+        
+        if (refreshedIsActive) {
+          // Proceed with upload if we now have active status
+          this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+          return this.processFiles(projectId, files);
+        }
+      } catch (err) {
+        console.error('[ERROR] Failed to refresh project details:', err);
+      }
+    }
+    
+    if (!hasActiveKB) {
+      console.warn('[WARN] Knowledge base not configured for project:', projectId);
+      
+      // Check if there's a pending knowledge base creation
+      const tooltip = document.getElementById('kbRequirementTooltip');
+      if (tooltip) {
+        tooltip.classList.remove('hidden');
+        setTimeout(() => tooltip.classList.add('hidden'), 5000);
+      }
+      
+      // Show actionable notification with KB setup button
+      uiUtilsInstance.showNotification(
+        "Please setup a knowledge base before uploading files",
+        "warning",
+        {
+          action: "Setup KB",
+          onAction: () => {
+            console.log('[DEBUG] Opening KB setup modal from notification action');
+            if (window.modalManager) {
+              window.modalManager.show("knowledge");
+            } else {
+              // Fallback if modalManager isn't available
+              const modal = document.getElementById('knowledgeBaseSettingsModal');
+              if (modal) modal.classList.remove('hidden');
+            }
+          }
+        }
+      );
+      
+      // Highlight the KB setup button if it exists and force display KB inactive section
+      const kbSetupBtn = document.getElementById('setupKnowledgeBaseBtn');
+      const kbActiveSection = document.getElementById('knowledgeBaseActive');
+      const kbInactiveSection = document.getElementById('knowledgeBaseInactive');
+      
+      if (kbActiveSection) kbActiveSection.classList.add('hidden');
+      if (kbInactiveSection) kbInactiveSection.classList.remove('hidden');
+      
+      if (kbSetupBtn) {
+        kbSetupBtn.classList.add('animate-pulse', 'ring-2', 'ring-blue-500');
+        setTimeout(() => {
+          kbSetupBtn.classList.remove('animate-pulse', 'ring-2', 'ring-blue-500');
+        }, 3000);
+      }
+      
+      return Promise.reject("Knowledge base not configured");
+    }
+    
+    // We have an active knowledge base, so proceed with file processing
+    return this.processFiles(projectId, files);
+  }
+
   updateUploadProgress() {
     const { completed, failed, total } = this.fileUploadStatus;
     const percentage = Math.round((completed / total) * 100);
       
     if (this.elements.progressBar) {
       this.elements.progressBar.classList.add('transition-all', 'duration-300');
-      animationUtilsInstance.animateProgress(
+      window.animationUtilsInstance.animateProgress(
         this.elements.progressBar,
         parseFloat(this.elements.progressBar.style.width || "0"),
         percentage

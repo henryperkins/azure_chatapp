@@ -85,6 +85,15 @@ const CONNECTION_STATES = {
 class AuthManager {
   constructor() {
     this.authCheckInProgress = false;
+    
+    // Listen for project selection events
+    document.addEventListener('projectSelected', (event) => {
+      if (event.detail && event.detail.projectId) {
+        console.log('Auth manager: Project selected:', event.detail.projectId);
+        // Store for future reference
+        localStorage.setItem('selectedProjectId', event.detail.projectId);
+      }
+    });
   }
 
   async getValidToken() {
@@ -137,11 +146,19 @@ window.WebSocketService = function (options = {}) {
   this.state = CONNECTION_STATES.DISCONNECTED;
   this.socket = null;
   this.chatId = null;
-  this.projectId = localStorage.getItem("selectedProjectId");
+  this.projectId = null; // Will be refreshed on each connect
   this.reconnectAttempts = 0;
   this.useHttpFallback = false;
   this.wsUrl = null;
   this.pendingMessages = new Map();
+  
+  // Listen for project selection events
+  document.addEventListener('projectSelected', (event) => {
+    if (event.detail && event.detail.projectId) {
+      console.log('WebSocketService: Project selected:', event.detail.projectId);
+      this.projectId = event.detail.projectId;
+    }
+  });
 
   // Dependencies
   this.authManager = new AuthManager();
@@ -199,7 +216,9 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     });
 
     let host = window.API_CONFIG?.WS_ENDPOINT || window.location.host;
-    host = host.replace(/^https?:\/\//, '');
+    
+    // Remove any protocol prefix if already present in the host
+    host = host.replace(/^(wss?:\/\/|https?:\/\/)/, '');
 
     if (!host) {
       console.error('Empty WebSocket host - using HTTP fallback');
@@ -208,9 +227,24 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     }
 
     const finalProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    
+    // Always refresh project ID from localStorage
+    this.projectId = this.projectId || localStorage.getItem("selectedProjectId");
+    
+    // Validate project selection before proceeding
     if (!this.projectId) {
-      throw new Error('No project selected - please select a project first');
+      const errorMsg = 'Please select a project before starting a conversation';
+      if (window.UIUtils?.showNotification) {
+        window.UIUtils.showNotification(errorMsg, 'warning');
+      } else {
+        console.warn(errorMsg);
+      }
+      this.useHttpFallback = true;
+      return false;
     }
+    
+    console.log(`WebSocketService connecting with projectId: ${this.projectId}, chatId: ${chatId}`);
+
     const basePath = `/api/projects/${this.projectId}/conversations/${chatId}/ws`;
     this.wsUrl = `${finalProtocol}${host}${basePath}?${params}`;
     console.log('Constructed WebSocket URL:', this.wsUrl);
@@ -559,7 +593,8 @@ function validateWebSocketUrl(url) {
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'ws:' || parsed.protocol === 'wss:';
-  } catch {
+  } catch (error) {
+    console.error('Invalid WebSocket URL:', url, error);
     return false;
   }
 }
