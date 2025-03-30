@@ -277,7 +277,8 @@ async def claude_chat(
         # When using extended thinking, we can't use temperature and other sampling params
         payload.pop("temperature", None)
     
-    # Add system message if found
+    # Combine system messages into one string or set default
+    system_message = "\n".join(system_messages) if system_messages else ""
     if system_message:
         payload["system"] = system_message
     else:
