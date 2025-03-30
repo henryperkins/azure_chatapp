@@ -86,6 +86,7 @@ async def init_db():
     async with async_engine.connect() as conn:
         result = await conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
         tables = [row[0] for row in result.fetchall()]
+        await conn.commit()  # Explicitly commit the transaction
         logger.info(f"Verified tables in database: {', '.join(tables)}")
 
 async def fix_db_schema():
