@@ -1,88 +1,17 @@
-// Define utility classes with fallbacks
-const projectDashboardUtils = require('./projectDashboardUtils');
-const UIUtils = projectDashboardUtils.UIUtils;
-const AnimationUtils = projectDashboardUtils.AnimationUtils; 
-const ModalManager = projectDashboardUtils.ModalManager;
+// Import shared utility classes
+const { UIUtils, AnimationUtils, ModalManager } = require('./projectDashboardUtils');
 
-// Fallback classes if the imports don't work
-class FallbackUIUtils {
-  constructor() { 
-    console.log('Fallback UIUtils created'); 
-  }
-  toggleVisibility(element, visible) {
-    if (!element) return;
-    element.classList.toggle('hidden', !visible);
-  }
-  createElement(tag, options = {}) {
-    const el = document.createElement(tag);
-    if (options.className) el.className = options.className;
-    if (options.textContent) el.textContent = options.textContent;
-    if (options.innerHTML) el.innerHTML = options.innerHTML;
-    if (options.onclick) el.addEventListener('click', options.onclick);
-    return el;
-  }
-  formatNumber(num) { return num?.toString() || '0'; }
-  formatDate(date) { return date || ''; }
-  formatBytes(bytes) { return (bytes || 0) + ' bytes'; }
-  fileIcon() { return '📄'; }
-  showNotification(msg, type) { 
-    console.log(`${type}: ${msg}`);
-    if (window.showNotification) {
-      window.showNotification(msg, type);
-    } else {
-      alert(`${type}: ${msg}`);
-    }
-  }
-}
+// Create instances of utility classes
+const uiUtilsInstance = new UIUtils();
+const animationUtilsInstance = new AnimationUtils();
+const modalManagerInstance = new ModalManager();
 
-class FallbackAnimationUtils {
-  constructor() { 
-    console.log('Fallback AnimationUtils created'); 
-  }
-  animateProgress(el, from, to) { 
-    if (el) el.style.width = to + '%'; 
-  }
-}
-
-class FallbackModalManager {
-  constructor() { 
-    console.log('Fallback ModalManager created'); 
-    this.modals = {};
-  }
-  show(id) { 
-    document.getElementById(id)?.classList.remove('hidden'); 
-  }
-  hide(id) { 
-    document.getElementById(id)?.classList.add('hidden'); 
-  }
-  static confirmAction(config) {
-    if (confirm(config.message || 'Are you sure?')) {
-      if (config.onConfirm) config.onConfirm();
-    } else {
-      if (config.onCancel) config.onCancel();
-    }
-  }
-}
-
-// Try to use the imported classes, fall back to our defined ones if they don't exist
-const UIUtilsClass = UIUtils || FallbackUIUtils;
-const AnimationUtilsClass = AnimationUtils || FallbackAnimationUtils;
-const ModalManagerClass = ModalManager || FallbackModalManager;
-
-// Create instances of utility classes for use within this module
-const uiUtilsInstance = new UIUtilsClass();
-const animationUtilsInstance = new AnimationUtilsClass();
-const modalManagerInstance = new ModalManagerClass();
-
-// Ensure instances are available globally if other scripts rely on them (optional, but safer for now)
+// Maintain global references for backward compatibility
 if (typeof window !== 'undefined') {
-  if (!window.UIUtils) window.UIUtils = uiUtilsInstance;
-  if (!window.AnimationUtils) window.AnimationUtils = animationUtilsInstance;
-  if (!window.modalManager) window.modalManager = modalManagerInstance;
+  window.UIUtils = window.UIUtils || uiUtilsInstance;
+  window.AnimationUtils = window.AnimationUtils || animationUtilsInstance;
+  window.modalManager = window.modalManager || modalManagerInstance;
 }
-
-console.log('UIUtils instance created:', !!uiUtilsInstance?.createElement);
-console.log('AnimationUtils instance created:', !!animationUtilsInstance?.animateProgress);
 
 /**
  * Knowledge Base Component - Handles knowledge base functionality
