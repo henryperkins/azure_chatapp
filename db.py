@@ -19,7 +19,7 @@ DATABASE_URL = settings.DATABASE_URL
 
 async_engine = create_async_engine(
     DATABASE_URL,
-    echo=True,  # Show SQL statements
+    echo=False,  # Disable engine-level logging
     pool_pre_ping=True
 )
 
