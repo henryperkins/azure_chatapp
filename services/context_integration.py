@@ -52,13 +52,13 @@ async def augment_with_knowledge(
             return []
 
         try:
-        # Search knowledge base
-        search_results = await search_project_context(
-            project_id=UUID(str(conversation.project_id)),
-            query=user_message,
-            db=db,
-            top_k=5  # Default to 5 results
-        )
+            # Search knowledge base
+            search_results = await search_project_context(
+                project_id=UUID(str(conversation.project_id)),
+                query=user_message, 
+                db=db,
+                top_k=5  # Default to 5 results
+            )
         
         if not search_results.get("results"):
             return []
