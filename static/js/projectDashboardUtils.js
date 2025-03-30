@@ -4,6 +4,7 @@
  * Utility classes for the project dashboard
  */
 
+(function() {
 // Basic utility class for UI operations
 class UIUtils {
   constructor() {
@@ -266,3 +267,4 @@ if (typeof window !== 'undefined') {
   window.AnimationUtils = AnimationUtils;
   window.ModalManager = ModalManager;
 }
+})();

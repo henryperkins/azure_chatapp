@@ -305,7 +305,4 @@ class ProjectListComponent {
   }
 }
 
-// Export as global
-if (typeof window !== 'undefined') {
-  window.ProjectListComponent = ProjectListComponent;
-}
+// Class is automatically available in global scope
