@@ -62,6 +62,9 @@ async def augment_with_knowledge(
             
             if not search_results.get("results"):
                 return []
+        except Exception as e:
+            logger.error(f"Error searching knowledge base: {str(e)}")
+            return []
 
         # Format and prioritize results
         context_messages = []
