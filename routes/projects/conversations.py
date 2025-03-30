@@ -653,10 +653,15 @@ async def create_message(
     # Generate AI response if user message
     if message.role == "user":
         msg_dicts = await get_conversation_messages(conversation_id, db, include_system_prompt=True)
+        kb_context = await augment_with_knowledge(
+            conversation_id=conversation_id_uuid,
+            user_message=new_msg.content.strip(),
+            db=db
+        )
         try:
             assistant_msg = await generate_ai_response(
                 conversation_id=conversation_id_uuid,
-                messages=msg_dicts,
+                messages=kb_context + msg_dicts,
                 model_id=conversation.model_id,
                 image_data=new_msg.image_data,
                 vision_detail=new_msg.vision_detail or "auto",

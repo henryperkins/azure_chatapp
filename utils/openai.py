@@ -225,6 +225,8 @@ async def claude_chat(
     for msg in formatted_messages:
         if msg["role"] == "system":
             system_messages.append(msg["content"])
+        elif msg.get("metadata", {}).get("kb_context"):
+            system_messages.append(msg["metadata"]["kb_context"])
         else:
             clean_messages.append(msg)
             
