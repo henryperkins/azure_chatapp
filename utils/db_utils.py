@@ -219,19 +219,19 @@ async def validate_resource_access(
     
     return resource
 
-
 async def get_by_id(
     db: AsyncSession,
     model_class: Type[T],
-    model_id: UUID
+    model_id: Union[UUID, int]
 ) -> Optional[T]:
     """
     Generic function to retrieve a model instance by its ID.
+    Supports both UUID and integer ID types.
 
     Args:
         db: Database session
         model_class: SQLAlchemy model class to query
-        model_id: ID of the model instance to retrieve
+        model_id: ID of the model instance to retrieve (UUID or integer)
 
     Returns:
         The model instance if found, otherwise None

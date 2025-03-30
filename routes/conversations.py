@@ -6,13 +6,12 @@ Provides endpoints for managing conversations and their messages.
 import json
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     WebSocket,
     WebSocketDisconnect,
     status,
@@ -340,7 +339,7 @@ async def create_message(
         db=db,
     )
 
-    response_payload = {
+    response_payload: dict[str, Any] = {
         "message_id": str(message.id),
         "role": message.role,
         "content": message.content,
@@ -411,8 +410,11 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
             token = extract_token(websocket)
             logger.debug(f"Extracted WebSocket token: {token}")
             if not token:
-                logger.warning("WebSocket connection rejected: No token provided. Headers: %s, Query: %s",
-                             websocket.headers, websocket.query_params)
+                logger.warning(
+                    "WebSocket connection rejected: No token provided. Headers: %s, Query: %s",
+                    websocket.headers,
+                    websocket.query_params
+                )
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
@@ -445,7 +447,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                 return
 
             # Use connection manager for WebSocket management
-            from utils.websocket_manager import manager
+            from utils.websocket_manager import ConnectionManager
+            manager = ConnectionManager()
             connection_success = await manager.connect(websocket, str(conversation_id), str(user.id))
             if not connection_success:
                 logger.warning(f"WebSocket connection failed for user {user.id}, conversation {conversation_id}")
@@ -547,8 +550,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                                 # Get metadata from the message
                                 metadata = assistant_msg.get_metadata_dict() if hasattr(assistant_msg, 'get_metadata_dict') else {}
                                 
-                                # Prepare response
-                                response_data = {
+                                # Prepare response with proper typing for complex objects
+                                response_data: dict[str, Any] = {
                                     "type": "message",
                                     "role": "assistant",
                                     "content": assistant_msg.content,
@@ -558,13 +561,21 @@ async def websocket_chat_endpoint(websocket: WebSocket, conversation_id: UUID):
                                 
                                 # Add thinking if available
                                 if metadata:
-                                    if "thinking" in metadata:
-                                        response_data["thinking"] = metadata["thinking"]
-                                    if "redacted_thinking" in metadata:
-                                        response_data["redacted_thinking"] = metadata["redacted_thinking"]
-                                    if "model" in metadata:
-                                        response_data["model"] = metadata["model"]
-                                    response_data["metadata"] = metadata
+                                    # Ensure all metadata values are strings
+                                    filtered_metadata = {
+                                        k: str(v) if v is not None else ""
+                                        for k, v in metadata.items()
+                                    }
+                                    
+                                    if "thinking" in filtered_metadata:
+                                        response_data["thinking"] = filtered_metadata["thinking"]
+                                    if "redacted_thinking" in filtered_metadata:
+                                        response_data["redacted_thinking"] = filtered_metadata["redacted_thinking"]
+                                    if "model" in filtered_metadata:
+                                        response_data["model"] = filtered_metadata["model"]
+                                    
+                                    # Only assign if we have valid metadata
+                                    response_data["metadata"] = filtered_metadata
                                 
                                 # Add message ID if present in original request
                                 if message_id:

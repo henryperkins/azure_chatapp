@@ -200,9 +200,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     Handles validation exceptions with a custom JSON error message.
     """
     logger.warning(f"Validation error for request {request.url} - {exc.errors()}")
-    content = {"detail": "Invalid request data"}
-    if settings.ENV != "production":
-        content["errors"] = exc.errors()
+    content = {
+        "detail": "Invalid request data",
+        "errors": exc.errors() if settings.ENV != "production" else None
+    }
     return JSONResponse(status_code=422, content=content)
 
 # -------------------------

@@ -300,9 +300,24 @@ function createProjectListItem(project) {
 
     li.addEventListener('click', () => {
       localStorage.setItem('selectedProjectId', projectData.id);
-      if (window.ProjectDashboard?.showProjectDetailsView) {
-        window.ProjectDashboard.showProjectDetailsView(projectData.id);
+      
+      // Multiple ways to navigate to project details
+      if (window.projectDashboard?.showProjectDetails) {
+        window.projectDashboard.showProjectDetails(projectData.id);
+      } else if (window.projectDashboard?.handleViewProject) {
+        window.projectDashboard.handleViewProject(projectData.id);
+      } else if (window.location.pathname.includes('/projects')) {
+        // On projects page already - use query parameter
+        window.location.search = `?project=${projectData.id}`;
+      } else {
+        // Navigate to projects page with ID
+        window.location.href = `/projects.html?project=${projectData.id}`;
       }
+      
+      // Dispatch event for other components that might listen
+      document.dispatchEvent(new CustomEvent('projectSelected', {
+        detail: { projectId: projectData.id }
+      }));
     });
 
     return li;
@@ -451,8 +466,15 @@ function loadSidebarProjects() {
     return Promise.resolve([]);
   }
 
-  // NEW: Ensure sidebar element exists with retry logic
-  const sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
+  // NEW: Ensure sidebar element exists with retry logic and proper ID
+  let sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
+  
+  // Try additional known IDs if the preferred one isn't found
+  if (!sidebarProjects) {
+    sidebarProjects = document.getElementById("projectsList") ||
+                      document.getElementById("sidebarProjects");
+  }
+  
   if (!sidebarProjects) {
     console.warn("Sidebar projects container not found, retrying in 100ms");
     return new Promise(resolve => {

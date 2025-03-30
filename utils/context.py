@@ -111,9 +111,16 @@ async def manage_context(
     logger.info("Conversation was too large; older messages summarized.")
     # Store which chunks were used in the first new message
     if len(remainder) > 0 and remainder[0]["role"] == "user":
-        remainder[0]["context_used"] = {
+        # Type the message dictionary directly
+        msg: dict[str, Any] = remainder[0]
+        # Ensure search_results exists and has results
+        chunk_ids = []
+        if search_results and search_results.get("results"):
+            chunk_ids = [str(r["id"]) for r in search_results["results"] if r and "id" in r]
+        
+        msg["context_used"] = {
             "query": user_message,
-            "chunk_ids": [r["id"] for r in search_results["results"]],
+            "chunk_ids": chunk_ids,
             "token_count": total_tokens,
             "summary": summary_text
         }
