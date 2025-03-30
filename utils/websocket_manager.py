@@ -67,6 +67,30 @@ class ConnectionManager:
                 pass
             return False
 
+    async def handle_token_refresh(self, websocket: WebSocket, new_token: str, db: AsyncSession) -> bool:
+        """Handle token refresh for an active WebSocket connection"""
+        try:
+            user = await get_user_from_token(new_token, db, "access")
+            decoded = jwt.decode(new_token, options={"verify_signature": False})
+            
+            # Get FRESH user state from DB
+            db_user = await db.get(User, user.id)
+            
+            # Critical version check with latest DB state
+            if db_user.token_version != decoded.get("version", 0):
+                logger.warning(f"Token version mismatch after refresh for {user.username}")
+                await self.disconnect(websocket)
+                return False
+                
+            # Update connection tracking
+            self.connection_users[websocket] = str(user.id)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Token refresh failed: {str(e)}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return False
+
     async def disconnect(self, websocket: WebSocket) -> None:
         """Improved disconnect with state checks and error filtering"""
         try:
