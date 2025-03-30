@@ -6,8 +6,12 @@ Handles connection state, message broadcasting, and connection cleanup.
 """
 import logging
 import json
+import jwt
 from typing import Dict, List, Any, Optional
 from fastapi import WebSocket, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from models.user import User
+from utils.auth_utils import get_user_from_token
 
 logger = logging.getLogger(__name__)
 
