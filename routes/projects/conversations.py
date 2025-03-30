@@ -454,23 +454,17 @@ async def project_websocket_chat_endpoint(
 
                         # Check for token refresh
                         if data_dict.get("type") == "token_refresh" and data_dict.get("token"):
-                            try:
-                                # Validate the new token
-                                new_token = data_dict.get("token")
-                                await verify_token(new_token, "access", db)
-                                logger.info(f"Token refreshed via WebSocket for user {user.id}")
+                            success = await manager.handle_token_refresh(
+                                websocket, 
+                                data_dict.get("token"), 
+                                db
+                            )
+                            if success:
                                 await manager.send_personal_message({
                                     "type": "token_refresh_success",
                                     "message": "Token refreshed successfully"
                                 }, websocket)
-                                continue
-                            except Exception as token_error:
-                                logger.error(f"Token refresh error: {str(token_error)}")
-                                await manager.send_personal_message({
-                                    "type": "error",
-                                    "message": "Token refresh failed"
-                                }, websocket)
-                                continue
+                            continue
 
                     except (json.JSONDecodeError, ValueError) as e:
                         await manager.send_personal_message({
