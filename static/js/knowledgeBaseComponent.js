@@ -1,17 +1,7 @@
-// Import shared utility classes
-const { UIUtils, AnimationUtils, ModalManager } = require('./projectDashboardUtils');
-
-// Create instances of utility classes
-const uiUtilsInstance = new UIUtils();
-const animationUtilsInstance = new AnimationUtils();
-const modalManagerInstance = new ModalManager();
-
-// Maintain global references for backward compatibility
-if (typeof window !== 'undefined') {
-  window.UIUtils = window.UIUtils || uiUtilsInstance;
-  window.AnimationUtils = window.AnimationUtils || animationUtilsInstance;
-  window.modalManager = window.modalManager || modalManagerInstance;
-}
+// Use global utility classes if available
+const uiUtilsInstance = window.UIUtils || new (window.UIUtils || class UIUtils {});
+const animationUtilsInstance = window.AnimationUtils || new (window.AnimationUtils || class AnimationUtils {});
+const ModalManager = window.ModalManager || class ModalManager {};
 
 /**
  * Knowledge Base Component - Handles knowledge base functionality
