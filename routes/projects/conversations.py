@@ -454,17 +454,31 @@ async def project_websocket_chat_endpoint(
 
                         # Check for token refresh
                         if data_dict.get("type") == "token_refresh" and data_dict.get("token"):
-                            success = await manager.handle_token_refresh(
-                                websocket, 
-                                data_dict.get("token"), 
-                                db
-                            )
-                            if success:
+                            try:
+                                # Get fresh user data from new token
+                                new_token = data_dict.get("token")
+                                user = await get_user_from_token(new_token, db, "access")
+                                db_user = await db.get(User, user.id)
+
+                                # Update in-memory user reference
+                                user = db_user
+
+                                logger.info(f"Token refreshed via WebSocket for user {user.id}")
+
+                                # Send success message using fresh user state
                                 await manager.send_personal_message({
                                     "type": "token_refresh_success",
-                                    "message": "Token refreshed successfully"
+                                    "message": "Token refreshed successfully",
+                                    "new_version": db_user.token_version  # Send back to client
                                 }, websocket)
-                            continue
+                                continue
+                            except Exception as token_error:
+                                logger.error(f"Token refresh error: {str(token_error)}")
+                                await manager.send_personal_message({
+                                    "type": "error",
+                                    "message": "Token refresh failed"
+                                }, websocket)
+                                continue
 
                     except (json.JSONDecodeError, ValueError) as e:
                         await manager.send_personal_message({
