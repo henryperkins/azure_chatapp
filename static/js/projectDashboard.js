@@ -399,13 +399,12 @@ async function initProjectDashboard() {
   }
 }
 
-// Export for module usage
-module.exports = { 
-  ProjectDashboard, 
-  initProjectDashboard 
-};
-
 // Automatic initialization when loaded in browser context
+// Expose to window instead of module.exports
+if (typeof window !== 'undefined') {
+  window.initProjectDashboard = initProjectDashboard;
+  window.ProjectDashboard = ProjectDashboard;
+}
 if (typeof window !== 'undefined') {
   // Wait for both DOM and projectManager to be ready
   const startInitialization = async () => {
