@@ -2,9 +2,9 @@
 main.py
 --------
 The FastAPI entrypoint for the Azure OpenAI Chat Application.
-- Initializes the app with middleware (logging).
-- Includes routers (auth, conversations, projects, etc.).
-- Runs database init or migrations on startup.
+- Initializes the app with middleware (CORS, security, logging)
+- Includes routers (auth, conversations, projects, etc.)
+- Runs database init or migrations on startup
 """
 
 import logging
@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
@@ -46,7 +47,8 @@ from config import settings
 sys.path.append(str(Path(__file__).resolve().parent))
 
 # Configure Logging
-logging.basicConfig(level=logging.WARNING)
+logging_level = logging.DEBUG if settings.ENV == "development" else logging.WARNING
+logging.basicConfig(level=logging_level)
 logger = logging.getLogger(__name__)
 
 # Configure SQLAlchemy logging to be less verbose
@@ -59,23 +61,34 @@ os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 allowed_hosts = ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
 
 # Create FastAPI app instance
+middleware = [
+    Middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=allowed_hosts,
+        www_redirect=False
+    ),
+    Middleware(
+        SessionMiddleware,
+        secret_key=os.environ["SESSION_SECRET"],  # Enforced environment variable
+        session_cookie="session",
+        same_site="lax",
+        https_only=True if settings.ENV == "production" else False,
+    ),
+]
+
+if settings.ENV != "production":
+    middleware.append(
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    )
+
 app = FastAPI(
-    middleware=[
-        Middleware(
-            TrustedHostMiddleware,
-            allowed_hosts=allowed_hosts,
-            www_redirect=False
-        ),
-        Middleware(
-            SessionMiddleware,
-            secret_key=os.getenv(
-                "SESSION_SECRET", "your-secret-key"
-            ),  # Change 'your-secret-key' to a secure value
-            session_cookie="session",
-            same_site="lax",  # More secure setting than 'none'
-            https_only=True if settings.ENV == "production" else False,
-        ),
-    ],
+    middleware=middleware,
     title="Azure OpenAI Chat Application",
     description="""
 A secure, robust, and intuitively designed web-based chat application 
@@ -147,23 +160,22 @@ async def health_check():
     """Health check endpoint to verify the application is running."""
     return {"status": "ok"}
 
-@app.get("/debug/schema-check")
-async def debug_schema_check():
-    """Debug endpoint to verify database schema alignment"""
-    from sqlalchemy import inspect
-    async with get_async_session_context() as session:
-        inspector = inspect(session.get_bind())
-        return {
-            "project_files_columns": inspector.get_columns("project_files"),
-            "knowledge_bases_columns": inspector.get_columns("knowledge_bases")
-        }
-    
+# Debug endpoints only available in non-production
+if settings.ENV != "production":
+    @app.get("/debug/schema-check")
+    async def debug_schema_check():
+        """Debug endpoint to verify database schema alignment"""
+        async with get_async_session_context() as session:
+            inspector = inspect(session.get_bind())
+            return {
+                "project_files_columns": inspector.get_columns("project_files"),
+                "knowledge_bases_columns": inspector.get_columns("knowledge_bases")
+            }
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Return the favicon."""
     return FileResponse("static/favicon.ico")
-
 
 # --------------------------------
 # CUSTOM 422 HANDLER
@@ -172,17 +184,12 @@ async def favicon():
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
     Handles validation exceptions with a custom JSON error message.
-    This is where 422 Unprocessable Entity gets triggered if the request
-    doesn't match the parameter or body schemas.
     """
     logger.warning(f"Validation error for request {request.url} - {exc.errors()}")
-    return JSONResponse(
-        status_code=422,
-        content={
-            "detail": "Invalid request data",
-            "errors": exc.errors()
-        },
-    )
+    content = {"detail": "Invalid request data"}
+    if settings.ENV != "production":
+        content["errors"] = exc.errors()
+    return JSONResponse(status_code=422, content=content)
 
 # -------------------------
 # Register Routers
@@ -210,7 +217,6 @@ app.include_router(
     tags=["project-conversations"]
 )
 
-
 # -------------------------
 # Startup & Shutdown Events
 # -------------------------
@@ -222,65 +228,40 @@ async def on_startup():
         # Initialize database with enhanced schema alignment
         await init_db()
         
-        # Additional validation after schema alignment has been applied
+        # Validate schema using SQLAlchemy inspector
         async with get_async_session_context() as session:
-            # Use run_sync to perform inspection operations
-            required_columns = {
+            inspector = inspect(session.get_bind())
+            required_tables = {
                 "project_files": ["config"],
                 "knowledge_bases": ["config"],
                 "users": ["token_version"],
                 "messages": ["context_used"]
             }
             
-            # Get database metadata using run_sync
-            def get_db_metadata(sync_session):
-                inspector = inspect(sync_session.get_bind())
-                metadata = {}
-                
-                try:
-                    conn = sync_session.connection()
-                    for table in required_columns.keys():
-                        if not inspector.has_table(table):
-                            continue
-                            
-                        result = conn.execute(
-                            text(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'")
-                        )
-                        metadata[table] = {row[0] for row in result}
-                finally:
-                    sync_session.close()
-                    
-                return metadata
-            
-            db_metadata = await session.run_sync(get_db_metadata)
-            
-            for table, cols in required_columns.items():
-                if table not in db_metadata:
+            for table, required_columns in required_tables.items():
+                if not inspector.has_table(table):
                     raise RuntimeError(f"Missing critical table: {table}")
                 
-                existing = db_metadata[table]
-                missing = set(cols) - existing
+                columns = [col["name"] for col in inspector.get_columns(table)]
+                missing = set(required_columns) - set(columns)
                 if missing:
                     raise RuntimeError(f"Missing columns in {table}: {missing}")
 
-        # Create uploads directory
+        # Create secure uploads directory
         upload_path = Path("./uploads/project_files")
         upload_path.mkdir(parents=True, exist_ok=True)
-        upload_path.chmod(0o755)
+        upload_path.chmod(0o700)  # Restrictive permissions
         
-        # Auth system
+        # Initialize auth system
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
             await load_revocation_list(session)
+            logger.info(f"Cleaned {deleted_count} expired tokens during startup")
 
         # Schedule periodic token cleanup
         await schedule_token_cleanup(interval_minutes=30)
         
         logger.info("Startup completed: Database validated, uploads ready, auth initialized")
-    except Exception as e:
-        logger.critical("Startup initialization failed: %s", e)
-        raise
-        logger.info("Authentication system initialized")
     except Exception as e:
         logger.critical("Startup initialization failed: %s", e)
         raise
