@@ -1,18 +1,11 @@
-// Import shared utility classes
-const { UIUtils, AnimationUtils, ModalManager } = require('./projectDashboardUtils');
-
-// Create instances of utility classes
-const uiUtilsInstance = new UIUtils();
-const animationUtilsInstance = new AnimationUtils();
-
-// Maintain global references for backward compatibility
-if (typeof window !== 'undefined') {
-  window.UIUtils = window.UIUtils || uiUtilsInstance;
-  window.AnimationUtils = window.AnimationUtils || animationUtilsInstance;
-}
+// Use global utils if available
+const uiUtilsInstance = window.UIUtils || new (window.UIUtils || class UIUtils {});
+const animationUtilsInstance = window.AnimationUtils || new (window.AnimationUtils || class AnimationUtils {});
+const ModalManager = window.ModalManager || class ModalManager {};
 
 /**
  * Project List Component - Handles the project list view
+ * @class
  */
 class ProjectListComponent {
   constructor(options) {
@@ -312,5 +305,7 @@ class ProjectListComponent {
   }
 }
 
-// Export the ProjectListComponent class
-module.exports = ProjectListComponent;
+// Export as global
+if (typeof window !== 'undefined') {
+  window.ProjectListComponent = ProjectListComponent;
+}

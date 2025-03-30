@@ -260,9 +260,9 @@ class ModalManager {
   }
 }
 
-// Export for usage in other modules
-module.exports = { 
-  UIUtils, 
-  AnimationUtils, 
-  ModalManager 
-};
+// Export as globals
+if (typeof window !== 'undefined') {
+  window.UIUtils = UIUtils;
+  window.AnimationUtils = AnimationUtils;
+  window.ModalManager = ModalManager;
+}
