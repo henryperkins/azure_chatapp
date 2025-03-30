@@ -1,10 +1,10 @@
 /**
  * projectDashboardUtils.js
  * -----------------------
- * Utility classes for the project dashboard
+ * Centralized utility classes for the project dashboard
  */
 
-// Wrap in IIFE to prevent multiple executions
+// IIFE to prevent global scope pollution
 (function() {
   // Global initialization flag to prevent double initialization
   if (window._dashboardUtilsInitialized) {
@@ -15,6 +15,10 @@
   
   console.log('Initializing projectDashboardUtils.js');
   
+  /* ===========================
+     INITIALIZE CORE DEPENDENCIES
+     =========================== */
+  
   // Define base Notifications object if not defined
   if (!window.Notifications) {
     console.log('Creating base Notifications object');
@@ -24,6 +28,10 @@
       projectNotFound: (msg) => console.warn('Project Not Found:', msg)
     };
   }
+  
+  /* ===========================
+     UI UTILITY CLASS
+     =========================== */
   
   // Define UIUtils safely with more robust error checking
   if (typeof window.UIUtils === 'undefined') {
@@ -110,11 +118,18 @@
         return iconMap[fileType] || '📄';
       }
       
+      getElement(id) {
+        return document.getElementById(id);
+      }
+      
       // Add a static method for availability checking
       static isAvailable() {
         return typeof window.UIUtils !== 'undefined';
       }
-      
+
+      /**
+       * Unified notification system - core implementation
+       */
       showNotification(message, type = "info", options = {}) {
         if (window.Notifications) {
           switch(type) {
@@ -144,7 +159,7 @@
       }
     };
     
-    // Immediately create instance to ensure it's available
+    // Create instance immediately
     window.uiUtilsInstance = new window.UIUtils();
   } else {
     console.log('UIUtils already exists, using existing definition');
@@ -153,6 +168,10 @@
       window.uiUtilsInstance = new window.UIUtils();
     }
   }
+
+  /* ===========================
+     ANIMATION UTILITY CLASS
+     =========================== */
 
   // Define AnimationUtils safely
   if (typeof window.AnimationUtils === 'undefined') {
@@ -184,7 +203,7 @@
       }
     };
     
-    // Create instance and make it globally available - THIS IS THE KEY FIX
+    // Create instance immediately
     window.animationUtilsInstance = new window.AnimationUtils();
   } else {
     console.log('AnimationUtils already exists, using existing definition');
@@ -194,7 +213,11 @@
     }
   }
 
-  // For ModalManager, check global existence before trying to create
+  /* ===========================
+     MODAL MANAGER CLASS
+     =========================== */
+
+  // Define ModalManager safely
   if (typeof window.ModalManager === 'undefined') {
     console.log('Creating ModalManager class');
     window.ModalManager = class ModalManager {
@@ -202,11 +225,6 @@
         // Initialize modal collection
         this.modals = {};
         this.registerAllModals();
-        
-        // Add DOMContentLoaded event to ensure modals are registered even on late initialization
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', () => this.registerAllModals());
-        }
         
         // Register modals again after a short delay to catch any late DOM updates
         setTimeout(() => this.registerAllModals(), 500);
@@ -353,28 +371,11 @@
     }
   }
 
-  // Fix initialization order - ensure core utils are available before component loading
-  document.addEventListener('DOMContentLoaded', () => {
-    // Signal utils ready
-    document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
-    console.log('Dashboard utils ready event dispatched');
-  });
-
-  // Ensure the project ID is available for websocket connections
-  try {
-    if (!localStorage.getItem("selectedProjectId") && document.querySelector('[data-project-id]')) {
-      const projectIdElement = document.querySelector('[data-project-id]');
-      const projectId = projectIdElement.getAttribute('data-project-id');
-      if (projectId) {
-        console.log('Setting selected project ID from data attribute:', projectId);
-        localStorage.setItem("selectedProjectId", projectId);
-      }
-    }
-  } catch (e) {
-    console.error('Error setting project ID from data attribute:', e);
-  }
-
-  // Add this near the end of the file
+  /* ===========================
+     GLOBAL EVENT HANDLING & NOTIFICATIONS
+     =========================== */
+  
+  // Unified notification function
   window.showNotification = function(message, type = "info", options = {}) {
     if (window.uiUtilsInstance && window.uiUtilsInstance.showNotification) {
       window.uiUtilsInstance.showNotification(message, type, options);
@@ -383,12 +384,7 @@
     }
   };
 
-  // Also add a convenience function to check if utils are ready
-  window.isProjectDashboardUtilsReady = function() {
-    return window.UIUtils && window.ModalManager && window.uiUtilsInstance;
-  };
-
-  // Add better error tracking
+  // Centralized global error handler
   window.addEventListener('error', function(event) {
     console.error('Global error:', event.error?.message || event.message);
     if (window.showNotification) {
@@ -430,8 +426,30 @@
     // Mark event as handled to prevent double-logging in console
     event.preventDefault();
   });
+
+  /* ===========================
+     INITIALIZATION & READINESS
+     =========================== */
+
+  // Helper function to dispatch ready event
+  function dispatchReady() {
+    document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
+    window.dashboardUtilsReady = true;
+    console.log('Dashboard utils ready event dispatched');
+  }
+
+  // Centralized initialization event
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', dispatchReady);
+  } else {
+    dispatchReady();
+  }
+
+  // Helper functions to check readiness
+  window.isProjectDashboardUtilsReady = function() {
+    return window.UIUtils && window.ModalManager && window.uiUtilsInstance;
+  };
   
-  // Add a check to see if all components are available
   window.areDashboardComponentsReady = function() {
     return (
       window.UIUtils && 

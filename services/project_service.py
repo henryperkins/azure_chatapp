@@ -10,16 +10,16 @@ We now clarify:
 
 from uuid import UUID
 from typing import Optional, Any, List, Dict, Type
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import asc, desc
+from sqlalchemy.orm import joinedload
 
 from models.project import Project
 from models.user import User
 from models.knowledge_base import KnowledgeBase
 from models.conversation import Conversation
-from models.artifact import Artifact
 
 # =======================================================
 #  Knowledge Base Validation
@@ -48,8 +48,6 @@ async def validate_knowledge_base_access(
 # =======================================================
 #  Project Access
 # =======================================================
-
-from sqlalchemy.orm import joinedload
 
 async def validate_project_access(
     project_id: UUID,
@@ -257,7 +255,6 @@ async def get_project_conversations(
     Return all conversations for a project. 
     Could eventually add skip/limit if needed.
     """
-    from models.conversation import Conversation
     result = await db.execute(
         select(Conversation).where(Conversation.project_id == project_id)
     )

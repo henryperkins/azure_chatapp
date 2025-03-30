@@ -8,7 +8,7 @@ This version has been updated to use db_utils.py functions instead of direct DB 
 """
 import logging
 import base64
-from typing import Dict, Any, Optional, List
+from typing import Dict, Optional, List
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -20,7 +20,6 @@ from models.project import Project
 from utils.openai import extract_base64_data
 from utils.context import manage_context, token_limit_check
 from utils.db_utils import get_by_id, get_all_by_condition, save_model
-from utils.serializers import serialize_message
 
 logger = logging.getLogger(__name__)
 

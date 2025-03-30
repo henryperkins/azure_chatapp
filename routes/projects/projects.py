@@ -9,7 +9,7 @@ import logging
 from uuid import UUID
 from typing import Optional, Dict
 import os
-from datetime import datetime
+import shutil
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
@@ -23,6 +23,7 @@ from models.project import Project
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact
+from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import validate_project_access
 import config
@@ -84,7 +85,10 @@ async def create_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Create new project"""
+    """
+    Create new project with automatic knowledge base creation.
+    A knowledge base will be automatically created for each new project.
+    """
     try:
         # Create project using db utility
         project = Project(
@@ -94,10 +98,30 @@ async def create_project(
         await save_model(db, project)
         logger.info(f"Project created successfully: {project.id} for user {current_user.id}")
         
+        # Auto-create knowledge base for the project
+        try:
+            # Convert to string and back to UUID to satisfy type checking
+            project_id_str = str(project.id)
+            kb = await knowledgebase_service.create_knowledge_base(
+                name=f"{project.name} Knowledge Base",
+                project_id=UUID(project_id_str),
+                description="Automatically created knowledge base",
+                embedding_model=None,  # Use default model
+                db=db
+            )
+            logger.info(f"Auto-created knowledge base {kb.id} for project {project.id}")
+            logger.info(f"Auto-created knowledge base {kb.id} for project {project.id}")
+        except Exception as kb_error:
+            logger.error(f"Failed to auto-create knowledge base: {str(kb_error)}")
+            # Continue execution even if KB creation fails
+        
+        # Refresh the project to include the KB relationship
+        await db.refresh(project)
+        
         # Serialize project for response
         serialized_project = serialize_project(project)
         
-        return await create_standard_response(serialized_project, "Project created successfully")
+        return await create_standard_response(serialized_project, "Project created successfully with knowledge base")
         
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
@@ -262,22 +286,87 @@ async def delete_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Delete a project and all associated resources"""
-    # Verify project ownership
-    project = await validate_project_access(
-        project_id,
-        current_user,
-        db
-    )
-
-    # Delete the project and rely on CASCADE for related resources
-    await db.delete(project)
-    await db.commit()
-    
-    return await create_standard_response(
-        {"id": str(project_id)},
-        "Project and all associated resources deleted successfully"
-    )
+    """Delete a project and all associated resources, including knowledge base, vector data, and files"""
+    try:
+        # Verify project ownership
+        project = await validate_project_access(
+            project_id,
+            current_user,
+            db
+        )
+        
+        # Store knowledge base ID before deletion if it exists
+        knowledge_base_id = project.knowledge_base_id
+        
+        # Get storage service for file deletion
+        storage_config = {
+            "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+            "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+        }
+        storage = get_file_storage(storage_config)
+        
+        # 1. Delete all files first (both from storage and database)
+        try:
+            # Get all files for this project
+            files_query = select(ProjectFile).where(ProjectFile.project_id == project_id)
+            files_result = await db.execute(files_query)
+            files = files_result.scalars().all()
+            
+            # Delete each file from storage
+            for file in files:
+                try:
+                    await storage.delete_file(file.file_path)
+                except Exception as file_err:
+                    logger.warning(f"Failed to delete file {file.id} from storage: {str(file_err)}")
+            
+            logger.info(f"Deleted {len(files)} files from storage for project {project_id}")
+        except Exception as files_err:
+            logger.error(f"Error deleting project files: {str(files_err)}")
+        
+        # 2. Delete vector data if knowledge base exists
+        if knowledge_base_id:
+            try:
+                # Get the knowledge base to find the embedding model
+                kb = await db.get(KnowledgeBase, knowledge_base_id)
+                if kb:
+                    embedding_model = kb.embedding_model or "all-MiniLM-L6-v2"
+                    
+                    # Initialize vector DB
+                    vector_db = await get_vector_db(
+                        model_name=embedding_model,
+                        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+                        load_existing=True
+                    )
+                    
+                    # Delete all vectors with this project ID
+                    await vector_db.delete_by_filter({"project_id": str(project_id)})
+                    logger.info(f"Deleted vector data for project {project_id}")
+            except Exception as vector_err:
+                logger.error(f"Error deleting vector data: {str(vector_err)}")
+        
+        # 3. Delete the project (this will cascade delete knowledge base and other DB records)
+        await db.delete(project)
+        await db.commit()
+        
+        # 4. Clean up vector DB storage directory
+        try:
+            vector_dir = os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id))
+            if os.path.exists(vector_dir):
+                shutil.rmtree(vector_dir, ignore_errors=True)
+                logger.info(f"Deleted vector storage directory for project {project_id}")
+        except Exception as dir_err:
+            logger.error(f"Error cleaning up vector storage directory: {str(dir_err)}")
+        
+        return await create_standard_response(
+            {"id": str(project_id)},
+            "Project and all associated resources deleted successfully"
+        )
+    except Exception as e:
+        logger.error(f"Error deleting project: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete project: {str(e)}"
+        )
 
 
 # ============================

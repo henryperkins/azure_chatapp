@@ -8,7 +8,6 @@ import logging
 import json
 from typing import Dict, List, Any, Optional
 from fastapi import WebSocket, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
