@@ -59,9 +59,9 @@ async def augment_with_knowledge(
                 db=db,
                 top_k=5  # Default to 5 results
             )
-        
-        if not search_results.get("results"):
-            return []
+            
+            if not search_results.get("results"):
+                return []
 
         # Format and prioritize results
         context_messages = []
