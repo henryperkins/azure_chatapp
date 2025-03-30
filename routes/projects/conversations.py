@@ -18,6 +18,7 @@ from schemas.chat_schemas import MessageCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services import conversation_service, project_service
+from services.context_integration import augment_with_knowledge
 from db import get_async_session
 from models.user import User
 from models.project import Project
@@ -511,7 +512,7 @@ async def project_websocket_chat_endpoint(
                             
                             # Inject knowledge base context
                             kb_context = await augment_with_knowledge(
-                                conversation_id=conversation_id_uuid,
+                                conversation_id=conversation_id,
                                 user_message=data_dict["content"],
                                 db=db
                             )
