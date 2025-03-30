@@ -74,11 +74,17 @@ async def augment_with_knowledge(
                 
             context_messages.append({
                 "role": "system",
-                "content": f"Knowledge base context: {result['text']}",
+                "content": (
+                    f"Relevant knowledge (score: {result.get('score', 0):.2f}):\n"
+                    f"{result['text']}\n"
+                    f"Source: {result.get('metadata', {}).get('file_name', 'unknown')}"
+                ),
                 "metadata": {
                     "source": "knowledge_base",
                     "file_id": result.get("metadata", {}).get("file_id"),
-                    "score": result.get("score")
+                    "file_name": result.get("metadata", {}).get("file_name"),
+                    "score": float(result.get("score", 0)),
+                    "chunk_index": result.get("metadata", {}).get("chunk_index")
                 }
             })
             total_tokens += result_tokens
