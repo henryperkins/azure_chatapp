@@ -337,11 +337,29 @@
           }
         }
 
-        // 3. Enhanced KB check with options
-        if (!knowledgeBaseId || !isKbActive) {
-          return await this._handleMissingKB(projectId, files);
+        // 3. Safely verify KB state
+        if (!window.knowledgeBaseState?.verifyKB) {
+          console.warn('knowledgeBaseState not available - skipping KB check');
+          return this._processFiles(projectId, files);
         }
+        const kbState = await window.knowledgeBaseState.verifyKB(projectId);
+        console.debug('Verified KB state:', kbState);
 
+        if (!kbState.exists) {
+          console.debug('KB check - exists:', kbState.exists, 'active:', kbState.isActive);
+          // Only recommend KB for text-based files and if no recent dismissal
+          if (window.knowledgeBaseState.shouldRecommendForFiles(files)) {
+            return await this._handleMissingKB(projectId, files);
+          }
+          console.debug('KB recommendation not shown (conditions not met)');
+        } else if (!kbState.isActive) {
+          console.debug('KB inactive - showing limited functionality warning');
+          window.showNotification(
+            `Knowledge Base (${kbState.name}) is inactive - some features disabled`,
+            "warning"
+          );
+        }
+    
         // 4. Proceed with normal upload flow
         this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
         return this._processFiles(projectId, files);
@@ -357,12 +375,24 @@
      */
     async _attemptAutoCreateKB(projectId) {
       try {
+        // Check if KB functionality is available
+        if (!window.projectManager?.createKnowledgeBase) {
+          console.debug('Knowledge Base creation not available - skipping');
+          return null;
+        }
+
         const defaultKb = {
           name: 'Default Knowledge Base',
           description: 'Automatically created for file uploads',
           is_active: true
         };
-        return await window.projectManager.createKnowledgeBase(projectId, defaultKb);
+        
+        try {
+          return await window.projectManager.createKnowledgeBase(projectId, defaultKb);
+        } catch (error) {
+          console.error('KB auto-creation failed:', error);
+          return null;
+        }
       } catch (error) {
         console.error('KB auto-creation failed:', error);
         return null;
