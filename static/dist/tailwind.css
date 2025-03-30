@@ -203,7 +203,6 @@ button,
 [type='reset'],
 [type='submit'] {
   -webkit-appearance: button; /* 1 */
-  appearance: button; /* 1 */
   background-color: transparent; /* 2 */
   background-image: none; /* 2 */
 }
@@ -248,7 +247,6 @@ Correct the cursor style of increment and decrement buttons in Safari.
 
 [type='search'] {
   -webkit-appearance: textfield; /* 1 */
-  appearance: textfield; /* 1 */
   outline-offset: -2px; /* 2 */
 }
 
@@ -376,7 +374,7 @@ audio,
 iframe,
 embed,
 object {
-  display: inline-block; /* 1 */
+  display: block; /* 1 */
   vertical-align: middle; /* 2 */
 }
 
@@ -712,6 +710,7 @@ video {
 /* Project card component */
 .project-card {
   margin-bottom: 1rem;
+  height: 100%;
   min-height: 200px;
   width: 100%;
   min-width: 300px;
@@ -984,14 +983,12 @@ video {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  line-clamp: 2;
+}
 .line-clamp-3 {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-  line-clamp: 3;
-}
 }
 .block {
   display: block;
@@ -1700,6 +1697,9 @@ video {
 }
 .underline {
   text-decoration-line: underline;
+}
+.opacity-0 {
+  opacity: 0;
 }
 .opacity-100 {
   opacity: 1;

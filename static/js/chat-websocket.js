@@ -208,6 +208,9 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     }
 
     const finalProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    if (!this.projectId) {
+      throw new Error('No project selected - please select a project first');
+    }
     const basePath = `/api/projects/${this.projectId}/conversations/${chatId}/ws`;
     this.wsUrl = `${finalProtocol}${host}${basePath}?${params}`;
     console.log('Constructed WebSocket URL:', this.wsUrl);
