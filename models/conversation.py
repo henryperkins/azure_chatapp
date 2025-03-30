@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
 from db import Base
 from typing import Optional
 from datetime import datetime
