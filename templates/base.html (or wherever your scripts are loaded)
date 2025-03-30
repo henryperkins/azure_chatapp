@@ -1,0 +1,5 @@
+<!-- Load project scripts in correct dependency order -->
+<script src="/static/js/projectDashboardUtils.js"></script>
+<script src="/static/js/projectListComponent.js"></script> 
+<script src="/static/js/projectDetailsComponent.js"></script>
+<script src="/static/js/projectDashboard.js"></script>
