@@ -343,7 +343,16 @@ window.WebSocketService.prototype.establishConnection = function () {
 
     socket.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        
+        // Handle token refresh success
+        if (data.type === 'token_refresh_success') {
+          if (window.TokenManager) {
+            window.TokenManager.tokenVersion = data.new_version;
+            console.log('Token version updated to:', data.new_version);
+          }
+          return;
+        }
 
         // Handle special message types
         if (data.type === 'pong') {
