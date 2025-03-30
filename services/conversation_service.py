@@ -102,16 +102,15 @@ async def create_conversation(
         await validate_model(model_id)
         logger.info("Model validation passed")
         
-        # Create conversation object
-        # Validate project and knowledge base
+        # Validate project and check knowledge base availability
         project = await db.get(Project, project_id)
         if not project:
             raise HTTPException(404, "Project not found")
             
+        # Auto-enable KB if project has one
+        use_knowledge_base = bool(project.knowledge_base_id)
+    
         if use_knowledge_base:
-            if not project.knowledge_base_id:
-                raise HTTPException(400, "Project has no linked knowledge base")
-                
             kb = await db.get(KnowledgeBase, project.knowledge_base_id)
             if not kb or not kb.is_active:
                 raise HTTPException(400, "Project's knowledge base is not active")
@@ -121,8 +120,8 @@ async def create_conversation(
             user_id=user_id,
             title=title,
             model_id=model_id,
-            use_knowledge_base=use_knowledge_base if project_id else False,  # Force false if no project
-            knowledge_base_id=project.knowledge_base_id if use_knowledge_base and project_id else None
+            use_knowledge_base=use_knowledge_base,
+            knowledge_base_id=project.knowledge_base_id if use_knowledge_base else None
         )
         logger.info("Conversation object created")
         
