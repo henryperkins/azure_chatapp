@@ -12,11 +12,11 @@ Manages knowledge bases and their components:
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator, List
+from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator
 from uuid import UUID
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 
 import config
@@ -27,9 +27,8 @@ from models.user import User
 
 # Import existing utilities to reduce duplication
 from utils.file_validation import FileValidator, sanitize_filename
-from utils.context import estimate_token_count, estimate_tokens
+from utils.context import estimate_token_count
 from utils.db_utils import get_by_id, get_all_by_condition, save_model
-from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project_file, serialize_vector_result
 from services.file_storage import get_file_storage
 from services.text_extraction import get_text_extractor, TextExtractionError
@@ -187,7 +186,6 @@ async def _process_file_tokens(
         "token_estimate": token_estimate,
         "metadata": metadata
     }
-
 async def estimate_tokens_from_file(
     content: Union[bytes, BinaryIO, AsyncGenerator[bytes, None]],
     filename: str
@@ -199,6 +197,13 @@ async def estimate_tokens_from_file(
     text_extractor = get_text_extractor()
     
     try:
+        # Handle AsyncGenerator by collecting all bytes
+        if isinstance(content, AsyncGenerator):
+            content_bytes = b''
+            async for chunk in content:
+                content_bytes += chunk
+            content = content_bytes
+
         # Extract text
         text_chunks, extracted_meta = await text_extractor.extract_text(
             content,

@@ -967,19 +967,75 @@
  <script src="/static/js/auth.js"></script>
  <script src="/static/js/modelConfig.js"></script>
  
- <!-- Utils must load first -->
+ <!-- Core utilities must load first -->
  <script src="/static/js/projectDashboardUtils.js"></script>
-  
- <!-- Core project scripts -->
- <script src="/static/js/projectManager.js"></script>
- <script src="/static/js/projectDashboard.js"></script>
- <script src="/static/js/projectDetailsComponent.js"></script>
- <script src="/static/js/projectListComponent.js"></script>
- 
- <!-- Knowledge Base (depends on projectManager and utils) -->
- <script src="/static/js/knowledgeBaseComponent.js"></script>
-   
- <!-- Consolidated scripts -->
+
+ <!-- Ensure utilities are ready before loading components -->
+ <script>
+   (function() {
+     let scriptsLoaded = {};
+     let pendingScripts = [
+       '/static/js/projectDetailsComponent.js',
+       '/static/js/projectListComponent.js',
+       '/static/js/knowledgeBaseComponent.js',
+       '/static/js/projectManager.js'
+     ];
+     
+     function waitForUtils() {
+       if (window.UIUtils && window.uiUtilsInstance && window.ModalManager) {
+         console.log('Dashboard utilities ready, loading components in sequence...');
+         loadScriptsSequentially();
+       } else {
+         console.log('Waiting for dashboard utilities...');
+         setTimeout(waitForUtils, 50);
+       }
+     }
+     
+     // Load scripts one after another to ensure proper order
+     function loadScriptsSequentially() {
+       if (pendingScripts.length === 0) {
+         // After all component scripts are loaded, load the dashboard
+         loadScript('/static/js/projectDashboard.js', function() {
+           console.log('All dashboard components loaded successfully.');
+         });
+         return;
+       }
+       
+       const nextScript = pendingScripts.shift();
+       loadScript(nextScript, function() {
+         // After script loads successfully, load the next one
+         loadScriptsSequentially();
+       });
+     }
+     
+     function loadScript(src, callback) {
+       if (scriptsLoaded[src]) {
+         if (callback) callback();
+         return;
+       }
+       
+       console.log('Loading script:', src);
+       const script = document.createElement('script');
+       script.src = src;
+       script.onload = function() {
+         console.log('Script loaded:', src);
+         scriptsLoaded[src] = true;
+         if (callback) callback();
+       };
+       script.onerror = function() {
+         console.error('Failed to load script:', src);
+         // Still try to continue with the next script
+         if (callback) callback();
+       };
+       document.head.appendChild(script);
+     }
+     
+     // Start checking for utilities
+     waitForUtils();
+   })();
+ </script>
+
+ <!-- Remaining scripts -->
  <script src="/static/js/sidebar.js"></script>
  <script src="/static/js/app.js"></script>
  <script>

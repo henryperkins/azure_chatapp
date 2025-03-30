@@ -155,7 +155,7 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
     const projectEndpoint = `/api/projects/${projectId}/`;
     console.log(`[ProjectManager] Loading project details from ${projectEndpoint}`);
       
-    window.apiRequest(projectEndpoint, "GET")
+    return window.apiRequest(projectEndpoint, "GET")
       .then((response) => {
         // Handle different response formats
         let projectData = null;
@@ -180,6 +180,43 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
         console.log(`[ProjectManager] Project loaded successfully:`, currentProject);
         localStorage.setItem('selectedProjectId', currentProject.id); // Store projectId
         
+        // Debug knowledge base status
+        console.log('[DEBUG] Knowledge base info in project:', {
+          kb_id: currentProject.knowledge_base_id,
+          project_id: currentProject.id,
+          has_kb: !!currentProject.knowledge_base_id
+        });
+        
+        // Clean any 'null' string value for knowledge_base_id
+        // (which can happen due to serialization issues)
+        if (currentProject.knowledge_base_id === 'null') {
+          console.warn('[WARN] Found knowledge_base_id="null" string, cleaning up');
+          currentProject.knowledge_base_id = null;
+        }
+        
+        // If we have a knowledge base ID but no knowledge base object, get the KB details
+        if (currentProject.knowledge_base_id && !currentProject.knowledge_base) {
+          console.log('[DEBUG] Project has knowledge_base_id but no knowledge_base object, fetching details');
+          
+          // Fetch the knowledge base details
+          window.apiRequest(`/api/knowledge-bases/${currentProject.knowledge_base_id}`, "GET")
+            .then(kbData => {
+              console.log('[DEBUG] Loaded knowledge base details:', kbData);
+              
+              // Add knowledge base data to project
+              currentProject.knowledge_base = kbData.data || kbData;
+              
+              // Update UI with the loaded knowledge base
+              updateKnowledgeBaseUI(currentProject);
+            })
+            .catch(err => {
+              console.error('[ERROR] Failed to load knowledge base details:', err);
+            });
+        }
+        
+        // Update knowledge base UI elements
+        updateKnowledgeBaseUI(currentProject);
+        
         document.dispatchEvent(
           new CustomEvent("projectLoaded", { detail: currentProject })
         );
@@ -189,7 +226,7 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
           console.warn("Project is archived, skipping additional loads.");
           window.Notifications?.projectNotFound?.() ||
             console.warn("This project is archived");
-          return;
+          return currentProject;
         }
 
         // Load all project details in parallel
@@ -201,6 +238,8 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
         ]).catch(err => {
           console.warn("Error loading some project details:", err);
         });
+        
+        return currentProject;
       })
       .catch((err) => {
         console.error("Error loading project details:", err);
@@ -391,10 +430,42 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
    * Returns a promise that resolves or rejects on the upload result.
    */
   function uploadFile(projectId, file) {
+    // First check if project has an active knowledge base
+    if (!currentProject) {
+      return Promise.reject(new Error("No project loaded. Please select a project first."));
+    }
+    
+    // Verify knowledge base exists and is active
+    if (!currentProject.knowledge_base_id) {
+      return Promise.reject(new Error("This project doesn't have a knowledge base configured. Please set up a knowledge base first."));
+    }
+    
+    // Check if knowledge base is active by looking at its properties
+    const kbIsActive = currentProject.knowledge_base?.is_active;
+    if (kbIsActive === false) { // Only reject if explicitly false, not if undefined
+      return Promise.reject(new Error("Knowledge base is disabled. Please activate it before uploading files."));
+    }
+    
+    // Verify that the project ID matches with what's stored with the knowledge base
+    const kbContainer = document.getElementById("knowledgeBaseActive");
+    if (kbContainer && kbContainer.dataset.projectId) {
+      const kbProjectId = kbContainer.dataset.projectId;
+      if (kbProjectId && kbProjectId !== projectId) {
+        console.error(`Project ID mismatch: current=${projectId}, KB=${kbProjectId}`);
+        return Promise.reject(new Error("Project ID mismatch with knowledge base. Please reload the page and try again."));
+      }
+    }
+    
     const formData = new FormData();
     formData.append("file", file);
     
     console.log(`Uploading file ${file.name} (${file.size} bytes) to project ${projectId}`);
+    console.log("Knowledge base status:", {
+      kb_id: currentProject.knowledge_base_id,
+      is_active: kbIsActive,
+      project_id: projectId,
+      kb_project_id: kbContainer?.dataset.projectId
+    });
     
     // Add any required metadata fields to formData
     formData.append('project_id', projectId);
@@ -537,9 +608,7 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
     return "unknown";
   }
 
-  /**
-   * Get the current project object
-   */
+  
   /**
    * Get the current project object
    * @returns {Object|null} The current project object or null if none loaded
@@ -547,8 +616,95 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
   function getCurrentProject() {
     return currentProject;
   }
+  
+  /**
+   * Updates the knowledge base UI elements based on project KB status
+   * @param {Object} project - The current project object
+   */
+  function updateKnowledgeBaseUI(project) {
+    if (!project) return;
+    
+    console.log('[ProjectManager] Updating knowledge base UI elements');
+    
+    // Update KB status indicators
+    const hasKnowledgeBase = !!project.knowledge_base_id;
+    const isActive = project.knowledge_base?.is_active !== false; // Consider active unless explicitly false
+    
+    console.log('[ProjectManager] Knowledge base status:', {
+      has_kb: hasKnowledgeBase,
+      is_active: isActive,
+      kb_id: project.knowledge_base_id
+    });
+    
+    // Update the status indicator
+    const kbStatus = document.getElementById('kbStatusIndicator');
+    if (kbStatus) {
+      if (!hasKnowledgeBase) {
+        kbStatus.textContent = "✗ Knowledge Base Required";
+        kbStatus.className = "text-red-600 text-sm";
+      } else if (!isActive) {
+        kbStatus.textContent = "⚠ Knowledge Base Inactive";
+        kbStatus.className = "text-yellow-600 text-sm";
+      } else {
+        kbStatus.textContent = "✓ Knowledge Base Ready";
+        kbStatus.className = "text-green-600 text-sm";
+      }
+    }
+    
+    // Show/hide active/inactive sections if they exist
+    const kbActiveSection = document.getElementById('knowledgeBaseActive');
+    const kbInactiveSection = document.getElementById('knowledgeBaseInactive');
+    
+    if (kbActiveSection) {
+      kbActiveSection.classList.toggle('hidden', !hasKnowledgeBase);
+    }
+    
+    if (kbInactiveSection) {
+      kbInactiveSection.classList.toggle('hidden', hasKnowledgeBase);
+    }
+    
+    // Update KB settings button if exists
+    const setupKbButton = document.getElementById('setupKnowledgeBaseBtn');
+    if (setupKbButton) {
+      // Keep button visible but update text if needed
+      if (!hasKnowledgeBase) {
+        setupKbButton.textContent = "Set Up Knowledge Base";
+        setupKbButton.classList.add('animate-pulse');
+      } else if (!isActive) {
+        setupKbButton.textContent = "Activate Knowledge Base";
+        setupKbButton.classList.add('animate-pulse');
+      } else {
+        setupKbButton.textContent = "Configure Knowledge Base";
+        setupKbButton.classList.remove('animate-pulse');
+      }
+    }
+    
+    // Update KB toggle if it exists
+    const kbToggle = document.getElementById('knowledgeBaseEnabled');
+    if (kbToggle && hasKnowledgeBase) {
+      kbToggle.checked = isActive;
+    }
+    
+    // Also update any file upload related elements
+    const uploadButtons = document.querySelectorAll('[data-requires-kb="true"]');
+    uploadButtons.forEach(button => {
+      const isDisabled = !hasKnowledgeBase || !isActive;
+      button.disabled = isDisabled;
+      
+      if (isDisabled) {
+        button.classList.add('opacity-50', 'cursor-not-allowed');
+        button.title = !hasKnowledgeBase
+          ? "Knowledge Base required to upload files"
+          : "Knowledge Base is inactive";
+      } else {
+        button.classList.remove('opacity-50', 'cursor-not-allowed');
+        button.title = "Upload file to Knowledge Base";
+      }
+    });
+    
+    console.log(`[ProjectManager] KB UI updated: hasKnowledgeBase=${hasKnowledgeBase}, isActive=${isActive}`);
+  }
 
-  // Expose the manager as a global object
   // Expose the manager as a global object
   window.projectManager = {
     // Data
@@ -573,6 +729,8 @@ console.log("[ProjectManager] Making filtered API request:", endpoint, {
     // Conversation
     createConversation,
     deleteProjectConversation,
+    // Knowledge Base
+    updateKnowledgeBaseUI,
     // API utilities
     checkProjectApiEndpoint
   };
