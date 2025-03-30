@@ -81,3 +81,14 @@ class Conversation(Base):
         if value and not self.project_id:
             raise ValueError("Knowledge base requires project association")
         return value
+
+    @validates('project_id') 
+    def validate_knowledge_base_requirements(self, key, project_id):
+        """Auto-enable knowledge base if project has one"""
+        if project_id and not self.use_knowledge_base:
+            from sqlalchemy import select
+            result = await db.execute(select(Project).where(Project.id == project_id))
+            project = result.scalars().first()
+            if project and project.knowledge_base_id:
+                self.use_knowledge_base = True
+        return project_id
