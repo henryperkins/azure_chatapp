@@ -218,14 +218,25 @@ async def claude_chat(
         logger.error("No valid messages to send to Claude API")
         raise HTTPException(status_code=400, detail="No valid messages to send to Claude")
     
-    # Extract system message if present
-    system_message = None
+    # Extract and combine all system messages including KB context
+    system_messages = []
     clean_messages = []
+    
     for msg in formatted_messages:
         if msg["role"] == "system":
-            system_message = msg["content"]
+            system_messages.append(msg["content"])
         else:
             clean_messages.append(msg)
+            
+    # Include KB context if present in message metadata
+    kb_context = next(
+        (msg.get("metadata", {}).get("kb_context") 
+         for msg in formatted_messages 
+         if msg.get("metadata", {}).get("kb_context")),
+        None
+    )
+    if kb_context:
+        system_messages.append(kb_context)
     
     payload = {
         "model": model_name,

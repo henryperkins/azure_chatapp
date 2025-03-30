@@ -74,3 +74,10 @@ class Conversation(Base):
                 raise ValueError("Project's knowledge base is not active")
             if not kb.metadata or not kb.metadata.get('index_stats', {}).get('chunk_count', 0) > 0:
                 raise ValueError("Knowledge base has no indexed content")
+
+    @validates('use_knowledge_base')
+    def validate_kb_flag(self, key, value):
+        """Validate knowledge base flag is consistent with project association"""
+        if value and not self.project_id:
+            raise ValueError("Knowledge base requires project association")
+        return value
