@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 async def augment_with_knowledge(
     conversation_id: UUID,
-    user_message: str, 
+    user_message: str,
     db: AsyncSession,
-    max_context_tokens: Optional[int] = None
-) -> List[Dict[str, str]]:
+    max_context_tokens: int = 2000  # Default token budget for KB context
+) -> List[Dict[str, Any]]:
     """
     Retrieves and formats relevant knowledge for a conversation.
     
@@ -58,35 +58,48 @@ async def augment_with_knowledge(
         if not search_results.get("results"):
             return []
 
-        # Format results as context messages
+        # Format and prioritize results
         context_messages = []
         total_tokens = 0
-        
-        for result in search_results["results"]:
-            # Estimate tokens for this result
-            result_tokens = estimate_token_count([
-                {"role": "user", "content": result["text"]}
-            ])
-            
-            # Check token budget if specified
-            if max_context_tokens and (total_tokens + result_tokens) > max_context_tokens:
+        seen_sources = set()
+
+        for result in sorted(search_results["results"], 
+                           key=lambda x: x.get("score", 0), 
+                           reverse=True):
+            if total_tokens >= max_context_tokens:
                 break
-                
-            context_messages.append({
+
+            text = result["text"]
+            source = result.get("metadata", {}).get("file_name", "unknown")
+            
+            # Dedupe similar content from same source
+            source_key = f"{source}:{hash(text) % 10000}"
+            if source_key in seen_sources:
+                continue
+            seen_sources.add(source_key)
+
+            # Calculate tokens and check budget
+            result_tokens = estimate_token_count([
+                {"role": "system", "content": text}
+            ])
+            if total_tokens + result_tokens > max_context_tokens:
+                continue
+
+            # Format as system message with metadata
+            context_msg = {
                 "role": "system",
-                "content": (
-                    f"Relevant knowledge (score: {result.get('score', 0):.2f}):\n"
-                    f"{result['text']}\n"
-                    f"Source: {result.get('metadata', {}).get('file_name', 'unknown')}"
-                ),
+                "content": f"Relevant context from {source}:\n{text}",
                 "metadata": {
-                    "source": "knowledge_base",
+                    "kb_context": True,
+                    "source": source,
                     "file_id": result.get("metadata", {}).get("file_id"),
-                    "file_name": result.get("metadata", {}).get("file_name"),
                     "score": float(result.get("score", 0)),
+                    "tokens": result_tokens,
                     "chunk_index": result.get("metadata", {}).get("chunk_index")
                 }
-            })
+            }
+            context_messages.append(context_msg)
+            total_tokens += result_tokens
             total_tokens += result_tokens
             
         # Store search results in conversation
