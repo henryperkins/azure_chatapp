@@ -107,8 +107,13 @@ async def create_conversation(
         if not project:
             raise HTTPException(404, "Project not found")
             
-        # Auto-enable KB if project has one
-        use_knowledge_base = bool(project.knowledge_base_id)
+        # Auto-enable KB if project has one and model supports it
+        use_knowledge_base = bool(project.knowledge_base_id) and model_id in [
+            "claude-3-sonnet-20240229",
+            "claude-3-opus-20240229",
+            "gpt-4",
+            "gpt-4-turbo"
+        ]
     
         if use_knowledge_base:
             kb = await db.get(KnowledgeBase, project.knowledge_base_id)

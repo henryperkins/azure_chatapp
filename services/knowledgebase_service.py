@@ -654,12 +654,27 @@ async def search_project_context(
     if project.knowledge_base_id:
         filter_metadata["knowledge_base_id"] = str(project.knowledge_base_id)
     
-    # Perform search with combined filters
+    # Clean and truncate query if needed
+    clean_query = ' '.join(query.split()[:50])  # Limit to first 50 words
+    
+    # Perform search with combined filters and query expansion
     results = await vector_db.search(
-        query=query,
-        top_k=top_k,
+        query=clean_query,
+        top_k=top_k * 2,  # Get extra results for filtering
         filter_metadata=filter_metadata
     )
+    
+    # Filter to ensure diversity of sources
+    unique_sources = set()
+    filtered_results = []
+    for res in results:
+        source = res.get("metadata", {}).get("file_id")
+        if source not in unique_sources:
+            filtered_results.append(res)
+            unique_sources.add(source)
+            if len(filtered_results) >= top_k:
+                break
+    results = filtered_results
     
     # Enhance with file info
     enhanced_results = []
