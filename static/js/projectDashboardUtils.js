@@ -224,7 +224,13 @@
       constructor() {
         // Initialize modal collection
         this.modals = {};
-        this.registerAllModals();
+        
+        // Wait for DOM to be ready before first registration
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => this.registerAllModals());
+        } else {
+          this.registerAllModals();
+        }
         
         // Register modals again after a short delay to catch any late DOM updates
         setTimeout(() => this.registerAllModals(), 500);
@@ -233,22 +239,32 @@
       }
       
       registerAllModals() {
-        // Register all known modals with better error handling
+        // Register all known modals with resilient error handling
         const modalMappings = {
-          'project': 'projectFormModal',
-          'instructions': 'instructionsModal',
-          'delete': 'deleteConfirmModal',
-          'knowledge': 'knowledgeBaseSettingsModal'
+          'project': ['projectFormModal'],
+          'instructions': ['instructionsModal'],
+          'delete': ['deleteConfirmModal'],
+          'knowledge': ['knowledgeBaseSettingsModal', 'knowledgeSettingsModal'] // Multiple possible IDs
         };
         
-        // Register each modal with verbose logging
-        for (const [key, id] of Object.entries(modalMappings)) {
-          const element = document.getElementById(id);
-          if (element) {
-            this.modals[key] = element;
-            console.log(`Modal registered: ${key} -> #${id}`);
-          } else {
-            console.warn(`Modal element not found: #${id} for key: ${key}`);
+        // Register each modal with flexible matching
+        for (const [key, ids] of Object.entries(modalMappings)) {
+          // Skip if already registered
+          if (this.modals[key]) continue;
+          
+          // Try all possible IDs for this modal
+          for (const id of ids) {
+            const element = document.getElementById(id);
+            if (element) {
+              this.modals[key] = element;
+              console.log(`Modal registered: ${key} -> #${id}`);
+              break;
+            }
+          }
+          
+          // Don't warn if not found - may be conditionally rendered
+          if (!this.modals[key]) {
+            console.debug(`Modal not currently available: ${key}`);
           }
         }
       }
@@ -418,6 +434,9 @@
         );
       } else if (errorMessage.includes('Network Error')) {
         window.showNotification('Network connection issue. Please check your connection.', 'error');
+      } else if (errorMessage.includes('No project selected')) {
+        // Silently ignore "No project selected" errors as they're handled elsewhere
+        event.preventDefault(); // Prevent default error handling
       } else {
         window.showNotification('Operation failed: ' + errorMessage, 'error');
       }

@@ -465,47 +465,36 @@
    * @returns {Promise<Object>} Upload response
    */
   async function uploadFile(projectId, file) {
-      // First check if project has an active knowledge base
-      if (!currentProject) {
-          return Promise.reject(new Error("No project loaded. Please select a project first."));
+    if (!currentProject) {
+      return Promise.reject(new Error("No project loaded. Please select a project first."));
+    }
+  
+    if (!currentProject.knowledge_base_id) {
+      try {
+        const defaultKb = {
+          name: 'Default Knowledge Base',
+          description: 'Automatically created for file uploads'
+        };
+  
+        await window.apiRequest(
+          `/api/projects/${projectId}/knowledge-base`,
+          "POST",
+          defaultKb
+        );
+  
+        await loadProjectDetails(projectId);
+        window.showNotification?.("Created knowledge base for file upload", "success");
+      } catch (kbError) {
+        const error = new Error("Knowledge base required before uploading files");
+        error.code = "KB_REQUIRED";
+        error.action = {
+          label: "Setup KB",
+          handler: () => window.modalManager?.show("knowledge")
+        };
+        throw error;
       }
-      
-      // Verify knowledge base exists and is active
-      if (!currentProject.knowledge_base_id) {
-          try {
-              // Auto-create a knowledge base if missing
-              const defaultKb = {
-                  name: 'Default Knowledge Base',
-                  description: 'Automatically created for file uploads'
-              };
-              
-              console.log("[ProjectManager] Auto-creating knowledge base for project:", projectId);
-              
-              await window.apiRequest(
-                  `/api/projects/${projectId}/knowledge-base`,
-                  "POST",
-                  defaultKb
-              );
-              
-              // Refresh project details to include the new KB
-              await loadProjectDetails(projectId);
-              
-              // Show success notification
-              window.showNotification?.("Created knowledge base for file upload", "success");
-          } catch (kbError) {
-              console.error("[ProjectManager] Failed to auto-create KB:", kbError);
-              
-              const error = new Error("Knowledge base required before uploading files");
-              error.code = "KB_REQUIRED";
-              error.action = {
-                  label: "Setup KB",
-                  handler: () => window.modalManager?.show("knowledge")
-              };
-              throw error;
-          }
-      }
-    
-    // Check if knowledge base is active
+    }
+  
     const kbIsActive = currentProject.knowledge_base?.is_active;
     if (kbIsActive === false) {
       const error = new Error("Knowledge base is disabled");
@@ -516,31 +505,26 @@
       };
       throw error;
     }
-    
-    // Create form data for upload
+  
+    // Sanitize file content before uploading
+    const sanitizedContent = await sanitizeFileContent(file);
+  
+    // Create a new Blob from sanitized content
+    const sanitizedBlob = new Blob([sanitizedContent], { type: file.type });
+    const sanitizedFile = new File([sanitizedBlob], file.name, { type: file.type });
+  
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", sanitizedFile);
     formData.append('project_id', projectId);
-    
-    console.log(`Uploading file ${file.name} (${file.size} bytes) to project ${projectId}`);
-    console.log("Knowledge base status:", {
-      kb_id: currentProject.knowledge_base_id,
-      is_active: kbIsActive,
-      project_id: projectId
-    });
-    
+  
     try {
       const response = await window.apiRequest(
         `/api/projects/${projectId}/knowledge-bases/files`,
         "POST",
         formData
       );
-      
-      console.log("File upload response:", response);
-      
-      // Enhanced response handling for KB processing
+  
       if (response?.data?.processing_status === "pending") {
-        // Return extended response with processing info
         return {
           ...response,
           processing: {
@@ -550,31 +534,44 @@
           }
         };
       }
-      
+  
       if (response?.data?.processing_status === "failed") {
         throw new Error(response.data.error || "Knowledge base processing failed");
       }
-      
+  
       return response;
     } catch (err) {
       console.error("File upload error:", err);
-      // Handle specific error status codes
       const status = err?.response?.status;
       if (status === 422) {
         throw new Error("File validation failed: The file format may be unsupported or the file is corrupted");
-     } else if (status === 413) {
+      } else if (status === 413) {
         throw new Error("File too large: The file exceeds the maximum allowed size");
-     } else if (status === 400) {
+      } else if (status === 400) {
         const detail = err?.response?.data?.detail || "Invalid file";
         throw new Error(`Bad request: ${detail}`);
-     } else if (status === 404) {
+      } else if (status === 404) {
         throw new Error("Project knowledge base not found - please configure it first");
-     } else if (status === 403) {
+      } else if (status === 403) {
         throw new Error("Knowledge base not active for this project");
       } else {
         throw new Error(err?.response?.data?.detail || err.message || "Upload failed");
       }
     }
+  }
+  
+  // Helper function to sanitize file content
+  async function sanitizeFileContent(file) {
+    const dangerousPatterns = ["curl"]; // Add more patterns as needed
+    const fileContent = await file.text();
+  
+    let sanitizedContent = fileContent;
+    dangerousPatterns.forEach(pattern => {
+      const regex = new RegExp(pattern, 'gi');
+      sanitizedContent = sanitizedContent.replace(regex, '[REMOVED]');
+    });
+  
+    return sanitizedContent;
   }
 
   /**

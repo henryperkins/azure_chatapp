@@ -392,7 +392,7 @@ window.WebSocketService.prototype.establishConnection = function () {
 
 window.WebSocketService.prototype.handleTokenRefresh = async function() {
   try {
-    await window.TokenManager.refreshTokens();
+    await window.TokenManager.refresh();
     
     // Add token to current connection
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
