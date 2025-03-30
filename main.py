@@ -10,7 +10,12 @@ The FastAPI entrypoint for the Azure OpenAI Chat Application.
 import logging
 import os
 import sys
+import warnings
 from pathlib import Path
+from cryptography.utils import CryptographyDeprecationWarning
+
+# Suppress cryptography warnings
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
@@ -47,12 +52,14 @@ from config import settings
 sys.path.append(str(Path(__file__).resolve().parent))
 
 # Configure Logging
-logging_level = logging.DEBUG if settings.ENV == "development" else logging.WARNING
+logging_level = logging.INFO if settings.ENV == "development" else logging.WARNING
 logging.basicConfig(level=logging_level)
 logger = logging.getLogger(__name__)
 
 # Configure SQLAlchemy logging to be less verbose
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
 
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
