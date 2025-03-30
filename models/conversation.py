@@ -86,9 +86,7 @@ class Conversation(Base):
     def validate_knowledge_base_requirements(self, key, project_id):
         """Auto-enable knowledge base if project has one"""
         if project_id and not self.use_knowledge_base:
-            from sqlalchemy import select
-            result = await db.execute(select(Project).where(Project.id == project_id))
-            project = result.scalars().first()
-            if project and project.knowledge_base_id:
-                self.use_knowledge_base = True
+            # This is a synchronous validator - we'll set the flag but actual validation
+            # will happen when the conversation is saved
+            self.use_knowledge_base = True
         return project_id
