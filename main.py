@@ -229,8 +229,9 @@ async def on_startup():
         await init_db()
         
         # Validate schema using SQLAlchemy inspector
-        async with get_async_session_context() as session:
-            inspector = inspect(session.get_bind())
+        async with async_engine.connect() as conn:
+            inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
+            
             required_tables = {
                 "project_files": ["config"],
                 "knowledge_bases": ["config"],
@@ -239,10 +240,10 @@ async def on_startup():
             }
             
             for table, required_columns in required_tables.items():
-                if not inspector.has_table(table):
+                if not await conn.run_sync(lambda sync_conn, t=table: inspector.has_table(t)):
                     raise RuntimeError(f"Missing critical table: {table}")
-                
-                columns = [col["name"] for col in inspector.get_columns(table)]
+                    
+                columns = [col['name'] for col in await conn.run_sync(lambda sync_conn, t=table: inspector.get_columns(t))]
                 missing = set(required_columns) - set(columns)
                 if missing:
                     raise RuntimeError(f"Missing columns in {table}: {missing}")
