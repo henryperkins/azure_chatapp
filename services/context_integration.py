@@ -119,3 +119,7 @@ async def augment_with_knowledge(
     except Exception as e:
         logger.error(f"Error augmenting with knowledge: {str(e)}")
         return []
+        
+    except Exception as e:
+        logger.error(f"Error augmenting with knowledge: {str(e)}")
+        return []
