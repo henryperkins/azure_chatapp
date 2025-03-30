@@ -509,10 +509,17 @@ async def project_websocket_chat_endpoint(
                             # Get conversation history
                             msg_dicts = await get_conversation_messages(conversation_id, db, include_system_prompt=True)
                             
-                            # Generate AI response
+                            # Inject knowledge base context
+                            kb_context = await augment_with_knowledge(
+                                conversation_id=conversation_id_uuid,
+                                user_message=data_dict["content"],
+                                db=db
+                            )
+                            
+                            # Generate AI response with enhanced context
                             assistant_msg = await generate_ai_response(
                                 conversation_id=conversation_id,
-                                messages=msg_dicts,
+                                messages=kb_context + msg_dicts,
                                 model_id=conversation.model_id,
                                 image_data=data_dict.get("image_data"),
                                 vision_detail=data_dict.get("vision_detail", "auto"),
