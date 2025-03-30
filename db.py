@@ -6,10 +6,12 @@ Defines the async init_db process for migrations or table creation.
 """
 
 import logging
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from contextlib import asynccontextmanager
+
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -33,8 +35,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 
 Base = declarative_base()
-
-from contextlib import asynccontextmanager
 
 
 async def get_async_session():

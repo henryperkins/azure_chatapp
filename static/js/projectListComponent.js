@@ -1,13 +1,38 @@
+/**
+ * projectListComponent.js
+ * -----------------------
+ * Component for displaying and managing the project list view
+ */
+
 (function() {
-  // Access global utility instances without redeclaring
-  var uiUtils = window.UIUtils;
-  var uiUtilsInstance = window.uiUtilsInstance;
-  var animationUtilsInstance = window.animationUtilsInstance;
-  
-  // Define ProjectListComponent
+  /**
+   * Project List Component - Handles the project list view
+   */
   class ProjectListComponent {
+    /**
+     * Initialize the project list component
+     * @param {Object} options - Configuration options
+     */
     constructor(options) {
+      if (!options || !options.elementId) {
+        console.error('ProjectListComponent: Missing required options');
+        throw new Error('ProjectListComponent requires elementId option');
+      }
+      
       console.log('[DEBUG] Initializing ProjectListComponent');
+      
+      /* ===========================
+         STATE MANAGEMENT
+         =========================== */
+      this.state = {
+        projects: [],
+        filter: 'all',
+        loading: false
+      };
+      
+      /* ===========================
+         OPTIONS & ELEMENT REFERENCES
+         =========================== */
       this.elementId = options.elementId;
       this.element = document.getElementById(this.elementId);
       this.onViewProject = options.onViewProject;
@@ -26,9 +51,16 @@
         }
       }
       
-      this.bindFilterEvents();
+      this._bindFilterEvents();
     }
 
+    /* ===========================
+       PUBLIC METHODS
+       =========================== */
+    
+    /**
+     * Show the project list view
+     */
     show() {
       const listView = document.getElementById('projectListView');
       const detailsView = document.getElementById('projectDetailsView');
@@ -38,15 +70,22 @@
       if (this.element) this.element.style.display = 'grid';
     }
 
+    /**
+     * Hide the project list view
+     */
     hide() {
       const element = document.getElementById("projectListView");
       if (element) {
-        uiUtilsInstance.toggleVisibility(element, false);
+        window.uiUtilsInstance.toggleVisibility(element, false);
       } else {
         console.error('projectListView element not found');
       }
     }
 
+    /**
+     * Render the list of projects
+     * @param {Array|Object} eventOrProjects - Projects array or event containing projects
+     */
     renderProjects(eventOrProjects) {
       try {
         if (!this.element) {
@@ -54,22 +93,11 @@
           return;
         }
         console.log('[DEBUG] renderProjects received:', eventOrProjects);
-        let projects = [];
-      
-        const extractProjects = (obj) => {
-          return obj?.data?.projects || obj?.projects || [];
-        };
-
-        if (Array.isArray(eventOrProjects)) {
-          projects = eventOrProjects;
-        } else if (eventOrProjects instanceof Event) {
-          projects = extractProjects(eventOrProjects.detail);
-        } else {
-          projects = extractProjects(eventOrProjects);
-        }
         
-        console.log('[PROJECTS] Raw projects data:', projects);
-        projects.forEach(p => console.log(`Project ${p.id} - pinned:${p.pinned}, archived:${p.archived}`));
+        // Extract projects from various input formats
+        const projects = this._extractProjects(eventOrProjects);
+        this.state.projects = projects;
+        
         console.log('[DEBUG] Projects to render:', projects?.length || 0);
           
         if (!this.element) {
@@ -85,29 +113,25 @@
         
         this.element.innerHTML = "";
 
+        // Handle error case
         if (projects.error) {
-          const errorMsg = document.createElement('div');
-          errorMsg.className = 'text-red-500 text-center py-8 col-span-3';
-          errorMsg.textContent = 'Error loading projects';
-          this.element.appendChild(errorMsg);
-          if (this.messageEl) this.messageEl.classList.add("hidden");
+          this._renderErrorState();
           return;
         }
 
+        // Handle empty state
         if (projects.length === 0) {
-          const emptyMsg = document.createElement('div');
-          emptyMsg.className = 'text-gray-500 dark:text-gray-400 text-center py-8 col-span-3 transition-colors duration-200';
-          emptyMsg.textContent = 'No projects available';
-          this.element.appendChild(emptyMsg);
-          if (this.messageEl) this.messageEl.classList.add("hidden");
+          this._renderEmptyState();
           return;
         }
 
+        // Hide "no projects" message if we have projects
         if (this.messageEl) this.messageEl.classList.add("hidden");
         
+        // Render each project
         projects.forEach(project => {
           try {
-            const card = this.createProjectCard(project);
+            const card = this._createProjectCard(project);
             if (card) {
               this.element.appendChild(card);
             }
@@ -117,14 +141,71 @@
         });
       } catch (err) {
         console.error('Error in renderProjects:', err);
-        const errorMsg = document.createElement('div');
-        errorMsg.className = 'text-red-500 text-center py-8 col-span-3';
-        errorMsg.textContent = 'Error displaying projects';
-        this.element.appendChild(errorMsg);
+        this._renderErrorState("Error displaying projects");
       }
     }
 
-    createProjectCard(project) {
+    /* ===========================
+       PRIVATE METHODS
+       =========================== */
+    
+    /**
+     * Extract projects array from various input formats
+     * @private
+     * @param {Array|Object} eventOrProjects - Projects array or event with projects
+     * @returns {Array} Array of projects
+     */
+    _extractProjects(eventOrProjects) {
+      let projects = [];
+      
+      const extractProjects = (obj) => {
+        return obj?.data?.projects || obj?.projects || [];
+      };
+
+      if (Array.isArray(eventOrProjects)) {
+        projects = eventOrProjects;
+      } else if (eventOrProjects instanceof Event) {
+        projects = extractProjects(eventOrProjects.detail);
+      } else {
+        projects = extractProjects(eventOrProjects);
+      }
+      
+      console.log('[PROJECTS] Raw projects data:', projects);
+      return projects;
+    }
+    
+    /**
+     * Render error state when projects fail to load
+     * @private
+     * @param {string} message - Error message to display
+     */
+    _renderErrorState(message = 'Error loading projects') {
+      const errorMsg = document.createElement('div');
+      errorMsg.className = 'text-red-500 text-center py-8 col-span-3';
+      errorMsg.textContent = message;
+      this.element.appendChild(errorMsg);
+      if (this.messageEl) this.messageEl.classList.add("hidden");
+    }
+    
+    /**
+     * Render empty state when no projects are available
+     * @private
+     */
+    _renderEmptyState() {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'text-gray-500 dark:text-gray-400 text-center py-8 col-span-3 transition-colors duration-200';
+      emptyMsg.textContent = 'No projects available';
+      this.element.appendChild(emptyMsg);
+      if (this.messageEl) this.messageEl.classList.add("hidden");
+    }
+
+    /**
+     * Create a project card element
+     * @private
+     * @param {Object} project - Project data
+     * @returns {HTMLElement} Project card element
+     */
+    _createProjectCard(project) {
       console.log('[DEBUG] Creating card for project:', project);
       if (!project) {
         console.error('[DEBUG] Project is null/undefined');
@@ -134,13 +215,16 @@
         console.error('[DEBUG] Project missing required id field:', project);
         return null;
       }
+      
+      // Get project stats
       const usage = project.token_usage || 0;
       const maxTokens = project.max_tokens || 0;
       const usagePct = maxTokens > 0 ? Math.min(100, (usage / maxTokens) * 100).toFixed(1) : 0;
       
+      // Create card
       let card;
-      if (UIUtils && uiUtilsInstance.createElement) {
-        card = uiUtilsInstance.createElement("div", {
+      if (window.uiUtilsInstance && window.uiUtilsInstance.createElement) {
+        card = window.uiUtilsInstance.createElement("div", {
           className: `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"} ${project.archived ? "project-card-archived" : ""}`
         });
       } else {
@@ -149,13 +233,38 @@
         card.className = `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"} ${project.archived ? "project-card-archived" : ""}`;
       }
       
-      // Header
-      const header = uiUtilsInstance.createElement("div", { className: "flex justify-between mb-2" });
-      const title = uiUtilsInstance.createElement("h3", { 
+      // Add card header
+      this._addCardHeader(card, project);
+      
+      // Add description
+      const desc = window.uiUtilsInstance.createElement("p", {
+        className: "text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2",
+        textContent: project.description || "No description"
+      });
+      card.appendChild(desc);
+      
+      // Add token usage
+      this._addTokenUsage(card, usage, maxTokens, usagePct);
+      
+      // Add footer
+      this._addCardFooter(card, project);
+      
+      return card;
+    }
+    
+    /**
+     * Add header section to project card
+     * @private
+     * @param {HTMLElement} card - Project card element
+     * @param {Object} project - Project data
+     */
+    _addCardHeader(card, project) {
+      const header = window.uiUtilsInstance.createElement("div", { className: "flex justify-between mb-2" });
+      const title = window.uiUtilsInstance.createElement("h3", { 
         className: "font-semibold text-md", 
         textContent: project.name 
       });
-      const statusIndicator = uiUtilsInstance.createElement("div", {
+      const statusIndicator = window.uiUtilsInstance.createElement("div", {
         className: "text-xs ml-2 px-2 py-1 rounded-full " + (
           project.archived ? "bg-gray-100 text-gray-600" :
           project.pinned ? "bg-yellow-100 text-yellow-700" : 
@@ -165,51 +274,60 @@
                     project.pinned ? "Pinned" : "Active"
       });
       
-      const badges = uiUtilsInstance.createElement("div", { className: "flex items-center" });
+      const badges = window.uiUtilsInstance.createElement("div", { className: "flex items-center" });
       badges.appendChild(statusIndicator);
       header.appendChild(title);
       header.appendChild(badges);
       card.appendChild(header);
-      
-      // Description
-      const desc = uiUtilsInstance.createElement("p", {
-        className: "text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2",
-        textContent: project.description || "No description"
-      });
-      card.appendChild(desc);
-      
-      // Token usage
-      const tokenWrapper = uiUtilsInstance.createElement("div", { className: "mb-2" });
-      const tokenHeader = uiUtilsInstance.createElement("div", { 
+    }
+    
+    /**
+     * Add token usage section to project card
+     * @private
+     * @param {HTMLElement} card - Project card element
+     * @param {number} usage - Token usage
+     * @param {number} maxTokens - Maximum tokens
+     * @param {string} usagePct - Usage percentage
+     */
+    _addTokenUsage(card, usage, maxTokens, usagePct) {
+      const tokenWrapper = window.uiUtilsInstance.createElement("div", { className: "mb-2" });
+      const tokenHeader = window.uiUtilsInstance.createElement("div", { 
         className: "flex justify-between mb-1 text-xs",
         innerHTML: `
-          <span>Tokens: ${uiUtilsInstance.formatNumber(usage)} / ${uiUtilsInstance.formatNumber(maxTokens)}</span>
+          <span>Tokens: ${window.uiUtilsInstance.formatNumber(usage)} / ${window.uiUtilsInstance.formatNumber(maxTokens)}</span>
           <span>${usagePct}%</span>
         `
       });
       
-      const progressOuter = uiUtilsInstance.createElement("div", { className: "progress-outer" });
-      const progressInner = uiUtilsInstance.createElement("div", { 
+      const progressOuter = window.uiUtilsInstance.createElement("div", { className: "progress-outer" });
+      const progressInner = window.uiUtilsInstance.createElement("div", { 
         className: "progress-inner h-full transition-all duration-500 ease-out",
-        style: { '--width': `${usagePct}%` }
+        style: { width: `${usagePct}%` }
       });
       
       progressOuter.appendChild(progressInner);
       tokenWrapper.appendChild(tokenHeader);
       tokenWrapper.appendChild(progressOuter);
       card.appendChild(tokenWrapper);
-      
-      // Footer
-      const footer = uiUtilsInstance.createElement("div", { className: "flex justify-between mt-3" });
-      const createdInfo = uiUtilsInstance.createElement("div", {
+    }
+    
+    /**
+     * Add footer section to project card
+     * @private
+     * @param {HTMLElement} card - Project card element
+     * @param {Object} project - Project data
+     */
+    _addCardFooter(card, project) {
+      const footer = window.uiUtilsInstance.createElement("div", { className: "flex justify-between mt-3" });
+      const createdInfo = window.uiUtilsInstance.createElement("div", {
         className: "text-xs text-gray-500",
-        textContent: `Created ${uiUtilsInstance.formatDate(project.created_at)}`
+        textContent: `Created ${window.uiUtilsInstance.formatDate(project.created_at)}`
       });
       
-      const actions = uiUtilsInstance.createElement("div", { className: "flex space-x-1" });
+      const actions = window.uiUtilsInstance.createElement("div", { className: "flex space-x-1" });
       
       // View button
-      const viewBtn = uiUtilsInstance.createElement("button", {
+      const viewBtn = window.uiUtilsInstance.createElement("button", {
         className: "p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors duration-150 view-project-btn",
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -224,7 +342,7 @@
       });
       
       // Delete button
-      const deleteBtn = uiUtilsInstance.createElement("button", {
+      const deleteBtn = window.uiUtilsInstance.createElement("button", {
         className: "p-1 text-red-600 hover:text-red-800 delete-project-btn",
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -234,7 +352,10 @@
                      m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         `,
-        onclick: () => this.confirmDelete(project)
+        onclick: (e) => {
+          e.stopPropagation();
+          this._confirmDelete(project);
+        }
       });
       
       actions.appendChild(viewBtn);
@@ -242,32 +363,50 @@
       footer.appendChild(createdInfo);
       footer.appendChild(actions);
       card.appendChild(footer);
-      
-      return card;
     }
 
-    confirmDelete(project) {
-      ModalManager.confirmAction({
+    /**
+     * Show delete confirmation dialog
+     * @private
+     * @param {Object} project - Project to delete
+     */
+    _confirmDelete(project) {
+      if (!window.ModalManager) {
+        console.error('ModalManager not available');
+        return;
+      }
+      
+      window.ModalManager.confirmAction({
         title: "Delete Project",
         message: `Are you sure you want to delete "${project.name}"?`,
         confirmText: "Delete",
         cancelText: "Cancel",
         confirmClass: "bg-red-600",
         onConfirm: () => {
-          window.projectManager?.deleteProject(project.id)
+          if (!window.projectManager) {
+            console.error('projectManager not available');
+            window.showNotification("Cannot delete project: system error", "error");
+            return;
+          }
+          
+          window.projectManager.deleteProject(project.id)
             .then(() => {
-              uiUtilsInstance.showNotification("Project deleted", "success");
-              window.projectManager?.loadProjects();
+              window.showNotification("Project deleted", "success");
+              window.projectManager.loadProjects();
             })
             .catch(err => {
               console.error("Error deleting project:", err);
-              uiUtilsInstance.showNotification("Failed to delete project", "error");
+              window.showNotification("Failed to delete project", "error");
             });
         }
       });
     }
 
-    bindFilterEvents() {
+    /**
+     * Bind filter buttons event handlers
+     * @private
+     */
+    _bindFilterEvents() {
       const filterButtons = document.querySelectorAll('.project-filter-btn');
       filterButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -283,9 +422,12 @@
           
           // Get filter from data attribute
           const filter = button.dataset.filter;
+          this.state.filter = filter;
           
           // Reload projects with filter
-          window.projectManager?.loadProjects(filter);
+          if (window.projectManager?.loadProjects) {
+            window.projectManager.loadProjects(filter);
+          }
           
           // Update URL without reload
           const url = new URL(window.location);

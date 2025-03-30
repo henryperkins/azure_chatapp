@@ -13,26 +13,21 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt
 import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.auth_utils import (
     clean_expired_tokens,
-    extract_token,
     get_current_user_and_token,
+    create_access_token,
+    revoke_token_id
 )
 
 from config import settings
 from db import get_async_session
 from models.user import User, TokenBlacklist
-from utils.auth_utils import (
-    JWT_SECRET,
-    JWT_ALGORITHM,
-    create_access_token,
-    revoke_token_id,
-)
+
 
 logger = logging.getLogger(__name__)
 

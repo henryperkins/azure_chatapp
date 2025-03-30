@@ -32,7 +32,7 @@ from utils.db_utils import get_by_id, get_all_by_condition, save_model
 from utils.serializers import serialize_project_file, serialize_vector_result
 from services.file_storage import get_file_storage
 from services.text_extraction import get_text_extractor, TextExtractionError
-from services.vector_db import get_vector_db, process_file_for_search, VectorDB
+from services.vector_db import get_vector_db, process_file_for_search
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ def get_kb_config() -> Dict[str, Any]:
         "default_chunk_overlap": getattr(config, "DEFAULT_CHUNK_OVERLAP", 200),
         "allowed_sort_fields": {"created_at", "filename", "file_size"}
     }
+
 
 KB_CONFIG = get_kb_config()
 MAX_FILE_BYTES = KB_CONFIG["max_file_bytes"]
@@ -122,12 +123,16 @@ async def _validate_file_access(
     project_id: UUID, 
     file_id: Optional[UUID] = None,
     user_id: Optional[int] = None,
-    db: AsyncSession = None
+    db: Optional[AsyncSession] = None
 ) -> Tuple[Project, Optional[ProjectFile]]:
     """
     Validate access to project and optionally a file.
     Returns tuple of (project, file) where file may be None.
     """
+    # Ensure database session is provided
+    if db is None:
+        raise ValueError("Database session is required")
+        
     # Validate project access
     project = await _validate_user_and_project(project_id, user_id, db)
     
@@ -363,8 +368,8 @@ async def process_file_for_vector_search(
             }
             project_file.metadata = metadata
             await save_model(db, project_file)
-        except:
-            pass
+        except Exception as metadata_error:
+            logger.error(f"Error updating file metadata: {metadata_error}")
         return {"success": False, "error": str(e)}
 
 def extract_file_metadata(
@@ -490,6 +495,10 @@ async def get_project_file(
     # Validate access
     _, file_record = await _validate_file_access(project_id, file_id, user_id, db)
     
+    # Ensure file_record exists
+    if file_record is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    
     # Create response data
     file_data = extract_file_metadata(file_record, include_token_count=True, include_file_path=True)
 
@@ -520,6 +529,10 @@ async def delete_project_file(
     """Delete a file from storage and database."""
     # Validate access
     project, file_record = await _validate_file_access(project_id, file_id, user_id, db)
+    
+    # Ensure file_record exists
+    if file_record is None:
+        raise HTTPException(status_code=404, detail="File not found")
     
     # Get token usage from metadata
     metadata = file_record.metadata or {}
@@ -632,11 +645,21 @@ async def search_project_context(
         load_existing=True
     )
     
-    # Perform search
+    # Perform search with required filters
+    # Make sure both project_id and knowledge_base_id are always used as filters
+    filter_metadata = {
+        "project_id": str(project_id)
+    }
+    
+    # Add knowledge_base_id filter if available
+    if project.knowledge_base_id:
+        filter_metadata["knowledge_base_id"] = str(project.knowledge_base_id)
+    
+    # Perform search with combined filters
     results = await vector_db.search(
         query=query,
         top_k=top_k,
-        filter_metadata={"project_id": str(project_id)} if project_id else None
+        filter_metadata=filter_metadata
     )
     
     # Enhance with file info

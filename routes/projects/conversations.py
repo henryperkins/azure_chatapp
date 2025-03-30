@@ -31,10 +31,8 @@ from utils.message_handlers import (
     update_project_token_usage
 )
 from utils.websocket_manager import ConnectionManager
-manager = ConnectionManager()
 from utils.ai_response import (
     generate_ai_response,
-    handle_websocket_response
 )
 from utils.auth_utils import (
     get_current_user_and_token, 
@@ -46,6 +44,7 @@ from utils.db_utils import validate_resource_access, get_all_by_condition, save_
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_message, serialize_conversation
 
+manager = ConnectionManager()
 logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/projects/{project_id}/conversations", 
@@ -258,7 +257,7 @@ async def delete_conversation(
             {"conversation_id": str(deleted_id)},
             "Conversation deleted successfully"
         )
-    except HTTPException as he:
+    except HTTPException:
         # Pass through HTTP exceptions from service layer
         raise
     except Exception as e:
@@ -347,6 +346,11 @@ async def project_websocket_chat_endpoint(
                 # Explicit token version check
                 decoded = jwt.decode(user_token, options={"verify_signature": False})
                 db_user = await db.get(User, user.id)
+                if not db_user:
+                    logger.warning(f"User not found in database: {user.id}")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                    
                 if db_user.token_version != decoded.get("version", 0):
                     logger.warning(f"Token version mismatch for {db_user.username}")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -357,12 +361,8 @@ async def project_websocket_chat_endpoint(
                     })
                     return
                 
-                db_user = await db.get(User, user.id)
-                decoded = jwt.decode(user_token, options={"verify_signature": False})
-                if db_user.token_version != decoded.get("version", 0):
-                    logger.warning(f"Token version mismatch for {user.id}")
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
+                # Redundant check - this block can be removed as the token version 
+                # is already checked above
                 
                 if db_user.token_version != decoded.get("version", 0):
                     logger.warning(f"WebSocket rejected: Token version mismatch for user {db_user.username}")
@@ -414,6 +414,7 @@ async def project_websocket_chat_endpoint(
                 logger.warning(f"WebSocket connection failed for user {user.id}, conversation {conversation_id}")
                 return
 
+            heartbeat_task = None
             try:
                 # Start heartbeat
                 async def heartbeat():
@@ -533,7 +534,7 @@ async def project_websocket_chat_endpoint(
                                         response_data["redacted_thinking"] = metadata["redacted_thinking"]
                                     if "model" in metadata:
                                         response_data["model"] = metadata["model"]
-                                    response_data["metadata"] = metadata
+                                    response_data["metadata"] = json.dumps(metadata)
                                 
                                 # Add message ID if present in original request
                                 if message_id:
@@ -563,7 +564,7 @@ async def project_websocket_chat_endpoint(
                 logger.info(f"WebSocket disconnected for user {user.id}, conversation {conversation_id}")
             finally:
                 # Cancel heartbeat task if it exists
-                if 'heartbeat_task' in locals():
+                if heartbeat_task is not None:
                     heartbeat_task.cancel()
                     try:
                         await heartbeat_task
@@ -571,6 +572,7 @@ async def project_websocket_chat_endpoint(
                         pass
                 
                 # Always disconnect properly
+                await manager.disconnect(websocket)
                 await manager.disconnect(websocket)
 
         except Exception as e:
