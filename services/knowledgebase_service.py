@@ -163,6 +163,24 @@ async def _process_upload_file_info(file: UploadFile) -> Dict[str, Any]:
         "file_type": file_info.get("category", "unknown")
     }
 
+async def _expand_query(original_query: str) -> str:
+    """Generate enhanced query using keyword extraction and synonym expansion"""
+    try:
+        # Simple implementation - can be enhanced with NLP later
+        keywords = set()
+        for word in original_query.lower().split():
+            if len(word) > 3:  # Ignore short words
+                keywords.add(word)
+                # Add simple synonyms
+                if word in ["how", "what", "why"]:
+                    keywords.update(["method", "process", "reason"])
+                elif word in ["best", "good"]:
+                    keywords.add("effective")
+        
+        return ' '.join(keywords) + " " + original_query[:100]  # Combine with original
+    except Exception:
+        return original_query[:150]  # Fallback to truncated original
+
 async def _process_file_tokens(
     contents: bytes,
     filename: str,
@@ -654,11 +672,8 @@ async def search_project_context(
     if project.knowledge_base_id:
         filter_metadata["knowledge_base_id"] = str(project.knowledge_base_id)
     
-    # Enhance query with expansion terms if enabled
-    if query_expansion:
-        clean_query = await self._expand_query(query)
-    else:
-        clean_query = ' '.join(query.split()[:50])  # Fallback to first 50 words
+    # Enhance query with expansion terms
+    clean_query = await _expand_query(query) if len(query.split()) > 3 else ' '.join(query.split()[:50])
         
     # Ensure query isn't empty after processing
     clean_query = clean_query.strip()
