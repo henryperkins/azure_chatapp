@@ -1,0 +1,66 @@
+
+/* Chat Layout Fixes */
+#chat-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 90vw;
+    margin: 0 auto;
+    min-height: calc(100vh - 4rem);
+    padding-bottom: 80px; /* Adjusted to prevent input overlap */
+    overflow: hidden;
+}
+
+/* Improved Chat Message Bubbles */
+.message-bubble {
+    max-width: 75%;
+    padding: 10px 15px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.98);
+    transition: all 0.2s ease-in-out;
+}
+
+.user-message .message-bubble {
+    background: linear-gradient(120deg, rgba(59, 130, 246, 0.85), rgba(147, 51, 234, 0.85));
+}
+
+/* Chat Input Container Improvements */
+.chat-input-container {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    z-index: 1200;
+    padding: 0.75rem 1rem;
+    backdrop-filter: blur(8px);
+    border-top: 1px solid rgba(229, 231, 235, 0.5);
+}
+
+/* Floating Button Fixes */
+.token-panel-container {
+    bottom: 80px;
+    right: 20px;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 640px) {
+    #chat-container {
+        padding-bottom: 100px;
+    }
+    
+    .chat-input-container {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .message-bubble {
+        max-width: 90%;
+        padding: 8px 12px;
+    }
+    
+    #font-size-adjuster {
+        top: auto;
+        bottom: 6rem;
+    }
+}

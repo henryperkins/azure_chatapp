@@ -968,6 +968,7 @@
  <script src="/static/js/modelConfig.js"></script>
  
  <!-- Core utilities must load first -->
+ <script src="/static/js/knowledgeBaseState.js"></script>
  <script src="/static/js/projectDashboardUtils.js"></script>
 
  <!-- Ensure utilities are ready before loading components -->
@@ -975,9 +976,9 @@
    (function() {
      let scriptsLoaded = {};
      let pendingScripts = [
+       '/static/js/knowledgeBaseComponent.js',
        '/static/js/projectDetailsComponent.js',
        '/static/js/projectListComponent.js',
-       '/static/js/knowledgeBaseComponent.js',
        '/static/js/projectManager.js'
      ];
      

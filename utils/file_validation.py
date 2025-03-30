@@ -148,7 +148,7 @@ class FileValidator:
                 # Web exploits
                 b'<?php', b'<script', b'eval(', b'document.cookie',
                 # System commands
-                b'powershell', b'cmd.exe', b'/bin/bash', b'wget', b'curl',
+                b'powershell', b'cmd.exe', b'/bin/bash', b'wget',
                 # Suspicious patterns
                 b'base64_decode', b'exec(', b'system(', b'passthru(',
                 # Dangerous file operations

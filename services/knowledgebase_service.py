@@ -299,10 +299,9 @@ async def _save_file_and_create_record(
         )
         
         # Save and update project token usage
-        async with db.begin():
-            await save_model(db, pf)
-            project.token_usage += token_estimate
-            await db.commit()
+        await save_model(db, pf)
+        project.token_usage += token_estimate
+        await save_model(db, project)
             
         # Process for search if requested
         if process_for_search and project.knowledge_base_id:

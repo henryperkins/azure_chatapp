@@ -181,13 +181,27 @@
      * @param {string} query - Search query
      */
     searchKnowledgeBase(query) {
+      // Debug log current project state
+      console.debug('Current project state:', {
+        hasProjectManager: !!window.projectManager,
+        currentProject: window.projectManager?.currentProject,
+        projectId: window.projectManager?.currentProject?.id
+      });
+
       const projectId = window.projectManager?.currentProject?.id;
       if (!projectId) {
-        window.showNotification("No project selected", "error");
-        return;
+        console.error('KB Search failed - no valid project selected');
+        window.showNotification("Please select a project first", "error");
+        this.state.isSearching = false;
+        if (typeof this._hideSearchLoading === 'function') {
+            this._hideSearchLoading();
+        }
+        return Promise.reject('No project selected');
       }
       
-      this._showSearchLoading();
+      if (typeof this._showSearchLoading === 'function') {
+        this._showSearchLoading();
+      }
       this.state.isSearching = true;
       
       window.apiRequest(`/api/projects/${projectId}/knowledge-bases/search`, "POST", {
@@ -197,13 +211,17 @@
         .then(response => {
           this.state.isSearching = false;
           const results = response.data?.results || [];
-          this._renderSearchResults(results);
+          if (typeof this._renderSearchResults === 'function') {
+            this._renderSearchResults(results);
+          }
         })
         .catch(err => {
           this.state.isSearching = false;
           console.error("Error searching knowledge base:", err);
           window.showNotification("Search failed", "error");
-          this._showNoResults();
+          if (typeof this._showNoResults === 'function') {
+            this._showNoResults();
+          }
         });
     }
 
@@ -375,13 +393,22 @@
         
         // First try to update the existing KB instead of creating new one
         try {
-          await window.apiRequest(
+          console.debug('Checking existing KB:', {
+            projectId: currentProject.id,
+            kbId: currentProject.knowledge_base_id
+          });
+          
+          const kbResponse = await window.apiRequest(
             `/api/knowledge-bases/${currentProject.knowledge_base_id}`,
             "GET"
           );
           
+          console.debug('Existing KB details:', kbResponse.data);
+          
           window.showNotification(
-            "Updated existing knowledge base settings",
+            kbResponse.data?.is_active
+              ? "Updated active knowledge base settings"
+              : "Updated inactive knowledge base settings",
             "success"
           );
           window.modalManager?.hide("knowledge");
@@ -403,6 +430,12 @@
       }
 
       try {
+        // First verify project doesn't already have a KB
+        const project = await window.projectManager.getProjectDetails(projectId);
+        if (project.knowledge_base_id) {
+          throw new Error('Project already has a knowledge base');
+        }
+
         console.log('[DEBUG] Setting up knowledge base for project:', projectId);
         window.showNotification("Setting up knowledge base...", "info");
         

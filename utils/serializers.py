@@ -160,7 +160,7 @@ def serialize_project_file(
         "file_type": file.file_type,
         "created_at": serialize_datetime(file.created_at),
         "updated_at": serialize_datetime(file.updated_at),
-        "extra_data": file.extra_data
+        "metadata": file.metadata or {}
     }
     
     if include_file_path:
