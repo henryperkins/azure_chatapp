@@ -89,54 +89,32 @@ async def create_conversation(
     Creates a new conversation with validation that standalone conversations
     cannot use knowledge base.
     """
-    # Validate knowledge base usage first
-    if use_knowledge_base and not project_id:
-        raise ValueError("Knowledge base requires project association")
-    """
-    Creates a new conversation with proper model alignment.
-    """
-    logger.info(f"Creating conversation for project {project_id} with model {model_id}")
-    
     try:
-        # Validate model first (reuse existing function)
         await validate_model(model_id)
-        logger.info("Model validation passed")
         
-        # Validate project and check knowledge base availability
-        project = await db.get(Project, project_id)
-        if not project:
-            raise HTTPException(404, "Project not found")
-            
-        # Auto-enable KB if project has one and model supports it
-        use_knowledge_base = bool(project.knowledge_base_id) and model_id in [
-            "claude-3-sonnet-20240229",
-            "claude-3-opus-20240229",
-            "gpt-4",
-            "gpt-4-turbo"
-        ]
-    
-        if use_knowledge_base:
-            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
-            if not kb or not kb.is_active:
-                raise HTTPException(400, "Project's knowledge base is not active")
-        
+        # Create base conversation object with safe defaults
         conv = Conversation(
             project_id=project_id,
             user_id=user_id,
             title=title,
             model_id=model_id,
-            use_knowledge_base=use_knowledge_base,
-            knowledge_base_id=project.knowledge_base_id if use_knowledge_base else None
+            use_knowledge_base=False,
+            knowledge_base_id=None
         )
-        logger.info("Conversation object created")
-        
-        # Use db_utils for saving
-        saved_conv = await save_model(db, conv)
-        if not saved_conv:
-            logger.error("Failed to save conversation - save_model returned None")
-            raise ValueError("Failed to save conversation - check database logs for details")
+
+        # Validate and set knowledge base info if needed
+        if project_id:
+            project = await db.get(Project, project_id)
+            await db.refresh(project, ["knowledge_base"])
             
-        logger.info(f"Conversation created successfully with ID {saved_conv.id}")
+            if project and project.knowledge_base_id:
+                conv.use_knowledge_base = True
+                conv.knowledge_base_id = project.knowledge_base_id
+
+        # Verify KB with actual database content
+        await conv.validate_knowledge_base(db)
+        
+        saved_conv = await save_model(db, conv)
         return saved_conv
         
     except Exception as e:
