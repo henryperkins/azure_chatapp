@@ -14,8 +14,8 @@ import warnings
 from pathlib import Path
 from cryptography.utils import CryptographyDeprecationWarning
 
-# Suppress cryptography warnings
-warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
+# Configure warnings filter
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning, module='pypdf')
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
@@ -56,10 +56,17 @@ logging_level = logging.INFO if settings.ENV == "development" else logging.WARNI
 logging.basicConfig(level=logging_level)
 logger = logging.getLogger(__name__)
 
-# Configure SQLAlchemy logging to be less verbose
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
-logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
-logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
+# Configure SQLAlchemy logging
+sqla_loggers = [
+    'sqlalchemy.engine',
+    'sqlalchemy.pool',
+    'sqlalchemy.dialects',
+    'sqlalchemy.orm'
+]
+
+for logger_name in sqla_loggers:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
+    logging.getLogger(logger_name).propagate = False  # Prevent duplicate logs
 
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
