@@ -8,12 +8,22 @@ const ModalManager = window.ModalManager;
  */
 class ProjectDashboard {
   constructor() {
+    if (!window.ModalManager) {
+      throw new Error('ModalManager dependency not loaded');
+    }
+    if (!window.UIUtils?.showNotification) {
+      console.error('UIUtils missing - notifications disabled');
+      this.showNotification = console.log; // Fallback
+    }
+
     this.components = {};
     this.state = {
       currentView: null, // 'list' or 'details'
       currentProject: null
     };
-    this.modalManager = new ModalManager();
+    this.modalManager = new window.ModalManager();
+    this.initAttempts = 0;
+    this.MAX_INIT_RETRIES = 5;
   }
 
   /**
@@ -22,22 +32,45 @@ class ProjectDashboard {
   async init(maxRetries = 3, retryDelay = 300) {
     console.log('Initializing Project Dashboard...');
     
-    let attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        if (this._isDocumentReady()) {
-          await this._completeInitialization();
-          console.log('Project Dashboard initialized successfully');
-          return;
-        }
-      } catch (error) {
-        console.error(`Initialization attempt ${attempt + 1} failed:`, error);
-        if (attempt === maxRetries - 1) throw error;
+    try {
+      if (this.initAttempts >= this.MAX_INIT_RETRIES) {
+        this._handleCriticalError(new Error('Max initialization attempts reached'));
+        return false;
       }
+
+      if (!window.projectManager) {
+        throw new Error('ProjectManager not available - required dependency');
+      }
+
+      if (this._isDocumentReady()) {
+        await this._completeInitialization();
+        console.log('✅ Project Dashboard initialized successfully');
+        this.initAttempts = 0; // Reset on success
+        return true;
+      }
+
+      throw new Error('Document not ready');
+    } catch (error) {
+      console.error(`Initialization attempt ${this.initAttempts + 1} failed:`, error);
       
-      attempt++;
-      await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+      if (this.initAttempts < this.MAX_INIT_RETRIES) {
+        this.initAttempts++;
+        const delay = retryDelay * this.initAttempts;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.init(maxRetries, retryDelay);
+      }
+
+      this._handleCriticalError(error);
+      return false;
     }
+  }
+
+  _handleCriticalError(error) {
+    console.error('💥 FATAL Init Failure:', error);
+    if (this.showNotification) {
+      this.showNotification('Application failed to initialize', 'error');
+    }
+    // Could add more user-facing error handling here
   }
 
   _isDocumentReady() {
