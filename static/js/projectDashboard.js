@@ -1,7 +1,7 @@
-const ProjectListComponent = require('./projectListComponent');
-const ProjectDetailsComponent = require('./projectDetailsComponent'); 
-const KnowledgeBaseComponent = require('./knowledgeBaseComponent');
-const { UIUtils, ModalManager } = require('./projectDashboardUtils');
+const ProjectListComponent = window.ProjectListComponent;
+const ProjectDetailsComponent = window.ProjectDetailsComponent;
+const UIUtils = window.UIUtils;
+const ModalManager = window.ModalManager;
 
 /**
  * Project Dashboard - Main controller class
