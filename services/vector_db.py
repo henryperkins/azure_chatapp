@@ -351,7 +351,8 @@ class VectorDB:
         self,
         query: str,
         top_k: int = 5,
-        filter_metadata: Optional[Dict[str, Any]] = None
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        query_expansion: bool = True
     ) -> List[Dict[str, Any]]:
         """Search for documents similar to the query text."""
         if not query:
@@ -497,6 +498,24 @@ class VectorDB:
                 k: v for k, v in self.metadata[doc_id].items() if k != "text"
             }
         }
+
+    async def _expand_query(self, original_query: str) -> str:
+        """Generate enhanced query using keyword extraction and synonym expansion"""
+        try:
+            # Simple implementation - can be enhanced with NLP later
+            keywords = set()
+            for word in original_query.lower().split():
+                if len(word) > 3:  # Ignore short words
+                    keywords.add(word)
+                    # Add simple synonyms
+                    if word in ["how", "what", "why"]:
+                        keywords.update(["method", "process", "reason"])
+                    elif word in ["best", "good"]:
+                        keywords.add("effective")
+            
+            return ' '.join(keywords) + " " + original_query[:100]  # Combine with original
+        except Exception:
+            return original_query[:150]  # Fallback to truncated original
 
     def _matches_filter(self, metadata: Dict[str, Any], filter_criteria: Dict[str, Any]) -> bool:
         """Check if metadata matches filter criteria."""

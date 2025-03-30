@@ -654,8 +654,16 @@ async def search_project_context(
     if project.knowledge_base_id:
         filter_metadata["knowledge_base_id"] = str(project.knowledge_base_id)
     
-    # Clean and truncate query if needed
-    clean_query = ' '.join(query.split()[:50])  # Limit to first 50 words
+    # Enhance query with expansion terms if enabled
+    if query_expansion:
+        clean_query = await self._expand_query(query)
+    else:
+        clean_query = ' '.join(query.split()[:50])  # Fallback to first 50 words
+        
+    # Ensure query isn't empty after processing
+    clean_query = clean_query.strip()
+    if not clean_query:
+        clean_query = query[:100]  # Fallback to raw input
     
     # Perform search with combined filters and query expansion
     results = await vector_db.search(
