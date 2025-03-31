@@ -404,6 +404,7 @@ async def project_websocket_chat_endpoint(
                 if not conversation:
                     error_msg = f"Conversation {conversation_id} not found in project {project_id}"
                     logger.warning(f"WebSocket rejected: {error_msg}")
+                    await websocket.accept()
                     await websocket.send_json({
                         "type": "error",
                         "code": "CONVERSATION_NOT_FOUND",
@@ -415,6 +416,7 @@ async def project_websocket_chat_endpoint(
             except HTTPException as e:
                 error_msg = f"Conversation access error: {e.detail}"
                 logger.warning(f"WebSocket rejected: {error_msg}")
+                await websocket.accept()
                 await websocket.send_json({
                     "type": "error",
                     "code": "CONVERSATION_ACCESS_DENIED",
@@ -425,6 +427,7 @@ async def project_websocket_chat_endpoint(
             except Exception as e:
                 error_msg = f"Unexpected conversation validation error: {str(e)}"
                 logger.error(f"WebSocket error: {error_msg}")
+                await websocket.accept()
                 await websocket.send_json({
                     "type": "error",
                     "code": "INTERNAL_ERROR",
