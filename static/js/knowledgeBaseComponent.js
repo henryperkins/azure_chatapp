@@ -54,6 +54,16 @@
       this._bindEvents();
     }
 
+    _showStatusAlert(message, type) {
+      const alert = this.elements.statusIndicator;
+      alert.innerHTML = `
+        <div class="notification ${type}">
+          ${message}
+          ${type === 'info' ? '<button class="ml-2" onclick="this.parentElement.remove()">×</button>' : ''}
+        </div>
+      `;
+    }
+
     /* ===========================
        PUBLIC METHODS
        =========================== */
@@ -70,6 +80,22 @@
       if (kb) {
         console.log('[DEBUG] Rendering knowledge base info:', kb);
         this.state.knowledgeBase = kb;
+
+        // Add status alerts based on backend conditions
+        if (kb.is_active) {
+          if (kb.stats?.file_count === 0) {
+            this._showStatusAlert(
+              "Knowledge Base is inactive - upload files to enable",
+              "warning"
+            );
+          }
+          if (kb.stats?.unprocessed_files > 0) {
+            this._showStatusAlert(
+              `${kb.stats.unprocessed_files} files need processing`,
+              "info"
+            );
+          }
+        }
         
         // Store the project_id in a data attribute for future reference
         if (kb.project_id && activeSection) {
@@ -643,12 +669,20 @@
         // Extract error details if present
         const errorDetails = result.metadata?.processing_error;
         const hasError = errorDetails && !result.success;
+        const fileInfo = result.file_info || {};
         
         const item = utils.createElement("div", {
           className: `content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow ${
             hasError ? "border-l-4 border-red-500" : ""
           }`
         });
+
+        // Add metadata row with relevance score, tokens, and source
+        const metaRow = this._createMetaRow(
+          `Relevance: ${Math.round(result.score * 100)}%`,
+          `Tokens: ${fileInfo.token_count || 'N/A'}`,
+          `Source: ${fileInfo.filename || 'Unknown'}`
+        );
         
         // Header with file info and match score
         const header = utils.createElement("div", {
@@ -684,8 +718,21 @@
           : textContent;
         
         item.appendChild(snippet);
+        item.appendChild(metaRow);
         resultsContainer.appendChild(item);
       });
+    }
+
+    _createMetaRow(...items) {
+      const row = window.uiUtilsInstance.createElement("div", {
+        className: "flex justify-between text-xs text-gray-500 mt-2"
+      });
+      
+      items.forEach(text => {
+        row.appendChild(window.uiUtilsInstance.createElement("span", {textContent: text}));
+      });
+      
+      return row;
     }
   }
 
