@@ -111,8 +111,13 @@ async def create_conversation(
                 conv.use_knowledge_base = True
                 conv.knowledge_base_id = project.knowledge_base_id
 
-        # Verify KB with actual database content
-        await conv.validate_knowledge_base(db)
+        try:
+            # Verify KB with actual database content
+            await conv.validate_knowledge_base(db)
+        except Exception as e:
+            logger.warning(f"Knowledge base validation failed: {str(e)} - continuing without KB")
+            conv.use_knowledge_base = False
+            conv.knowledge_base_id = None
         
         saved_conv = await save_model(db, conv)
         return saved_conv
