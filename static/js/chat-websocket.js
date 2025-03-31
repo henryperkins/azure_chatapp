@@ -1,12 +1,16 @@
 (function() {
-  // Prevent multiple executions
+  // Singleton instance tracking
+  const debugPrefix = '[WebSocketService]';
+  
+  // Prevent duplicate loading with debug logging
   if (window.__webSocketServiceLoaded) {
-    console.warn('chat-websocket.js already loaded');
+    console.debug(`${debugPrefix} Script already loaded - skipping reinitialization`);
     return;
   }
 
   // Mark as loaded
   window.__webSocketServiceLoaded = true;
+  console.debug(`${debugPrefix} Initializing WebSocket service`);
 
   /**
    * chat-websocket.js
@@ -35,11 +39,14 @@
    * }} AugmentedWindow
    */
 
-  // Only define WebSocketService if it doesn't exist
+  // Singleton pattern implementation
   if (window.WebSocketService) {
-    console.warn('WebSocketService already defined');
+    console.debug(`${debugPrefix} Service already exists - using existing instance`);
     return;
   }
+
+  // Track active instances
+  const activeInstances = new WeakMap();
 
   // Connection state constants
   const CONNECTION_STATES = {
@@ -108,6 +115,12 @@
    * Handles real-time communication with automatic reconnection
    */
   window.WebSocketService = function (options = {}) {
+    // Singleton enforcement
+    if (activeInstances.has(this)) {
+      console.debug(`${debugPrefix} Returning existing instance`);
+      return activeInstances.get(this);
+    }
+    activeInstances.set(this, this);
   // Configuration
   this.maxRetries = options.maxRetries || 3;
   this.reconnectInterval = options.reconnectInterval || 3000;
@@ -164,16 +177,31 @@ window.WebSocketService.prototype.setState = function (newState) {
 
 // Connection management
 window.WebSocketService.prototype.connect = async function (chatId) {
+  const debugPrefix = '[WebSocketService]';
   if (!chatId) throw new Error('Invalid chatId');
 
+  // Return existing connection if already connected to same chat
   if (this.state === CONNECTION_STATES.CONNECTED && this.chatId === chatId) {
+    console.debug(`${debugPrefix} Already connected to chat ${chatId}`);
     return true;
   }
-  if (
-    this.state === CONNECTION_STATES.CONNECTING ||
-    this.state === CONNECTION_STATES.RECONNECTING
-  ) {
-    throw new Error('Connection already in progress');
+
+  // Queue connection requests if one is already in progress
+  if (this.state === CONNECTION_STATES.CONNECTING ||
+      this.state === CONNECTION_STATES.RECONNECTING) {
+    console.debug(`${debugPrefix} Connection in progress - queuing request for chat ${chatId}`);
+    return new Promise((resolve) => {
+      const checkConnection = () => {
+        if (this.state === CONNECTION_STATES.CONNECTED) {
+          resolve(true);
+        } else if (this.state === CONNECTION_STATES.DISCONNECTED) {
+          this.connect(chatId).then(resolve);
+        } else {
+          setTimeout(checkConnection, 100);
+        }
+      };
+      checkConnection();
+    });
   }
 
   this.setState(CONNECTION_STATES.CONNECTING);
@@ -227,6 +255,7 @@ window.WebSocketService.prototype.connect = async function (chatId) {
   }
 
   if (!validateWebSocketUrl(this.wsUrl)) {
+    console.error(`${debugPrefix} Invalid WebSocket URL: ${this.wsUrl}`);
     throw new Error(`Invalid WebSocket URL: ${this.wsUrl}`);
   }
 
@@ -583,4 +612,20 @@ function validateWebSocketUrl(url) {
   // Export version and constants for debugging
   WebSocketService.version = '1.0.1';
   WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    console.debug(`${debugPrefix} Cleaning up before page unload`);
+    if (window.WebSocketService) {
+      const instances = Array.from(activeInstances.values());
+      instances.forEach(instance => {
+        try {
+          instance.destroy();
+        } catch (err) {
+          console.debug(`${debugPrefix} Error during cleanup:`, err);
+        }
+      });
+      activeInstances.clear();
+    }
+  });
 })(); // End of IIFE
