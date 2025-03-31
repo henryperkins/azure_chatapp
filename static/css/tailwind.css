@@ -401,10 +401,17 @@
 
 /* Consolidated transition classes */
 #mainSidebar {
-    @apply transform transition-transform duration-300 ease-out;
+    @apply transform transition-transform duration-300 ease-out will-change-transform;
     transform: translateX(-100%);
     z-index: 50;
-    will-change: transform;
+    transition-property: transform, opacity;
+    backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion) {
+    #mainSidebar {
+        transition: none;
+    }
 }
 
 #mainSidebar.translate-x-0 {

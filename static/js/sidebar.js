@@ -27,26 +27,23 @@ function initializeSidebarToggle() {
     // Set initial state based on viewport
     const isMobile = window.innerWidth < 768;
     isOpen = !isMobile;
-    sidebar.classList.toggle('translate-x-0', !isMobile);
-    sidebar.classList.toggle('-translate-x-full', isMobile);
+    updateSidebarState();
 
     // Event Listeners
-    const handleToggle = () => {
-        isOpen = !isOpen;
-        const isMobile = window.innerWidth < 768;
-        
-        sidebar.classList.toggle('translate-x-0', isOpen);
-        sidebar.classList.toggle('-translate-x-full', !isOpen);
-        
-        if (isMobile) {
-            document.body.classList.toggle('overflow-hidden', isOpen);
-            updateBackdrop(isOpen);
-        }
-    };
-
-    toggleBtn.addEventListener('click', handleToggle);
-    closeBtn?.addEventListener('click', handleToggle);
+    toggleBtn.addEventListener('click', toggleSidebar);
+    closeBtn?.addEventListener('click', toggleSidebar);
     window.addEventListener('resize', handleResize);
+}
+
+function updateSidebarState() {
+    const isMobile = window.innerWidth < 768;
+    sidebar.classList.toggle('translate-x-0', isOpen);
+    sidebar.classList.toggle('-translate-x-full', !isOpen);
+    
+    if (isMobile) {
+        document.body.classList.toggle('overflow-hidden', isOpen);
+        updateBackdrop(isOpen);
+    }
 }
 
 function handleResize() {
@@ -243,21 +240,35 @@ function initializeModelDropdownOnLoad() {
 /**
  * Handles switching between tabs in the sidebar
  */
+const TAB_CONFIG = {
+  recent: {
+    buttonId: 'recentChatsTab',
+    sectionId: 'recentChatsSection',
+    loader: () => window.loadConversationList?.()
+  },
+  starred: {
+    buttonId: 'starredChatsTab', 
+    sectionId: 'starredChatsSection',
+    loader: loadStarredConversations
+  },
+  projects: {
+    buttonId: 'projectsTab',
+    sectionId: 'projectsSection',
+    loader: () => window.loadSidebarProjects?.()
+  }
+};
+
 function setupSidebarTabs() {
-  const tabs = {
-    recent: {
-      button: document.getElementById('recentChatsTab'),
-      content: document.getElementById('recentChatsSection')
-    },
-    starred: {
-      button: document.getElementById('starredChatsTab'),
-      content: document.getElementById('starredChatsSection')
-    },
-    projects: {
-      button: document.getElementById('projectsTab'),
-      content: document.getElementById('projectsSection')
-    }
-  };
+  const tabs = {};
+  
+  // Initialize tab elements
+  Object.entries(TAB_CONFIG).forEach(([name, config]) => {
+    tabs[name] = {
+      button: document.getElementById(config.buttonId),
+      content: document.getElementById(config.sectionId),
+      loader: config.loader
+    };
+  });
   
   // Make sure all elements exist before setting up event handlers
   if (!tabs.recent.button || !tabs.starred.button || !tabs.projects.button) {
@@ -342,17 +353,29 @@ function setupSidebarTabs() {
 /**
  * Sets up collapsible sections in the sidebar
  */
+const COLLAPSIBLE_SECTIONS = [
+  {
+    toggleId: 'toggleModelConfig',
+    panelId: 'modelConfigPanel',
+    chevronId: 'modelConfigChevron',
+    onExpand: () => window.initializeModelDropdown?.()
+  },
+  {
+    toggleId: 'toggleCustomInstructions',
+    panelId: 'customInstructionsPanel',
+    chevronId: 'customInstructionsChevron' 
+  }
+];
+
 function setupCollapsibleSections() {
-  // Model Configuration section
-  setupCollapsibleSection('toggleModelConfig', 'modelConfigPanel', 'modelConfigChevron', () => {
-    // Initialize the model dropdown when expanded
-    if (typeof initializeModelDropdown === 'function') {
-      initializeModelDropdown();
-    }
+  COLLAPSIBLE_SECTIONS.forEach(section => {
+    setupCollapsibleSection(
+      section.toggleId,
+      section.panelId,
+      section.chevronId,
+      section.onExpand
+    );
   });
-  
-  // Custom Instructions section
-  setupCollapsibleSection('toggleCustomInstructions', 'customInstructionsPanel', 'customInstructionsChevron');
 }
 
 /**
