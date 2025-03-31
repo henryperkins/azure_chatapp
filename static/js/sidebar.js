@@ -9,75 +9,77 @@
  * - Starred conversations management
  */
 
-// Global variables
 let sidebar = null;
 let isOpen = false;
 let toggleBtn = null;
 let closeBtn = null;
 
-// Global backdrop functions
-function createBackdrop() {
-    if (!isMobileView()) return; // Only needed on mobile
+function initializeSidebarToggle() {
+    sidebar = document.getElementById('mainSidebar');
+    toggleBtn = document.getElementById('navToggleBtn');
+    closeBtn = document.getElementById('closeSidebarBtn');
+
+    if (!sidebar || !toggleBtn) {
+        console.error("Sidebar elements missing");
+        return;
+    }
+
+    // Set initial state based on viewport
+    const isMobile = window.innerWidth < 768;
+    isOpen = !isMobile;
+    sidebar.classList.toggle('translate-x-0', !isMobile);
+    sidebar.classList.toggle('-translate-x-full', isMobile);
+
+    // Event Listeners
+    const handleToggle = () => {
+        isOpen = !isOpen;
+        const isMobile = window.innerWidth < 768;
+        
+        sidebar.classList.toggle('translate-x-0', isOpen);
+        sidebar.classList.toggle('-translate-x-full', !isOpen);
+        
+        if (isMobile) {
+            document.body.classList.toggle('overflow-hidden', isOpen);
+            updateBackdrop(isOpen);
+        }
+    };
+
+    toggleBtn.addEventListener('click', handleToggle);
+    closeBtn?.addEventListener('click', handleToggle);
+    window.addEventListener('resize', handleResize);
+}
+
+function handleResize() {
+    const isMobile = window.innerWidth < 768;
+    const shouldBeOpen = !isMobile;
     
+    if (shouldBeOpen !== isOpen) {
+        isOpen = shouldBeOpen;
+        sidebar.classList.toggle('translate-x-0', shouldBeOpen);
+        sidebar.classList.toggle('-translate-x-full', !shouldBeOpen);
+        document.body.classList.remove('overflow-hidden');
+        updateBackdrop(false);
+    }
+}
+
+function updateBackdrop(show) {
     let backdrop = document.getElementById('sidebarBackdrop');
     if (!backdrop) {
         backdrop = document.createElement('div');
         backdrop.id = 'sidebarBackdrop';
-        backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 opacity-0';
-        backdrop.addEventListener('click', toggleSidebar);
+        backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300';
+        backdrop.onclick = () => toggleSidebar();
         document.body.appendChild(backdrop);
     }
-    setTimeout(() => {
-        backdrop.classList.add('opacity-100');
-        backdrop.style.pointerEvents = 'auto';
-    }, 10);
+    backdrop.style.opacity = show ? '1' : '0';
+    backdrop.style.pointerEvents = show ? 'auto' : 'none';
 }
 
-function removeBackdrop() {
-    const backdrop = document.getElementById('sidebarBackdrop');
-    if (backdrop) {
-        backdrop.classList.remove('opacity-100');
-        backdrop.style.pointerEvents = 'none';
-        setTimeout(() => {
-            if (backdrop && !isOpen) {
-                backdrop.remove();
-            }
-        }, 300);
-    }
-}
-
-function toggleSidebar() {
-    if (!sidebar) return;
-    
-    isOpen = !isOpen;
-    const isMobile = isMobileView();
-    
-    if (isOpen) {
-        if (isMobile) {
-            document.body.classList.add('overflow-hidden');
-        }
-        document.documentElement.style.overflow = 'hidden';
-        sidebar.classList.remove('-translate-x-full');
-        sidebar.classList.add('translate-x-0');
-        createBackdrop();
-    } else {
-        if (isMobile) {
-            document.body.classList.remove('overflow-hidden');
-        }
-        document.documentElement.style.overflow = '';
-        sidebar.classList.add('-translate-x-full');
-        sidebar.classList.remove('translate-x-0');
-        removeBackdrop();
-    }
-
-    // Smooth transitions
-    requestAnimationFrame(() => {
-        sidebar.classList.add('sidebar-transition');
-        setTimeout(() => {
-            sidebar.classList.remove('sidebar-transition');
-        }, 300);
-    });
-}
+// Unified initialization
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.readyState === 'loading') return;
+    initializeSidebarToggle();
+});
 
 
     // Add keyboard accessibility
@@ -671,4 +673,7 @@ window.sidebar = {
 };
 
 // Make toggle function directly available
-window.toggleSidebar = toggleSidebar;
+window.toggleSidebar = () => {
+    const handleToggle = new Event('click');
+    toggleBtn?.dispatchEvent(handleToggle);
+};
