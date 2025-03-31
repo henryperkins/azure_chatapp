@@ -41,101 +41,73 @@
     return;
   }
 
-  // 1. Define the constructor FIRST
-  window.WebSocketService = function (options = {}) {
-    // Configuration
-    this.maxRetries = options.maxRetries || 3;
-    this.reconnectInterval = options.reconnectInterval || 3000;
-    this.connectionTimeout = options.connectionTimeout || 10000;
-    this.messageTimeout = options.messageTimeout || 30000;
-
-    // State
-    this.state = CONNECTION_STATES.DISCONNECTED;
-    this.socket = null;
-    this.chatId = null;
-    this.projectId = localStorage.getItem("selectedProjectId");
-    this.reconnectAttempts = 0;
-    this.useHttpFallback = false;
-    this.wsUrl = null;
-    this.pendingMessages = new Map();
-
-    // Dependencies
-    this.authManager = new AuthManager();
-
-    // Event handlers
-    this.onMessage = options.onMessage || (() => { });
-    this.onError = options.onError || ((err) => console.error('WebSocket Error:', err));
-    this.onConnect = options.onConnect || (() => { });
-    this.onDisconnect = options.onDisconnect || (() => { });
+  // Connection state constants
+  const CONNECTION_STATES = {
+    DISCONNECTED: 'disconnected',
+    CONNECTING: 'connecting',
+    CONNECTED: 'connected',
+    RECONNECTING: 'reconnecting',
+    ERROR: 'error'
   };
 
-  // Connection state constants
-const CONNECTION_STATES = {
-  DISCONNECTED: 'disconnected',
-  CONNECTING: 'connecting',
-  CONNECTED: 'connected',
-  RECONNECTING: 'reconnecting',
-  ERROR: 'error'
-};
-
-/**
- * Authentication Manager
- * Centralizes all authentication logic
- */
-class AuthManager {
-  constructor() {
-    this.authCheckInProgress = false;
-    
-    // Listen for project selection events
-    document.addEventListener('projectSelected', (event) => {
-      if (event.detail && event.detail.projectId) {
-        console.log('Auth manager: Project selected:', event.detail.projectId);
-        // Store for future reference
-        localStorage.setItem('selectedProjectId', event.detail.projectId);
-      }
-    });
-  }
-
-  async getValidToken() {
-    if (this.authCheckInProgress) {
-      throw new Error('Auth check already in progress');
-    }
-
-    this.authCheckInProgress = true;
-    try {
-      // Check for existing valid token
-      if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
-        return window.TokenManager.accessToken;
-      }
-
-      // Attempt token refresh if available
-      if (window.TokenManager?.refresh) {
-        await window.TokenManager.refresh();
-        if (window.TokenManager.accessToken) {
-          return window.TokenManager.accessToken;
-        }
-      }
-
-      // Final fallback to auth verification
-      if (window.auth?.verify) {
-        const verified = await window.auth.verify();
-        if (verified && window.TokenManager?.accessToken) {
-          return window.TokenManager.accessToken;
-        }
-      }
-
-      throw new Error('Unable to obtain valid token');
-    } finally {
+  /**
+   * Authentication Manager
+   * Centralizes all authentication logic
+   */
+  class AuthManager {
+    constructor() {
       this.authCheckInProgress = false;
+      
+      // Listen for project selection events
+      document.addEventListener('projectSelected', (event) => {
+        if (event.detail && event.detail.projectId) {
+          console.log('Auth manager: Project selected:', event.detail.projectId);
+          // Store for future reference
+          localStorage.setItem('selectedProjectId', event.detail.projectId);
+        }
+      });
+    }
+
+    async getValidToken() {
+      if (this.authCheckInProgress) {
+        throw new Error('Auth check already in progress');
+      }
+
+      this.authCheckInProgress = true;
+      try {
+        // Check for existing valid token
+        if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
+          return window.TokenManager.accessToken;
+        }
+
+        // Attempt token refresh if available
+        if (window.TokenManager?.refresh) {
+          await window.TokenManager.refresh();
+          if (window.TokenManager.accessToken) {
+            return window.TokenManager.accessToken;
+          }
+        }
+
+        // Final fallback to auth verification
+        if (window.auth?.verify) {
+          const verified = await window.auth.verify();
+          if (verified && window.TokenManager?.accessToken) {
+            return window.TokenManager.accessToken;
+          }
+        }
+
+        throw new Error('Unable to obtain valid token');
+      } finally {
+        this.authCheckInProgress = false;
+      }
     }
   }
-}
 
-/**
- * WebSocket Service
- * Handles real-time communication with automatic reconnection
- */
-window.WebSocketService = function (options = {}) {
+  /**
+   * WebSocket Service
+   * Handles real-time communication with automatic reconnection
+   */
+  window.WebSocketService = function (options = {}) {
   // Configuration
   this.maxRetries = options.maxRetries || 3;
   this.reconnectInterval = options.reconnectInterval || 3000;
