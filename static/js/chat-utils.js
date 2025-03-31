@@ -20,14 +20,8 @@ window.ChatUtils = {
     // Otherwise, fallback to basic error handling
     console.error(`[${context}] Error:`, error);
     
-    let message = 'An error occurred';
-    if (error instanceof TypeError) {
-      message = 'Network error - please check your connection';
-    } else if (error.response && error.response.status === 401) {
-      message = 'Session expired - please log in again';
-    } else if (error.message) {
-      message = error.message;
-    }
+    // Extract best message based on error type
+    let message = this.extractErrorMessage(error);
     
     // Use provided fallback or show notification via available methods
     if (typeof fallbackNotify === 'function') {
@@ -39,6 +33,51 @@ window.ChatUtils = {
     } else {
       console.error(message);
     }
+  },
+  
+  /**
+   * Extract the most appropriate error message from an error object
+   * @param {Error|Object} error - The error object
+   * @returns {string} The extracted error message
+   */
+  extractErrorMessage(error) {
+    if (!error) return 'Unknown error occurred';
+    
+    // Check for network errors
+    if (error instanceof TypeError || error.name === 'TypeError') {
+      return 'Network error - please check your connection';
+    }
+    
+    // Check for authentication errors
+    if (error.response) {
+      if (error.response.status === 401) {
+        return 'Session expired - please log in again';
+      } else if (error.response.status === 403) {
+        return 'You don\'t have permission to perform this action';
+      } else if (error.response.status === 404) {
+        return 'The requested resource was not found';
+      } else if (error.response.status === 429) {
+        return 'Too many requests - please try again later';
+      } else if (error.response.status >= 500) {
+        return 'Server error - please try again later';
+      }
+    }
+    
+    // Check for specific error messages
+    if (error.message) {
+      // Sanitize error message to prevent potential XSS
+      const sanitizedMessage = error.message
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+        
+      // Truncate very long messages
+      return sanitizedMessage.length > 150 
+        ? sanitizedMessage.substring(0, 150) + '...' 
+        : sanitizedMessage;
+    }
+    
+    // Fallback for unknown errors
+    return 'An unexpected error occurred';
   },
   
   /**

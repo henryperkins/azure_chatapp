@@ -423,8 +423,21 @@
       return false;
     }
     
-    return currentProject.knowledge_base_id && 
-           currentProject.knowledge_base?.is_active !== false;
+    return isKnowledgeBaseActive(currentProject);
+  }
+  
+  /**
+   * Check if knowledge base is active (centralized helper)
+   * @param {Object} project - Project object
+   * @returns {boolean} True if KB exists and is active
+   */
+  function isKnowledgeBaseActive(project) {
+    if (!project) return false;
+    
+    const hasKnowledgeBase = !!project.knowledge_base_id;
+    const isActive = project.knowledge_base?.is_active !== false; // Consider active unless explicitly false
+    
+    return hasKnowledgeBase && isActive;
   }
   
   /**

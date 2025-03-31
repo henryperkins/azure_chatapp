@@ -54,9 +54,6 @@ function ensureModulesLoaded() {
   }, Promise.resolve());
 }
 
-// For maintaining backward compatibility with global functions
-let chatInterface = null;
-
 // Initialize the chat functionality
 window.initializeChat = async function() {
   try {
@@ -68,12 +65,16 @@ window.initializeChat = async function() {
     // Add markdown styles
     addMarkdownStyles();
     
-    // Create the chat interface
-    chatInterface = new window.ChatInterface();
-    chatInterface.initialize();
+    // Create the chat interface only if not already created
+    if (!window.chatInterface) {
+      window.chatInterface = new window.ChatInterface();
+      window.chatInterface.initialize();
+    }
     
-    // Expose the instance globally for project page
-    window.projectChatInterface = chatInterface;
+    // Ensure projectChatInterface is available for project page
+    if (!window.projectChatInterface) {
+      window.projectChatInterface = window.chatInterface;
+    }
 
     // Listen for model configuration changes
     document.addEventListener('modelConfigChanged', (e) => {
