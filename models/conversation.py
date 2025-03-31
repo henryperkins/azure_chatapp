@@ -57,23 +57,28 @@ class Conversation(Base):
         return f"<Conversation {self.id} (User #{self.user_id}) title={self.title}>"
 
     async def validate_knowledge_base(self, db: AsyncSession) -> None:
-        """Validate KB usage is properly configured"""
-        if self.use_knowledge_base and not self.project_id:
-            raise ValueError("Knowledge base can only be used with project-associated conversations")
+        """Validate KB with actual database content"""
+        if self.use_knowledge_base and self.knowledge_base_id:
+            kb = await db.get(KnowledgeBase, self.knowledge_base_id)
             
-        if self.use_knowledge_base:
-            if not self.project_id:
-                raise ValueError("Conversation must belong to project to use KB")
-            
-            project = await db.get(Project, self.project_id)
-            if not project or not project.knowledge_base_id:
-                raise ValueError("Project has no knowledge base configured")
-            
-            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
-            if not kb or not kb.is_active:
+            # Check if KB exists and active
+            if not kb or not getattr(kb, 'is_active', False):
                 raise ValueError("Project's knowledge base is not active")
-            
-            # Get total chunks from processed files
+                
+            # Check index stats through FILE PROCESSING STATUS
+            stmt = select(ProjectFile).where(                                            
+                ProjectFile.project_id == self.project_id,
+                ProjectFile.config["search_processing"]["success"].as_boolean().is_(True)
+            )                                                                            
+            files = (await db.execute(stmt)).scalars().all()                             
+
+            total_chunks = sum(                                                          
+                (file.config or {}).get("search_processing", {}).get("chunk_count", 0)  
+                for file in files                                                        
+            )                                                                            
+
+            if total_chunks <= 0:                                                        
+                raise ValueError("Knowledge base has no indexed content")
             from models.project_file import ProjectFile
             from sqlalchemy import select, Boolean
             
