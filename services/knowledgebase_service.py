@@ -363,13 +363,13 @@ async def process_file_for_vector_search(
         
         # Update file metadata
         if search_results.get("success", False):
-            metadata = project_file.metadata or {}
-            metadata["search_processing"] = {
+            config = project_file.config or {}
+            config["search_processing"] = {
                 "success": True,
                 "chunk_count": search_results.get("chunk_count", 0),
                 "processed_at": datetime.now().isoformat()
             }
-            project_file.metadata = metadata
+            project_file.config = config
             await save_model(db, project_file)
             
         return search_results
@@ -377,13 +377,13 @@ async def process_file_for_vector_search(
         logger.error(f"Error processing file for search: {str(e)}")
         # Update metadata with error
         try:
-            metadata = project_file.metadata or {}
-            metadata["search_processing"] = {
+            config = project_file.config or {}
+            config["search_processing"] = {
                 "success": False,
                 "error": str(e),
                 "attempted_at": datetime.now().isoformat()
             }
-            project_file.metadata = metadata
+            project_file.config = config
             await save_model(db, project_file)
         except Exception as metadata_error:
             logger.error(f"Error updating file metadata: {metadata_error}")
