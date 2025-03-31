@@ -266,15 +266,13 @@ async def reprocess_project_files(
                 chunk_overlap=DEFAULT_CHUNK_OVERLAP
             )
             
-            metadata = {} if file_record.metadata is None else (
-                file_record.metadata if isinstance(file_record.metadata, dict) else {}
-            )
-            metadata["search_processing"] = {
-                "success": result.get("success", False),
+            config = file_record.config or {}
+            config["search_processing"] = {
+                "success": result.get("success", False), 
                 "chunk_count": result.get("chunk_count", 0),
                 "processed_at": datetime.now().isoformat()
             }
-            file_record.metadata = metadata
+            file_record.config = config
             
             if result.get("success", False):
                 processed_count += 1
