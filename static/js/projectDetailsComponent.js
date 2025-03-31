@@ -1130,9 +1130,9 @@
 
       const status = processing.status || 'pending';
       const text = {
-        pending: "Pending Processing",
-        success: "Search Ready",
-        error: `Failed: ${processing.error?.split('\n')[0] || ''}`,
+        pending: "Processing...",
+        success: "Ready for Search",
+        error: `Error: ${processing.error?.split('\n')[0] || ''}`,
         default: "Not Processed"
       }[status] || status;
 
