@@ -510,12 +510,21 @@ async def project_websocket_chat_endpoint(
                             # Get conversation history
                             msg_dicts = await get_conversation_messages(conversation_id, db, include_system_prompt=True)
                             
-                            # Inject knowledge base context
-                            kb_context = await augment_with_knowledge(
-                                conversation_id=conversation_id,
-                                user_message=data_dict["content"],
-                                db=db
-                            )
+                            # Inject knowledge base context if enabled
+                            kb_context = []
+                            if conversation.use_knowledge_base:
+                                try:
+                                    kb_context = await augment_with_knowledge(
+                                        conversation_id=conversation_id,
+                                        user_message=data_dict["content"],
+                                        db=db
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to augment with knowledge: {str(e)}")
+                                    await manager.send_personal_message({
+                                        "type": "warning",
+                                        "message": "Knowledge base unavailable - continuing without context"
+                                    }, websocket)
                             
                             # Generate AI response with enhanced context
                             assistant_msg = await generate_ai_response(
