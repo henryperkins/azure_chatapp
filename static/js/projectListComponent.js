@@ -52,6 +52,7 @@
       }
       
       this._bindFilterEvents();
+      this._bindCreateProjectButton(); // Add this line
     }
 
     /* ===========================
@@ -435,6 +436,24 @@
           window.history.replaceState({}, '', url);
         });
       });
+    }
+
+    /**
+     * Bind the "Create Project" button event handler
+     * @private
+     */
+    _bindCreateProjectButton() {
+      const createProjectBtn = document.getElementById('createProjectBtn');
+      if (createProjectBtn) {
+        createProjectBtn.addEventListener('click', () => {
+          if (!window.projectModal?.initialized) {
+            window.projectModal = new ProjectModal();
+          }
+          window.projectModal.openModal();
+        });
+      } else {
+        console.error('Create Project button not found');
+      }
     }
   }
 
