@@ -38,6 +38,12 @@
     console.log('Creating UIUtils class');
     window.UIUtils = class UIUtils {
       constructor() {
+        this.notificationContainer = document.createElement('div');
+        this.notificationContainer.id = 'notificationContainer';
+        this.notificationContainer.className = 'fixed top-4 right-4 z-50 space-y-2 w-80';
+        document.body.appendChild(this.notificationContainer);
+      }
+      constructor() {
         console.log('UIUtils instance created');
       }
       
@@ -139,22 +145,24 @@
        * @param {Object} options - Additional options (action, timeout, etc.)
        */
       showNotification(message, type = "info", options = {}) {
-        if (window.Notifications) {
-          switch(type) {
-            case 'error':
-              window.Notifications.apiError(message);
-              break;
-            case 'success':
-              window.Notifications.apiSuccess?.(message) || 
-                console.log(`[SUCCESS] ${message}`);
-              break;
-            case 'warning':
-              window.Notifications.projectNotFound?.(message) || 
-                console.warn(`[WARNING] ${message}`);
-              break;
-            default:
-              console.log(`[INFO] ${message}`);
-          }
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification p-4 rounded shadow-lg ${
+          type === 'error' ? 'bg-red-100 text-red-800' :
+          type === 'success' ? 'bg-green-100 text-green-800' :
+          type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+          'bg-blue-100 text-blue-800'
+        }`;
+        notification.textContent = message;
+        
+        // Add to container
+        this.notificationContainer.appendChild(notification);
+        
+        // Auto-remove after timeout
+        setTimeout(() => {
+          notification.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+          setTimeout(() => notification.remove(), 300);
+        }, options.timeout || 5000);
           
           // Handle action button if specified in options
           if (options.action && options.onAction) {
