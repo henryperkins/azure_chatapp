@@ -1120,6 +1120,11 @@
      * @private
      * @param {Object} artifact - Artifact to delete
      */
+    /**
+     * Create processing status badge with better error handling
+     * @param {Object} processing - Processing metadata
+     * @returns {HTMLElement} Status badge element
+     */
     _createProcessingBadge(processing) {
       const colors = {
         success: "bg-green-100 text-green-800",
@@ -1129,32 +1134,70 @@
       };
 
       const status = processing.status || 'pending';
-      const text = {
+      
+      // Map backend status values to UI text
+      const statusText = {
         pending: "Processing...",
         success: "Ready for Search",
-        error: `Error: ${processing.error?.split('\n')[0] || ''}`,
+        error: processing.error ? `Error: ${processing.error.substring(0, 30)}...` : 'Processing Failed',
         default: "Not Processed"
-      }[status] || status;
+      };
+      
+      const text = statusText[status] || statusText.default;
+      const colorClass = colors[status] || colors.default;
 
       return window.uiUtilsInstance.createElement("div", {
-        className: `processing-status text-xs px-2 py-1 rounded ${colors[status] || colors.default} mt-1`,
+        className: `processing-status text-xs px-2 py-1 rounded ${colorClass} mt-1`,
         textContent: text,
-        title: processing.error ? "Processing Error: " + processing.error : ""
+        title: processing.error || ""
       });
     }
 
+    /**
+     * Set up WebSocket connection for processing updates
+     * @param {string} projectId - Project ID to monitor
+     */
     _setupProcessingWS(projectId) {
+      if (!projectId) return;
+      
+      // Clean up any existing connection
+      if (this.processingWS) {
+        this.processingWS.close();
+        this.processingWS = null;
+      }
+
+      // Create new connection
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(
-        `${protocol}//${window.location.host}/ws/processing/${projectId}`
+        `${protocol}//${window.location.host}/api/ws/processing/${projectId}`
       );
 
       ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'processing_update' && this.state.currentProject) {
-          this._updateFileStatus(data.file_id, data.status, data.error);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'processing_update' && this.state.currentProject) {
+            this._updateFileStatus(data.file_id, data.status, data.error);
+          }
+        } catch (e) {
+          console.error('Error processing websocket message:', e);
         }
       };
+
+      ws.onerror = (error) => {
+        console.error('Processing WebSocket error:', error);
+        // Try to reconnect in 5 seconds
+        setTimeout(() => this._setupProcessingWS(projectId), 5000);
+      };
+
+      ws.onclose = () => {
+        console.log('Processing WebSocket closed');
+        // Try to reconnect in 5 seconds if still on same project
+        if (window.projectManager?.currentProject?.id === projectId) {
+          setTimeout(() => this._setupProcessingWS(projectId), 5000);
+        }
+      };
+
+      this.processingWS = ws;
     }
 
     _updateFileStatus(fileId, status, error) {
