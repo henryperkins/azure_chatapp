@@ -723,7 +723,33 @@ window.sidebar = {
 };
 
 // Make toggle function directly available
-window.toggleSidebar = () => {
-    const handleToggle = new Event('click');
-    toggleBtn?.dispatchEvent(handleToggle);
-};
+window.toggleSidebar = function() {
+  const isMobile = window.innerWidth < 768;
+  
+  // Only allow toggle on mobile view
+  if (isMobile) {
+    isOpen = !isOpen;
+    updateSidebarState();
+    updateBackdrop(isOpen);
+    updateAccessibilityAttributes();
+  }
+  
+  // Always show sidebar on desktop when toggled
+  if (!isMobile) {
+    isOpen = true;
+    updateSidebarState();
+  }
+}
+
+function updateAccessibilityAttributes() {
+  if (!toggleBtn || !sidebar) return;
+  
+  toggleBtn.setAttribute('aria-expanded', isOpen);
+  toggleBtn.setAttribute('aria-label', isOpen ? 'Close sidebar' : 'Open sidebar');
+  sidebar.setAttribute('aria-hidden', !isOpen);
+  
+  // Manage focus when closing
+  if (!isOpen && document.activeElement === closeBtn) {
+    toggleBtn.focus();
+  }
+}
