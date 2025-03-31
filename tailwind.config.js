@@ -24,7 +24,9 @@ module.exports = {
         'spin-slow': 'spin 3s linear infinite',
         'slide-in': 'slideIn 0.2s ease-out forwards',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'count-up': 'countUp 0.3s ease-out'
+        'count-up': 'countUp 0.3s ease-out',
+        'fade-in': 'fadeIn 0.3s ease-in-out forwards',
+        'fade-in-slow': 'fadeIn 0.5s ease-in-out forwards'
       },
       keyframes: {
         slideIn: {
@@ -34,6 +36,10 @@ module.exports = {
         countUp: {
           'from': { opacity: '0.5', transform: 'translateY(5px)' },
           'to': { opacity: '1', transform: 'translateY(0)' }
+        },
+        fadeIn: {
+          'from': { opacity: '0' },
+          'to': { opacity: '1' }
         }
       },
       // Add proper z-index values
@@ -50,14 +56,23 @@ module.exports = {
         'notification': '1030'
       },
       transitionProperty: {
-        'transform': 'transform'
+        'transform': 'transform',
+        'slide': 'transform, opacity'
       },
       colors: {
         // Primary color palette
         primary: {
-          DEFAULT: '#1E40AF',
-          light: '#60A5FA',
-          dark: '#1E3A8A',
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
+          DEFAULT: '#3b82f6',
         },
         // Secondary color palette
         secondary: {
@@ -72,7 +87,12 @@ module.exports = {
         // Dark mode surface colors
         surface: {
           DEFAULT: colors.white,
-          dark: '#111827', // Changed to match existing dark bg-gray-900
+          dark: '#111827',
+          light: '#ffffff',
+          hover: {
+            light: '#f9fafb',
+            dark: '#1f2937'
+          }
         },
         border: {
           DEFAULT: '#e5e7eb', // Existing border-gray-200
