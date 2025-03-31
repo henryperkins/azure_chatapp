@@ -654,14 +654,8 @@ function safeInitialize() {
 
   // Auth dropdown handling is done in auth.js
 
-  // Toggle sidebar
-  if (elementMap.NAV_TOGGLE_BTN) {
-    console.log("Setting up nav toggle button");
-    elementMap.NAV_TOGGLE_BTN.addEventListener('click', function() {
-      console.log("Nav toggle button clicked");
-      window.toggleSidebar();
-    });
-  } else {
+  // Toggle sidebar is handled by sidebar.js
+  if (!elementMap.NAV_TOGGLE_BTN) {
     console.error("Nav toggle button not found");
   }
 
