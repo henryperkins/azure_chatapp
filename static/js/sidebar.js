@@ -64,15 +64,41 @@ function handleResize() {
 
 function updateBackdrop(show) {
     let backdrop = document.getElementById('sidebarBackdrop');
+    
     if (!backdrop) {
         backdrop = document.createElement('div');
         backdrop.id = 'sidebarBackdrop';
-        backdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300';
-        backdrop.onclick = () => toggleSidebar();
+        backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
+        backdrop.setAttribute('aria-hidden', 'true');
+        backdrop.setAttribute('data-testid', 'sidebar-backdrop');
+        
+        // Accessible click handler
+        backdrop.addEventListener('click', () => {
+            toggleSidebar();
+            document.getElementById('navToggleBtn')?.focus();
+        });
+        
         document.body.appendChild(backdrop);
     }
-    backdrop.style.opacity = show ? '1' : '0';
-    backdrop.style.pointerEvents = show ? 'auto' : 'none';
+
+    // Improved animation handling
+    if (show) {
+        backdrop.style.display = 'block';
+        requestAnimationFrame(() => {
+            backdrop.style.opacity = '1';
+            backdrop.style.pointerEvents = 'auto';
+            backdrop.setAttribute('aria-hidden', 'false');
+        });
+    } else {
+        backdrop.style.opacity = '0';
+        backdrop.style.pointerEvents = 'none';
+        backdrop.setAttribute('aria-hidden', 'true');
+        backdrop.addEventListener('transitionend', () => {
+            if (backdrop.style.opacity === '0') {
+                backdrop.style.display = 'none';
+            }
+        }, { once: true });
+    }
 }
 
 // Unified initialization
