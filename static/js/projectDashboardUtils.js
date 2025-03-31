@@ -112,9 +112,14 @@
           'html': '🌐',
           'jpg': '🖼️',
           'jpeg': '🖼️',
-          'png': '🖼️'
+          'png': '🖼️',
+          'py': '🐍',
+          'js': '📜',
+          'css': '🎨',
+          'zip': '📦',
+          'xml': '🔍'
         };
-        
+      
         return iconMap[fileType] || '📄';
       }
       
@@ -129,6 +134,9 @@
 
       /**
        * Unified notification system - core implementation
+       * @param {string} message - The notification message
+       * @param {string} type - The notification type (info, success, warning, error)
+       * @param {Object} options - Additional options (action, timeout, etc.)
        */
       showNotification(message, type = "info", options = {}) {
         if (window.Notifications) {
@@ -152,6 +160,25 @@
           if (options.action && options.onAction) {
             // Implementation for notification with action button
             console.log(`Action ${options.action} available for: ${message}`);
+            
+            // If a second action is available
+            if (options.secondaryAction && options.onSecondaryAction) {
+              console.log(`Secondary action ${options.secondaryAction} available for: ${message}`);
+            }
+          }
+          
+          // Handle auto-timeout if specified
+          if (options.timeout && typeof options.timeout === 'number') {
+            setTimeout(() => {
+              // Find and remove notification if DOM manipulation is supported
+              const notifications = document.querySelectorAll('.notification');
+              for (const notif of notifications) {
+                if (notif.textContent.includes(message)) {
+                  notif.remove();
+                  break;
+                }
+              }
+            }, options.timeout);
           }
         } else {
           console.log(`[${type.toUpperCase()}] ${message}`);

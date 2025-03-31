@@ -102,7 +102,7 @@ window.MessageService.prototype.sendMessage = async function(content) {
       await this._sendMessageHttp(messagePayload);
     }
   } catch (error) {
-    // Use standardized error handling
+    // Always use standardized error handling from ChatUtils
     window.ChatUtils?.handleError?.('Sending message', error) || 
     this.onError('Sending message', error);
   }
