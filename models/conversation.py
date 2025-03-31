@@ -75,16 +75,17 @@ class Conversation(Base):
             
             # Get total chunks from processed files
             from models.project_file import ProjectFile
-            from sqlalchemy import select
+            from sqlalchemy import select, Boolean
             
             stmt = select(ProjectFile).where(                                            
                 ProjectFile.project_id == self.project_id,
-                ProjectFile.metadata["search_processing"]["success"].as_boolean()  
+                ProjectFile.config.has_key("search_processing"),
+                ProjectFile.config["search_processing"]["success"].astext.cast(Boolean).is_(True)
             )                                                                            
             files = (await db.execute(stmt)).scalars().all()                             
 
             total_chunks = sum(                                                          
-                (file.metadata or {}).get("search_processing", {}).get("chunk_count", 0) 
+                file.config.get("search_processing", {}).get("chunk_count", 0)
                 for file in files                                                        
             )                                                                            
 
