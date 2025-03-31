@@ -206,7 +206,7 @@
      * Search the knowledge base with the given query
      * @param {string} query - Search query
      */
-    searchKnowledgeBase(query) {
+    async searchKnowledgeBase(query) {
       // Debug log current project state
       console.debug('Current project state:', {
         hasProjectManager: !!window.projectManager,
@@ -224,31 +224,44 @@
         }
         return Promise.reject('No project selected');
       }
-      
-      if (typeof this._showSearchLoading === 'function') {
-        this._showSearchLoading();
+
+      if (!query || query.trim().length < 2) {
+        window.showNotification("Search query must be at least 2 characters", "warning");
+        return;
       }
-      this.state.isSearching = true;
-      
-      window.apiRequest(`/api/projects/${projectId}/knowledge-bases/search`, "POST", {
-        query,
-        top_k: 5
-      })
-        .then(response => {
-          this.state.isSearching = false;
-          const results = response.data?.results || [];
-          if (typeof this._renderSearchResults === 'function') {
-            this._renderSearchResults(results);
-          }
-        })
-        .catch(err => {
-          this.state.isSearching = false;
-          console.error("Error searching knowledge base:", err);
-          window.showNotification("Search failed", "error");
-          if (typeof this._showNoResults === 'function') {
-            this._showNoResults();
-          }
-        });
+
+      try {
+        if (typeof this._showSearchLoading === 'function') {
+          this._showSearchLoading();
+        }
+        this.state.isSearching = true;
+        
+        const response = await window.apiRequest(
+          `/api/projects/${projectId}/search-context?query=${encodeURIComponent(query)}&top_k=5`,
+          "GET"
+        );
+
+        this.state.isSearching = false;
+        const results = response.data?.results || [];
+        if (typeof this._renderSearchResults === 'function') {
+          this._renderSearchResults(results);
+        }
+      } catch (err) {
+        this.state.isSearching = false;
+        console.error("Error searching knowledge base:", err);
+        
+        let errorMsg = "Search failed";
+        if (err.response?.status === 404) {
+          errorMsg = "Project or knowledge base not found";
+        } else if (err.message?.includes("No project selected")) {
+          errorMsg = "Please select a project first";
+        }
+
+        window.showNotification(errorMsg, "error");
+        if (typeof this._showNoResults === 'function') {
+          this._showNoResults();
+        }
+      }
     }
 
     /**
