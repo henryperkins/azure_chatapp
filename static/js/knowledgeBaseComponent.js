@@ -222,7 +222,7 @@
      */
     async toggleKnowledgeBase(enabled) {
       const project = window.projectManager?.currentProject;
-      if (!project?.knowledge_base_id) return;
+      if (!project?.id) return;
       
       const toggle = this.elements.kbToggle;
       const originalState = toggle.checked;
@@ -235,10 +235,11 @@
       );
       
       try {
+        // UPDATED: Use the correct toggle endpoint
         await window.apiRequest(
-          `/api/knowledge-bases/${project.knowledge_base_id}`,
-          "PATCH",
-          { is_active: enabled }
+          `/api/projects/${project.id}/knowledge-bases/toggle`,
+          "POST",
+          { enable: enabled }
         );
         
         window.showNotification(
@@ -294,9 +295,14 @@
         // Get top_k value from UI or use default
         const topK = document.getElementById('knowledgeTopK')?.value || 5;
         
+        // UPDATED: Use the correct search endpoint from knowledge_base_routes.py
         const response = await window.apiRequest(
-          `/api/projects/${projectId}/search-context?query=${encodeURIComponent(query)}&top_k=${topK}`,
-          "GET"
+          `/api/projects/${projectId}/knowledge-bases/search`,
+          "POST",
+          {
+            query: query.trim(),
+            top_k: parseInt(topK, 10)
+          }
         );
 
         this.state.isSearching = false;
@@ -462,6 +468,11 @@
      * @private
      * @param {Event} e - Form submit event
      */
+    /**
+     * Handle knowledge base form submission
+     * @private
+     * @param {Event} e - Form submit event
+     */
     async _handleKnowledgeBaseFormSubmit(e) {
       e.preventDefault();
       
@@ -475,71 +486,16 @@
       if (!projectId) {
         window.showNotification("Please select a project first", "error");
         window.modalManager?.hide("knowledge");
-        console.error('No project ID found in:', {
-          localStorage: localStorage.getItem('selectedProjectId'),
-          projectManager: window.projectManager?.currentProject,
-          pathname: window.location.pathname
-        });
         return;
       }
 
-      // Check if project already has a knowledge base
-      const currentProject = window.projectManager?.currentProject;
-      if (currentProject?.knowledge_base_id) {
-        console.log('[DEBUG] Project already has knowledge base:', currentProject.knowledge_base_id);
-        
-        // First try to update the existing KB instead of creating new one
-        try {
-          console.debug('Checking existing KB:', {
-            projectId: currentProject.id,
-            kbId: currentProject.knowledge_base_id
-          });
-          
-          const kbResponse = await window.apiRequest(
-            `/api/knowledge-bases/${currentProject.knowledge_base_id}`,
-            "GET"
-          );
-          
-          console.debug('Existing KB details:', kbResponse.data);
-          
-          window.showNotification(
-            kbResponse.data?.is_active
-              ? "Updated active knowledge base settings"
-              : "Updated inactive knowledge base settings",
-            "success"
-          );
-          window.modalManager?.hide("knowledge");
-          
-          // Refresh project details to ensure KB status is current
-          if (window.projectManager) {
-            await window.projectManager.loadProjectDetails(projectId);
-          }
-          return;
-        } catch (updateError) {
-          console.error('Failed to update existing KB:', updateError);
-          window.showNotification(
-            "This project already has a knowledge base. Please use the existing one.",
-            "warning"
-          );
-          window.modalManager?.hide("knowledge");
-          return;
-        }
-      }
-
       try {
-        // First verify project doesn't already have a KB
-        const project = await window.projectManager.getProjectDetails(projectId);
-        if (project.knowledge_base_id) {
-          throw new Error('Project already has a knowledge base');
-        }
-
-        console.log('[DEBUG] Setting up knowledge base for project:', projectId);
         window.showNotification("Setting up knowledge base...", "info");
         
         // Convert form data to object
         const kbData = Object.fromEntries(formData);
-        console.log('[DEBUG] Knowledge base data:', kbData);
         
+        // UPDATED: Use the project-specific KB creation endpoint
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases`,
           "POST",
@@ -591,13 +547,32 @@
      * @private
      * @param {string} kbId - Knowledge base ID
      */
+    /**
+     * Load knowledge base health information
+     * @private
+     * @param {string} kbId - Knowledge base ID
+     */
     async _loadKnowledgeBaseHealth(kbId) {
+      if (!kbId) return null;
+      
       try {
-        const health = await window.apiRequest(
+        // UPDATED: Use the proper health endpoint
+        const response = await window.apiRequest(
           `/api/knowledge-bases/${kbId}/health`,
           "GET"
         );
-        // TODO: Implement renderHealthStatus if needed
+        
+        const health = response.data || {};
+        
+        // Update status indicator
+        this._updateStatusIndicator(health.status === "active");
+        
+        // Update metadata display
+        if (health.processed_files !== undefined) {
+          const fileCountEl = document.getElementById("knowledgeFileCount");
+          if (fileCountEl) fileCountEl.textContent = health.processed_files;
+        }
+        
         return health;
       } catch (err) {
         console.error("Failed to load KB health:", err);
@@ -815,6 +790,9 @@
     /**
      * Render search results with proper error handling and metadata display
      */
+    /**
+     * Render search results with proper error handling and metadata display
+     */
     _renderSearchResults(results) {
       const { resultsContainer, resultsSection, noResultsSection } = this.elements;
       if (!resultsContainer) return;
@@ -831,11 +809,15 @@
       noResultsSection.classList.add("hidden");
 
       results.forEach(result => {
+        // Get metadata correctly from the backend response structure
+        const metadata = result.metadata || {};
         const score = Math.round((result.score || 0) * 100);
+        
         const item = this._createSearchResultItem(
           result.text,
           score,
-          result.metadata || {}
+          metadata,
+          result.file_info
         );
         
         item.addEventListener('click', () => this._showResultDetail(result));
@@ -918,7 +900,10 @@
     /**
      * Create individual search result item with proper metadata
      */
-    _createSearchResultItem(content, score, metadata) {
+    /**
+     * Create individual search result item with proper metadata
+     */
+    _createSearchResultItem(content, score, metadata, fileInfo) {
       const utils = window.uiUtilsInstance;
       const item = utils.createElement("div", {
         className: "content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 " +
@@ -934,18 +919,18 @@
       const sourceDiv = utils.createElement("div", { className: "flex items-center truncate" });
       sourceDiv.appendChild(utils.createElement("span", {
         className: "text-lg mr-2",
-        textContent: utils.fileIcon(metadata.file_type || "txt")
+        textContent: utils.fileIcon(fileInfo?.file_type || metadata.file_type || "txt")
       }));
         
       const sourceDetails = utils.createElement("div", { className: "truncate" });
       sourceDetails.appendChild(utils.createElement("div", {
         className: "font-medium truncate",
-        textContent: metadata.file_name || "Unknown source",
-        title: metadata.file_name
+        textContent: fileInfo?.filename || metadata.file_name || "Unknown source",
+        title: fileInfo?.filename || metadata.file_name
       }));
       sourceDetails.appendChild(utils.createElement("div", {
         className: "text-xs text-gray-500 truncate",
-        textContent: `Chunk ${metadata.chunk_index || 0} • ${utils.formatDate(metadata.processed_at)}`
+        textContent: `Chunk ${metadata.chunk_index || 0} • ${utils.formatDate(metadata.processed_at || fileInfo?.created_at)}`
       }));
       
       sourceDiv.appendChild(sourceDetails);
@@ -971,9 +956,9 @@
 
       // Metadata row
       const metaData = [
-        `Tokens: ${metadata.token_count || 'N/A'}`,
+        `Tokens: ${metadata.token_count || fileInfo?.token_count || 'N/A'}`,
         `Chunk Size: ${metadata.chunk_size || 'N/A'}`,
-        `Processed: ${utils.formatDate(metadata.processed_at || metadata.created_at || 'Unknown')}`
+        `From: ${this._formatSourceName(fileInfo?.filename || metadata.file_name || 'Unknown')}`
       ];
       
       item.appendChild(this._createMetaRow(...metaData));
