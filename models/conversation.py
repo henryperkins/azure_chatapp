@@ -77,17 +77,17 @@ class Conversation(Base):
             from models.project_file import ProjectFile
             from sqlalchemy import select, Boolean
             
-            stmt = select(ProjectFile).where(                                            
+            stmt = select(ProjectFile).where(
                 ProjectFile.project_id == self.project_id,
                 ProjectFile.config.has_key("search_processing"),
-                ProjectFile.config["search_processing"]["success"].astext.cast(Boolean).is_(True)
-            )                                                                            
-            files = (await db.execute(stmt)).scalars().all()                             
+                ProjectFile.config["search_processing"]["success"].as_boolean()
+            )
+            files = (await db.execute(stmt)).scalars().all()
 
-            total_chunks = sum(                                                          
+            total_chunks = sum(
                 file.config.get("search_processing", {}).get("chunk_count", 0)
-                for file in files                                                        
-            )                                                                            
+                for file in files
+            )
 
             if total_chunks <= 0:                                                        
                 raise ValueError("Knowledge base has no indexed content")
