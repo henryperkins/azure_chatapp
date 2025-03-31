@@ -549,13 +549,26 @@
       e.stopPropagation();
       
       const projectId = this.state.currentProject?.id;
-      if (!projectId) return;
+      if (!projectId) {
+        window.showNotification('No project selected', 'warning');
+        return;
+      }
 
       try {
-        // Show the chat container
+        // Verify all required DOM elements are present
         const chatContainer = document.getElementById('projectChatContainer');
-        if (chatContainer) chatContainer.classList.remove('hidden');
-
+        const chatUI = document.getElementById('projectChatUI');
+        const chatMessages = document.getElementById('projectChatMessages');
+        const chatInput = document.getElementById('projectChatInput');
+        const chatSendBtn = document.getElementById('projectChatSendBtn');
+        
+        if (!chatContainer || !chatUI || !chatMessages || !chatInput || !chatSendBtn) {
+          throw new Error('Required chat UI elements not found in DOM');
+        }
+        
+        // Show the chat container
+        chatContainer.classList.remove('hidden');
+        
         // Initialize or update chat interface with correct selectors
         if (!window.projectChatInterface) {
           window.projectChatInterface = new window.ChatInterface({
@@ -584,8 +597,11 @@
         // Store project ID in localStorage for chat context
         localStorage.setItem('selectedProjectId', projectId);
       } catch (error) {
-        console.error('Error creating new conversation:', error);
-        window.showNotification('Failed to create conversation', 'error');
+        console.error('Error creating conversation:', error);
+        window.showNotification(
+          `Failed to create conversation: ${error.message || 'Unknown error'}`, 
+          'error'
+        );
       }
     }
 
@@ -1126,31 +1142,41 @@
      * @returns {HTMLElement} Status badge element
      */
     _createProcessingBadge(processing) {
-      const colors = {
-        success: "bg-green-100 text-green-800",
-        error: "bg-red-100 text-red-800", 
-        pending: "bg-yellow-100 text-yellow-800",
-        default: "bg-gray-100 text-gray-600"
+      // Define clear mapping between backend states and UI presentation
+      const statusMappings = {
+        'success': {
+          class: "bg-green-100 text-green-800",
+          text: "Ready for Search",
+          icon: "✓"
+        },
+        'error': {
+          class: "bg-red-100 text-red-800",
+          text: processing.error ? `Error: ${processing.error.substring(0, 25)}...` : 'Processing Failed',
+          icon: "⚠"
+        },
+        'pending': {
+          class: "bg-yellow-100 text-yellow-800", 
+          text: "Processing...",
+          icon: "⏳"
+        },
+        'default': {
+          class: "bg-gray-100 text-gray-600",
+          text: "Not Processed",
+          icon: "•"
+        }
       };
 
-      const status = processing.status || 'pending';
+      // Get the appropriate status mapping or use default
+      const status = processing.status || 'default';
+      const mapping = statusMappings[status] || statusMappings.default;
       
-      // Map backend status values to UI text
-      const statusText = {
-        pending: "Processing...",
-        success: "Ready for Search",
-        error: processing.error ? `Error: ${processing.error.substring(0, 30)}...` : 'Processing Failed',
-        default: "Not Processed"
-      };
+      // Create badge with consistent structure
+      const badge = document.createElement('div');
+      badge.className = `processing-status text-xs px-2 py-1 rounded ${mapping.class} mt-1 flex items-center`;
+      badge.innerHTML = `<span class="mr-1">${mapping.icon}</span> ${mapping.text}`;
+      badge.title = processing.error || mapping.text;
       
-      const text = statusText[status] || statusText.default;
-      const colorClass = colors[status] || colors.default;
-
-      return window.uiUtilsInstance.createElement("div", {
-        className: `processing-status text-xs px-2 py-1 rounded ${colorClass} mt-1`,
-        textContent: text,
-        title: processing.error || ""
-      });
+      return badge;
     }
 
     /**
