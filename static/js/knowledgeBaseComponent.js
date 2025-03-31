@@ -207,13 +207,6 @@
      * @param {string} query - Search query
      */
     async searchKnowledgeBase(query) {
-      // Debug log current project state
-      console.debug('Current project state:', {
-        hasProjectManager: !!window.projectManager,
-        currentProject: window.projectManager?.currentProject,
-        projectId: window.projectManager?.currentProject?.id
-      });
-
       const projectId = window.projectManager?.currentProject?.id;
       if (!projectId) {
         console.error('KB Search failed - no valid project selected');
@@ -236,8 +229,11 @@
         }
         this.state.isSearching = true;
         
+        // Get top_k value from UI or use default
+        const topK = document.getElementById('knowledgeTopK')?.value || 5;
+        
         const response = await window.apiRequest(
-          `/api/projects/${projectId}/search-context?query=${encodeURIComponent(query)}&top_k=5`,
+          `/api/projects/${projectId}/search-context?query=${encodeURIComponent(query)}&top_k=${topK}`,
           "GET"
         );
 
