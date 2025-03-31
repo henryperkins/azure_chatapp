@@ -127,27 +127,50 @@ function initializeSidebarToggle() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Track active event listeners
+let currentListeners = [];
+
+function cleanupSidebarListeners() {
+  currentListeners.forEach(({element, type, handler}) => {
+    element.removeEventListener(type, handler);
+  });
+  currentListeners = [];
+}
+
+function trackListener(element, type, handler) {
+  element.addEventListener(type, handler);
+  currentListeners.push({element, type, handler});
+}
+
+function initializeSidebar() {
+  cleanupSidebarListeners();
+  
   // Initialize pinned state
   if (localStorage.getItem('sidebarPinned') === 'true') {
     document.body.classList.add('pinned-sidebar');
   }
 
   initializeSidebarToggle();
-  // Initialize sidebar tabs
-  document.documentElement.style.overflow = ''; // Remove initial overflow hidden
   setupSidebarTabs();
-  // Initialize collapsible sections
   setupCollapsibleSections();
-  // Set up pin sidebar functionality
   setupPinningSidebar();
-  // Set up custom instructions
   setupCustomInstructions();
-  // Set up new chat button
   setupNewChatButton();
-  // Initialize model dropdown
   initializeModelDropdownOnLoad();
-});
+
+  document.documentElement.style.overflow = '';
+}
+
+// Expose reinitialization function
+window.reinitializeSidebar = function() {
+  sidebar = null;
+  isOpen = false;
+  toggleBtn = null;
+  closeBtn = null;
+  initializeSidebar();
+};
+
+document.addEventListener('DOMContentLoaded', initializeSidebar);
 
 /**
  * Ensures the model dropdown is initialized on page load 
@@ -198,9 +221,16 @@ function setupSidebarTabs() {
     return;
   }
   
-  // Set current tab based on page (projects.html vs index.html)
-  const isProjectsPage = window.location.pathname.includes('/projects');
+  // Set current tab based on page
+  const isProjectsPage = window.location.pathname.includes('/projects') || 
+                        document.getElementById('projectManagerPanel');
   const initialTab = isProjectsPage ? 'projects' : 'recent';
+
+  // Redirect if trying to switch away from projects tab on projects page
+  if (isProjectsPage && savedTab !== 'projects') {
+    localStorage.setItem('sidebarActiveTab', 'projects');
+    savedTab = 'projects';
+  }
   
   // Function to activate a tab
   function activateTab(tabName) {
