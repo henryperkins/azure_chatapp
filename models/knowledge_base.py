@@ -15,6 +15,8 @@ class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
     __table_args__ = (
         Index('ix_knowledge_bases_is_active', 'is_active'),
+        Index('ix_knowledge_bases_project_id', 'project_id'),
+        Index('ix_knowledge_bases_embedding_model', 'embedding_model'),
     )
     
     config: Mapped[dict] = mapped_column(JSONB(none_as_null=True), default=dict)
@@ -26,7 +28,11 @@ class KnowledgeBase(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    embedding_model: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Embedding model identifier (e.g. 'all-MiniLM-L6-v2')"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     last_used: Mapped[Optional[datetime]] = mapped_column(
