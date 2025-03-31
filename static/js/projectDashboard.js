@@ -730,6 +730,14 @@ class ProjectDashboard {
     // Register listeners
     this.registerEventListeners();
     
+    // Initialize project modal
+    if (typeof window.ProjectModal !== 'undefined') {
+      this.projectModal = new window.ProjectModal();
+    } else if (window.projectModal) {
+      // Use existing instance if available
+      this.projectModal = window.projectModal;
+    }
+    
     // Process initial state
     this.processUrlParams();
     
