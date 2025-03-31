@@ -17,6 +17,8 @@ let closeBtn = null;
 
 // Global backdrop functions
 function createBackdrop() {
+    if (!isMobileView()) return; // Only needed on mobile
+    
     let backdrop = document.getElementById('sidebarBackdrop');
     if (!backdrop) {
         backdrop = document.createElement('div');
@@ -43,13 +45,6 @@ function removeBackdrop() {
         }, 300);
     }
 }
-function removeBackdrop() {
-    const backdrop = document.getElementById('sidebarBackdrop');
-    if (backdrop) {
-        backdrop.classList.remove('opacity-100');
-        setTimeout(() => backdrop.remove(), 300);
-    }
-}
 
 function toggleSidebar() {
     if (!sidebar) return;
@@ -66,8 +61,11 @@ function toggleSidebar() {
     }
 }
 
+function isMobileView() {
+    return window.innerWidth < 768; // Matches tailwind's 'md' breakpoint
+}
+
 function initializeSidebarToggle() {
-    // Get elements with fallbacks
     sidebar = document.getElementById('mainSidebar');
     toggleBtn = document.getElementById('navToggleBtn');
     closeBtn = document.getElementById('closeSidebarBtn');
@@ -85,12 +83,12 @@ function initializeSidebarToggle() {
         }
     });
 
-    // Initialize state based on window size
-    isOpen = window.innerWidth >= 768;
+    // Initialize state
+    isOpen = !isMobileView();
     sidebar.classList.toggle('-translate-x-full', !isOpen);
     sidebar.classList.toggle('translate-x-0', isOpen);
 
-    // Setup event listeners
+    // Event Listeners
     toggleBtn.addEventListener('click', toggleSidebar);
     if (closeBtn) {
         closeBtn.addEventListener('click', toggleSidebar);
@@ -98,9 +96,8 @@ function initializeSidebarToggle() {
         console.warn("Close button not found");
     }
 
-    // Responsive behavior
     window.addEventListener('resize', () => {
-        const shouldBeOpen = window.innerWidth >= 768;
+        const shouldBeOpen = !isMobileView();
         if (shouldBeOpen !== isOpen) {
             isOpen = shouldBeOpen;
             sidebar.classList.toggle('-translate-x-full', !isOpen);
@@ -114,26 +111,6 @@ function initializeSidebarToggle() {
         toggleBtn: !!toggleBtn,
         closeBtn: !!closeBtn,
         initialState: isOpen ? 'open' : 'closed'
-    });
-
-    isOpen = window.innerWidth >= 768;
-    sidebar.classList.toggle('-translate-x-full', !isOpen);
-    sidebar.classList.toggle('translate-x-0', isOpen);
-
-    // Event listeners
-    toggleBtn.addEventListener('click', toggleSidebar);
-    if (closeBtn) {
-        closeBtn.addEventListener('click', toggleSidebar);
-    }
-
-    window.addEventListener('resize', () => {
-        const shouldBeOpen = window.innerWidth >= 768;
-        if (shouldBeOpen !== isOpen) {
-            isOpen = shouldBeOpen;
-            sidebar.classList.toggle('-translate-x-full', !isOpen);
-            sidebar.classList.toggle('translate-x-0', isOpen);
-            if (!isOpen) removeBackdrop();
-        }
     });
 }
 
