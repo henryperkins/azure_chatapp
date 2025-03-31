@@ -340,10 +340,9 @@ class VectorDB:
                     raise VectorDBError("FAISS not available for index creation")
                 
             # Add embeddings to index
-            if self.index is not None:
-                if self.index is not None and embeddings_np.size > 0:
-                    self.index.add(embeddings_np)  # type: ignore
-                self.id_map.extend(ids)
+            if self.index is not None and embeddings_np.size > 0:
+                self.index.add(embeddings_np)  # type: ignore
+            self.id_map.extend(ids)
         except Exception as e:
             logger.error(f"Error updating FAISS index: {str(e)}")
 
