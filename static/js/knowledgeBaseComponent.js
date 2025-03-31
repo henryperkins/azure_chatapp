@@ -125,10 +125,26 @@
           activeSection.dataset.kbId = kb.id;
         }
         
-        // Update name element
+        // Update name and version elements
         const nameElement = document.getElementById("knowledgeBaseName");
         if (nameElement) {
           nameElement.textContent = kb.name || "Project Knowledge Base";
+        }
+
+        const versionElement = document.getElementById("knowledgeBaseVersion");
+        if (versionElement) {
+          versionElement.textContent = `v${kb.version || 1}`;
+          versionElement.title = `Knowledge Base Schema Version ${kb.version || 1}`;
+        }
+
+        const lastUsedElement = document.getElementById("knowledgeBaseLastUsed");
+        if (lastUsedElement) {
+          lastUsedElement.textContent = kb.last_used 
+            ? window.uiUtilsInstance.formatDate(kb.last_used)
+            : "Never used";
+          lastUsedElement.title = kb.last_used 
+            ? `Last used at ${new Date(kb.last_used).toLocaleString()}`
+            : "This knowledge base has never been queried";
         }
         
         // Update toggle state
@@ -667,6 +683,18 @@
       const utils = window.uiUtilsInstance;
       if (totalSizeEl && utils) {
         totalSizeEl.textContent = utils.formatBytes(stats.total_size || 0);
+      }
+
+      const kbVersionEl = document.getElementById("kbVersionDisplay");
+      if (kbVersionEl) {
+        kbVersionEl.textContent = `Schema v${kb.version || 1}`;
+      }
+
+      const lastUsedEl = document.getElementById("kbLastUsedDisplay");
+      if (lastUsedEl) {
+        lastUsedEl.textContent = kb.last_used
+          ? window.uiUtilsInstance.formatDate(kb.last_used)
+          : "Never";
       }
     }
     
