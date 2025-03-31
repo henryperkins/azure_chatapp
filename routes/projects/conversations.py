@@ -386,12 +386,12 @@ async def project_websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION) 
                 return
 
-            # Validate conversation access
-            additional_filters = [
-                Conversation.project_id == project_id,
-                Conversation.is_deleted.is_(False)
-            ]
+            # Validate conversation access with more detailed error handling
             try:
+                additional_filters = [
+                    Conversation.project_id == project_id,
+                    Conversation.is_deleted.is_(False)
+                ]
                 conversation = await validate_resource_access(
                     conversation_id,
                     Conversation,
@@ -400,13 +400,37 @@ async def project_websocket_chat_endpoint(
                     "Conversation",
                     additional_filters
                 )
+                
                 if not conversation:
-                    logger.warning(f"WebSocket rejected: Invalid conversation access for user {user.id}, conversation {conversation_id}")
+                    error_msg = f"Conversation {conversation_id} not found in project {project_id}"
+                    logger.warning(f"WebSocket rejected: {error_msg}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "code": "CONVERSATION_NOT_FOUND",
+                        "message": error_msg
+                    })
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-            except Exception as conversation_error:
-                logger.warning(f"WebSocket conversation access error: {str(conversation_error)}")
+                    
+            except HTTPException as e:
+                error_msg = f"Conversation access error: {e.detail}"
+                logger.warning(f"WebSocket rejected: {error_msg}")
+                await websocket.send_json({
+                    "type": "error",
+                    "code": "CONVERSATION_ACCESS_DENIED",
+                    "message": error_msg
+                })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+            except Exception as e:
+                error_msg = f"Unexpected conversation validation error: {str(e)}"
+                logger.error(f"WebSocket error: {error_msg}")
+                await websocket.send_json({
+                    "type": "error",
+                    "code": "INTERNAL_ERROR",
+                    "message": "Internal server error during validation"
+                })
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
                 return
 
             # Use the connection manager to handle this WebSocket connection

@@ -65,24 +65,29 @@ class Conversation(Base):
             kb = await db.get(KnowledgeBase, self.knowledge_base_id)
             
             # Check if KB exists and active
-            if not kb or not getattr(kb, 'is_active', False):
+            if not kb:
+                raise ValueError("Project's knowledge base not found")
+            if not getattr(kb, 'is_active', False):
                 raise ValueError("Project's knowledge base is not active")
 
             from models.project_file import ProjectFile
+            from sqlalchemy import func
 
-            stmt = select(ProjectFile).where(
+            # More efficient query to count chunks
+            stmt = select(
+                func.sum(ProjectFile.config["search_processing"]["chunk_count"].as_integer())
+            ).where(
                 ProjectFile.project_id == self.project_id,
                 ProjectFile.config["search_processing"]["success"].as_boolean()
             )
-            files = (await db.execute(stmt)).scalars().all()
-
-            total_chunks = sum(
-                file.config.get("search_processing", {}).get("chunk_count", 0)
-                for file in files
-            )
+            total_chunks = (await db.execute(stmt)).scalar() or 0
 
             if total_chunks <= 0:
-                logger.warning(f"Knowledge base {kb.id} has no indexed content - continuing anyway")
+                logger.warning(
+                    f"Knowledge base {kb.id} has no indexed content - "
+                    f"either upload files or disable knowledge base for project {self.project_id}"
+                )
+                # Don't raise error but make it clear in logs that KB won't be used
 
     @validates('use_knowledge_base')
     def validate_kb_flag(self, key, value):
