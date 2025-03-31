@@ -14,7 +14,10 @@ from typing import Optional
 from fastapi import (
     APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 )
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 # Internal imports
 from services import knowledgebase_service
@@ -129,14 +132,26 @@ async def delete_project_file(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Delete a file using knowledge base service"""
-    result = await knowledgebase_service.delete_project_file(
-        project_id=project_id,
-        file_id=file_id,
-        db=db,
-        user_id=current_user.id
-    )
-    return await create_standard_response(result)
+    """Delete a file from project storage and knowledge base"""
+    try:
+        result = await knowledgebase_service.delete_project_file(
+            project_id=project_id,
+            file_id=file_id,
+            db=db,
+            user_id=current_user.id
+        )
+
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", "File deleted successfully"),
+            "file_id": str(file_id)
+        }
+    except Exception as e:
+        logger.error(f"Error deleting file {file_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"File deletion failed: {str(e)}"
+        )
 
 @router.post("/reprocess", response_model=dict)
 async def reprocess_project_files(
@@ -168,54 +183,169 @@ async def reprocess_project_files(
     total_files = len(files)
     processed_count = 0
     failed_count = 0
-    
-    default_embedding_model = getattr(config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-    embedding_model = project.knowledge_base.embedding_model if project.knowledge_base else default_embedding_model
-    vector_db = await get_vector_db(
-        model_name=embedding_model,
-        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-        load_existing=True
-    )
-    
-    storage_config = {
-        "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
-    }
-    storage = get_file_storage(storage_config)
-    
-    for file_record in files:
-        try:
-            file_content = await storage.get_file(file_record.file_path)
-            result = await process_file_for_search(
-                project_file=file_record,
-                vector_db=vector_db,
-                file_content=file_content,
-                chunk_size=DEFAULT_CHUNK_SIZE,
-                chunk_overlap=DEFAULT_CHUNK_OVERLAP
+    error_messages = []
+
+    try:
+        # Get knowledge base model name with safeguards
+        default_embedding_model = getattr(config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        embedding_model = default_embedding_model
+
+        # Get a fresh project instance with knowledge_base relationship loaded
+        project_query = select(Project).options(selectinload(Project.knowledge_base)).where(Project.id == project_id)
+        project_result = await db.execute(project_query)
+        fresh_project = project_result.scalars().first()
+        
+        if fresh_project and fresh_project.knowledge_base_id and fresh_project.knowledge_base:
+            if fresh_project.knowledge_base.embedding_model:
+                embedding_model = fresh_project.knowledge_base.embedding_model
+        
+        # Load all files with their project relationships
+        file_query = (
+            select(ProjectFile)
+            .options(selectinload(ProjectFile.project).selectinload(Project.knowledge_base))
+            .where(ProjectFile.project_id == project_id)
+        )
+        file_result = await db.execute(file_query)
+        file_records = file_result.scalars().all()
+        
+        if file_records:
+            # Initialize vector DB
+            vector_db = await get_vector_db(
+                model_name=str(embedding_model),
+                storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+                load_existing=True
             )
             
-            file_config = file_record.config or {}
-            file_config["search_processing"] = {
-                "success": result.get("success", False), 
-                "chunk_count": result.get("chunk_count", 0),
-                "processed_at": datetime.now().isoformat()
+            # Configure storage
+            storage_config = {
+                "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+                "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
             }
-            file_record.config = file_config
+            storage = get_file_storage(storage_config)
             
-            if result.get("success", False):
-                processed_count += 1
-            else:
-                failed_count += 1
-        except Exception as e:
-            logger.exception(f"Error processing file {file_record.id} ({file_record.filename}): {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error processing file {file_record.filename}: {str(e)}")
+            # Process each file
+            for file_record in file_records:
+                try:
+                    error_details = ""
+                    file_content = None
+                    file_found = False
 
-            failed_count += 1
+                    # Try original path
+                    try:
+                        file_content = await storage.get_file(file_record.file_path)
+                        file_found = True
+                    except FileNotFoundError as e:
+                        error_details = str(e)
+                        # If not found, try alternative paths
+                        base_dir = getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+                        current_dir = os.getcwd()
+                        # Get the project ID and filename for better path reconstruction
+                        project_id_str = str(file_record.project_id)
+                        filename = os.path.basename(file_record.file_path)
+                        
+                        # Try to extract just the base filename without any hash prefix
+                        clean_filename = filename
+                        if "_" in filename:
+                            parts = filename.split("_")
+                            if len(parts) >= 3:  # pattern is likely project_id_hash_filename
+                                clean_filename = "_".join(parts[2:])  # Get everything after project_id and hash
+
+                        possible_paths = [
+                            # Paths matching the standard format: uploads/project_id_hash_filename
+                            os.path.join(base_dir, f"{project_id_str}_*_{clean_filename}"),
+                            os.path.join(base_dir, os.path.basename(file_record.file_path)),
+                            os.path.join(base_dir, file_record.file_path),
+                            os.path.join(current_dir, base_dir, f"{project_id_str}_*_{clean_filename}"),
+                            os.path.join(current_dir, file_record.file_path), 
+                            os.path.join(current_dir, base_dir, os.path.basename(file_record.file_path))
+                        ]
+                        
+                        for path in possible_paths:
+                            if os.path.exists(path):
+                                file_content = await storage.get_file(path)
+                                file_record.file_path = path  # Update to the working path
+                                file_found = True
+                                logger.info(f"Found file at alternative path: {path}")
+                                break
+                            # Special handling for glob patterns with wildcards
+                            elif "*" in path:
+                                import glob
+                                matching_files = glob.glob(path)
+                                if matching_files:
+                                    # Use the first matching file
+                                    match_path = matching_files[0]
+                                    logger.info(f"Found file using pattern match: {match_path}")
+                                    file_content = await storage.get_file(match_path)
+                                    file_record.file_path = match_path  # Update to the actual path
+                                    file_found = True
+                                    # Path will be saved when db.commit() is called later
+                                break
+
+                    # If file wasn't found after all attempts
+                    if not file_found or file_content is None:
+                        error_message = (
+                            f"Error processing file {file_record.filename}: Local file not found: "
+                            f"{file_record.file_path} {error_details}"
+                        )
+                        logger.error(error_message)
+                        error_messages.append(error_message)
+                        failed_count += 1
+                        continue
+
+                    # Process the file for search
+                    result = await process_file_for_search(
+                        project_file=file_record,
+                        vector_db=vector_db,
+                        file_content=file_content,
+                        chunk_size=DEFAULT_CHUNK_SIZE,
+                        chunk_overlap=DEFAULT_CHUNK_OVERLAP
+                    )
+                    
+                    # Update file record
+                    file_config = file_record.config or {}
+                    file_config["search_processing"] = {
+                        "success": result.get("success", False),
+                        "chunk_count": result.get("chunk_count", 0),
+                        "processed_at": datetime.now().isoformat()
+                    }
+                    file_record.config = file_config
+                    
+                    # Update counts
+                    if result.get("success", False):
+                        processed_count += 1
+                    else:
+                        failed_count += 1
+                        if result.get("error"):
+                            error_messages.append(f"{file_record.filename}: {result.get('error')}")
+
+                except Exception as e:
+                    error_message = f"Error processing file {file_record.filename}: {str(e)}"
+                    logger.exception(error_message)
+                    error_messages.append(error_message)
+                    failed_count += 1
+                    # Continue processing other files instead of failing the entire operation
+                    continue
+
+    except Exception as e:
+        error_message = f"Error initializing reprocessing: {str(e)}"
+        logger.exception(error_message)
+        raise HTTPException(
+            status_code=500,
+            detail=error_message
+        )
     
-    await db.commit()
+    # Commit changes with transaction handling
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        if "transaction is already begun" not in str(e):
+            logger.error(f"Database error in reprocess_project_files: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        logger.info("Using existing transaction for reprocessing files")
     
     return await create_standard_response({
         "total_files": total_files,
         "processed_success": processed_count,
-        "processed_failed": failed_count
+        "processed_failed": failed_count,
+        "errors": error_messages if error_messages else None
     }, "Files reprocessed for knowledge base")

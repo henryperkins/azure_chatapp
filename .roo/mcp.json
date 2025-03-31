@@ -1,0 +1,62 @@
+{
+  "mcpServers": {
+    "github.com/modelcontextprotocol/servers/tree/main/src/postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://postgres:newpassword@localhost/postgres"
+      ],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/mendableai/firecrawl-mcp-server": {
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "fc-a3ba8f1f4722412784295d42c24bb89f"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/executeautomation/mcp-playwright": {
+      "command": "npx",
+      "args": ["-y", "@executeautomation/playwright-mcp-server"],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/modelcontextprotocol/servers/tree/main/src/puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer", "--", "--no-sandbox"],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/modelcontextprotocol/servers/tree/main/src/git": {
+      "command": "/home/azureuser/azure_chatapp/venv/bin/python",
+      "args": ["-m", "mcp_server_git", "--repository", "/home/azureuser/azure_chatapp"],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/modelcontextprotocol/servers/tree/main/src/github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/AgentDeskAI/browser-tools-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@agentdeskai/browser-tools-mcp@1.2.0"
+      ],
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

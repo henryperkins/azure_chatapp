@@ -1,3 +1,13 @@
+"""
+services/file_storage.py
+
+Purpose: Abstracts file storage operations
+Features:
+    Supports local, Azure Blob, and AWS S3
+    backends, Conditional imports for optional
+    cloud dependencies, Consistent interface
+    for saving, retrieving, and deleting files
+"""
 import os
 import hashlib
 import logging
@@ -119,10 +129,10 @@ class FileStorage:
                 )
             if not azure_connection_string or not azure_container_name:
                 raise ValueError("Must provide azure_connection_string and azure_container_name.")
-
-            # Cast to the actual imported types
-            azure_blob_service = cast(BlobServiceClient, BlobServiceClient)
-            self.blob_service_client = azure_blob_service.from_connection_string(azure_connection_string)
+            
+            # Import directly to ensure we have the correct class
+            from azure.storage.blob.aio import BlobServiceClient
+            self.blob_service_client = BlobServiceClient.from_connection_string(azure_connection_string)
             self.azure_container_name = azure_container_name
             self.container_client = self.blob_service_client.get_container_client(azure_container_name)
 
@@ -172,7 +182,10 @@ class FileStorage:
             raise ValueError(f"Unsupported storage type: {self.storage_type}")
 
     async def _save_bytes_local(self, content: bytes, filename: str) -> str:
+        # Ensure directory exists - including any nested directories
         file_path = Path(self.local_path) / filename
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
         with file_path.open("wb") as f:
             f.write(content)
             f.flush()
