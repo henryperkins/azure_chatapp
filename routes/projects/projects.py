@@ -558,7 +558,21 @@ async def create_project_knowledge_base(
         processed_files = 0
         if kb_data.process_existing_files:
             # Get files
-            files = await knowledgebase_service.list_project_files(project_id, db)
+            # Direct query to get project files since list_project_files was removed from knowledgebase_service
+            project_files = await get_all_by_condition(
+                db,
+                ProjectFile,
+                ProjectFile.project_id == project_id,
+                order_by=ProjectFile.created_at.desc()
+            )
+            
+            files = {
+                "files": [
+                    {"id": str(file.id), "filename": file.filename, 
+                     "file_type": file.file_type, "file_size": file.file_size,
+                     "created_at": file.created_at.isoformat() if file.created_at else None}
+                    for file in project_files
+                ]}
             for file in files.get("files", []):
                 try:
                     # Get file record

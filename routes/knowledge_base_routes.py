@@ -21,7 +21,8 @@ from fastapi import (
     Body,
     Request,
     UploadFile,
-    File
+    File,
+    BackgroundTasks
 )
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -186,10 +187,21 @@ async def get_knowledge_base_status(
     from services.project_service import check_knowledge_base_status
     kb_status = await check_knowledge_base_status(UUID(project_id), db)
     
+    # Get the actual knowledge base to check if it's active
+    project = await db.get(Project, UUID(project_id))
+    is_active = False
+    name = None
+    
+    if project and project.knowledge_base_id:
+        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+        if kb:
+            is_active = kb.is_active
+            name = kb.name
+    
     return {
         "exists": kb_status is not None,
-        "isActive": kb_status["is_active"] if kb_status else False,
-        "name": kb_status["name"] if kb_status else None
+        "isActive": is_active,
+        "name": name
     }
 
 
@@ -497,6 +509,7 @@ async def get_knowledge_base_health(
 @router.post("/projects/{project_id}/knowledge-bases/files", response_model=dict)
 async def upload_file_to_knowledge_base(
     project_id: UUID,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
@@ -520,36 +533,33 @@ async def upload_file_to_knowledge_base(
         )
 
     try:
-        try:
-            # Use knowledgebase_service to handle the upload
-            result = await knowledgebase_service.upload_file_to_project(
-                project_id=project_id,
-                file=file,
-                db=db,
-                user_id=current_user.id
-            )
-        except HTTPException as http_ex:
-            # Re-raise HTTP exceptions with proper status codes
-            raise http_ex
-        except ValueError as ve:
-            # Convert validation errors to 422 Unprocessable Entity
-            logger.warning(f"Validation error during file upload: {str(ve)}")
-            raise HTTPException(status_code=422, detail=str(ve))
-        except Exception as e:
-            logger.error(f"Error during file upload: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
-
-        return await create_standard_response(
-            result,
-            "File uploaded to knowledge base successfully"
+        # Use knowledgebase_service to handle the upload
+        result = await knowledgebase_service.upload_file_to_project(
+            project_id=project_id,
+            file=file,
+            db=db,
+            user_id=current_user.id,
+            background_tasks=background_tasks
         )
+
+        # Return response in format expected by frontend
+        return {
+            "data": result,
+            "success": True,
+            "message": "File uploaded successfully"
+        }
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"File upload failed: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"File upload failed: {str(e)}"
+            detail={
+                "error": str(e),
+                "success": False,
+                "message": "File upload failed"
+            }
         )
 
 

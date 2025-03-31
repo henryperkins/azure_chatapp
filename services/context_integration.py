@@ -6,7 +6,7 @@ Manages context injection, token budgeting, and search result formatting.
 """
 
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Any
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +35,6 @@ async def augment_with_knowledge(
         List of message dicts with injected knowledge context
     """
     from sqlalchemy.orm import joinedload
-    from services import knowledgebase_service
 
     try:
         # Load conversation with project relationship
@@ -71,9 +70,7 @@ async def augment_with_knowledge(
         total_tokens = 0
         seen_sources = set()
 
-        for result in sorted(search_results["results"], 
-                           key=lambda x: x.get("score", 0), 
-                           reverse=True):
+        for result in sorted(search_results["results"], key=lambda x: x.get("score", 0), reverse=True):
             if total_tokens >= max_context_tokens:
                 break
 
@@ -93,6 +90,10 @@ async def augment_with_knowledge(
             if total_tokens + result_tokens > max_context_tokens:
                 continue
 
+            # Get file_id safely
+            metadata = result.get("metadata", {})
+            file_id = metadata.get("file_id") if metadata else None
+            
             # Format as system message with metadata
             context_msg = {
                 "role": "system",
@@ -100,16 +101,15 @@ async def augment_with_knowledge(
                 "metadata": {
                     "kb_context": True,
                     "source": source,
-                    "file_id": result.get("metadata", {}).get("file_id"),
+                    "file_id": file_id,  # Safely handled file_id
                     "score": float(result.get("score", 0)),
                     "tokens": result_tokens,
-                    "chunk_index": result.get("metadata", {}).get("chunk_index")
+                    "chunk_index": metadata.get("chunk_index") if metadata else None
                 }
             }
             context_messages.append(context_msg)
             total_tokens += result_tokens
-            total_tokens += result_tokens
-            
+        
         # Store search results in conversation
         conversation.search_results = {
             "query": user_message,
@@ -118,10 +118,6 @@ async def augment_with_knowledge(
         }
         
         return context_messages
-        
-    except Exception as e:
-        logger.error(f"Error augmenting with knowledge: {str(e)}")
-        return []
         
     except Exception as e:
         logger.error(f"Error augmenting with knowledge: {str(e)}")

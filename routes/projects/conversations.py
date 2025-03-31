@@ -38,8 +38,7 @@ from utils.ai_response import (
 from utils.auth_utils import (
     get_current_user_and_token, 
     extract_token, 
-    get_user_from_token,
-    verify_token
+    get_user_from_token
 )
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -489,15 +488,23 @@ async def project_websocket_chat_endpoint(
                                 db_user = await db.get(User, user.id)
 
                                 # Update in-memory user reference
-                                user = db_user
+                                if db_user is None:
+                                    logger.error(f"Token refresh failed: User {user.id} not found in database")
+                                    await manager.send_personal_message({
+                                        "type": "error",
+                                        "message": "Token refresh failed: User not found"
+                                    }, websocket)
+                                    continue
+                                
+                                user = db_user  # Update reference only if db_user is not None
 
                                 logger.info(f"Token refreshed via WebSocket for user {user.id}")
 
                                 # Send success message using fresh user state
                                 await manager.send_personal_message({
                                     "type": "token_refresh_success",
-                                    "message": "Token refreshed successfully",
-                                    "new_version": db_user.token_version  # Send back to client
+                                    "message": "Token refreshed successfully", 
+                                    "new_version": db_user.token_version if hasattr(db_user, 'token_version') else None
                                 }, websocket)
                                 continue
                             except Exception as token_error:
