@@ -348,8 +348,8 @@
         }
 
         // 3. Safely verify KB state
-        if (!window.knowledgeBaseState?.verifyKB) {
-          console.warn('knowledgeBaseState not available - skipping KB check');
+        if (!window.knowledgeBaseState || typeof window.knowledgeBaseState.verifyKB !== 'function') {
+          console.warn('knowledgeBaseState validation not available - proceeding with upload');
           return this._processFiles(projectId, files);
         }
         const kbState = await window.knowledgeBaseState.verifyKB(projectId);

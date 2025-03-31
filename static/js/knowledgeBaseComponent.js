@@ -18,8 +18,8 @@
       
       // Verify required elements exist
       const requiredElements = [
-        'knowledgeBaseVersion', 'knowledgeBaseLastUsed',
-        'kbVersionDisplay', 'kbLastUsedDisplay'
+        'kbVersionDisplay', 'kbLastUsedDisplay', 
+        'knowledgeBaseEnabled', 'knowledgeBaseName'
       ];
       requiredElements.forEach(id => {
         if (!document.getElementById(id)) {
@@ -117,7 +117,7 @@
 
         // Version display
         const versionValue = kb.version ? `v${kb.version}` : 'v1 (default)';
-        this._updateElementText('knowledgeBaseVersion', versionValue, 'Schema Version');
+        this._updateElementText('kbVersionDisplay', versionValue, 'Schema Version');
         
         // Last used display with proper timezone handling
         const lastUsed = kb.last_used ? 
@@ -125,7 +125,7 @@
             year: 'numeric', month: 'short', day: 'numeric', 
             hour: '2-digit', minute: '2-digit', timeZoneName: 'short' 
           }) : 'Never used';
-        this._updateElementText('knowledgeBaseLastUsed', lastUsed, 'Last used');
+        this._updateElementText('kbLastUsedDisplay', lastUsed, 'Last used');
 
         // Add status alerts based on backend conditions
         if (kb.is_active) {
@@ -224,7 +224,11 @@
       const project = window.projectManager?.currentProject;
       if (!project?.id) return;
       
-      const toggle = this.elements.kbToggle;
+      const toggle = this.elements.kbToggle || document.getElementById('knowledgeBaseEnabled');
+      if (!toggle) {
+        console.error('Cannot find knowledge base toggle element');
+        return;
+      }
       const originalState = toggle.checked;
       
       // Optimistic UI update
@@ -379,11 +383,15 @@
      * @private
      */
     _bindEvents() {
-      // Search button
-      this.elements.searchButton?.addEventListener("click", () => {
-        const query = this.elements.searchInput?.value?.trim();
-        if (query) this.searchKnowledgeBase(query);
-      });
+      // Search button with error handling
+      if (this.elements.searchButton) {
+        this.elements.searchButton.addEventListener("click", () => {
+          const query = this.elements.searchInput?.value?.trim();
+          if (query) this.searchKnowledgeBase(query);
+        });
+      } else {
+        console.warn('Knowledge search button not found in DOM');
+      }
       
       // Search input (Enter key)
       this.elements.searchInput?.addEventListener("keyup", (e) => {
@@ -436,19 +444,38 @@
     _showKnowledgeBaseModal() {
       console.log('[DEBUG] Opening knowledge base modal');
       
-      if (window.modalManager) {
-        window.modalManager.show("knowledge");
-        console.log('[DEBUG] Using modalManager to show KB modal');
-      } else if (window.ModalManager && typeof window.ModalManager.show === 'function') {
-        // Try using static ModalManager method if available
-        window.ModalManager.show("knowledge");
-        console.log('[DEBUG] Using ModalManager.show to show KB modal');
-      } else {
-        // Fallback to direct DOM manipulation if modalManager isn't available
+      let modalOpened = false;
+      
+      // Try all possible methods
+      if (window.modalManager && typeof window.modalManager.show === 'function') {
+        try {
+          window.modalManager.show("knowledge");
+          modalOpened = true;
+          console.log('[DEBUG] Using modalManager to show KB modal');
+        } catch (e) {
+          console.error('[ERROR] modalManager failed:', e);
+        }
+      }
+      
+      // Try ModalManager static method if available
+      if (!modalOpened && window.ModalManager && typeof window.ModalManager.show === 'function') {
+        try {
+          window.ModalManager.show("knowledge");
+          modalOpened = true;
+          console.log('[DEBUG] Using ModalManager.show to show KB modal');
+        } catch (e) {
+          console.error('[ERROR] ModalManager.show failed:', e);
+        }
+      }
+      
+      // Fallback if modalManager failed
+      if (!modalOpened) {
         const modal = document.getElementById('knowledgeBaseSettingsModal');
         if (modal) {
           console.log('[DEBUG] Showing KB modal directly via DOM');
           modal.classList.remove('hidden');
+          modal.classList.add('confirm-modal');
+          modalOpened = true;
         } else {
           console.error('[ERROR] KB settings modal not found in DOM');
         }
