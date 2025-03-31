@@ -102,12 +102,12 @@ async def fix_db_schema():
         # 1. Add missing columns
         for table_name in Base.metadata.tables.keys():
             # Skip tables that don't exist in the database yet
-            if not await conn.run_sync(lambda sync_conn: inspector.has_table(table_name)):
+            if not inspector.has_table(table_name):
                 logger.info(f"Skipping non-existent table: {table_name}")
                 continue
                 
             # Get database columns
-            db_cols = {c['name'] for c in (await conn.run_sync(lambda sync_conn: inspector.get_columns(table_name)))}
+            db_cols = {c['name'] for c in inspector.get_columns(table_name)}
             
             # Get ORM columns
             orm_cols = set(Base.metadata.tables[table_name].columns.keys())
@@ -140,7 +140,7 @@ async def fix_db_schema():
                     col_spec += f" DEFAULT {col.server_default.arg}"
                 
                 ddl = f"ALTER TABLE {table_name} ADD COLUMN {col_spec}"
-                await conn.execute(text(ddl))
+                sync_conn.execute(text(ddl))
                 logger.info(f"Added missing column: {table_name}.{col_name}")
 
         # 2. Create missing indexes
