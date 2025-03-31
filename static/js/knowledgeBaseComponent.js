@@ -612,7 +612,6 @@
     _showSearchLoading() {
       const { resultsSection, noResultsSection, resultsContainer } = this.elements;
       
-      if (resultsSection) resultsSection.classList.add("hidden");
       if (noResultsSection) noResultsSection.classList.add("hidden");
       
       if (resultsContainer) {
@@ -622,8 +621,9 @@
             <span>Searching...</span>
           </div>
         `;
-        resultsSection.classList.remove("hidden");
       }
+      
+      if (resultsSection) resultsSection.classList.remove("hidden");
     }
     
     /**
@@ -635,6 +635,23 @@
       
       if (resultsSection) resultsSection.classList.add("hidden");
       if (noResultsSection) noResultsSection.classList.remove("hidden");
+    }
+    
+    /**
+     * Hide search loading state
+     * @private
+     */
+    _hideSearchLoading() {
+      if (this.state.isSearching) return;
+      
+      // Clear any loading indicators
+      const { resultsContainer } = this.elements;
+      if (resultsContainer) {
+        const loadingEl = resultsContainer.querySelector('.flex.justify-center.items-center');
+        if (loadingEl) {
+          loadingEl.remove();
+        }
+      }
     }
     
     /**
@@ -758,6 +775,20 @@
      * @param {boolean} hasKnowledgeBase - Whether project has a KB
      * @param {boolean} isActive - Whether KB is active
      */
+    /**
+     * Format source filename for display
+     * @private
+     */
+    _formatSourceName(filename) {
+      if (!filename) return "Unknown source";
+      // Truncate long filenames
+      return filename.length > 25 ? filename.substring(0, 22) + '...' : filename;
+    }
+    
+    /**
+     * Update upload buttons state based on KB status
+     * @private
+     */
     _updateUploadButtonsState(hasKnowledgeBase, isActive) {
       const uploadButtons = document.querySelectorAll('[data-requires-kb="true"]');
       uploadButtons.forEach(button => {
@@ -813,6 +844,78 @@
     }
 
     /**
+     * Show detailed view of a search result
+     * @private
+     */
+    _showResultDetail(result) {
+      // Get modal elements
+      const modal = document.getElementById('knowledgeResultModal');
+      const title = document.getElementById('knowledgeResultTitle');
+      const source = document.getElementById('knowledgeResultSource');
+      const score = document.getElementById('knowledgeResultScore');
+      const content = document.getElementById('knowledgeResultContent');
+      
+      if (!modal || !title || !source || !score || !content) {
+        console.error('Knowledge result modal elements not found');
+        return;
+      }
+      
+      // Format score as percentage
+      const scorePercentage = Math.round((result.score || 0) * 100);
+      
+      // Populate modal content
+      title.textContent = result.metadata?.file_name || 'Knowledge Result';
+      source.textContent = result.metadata?.file_name || 'Unknown source';
+      score.textContent = `${scorePercentage}% match`;
+      content.textContent = result.text || 'No content available';
+      
+      // Show modal
+      if (window.modalManager?.show) {
+        window.modalManager.show('knowledgeResult');
+      } else {
+        modal.classList.remove('hidden');
+      }
+      
+      // Handle "Use in Chat" button
+      const useInChatBtn = document.getElementById('useInChatBtn');
+      if (useInChatBtn) {
+        useInChatBtn.onclick = () => {
+          this._useInConversation(result);
+          // Hide modal
+          if (window.modalManager?.hide) {
+            window.modalManager.hide('knowledgeResult');
+          } else {
+            modal.classList.add('hidden');
+          }
+        };
+      }
+    }
+    
+    /**
+     * Use search result in conversation
+     * @private
+     */
+    _useInConversation(result) {
+      const chatInput = document.getElementById('projectChatInput') || document.getElementById('chatInput');
+      if (!chatInput) {
+        window.showNotification("Chat input not found", "error");
+        return;
+      }
+      
+      // Format the content for the input
+      const content = `Reference from "${result.metadata?.file_name || 'knowledge base'}":\n\n${result.text}\n\nPlease analyze this content.`;
+      
+      // Set the input value
+      chatInput.value = content;
+      
+      // Focus the input
+      chatInput.focus();
+      
+      // Show notification
+      window.showNotification("Knowledge content added to chat input", "success");
+    }
+
+    /**
      * Create individual search result item with proper metadata
      */
     _createSearchResultItem(content, score, metadata) {
@@ -845,8 +948,8 @@
         textContent: `Chunk ${metadata.chunk_index || 0} • ${utils.formatDate(metadata.processed_at)}`
       }));
       
-      fileInfoDiv.appendChild(fileDetails);
-      header.appendChild(fileInfoDiv);
+      sourceDiv.appendChild(sourceDetails);
+      header.appendChild(sourceDiv);
 
       // Score badge
       header.appendChild(utils.createElement("div", {
@@ -868,9 +971,9 @@
 
       // Metadata row
       const metaData = [
-        `Tokens: ${metadata.token_count || fileInfo.token_count || 'N/A'}`,
+        `Tokens: ${metadata.token_count || 'N/A'}`,
         `Chunk Size: ${metadata.chunk_size || 'N/A'}`,
-        `Processed: ${utils.formatDate(metadata.processed_at || fileInfo.created_at)}`
+        `Processed: ${utils.formatDate(metadata.processed_at || metadata.created_at || 'Unknown')}`
       ];
       
       item.appendChild(this._createMetaRow(...metaData));
