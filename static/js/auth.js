@@ -315,16 +315,19 @@ function setupUIListeners() {
       notify("Login successful", "success");
       
       // Instead of reloading page, which causes the blank page issue,
-      // directly update the UI and load conversations
-      if (typeof window.loadConversationList === 'function') {
-        window.loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-      }
-      if (typeof window.loadSidebarProjects === 'function') {
-        window.loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
-      }
-      if (typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
-        window.createNewChat().catch(err => console.warn("Failed to create chat:", err));
-      }
+      // directly update the UI and load conversations after a short delay
+      // to ensure all dependencies are initialized
+      setTimeout(() => {
+        if (typeof window.loadConversationList === 'function' && window.conversationManager) {
+          window.loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+        }
+        if (typeof window.loadSidebarProjects === 'function' && window.projectManager) {
+          window.loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+        }
+        if (typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId && window.chatInterface) {
+          window.createNewChat().catch(err => console.warn("Failed to create chat:", err));
+        }
+      }, 500); // 500ms delay to allow other components to initialize
     } catch (error) {
       console.error("Login failed:", error);
       notify(error.message || "Login failed", "error");

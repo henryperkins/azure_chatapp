@@ -1,13 +1,16 @@
 /**
- * Project Modal Controller
- * Handles all modal interactions including:
- * - Validation
- * - Auto-saving drafts
- * - Multiple exit paths
- * - Accessibility
+ * @file projectModal.js
+ * @description Project Modal Controller with form handling
+ * @module ProjectModal
+ * 
+ * Features:
+ * - Form validation and auto-saving
+ * - Accessibility compliant
+ * - Multiple exit paths with confirmation
  */
 
-class ProjectModal {
+if (typeof window.ProjectModal === 'undefined') {
+  window.ProjectModal = class ProjectModal {
   constructor() {
     this.modal = document.getElementById('projectFormModal');
     if (!this.modal) {
@@ -188,4 +191,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // Auto-initialize if loaded after DOMContentLoaded
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   initProjectModal();
+}
 }

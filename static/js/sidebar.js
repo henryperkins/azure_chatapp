@@ -13,6 +13,26 @@ let sidebar = null;
 let isOpen = false;
 let toggleBtn = null;
 let closeBtn = null;
+let savedTab = null;
+
+// Define toggleSidebar first since it's used in initializeSidebarToggle
+window.toggleSidebar = function() {
+  const isMobile = window.innerWidth < 768;
+  
+  // Only allow toggle on mobile view
+  if (isMobile) {
+    isOpen = !isOpen;
+    updateSidebarState();
+    updateBackdrop(isOpen);
+    updateAccessibilityAttributes();
+  }
+  
+  // Always show sidebar on desktop when toggled
+  if (!isMobile) {
+    isOpen = true;
+    updateSidebarState();
+  }
+}
 
 function initializeSidebarToggle() {
   sidebar = document.getElementById('mainSidebar');
@@ -105,69 +125,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSidebarToggle();
 });
 
-
-    // Add keyboard accessibility
-    toggleBtn.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleSidebar();
-        }
-    });
-
-    // Rest of existing initializeSidebarToggle function...
-
-function isMobileView() {
-    return window.innerWidth < 768; // Matches tailwind's 'md' breakpoint
-}
-
-function initializeSidebarToggle() {
-    sidebar = document.getElementById('mainSidebar');
-    toggleBtn = document.getElementById('navToggleBtn');
-    closeBtn = document.getElementById('closeSidebarBtn');
-
-    if (!sidebar || !toggleBtn) {
-        console.error("Sidebar initialization failed - missing required elements");
-        return;
-    }
-
-    // Verify critical classes exist (only warn if missing)
-    const criticalClasses = ['-translate-x-full', 'translate-x-0'];
-    criticalClasses.forEach(cls => {
-        if (!sidebar.classList.contains(cls)) {
-            console.warn(`Critical class missing: ${cls} - sidebar may not function properly`);
-        }
-    });
-
-    // Initialize state
-    isOpen = !isMobileView();
-    sidebar.classList.toggle('-translate-x-full', !isOpen);
-    sidebar.classList.toggle('translate-x-0', isOpen);
-
-    // Event Listeners
-    toggleBtn.addEventListener('click', toggleSidebar);
-    if (closeBtn) {
-        closeBtn.addEventListener('click', toggleSidebar);
-    } else {
-        console.warn("Close button not found");
-    }
-
-    window.addEventListener('resize', () => {
-        const shouldBeOpen = !isMobileView();
-        if (shouldBeOpen !== isOpen) {
-            isOpen = shouldBeOpen;
-            sidebar.classList.toggle('-translate-x-full', !isOpen);
-            sidebar.classList.toggle('translate-x-0', isOpen);
-            if (!isOpen) removeBackdrop();
-        }
-    });
-
-    console.log("Sidebar initialized successfully", {
-        sidebar: !!sidebar,
-        toggleBtn: !!toggleBtn,
-        closeBtn: !!closeBtn,
-        initialState: isOpen ? 'open' : 'closed'
-    });
-}
+// Add keyboard accessibility only if toggleBtn exists
+if (toggleBtn) toggleBtn.addEventListener('keydown', handleKeydown);
 
 // Track active event listeners
 let currentListeners = [];
@@ -340,7 +299,6 @@ function setupSidebarTabs() {
   }
   
   // Load user preference or use default
-  const savedTab = localStorage.getItem('sidebarActiveTab') || initialTab;
   activateTab(savedTab);
   
   // Set up click handlers for tabs
@@ -722,23 +680,11 @@ window.sidebar = {
   toggle: toggleSidebar
 };
 
-// Make toggle function directly available
-window.toggleSidebar = function() {
-  const isMobile = window.innerWidth < 768;
-  
-  // Only allow toggle on mobile view
-  if (isMobile) {
-    isOpen = !isOpen;
-    updateSidebarState();
-    updateBackdrop(isOpen);
-    updateAccessibilityAttributes();
-  }
-  
-  // Always show sidebar on desktop when toggled
-  if (!isMobile) {
-    isOpen = true;
-    updateSidebarState();
-  }
+function handleKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleSidebar();
+    }
 }
 
 function updateAccessibilityAttributes() {

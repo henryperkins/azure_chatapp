@@ -221,10 +221,33 @@
      * Toggle knowledge base active state
      * @param {boolean} enabled - Whether to enable the knowledge base
      */
+    /**
+     * Get current project ID from multiple sources
+     * @private
+     */
+    _getCurrentProjectId() {
+      // 1. Check active section data attribute
+      if (this.elements.activeSection?.dataset?.projectId) {
+        return this.elements.activeSection.dataset.projectId;
+      }
+      
+      // 2. Check localStorage
+      const storedId = localStorage.getItem('selectedProjectId');
+      if (storedId) return storedId;
+      
+      // 3. Check projectManager
+      if (window.projectManager?.currentProject?.id) {
+        return window.projectManager.currentProject.id;
+      }
+      
+      return null;
+    }
+
     async toggleKnowledgeBase(enabled) {
-      const project = window.projectManager?.currentProject;
-      if (!project?.id) {
+      const projectId = this._getCurrentProjectId();
+      if (!projectId) {
         console.warn('No active project selected');
+        window.showNotification("Please select a project first", "error");
         return;
       }
       
@@ -278,7 +301,7 @@
      * @param {string} query - Search query
      */
     async searchKnowledgeBase(query) {
-      const projectId = window.projectManager?.currentProject?.id;
+      const projectId = this._getCurrentProjectId();
       if (!projectId) {
         console.error('KB Search failed - no valid project selected');
         window.showNotification("Please select a project first", "error");
@@ -340,8 +363,11 @@
      * Reprocess files in the knowledge base
      */
     async reprocessFiles() {
-      const projectId = window.projectManager?.currentProject?.id;
-      if (!projectId) return;
+      const projectId = this._getCurrentProjectId();
+      if (!projectId) {
+        window.showNotification("Please select a project first", "error");
+        return;
+      }
 
       try {
         window.showNotification("Reprocessing files for search...", "info");

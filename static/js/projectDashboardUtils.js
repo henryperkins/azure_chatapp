@@ -1,4 +1,11 @@
 /**
+ * @file projectDashboardUtils.js
+ * @description Centralized utility classes for the project dashboard
+ * @module DashboardUtils
+ * 
+ * This module provides:
+ * - UI utilities (UIUtils class)
+ * - Animation utilities (AnimationUtils class)
  * projectDashboardUtils.js
  * -----------------------
  * Centralized utility classes for the project dashboard
@@ -32,19 +39,24 @@
   /* ===========================
      UI UTILITY CLASS
      =========================== */
-  
-  // Define UIUtils safely with more robust error checking
+
+  /**
+   * UI Utility Class
+   * @class UIUtils
+   * @description Provides DOM manipulation and UI helper methods
+   * 
+   * Features:
+   * - Element creation with comprehensive options
+   */
   if (typeof window.UIUtils === 'undefined') {
     console.log('Creating UIUtils class');
     window.UIUtils = class UIUtils {
       constructor() {
+        console.log('UIUtils instance created');
         this.notificationContainer = document.createElement('div');
         this.notificationContainer.id = 'notificationContainer';
         this.notificationContainer.className = 'fixed top-4 right-4 z-50 space-y-2 w-80';
         document.body.appendChild(this.notificationContainer);
-      }
-      constructor() {
-        console.log('UIUtils instance created');
       }
       
       createElement(tag, options = {}) {
@@ -145,52 +157,49 @@
        * @param {Object} options - Additional options (action, timeout, etc.)
        */
       showNotification(message, type = "info", options = {}) {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `notification p-4 rounded shadow-lg ${
-          type === 'error' ? 'bg-red-100 text-red-800' :
-          type === 'success' ? 'bg-green-100 text-green-800' :
-          type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-          'bg-blue-100 text-blue-800'
-        }`;
-        notification.textContent = message;
-        
-        // Add to container
-        this.notificationContainer.appendChild(notification);
-        
-        // Auto-remove after timeout
-        setTimeout(() => {
-          notification.classList.add('opacity-0', 'transition-opacity', 'duration-300');
-          setTimeout(() => notification.remove(), 300);
-        }, options.timeout || 5000);
+          // Create notification element
+          const notification = document.createElement('div');
+          notification.className = `notification p-4 rounded shadow-lg ${
+            type === 'error' ? 'bg-red-100 text-red-800' :
+            type === 'success' ? 'bg-green-100 text-green-800' :
+            type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+            'bg-blue-100 text-blue-800'
+          }`;
+          notification.textContent = message;
           
-          // Handle action button if specified in options
-          if (options.action && options.onAction) {
-            // Implementation for notification with action button
-            console.log(`Action ${options.action} available for: ${message}`);
+          // Add to container
+          this.notificationContainer.appendChild(notification);
+          
+          // Auto-remove after timeout
+          setTimeout(() => {
+            notification.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+            setTimeout(() => notification.remove(), 300);
+          }, options.timeout || 5000);
             
-            // If a second action is available
-            if (options.secondaryAction && options.onSecondaryAction) {
-              console.log(`Secondary action ${options.secondaryAction} available for: ${message}`);
-            }
-          }
-          
-          // Handle auto-timeout if specified
-          if (options.timeout && typeof options.timeout === 'number') {
-            setTimeout(() => {
-              // Find and remove notification if DOM manipulation is supported
-              const notifications = document.querySelectorAll('.notification');
-              for (const notif of notifications) {
-                if (notif.textContent.includes(message)) {
-                  notif.remove();
-                  break;
-                }
+            // Handle action button if specified in options
+            if (options.action && options.onAction) {
+              // Implementation for notification with action button
+              console.log(`Action ${options.action} available for: ${message}`);
+              
+              // If a second action is available
+              if (options.secondaryAction && options.onSecondaryAction) {
+                console.log(`Secondary action ${options.secondaryAction} available for: ${message}`);
               }
-            }, options.timeout);
-          }
-        } else {
-          console.log(`[${type.toUpperCase()}] ${message}`);
-        }
+            }
+            
+            // Handle auto-timeout if specified
+            if (options.timeout && typeof options.timeout === 'number') {
+              setTimeout(() => {
+                // Find and remove notification if DOM manipulation is supported
+                const notifications = document.querySelectorAll('.notification');
+                for (const notif of notifications) {
+                  if (notif.textContent.includes(message)) {
+                    notif.remove();
+                    break;
+                  }
+                }
+              }, options.timeout);
+            }
       }
     };
     
@@ -207,6 +216,13 @@
   /* ===========================
      ANIMATION UTILITY CLASS
      =========================== */
+
+  /**
+   * Animation Utility Class
+   * @class AnimationUtils
+   * @description Provides animation helper methods
+   * @property {Object} animations - Active animations tracker
+   */
 
   // Define AnimationUtils safely
   if (typeof window.AnimationUtils === 'undefined') {
@@ -251,6 +267,13 @@
   /* ===========================
      MODAL MANAGER CLASS
      =========================== */
+
+  /**
+   * Modal Manager Class
+   * @class ModalManager
+   * @description Handles modal registration and management
+   * @property {Object} modals - Registered modals collection
+   */
 
   // Define ModalManager safely
   if (typeof window.ModalManager === 'undefined') {
@@ -448,6 +471,13 @@
     const reason = event.reason;
     const errorMessage = typeof reason === 'string' ? reason : reason?.message || 'Unknown error';
     const errorStack = reason?.stack || '';
+    
+    // Handle specific error types
+    if (errorMessage.includes('No project selected')) {
+      // Already handled by the component, just prevent default logging
+      event.preventDefault();
+      return;
+    }
     
     // Log details for debugging
     console.error('Unhandled promise rejection:', errorMessage);

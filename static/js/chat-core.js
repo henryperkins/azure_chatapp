@@ -3,6 +3,13 @@
  * Main entry point for chat functionality
  */
 
+if (typeof window.chatInterface === 'undefined') {
+  window.chatInterface = null;
+}
+if (typeof window.projectChatInterface === 'undefined') {
+  window.projectChatInterface = null;
+}
+
 // Helper to add markdown styles
 function addMarkdownStyles() {
   if (document.getElementById('markdown-styles')) return;
@@ -32,11 +39,11 @@ function ensureModulesLoaded() {
     { name: 'UIComponents', path: '/static/js/chat-ui.js' },
     { name: 'ChatInterface', path: '/static/js/chat-interface.js' }
   ];
-  
+
   const missingModules = requiredModules.filter(mod => !window[mod.name]);
-  
+
   if (missingModules.length === 0) return Promise.resolve();
-  
+
   // Function to load a script
   const loadScript = (path) => {
     return new Promise((resolve, reject) => {
@@ -47,7 +54,7 @@ function ensureModulesLoaded() {
       document.head.appendChild(script);
     });
   };
-  
+
   // Load missing modules sequentially
   return missingModules.reduce((promise, module) => {
     return promise.then(() => loadScript(module.path));
@@ -55,22 +62,22 @@ function ensureModulesLoaded() {
 }
 
 // Initialize the chat functionality
-window.initializeChat = async function() {
+window.initializeChat = async function () {
   try {
     console.log("Initializing chat system...");
-    
+
     // Ensure required modules are loaded
     await ensureModulesLoaded();
-    
+
     // Add markdown styles
     addMarkdownStyles();
-    
+
     // Create the chat interface only if not already created
     if (!window.chatInterface) {
       window.chatInterface = new window.ChatInterface();
       window.chatInterface.initialize();
     }
-    
+
     // Ensure projectChatInterface is available for project page
     if (!window.projectChatInterface) {
       window.projectChatInterface = window.chatInterface;
@@ -88,10 +95,10 @@ window.initializeChat = async function() {
         }
       }
     });
-    
+
     // Set up global keyboard shortcuts
     setupGlobalKeyboardShortcuts();
-    
+
     console.log("Chat system initialized successfully");
     return chatInterface;
   } catch (error) {
@@ -106,7 +113,7 @@ function setupGlobalKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     // Avoid capturing key events in input fields
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    
+
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
       // NOTE: This hijacks Ctrl+R - only use if needed
       if (e.key.toLowerCase() === 'r') {
@@ -128,15 +135,27 @@ function setupGlobalKeyboardShortcuts() {
 }
 
 // Public API for backward compatibility
-window.loadConversation = function(chatId) {
-  if (!chatInterface) {
-    // Create a promise that resolves when chat is initialized
-    return window.initializeChat().then(() => chatInterface.loadConversation(chatId));
+window.loadConversation = async function (chatId) {
+  try {
+    if (!chatInterface) {
+      if (!window.initializeChat) {
+        throw new Error('Chat system not properly initialized');
+      }
+      await window.initializeChat();
+    }
+    
+    if (!chatInterface?.loadConversation) {
+      throw new Error('Chat interface not available');
+    }
+    
+    return await chatInterface.loadConversation(chatId);
+  } catch (error) {
+    console.error('Failed to load conversation:', error);
+    throw error;
   }
-  return chatInterface.loadConversation(chatId);
 };
 
-window.createNewChat = async function() {
+window.createNewChat = async function () {
   if (!chatInterface) {
     // Create a promise that resolves when chat is initialized
     return window.initializeChat().then(() => chatInterface.createNewConversation());
@@ -144,7 +163,7 @@ window.createNewChat = async function() {
   return chatInterface.createNewConversation();
 };
 
-window.sendMessage = async function(chatId, userMsg) {
+window.sendMessage = async function (chatId, userMsg) {
   if (!chatInterface) {
     // Create a promise that resolves when chat is initialized
     return window.initializeChat().then(() => {
@@ -156,7 +175,7 @@ window.sendMessage = async function(chatId, userMsg) {
   return chatInterface._handleSendMessage(userMsg);
 };
 
-window.setupWebSocket = async function(chatId) {
+window.setupWebSocket = async function (chatId) {
   if (!chatInterface) {
     // Create a promise that resolves when chat is initialized
     return window.initializeChat().then(() => {
@@ -175,7 +194,7 @@ window.setupWebSocket = async function(chatId) {
       return false;
     });
   }
-  
+
   if (!chatId && chatInterface.currentChatId) {
     chatId = chatInterface.currentChatId;
   }
@@ -193,16 +212,16 @@ window.setupWebSocket = async function(chatId) {
   return false;
 };
 
-window.testWebSocketConnection = async function() {
+window.testWebSocketConnection = async function () {
   await ensureModulesLoaded();
-  
-  const isAuthenticated = await window.ChatUtils?.isAuthenticated?.() || 
-                          (window.auth?.verify ? await window.auth.verify() : false);
-                          
+
+  const isAuthenticated = await window.ChatUtils?.isAuthenticated?.() ||
+    (window.auth?.verify ? await window.auth.verify() : false);
+
   if (!isAuthenticated) {
     return { success: false, authenticated: false, message: "Authentication required" };
   }
-  
+
   try {
     // Check if we can construct a valid WebSocket URL
     const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -215,7 +234,7 @@ window.testWebSocketConnection = async function() {
       throw new Error('No chatId available for WebSocket connection');
     }
     const wsUrl = `${wsProtocol}${host}/ws?chatId=${chatId}`;
-    
+
     return {
       success: true,
       authenticated: true,
@@ -224,10 +243,10 @@ window.testWebSocketConnection = async function() {
     };
   } catch (error) {
     window.ChatUtils?.handleError?.('WebSocket test', error);
-    return { 
-      success: false, 
-      error: error.message, 
-      message: "WebSocket test failed" 
+    return {
+      success: false,
+      error: error.message,
+      message: "WebSocket test failed"
     };
   }
 };
@@ -239,5 +258,4 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error("Failed to auto-initialize chat:", error);
     });
   }
-  
 });
