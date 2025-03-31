@@ -90,15 +90,14 @@ async def init_db():
         logger.info(f"Verified tables in database: {', '.join(tables)}")
 
 async def fix_db_schema():
-    """Comprehensive schema alignment without alembic"""
-    from sqlalchemy import inspect, text, DDL
-    from db import sync_engine  # For SQL compilation
-
+    """Comprehensive schema alignment using synchronous session for DDL"""
+    from sqlalchemy import inspect, text
+    
     logger.info("Starting comprehensive schema alignment...")
     
-    async with async_engine.begin() as conn:
-        # Use direct async inspection
-        inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
+    # Use sync engine for all schema operations
+    with sync_engine.begin() as sync_conn:
+        inspector = inspect(sync_conn)
         
         # 1. Add missing columns
         for table_name in Base.metadata.tables.keys():
