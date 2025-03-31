@@ -49,6 +49,34 @@ async def validate_knowledge_base_access(
 #  Project Access
 # =======================================================
 
+async def check_knowledge_base_status(
+    project_id: UUID,
+    db: AsyncSession
+) -> Dict[str, Any]:
+    """Check if project's knowledge base has indexed content"""
+    from models.project_file import ProjectFile
+    from sqlalchemy import select, func
+    
+    # Count processed files and total chunks
+    stmt = select(
+        func.count().label("file_count"),
+        func.sum(
+            ProjectFile.metadata["search_processing"]["chunk_count"].as_integer()
+        ).label("total_chunks")
+    ).where(
+        ProjectFile.project_id == project_id,
+        ProjectFile.metadata["search_processing"]["success"].as_boolean()
+    )
+    
+    result = await db.execute(stmt)
+    stats = result.mappings().first()
+    
+    return {
+        "has_content": bool(stats and stats["total_chunks"]),
+        "file_count": stats["file_count"] if stats else 0,
+        "chunk_count": stats["total_chunks"] if stats else 0
+    }
+
 async def validate_project_access(
     project_id: UUID,
     user: User,
