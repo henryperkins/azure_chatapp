@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Internal imports
 from services import knowledgebase_service
-from utils.file_validation import FileValidator
 from services.vector_db import (
     get_vector_db, process_file_for_search,
     VECTOR_DB_STORAGE_PATH, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
@@ -110,72 +109,8 @@ async def upload_project_file(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Upload a file to a project using the knowledge base service"""
-    try:
-        logger.info(
-            f"Received file upload: {file.filename}, "
-            f"content_type: {file.content_type}, "
-            f"size: {getattr(file, 'size', 'unknown')}"
-        )
-        
-        if not file or not file.filename:
-            logger.error("No file or filename provided")
-            raise HTTPException(status_code=400, detail="No file provided")
-        
-        await validate_resource_access(
-            project_id,
-            Project,
-            current_user,
-            db,
-            resource_name="Project"
-        )
-        
-        # Validate file via centralized validator
-        try:
-            _ = await FileValidator.validate_upload_file(file)
-        except ValueError as e:
-            logger.error(f"File validation failed: {str(e)}")
-            raise HTTPException(status_code=400, detail=str(e))
-        
-        # Peek at the first 1KB
-        try:
-            peek_content = await file.read(1024)
-            if not peek_content and file.filename != '':
-                logger.warning(f"Empty or unreadable file: {file.filename}")
-            await file.seek(0)  # Reset pointer
-        except Exception as read_error:
-            logger.error(f"Error reading file: {str(read_error)}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"File is unreadable: {str(read_error)}"
-            )
-        
-        # Delegate to knowledgebase_service
-        result = await knowledgebase_service.upload_file_to_project(
-            project_id=project_id,
-            file=file,
-            db=db,
-            user_id=current_user.id
-        )
-        
-        file_data = result["file"]
-        logger.info(
-            f"Successfully uploaded file {file.filename} "
-            f"to project {project_id}, saved as {file_data['id']}"
-        )
-        
-        return await create_standard_response(
-            file_data,
-            "File uploaded successfully"
-        )
-    except HTTPException:
-        raise
-    except ValueError as e:
-        logger.error(f"Validation error uploading file: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Invalid file: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error uploading file: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+    """Temporarily disabled file upload endpoint."""
+    raise HTTPException(status_code=501, detail="File upload functionality is currently unavailable.")
 
 @router.get("/{file_id}", response_model=dict)
 async def get_project_file(
@@ -185,14 +120,7 @@ async def get_project_file(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Get file details and content using knowledge base service"""
-    file_data = await knowledgebase_service.get_project_file(
-        project_id=project_id,
-        file_id=file_id,
-        db=db,
-        user_id=current_user.id,
-        include_content=True
-    )
-    return await create_standard_response(file_data)
+    raise HTTPException(status_code=501, detail="Get file functionality is currently unavailable.")
 
 @router.delete("/{file_id}", response_model=dict)
 async def delete_project_file(
@@ -266,20 +194,22 @@ async def reprocess_project_files(
                 chunk_overlap=DEFAULT_CHUNK_OVERLAP
             )
             
-            config = file_record.config or {}
-            config["search_processing"] = {
+            file_config = file_record.config or {}
+            file_config["search_processing"] = {
                 "success": result.get("success", False), 
                 "chunk_count": result.get("chunk_count", 0),
                 "processed_at": datetime.now().isoformat()
             }
-            file_record.config = config
+            file_record.config = file_config
             
             if result.get("success", False):
                 processed_count += 1
             else:
                 failed_count += 1
         except Exception as e:
-            logger.error(f"Error processing file {file_record.id}: {str(e)}")
+            logger.exception(f"Error processing file {file_record.id} ({file_record.filename}): {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error processing file {file_record.filename}: {str(e)}")
+
             failed_count += 1
     
     await db.commit()

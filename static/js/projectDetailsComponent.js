@@ -355,10 +355,15 @@
         const kbState = await window.knowledgeBaseState.verifyKB(projectId);
         console.debug('Verified KB state:', kbState);
 
-        if (!kbState.exists) {
+        // Skip KB logic if API error occurred
+        if (kbState.error) {
+          console.warn('KB verification error - proceeding with upload:', kbState.error);
+          return this._processFiles(projectId, files);
+        }
+        else if (!kbState.exists) {
           console.debug('KB check - exists:', kbState.exists, 'active:', kbState.isActive);
           // Only recommend KB for text-based files and if no recent dismissal
-          if (window.knowledgeBaseState.shouldRecommendForFiles(files)) {
+          if (Array.isArray(files) && window.knowledgeBaseState.shouldRecommendForFiles(files)) {
             return await this._handleMissingKB(projectId, files);
           }
           console.debug('KB recommendation not shown (conditions not met)');
