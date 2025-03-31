@@ -673,8 +673,7 @@
       // Clear previous results
       resultsContainer.innerHTML = "";
       
-      // Handle error cases and empty results
-      if (!results || results.length === 0 || results.error) {
+      if (!results || results.length === 0) {
         this._showNoResults();
         return;
       }
@@ -683,19 +682,13 @@
       noResultsSection.classList.add("hidden");
 
       results.forEach(result => {
-        const hasError = result.error || (result.metadata?.processing_error);
-        const fileInfo = result.file_info || {};
-        const metadata = result.metadata || {};
-
+        const score = Math.round((result.score || 0) * 100);
         const item = this._createSearchResultItem(
-          result.text || result.content, // Support both text/content fields
-          Math.round((result.score || 0.7) * 100), // Default to 70% if no score
-          fileInfo,
-          metadata,
-          hasError
+          result.text,
+          score,
+          result.metadata || {}
         );
-
-        // Add click handler for viewing full result
+        
         item.addEventListener('click', () => this._showResultDetail(result));
         resultsContainer.appendChild(item);
       });
@@ -704,13 +697,11 @@
     /**
      * Create individual search result item with proper metadata
      */
-    _createSearchResultItem(content, score, fileInfo, metadata, hasError) {
+    _createSearchResultItem(content, score, metadata) {
       const utils = window.uiUtilsInstance;
       const item = utils.createElement("div", {
-        className: `content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 
-                    cursor-pointer hover:shadow-md transition-shadow ${
-                      hasError ? "border-l-4 border-red-500" : ""
-                    }`
+        className: "content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 " +
+                   "cursor-pointer hover:shadow-md transition-shadow"
       });
 
       // Header with file info and score
@@ -718,22 +709,22 @@
         className: "flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 mb-2"
       });
 
-      // File info section
-      const fileInfoDiv = utils.createElement("div", { className: "flex items-center truncate" });
-      fileInfoDiv.appendChild(utils.createElement("span", {
+      // Source info section
+      const sourceDiv = utils.createElement("div", { className: "flex items-center truncate" });
+      sourceDiv.appendChild(utils.createElement("span", {
         className: "text-lg mr-2",
-        textContent: utils.fileIcon(fileInfo.file_type || "txt")
+        textContent: utils.fileIcon(metadata.file_type || "txt")
       }));
-      
-      const fileDetails = utils.createElement("div", { className: "truncate" });
-      fileDetails.appendChild(utils.createElement("div", {
+        
+      const sourceDetails = utils.createElement("div", { className: "truncate" });
+      sourceDetails.appendChild(utils.createElement("div", {
         className: "font-medium truncate",
-        textContent: fileInfo.filename || "Unknown file",
-        title: fileInfo.filename
+        textContent: metadata.file_name || "Unknown source",
+        title: metadata.file_name
       }));
-      fileDetails.appendChild(utils.createElement("div", {
+      sourceDetails.appendChild(utils.createElement("div", {
         className: "text-xs text-gray-500 truncate",
-        textContent: `${utils.formatBytes(fileInfo.file_size || 0)} • ${utils.formatDate(fileInfo.created_at)}`
+        textContent: `Chunk ${metadata.chunk_index || 0} • ${utils.formatDate(metadata.processed_at)}`
       }));
       
       fileInfoDiv.appendChild(fileDetails);
