@@ -431,7 +431,13 @@
 /* Desktop behavior - always visible */
 @media (min-width: 768px) {
   #mainSidebar {
-    transform: translate3d(0, 0, 0) !important;
+    transform: none !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  #mainSidebar {
+    width: 20rem; /* 320px */
   }
 }
 

@@ -51,15 +51,37 @@ function toggleSidebar() {
     
     isOpen = !isOpen;
     if (isOpen) {
+        document.documentElement.style.overflow = 'hidden';
         sidebar.classList.remove('-translate-x-full');
         sidebar.classList.add('translate-x-0');
         createBackdrop();
     } else {
+        document.documentElement.style.overflow = '';
         sidebar.classList.add('-translate-x-full');
         sidebar.classList.remove('translate-x-0');
         removeBackdrop();
     }
 }
+
+function initializeSidebarToggle() {
+    sidebar = document.getElementById('mainSidebar');
+    toggleBtn = document.getElementById('navToggleBtn');
+    closeBtn = document.getElementById('closeSidebarBtn');
+
+    if (!sidebar || !toggleBtn) {
+        console.error("Sidebar initialization failed - missing required elements");
+        return;
+    }
+
+    // Add keyboard accessibility
+    toggleBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleSidebar();
+        }
+    });
+
+    // Rest of existing initializeSidebarToggle function...
 
 function isMobileView() {
     return window.innerWidth < 768; // Matches tailwind's 'md' breakpoint
@@ -115,8 +137,14 @@ function initializeSidebarToggle() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize pinned state
+  if (localStorage.getItem('sidebarPinned') === 'true') {
+    document.body.classList.add('pinned-sidebar');
+  }
+
   initializeSidebarToggle();
   // Initialize sidebar tabs
+  document.documentElement.style.overflow = ''; // Remove initial overflow hidden
   setupSidebarTabs();
   // Initialize collapsible sections
   setupCollapsibleSections();
