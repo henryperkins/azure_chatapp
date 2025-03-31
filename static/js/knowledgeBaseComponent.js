@@ -586,16 +586,16 @@
       
       modelSelect.innerHTML = `
         <option value="all-MiniLM-L6-v2" ${selectedModel === 'all-MiniLM-L6-v2' ? 'selected' : ''}>
-          AllMiniLM-L6-v2 (Fast Local)
+          Local: All-MiniLM-L6-v2 (384d • Fast)
         </option>
         <option value="text-embedding-3-small" ${selectedModel === 'text-embedding-3-small' ? 'selected' : ''}>
-          OpenAI - Text Embedding v3 Small
+          OpenAI: text-embedding-3-small (1536d • Recommended)
         </option>
         <option value="text-embedding-3-large" ${selectedModel === 'text-embedding-3-large' ? 'selected' : ''}>
-          OpenAI - Text Embedding v3 Large
+          OpenAI: text-embedding-3-large (3072d • Largest)
         </option>
         <option value="embed-english-v3.0" ${selectedModel === 'embed-english-v3.0' ? 'selected' : ''}>
-          Cohere - English Embedding v3
+          Cohere: embed-english-v3.0 (1024d • English Only)
         </option>
       `;
     }
