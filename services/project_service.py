@@ -61,11 +61,11 @@ async def check_knowledge_base_status(
     stmt = select(
         func.count().label("file_count"),
         func.sum(
-            ProjectFile.metadata["search_processing"]["chunk_count"].as_integer()
+            ProjectFile.config["search_processing"]["chunk_count"].as_integer()
         ).label("total_chunks")
     ).where(
         ProjectFile.project_id == project_id,
-        ProjectFile.metadata["search_processing"]["success"].as_boolean()
+        ProjectFile.config["search_processing"]["success"].as_boolean()
     )
     
     result = await db.execute(stmt)

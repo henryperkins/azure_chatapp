@@ -18,7 +18,7 @@ __all__ = [
     "VectorDB", "get_vector_db", "process_file_for_search",
     
     # Knowledge base
-    "upload_file_to_project", "list_project_files", "get_project_file",
+    # Removed list_project_files, get_project_file, upload_file_to_project
     "delete_project_file", "get_project_files_stats", "search_project_context",
     "create_knowledge_base",
     
@@ -64,9 +64,6 @@ from .vector_db import (
 
 # Knowledge base services
 from .knowledgebase_service import (
-    upload_file_to_project,
-    list_project_files,
-    get_project_file,
     delete_project_file,
     get_project_files_stats,
     search_project_context,

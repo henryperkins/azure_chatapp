@@ -10,7 +10,7 @@ class KnowledgeBaseState {
     try {
       // Check cache first
       if (this._cache.has(projectId)) {
-        return this._cache.get(projectId);
+        return { ...this._cache.get(projectId), fromCache: true };
       }
 
       // Verify with backend
@@ -24,7 +24,11 @@ class KnowledgeBaseState {
       return response.data;
     } catch (error) {
       console.error('KB verification failed:', error);
-      return { exists: false, isActive: false };
+      return { 
+        exists: false, 
+        isActive: false,
+        error: error.response?.status === 404 ? 'ENDPOINT_NOT_FOUND' : 'API_ERROR'
+      };
     }
   }
 

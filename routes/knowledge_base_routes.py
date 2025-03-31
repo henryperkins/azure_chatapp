@@ -177,6 +177,21 @@ async def create_project_knowledge_base(
         logger.error(f"Error creating knowledge base: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create knowledge base: {str(e)}")
 
+@router.get("/projects/{project_id}/knowledge-base-status", response_model=dict)
+async def get_knowledge_base_status(
+    project_id: str,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Check knowledge base status for a project"""
+    from services.project_service import check_knowledge_base_status
+    kb_status = await check_knowledge_base_status(UUID(project_id), db)
+    
+    return {
+        "exists": kb_status is not None,
+        "isActive": kb_status["is_active"] if kb_status else False,
+        "name": kb_status["name"] if kb_status else None
+    }
+
 
 @router.post("/knowledge-bases", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_knowledge_base(
