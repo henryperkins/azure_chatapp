@@ -650,77 +650,109 @@
      * @private
      * @param {Array} results - Search results
      */
+    /**
+     * Render search results with proper error handling and metadata display
+     */
     _renderSearchResults(results) {
       const { resultsContainer, resultsSection, noResultsSection } = this.elements;
       if (!resultsContainer) return;
+
+      // Clear previous results
+      resultsContainer.innerHTML = "";
       
-      if (!results || results.length === 0) {
+      // Handle error cases and empty results
+      if (!results || results.length === 0 || results.error) {
         this._showNoResults();
         return;
       }
-      
-      resultsContainer.innerHTML = "";
+
       resultsSection.classList.remove("hidden");
       noResultsSection.classList.add("hidden");
-      
-      const utils = window.uiUtilsInstance;
-      
-      results.forEach(result => {
-        // Extract error details if present
-        const errorDetails = result.metadata?.processing_error;
-        const hasError = errorDetails && !result.success;
-        const fileInfo = result.file_info || {};
-        
-        const item = utils.createElement("div", {
-          className: `content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 hover:shadow-md transition-shadow ${
-            hasError ? "border-l-4 border-red-500" : ""
-          }`
-        });
 
-        // Add metadata row with relevance score, tokens, and source
-        const metaRow = this._createMetaRow(
-          `Relevance: ${Math.round(result.score * 100)}%`,
-          `Tokens: ${fileInfo.token_count || 'N/A'}`,
-          `Source: ${fileInfo.filename || 'Unknown'}`
+      results.forEach(result => {
+        const hasError = result.error || (result.metadata?.processing_error);
+        const fileInfo = result.file_info || {};
+        const metadata = result.metadata || {};
+
+        const item = this._createSearchResultItem(
+          result.text || result.content, // Support both text/content fields
+          Math.round((result.score || 0.7) * 100), // Default to 70% if no score
+          fileInfo,
+          metadata,
+          hasError
         );
-        
-        // Header with file info and match score
-        const header = utils.createElement("div", {
-          className: "flex justify-between items-center border-b border-gray-200 pb-2 mb-2"
-        });
-        
-        const fileInfo = utils.createElement("div", { className: "flex items-center" });
-        fileInfo.appendChild(utils.createElement("span", {
-          className: "text-lg mr-2",
-          textContent: utils.fileIcon(result.file_type || "txt")
-        }));
-        fileInfo.appendChild(utils.createElement("div", {
-          className: "font-medium",
-          textContent: result.filename || result.file_path || "Unknown source"
-        }));
-        
-        header.appendChild(fileInfo);
-        header.appendChild(utils.createElement("div", {
-          className: "text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded",
-          textContent: `${Math.round(result.score * 100)}% match`
-        }));
-        
-        item.appendChild(header);
-        
-        // Content snippet
-        const snippet = utils.createElement("div", {
-          className: "text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-3"
-        });
-        
-        const textContent = result.text || result.content || "";
-        snippet.textContent = textContent.length > 200 
-          ? textContent.substring(0, 200) + "..." 
-          : textContent;
-        
-        item.appendChild(snippet);
-        item.appendChild(metaRow);
+
+        // Add click handler for viewing full result
+        item.addEventListener('click', () => this._showResultDetail(result));
         resultsContainer.appendChild(item);
       });
+    }
+
+    /**
+     * Create individual search result item with proper metadata
+     */
+    _createSearchResultItem(content, score, fileInfo, metadata, hasError) {
+      const utils = window.uiUtilsInstance;
+      const item = utils.createElement("div", {
+        className: `content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 
+                    cursor-pointer hover:shadow-md transition-shadow ${
+                      hasError ? "border-l-4 border-red-500" : ""
+                    }`
+      });
+
+      // Header with file info and score
+      const header = utils.createElement("div", {
+        className: "flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 mb-2"
+      });
+
+      // File info section
+      const fileInfoDiv = utils.createElement("div", { className: "flex items-center truncate" });
+      fileInfoDiv.appendChild(utils.createElement("span", {
+        className: "text-lg mr-2",
+        textContent: utils.fileIcon(fileInfo.file_type || "txt")
+      }));
+      
+      const fileDetails = utils.createElement("div", { className: "truncate" });
+      fileDetails.appendChild(utils.createElement("div", {
+        className: "font-medium truncate",
+        textContent: fileInfo.filename || "Unknown file",
+        title: fileInfo.filename
+      }));
+      fileDetails.appendChild(utils.createElement("div", {
+        className: "text-xs text-gray-500 truncate",
+        textContent: `${utils.formatBytes(fileInfo.file_size || 0)} • ${utils.formatDate(fileInfo.created_at)}`
+      }));
+      
+      fileInfoDiv.appendChild(fileDetails);
+      header.appendChild(fileInfoDiv);
+
+      // Score badge
+      header.appendChild(utils.createElement("div", {
+        className: `text-xs px-2 py-1 rounded ${
+          score > 75 ? "bg-green-100 text-green-800" :
+          score > 50 ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-600"
+        }`,
+        textContent: `${score}% match`
+      }));
+
+      item.appendChild(header);
+
+      // Content snippet (limited to 3 lines)
+      const contentDiv = utils.createElement("div", {
+        className: "text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-2",
+        textContent: content?.substring(0, 300) || "No content available"
+      });
+      item.appendChild(contentDiv);
+
+      // Metadata row
+      const metaData = [
+        `Tokens: ${metadata.token_count || fileInfo.token_count || 'N/A'}`,
+        `Chunk Size: ${metadata.chunk_size || 'N/A'}`,
+        `Processed: ${utils.formatDate(metadata.processed_at || fileInfo.created_at)}`
+      ];
+      
+      item.appendChild(this._createMetaRow(...metaData));
+      return item;
     }
 
     _createMetaRow(...items) {
