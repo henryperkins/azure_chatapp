@@ -63,15 +63,6 @@ function toggleSidebar() {
     }
 }
 
-function initializeSidebarToggle() {
-    sidebar = document.getElementById('mainSidebar');
-    toggleBtn = document.getElementById('navToggleBtn');
-    closeBtn = document.getElementById('closeSidebarBtn');
-
-    if (!sidebar || !toggleBtn) {
-        console.error("Sidebar initialization failed - missing required elements");
-        return;
-    }
 
     // Add keyboard accessibility
     toggleBtn.addEventListener('keydown', (e) => {
