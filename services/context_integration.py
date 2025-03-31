@@ -39,7 +39,7 @@ async def augment_with_knowledge(
 
     try:
         # Load conversation with project relationship
-        conversation = await db.get(Conversation, conversation_id, [joinedload(Conversation.project)])
+        conversation = await db.get(Conversation, conversation_id, options=[joinedload(Conversation.project)])
         if not conversation or not conversation.project_id:
             logger.warning(f"Conversation {conversation_id} has no project")
             return []  # No KB for standalone conversations
