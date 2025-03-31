@@ -589,10 +589,10 @@
           all-MiniLM-L6-v2 (Default)
         </option>
         <option value="text-embedding-3-small" ${selectedModel === 'text-embedding-3-small' ? 'selected' : ''}>
-          OpenAI text-embedding-3-small
+          OpenAI: Text Embedding 3 Small
         </option>
         <option value="embed-english-v3.0" ${selectedModel === 'embed-english-v3.0' ? 'selected' : ''}>
-          Cohere embed-english-v3.0
+          Cohere: English Embedding v3.0
         </option>
       `;
     }
