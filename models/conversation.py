@@ -7,7 +7,7 @@ Defines the Conversation model, representing a conversation's metadata:
 - optional model_id referencing an AI model
 - title for display
 """
-from sqlalchemy import String, Integer, Boolean, TIMESTAMP, text, ForeignKey
+from sqlalchemy import String, Integer, Boolean, TIMESTAMP, text, ForeignKey, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from models.project import Project
