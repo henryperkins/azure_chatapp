@@ -64,27 +64,11 @@ class Conversation(Base):
             # Check if KB exists and active
             if not kb or not getattr(kb, 'is_active', False):
                 raise ValueError("Project's knowledge base is not active")
-                
-            # Check index stats through FILE PROCESSING STATUS
-            stmt = select(ProjectFile).where(                                            
-                ProjectFile.project_id == self.project_id,
-                ProjectFile.config["search_processing"]["success"].as_boolean().is_(True)
-            )                                                                            
-            files = (await db.execute(stmt)).scalars().all()                             
 
-            total_chunks = sum(                                                          
-                (file.config or {}).get("search_processing", {}).get("chunk_count", 0)  
-                for file in files                                                        
-            )                                                                            
-
-            if total_chunks <= 0:                                                        
-                raise ValueError("Knowledge base has no indexed content")
             from models.project_file import ProjectFile
-            from sqlalchemy import select, Boolean
-            
+
             stmt = select(ProjectFile).where(
                 ProjectFile.project_id == self.project_id,
-                ProjectFile.config.has_key("search_processing"),
                 ProjectFile.config["search_processing"]["success"].as_boolean()
             )
             files = (await db.execute(stmt)).scalars().all()
@@ -94,7 +78,7 @@ class Conversation(Base):
                 for file in files
             )
 
-            if total_chunks <= 0:                                                        
+            if total_chunks <= 0:
                 raise ValueError("Knowledge base has no indexed content")
 
     @validates('use_knowledge_base')
