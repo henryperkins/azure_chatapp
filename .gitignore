@@ -7,3 +7,9 @@ __pycache__
 uploads
 uploads/*
 .qodo
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

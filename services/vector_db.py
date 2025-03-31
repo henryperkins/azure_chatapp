@@ -688,7 +688,7 @@ async def process_file_for_search(
         # The knowledge_base validation happens in the add_documents method
             
         # Extract text chunks and metadata
-        text_chunks, metadata = await text_extractor.extract_text(
+        text_chunks, metadata = text_extractor.extract_text(
             file_content,
             filename=project_file.filename,
             chunk_size=chunk_size,
@@ -697,12 +697,20 @@ async def process_file_for_search(
 
         # Create metadata for each chunk
         chunk_metadatas = []
+        
+        # Get knowledge_base_id from project - this is where the error occurs
+        # We need to properly handle the async access to project.knowledge_base_id
+        knowledge_base_id = None
+        if hasattr(project_file, 'project'):
+            if project_file.project and hasattr(project_file.project, 'knowledge_base_id'):
+                knowledge_base_id = project_file.project.knowledge_base_id
+        
         for i in range(len(text_chunks)):
             # Get project info to ensure we have knowledge_base_id
             chunk_metadatas.append({
                 "file_id": str(project_file.id),
                 "project_id": str(project_file.project_id),
-                "knowledge_base_id": str(project_file.project.knowledge_base_id) if project_file.project and project_file.project.knowledge_base_id else None,
+                "knowledge_base_id": str(knowledge_base_id) if knowledge_base_id else None,
                 "chunk_index": i,
                 "total_chunks": len(text_chunks),
                 "file_name": project_file.filename,

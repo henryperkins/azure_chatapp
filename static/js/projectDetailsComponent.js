@@ -352,30 +352,38 @@
           console.warn('knowledgeBaseState validation not available - proceeding with upload');
           return this._processFiles(projectId, files);
         }
-        const kbState = await window.knowledgeBaseState.verifyKB(projectId);
-        console.debug('Verified KB state:', kbState);
 
-        // Skip KB logic if API error occurred
-        if (kbState.error) {
-          console.warn('KB verification error - proceeding with upload:', kbState.error);
+        try {
+          const kbState = await window.knowledgeBaseState.verifyKB(projectId);
+          console.debug('Verified KB state:', kbState);
+
+          if (kbState && typeof kbState === 'object') {
+            if (kbState.error) {
+              console.warn('KB verification error - proceeding with upload:', kbState.error);
+              return this._processFiles(projectId, files);
+            }
+            else if (!kbState.exists) {
+              console.debug('KB check - exists:', kbState.exists, 'active:', kbState.isActive);
+              if (Array.isArray(files) && window.knowledgeBaseState.shouldRecommendForFiles(files)) {
+                return await this._handleMissingKB(projectId, files);
+              }
+              console.debug('KB recommendation not shown (conditions not met)');
+            } 
+            else if (!kbState.isActive) {
+              console.debug('KB inactive - showing limited functionality warning');
+              window.showNotification(
+                `Knowledge Base (${kbState.name}) is inactive - some features disabled`,
+                "warning"
+              );
+            }
+          }
+        } catch (error) {
+          console.error('KB verification failed:', error);
           return this._processFiles(projectId, files);
         }
-        else if (!kbState.exists) {
-          console.debug('KB check - exists:', kbState.exists, 'active:', kbState.isActive);
-          // Only recommend KB for text-based files and if no recent dismissal
-          if (Array.isArray(files) && window.knowledgeBaseState.shouldRecommendForFiles(files)) {
-            return await this._handleMissingKB(projectId, files);
-          }
-          console.debug('KB recommendation not shown (conditions not met)');
-        } else if (!kbState.isActive) {
-          console.debug('KB inactive - showing limited functionality warning');
-          window.showNotification(
-            `Knowledge Base (${kbState.name}) is inactive - some features disabled`,
-            "warning"
-          );
-        }
-    
+
         // 4. Proceed with normal upload flow
+        console.debug('Proceeding with normal file upload flow');
         this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
         return this._processFiles(projectId, files);
         
@@ -449,6 +457,7 @@
         );
       });
     }
+
     /**
      * Switch between project detail tabs
      * @param {string} tabName - Tab name to switch to
@@ -804,8 +813,24 @@
                 console.error(`Upload error for ${file.name}:`, error);
                  
                 // Determine the specific error message based on error type
-                let errorMessage = error.message || "Upload failed";
-                 
+                let errorMessage = "Upload failed";
+                
+                // Safely extract error message from various response formats
+                if (error && error.message) {
+                  errorMessage = error.message;
+                } else if (error && error.response && error.response.data) {
+                  // Try to get error from response data
+                  if (typeof error.response.data === 'string') {
+                    errorMessage = error.response.data;
+                  } else if (error.response.data.detail) {
+                    errorMessage = error.response.data.detail;
+                  } else if (error.response.data.message) {
+                    errorMessage = error.response.data.message;
+                  } else if (error.response.data.error) {
+                    errorMessage = error.response.data.error;
+                  }
+                }
+                
                 // Handle specific error types
                 if (errorMessage.includes("validation") || errorMessage.includes("format")) {
                   errorMessage = "File format not supported or validation failed";
@@ -955,7 +980,6 @@
         className: "text-xs text-gray-500",
         textContent: window.uiUtilsInstance.formatDate(conversation.created_at)
       }));
-      
       
       infoDiv.appendChild(textDiv);
       
@@ -1141,6 +1165,36 @@
      * @private
      * @param {Object} artifact - Artifact to delete
      */
+    _confirmDeleteArtifact(artifact) {
+      window.ModalManager.confirmAction({
+        title: "Delete Artifact",
+        message: `Delete "${artifact.title || 'this artifact'}"?`,
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        confirmClass: "bg-red-600",
+        onConfirm: () => {
+          const projectId = this.state.currentProject?.id;
+          if (!projectId) return;
+          
+          window.projectManager?.deleteArtifact(projectId, artifact.id)
+            .then(() => {
+              window.showNotification("Artifact deleted", "success");
+              // Refresh data
+              Promise.all([
+                window.projectManager.loadProjectStats(projectId),
+                window.projectManager.loadProjectArtifacts(projectId)
+              ]).catch(err => {
+                console.error("Error refreshing data:", err);
+              });
+            })
+            .catch(err => {
+              console.error("Error deleting artifact:", err);
+              window.showNotification("Failed to delete artifact", "error");
+            });
+        }
+      });
+    }
+
     /**
      * Create processing status badge with better error handling
      * @param {Object} processing - Processing metadata
@@ -1250,36 +1304,6 @@
           'bg-yellow-100 text-yellow-800'
         }`;
       }
-    }
-
-    _confirmDeleteArtifact(artifact) {
-      window.ModalManager.confirmAction({
-        title: "Delete Artifact",
-        message: `Delete "${artifact.title || 'this artifact'}"?`,
-        confirmText: "Delete",
-        cancelText: "Cancel",
-        confirmClass: "bg-red-600",
-        onConfirm: () => {
-          const projectId = this.state.currentProject?.id;
-          if (!projectId) return;
-          
-          window.projectManager?.deleteArtifact(projectId, artifact.id)
-            .then(() => {
-              window.showNotification("Artifact deleted", "success");
-              // Refresh data
-              Promise.all([
-                window.projectManager.loadProjectStats(projectId),
-                window.projectManager.loadProjectArtifacts(projectId)
-              ]).catch(err => {
-                console.error("Error refreshing data:", err);
-              });
-            })
-            .catch(err => {
-              console.error("Error deleting artifact:", err);
-              window.showNotification("Failed to delete artifact", "error");
-            });
-        }
-      });
     }
   }
 

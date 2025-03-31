@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css",
     "dev:css": "postcss ./static/css/tailwind.css -o ./static/dist/tailwind.css --watch"
   },
@@ -19,6 +18,8 @@
   },
   "homepage": "https://github.com/henryperkins/azure_chatapp#readme",
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
+    "@types/node": "^22.13.14",
     "autoprefixer": "^10.4.17",
     "postcss": "^8.4.35",
     "postcss-cli": "^10.1.0",

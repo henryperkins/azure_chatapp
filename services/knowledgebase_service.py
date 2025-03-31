@@ -77,10 +77,10 @@ def extract_file_metadata(file_record: ProjectFile, include_token_count: bool = 
     if hasattr(file_record, "created_at") and file_record.created_at:
         metadata["created_at"] = file_record.created_at.isoformat()
     
-    if include_token_count and hasattr(file_record, "metadata") and file_record.metadata:
-        file_metadata = file_record.metadata or {}
-        if "token_count" in file_metadata:
-            metadata["token_count"] = file_metadata["token_count"]
+    if include_token_count and hasattr(file_record, "config") and file_record.config:
+        file_config = file_record.config or {}
+        if "token_count" in file_config:
+            metadata["token_count"] = file_config["token_count"]
     
     # Add processing status if available
     if hasattr(file_record, "config") and file_record.config:
@@ -216,14 +216,17 @@ async def _process_file_tokens(
     file: UploadFile,
     project: Project
 ) -> Dict[str, Any]:
-    """
-    Extract text and estimate tokens, using existing utilities.
-    """
-    # Choose content source based on size
-    content_to_process = contents if len(contents) <= STREAM_THRESHOLD else file.file
-    
-    # Extract text and estimate tokens
-    token_info = await estimate_tokens_from_file(content_to_process, filename)
+    """Extract text and estimate tokens, using existing utilities."""
+    try:
+        # Choose content source based on size
+        content_to_process = contents if len(contents) <= STREAM_THRESHOLD else file.file
+        
+        # Extract text and estimate tokens
+        token_info = await estimate_tokens_from_file(content_to_process, filename)
+    except Exception as e:
+        logger.error(f"Error estimating tokens for {filename}: {str(e)}")
+        token_info = (0, {"error": str(e)})
+
     token_estimate = token_info[0]
     metadata = token_info[1]
     
@@ -257,11 +260,15 @@ async def estimate_tokens_from_file(
                 collected_content.extend(chunk)
             content = bytes(collected_content)
             
-        # Extract text from file
-        extracted_text = await text_extractor.extract_text(content, filename)
+        # Extract text from file - ensure this returns a single awaitable
+        chunks, metadata = text_extractor.extract_text(content, filename)
         
-        # Estimate token count
-        token_count = await estimate_token_count(extracted_text)
+        # Get token count from metadata if available, otherwise calculate from whole content
+        token_count = metadata.get("token_count", 0)
+        if token_count == 0 and chunks:
+            # Join all chunks to count tokens (less precise but fallback)
+            full_text = ' '.join(chunks)
+            token_count = len(full_text) // 4  # Simple estimation
         
         # Return token count and metadata
         extraction_method = getattr(text_extractor, "name", "unknown_extractor")
@@ -328,7 +335,7 @@ async def upload_file_to_project(
     await file.seek(0)
     
     # Get token information 
-    token_info = await _process_file_tokens(contents, sanitized_filename, file, project)
+    token_info = await _process_file_tokens(contents, sanitized_filename, file, project)  # This now properly awaits the coroutine
     token_estimate = token_info["token_estimate"]
     
     # Configure file storage
@@ -359,34 +366,48 @@ async def upload_file_to_project(
         filename=sanitized_filename,
         file_path=stored_path,
         file_type=file_type,
-        file_size=file_size,
-        metadata={
-            "token_count": token_estimate,
-            "file_extension": file_ext,
-            "content_type": file.content_type,
-            "upload_time": datetime.now().isoformat(),
-        }
+        file_size=file_size
     )
     
-    # Add search processing status to metadata
-    processing_metadata = {
-        "status": "pending",
-        "queued_at": datetime.now().isoformat(),
-    }
-    
+    # Add token data and processing status to config
     project_file.config = {
-        "search_processing": processing_metadata
+        "token_count": token_estimate,
+        "file_extension": file_ext,
+        "content_type": file.content_type,
+        "upload_time": datetime.now().isoformat(),
+        "search_processing": {
+            "status": "pending",
+            "queued_at": datetime.now().isoformat(),
+        }
     }
     
     # Save to database within a transaction
-    async with db.begin():
+    try:
+        # Try without explicit transaction
         # Save file record
         await save_model(db, project_file)
         
         # Update project token usage
         project.token_usage += token_estimate
         await save_model(db, project)
-    
+        
+        # Flush to ensure changes are sent to DB, but don't commit yet
+        await db.flush()
+    except SQLAlchemyError as e:
+        # If there's an error and it's because a transaction is already active
+        if "transaction is already begun" not in str(e):
+            # Re-raise if it's not a transaction-related error
+            raise
+        
+        # Try again with explicit transaction management
+        async with db.begin():
+            # Save file record
+            await save_model(db, project_file)
+            
+            # Update project token usage
+            project.token_usage += token_estimate
+            await save_model(db, project)
+
     # Process for search in background if task runner provided
     if background_tasks:
         background_tasks.add_task(
@@ -412,16 +433,16 @@ async def upload_file_to_project(
 
 # Background task to process file for vector DB
 async def _process_file_for_vector_db(
-    file_id: UUID,
-    project_id: UUID,
-    knowledge_base_id: UUID,
+    file_id: Any,  # Could be a string or UUID, will be handled in function body
+    project_id: Any,
+    knowledge_base_id: Any,
     file_path: str,
     db: AsyncSession
 ):
     """Process a file for the vector database (runs in background)"""
     try:
-        # Get file record
-        file_record = await get_by_id(db, ProjectFile, file_id)
+        # Get file record - ensure IDs are converted to UUID if they're not already
+        file_record = await get_by_id(db, ProjectFile, UUID(str(file_id)) if not isinstance(file_id, UUID) else file_id)
         if not file_record:
             logger.error(f"File record {file_id} not found for processing")
             return
@@ -436,8 +457,8 @@ async def _process_file_for_vector_db(
         # Get file content
         file_content = await storage.get_file(file_path)
         
-        # Get model name from knowledge base
-        kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+        # Get model name from knowledge base - ensure KB ID is converted to UUID
+        kb = await get_by_id(db, KnowledgeBase, UUID(str(knowledge_base_id)) if not isinstance(knowledge_base_id, UUID) else knowledge_base_id)
         model_name = kb.embedding_model if kb else DEFAULT_EMBEDDING_MODEL
         
         # Configure vector DB
@@ -501,9 +522,9 @@ async def delete_project_file(
     if file_record is None:
         raise HTTPException(status_code=404, detail="File not found")
     
-    # Get token usage from metadata
-    metadata = file_record.metadata or {}
-    token_estimate = metadata.get("token_count", 0)
+    # Get token usage from config (previously metadata)
+    config = file_record.config or {}
+    token_estimate = config.get("token_count", 0)
 
     # Delete from storage
     storage_config = {
@@ -538,12 +559,25 @@ async def delete_project_file(
         except Exception as e:
             logger.error(f"Error removing file from vector DB: {e}")
     
-    # Delete from database
-    async with db.begin():
+    # Delete from database - use a more reliable approach
+    try:
+        # Attempt the delete and project update without explicit transaction
         await db.delete(file_record)
         # Update project token usage
         project.token_usage = max(0, project.token_usage - token_estimate)
-        await db.commit()
+        # Flush to ensure changes are sent to DB, but don't commit yet
+        await db.flush()
+        # We'll let the outer transaction handle the commit
+    except SQLAlchemyError as e:
+        # If there's an error, it might be because we need to manage the transaction ourselves
+        if "transaction is already begun" not in str(e):
+            # Re-raise if it's not a transaction-related error
+            raise
+        # Try again with explicit transaction management
+        async with db.begin():
+            await db.delete(file_record)
+            # Update project token usage
+            project.token_usage = max(0, project.token_usage - token_estimate)
     
     return {
         "success": file_deletion_status == "success",
