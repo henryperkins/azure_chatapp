@@ -79,7 +79,7 @@ class Conversation(Base):
             )
 
             if total_chunks <= 0:
-                raise ValueError("Knowledge base has no indexed content")
+                logger.warning(f"Knowledge base {kb.id} has no indexed content - continuing anyway")
 
     @validates('use_knowledge_base')
     def validate_kb_flag(self, key, value):
