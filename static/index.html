@@ -585,6 +585,9 @@
     window.BACKEND_HOST = window.API_ENDPOINT ?
       new URL(window.API_ENDPOINT).host :
       'api.example.com'; // Default fallback
+    // Prevent duplicate declarations
+    window.chatInterface = window.chatInterface || null;
+    window.projectChatInterface = window.projectChatInterface || null;
     window.ENV = 'development'; // Matches config.py default
     console.log('BACKEND_HOST set to:', window.BACKEND_HOST);
   </script>
@@ -599,11 +602,11 @@
   <script src="/static/js/projectManager.js"></script>
   <script src="/static/js/projectDashboard.js"></script>
   <script src="/static/js/projectDetailsComponent.js"></script>
-  <script src="/static/js/projectDashboardUtils.js"></script>
   <script src="/static/js/chat-utils.js"></script>
   <script src="/static/js/chat-websocket.js"></script>
   <script src="/static/js/chat-messages.js"></script>
   <script src="/static/js/chat-conversations.js"></script>
+  <script src="/static/js/projectDashboardUtils.js"></script>
   <script src="/static/js/chat-ui.js"></script>
   <script src="/static/js/chat-interface.js"></script>
   <script src="/static/js/chat-core.js"></script>
