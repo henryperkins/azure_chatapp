@@ -378,6 +378,22 @@ class ProjectDashboard {
     const project = event.detail;
     this.state.currentProject = project;
     this.components.projectDetails.renderProject(project);
+    
+    // Unified KB component handling
+    if (project.knowledge_base_id && this.components.knowledgeBase) {
+      // If project has KB info, pass it directly
+      if (project.knowledge_base) {
+        this.components.knowledgeBase.renderKnowledgeBaseInfo(project.knowledge_base);
+      }
+      // Otherwise, load it if needed
+      else if (window.projectManager?.loadKnowledgeBaseDetails) {
+        window.projectManager.loadKnowledgeBaseDetails(project.knowledge_base_id)
+          .catch(err => console.error('Failed to load KB details:', err));
+      }
+    } else if (this.components.knowledgeBase) {
+      // Explicitly indicate no KB is available
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(null);
+    }
   }
 
   /**
