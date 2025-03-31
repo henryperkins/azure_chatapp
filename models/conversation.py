@@ -71,23 +71,40 @@ class Conversation(Base):
                 raise ValueError("Project's knowledge base is not active")
 
             from models.project_file import ProjectFile
-            from sqlalchemy import func
+            from sqlalchemy import func, or_
 
-            # More efficient query to count chunks
+            # Check for any files that are either:
+            # 1. Successfully processed (has chunks)
+            # 2. In processing state (pending)
+            # 3. Failed but retryable
             stmt = select(
-                func.sum(ProjectFile.config["search_processing"]["chunk_count"].as_integer())
+                func.count().label("total_files"),
+                func.sum(
+                    ProjectFile.config["search_processing"]["chunk_count"].as_integer()
+                ).label("total_chunks")
             ).where(
                 ProjectFile.project_id == self.project_id,
-                ProjectFile.config["search_processing"]["success"].as_boolean()
-            )
-            total_chunks = (await db.execute(stmt)).scalar() or 0
-
-            if total_chunks <= 0:
-                logger.warning(
-                    f"Knowledge base {kb.id} has no indexed content - "
-                    f"either upload files or disable knowledge base for project {self.project_id}"
+                or_(
+                    ProjectFile.config["search_processing"]["success"].as_boolean(),
+                    ProjectFile.config["search_processing"]["attempted_at"].is_not(None)
                 )
-                # Don't raise error but make it clear in logs that KB won't be used
+            )
+            
+            result = await db.execute(stmt)
+            stats = result.mappings().first()
+            total_chunks = stats["total_chunks"] or 0
+            total_files = stats["total_files"] or 0
+
+            if total_chunks <= 0 and total_files > 0:
+                raise ValueError(
+                    "Knowledge base has files but none are indexed yet. "
+                    "Please reprocess files or wait for indexing to complete."
+                )
+            elif total_chunks <= 0:
+                logger.warning(
+                    f"Knowledge base {kb.id} has no files - "
+                    f"upload files to enable knowledge base for project {self.project_id}"
+                )
 
     @validates('use_knowledge_base')
     def validate_kb_flag(self, key, value):
