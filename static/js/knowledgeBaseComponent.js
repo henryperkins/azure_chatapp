@@ -16,6 +16,19 @@
     constructor(options = {}) {
       console.log('[DEBUG] Initializing KnowledgeBaseComponent');
       
+      // Add style for disabled model options
+      const style = document.createElement('style');
+      style.textContent = `
+        .disabled-option {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .disabled-option:hover {
+          background-color: inherit !important;
+        }
+      `;
+      document.head.appendChild(style);
+
       /* ===========================
          STATE MANAGEMENT
          =========================== */
@@ -584,20 +597,59 @@
       const modelSelect = document.getElementById("knowledgeBaseModelSelect");
       if (!modelSelect) return;
       
+      // Remove any existing error states FIRST
+      const existingErrors = modelSelect.parentElement.querySelectorAll('.model-error');
+      existingErrors.forEach(e => e.remove());
+
       modelSelect.innerHTML = `
         <option value="all-MiniLM-L6-v2" ${selectedModel === 'all-MiniLM-L6-v2' ? 'selected' : ''}>
-          Local: All-MiniLM-L6-v2 (384d • Fast)
+          Local: All-MiniLM-L6-v2 (384d • Fast • Default)
         </option>
-        <option value="text-embedding-3-small" ${selectedModel === 'text-embedding-3-small' ? 'selected' : ''}>
+        <option value="text-embedding-3-small" ${
+          selectedModel === 'text-embedding-3-small' ? 'selected' : ''
+        } ${this._validateDimension(1536, selectedModel)}>
           OpenAI: text-embedding-3-small (1536d • Recommended)
         </option>
-        <option value="text-embedding-3-large" ${selectedModel === 'text-embedding-3-large' ? 'selected' : ''}>
+        <option value="text-embedding-3-large" ${
+          selectedModel === 'text-embedding-3-large' ? 'selected' : ''
+        } ${this._validateDimension(3072, selectedModel)}>
           OpenAI: text-embedding-3-large (3072d • Largest)
         </option>
-        <option value="embed-english-v3.0" ${selectedModel === 'embed-english-v3.0' ? 'selected' : ''}>
+        <option value="embed-english-v3.0" ${
+          selectedModel === 'embed-english-v3.0' ? 'selected' : ''
+        } ${this._validateDimension(1024, selectedModel)}>
           Cohere: embed-english-v3.0 (1024d • English Only)
         </option>
       `;
+
+      // Add dimension validation helpers
+      this._validateSelectedModelDimensions();
+    }
+
+    // New helper method
+    _validateDimension(requiredDim, selectedModel) {
+      const currentProject = window.projectManager?.currentProject;
+      const existingDim = currentProject?.knowledge_base?.embedding_dimension;
+      
+      if (existingDim && existingDim !== requiredDim) {
+        return 'disabled class="disabled-option" title="Existing vectors use different dimensions"';
+      }
+      
+      return selectedModel ? '' : '';
+    }
+
+    // New validation check
+    _validateSelectedModelDimensions() {
+      const modelSelect = document.getElementById("knowledgeBaseModelSelect");
+      const warning = document.createElement('div');
+      warning.className = 'model-error text-red-600 text-sm mt-2';
+      
+      Array.from(modelSelect.options).forEach(opt => {
+        if (opt.disabled && opt.selected) {
+          warning.textContent = "Warning: Changing dimensions requires re-processing all files!";
+          modelSelect.parentElement.appendChild(warning);
+        }
+      });
     }
     
     /**
