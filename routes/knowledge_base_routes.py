@@ -148,6 +148,10 @@ async def create_project_knowledge_base(
             db=db
         )
 
+        # Get KB status info
+        from services.project_service import check_knowledge_base_status
+        kb_status = await check_knowledge_base_status(project_id, db)
+
         return await create_standard_response(
             {
                 "id": str(knowledge_base.id),
@@ -158,7 +162,12 @@ async def create_project_knowledge_base(
                 "project_id": str(knowledge_base.project_id),
                 "created_at": knowledge_base.created_at.isoformat()
                 if knowledge_base.created_at
-                else None
+                else None,
+                "stats": {
+                    "has_content": kb_status["has_content"],
+                    "file_count": kb_status["file_count"],
+                    "chunk_count": kb_status["chunk_count"]
+                }
             },
             "Knowledge base created successfully"
         )

@@ -73,11 +73,22 @@ class Conversation(Base):
             if not kb or not kb.is_active:
                 raise ValueError("Project's knowledge base is not active")
             
-            # Check index stats through JSONB config field
-            config_data = kb.config or {}
-            index_stats = config_data.get("index_stats", {})
+            # Get total chunks from processed files
+            from models.project_file import ProjectFile
+            from sqlalchemy import select
             
-            if not index_stats.get("chunk_count", 0) > 0:
+            stmt = select(ProjectFile).where(                                            
+                ProjectFile.project_id == self.project_id,
+                ProjectFile.metadata["search_processing"]["success"].as_boolean()  
+            )                                                                            
+            files = (await db.execute(stmt)).scalars().all()                             
+
+            total_chunks = sum(                                                          
+                (file.metadata or {}).get("search_processing", {}).get("chunk_count", 0) 
+                for file in files                                                        
+            )                                                                            
+
+            if total_chunks <= 0:                                                        
                 raise ValueError("Knowledge base has no indexed content")
 
     @validates('use_knowledge_base')
