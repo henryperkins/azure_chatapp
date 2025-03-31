@@ -16,6 +16,17 @@
     constructor(options = {}) {
       console.log('[DEBUG] Initializing KnowledgeBaseComponent');
       
+      // Verify required elements exist
+      const requiredElements = [
+        'knowledgeBaseVersion', 'knowledgeBaseLastUsed',
+        'kbVersionDisplay', 'kbLastUsedDisplay'
+      ];
+      requiredElements.forEach(id => {
+        if (!document.getElementById(id)) {
+          console.error(`KB Component: Required element #${id} missing in DOM`);
+        }
+      });
+      
       // Add style for disabled model options
       const style = document.createElement('style');
       style.textContent = `
@@ -77,6 +88,16 @@
       `;
     }
 
+    _updateElementText(elementId, text, fallbackLabel) {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.textContent = text;
+        el.title = `${fallbackLabel}: ${text}`;
+      } else {
+        console.warn(`Element #${elementId} not found for KB info display`);
+      }
+    }
+
     /* ===========================
        PUBLIC METHODS
        =========================== */
@@ -93,6 +114,18 @@
       if (kb) {
         console.log('[DEBUG] Rendering knowledge base info:', kb);
         this.state.knowledgeBase = kb;
+
+        // Version display
+        const versionValue = kb.version ? `v${kb.version}` : 'v1 (default)';
+        this._updateElementText('knowledgeBaseVersion', versionValue, 'Schema Version');
+        
+        // Last used display with proper timezone handling
+        const lastUsed = kb.last_used ? 
+          new Date(kb.last_used).toLocaleString([], { 
+            year: 'numeric', month: 'short', day: 'numeric', 
+            hour: '2-digit', minute: '2-digit', timeZoneName: 'short' 
+          }) : 'Never used';
+        this._updateElementText('knowledgeBaseLastUsed', lastUsed, 'Last used');
 
         // Add status alerts based on backend conditions
         if (kb.is_active) {
@@ -674,8 +707,9 @@
      * @param {Object} stats - Knowledge base stats
      */
     _updateKnowledgeBaseStats(stats) {
-      if (!stats) return;
-      
+      const kb = this.state.knowledgeBase;
+      if (!kb || !stats) return;
+
       const fileCountEl = document.getElementById("knowledgeFileCount");
       if (fileCountEl) fileCountEl.textContent = stats.file_count || 0;
       
@@ -685,16 +719,21 @@
         totalSizeEl.textContent = utils.formatBytes(stats.total_size || 0);
       }
 
-      const kbVersionEl = document.getElementById("kbVersionDisplay");
-      if (kbVersionEl) {
-        kbVersionEl.textContent = `Schema v${kb.version || 1}`;
+      const formattedVersion = kb.version ? `Schema v${kb.version}` : 'Schema v1';
+      const versionElement = document.getElementById('kbVersionDisplay');
+      if (versionElement) {
+        versionElement.textContent = formattedVersion;
+        versionElement.title = `Knowledge Base Schema Version ${kb.version || 1}`;
       }
 
-      const lastUsedEl = document.getElementById("kbLastUsedDisplay");
-      if (lastUsedEl) {
-        lastUsedEl.textContent = kb.last_used
-          ? window.uiUtilsInstance.formatDate(kb.last_used)
-          : "Never";
+      const lastUsed = kb.last_used ?
+        window.uiUtilsInstance.formatDate(kb.last_used) : 'Never';
+      const lastUsedElement = document.getElementById('kbLastUsedDisplay'); 
+      if (lastUsedElement) {
+        lastUsedElement.textContent = lastUsed;
+        lastUsedElement.title = kb.last_used ? 
+          `Last queried at ${new Date(kb.last_used).toLocaleString()}` :
+          'This knowledge base has never been queried';
       }
     }
     
