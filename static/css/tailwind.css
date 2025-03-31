@@ -108,19 +108,29 @@
 }
 
 #mainSidebar {
-  z-index: 999;
+  z-index: 1031; /* Above notifications */
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
 }
 
 #sidebarBackdrop {
-  z-index: 998;
+  z-index: 1025; /* Below sidebar but above most content */
 }
 
 .modal {
-  z-index: 1000;
+  z-index: 1050; /* Above everything */
 }
 
 #notificationArea {
-  z-index: 1030;
+  z-index: 1030; /* Below sidebar */
+}
+
+.projects-page #mainSidebar {
+  width: 22rem;
+}
+
+.projects-page #sidebarProjects {
+  padding-bottom: 6rem;
 }
 
 
