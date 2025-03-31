@@ -7,6 +7,7 @@ Defines the Conversation model, representing a conversation's metadata:
 - optional model_id referencing an AI model
 - title for display
 """
+import logging
 from sqlalchemy import String, Integer, Boolean, TIMESTAMP, text, ForeignKey, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -17,6 +18,8 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
 from db import Base
 from typing import Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 import uuid
 
 class Conversation(Base):
