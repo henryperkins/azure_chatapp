@@ -433,54 +433,50 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
 
   console.error('WebSocket connection error:', {
     error: errorDetails,
-    url: this.wsUrl,
     state: this.state,
     chatId: this.chatId,
     projectId: this.projectId,
     reconnectAttempt: this.reconnectAttempts
   });
 
-  // Handle specific error codes
-  if (error.code === 1006) {
-    console.warn('Abnormal closure detected - resetting connection state');
-    this.state = CONNECTION_STATES.DISCONNECTED;
-    this.socket = null;
-  } else if ((error?.message || '').includes('403') || (error?.message || '').includes('401') || (error?.message || '').includes('version mismatch')) {
-    console.log('Auth-related error - triggering token refresh');
+  // Clean state and reference
+  this.socket = null;
+  this.setState(CONNECTION_STATES.ERROR);
+  
+  // Define max retries for clarity
+  const MAX_RETRIES = 4;
+
+  // Handle common error scenarios
+  const isAuthError = (error?.message || '').includes('403') || 
+                      (error?.message || '').includes('401') || 
+                      (error?.message || '').includes('version mismatch');
+
+  if (isAuthError) {
     try {
+      console.log('Auth-related error - triggering token refresh');
       await window.TokenManager.refreshTokens();
-      await this.attemptReconnection();
+      // Token refresh succeeded, attempt immediate reconnection
+      if (this.reconnectAttempts < MAX_RETRIES) {
+        return await this.attemptReconnection();
+      }
     } catch (refreshError) {
       console.error('Token refresh failed:', refreshError);
     }
   }
-  
-  this.socket = null;
-  this.setState(CONNECTION_STATES.ERROR);
 
-  // Only attempt reconnection if not already in progress
-  // and we haven't exceeded max retries
-  // Add debug logging
-  console.debug('Connection error details:', {
-    error: error,
-    wsUrl: this.wsUrl,
-    state: this.state
-  });
-
-  // Maximum reasonable retries before full fallback
-  const MAX_RETRIES = 4; 
-  
-  // Modify this condition:
-  if (this.state !== CONNECTION_STATES.RECONNECTING &&
+  // Decide whether to retry connection or switch to HTTP fallback
+  if (this.state !== CONNECTION_STATES.RECONNECTING && 
       this.reconnectAttempts < MAX_RETRIES) {
-    this.attemptReconnection();
-  } else {
-    console.warn('Permanent connection failure - switching to HTTP only');
-    this.useHttpFallback = true;
-    this.setState(CONNECTION_STATES.DISCONNECTED);
-    if (this.onError) {
-      this.onError(new Error('Real-time connection unavailable. Using reliable HTTP fallback.'));
-    }
+    return this.attemptReconnection();
+  } 
+  
+  // Switch to HTTP fallback after exhausting retries
+  console.warn('Switching to HTTP fallback after maximum reconnection attempts');
+  this.useHttpFallback = true;
+  this.setState(CONNECTION_STATES.DISCONNECTED);
+  
+  if (this.onError) {
+    this.onError(new Error('Real-time connection unavailable. Using reliable HTTP fallback.'));
   }
 };
 
