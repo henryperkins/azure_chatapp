@@ -308,15 +308,31 @@ window.WebSocketService.prototype.connect = async function (chatId) {
 window.WebSocketService.prototype.startHeartbeat = function() {
   if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
   
+  // Reset pending pongs counter
+  this.pendingPongs = 0;
+  this.lastPongTime = Date.now();
+  
   this.heartbeatInterval = setInterval(() => {
-    if (this.isConnected()) {
-      this.socket.send(JSON.stringify({ type: 'ping' }));
+    if (!this.isConnected()) return;
+    
+    // Check if we've missed too many pongs
+    const timeSinceLastPong = Date.now() - this.lastPongTime;
+    if (timeSinceLastPong > 90000) { // 1.5x heartbeat interval
+      console.warn('Heartbeat timeout - no pong received in', timeSinceLastPong, 'ms');
+      this.handleConnectionError(new Error(`Heartbeat timeout (${timeSinceLastPong}ms since last pong)`));
+      return;
+    }
+    
+    try {
+      this.socket.send(JSON.stringify({
+        type: 'ping',
+        timestamp: Date.now()
+      }));
       this.pendingPongs++;
-      
-      if (this.pendingPongs > 2) {
-        console.warn('Missed pongs - forcing reconnect');
-        this.handleConnectionError(new Error('Heartbeat timeout'));
-      }
+      console.debug('Sent ping, pending pongs:', this.pendingPongs);
+    } catch (err) {
+      console.error('Failed to send heartbeat ping:', err);
+      this.handleConnectionError(err);
     }
   }, 30000);
 };
@@ -358,6 +374,8 @@ window.WebSocketService.prototype.establishConnection = function () {
         // Handle special message types
         if (data.type === 'pong') {
           this.pendingPongs = Math.max(0, this.pendingPongs - 1);
+          this.lastPongTime = Date.now();
+          console.debug('Received pong, pending pongs:', this.pendingPongs);
         } else if (data.type === 'token_refresh_required') {
           this.handleTokenRefresh().catch(err => {
             console.error('Token refresh failed:', err);
@@ -432,12 +450,34 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
     wasClean: error.wasClean || false
   };
 
+  // Special handling for code 1008 (Policy Violation)
+  if (error.code === 1008) {
+    console.error('WebSocket policy violation:', errorDetails, {
+      state: this.state,
+      chatId: this.chatId,
+      projectId: this.projectId,
+      reconnectAttempt: this.reconnectAttempts,
+      wsUrl: this.wsUrl
+    });
+
+    // For policy violations, we should not attempt to reconnect
+    this.useHttpFallback = true;
+    this.setState(CONNECTION_STATES.DISCONNECTED);
+    
+    if (this.onError) {
+      this.onError(new Error('Connection terminated due to policy violation. Using HTTP fallback.'));
+    }
+    return;
+  }
+
   console.error('WebSocket connection error:', {
     error: errorDetails,
     state: this.state,
     chatId: this.chatId,
     projectId: this.projectId,
-    reconnectAttempt: this.reconnectAttempts
+    reconnectAttempt: this.reconnectAttempts,
+    wsUrl: this.wsUrl,
+    timestamp: new Date().toISOString()
   });
 
   // Clean state and reference
@@ -483,35 +523,49 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
 
 window.WebSocketService.prototype.attemptReconnection = function () {
   if (this.reconnectAttempts >= this.maxRetries) {
-    console.warn('Max reconnection attempts reached');
+    console.warn('Max reconnection attempts reached', {
+      attempts: this.reconnectAttempts,
+      maxRetries: this.maxRetries,
+      lastError: this.lastError
+    });
     this.useHttpFallback = true;
+    this.setState(CONNECTION_STATES.DISCONNECTED);
     return;
   }
 
   this.setState(CONNECTION_STATES.RECONNECTING);
   this.reconnectAttempts++;
+  this.lastError = null;
 
   // Calculate delay with exponential backoff and jitter
-  const delay = Math.min(
-    30000, // Max 30 seconds
-    this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1) * (1 + Math.random() * 0.5)
-  );
+  const baseDelay = this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
+  const jitter = baseDelay * 0.5 * Math.random(); // Up to 50% jitter
+  const delay = Math.min(60000, baseDelay + jitter); // Cap at 60 seconds
 
-  console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+  console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxRetries})`, {
+    baseDelay,
+    jitter,
+    maxDelay: 60000
+  });
 
-  setTimeout(() => {
+  this.reconnectTimeout = setTimeout(() => {
     // Validate URL before reconnection attempt
     if (!validateWebSocketUrl(this.wsUrl)) {
-      console.error(`Invalid WebSocket URL for reconnection: ${this.wsUrl}`);
+      const error = new Error(`Invalid WebSocket URL for reconnection: ${this.wsUrl}`);
+      console.error(error.message);
+      this.lastError = error;
       this.useHttpFallback = true;
+      this.setState(CONNECTION_STATES.DISCONNECTED);
       return;
     }
 
-    this.connect(this.chatId).catch(() => {
-      if (this.reconnectAttempts < this.maxRetries) {
-        this.attemptReconnection();
-      }
-    });
+    this.connect(this.chatId)
+      .catch((error) => {
+        this.lastError = error;
+        if (this.reconnectAttempts < this.maxRetries) {
+          this.attemptReconnection();
+        }
+      });
   }, delay);
 };
 
@@ -565,29 +619,65 @@ window.WebSocketService.prototype.isConnected = function () {
 
 // Clean disconnection
 window.WebSocketService.prototype.disconnect = function () {
-  if (this.socket) {
-    // Clear any pending messages
+  // Clear any pending reconnection attempts
+  if (this.reconnectTimeout) {
+    clearTimeout(this.reconnectTimeout);
+    this.reconnectTimeout = null;
+  }
+
+  // Clear any pending messages
+  if (this.pendingMessages.size > 0) {
     this.pendingMessages.forEach(({ reject, timeout }) => {
       clearTimeout(timeout);
       reject(new Error('Connection closed'));
     });
     this.pendingMessages.clear();
+  }
 
-    // Close the socket
-    this.socket.close();
+  // Clear heartbeat
+  if (this.heartbeatInterval) {
+    clearInterval(this.heartbeatInterval);
+    this.heartbeatInterval = null;
+  }
+
+  // Close the socket if it exists
+  if (this.socket) {
+    try {
+      this.socket.close();
+    } catch (err) {
+      console.error('Error closing WebSocket:', err);
+    }
     this.socket = null;
   }
 
   this.setState(CONNECTION_STATES.DISCONNECTED);
+  console.debug('WebSocket disconnected and cleaned up');
 };
 
-// Cleanup on instance destruction
+/**
+ * Cleanup on instance destruction
+ * - Disconnects the WebSocket
+ * - Clears all event handlers
+ * - Removes all references to prevent memory leaks
+ */
 window.WebSocketService.prototype.destroy = function () {
+  // Disconnect first to clean up resources
   this.disconnect();
+
+  // Clear all event handlers
   this.onMessage = () => { };
   this.onError = () => { };
   this.onConnect = () => { };
   this.onDisconnect = () => { };
+
+  // Clear other references
+  this.pendingMessages = new Map();
+  this.lastError = null;
+  this.wsUrl = null;
+  this.chatId = null;
+  this.projectId = null;
+
+  console.debug('WebSocketService instance destroyed');
 };
 
 /**
@@ -596,11 +686,45 @@ window.WebSocketService.prototype.destroy = function () {
  * @returns {boolean} - Whether the URL is a valid WebSocket URL
  */
 function validateWebSocketUrl(url) {
+  if (!url || typeof url !== 'string') {
+    console.error('Invalid WebSocket URL: URL is empty or not a string');
+    return false;
+  }
+
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'ws:' || parsed.protocol === 'wss:';
+    
+    // Validate protocol
+    if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
+      console.error('Invalid WebSocket protocol:', parsed.protocol);
+      return false;
+    }
+
+    // Validate hostname
+    if (!parsed.hostname) {
+      console.error('Missing hostname in WebSocket URL');
+      return false;
+    }
+
+    // Validate path (must start with /)
+    if (!parsed.pathname.startsWith('/')) {
+      console.error('WebSocket path must start with /:', parsed.pathname);
+      return false;
+    }
+
+    // Additional security checks
+    if (parsed.username || parsed.password) {
+      console.error('WebSocket URL should not contain credentials');
+      return false;
+    }
+
+    return true;
   } catch (error) {
-    console.error('Invalid WebSocket URL:', url, error);
+    console.error('Invalid WebSocket URL:', {
+      url,
+      error: error.message,
+      stack: error.stack
+    });
     return false;
   }
 }
@@ -610,8 +734,19 @@ function validateWebSocketUrl(url) {
     module.exports = WebSocketService;
   }
   // Export version and constants for debugging
-  WebSocketService.version = '1.0.1';
+  WebSocketService.version = '1.1.0';
   WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
+  
+  /**
+   * Changelog:
+   * v1.1.0 - Improved WebSocket reliability
+   *   - Enhanced heartbeat mechanism with ping/pong tracking
+   *   - Added specific handling for code 1008 (Policy Violation)
+   *   - Strengthened URL validation with security checks
+   *   - Improved reconnection logic with better backoff and jitter
+   *   - Added detailed logging for connection states and errors
+   *   - Better cleanup of resources on disconnect/destroy
+   */
 
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
