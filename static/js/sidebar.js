@@ -50,17 +50,33 @@ function toggleSidebar() {
     if (!sidebar) return;
     
     isOpen = !isOpen;
+    const isMobile = isMobileView();
+    
     if (isOpen) {
+        if (isMobile) {
+            document.body.classList.add('overflow-hidden');
+        }
         document.documentElement.style.overflow = 'hidden';
         sidebar.classList.remove('-translate-x-full');
         sidebar.classList.add('translate-x-0');
         createBackdrop();
     } else {
+        if (isMobile) {
+            document.body.classList.remove('overflow-hidden');
+        }
         document.documentElement.style.overflow = '';
         sidebar.classList.add('-translate-x-full');
         sidebar.classList.remove('translate-x-0');
         removeBackdrop();
     }
+
+    // Smooth transitions
+    requestAnimationFrame(() => {
+        sidebar.classList.add('sidebar-transition');
+        setTimeout(() => {
+            sidebar.classList.remove('sidebar-transition');
+        }, 300);
+    });
 }
 
 
