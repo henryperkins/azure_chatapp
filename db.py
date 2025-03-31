@@ -146,17 +146,17 @@ async def fix_db_schema():
         # 2. Create missing indexes
         for table_name, table in Base.metadata.tables.items():
             # Get existing indexes
-            db_indexes = {idx['name'] for idx in (await conn.run_sync(lambda sync_conn: inspector.get_indexes(table_name)))}
+            db_indexes = {idx['name'] for idx in inspector.get_indexes(table_name)}
             
             # Check ORM indexes
             for idx in table.indexes:
                 if idx.name not in db_indexes:
-                    await conn.execute(DDL(str(idx.create(async_engine))))
+                    sync_conn.execute(text(str(idx.create(sync_engine))))
                     logger.info(f"Created missing index: {idx.name}")
         
         # 3. Handle column type changes
         for table_name, table in Base.metadata.tables.items():
-            db_cols = await conn.run_sync(lambda sync_conn: inspector.get_columns(table_name))
+            db_cols = inspector.get_columns(table_name)
             db_col_dict = {c['name']: c for c in db_cols}
             
             for col_name, orm_col in table.columns.items():
@@ -172,12 +172,12 @@ async def fix_db_schema():
                     logger.warning(f"Type mismatch: {table_name}.{orm_col.name} (DB: {db_type} vs ORM: {orm_type})")
                     # Handle common type conversions safely
                     if 'VARCHAR' in db_type and 'TEXT' in orm_type:
-                        await conn.execute(text(
+                        sync_conn.execute(text(
                             f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
                         ))
                         logger.info(f"Converted {table_name}.{orm_col.name} from VARCHAR to TEXT")
                     elif 'INTEGER' in db_type and 'BIGINT' in orm_type:
-                        await conn.execute(text(
+                        sync_conn.execute(text(
                             f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE BIGINT"
                         ))
                         logger.info(f"Converted {table_name}.{orm_col.name} from INTEGER to BIGINT")
@@ -187,7 +187,7 @@ async def fix_db_schema():
                     try:
                         if orm_col.nullable and not db_col["nullable"]:
                             # Make column nullable (easy)
-                            await conn.execute(text(
+                            sync_conn.execute(text(
                                 f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} DROP NOT NULL"
                             ))
                             logger.info(f"Made {table_name}.{orm_col.name} nullable")
@@ -195,11 +195,11 @@ async def fix_db_schema():
                             # Add default value first if needed
                             if not orm_col.server_default:
                                 default_val = "0" if "INT" in orm_type else "''" if "VARCHAR" in orm_type else "false" if "BOOL" in orm_type else "'{}'::jsonb" if "JSONB" in orm_type else "NULL"
-                                await conn.execute(text(
+                                sync_conn.execute(text(
                                     f"UPDATE {table_name} SET {orm_col.name} = {default_val} WHERE {orm_col.name} IS NULL"
                                 ))
                             # Make not nullable
-                            await conn.execute(text(
+                            sync_conn.execute(text(
                                 f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} SET NOT NULL"
                             ))
                             logger.info(f"Made {table_name}.{orm_col.name} NOT NULL")
@@ -208,7 +208,7 @@ async def fix_db_schema():
         
         # 4. Handle check constraints
         for table_name, table in Base.metadata.tables.items():
-            db_constraints = await conn.run_sync(lambda sync_conn: inspector.get_check_constraints(table_name))
+            db_constraints = inspector.get_check_constraints(table_name)
             db_constraint_names = {c['name'] for c in db_constraints}
             
             # Add missing check constraints
@@ -220,14 +220,14 @@ async def fix_db_schema():
                             if hasattr(constraint, 'sqltext'):
                                 sql_condition = str(constraint.sqltext)
                                 ddl = f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint.name} CHECK ({sql_condition})"
-                                await conn.execute(text(ddl))
+                                sync_conn.execute(text(ddl))
                                 logger.info(f"Added check constraint: {constraint.name}")
                         except Exception as e:
                             logger.error(f"Failed to add check constraint {constraint.name}: {e}")
         
         # 5. Handle foreign key constraints
         for table_name, table in Base.metadata.tables.items():
-            db_fks = await conn.run_sync(lambda sync_conn: inspector.get_foreign_keys(table_name))
+            db_fks = inspector.get_foreign_keys(table_name)
             db_fk_cols = {(fk['constrained_columns'][0], fk['referred_table']) for fk in db_fks if fk['constrained_columns']}
             
             for fk in table.foreign_keys:
@@ -238,7 +238,7 @@ async def fix_db_schema():
                     # FK doesn't exist, try to add it
                     try:
                         constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
-                        await conn.execute(text(
+                        sync_conn.execute(text(
                             f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
                             f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
                         ))
