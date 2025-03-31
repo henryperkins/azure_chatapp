@@ -642,10 +642,16 @@ async def create_knowledge_base(
 @handle_service_errors("Error searching project context")
 async def search_project_context(
     project_id: UUID,
-    query: str,
+    query: str, 
     db: AsyncSession,
     top_k: int = 5
 ) -> Dict[str, Any]:
+    """Search project knowledge base with enhanced error handling and validation."""
+    if not query or len(query.strip()) < 2:
+        raise ValueError("Query must be at least 2 characters")
+            
+    if top_k < 1 or top_k > 20:
+        raise ValueError("top_k must be between 1 and 20")
     """Search for relevant context in a project's vector database."""
     # Validate project
     project = await _validate_user_and_project(project_id, None, db)
