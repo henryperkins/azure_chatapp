@@ -151,8 +151,16 @@ async def fix_db_schema():
             # Check ORM indexes
             for idx in table.indexes:
                 if idx.name not in db_indexes:
-                    sync_conn.execute(text(str(idx.create(sync_engine))))
-                    logger.info(f"Created missing index: {idx.name}")
+                    create_stmt = idx.create(sync_engine)
+                    if create_stmt is not None:
+                        sql_text = str(create_stmt)
+                        if sql_text and sql_text.strip():
+                            sync_conn.execute(text(sql_text))
+                            logger.info(f"Created missing index: {idx.name}")
+                        else:
+                            logger.warning(f"Empty create statement for index: {idx.name}")
+                    else:
+                        logger.warning(f"Could not generate create statement for index: {idx.name}")
         
         # 3. Handle column type changes
         for table_name, table in Base.metadata.tables.items():
