@@ -240,15 +240,4 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // Always set up the nav toggle button handler regardless of page
-  const navToggleBtn = document.getElementById('navToggleBtn');
-  if (navToggleBtn) {
-    console.log("Setting up additional nav toggle button handler");
-    navToggleBtn.addEventListener('click', function() {
-      console.log("Nav toggle button clicked (direct handler)");
-      if (typeof window.toggleSidebar === 'function') {
-        window.toggleSidebar();
-      }
-    });
-  }
 });

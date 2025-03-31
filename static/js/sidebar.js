@@ -15,24 +15,29 @@ let toggleBtn = null;
 let closeBtn = null;
 
 function initializeSidebarToggle() {
-    sidebar = document.getElementById('mainSidebar');
-    toggleBtn = document.getElementById('navToggleBtn');
-    closeBtn = document.getElementById('closeSidebarBtn');
+  sidebar = document.getElementById('mainSidebar');
+  toggleBtn = document.getElementById('navToggleBtn');
+  closeBtn = document.getElementById('closeSidebarBtn');
 
-    if (!sidebar || !toggleBtn) {
-        console.error("Sidebar elements missing");
-        return;
-    }
+  if (!sidebar || !toggleBtn) {
+    console.error("Sidebar elements missing");
+    return;
+  }
 
-    // Set initial state based on viewport
-    const isMobile = window.innerWidth < 768;
-    isOpen = !isMobile;
-    updateSidebarState();
+  const isMobile = window.innerWidth < 768;
+  isOpen = !isMobile; // Show on desktop by default
+  
+  // Remove duplicate listeners
+  toggleBtn?.replaceWith(toggleBtn.cloneNode(true));
+  closeBtn?.replaceWith(closeBtn.cloneNode(true));
 
-    // Event Listeners
-    toggleBtn.addEventListener('click', toggleSidebar);
-    closeBtn?.addEventListener('click', toggleSidebar);
-    window.addEventListener('resize', handleResize);
+  // Set up fresh listeners
+  toggleBtn?.addEventListener('click', toggleSidebar);
+  closeBtn?.addEventListener('click', toggleSidebar);
+  window.addEventListener('resize', handleResize);
+  
+  updateSidebarState();
+  updateAccessibilityAttributes();
 }
 
 function updateSidebarState() {
@@ -47,55 +52,51 @@ function updateSidebarState() {
 }
 
 function handleResize() {
-    const isMobile = window.innerWidth < 768;
-    const shouldBeOpen = !isMobile;
-    
-    if (shouldBeOpen !== isOpen) {
-        isOpen = shouldBeOpen;
-        sidebar.classList.toggle('translate-x-0', shouldBeOpen);
-        sidebar.classList.toggle('-translate-x-full', !shouldBeOpen);
-        document.body.classList.remove('overflow-hidden');
-        updateBackdrop(false);
-    }
+  const wasMobile = window.innerWidth < 768;
+  const isNowMobile = window.innerWidth < 768;
+  
+  if (wasMobile !== isNowMobile) {
+    isOpen = !isNowMobile; // Always show on desktop, hide on mobile by default
+    updateSidebarState();
+    updateBackdrop(isNowMobile && isOpen);
+    updateAccessibilityAttributes();
+  }
 }
 
 function updateBackdrop(show) {
-    let backdrop = document.getElementById('sidebarBackdrop');
+  let backdrop = document.getElementById('sidebarBackdrop');
+  
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'sidebarBackdrop';
+    backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.setAttribute('data-testid', 'sidebar-backdrop');
     
-    if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.id = 'sidebarBackdrop';
-        backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
-        backdrop.setAttribute('aria-hidden', 'true');
-        backdrop.setAttribute('data-testid', 'sidebar-backdrop');
-        
-        // Accessible click handler
-        backdrop.addEventListener('click', () => {
-            toggleSidebar();
-            document.getElementById('navToggleBtn')?.focus();
-        });
-        
-        document.body.appendChild(backdrop);
-    }
+    // Accessible click handler
+    backdrop.addEventListener('click', () => {
+      toggleSidebar();
+      document.getElementById('navToggleBtn')?.focus();
+    });
+    
+    document.body.appendChild(backdrop);
+  }
 
-    // Improved animation handling
-    if (show) {
-        backdrop.style.display = 'block';
-        requestAnimationFrame(() => {
-            backdrop.style.opacity = '1';
-            backdrop.style.pointerEvents = 'auto';
-            backdrop.setAttribute('aria-hidden', 'false');
-        });
-    } else {
-        backdrop.style.opacity = '0';
-        backdrop.style.pointerEvents = 'none';
-        backdrop.setAttribute('aria-hidden', 'true');
-        backdrop.addEventListener('transitionend', () => {
-            if (backdrop.style.opacity === '0') {
-                backdrop.style.display = 'none';
-            }
-        }, { once: true });
-    }
+  if (show) {
+    backdrop.style.display = 'block';
+    backdrop.classList.add('opacity-100');
+    backdrop.classList.remove('opacity-0');
+    backdrop.setAttribute('aria-hidden', 'false');
+  } else {
+    backdrop.classList.add('opacity-0');
+    backdrop.classList.remove('opacity-100');
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.addEventListener('transitionend', () => {
+      if (parseFloat(backdrop.style.opacity) === 0) {
+        backdrop.style.display = 'none';
+      }
+    }, { once: true });
+  }
 }
 
 // Unified initialization
