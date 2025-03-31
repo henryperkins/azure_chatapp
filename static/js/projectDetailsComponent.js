@@ -14,6 +14,10 @@
      * @param {Object} options - Configuration options
      */
     constructor(options = {}) {
+      // Add WebSocket connection for processing updates
+      if (window.projectManager?.currentProject?.id) {
+        this._setupProcessingWS(window.projectManager.currentProject.id);
+      }
       /* ===========================
          STATE MANAGEMENT
          =========================== */
@@ -164,7 +168,8 @@
       
       files.forEach(file => {
         const item = window.uiUtilsInstance.createElement("div", {
-          className: "content-item"
+          className: "content-item",
+          "data-file-id": file.id
         });
         
         // Info section
@@ -183,6 +188,11 @@
           className: "text-xs text-gray-500",
           textContent: `${window.uiUtilsInstance.formatBytes(file.file_size)} · ${window.uiUtilsInstance.formatDate(file.created_at)}`
         }));
+
+        // Add processing status badge
+        const processing = file.metadata?.search_processing || {};
+        const statusBadge = this._createProcessingBadge(processing);
+        detailDiv.appendChild(statusBadge);
         
         infoDiv.appendChild(detailDiv);
         item.appendChild(infoDiv);
@@ -1110,6 +1120,64 @@
      * @private
      * @param {Object} artifact - Artifact to delete
      */
+    _createProcessingBadge(processing) {
+      const colors = {
+        success: "bg-green-100 text-green-800",
+        error: "bg-red-100 text-red-800", 
+        pending: "bg-yellow-100 text-yellow-800",
+        default: "bg-gray-100 text-gray-600"
+      };
+
+      const status = processing.status || 'pending';
+      const text = {
+        pending: "Pending Processing",
+        success: "Search Ready",
+        error: `Failed: ${processing.error?.split('\n')[0] || ''}`,
+        default: "Not Processed"
+      }[status] || status;
+
+      return window.uiUtilsInstance.createElement("div", {
+        className: `processing-status text-xs px-2 py-1 rounded ${colors[status] || colors.default} mt-1`,
+        textContent: text,
+        title: processing.error ? "Processing Error: " + processing.error : ""
+      });
+    }
+
+    _setupProcessingWS(projectId) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(
+        `${protocol}//${window.location.host}/ws/processing/${projectId}`
+      );
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'processing_update' && this.state.currentProject) {
+          this._updateFileStatus(data.file_id, data.status, data.error);
+        }
+      };
+    }
+
+    _updateFileStatus(fileId, status, error) {
+      const fileItem = this.elements.filesList.querySelector(
+        `[data-file-id="${fileId}"]`
+      );
+      
+      if (!fileItem) return;
+
+      const statusDiv = fileItem.querySelector('.processing-status');
+      if (statusDiv) {
+        statusDiv.textContent = status === 'success' ? 'Search Ready' : 
+          status === 'error' ? `Error: ${error?.substring(0, 30)}...` :
+          'Processing...';
+        
+        statusDiv.className = `processing-status text-xs px-2 py-1 rounded ${
+          status === 'success' ? 'bg-green-100 text-green-800' :
+          status === 'error' ? 'bg-red-100 text-red-800' :
+          'bg-yellow-100 text-yellow-800'
+        }`;
+      }
+    }
+
     _confirmDeleteArtifact(artifact) {
       window.ModalManager.confirmAction({
         title: "Delete Artifact",
