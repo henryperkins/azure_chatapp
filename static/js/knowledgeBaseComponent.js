@@ -66,13 +66,14 @@
         reprocessButton: document.getElementById("reprocessFilesBtn")
       };
 
-      // Style the search button if it exists
+      // Add missing styles to search button if it exists
       if (this.elements.searchButton) {
-        this.elements.searchButton.className =
-          'px-4 py-2.5 bg-blue-600 text-white rounded-lg ' +
-          'hover:bg-blue-700 transition-colors duration-200 ' +
-          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 ' +
-          'text-sm font-medium';
+        this.elements.searchButton.classList.add(
+          'focus:outline-none', 
+          'focus:ring-2', 
+          'focus:ring-blue-500', 
+          'focus:ring-opacity-50'
+        );
       }
       
       this._bindEvents();
@@ -164,13 +165,13 @@
           nameElement.textContent = kb.name || "Project Knowledge Base";
         }
 
-        const versionElement = document.getElementById("knowledgeBaseVersion");
+        const versionElement = document.getElementById("kbVersionDisplay");
         if (versionElement) {
           versionElement.textContent = `v${kb.version || 1}`;
           versionElement.title = `Knowledge Base Schema Version ${kb.version || 1}`;
         }
 
-        const lastUsedElement = document.getElementById("knowledgeBaseLastUsed");
+        const lastUsedElement = document.getElementById("kbLastUsedDisplay");
         if (lastUsedElement) {
           lastUsedElement.textContent = kb.last_used 
             ? window.uiUtilsInstance.formatDate(kb.last_used)
@@ -222,7 +223,10 @@
      */
     async toggleKnowledgeBase(enabled) {
       const project = window.projectManager?.currentProject;
-      if (!project?.id) return;
+      if (!project?.id) {
+        console.warn('No active project selected');
+        return;
+      }
       
       const toggle = this.elements.kbToggle || document.getElementById('knowledgeBaseEnabled');
       if (!toggle) {
@@ -403,11 +407,13 @@
   
       // Reprocess files button
       if (this.elements.reprocessButton) {
-        this.elements.reprocessButton.className =
-          'px-4 py-2.5 bg-gray-600 text-white rounded-lg ' +
-          'hover:bg-gray-700 transition-colors duration-200 ' +
-          'focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 ' +
-          'text-sm font-medium';
+        this.elements.reprocessButton.classList.add(
+          'focus:outline-none',
+          'focus:ring-2',
+          'focus:ring-gray-500',
+          'focus:ring-opacity-50',
+          'transition-colors'
+        );
         this.elements.reprocessButton.addEventListener("click", () => this.reprocessFiles());
       }
       
@@ -444,41 +450,41 @@
     _showKnowledgeBaseModal() {
       console.log('[DEBUG] Opening knowledge base modal');
       
-      let modalOpened = false;
-      
-      // Try all possible methods
-      if (window.modalManager && typeof window.modalManager.show === 'function') {
+      // Create a unified modal access helper
+      const showModal = (id, fallbackId) => {
+        // Try all methods in sequence with proper error handling
         try {
-          window.modalManager.show("knowledge");
-          modalOpened = true;
-          console.log('[DEBUG] Using modalManager to show KB modal');
+          // Try window.modalManager.show first
+          if (window.modalManager?.show) {
+            window.modalManager.show(id);
+            return true;
+          }
+          
+          // Try window.ModalManager.show next
+          if (window.ModalManager?.show) {
+            window.ModalManager.show(id);
+            return true;
+          }
+          
+          // Direct DOM as last resort
+          const modal = document.getElementById(fallbackId);
+          if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('confirm-modal');
+            return true;
+          }
+          
+          return false;
         } catch (e) {
-          console.error('[ERROR] modalManager failed:', e);
+          console.error(`Modal error (${id}):`, e);
+          return false;
         }
-      }
+      };
       
-      // Try ModalManager static method if available
-      if (!modalOpened && window.ModalManager && typeof window.ModalManager.show === 'function') {
-        try {
-          window.ModalManager.show("knowledge");
-          modalOpened = true;
-          console.log('[DEBUG] Using ModalManager.show to show KB modal');
-        } catch (e) {
-          console.error('[ERROR] ModalManager.show failed:', e);
-        }
-      }
-      
-      // Fallback if modalManager failed
-      if (!modalOpened) {
-        const modal = document.getElementById('knowledgeBaseSettingsModal');
-        if (modal) {
-          console.log('[DEBUG] Showing KB modal directly via DOM');
-          modal.classList.remove('hidden');
-          modal.classList.add('confirm-modal');
-          modalOpened = true;
-        } else {
-          console.error('[ERROR] KB settings modal not found in DOM');
-        }
+      // Try with both known modal IDs
+      if (!showModal('knowledge', 'knowledgeBaseSettingsModal')) {
+        console.error('Failed to show knowledge base modal');
+        window.showNotification?.('Could not open settings', 'error');
       }
       
       // Try to get and store project ID if available
@@ -932,6 +938,14 @@
      */
     _createSearchResultItem(content, score, metadata, fileInfo) {
       const utils = window.uiUtilsInstance;
+      
+      // Standardize metadata handling with defaults
+      const filename = fileInfo?.filename || metadata.file_name || "Unknown source";
+      const fileType = fileInfo?.file_type || metadata.file_type || "txt";
+      const createdAt = metadata.processed_at || fileInfo?.created_at || new Date().toISOString();
+      const chunkIndex = metadata.chunk_index || 0;
+      const tokenCount = metadata.token_count || fileInfo?.token_count || 'N/A';
+      
       const item = utils.createElement("div", {
         className: "content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 " +
                    "cursor-pointer hover:shadow-md transition-shadow"
@@ -946,18 +960,18 @@
       const sourceDiv = utils.createElement("div", { className: "flex items-center truncate" });
       sourceDiv.appendChild(utils.createElement("span", {
         className: "text-lg mr-2",
-        textContent: utils.fileIcon(fileInfo?.file_type || metadata.file_type || "txt")
+        textContent: utils.fileIcon(fileType)
       }));
         
       const sourceDetails = utils.createElement("div", { className: "truncate" });
       sourceDetails.appendChild(utils.createElement("div", {
         className: "font-medium truncate",
-        textContent: fileInfo?.filename || metadata.file_name || "Unknown source",
-        title: fileInfo?.filename || metadata.file_name
+        textContent: filename,
+        title: filename
       }));
       sourceDetails.appendChild(utils.createElement("div", {
         className: "text-xs text-gray-500 truncate",
-        textContent: `Chunk ${metadata.chunk_index || 0} • ${utils.formatDate(metadata.processed_at || fileInfo?.created_at)}`
+        textContent: `Chunk ${chunkIndex} • ${utils.formatDate(createdAt)}`
       }));
       
       sourceDiv.appendChild(sourceDetails);
