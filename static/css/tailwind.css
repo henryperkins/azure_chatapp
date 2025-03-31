@@ -401,13 +401,27 @@
 
 /* Consolidated transition classes */
 #mainSidebar {
-    @apply transform transition-transform duration-300 ease-in-out;
+    @apply transform transition-transform duration-300 ease-out;
     transform: translateX(-100%);
     z-index: 50;
+    will-change: transform;
 }
 
 #mainSidebar.translate-x-0 {
     transform: translateX(0);
+}
+
+#sidebarBackdrop {
+    @apply z-[99] transition-opacity duration-300 ease-out;
+    will-change: opacity;
+}
+
+/* Motion reduction preference */
+@media (prefers-reduced-motion) {
+    #mainSidebar,
+    #sidebarBackdrop {
+        @apply transition-none;
+    }
 }
 
 /* Mobile-first styles */
