@@ -283,6 +283,14 @@
           { enable: enabled }
         );
         
+        // Store KB status in localStorage for the chat to access
+        localStorage.setItem(`kb_enabled_${projectId}`, String(enabled));
+        
+        // Also update cache in knowledgeBaseState if available
+        if (window.knowledgeBaseState?.invalidateCache) {
+          window.knowledgeBaseState.invalidateCache(projectId);
+        }
+        
         window.showNotification(
           `Knowledge base ${enabled ? "enabled" : "disabled"}`,
           "success"
@@ -353,8 +361,9 @@
         );
 
         this.state.isSearching = false;
-        const results = response.data?.results || [];
-        if (typeof this._renderSearchResults === 'function') {
+        // Ensure results is always an array
+        const results = Array.isArray(response.data?.results) ? response.data.results : [];
+        if (typeof this._renderSearchResults === 'function' && results.length > 0) {
           this._renderSearchResults(results);
         }
       } catch (err) {
@@ -952,7 +961,9 @@
      * Render search results with proper error handling and metadata display
      */
     _renderSearchResults(results) {
-      const { resultsContainer, resultsSection, noResultsSection } = this.elements;
+        // Validate results is an array before processing
+        if (!Array.isArray(results)) results = [];
+        const { resultsContainer, resultsSection, noResultsSection } = this.elements;
       if (!resultsContainer) return;
 
       // Clear previous results

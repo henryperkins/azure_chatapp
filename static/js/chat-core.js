@@ -83,16 +83,48 @@ window.initializeChat = async function () {
       window.projectChatInterface = window.chatInterface;
     }
 
-    // Listen for model configuration changes
+    // Listen for model configuration changes with improved handling
     document.addEventListener('modelConfigChanged', (e) => {
-      if (chatInterface && chatInterface.messageService) {
-        const modelName = e.detail?.modelName || localStorage.getItem('modelName');
-        if (modelName) {
-          window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-          window.MODEL_CONFIG.modelName = modelName;
-          window.MODEL_CONFIG.maxTokens = Number(e.detail?.maxTokens) || 200000;
-          window.MODEL_CONFIG.thinkingBudget = Number(e.detail?.thinkingBudget) || 10000;
+      try {
+        console.log("Model config changed event received:", e.detail);
+        
+        // Ensure MODEL_CONFIG exists
+        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+        
+        // Update model name from event or localStorage
+        const modelName = e.detail?.modelName || localStorage.getItem('modelName') || "claude-3-sonnet-20240229";
+        window.MODEL_CONFIG.modelName = modelName;
+        
+        // Update max tokens with proper fallback
+        const storedMaxTokens = localStorage.getItem('maxTokens') || "500";
+        window.MODEL_CONFIG.maxTokens = Number(e.detail?.maxTokens) || Number(storedMaxTokens) || 500;
+        
+        // Update thinking budget with proper fallback
+        const storedThinkingBudget = localStorage.getItem('thinkingBudget') || "16000";
+        window.MODEL_CONFIG.thinkingBudget = Number(e.detail?.thinkingBudget) || Number(storedThinkingBudget) || 16000;
+        
+        // Update extended thinking settings
+        const storedExtendedThinking = localStorage.getItem('extendedThinking') === "true";
+        window.MODEL_CONFIG.extendedThinking = e.detail?.extendedThinking === "true" || storedExtendedThinking;
+        
+        // Update vision settings
+        const storedVisionEnabled = localStorage.getItem('visionEnabled') === "true";
+        window.MODEL_CONFIG.visionEnabled = e.detail?.visionEnabled === "true" || storedVisionEnabled;
+        window.MODEL_CONFIG.visionDetail = e.detail?.visionDetail || localStorage.getItem('visionDetail') || "auto";
+        
+        // Update reasoning effort setting
+        const storedReasoning = localStorage.getItem('reasoningEffort') || "medium";
+        window.MODEL_CONFIG.reasoningEffort = e.detail?.reasoningEffort || storedReasoning;
+        
+        console.log("Updated MODEL_CONFIG:", window.MODEL_CONFIG);
+        
+        // Update message service if available
+        if (chatInterface && chatInterface.messageService) {
+          // Pass the updated config to message service if needed
+          chatInterface.messageService.updateModelConfig(window.MODEL_CONFIG);
         }
+      } catch (error) {
+        console.error("Error handling model config change:", error);
       }
     });
 
