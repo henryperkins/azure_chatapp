@@ -831,8 +831,10 @@
                   }
                 }
                 
-                // Handle specific error types
-                if (errorMessage.includes("validation") || errorMessage.includes("format")) {
+                // Handle specific error types with more descriptive messages
+                if (errorMessage.includes("dangerous patterns") || errorMessage.includes("<script")) {
+                  errorMessage = "File contains potentially unsafe content (such as script tags). Please sanitize the file before uploading.";
+                } else if (errorMessage.includes("validation") || errorMessage.includes("format")) {
                   errorMessage = "File format not supported or validation failed";
                 } else if (errorMessage.includes("too large")) {
                   errorMessage = "File exceeds size limit";
@@ -840,9 +842,14 @@
                   errorMessage = "Project token limit exceeded";
                 } else if (error.response?.status === 422) {
                   errorMessage = "File validation failed - unsupported format or content";
+                } else if (error.response?.status === 400) {
+                  // Additional user-friendly message for 400 Bad Request errors
+                  if (errorMessage.includes("File upload failed")) {
+                    errorMessage = "File contains potentially unsafe content. Please remove script tags or other executable code.";
+                  }
                 }
                  
-                window.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
+                window.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error', { timeout: 6000 });
                 this.fileUploadStatus.failed++;
                 this.fileUploadStatus.completed++;
                 this._updateUploadProgress();
