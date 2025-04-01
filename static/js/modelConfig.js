@@ -47,26 +47,42 @@ function initModelConfig() {
       persistSettings();
     };
 
+    // Sync function with better error handling
     maxTokensSlider.addEventListener("input", () => {
-      syncMaxTokens(maxTokensSlider.value);
+      try {
+        syncMaxTokens(maxTokensSlider.value);
+      } catch (e) {
+        console.error("Error syncing max tokens from slider:", e);
+      }
     });
 
     maxTokensInput.addEventListener("change", () => {
-      syncMaxTokens(maxTokensInput.value);
+      try {
+        syncMaxTokens(maxTokensInput.value);
+      } catch (e) {
+        console.error("Error syncing max tokens from input:", e);
+      }
     });
 
     const maxTokensContainer = document.getElementById("maxTokensContainer");
     if (maxTokensContainer) {
-      maxTokensContainer.innerHTML = '';
-      maxTokensGroup.appendChild(maxTokensSlider);
-      maxTokensGroup.appendChild(maxTokensInput);
-      maxTokensContainer.appendChild(maxTokensGroup);
+      try {
+        maxTokensContainer.innerHTML = '';
+        maxTokensGroup.appendChild(maxTokensSlider);
+        maxTokensGroup.appendChild(maxTokensInput);
+        maxTokensContainer.appendChild(maxTokensGroup);
+        
+        // Keep hidden input for form submission
+        const maxTokensHidden = document.createElement("input");
+        maxTokensHidden.type = "hidden";
+        maxTokensHidden.id = "maxTokensHidden";
+        maxTokensHidden.value = maxTokensSlider.value;
+        maxTokensContainer.appendChild(maxTokensHidden);
+      } catch (e) {
+        console.error("Error setting up max tokens UI:", e);
+      }
     }
-
-    // Keep hidden input for form submission
-    const maxTokensHidden = document.createElement("input");
-    maxTokensHidden.type = "hidden";
-    maxTokensHidden.id = "maxTokensHidden";
+    
     const visionToggle = document.getElementById("visionToggle");
     
     
@@ -143,13 +159,25 @@ function initModelConfig() {
     const storedExtendedThinking = localStorage.getItem("extendedThinking") === "true";
     const storedThinkingBudget = localStorage.getItem("thinkingBudget") || "16000";
     
-    // Initialize UI
+    // Initialize UI with stored values
     if (modelSelect) modelSelect.value = storedModel;
+    
+    // Initialize max tokens UI elements
     if (maxTokensInput) {
       maxTokensInput.value = storedMaxTokens;
       maxTokensInput.type = "number";
       maxTokensInput.min = "100";
       maxTokensInput.max = "100000";
+    }
+    
+    if (maxTokensSlider) {
+      maxTokensSlider.value = storedMaxTokens;
+    }
+    
+    // Set hidden input value
+    const maxTokensHidden = document.getElementById("maxTokensHidden");
+    if (maxTokensHidden) {
+      maxTokensHidden.value = storedMaxTokens;
     }
     // Set the reasoningEffortSelect if there's a saved value
     if (storedReasoning) {
@@ -196,13 +224,27 @@ function initModelConfig() {
       visionToggle.addEventListener("change", persistSettings);
     }
 
-    // Ensure window.MODEL_CONFIG is in sync on load
+    // Initialize window.MODEL_CONFIG with stored values
+    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+    window.MODEL_CONFIG.modelName = storedModel;
+    window.MODEL_CONFIG.maxTokens = parseInt(storedMaxTokens, 10) || 500;
+    window.MODEL_CONFIG.visionEnabled = storedVision;
+    window.MODEL_CONFIG.extendedThinking = storedExtendedThinking;
+    window.MODEL_CONFIG.thinkingBudget = parseInt(storedThinkingBudget, 10) || 16000;
+    window.MODEL_CONFIG.reasoningEffort = storedReasoning || "medium";
+    
+    // Ensure settings are consistent and dispatch initialization event
     persistSettings();
 
     // Setup vision file input handler
     setupVisionFileInput();
 
-    console.log("Model config module initialized");
+    console.log("Model config module initialized with:", window.MODEL_CONFIG);
+    
+    // Dispatch event to notify other components
+    document.dispatchEvent(new CustomEvent('modelConfigInitialized', {
+      detail: window.MODEL_CONFIG
+    }));
   } catch (error) {
     console.error("Model config initialization failed:", error);
     throw error;
@@ -344,30 +386,56 @@ function setupVisionFileInput() {
 }
 
 /**
- * Save changes to localStorage and (optionally) to a global object
- */
-function persistSettings() {
-
-  // Model
-  const modelSelect = document.getElementById("modelSelect");
-  if (modelSelect) {
-    localStorage.setItem("modelName", modelSelect.value);
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.modelName = modelSelect.value;
-  }
-
-  // Max tokens
-  const maxTokensHidden = document.getElementById("maxTokensHidden");
-  if (maxTokensHidden) {
-    const tokensVal = Number(maxTokensHidden.value);
-    const clampedVal = Math.min(Math.max(tokensVal, 100), 100000); // clamp range 100..100000
-    maxTokensHidden.value = clampedVal.toString();
-
-    localStorage.setItem("maxTokens", clampedVal.toString());
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.maxTokens = clampedVal;
-  }
-
+ /**
+  * Save changes to localStorage and (optionally) to a global object
+  */
+ function persistSettings() {
+ 
+   // Model
+   const modelSelect = document.getElementById("modelSelect");
+   if (modelSelect) {
+     localStorage.setItem("modelName", modelSelect.value);
+     window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+     window.MODEL_CONFIG.modelName = modelSelect.value;
+   }
+ 
+   // Max tokens - Try multiple sources for the token value
+   let maxTokensValue;
+   
+   // First try the slider
+   const maxTokensSlider = document.getElementById("maxTokensSlider");
+   if (maxTokensSlider) {
+     maxTokensValue = Number(maxTokensSlider.value);
+   }
+   
+   // Then try the input field
+   if (!maxTokensValue) {
+     const maxTokensInput = document.getElementById("maxTokensInput");
+     if (maxTokensInput) {
+       maxTokensValue = Number(maxTokensInput.value);
+     }
+   }
+   
+   // Finally try the hidden field
+   if (!maxTokensValue) {
+     const maxTokensHidden = document.getElementById("maxTokensHidden");
+     if (maxTokensHidden) {
+       maxTokensValue = Number(maxTokensHidden.value);
+     }
+   }
+   
+   // Use a sensible default if all else fails
+   if (!maxTokensValue || isNaN(maxTokensValue)) {
+     maxTokensValue = 500;
+   }
+   
+   // Clamp to a reasonable range
+   const clampedVal = Math.min(Math.max(maxTokensValue, 100), 100000);
+   
+   // Update all token-related elements
+   localStorage.setItem("maxTokens", clampedVal.toString());
+   window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+   window.MODEL_CONFIG.maxTokens = clampedVal;
   // Reasoning effort
   const reasoningEffortRange = document.getElementById("reasoningEffortRange");
   if (reasoningEffortRange) {
@@ -425,29 +493,73 @@ function persistSettings() {
  * Update the model configuration display
  */
 function updateModelConfigDisplay() {
-  const currentModelNameEl = document.getElementById("currentModelName");
-  const currentMaxTokensEl = document.getElementById("currentMaxTokens");
-  const currentReasoningEl = document.getElementById("currentReasoning");
-  const visionEnabledStatusEl = document.getElementById("visionEnabledStatus");
-  
-  // Model
-  if (currentModelNameEl) {
-    currentModelNameEl.textContent = window.MODEL_CONFIG?.modelName || "N/A";
-  }
+  try {
+    // Ensure MODEL_CONFIG exists
+    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+    
+    // Get display elements
+    const currentModelNameEl = document.getElementById("currentModelName");
+    const currentMaxTokensEl = document.getElementById("currentMaxTokens");
+    const currentReasoningEl = document.getElementById("currentReasoning");
+    const visionEnabledStatusEl = document.getElementById("visionEnabledStatus");
+    
+    // Model - with failsafe fallbacks
+    if (currentModelNameEl) {
+      const modelName = window.MODEL_CONFIG.modelName ||
+                       localStorage.getItem("modelName") ||
+                       "claude-3-sonnet-20240229";
+      currentModelNameEl.textContent = modelName;
+    }
 
-  // Max Tokens
-  if (currentMaxTokensEl) {
-    currentMaxTokensEl.textContent = `${window.MODEL_CONFIG?.maxTokens?.toString() || "N/A"} tokens`;
-  }
+    // Max Tokens - with failsafe fallbacks
+    if (currentMaxTokensEl) {
+      const maxTokens = window.MODEL_CONFIG.maxTokens ||
+                       localStorage.getItem("maxTokens") ||
+                       "500";
+      currentMaxTokensEl.textContent = `${maxTokens} tokens`;
+    }
 
-  // Reasoning
-  if (currentReasoningEl) {
-    currentReasoningEl.textContent = window.MODEL_CONFIG?.reasoningEffort || "N/A";
-  }
+    // Reasoning - with failsafe fallbacks
+    if (currentReasoningEl) {
+      const reasoningEffort = window.MODEL_CONFIG.reasoningEffort ||
+                             localStorage.getItem("reasoningEffort") ||
+                             "medium";
+      currentReasoningEl.textContent = reasoningEffort;
+    }
 
-  // Vision
-  if (visionEnabledStatusEl) {
-    visionEnabledStatusEl.textContent = window.MODEL_CONFIG?.visionEnabled ? "Enabled" : "Disabled";
+    // Vision - with failsafe fallbacks
+    if (visionEnabledStatusEl) {
+      const visionEnabled = window.MODEL_CONFIG.visionEnabled ||
+                            localStorage.getItem("visionEnabled") === "true";
+      visionEnabledStatusEl.textContent = visionEnabled ? "Enabled" : "Disabled";
+    }
+    
+    // Also update any UI elements that should reflect these values
+    const modelSelect = document.getElementById("modelSelect");
+    if (modelSelect && window.MODEL_CONFIG.modelName) {
+      try {
+        modelSelect.value = window.MODEL_CONFIG.modelName;
+      } catch (e) {
+        console.warn("Could not update model select UI:", e);
+      }
+    }
+    
+    // Update UI token elements if present
+    try {
+      const maxTokensSlider = document.getElementById("maxTokensSlider");
+      const maxTokensInput = document.getElementById("maxTokensInput");
+      const maxTokensHidden = document.getElementById("maxTokensHidden");
+      
+      if (window.MODEL_CONFIG.maxTokens) {
+        if (maxTokensSlider) maxTokensSlider.value = window.MODEL_CONFIG.maxTokens;
+        if (maxTokensInput) maxTokensInput.value = window.MODEL_CONFIG.maxTokens;
+        if (maxTokensHidden) maxTokensHidden.value = window.MODEL_CONFIG.maxTokens;
+      }
+    } catch (e) {
+      console.warn("Could not update token UI elements:", e);
+    }
+  } catch (error) {
+    console.error("Error updating model config display:", error);
   }
 }
 

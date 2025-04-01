@@ -13,7 +13,7 @@ let sidebar = null;
 let isOpen = false;
 let toggleBtn = null;
 let closeBtn = null;
-let savedTab = null;
+let savedTab = localStorage.getItem('sidebarActiveTab') || null;
 
 // Define toggleSidebar first since it's used in initializeSidebarToggle
 window.toggleSidebar = function() {
@@ -171,7 +171,111 @@ window.reinitializeSidebar = function() {
   initializeSidebar();
 };
 
-document.addEventListener('DOMContentLoaded', initializeSidebar);
+/**
+ * Search conversation list in the sidebar based on search query
+ * @param {string} query - The search query to filter conversations
+ */
+function searchSidebarConversations(query) {
+  const sidebarConversations = document.getElementById('sidebarConversations');
+  if (!sidebarConversations) return;
+
+  const conversations = sidebarConversations.querySelectorAll('li');
+  const searchTerm = query.toLowerCase();
+  let hasVisibleConversations = false;
+
+  conversations.forEach(conv => {
+    // Skip if it's an empty state message
+    if (conv.classList.contains('text-center') && conv.classList.contains('text-gray-500')) {
+      return;
+    }
+    
+    const title = conv.querySelector('.truncate')?.textContent.toLowerCase() || '';
+    const isVisible = title.includes(searchTerm);
+    conv.classList.toggle('hidden', !isVisible);
+    
+    if (isVisible) {
+      hasVisibleConversations = true;
+    }
+  });
+
+  // Show empty state if no matching conversations
+  const existingEmptyState = sidebarConversations.querySelector('.text-center.text-gray-500.py-4');
+  if (!hasVisibleConversations) {
+    if (!existingEmptyState) {
+      const emptyState = document.createElement('li');
+      emptyState.className = 'text-center text-gray-500 py-4';
+      emptyState.textContent = 'No matching conversations found';
+      sidebarConversations.appendChild(emptyState);
+    }
+  } else if (existingEmptyState && existingEmptyState.textContent === 'No matching conversations found') {
+    existingEmptyState.remove();
+  }
+}
+
+/**
+ * Search projects list in the sidebar based on search query
+ * @param {string} query - The search query to filter projects
+ */
+function searchSidebarProjects(query) {
+  const sidebarProjects = document.getElementById('sidebarProjects');
+  if (!sidebarProjects) return;
+
+  const projects = sidebarProjects.querySelectorAll('li');
+  const searchTerm = query.toLowerCase();
+  let hasVisibleProjects = false;
+
+  projects.forEach(project => {
+    // Skip if it's an empty state message
+    if (project.classList.contains('text-center') && project.classList.contains('text-gray-500')) {
+      return;
+    }
+    
+    const projectName = project.querySelector('span')?.textContent.toLowerCase() || '';
+    const isVisible = projectName.includes(searchTerm);
+    project.classList.toggle('hidden', !isVisible);
+    
+    if (isVisible) {
+      hasVisibleProjects = true;
+    }
+  });
+
+  // Show empty state if no matching projects
+  const existingEmptyState = sidebarProjects.querySelector('.text-center.text-gray-500.py-4');
+  if (!hasVisibleProjects) {
+    if (!existingEmptyState) {
+      const emptyState = document.createElement('li');
+      emptyState.className = 'text-center text-gray-500 py-4';
+      emptyState.textContent = 'No matching projects found';
+      sidebarProjects.appendChild(emptyState);
+    }
+  } else if (existingEmptyState && existingEmptyState.textContent === 'No matching projects found') {
+    existingEmptyState.remove();
+  }
+}
+
+// Setup search functionality
+function setupSearchInput() {
+  // Set up conversation search
+  const chatSearchInput = document.getElementById('chatSearchInput');
+  if (chatSearchInput) {
+    chatSearchInput.addEventListener('input', (e) => {
+      searchSidebarConversations(e.target.value);
+    });
+  }
+  
+  // Set up project search
+  const projectSearchInput = document.getElementById('sidebarProjectSearch');
+  if (projectSearchInput) {
+    projectSearchInput.addEventListener('input', (e) => {
+      searchSidebarProjects(e.target.value);
+    });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initializeSidebar();
+  setupSearchInput();
+});
 
 /**
  * Ensures the model dropdown is initialized on page load 
@@ -229,22 +333,40 @@ function setupSidebarTabs() {
       loader: config.loader
     };
   });
-  
-  // Make sure all elements exist before setting up event handlers
-  if (!tabs.recent.button || !tabs.starred.button || !tabs.projects.button) {
-    console.warn('Sidebar tabs not found in the DOM');
-    return;
+  // Determine if we're on the projects page
+  const isProjectsPage = window.location.pathname.includes('/projects') ||
+                        document.getElementById('projectManagerPanel');
+                        
+  // Check required tab buttons based on page
+  if (isProjectsPage) {
+    // On projects page, we only need the projects tab
+    if (!tabs.projects.button || !tabs.projects.content) {
+      console.warn('Projects tab elements not found in the DOM');
+      return;
+    }
+  } else {
+    // On chat page, check if at least the recent tab is available
+    if (!tabs.recent.button || !tabs.recent.content) {
+      console.warn('Recent tab elements not found in the DOM');
+      return;
+    }
   }
   
-  // Set current tab based on page
-  const isProjectsPage = window.location.pathname.includes('/projects') || 
-                        document.getElementById('projectManagerPanel');
-  const initialTab = isProjectsPage ? 'projects' : 'recent';
-
-  // Redirect if trying to switch away from projects tab on projects page
+  // Set current tab based on saved preference or page
+  // (Note: isProjectsPage is already defined above)
+  
+  // Load user preference from localStorage or use default
+  savedTab = localStorage.getItem('sidebarActiveTab');
+  
+  // Override with 'projects' if on projects page and not already set to projects
   if (isProjectsPage && savedTab !== 'projects') {
     localStorage.setItem('sidebarActiveTab', 'projects');
     savedTab = 'projects';
+  }
+  
+  // Use default if no saved tab
+  if (!savedTab) {
+    savedTab = isProjectsPage ? 'projects' : 'recent';
   }
   
   // Function to activate a tab
@@ -282,15 +404,22 @@ function setupSidebarTabs() {
       if (tabName === 'recent') {
         // Make sure conversations are loaded
         if (typeof window.loadConversationList === 'function') {
+          console.log("Loading conversation list for recent tab");
           setTimeout(() => window.loadConversationList(), 300);
+        } else {
+          console.warn("loadConversationList function not available");
         }
       } else if (tabName === 'starred') {
         // Load starred conversations
+        console.log("Loading starred conversations");
         setTimeout(() => loadStarredConversations(), 300);
       } else if (tabName === 'projects') {
         // Make sure projects are loaded
         if (typeof window.loadSidebarProjects === 'function') {
+          console.log("Loading sidebar projects for projects tab");
           setTimeout(() => window.loadSidebarProjects(), 300);
+        } else {
+          console.warn("loadSidebarProjects function not available");
         }
       }
     } else {
@@ -677,6 +806,8 @@ window.sidebar = {
   toggleStarConversation,
   isConversationStarred,
   loadStarredConversations,
+  searchSidebarConversations,
+  searchSidebarProjects,
   toggle: toggleSidebar
 };
 
