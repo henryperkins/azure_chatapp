@@ -10,6 +10,19 @@ window.MessageService = function(options = {}) {
   this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error));
   this.chatId = null;
   this.wsService = null;
+  
+  // Initialize with current model configuration if available
+  this.modelConfig = window.MODEL_CONFIG || {
+    modelName: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
+    maxTokens: parseInt(localStorage.getItem("maxTokens") || "500", 10),
+    extendedThinking: localStorage.getItem("extendedThinking") === "true",
+    thinkingBudget: parseInt(localStorage.getItem("thinkingBudget") || "16000", 10),
+    reasoningEffort: localStorage.getItem("reasoningEffort") || "medium",
+    visionEnabled: localStorage.getItem("visionEnabled") === "true",
+    visionDetail: localStorage.getItem("visionDetail") || "auto"
+  };
+  
+  console.log("MessageService initialized with model config:", this.modelConfig);
 };
 
 // Initialize service with chat ID and optional WebSocket service
@@ -57,23 +70,57 @@ window.MessageService.prototype.sendMessage = async function(content) {
     const isProjectContext = window.location.pathname.includes('/projects');
     const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
     
+    // Use the stored model config if available, otherwise fall back to localStorage
     const messagePayload = {
       type: "user_message",
       content: content,
-      model_id: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
-      enable_thinking: localStorage.getItem("extendedThinking") === "true" || true,
+      model_id: this.modelConfig?.modelName || localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
+      enable_thinking: this.modelConfig?.extendedThinking || localStorage.getItem("extendedThinking") === "true" || true,
       project_id: isProjectContext ? projectId : null
     };
+
+    // Add vision parameters if enabled
+    if (this.modelConfig?.visionEnabled && this.modelConfig?.visionImage) {
+      messagePayload.vision_enabled = true;
+      messagePayload.vision_image = this.modelConfig.visionImage;
+      messagePayload.vision_detail = this.modelConfig.visionDetail || "auto";
+    }
+    
+    // Add reasoning parameters if available
+    if (this.modelConfig?.reasoningEffort) {
+      messagePayload.reasoning_effort = this.modelConfig.reasoningEffort;
+    }
 
     // Only include project_id if we're in project context
     if (isProjectContext && projectId) {
       messagePayload.project_id = projectId;
+      
+      // Add knowledge base integration
+      try {
+        // Check if knowledge base is enabled for this project
+        // First check project-specific conversation setting, then check global project KB setting
+        const kbStatus = await this._checkKnowledgeBaseStatus(projectId);
+        if (kbStatus) {
+          messagePayload.use_knowledge_base = kbStatus.enabled;
+          console.log(`Using knowledge base for project ${projectId}: ${kbStatus.enabled}`);
+        }
+      } catch (e) {
+        console.warn("Error checking knowledge base status:", e);
+      }
     }
     
     // Add thinking budget if available and model supports it
-    const thinkingBudget = localStorage.getItem("thinkingBudget");
+    const thinkingBudget = this.modelConfig?.thinkingBudget || localStorage.getItem("thinkingBudget");
     if (thinkingBudget) {
-      messagePayload.thinking_budget = parseInt(thinkingBudget, 10);
+      try {
+        const budget = parseInt(thinkingBudget, 10);
+        if (!isNaN(budget) && budget > 0) {
+          messagePayload.thinking_budget = budget;
+          console.log(`Applied thinking budget of ${budget} tokens`);
+        }
+      } catch (e) {
+        console.warn('Error parsing thinking budget:', e);
+      }
     }
 
     if (this.wsService && this.wsService.isConnected()) {
@@ -121,16 +168,44 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       (window.location.pathname.match(/projects\/([^/]+)/) || [])[1];
         
     // Determine correct endpoint based on context
-    const endpoint = projectId 
+    const endpoint = projectId
       ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
       : `/api/chat/conversations/${this.chatId}/messages`;
     
-    // Ensure projectId is included in request if available
-    const options = projectId ? { project_id: projectId } : {};
+    // Create options with projectId if available
+    const requestBody = {
+      ...messagePayload,
+      project_id: projectId || null
+    };
     
-    // Use window.apiRequest instead of direct fetch
-    const data = await window.apiRequest(endpoint, 'POST', messagePayload);
-    const responseData = data.data || data;
+    // Check if knowledge base should be used
+    if (projectId) {
+      try {
+        const kbStatus = await this._checkKnowledgeBaseStatus(projectId);
+        if (kbStatus) {
+          requestBody.use_knowledge_base = kbStatus.enabled;
+          console.log(`[HTTP] Using knowledge base for project ${projectId}: ${kbStatus.enabled}`);
+        }
+      } catch (e) {
+        console.warn("[HTTP] Error checking knowledge base status:", e);
+      }
+    }
+    
+    // Use fetch directly if apiRequest is not available
+    const fetchOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify(requestBody)
+    };
+    
+    const response = await (window.apiRequest ?
+      window.apiRequest(endpoint, 'POST', requestBody) :
+      fetch(endpoint, fetchOptions).then(res => res.json()));
+    
+    const responseData = response.data || response;
     
     console.log('API response data:', responseData);
     
@@ -177,18 +252,31 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       assistantContent = responseData.assistant_content;
     }
     
-    this.onMessageReceived({
-      role: 'assistant',
-      content: assistantContent,
-      thinking: assistantThinking,
-      redacted_thinking: assistantRedactedThinking,
-      metadata: assistantMetadata
-    });
+    // Only call onMessageReceived if we actually got content
+    if (assistantContent) {
+      this.onMessageReceived({
+        role: 'assistant',
+        content: assistantContent,
+        thinking: assistantThinking,
+        redacted_thinking: assistantRedactedThinking,
+        metadata: assistantMetadata
+      });
+    } else {
+      console.error('Empty or missing assistant content in response:', responseData);
+      this.onError('HTTP message', new Error('No response content received from API'));
+    }
   } catch (error) {
     // Use standardized error handling
     window.ChatUtils?.handleError?.('HTTP message', error) || 
     this.onError('HTTP message', error);
   }
+};
+
+// Update model configuration
+window.MessageService.prototype.updateModelConfig = function(config) {
+  // Store current model configuration for message sending
+  this.modelConfig = config;
+  console.log("MessageService updated with new model config:", config);
 };
 
 // Handle WebSocket messages
@@ -254,5 +342,49 @@ window.MessageService.prototype._handleWsMessage = function(event) {
     // Use standardized error handling
     window.ChatUtils?.handleError?.('Processing WebSocket message', error) || 
     this.onError('Processing WebSocket message', error);
+  }
+};
+
+/**
+ * Check if knowledge base is enabled for a project
+ * @private
+ * @param {string} projectId - Project ID
+ * @returns {Promise<Object>} Knowledge base status
+ */
+window.MessageService.prototype._checkKnowledgeBaseStatus = async function(projectId) {
+  try {
+    // First check local cache
+    const localSetting = localStorage.getItem(`kb_enabled_${projectId}`);
+    if (localSetting !== null) {
+      return { enabled: localSetting === "true", source: "localStorage" };
+    }
+    
+    // If window.knowledgeBaseState is available, use it
+    if (window.knowledgeBaseState?.verifyKB) {
+      const kbState = await window.knowledgeBaseState.verifyKB(projectId);
+      if (kbState) {
+        // Cache the result
+        localStorage.setItem(`kb_enabled_${projectId}`, String(kbState.isActive));
+        return { enabled: kbState.isActive, exists: kbState.exists, source: "api" };
+      }
+    }
+    
+    // Fall back to API request
+    try {
+      const response = await window.apiRequest(
+        `/api/projects/${projectId}/knowledge-base-status`,
+        "GET"
+      );
+      
+      const data = response.data || {};
+      localStorage.setItem(`kb_enabled_${projectId}`, String(data.isActive));
+      return { enabled: data.isActive, exists: data.exists, source: "api" };
+    } catch (apiError) {
+      console.warn("Knowledge base status API error:", apiError);
+      return { enabled: false, exists: false, source: "api_error" };
+    }
+  } catch (error) {
+    console.warn("Error checking knowledge base status:", error);
+    return { enabled: false, error: true };
   }
 };
