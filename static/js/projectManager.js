@@ -462,13 +462,22 @@
 
   // Helper function to sanitize file content
   async function sanitizeFileContent(file) {
-    const dangerousPatterns = ["curl"]; // Example pattern
+    const dangerousPatterns = [
+      "curl",
+      "<script[^>]*>.*?</script>", // Script tags with content
+      "<script[^>]*>", // Opening script tags
+      "</script>", // Closing script tags
+      "eval\\(.*?\\)", // eval() calls
+      "document\\.cookie", // Cookie access
+      "\\bexec\\(", // exec() calls
+      "\\bsystem\\(", // system() calls
+    ];
     const fileContent = await file.text();
 
     let sanitizedContent = fileContent;
     dangerousPatterns.forEach(pattern => {
       const regex = new RegExp(pattern, "gi");
-      sanitizedContent = sanitizedContent.replace(regex, "[REMOVED]");
+      sanitizedContent = sanitizedContent.replace(regex, "[SANITIZED]");
     });
     return sanitizedContent;
   }

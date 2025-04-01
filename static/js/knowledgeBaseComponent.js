@@ -132,7 +132,12 @@
         if (kb.is_active) {
           if (kb.stats?.file_count === 0) {
             this._showStatusAlert(
-              "Knowledge Base is inactive - upload files to enable",
+              "Knowledge Base is empty - upload files to use with conversations",
+              "warning"
+            );
+          } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0) {
+            this._showStatusAlert(
+              "Files need processing - click 'Reprocess Files' to make them searchable",
               "warning"
             );
           }
@@ -142,6 +147,11 @@
               "info"
             );
           }
+        } else {
+          this._showStatusAlert(
+            "Knowledge Base is disabled - toggle to enable for conversations",
+            "warning"
+          );
         }
         
         // Store the project_id in a data attribute for future reference
@@ -266,9 +276,9 @@
       );
       
       try {
-        // UPDATED: Use the correct toggle endpoint
+        // Use the correct toggle endpoint with the proper project ID
         await window.apiRequest(
-          `/api/projects/${project.id}/knowledge-bases/toggle`,
+          `/api/projects/${projectId}/knowledge-bases/toggle`,
           "POST",
           { enable: enabled }
         );
@@ -281,9 +291,15 @@
         // Refresh stats and KB info
         if (window.projectManager) {
           await Promise.all([
-            window.projectManager.loadProjectStats(project.id),
-            this._loadKnowledgeBaseHealth(project.knowledge_base_id)
+            window.projectManager.loadProjectStats(projectId),
+            window.projectManager.loadProjectDetails(projectId) // Reload the full project
           ]);
+          
+          // If we can get the KB ID, load its health
+          const currentProject = window.projectManager.currentProject();
+          if (currentProject?.knowledge_base_id) {
+            await this._loadKnowledgeBaseHealth(currentProject.knowledge_base_id);
+          }
         }
       } catch (err) {
         console.error("Error toggling knowledge base:", err);
@@ -360,13 +376,30 @@
     }
 
     /**
-     * Reprocess files in the knowledge base
+     * Reprocess files in the knowledge base with enhanced status reporting
      */
     async reprocessFiles() {
       const projectId = this._getCurrentProjectId();
       if (!projectId) {
         window.showNotification("Please select a project first", "error");
         return;
+      }
+
+      // Get the button element for visual feedback
+      const reprocessBtn = this.elements.reprocessButton;
+      if (reprocessBtn) {
+        // Add loading state
+        const originalText = reprocessBtn.innerHTML;
+        reprocessBtn.innerHTML = `
+          <div class="inline-flex items-center">
+            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Processing...
+          </div>
+        `;
+        reprocessBtn.disabled = true;
       }
 
       try {
@@ -376,15 +409,34 @@
           "POST"
         );
         
-        window.showNotification(
-          `Reprocessed ${response.data.processed_success} files successfully`,
-          "success"
-        );
+        const successCount = response.data?.processed_success || 0;
+        const failedCount = response.data?.processed_failed || 0;
+        const totalCount = response.data?.total_files || 0;
         
-        // Refresh the file list and stats
+        // Provide comprehensive feedback
+        let message = `Reprocessed ${successCount} files successfully`;
+        if (failedCount > 0) {
+          message += `, ${failedCount} failed`;
+        }
+        if (successCount === 0 && totalCount === 0) {
+          message = "No files to process. Upload files first.";
+        }
+        
+        window.showNotification(message, failedCount > 0 ? "warning" : "success");
+        
+        // Refresh the file list, stats, and knowledge base status
         if (window.projectManager) {
-          window.projectManager.loadProjectFiles(projectId);
-          window.projectManager.loadProjectStats(projectId);
+          await Promise.all([
+            window.projectManager.loadProjectFiles(projectId),
+            window.projectManager.loadProjectStats(projectId),
+            window.projectManager.loadProjectDetails(projectId)
+          ]);
+          
+          // If we can get the KB ID, load its health
+          const currentProject = window.projectManager.currentProject();
+          if (currentProject?.knowledge_base_id) {
+            await this._loadKnowledgeBaseHealth(currentProject.knowledge_base_id);
+          }
         }
       } catch (error) {
         // Handle specific status codes
@@ -395,12 +447,20 @@
           errorMessage = "Cannot process files: validation failed";
         } else if (status === 404) {
           errorMessage = "Project or knowledge base not found";
+        } else if (status === 400) {
+          errorMessage = "Knowledge base setup required before processing files";
         } else if (error?.response?.data?.detail) {
           errorMessage = error.response.data.detail;
         }
         
         window.showNotification(errorMessage, "error");
         console.error("Reprocessing error:", error);
+      } finally {
+        // Restore button state
+        if (reprocessBtn) {
+          reprocessBtn.innerHTML = originalText;
+          reprocessBtn.disabled = false;
+        }
       }
     }
 
@@ -800,6 +860,22 @@
         statusElement.className = isActive
           ? "text-green-600 font-medium"
           : "text-red-600 font-medium";
+
+        // Make it clearer to the user what the state means
+        statusElement.title = isActive
+          ? "Knowledge base is enabled and will be used for search and conversation context"
+          : "Knowledge base is disabled and will not be used until activated";
+      }
+      
+      // Update additional status indicators if they exist
+      const statusBadge = document.getElementById("kbStatusBadge");
+      if (statusBadge) {
+        statusBadge.className = isActive
+          ? "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+          : "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800";
+        statusBadge.innerHTML = isActive
+          ? '<span class="h-2 w-2 rounded-full bg-green-400 mr-1.5"></span>Active'
+          : '<span class="h-2 w-2 rounded-full bg-red-400 mr-1.5"></span>Inactive';
       }
     }
     
@@ -825,6 +901,9 @@
      */
     _updateUploadButtonsState(hasKnowledgeBase, isActive) {
       const uploadButtons = document.querySelectorAll('[data-requires-kb="true"]');
+      const fileCountEl = document.getElementById("knowledgeFileCount");
+      const fileCount = fileCountEl ? parseInt(fileCountEl.textContent, 10) || 0 : 0;
+      
       uploadButtons.forEach(button => {
         const isDisabled = !hasKnowledgeBase || !isActive;
         button.disabled = isDisabled;
@@ -832,13 +911,33 @@
         if (isDisabled) {
           button.classList.add('opacity-50', 'cursor-not-allowed');
           button.title = !hasKnowledgeBase
-            ? "Knowledge Base required to upload files"
-            : "Knowledge Base is inactive";
+            ? "Knowledge Base required to upload files - click 'Setup Knowledge Base' first"
+            : "Knowledge Base is inactive - toggle it on to enable uploads";
         } else {
           button.classList.remove('opacity-50', 'cursor-not-allowed');
-          button.title = "Upload file to Knowledge Base";
+          button.title = fileCount > 0
+            ? "Upload more files to Knowledge Base"
+            : "Upload your first file to Knowledge Base";
         }
       });
+      
+      // Update reprocess button state based on file count
+      if (this.elements.reprocessButton) {
+        if (fileCount === 0) {
+          this.elements.reprocessButton.disabled = true;
+          this.elements.reprocessButton.classList.add('opacity-50', 'cursor-not-allowed');
+          this.elements.reprocessButton.title = "No files to process - upload files first";
+        } else {
+          this.elements.reprocessButton.disabled = !hasKnowledgeBase || !isActive;
+          if (!hasKnowledgeBase || !isActive) {
+            this.elements.reprocessButton.classList.add('opacity-50', 'cursor-not-allowed');
+            this.elements.reprocessButton.title = "Knowledge Base must be active to process files";
+          } else {
+            this.elements.reprocessButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            this.elements.reprocessButton.title = "Process files for search and context";
+          }
+        }
+      }
     }
     
     /**
