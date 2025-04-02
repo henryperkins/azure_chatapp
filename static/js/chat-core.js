@@ -74,10 +74,145 @@ window.initializeChat = async function () {
 
     // Create the chat interface only if not already created
     if (!window.chatInterface) {
-      window.chatInterface = new window.ChatInterface();
-      window.chatInterface.initialize();
+      // Ensure chat container exists and is visible
+      const chatContainer = await ensureChatContainerVisible();
+      if (!chatContainer) {
+        throw new Error('Chat container not found after multiple attempts');
+      }
+
+      // Use the same selector lookup logic as in ensureChatContainerVisible
+      const container = document.querySelector('#projectChatContainer') || 
+                       document.querySelector('#chatContainer');
+                      
+      // Adjust the containerSelector based on what was found
+      const containerSelector = container?.id === 'chatContainer' ? 
+                               '#chatContainer' : 
+                               '#projectChatContainer';
+                               
+      // Also adjust message container selector similarly
+      const messageSelector = container?.id === 'chatContainer' ? 
+                             '#chatMessages' : 
+                             '#projectChatMessages';
+                             
+      console.log(`Initializing chat with container: ${containerSelector}, messages: ${messageSelector}`);
+      
+      window.chatInterface = new window.ChatInterface({
+        containerSelector: containerSelector,
+        messageContainerSelector: messageSelector
+      });
+      
+      try {
+        await window.chatInterface.initialize();
+      } catch (err) {
+        console.error('Chat initialization failed:', err);
+        showChatError('Chat initialization failed. Please refresh the page.');
+        throw err;
+      }
     }
 
+    // Helper function to ensure chat container is visible
+  async function ensureChatContainerVisible() {
+    let attempts = 0;
+    const maxAttempts = 15;
+    const delay = 400;
+    
+    while (attempts < maxAttempts) {
+      // Use the existing project chat container
+      let container = document.querySelector('#projectChatContainer');
+        
+        // Check for containers that might be nested or within the project view
+        if (!container) {
+          container = document.querySelector('#projectChatUI') || 
+                      document.querySelector('#projectDetailsView #projectChatContainer');
+        }
+                          
+        // If container doesn't exist, create it in main content
+        if (!container) {
+          console.log("Chat container not found, creating one...");
+          const mainContent = document.querySelector('main');
+          
+          if (mainContent) {
+            container = document.createElement('div');
+            container.id = 'projectChatContainer';
+            container.className = 'mt-4 transition-all duration-300 ease-in-out';
+            container.style.display = 'block'; // Ensure it's explicitly visible
+            
+            // Create messages container
+            const messagesContainer = document.createElement('div');
+            messagesContainer.id = 'projectChatMessages';
+            messagesContainer.className = 'chat-message-container';
+            container.appendChild(messagesContainer);
+            
+            // Create input area
+            const inputArea = document.createElement('div');
+            inputArea.className = 'flex items-center border-t border-gray-200 dark:border-gray-700 p-2';
+            
+            const chatInput = document.createElement('input');
+            chatInput.id = 'projectChatInput';
+            chatInput.type = 'text';
+            chatInput.className = 'flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white';
+            chatInput.placeholder = 'Type your message...';
+            
+            const sendBtn = document.createElement('button');
+            sendBtn.id = 'projectChatSendBtn';
+            sendBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors';
+            sendBtn.textContent = 'Send';
+            
+            inputArea.appendChild(chatInput);
+            inputArea.appendChild(sendBtn);
+            container.appendChild(inputArea);
+            
+            // Add to DOM
+            mainContent.appendChild(container);
+            console.log("Created chat container:", container.id);
+          }
+        }
+                          
+        if (container) {
+          // Ensure the container is actually visible
+          container.classList.remove('hidden');
+          container.style.display = 'block';
+          
+          // Handle possible parent visibility
+          let parent = container.parentElement;
+          while (parent && parent !== document.body) {
+            if (parent.classList.contains('hidden')) {
+              parent.classList.remove('hidden');
+            }
+            if (parent.style.display === 'none') {
+              parent.style.display = 'block';
+            }
+            parent = parent.parentElement;
+          }
+          
+          // Double check it's actually visible now - may need interval for DOM to update
+          if (container.offsetParent !== null) {
+            console.log("Chat container found and visible:", container.id);
+            return container;
+          }
+          
+          console.log("Container found but not yet visible, waiting...");
+        }
+        
+        // If not found, log for debugging
+        if (attempts % 3 === 0) {
+          console.log(`Searching for chat container (attempt ${attempts+1}/${maxAttempts})...`);
+        }
+        
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      console.error("Could not find chat container with selectors: #projectChatContainer or #chatContainer");
+      return null;
+    }
+
+    function showChatError(message) {
+      const errorEl = document.createElement('div');
+      errorEl.className = 'p-4 bg-red-50 text-red-700 rounded mb-4';
+      errorEl.textContent = message;
+      document.querySelector('main')?.prepend(errorEl);
+    }
     // Ensure projectChatInterface is available for project page
     if (!window.projectChatInterface) {
       window.projectChatInterface = window.chatInterface;
@@ -283,11 +418,28 @@ window.testWebSocketConnection = async function () {
   }
 };
 
-// Auto-initialize chat if #chatUI is present in DOM
+// Auto-initialize chat for either page type
 document.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('chatUI')) {
-    window.initializeChat().catch(error => {
-      console.error("Failed to auto-initialize chat:", error);
-    });
+  // Ensure chat containers exist first
+  if (typeof window.ensureChatContainers === 'function') {
+    console.log("Ensuring chat containers exist...");
+    window.ensureChatContainers();
   }
+  
+  // Check for chat UI elements from either page type with a slightly longer delay
+  setTimeout(() => {
+    if (document.getElementById('chatUI') || 
+        document.getElementById('projectChatContainer') || 
+        document.getElementById('chatContainer') ||
+        document.getElementById('projectChatUI')) {
+      console.log("Chat UI element found, initializing chat system...");
+      setTimeout(() => {
+        window.initializeChat().catch(error => {
+          console.error("Failed to auto-initialize chat:", error);
+        });
+      }, 800); // Longer delay to ensure DOM is fully ready
+    } else {
+      console.log("No chat UI elements found, skipping chat initialization");
+    }
+  }, 200);
 });

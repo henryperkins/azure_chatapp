@@ -1,6 +1,7 @@
 // auth.js - Updated to rely on app.js's apiRequest and a single refresh approach
 // apiRequest availability will be checked when actually needed
 
+
 // -------------------------
 // Token Management
 // -------------------------
@@ -73,39 +74,48 @@ const TokenManager = {
    * to prevent parallel refresh calls.
    */
   async refreshTokens() {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000;
+    
     if (sessionStorage.getItem('refreshing')) {
-      let attempts = 0;
-      while (sessionStorage.getItem('refreshing') && attempts < 10) {
-        await new Promise(r => setTimeout(r, 300));
-        attempts++;
-      }
-      if (sessionStorage.getItem('refreshing')) {
-        throw new Error('Token refresh timeout');
-      }
-      return; // Another process completed the refresh
+      // Wait for existing refresh to complete
+      await new Promise(r => setTimeout(r, 500));
+      return;
     }
 
-    try {
-      sessionStorage.setItem('refreshing', 'true');
-      console.log('TokenManager: Attempting token refresh...');
-      // Use app.js's single fetch wrapper
-      if (!window.apiRequest) {
-        console.error('apiRequest not available - cannot refresh tokens');
-        throw new Error('Missing apiRequest implementation');
-      }
-      const data = await window.apiRequest('/api/auth/refresh', 'POST');
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        sessionStorage.setItem('refreshing', 'true');
+        console.log(`TokenManager: Attempting token refresh (attempt ${attempt})`);
+        
+        if (!window.apiRequest) {
+          throw new Error('Missing apiRequest implementation');
+        }
 
-      if (!data.access_token) {
-        throw new Error('No access token in refresh response');
+        const data = await window.apiRequest('/api/auth/refresh', 'POST');
+        
+        if (!data?.access_token) {
+          throw new Error('Invalid refresh response');
+        }
+
+        this.setTokens(data.access_token, data.refresh_token);
+        console.log('TokenManager: Token refresh successful');
+        return true;
+        
+      } catch (error) {
+        console.error(`Token refresh failed (attempt ${attempt}):`, error);
+        
+        if (attempt === MAX_RETRIES) {
+          // Clear tokens on final failure
+          this.clearTokens();
+          throw error;
+        }
+        
+        // Exponential backoff
+        await new Promise(r => setTimeout(r, RETRY_DELAY * attempt));
+      } finally {
+        sessionStorage.removeItem('refreshing');
       }
-      this.setTokens(data.access_token, data.refresh_token);
-      console.log('TokenManager: Token refresh successful');
-      return true;
-    } catch (error) {
-      console.error('TokenManager: Token refresh failed:', error);
-      throw error;
-    } finally {
-      sessionStorage.removeItem('refreshing');
     }
   }
 };
@@ -478,7 +488,7 @@ async function logout(e) {
 
     if (e) {
       notify("Logged out", "success");
-      window.location.href = '/';
+      window.location.href = '/index.html';
     }
   } catch (error) {
     console.error("Logout error:", error);
@@ -542,6 +552,11 @@ const authVerificationCache = {
 };
 
 async function verifyAuthState() {
+  if (isDevelopment) {
+    console.log('Development mode - skipping auth verification');
+    return true;
+  }
+
   try {
     if (authVerificationCache.isValid()) {
       return authVerificationCache.result;
