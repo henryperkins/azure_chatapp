@@ -574,26 +574,48 @@ async function verifyAuthState() {
       authVerificationCache.set(false);
       return false;
     }
+
+    // Handle expired tokens
     if (TokenManager.isExpired()) {
       console.log('verifyAuthState: Refreshing token because it is expired');
-      await TokenManager.refreshTokens();
+      try {
+        await TokenManager.refreshTokens();
+      } catch (refreshError) {
+        console.warn('Token refresh failed:', refreshError);
+        // Clear tokens and cache on refresh failure
+        TokenManager.clearTokens();
+        authVerificationCache.set(false);
+        broadcastAuth(false);
+        throw new Error('Session expired. Please login again.');
+      }
     }
 
     // Check with server
     if (!window.apiRequest) {
       return !!TokenManager.accessToken;
     }
-    const response = await window.apiRequest('/api/auth/verify');
-    // If server says we're authenticated
-    if (response.authenticated && !TokenManager.accessToken) {
-      // Possibly call updateAuthStatus to set tokens if they come back
-      await updateAuthStatus();
-      authVerificationCache.set(true);
-      return true;
-    }
 
-    authVerificationCache.set(response.authenticated);
-    return response.authenticated;
+    try {
+      const response = await window.apiRequest('/api/auth/verify');
+      // If server says we're authenticated
+      if (response.authenticated && !TokenManager.accessToken) {
+        await updateAuthStatus();
+        authVerificationCache.set(true);
+        return true;
+      }
+
+      authVerificationCache.set(response.authenticated);
+      return response.authenticated;
+    } catch (verifyError) {
+      if (verifyError.status === 401) {
+        console.warn('Auth verification failed - token invalid');
+        TokenManager.clearTokens();
+        authVerificationCache.set(false);
+        broadcastAuth(false);
+        throw new Error('Session expired. Please login again.');
+      }
+      throw verifyError;
+    }
   } catch (error) {
     console.warn('Auth verification error:', error);
     // If it's a network error, we might still have local tokens

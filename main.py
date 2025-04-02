@@ -25,15 +25,22 @@ from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import inspect
 
-# Import routers
+# ------------------------------------------------------------------------------
+# OLD conversation route imports removed:
+# from routes.conversations import router as conversations_router
+# from routes.projects.conversations import router as project_conversations_router
+# ------------------------------------------------------------------------------
+
+# Import your new unified conversations router
+from routes.unified_conversations import router as unified_conversations_router
+
+# Other router imports
 from auth import router as auth_router
-from routes.conversations import router as conversations_router
 from routes.file_upload import router as file_upload_router
 from routes.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
 from routes.projects.artifacts import router as project_artifacts_router
-from routes.projects.conversations import router as project_conversations_router
 
 # Import database utilities
 from db import init_db, get_async_session_context, async_engine
@@ -45,7 +52,9 @@ from utils.db_utils import schedule_token_cleanup
 # Import configuration
 from config import settings
 
-warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning, module='pypdf')
+warnings.filterwarnings(
+    "ignore", category=CryptographyDeprecationWarning, module="pypdf"
+)
 
 # Ensure Python recognizes config.py as a module
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -57,29 +66,26 @@ logger = logging.getLogger(__name__)
 
 # Configure SQLAlchemy logging
 sqla_loggers = [
-    'sqlalchemy.engine',
-    'sqlalchemy.pool',
-    'sqlalchemy.dialects',
-    'sqlalchemy.orm'
+    "sqlalchemy.engine",
+    "sqlalchemy.pool",
+    "sqlalchemy.dialects",
+    "sqlalchemy.orm",
 ]
-
 for logger_name in sqla_loggers:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
-    logging.getLogger(logger_name).propagate = False  # Prevent duplicate logs
+    logging.getLogger(logger_name).propagate = False
 
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 
 # Configure allowed hosts
-allowed_hosts = ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
+allowed_hosts = (
+    ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
+)
 
 # Create FastAPI app instance
 middleware = [
-    Middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=allowed_hosts,
-        www_redirect=False
-    ),
+    Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts, www_redirect=False),
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],  # Enforced environment variable
@@ -113,15 +119,15 @@ file uploads, and more.
     openapi_tags=[
         {
             "name": "conversations",
-            "description": "Operations with standalone conversations",
+            "description": "Operations with standalone and project-based conversations",
         },
         {
             "name": "projects",
             "description": "Core project management operations",
         },
         {
-            "name": "project-conversations",
-            "description": "Operations with project-specific conversations",
+            "name": "knowledge-bases",
+            "description": "Operations with knowledge bases",
         },
         {
             "name": "project-files",
@@ -132,8 +138,8 @@ file uploads, and more.
             "description": "Operations with project artifacts",
         },
         {
-            "name": "knowledge-bases",
-            "description": "Operations with knowledge bases",
+            "name": "authentication",
+            "description": "User authentication and token management",
         },
     ],
     docs_url="/docs" if settings.ENV != "production" else None,
@@ -143,38 +149,47 @@ file uploads, and more.
 # Enforce HTTPS in production
 if settings.ENV == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
-    
+
     @app.middleware("http")
     async def add_hsts_header(request: Request, call_next):
         response = await call_next(request)
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
         return response
+
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/", include_in_schema=False)
 async def root():
     """Return the root HTML file."""
     return FileResponse("static/index.html")
 
+
 @app.get("/index.html", include_in_schema=False)
 async def index():
     """Return the index HTML file."""
     return FileResponse("static/index.html")
+
 
 @app.get("/projects", include_in_schema=False)
 async def projects():
     """Return the projects HTML file."""
     return FileResponse("static/index.html")
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint to verify the application is running."""
     return {"status": "ok"}
 
+
 # Debug endpoints only available in non-production
 if settings.ENV != "production":
+
     @app.get("/debug/schema-check")
     async def debug_schema_check():
         """Debug endpoint to verify database schema alignment"""
@@ -182,13 +197,15 @@ if settings.ENV != "production":
             inspector = inspect(session.get_bind())
             return {
                 "project_files_columns": inspector.get_columns("project_files"),
-                "knowledge_bases_columns": inspector.get_columns("knowledge_bases")
+                "knowledge_bases_columns": inspector.get_columns("knowledge_bases"),
             }
+
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Return the favicon."""
     return FileResponse("static/favicon.ico")
+
 
 # --------------------------------
 # CUSTOM 422 HANDLER
@@ -201,35 +218,40 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     logger.warning(f"Validation error for request {request.url} - {exc.errors()}")
     content = {
         "detail": "Invalid request data",
-        "errors": exc.errors() if settings.ENV != "production" else None
+        "errors": exc.errors() if settings.ENV != "production" else None,
     }
     return JSONResponse(status_code=422, content=content)
+
 
 # -------------------------
 # Register Routers
 # -------------------------
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
-app.include_router(conversations_router, prefix="/api/chat/conversations", tags=["conversations"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 
 app.include_router(
     project_files_router,
-    prefix="/api/projects/{project_id}/files", 
-    tags=["project-files"]
+    prefix="/api/projects/{project_id}/files",
+    tags=["project-files"],
 )
 
 app.include_router(
     project_artifacts_router,
     prefix="/api/projects/{project_id}/artifacts",
-    tags=["project-artifacts"]
+    tags=["project-artifacts"],
 )
 
+# -----------------------------
+# Unified Conversations Router
+# -----------------------------
 app.include_router(
-    project_conversations_router,
-    tags=["project-conversations"]
+    unified_conversations_router,
+    prefix="/api",  # so routes become /api/conversations and /api/projects/{project_id}/conversations
+    tags=["conversations"],
 )
+
 
 # -------------------------
 # Startup & Shutdown Events
@@ -241,23 +263,30 @@ async def on_startup():
     try:
         # Initialize database with enhanced schema alignment
         await init_db()
-        
+
         # Validate schema using SQLAlchemy inspector
         async with async_engine.connect() as conn:
             inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
-            
+
             required_tables = {
                 "project_files": ["config"],
                 "knowledge_bases": ["config"],
                 "users": ["token_version"],
-                "messages": ["context_used"]
+                "messages": ["context_used"],
             }
-            
+
             for table, required_columns in required_tables.items():
-                if not await conn.run_sync(lambda sync_conn, t=table: inspector.has_table(t)):
+                if not await conn.run_sync(
+                    lambda s_conn, t=table: inspector.has_table(t)
+                ):
                     raise RuntimeError(f"Missing critical table: {table}")
-                    
-                columns = [col['name'] for col in await conn.run_sync(lambda sync_conn, t=table: inspector.get_columns(t))]
+
+                columns = [
+                    col["name"]
+                    for col in await conn.run_sync(
+                        lambda s_conn, t=table: inspector.get_columns(t)
+                    )
+                ]
                 missing = set(required_columns) - set(columns)
                 if missing:
                     raise RuntimeError(f"Missing columns in {table}: {missing}")
@@ -266,7 +295,7 @@ async def on_startup():
         upload_path = Path("./uploads/project_files")
         upload_path.mkdir(parents=True, exist_ok=True)
         upload_path.chmod(0o700)  # Restrictive permissions
-        
+
         # Initialize auth system
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
@@ -275,11 +304,14 @@ async def on_startup():
 
         # Schedule periodic token cleanup
         await schedule_token_cleanup(interval_minutes=30)
-        
-        logger.info("Startup completed: Database validated, uploads ready, auth initialized")
+
+        logger.info(
+            "Startup completed: Database validated, uploads ready, auth initialized"
+        )
     except Exception as e:
         logger.critical("Startup initialization failed: %s", e)
         raise
+
 
 @app.on_event("shutdown")
 async def on_shutdown():

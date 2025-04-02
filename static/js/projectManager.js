@@ -1,4 +1,4 @@
-/**
+ /**
  * projectManager.js
  * ------------------
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
@@ -330,8 +330,8 @@
   }
 
   /* ===========================
-     FILE OPERATIONS
-     =========================== */
+   * KNOWLEDGE BASE OPERATIONS
+   * =========================== */
 
   /**
    * Check if the project has an active knowledge base
@@ -566,19 +566,19 @@
       );
 
       // Validate response structure
-      if (!response?.id) {
+      if (!response?.data?.id) {
         console.error('[ProjectManager] Invalid conversation response:', response);
         throw new Error(`Server returned invalid conversation ID: ${JSON.stringify(response)}`);
       }
 
-      console.debug('[ProjectManager] Created conversation:', response.id);
+      console.debug('[ProjectManager] Created conversation:', response.data.id);
       
       // Link conversation to knowledge base if available
       if (this.currentProject.knowledge_base_id) {
-        await this.linkConversationToKnowledgeBase(response.id);
+        await this.linkConversationToKnowledgeBase(response.data.id);
       }
 
-      return response;
+      return response.data;
     } catch (error) {
       console.error('[ProjectManager] Conversation creation failed:', {
         error: error.message,
@@ -587,7 +587,7 @@
         knowledgeBase: !!this.currentProject?.knowledge_base_id
       });
       
-      throw new Error(`Failed to create conversation: ${this.formatProjectError(error)}`);
+      throw new Error(`Failed to create conversation: ${formatProjectError(error)}`);
     }
   }
 
@@ -624,7 +624,7 @@
 
   /**
    * Format project-related errors for user display
-   * @param {Error} error 
+   * @param {Error} error
    * @returns {string}
    */
   function formatProjectError(error) {
@@ -636,10 +636,6 @@
            status === 404 ? "Project not found or unavailable" :
            serverMessage || error.message || "Unknown project error";
   }
-
-  /* ===========================
-     KNOWLEDGE BASE OPERATIONS
-     =========================== */
 
   /**
    * Load knowledge base details
@@ -766,6 +762,10 @@
     // Knowledge Base
     isKnowledgeBaseReady,
     loadKnowledgeBaseDetails,
+    // Error formatting
+    formatProjectError,
+    // Error formatting
+    formatProjectError,
     // API utils
     checkProjectApiEndpoint,
     // Event utility

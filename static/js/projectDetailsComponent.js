@@ -937,37 +937,69 @@
     _renderConversationItem(conversation) {
       const convoEl = window.uiUtilsInstance.createElement("div", {
         className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
-        onclick: async () => {
-          const chatContainer = document.getElementById('projectChatContainer');
-          if (chatContainer) {
-            chatContainer.classList.remove('hidden');
-            // Scroll to chat container
-            chatContainer.scrollIntoView({ behavior: 'smooth' });
-          }
-          
-          console.log('Loading conversation', conversation.id);
-          
-          // Verify chat interface is ready
-          if (!window.projectChatInterface) {
-            console.error('Project chat interface not initialized');
-            return;
-          }
-
-          // Ensure target container is set
+        onclick: async (e) => {
           try {
+            console.log('Conversation clicked:', conversation.id, conversation);
+            
+            // Show chat container
+            const chatContainer = document.getElementById('projectChatContainer');
+            if (chatContainer) {
+              chatContainer.classList.remove('hidden');
+              chatContainer.scrollIntoView({ behavior: 'smooth' });
+            }
+
+            // Verify chat interface is available and initialized
+            if (!window.projectChatInterface) {
+              const errorMsg = 'Project chat interface not initialized';
+              console.error(errorMsg);
+              window.showNotification('Chat system not ready', 'error');
+              return;
+            }
+
+            if (!window.projectChatInterface.initialized) {
+              const errorMsg = 'Chat interface not initialized - trying to initialize';
+              console.warn(errorMsg);
+              try {
+                await window.projectChatInterface.initialize();
+              } catch (initErr) {
+                console.error('Failed to initialize chat interface:', initErr);
+                window.showNotification('Failed to initialize chat', 'error');
+                return;
+              }
+            }
+
+            // Set target container
+            console.log('Setting target container to #projectChatMessages');
             window.projectChatInterface.setTargetContainer('#projectChatMessages');
-            console.log('Target container set successfully');
-          } catch (err) {
-            console.error('Failed to set target container:', err);
-          }
+            
+            // Load the conversation with detailed logging
+            console.log('Loading conversation:', conversation.id);
+            const success = await window.projectChatInterface.loadConversation(conversation.id);
+            
+            if (!success) {
+              throw new Error('loadConversation returned false');
+            }
 
-          // Load conversation with error handling
-          try {
-            await window.projectChatInterface.loadConversation(conversation.id);
-            console.log('Conversation loaded successfully');
+            console.log('Conversation loaded successfully, updating URL');
+            
+            // Update URL
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('chatId', conversation.id);
+            window.history.pushState({}, '', newUrl);
+
+            // Verify UI updated
+            const messagesContainer = document.querySelector('#projectChatMessages');
+            if (!messagesContainer || messagesContainer.children.length === 0) {
+              console.warn('Messages container not updated after load');
+            } else {
+              console.log('Messages container updated successfully');
+            }
           } catch (err) {
-            console.error('Failed to load conversation:', err);
-            window.showNotification('Failed to load conversation', 'error');
+            console.error('Error in conversation click handler:', err);
+            window.showNotification(
+              `Error loading conversation: ${err.message || 'Unknown error'}`,
+              'error'
+            );
           }
         }
       });
