@@ -154,12 +154,14 @@ if (typeof window.ProjectModal === 'undefined') {
   }
 
   openModal() {
-    // Ensure we remove any "hidden" class and set a high z-index to avoid stacking issues
+    // Ensure we remove any "hidden" class
     this.modal.classList.remove('hidden');
-    this.modal.style.zIndex = '9999';
-
-    // Force a visible display
-    this.modal.style.display = 'flex';
+    
+    // Responsive width
+    this.modal.style.width = '100%';
+    if (window.innerWidth >= 640) {
+      this.modal.style.maxWidth = '500px';
+    }
 
     // Focus the name input
     this.nameInput.focus();
