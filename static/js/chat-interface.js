@@ -174,16 +174,28 @@ window.ChatInterface.prototype.initialize = async function() {
   }
 
   // Initialize services
-  if (!this.conversationService) {
-    this.conversationService = window.ConversationService || {
-      createNewConversation: async () => {
-        throw new Error('ConversationService not properly initialized');
-      },
-      loadConversation: async () => {
-        throw new Error('ConversationService not properly initialized');
+  if (!window.ConversationService) {
+    console.error('ConversationService not loaded - delaying initialization');
+    setTimeout(() => {
+      if (!window.ConversationService) {
+        console.error('ConversationService still not available after delay');
       }
-    };
+      this.initialize();
+    }, 100);
+    return;
   }
+
+  // Create new instance of ConversationService with required callbacks
+  this.conversationService = new window.ConversationService({
+    onConversationLoaded: (conversation) => {
+      this.currentConversation = conversation;
+      this._handleConversationLoaded(conversation);
+    },
+    onError: (context, error) => {
+      window.ChatUtils?.handleError?.(context, error, this.notificationFunction);
+    },
+    showNotification: this.notificationFunction
+  });
 
   // Initial load or creation
   this._handleInitialConversation();
@@ -296,14 +308,29 @@ window.ChatInterface.prototype.loadConversation = function(chatId) {
   if (!chatId) {
     return Promise.reject(new Error('No conversation ID provided'));
   }
-  
+
+  // Skip if already loading this conversation
+  if (this.currentChatId === chatId && this._isLoadingConversation) {
+    return Promise.resolve(false);
+  }
+
   console.log(`Loading conversation with ID: ${chatId}`);
+  this._isLoadingConversation = true;
+  
+  // Clear previous conversation state
+  if (this.ui?.messageList) {
+    this.ui.messageList.clear();
+  }
+  if (this.messageService) {
+    this.messageService.clear();
+  }
   this.currentChatId = chatId;
 
   return this.conversationService.loadConversation(chatId)
     .then(success => {
+      this._isLoadingConversation = false;
       if (success) {
-        console.log(`Successfully loaded conversation: ${chatId}`);
+        console.log(`Successfully loaded conversation: ${chatId}`, this.conversationService.currentConversation);
         
         // Initialize message service with HTTP initially
         // This ensures we have a working message service even if WebSocket fails
@@ -468,10 +495,24 @@ window.ChatInterface.prototype.setTargetContainer = function(selector) {
 
 // Handle conversation loaded event
 window.ChatInterface.prototype._handleConversationLoaded = function(conversation) {
+  console.log('Handling conversation loaded:', conversation);
+  
+  if (!conversation) {
+    console.error('No conversation data received');
+    return;
+  }
+
   if (this.titleEl) {
     this.titleEl.textContent = conversation.title || "New Chat";
   }
-  this.ui.messageList.renderMessages(conversation.messages);
+
+  if (conversation.messages) {
+    console.log('Rendering messages:', conversation.messages.length);
+    this.ui.messageList.renderMessages(conversation.messages);
+  } else {
+    console.warn('No messages in conversation');
+    this.ui.messageList.renderMessages([]);
+  }
   
   // Dispatch event for other components
   document.dispatchEvent(new CustomEvent('conversationLoaded', {

@@ -410,9 +410,13 @@ window.WebSocketService.prototype.establishConnection = function () {
 
     socket.onclose = (event) => {
       clearTimeout(timeout);
-      if (event.code !== 1000) { // 1000 = normal closure
+      
+      // Skip error handling for normal closures (1000, 1001, 1005)
+      if (![1000, 1001, 1005].includes(event.code)) {
         this.handleConnectionError(new Error(`Connection closed: ${event.code}`));
       }
+      
+      this.socket = null;
       this.setState(CONNECTION_STATES.DISCONNECTED);
     };
   });
@@ -444,14 +448,23 @@ window.WebSocketService.prototype.handleTokenRefresh = async function() {
 };
 
 window.WebSocketService.prototype.handleConnectionError = async function (error) {
+  // Parse error code as number for reliable comparison
+  const errorCode = Number(error.code) || 0;
   const errorDetails = {
-    code: error.code || 'unknown',
+    code: errorCode,
     reason: error.reason || error.message || 'unknown',
     wasClean: error.wasClean || false
   };
 
+  // Skip all handling for normal closures (code 1005)
+  if (errorCode === 1005) {
+    this.socket = null;
+    this.setState(CONNECTION_STATES.DISCONNECTED);
+    return;
+  }
+
   // Special handling for code 1008 (Policy Violation)
-  if (error.code === 1008) {
+  if (errorCode === 1008) {
     console.error('WebSocket policy violation:', errorDetails, {
       state: this.state,
       chatId: this.chatId,
@@ -470,15 +483,18 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
     return;
   }
 
-  console.error('WebSocket connection error:', {
-    error: errorDetails,
-    state: this.state,
-    chatId: this.chatId,
-    projectId: this.projectId,
-    reconnectAttempt: this.reconnectAttempts,
-    wsUrl: this.wsUrl,
-    timestamp: new Date().toISOString()
-  });
+  // Skip logging for normal closures (code 1005)
+  if (errorDetails.code !== 1005) {
+    console.error('WebSocket connection error:', {
+      error: errorDetails,
+      state: this.state,
+      chatId: this.chatId,
+      projectId: this.projectId,
+      reconnectAttempt: this.reconnectAttempts,
+      wsUrl: this.wsUrl,
+      timestamp: new Date().toISOString()
+    });
+  }
 
   // Clean state and reference
   this.socket = null;

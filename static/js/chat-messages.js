@@ -26,6 +26,32 @@ window.MessageService = function (options = {}) {
 };
 
 /**
+ * Clear all message state
+ */
+window.MessageService.prototype.clear = function() {
+  this.chatId = null;
+  
+  try {
+    // Disconnect WebSocket if connected
+    if (this.wsService && typeof this.wsService.disconnect === 'function') {
+      this.wsService.disconnect();
+      this.wsService = null;
+    }
+  } catch (error) {
+    console.error('Error disconnecting WebSocket:', error);
+  }
+  
+  try {
+    // Clear any UI state with empty array
+    if (typeof this.onMessageReceived === 'function') {
+      this.onMessageReceived([]);
+    }
+  } catch (error) {
+    console.error('Error clearing messages:', error);
+  }
+};
+
+/**
  * Initialize the service with a chat ID and optional WebSocket service
  */
 window.MessageService.prototype.initialize = function (chatId, wsService) {
