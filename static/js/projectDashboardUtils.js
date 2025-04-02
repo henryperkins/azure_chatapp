@@ -340,6 +340,7 @@
           if (fallbackModal) {
             console.log(`Found fallback modal for "${modalId}" via direct DOM query`);
             fallbackModal.classList.remove('hidden');
+            this._setupModalEvents(fallbackModal);
             return;
           }
           
@@ -350,6 +351,7 @@
         // Add modal overlay classes
         modal.classList.add('confirm-modal');
         modal.classList.remove('hidden');
+        this._setupModalEvents(modal);
         console.log(`Modal "${modalId}" shown successfully`);
       }
       
@@ -365,6 +367,7 @@
           
           if (fallbackModal) {
             fallbackModal.classList.add('hidden');
+            this._cleanupModalEvents(fallbackModal);
             return;
           }
           return;
@@ -373,13 +376,40 @@
         // Remove modal overlay classes
         modal.classList.remove('confirm-modal');
         modal.classList.add('hidden');
+        this._cleanupModalEvents(modal);
       }
       
       static closeActiveModal() {
-        const modal = document.getElementById('deleteConfirmModal');
+        const modal = document.querySelector('.confirm-modal:not(.hidden)');
         if (modal) {
           modal.classList.remove('confirm-modal');
           modal.classList.add('hidden');
+        }
+      }
+
+      _setupModalEvents(modal) {
+        // Handle ESC key
+        const handleKeyDown = (e) => {
+          if (e.key === 'Escape') {
+            this.hide(modal.id.replace('Modal', ''));
+          }
+        };
+        modal._handleKeyDown = handleKeyDown;
+        document.addEventListener('keydown', handleKeyDown);
+
+        // Handle close button click
+        const closeBtn = modal.querySelector('[id^="close"]');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            this.hide(modal.id.replace('Modal', ''));
+          });
+        }
+      }
+
+      _cleanupModalEvents(modal) {
+        if (modal._handleKeyDown) {
+          document.removeEventListener('keydown', modal._handleKeyDown);
+          delete modal._handleKeyDown;
         }
       }
       
