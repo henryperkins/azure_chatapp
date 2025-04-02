@@ -19,8 +19,8 @@ if (typeof window.ProjectModal === 'undefined') {
     }
 
     this.form = document.getElementById('projectForm');
-    this.nameInput = document.getElementById('projectNameInput');
-    this.nameError = document.getElementById('nameError');
+    this.nameInput = document.getElementById('projectForm-nameInput');
+    this.nameError = document.getElementById('projectForm-nameError');
     this.closeBtn = document.getElementById('closeProjectFormBtn');
     this.cancelBtn = document.getElementById('cancelProjectFormBtn');
     this.submitBtn = document.getElementById('submitProjectFormBtn');
