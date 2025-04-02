@@ -421,7 +421,7 @@
 #mainSidebar {
     @apply transform transition-transform duration-300 ease-out will-change-transform;
     transform: translateX(-100%);
-    z-index: 50;
+    z-index: 100; /* Lower than backdrop */
     transition-property: transform, opacity;
     backface-visibility: hidden;
 }
