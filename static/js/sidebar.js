@@ -282,22 +282,61 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function initializeModelDropdownOnLoad() {
   const modelDropdown = document.getElementById('modelSelect');
-  if (modelDropdown && typeof initializeModelDropdown === 'function') {
-    // If the dropdown is empty, initialize it
+  if (modelDropdown && typeof window.initializeModelDropdown === 'function') {
+    // Check if dropdown needs initialization
     if (modelDropdown.options.length === 0) {
-      initializeModelDropdown();
+      window.initializeModelDropdown();
     }
     
-    // Set default value to Claude 3.7 Sonnet if not already set
-    if (!modelDropdown.value) {
-      modelDropdown.value = 'claude-3-7-sonnet-20250219';
-      if (typeof persistSettings === 'function') {
-        persistSettings();
-      }
+    // Load model from localStorage instead of hardcoding
+    const storedModel = localStorage.getItem('modelName');
+    if (!modelDropdown.value && storedModel) {
+      modelDropdown.value = storedModel;
+    } else if (!modelDropdown.value) {
+      // Use default from modelConfig if available
+      const defaultModel = window.MODEL_CONFIG?.modelName || 'claude-3-sonnet-20240229';
+      modelDropdown.value = defaultModel;
     }
     
-    // Listen for user changes to model selection
-    modelDropdown.addEventListener('change', persistSettings);
+    // Apply settings if needed
+    if (typeof window.persistSettings === 'function') {
+      window.persistSettings();
+    }
+    
+    // Only add listener if not already added
+    modelDropdown.removeEventListener('change', window.persistSettings);
+    modelDropdown.addEventListener('change', window.persistSettings);
+    
+    // Also add a listener for custom instructions changes
+    const customInstructionsTextarea = document.getElementById('globalCustomInstructions');
+    const saveInstructionsButton = document.getElementById('saveGlobalInstructions');
+    
+    if (customInstructionsTextarea && saveInstructionsButton) {
+      saveInstructionsButton.addEventListener('click', function() {
+        // Save custom instructions
+        const instructions = customInstructionsTextarea.value;
+        localStorage.setItem('globalCustomInstructions', instructions);
+        
+        // Update MODEL_CONFIG and notify components
+        if (window.MODEL_CONFIG) {
+          window.MODEL_CONFIG.customInstructions = instructions;
+        }
+        
+        // Dispatch event to notify other components
+        document.dispatchEvent(new CustomEvent('modelConfigChanged', {
+          detail: {
+            customInstructions: instructions,
+            timestamp: Date.now()
+          }
+        }));
+        
+        if (window.showNotification) {
+          window.showNotification("Custom instructions saved and applied", "success");
+        } else {
+          console.log("Custom instructions saved and applied");
+        }
+      });
+    }
   }
 }
 
@@ -486,28 +525,35 @@ function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
   // Load saved state
   const isExpanded = localStorage.getItem(`${toggleId}_expanded`) === 'true';
   
-  // Set initial state
+  // Apply initial state
   if (isExpanded) {
+    panel.style.maxHeight = 'max-content'; // Use max-content for proper rendering
     panel.classList.add('max-h-[999px]');
     chevron.classList.add('rotate-180');
     
     // Call onExpand callback if provided and panel is expanded
     if (typeof onExpand === 'function') {
-      setTimeout(onExpand, 0); // Execute after current call stack
+      setTimeout(onExpand, 100); // Slightly longer timeout to ensure DOM is ready
     }
+  } else {
+    panel.style.maxHeight = '0px';
   }
   
   toggleButton.addEventListener('click', () => {
-    const isCurrentlyExpanded = panel.style.maxHeight !== '0px' && panel.style.maxHeight !== '';
+    const isCurrentlyExpanded = panel.classList.contains('max-h-[999px]');
     
     if (isCurrentlyExpanded) {
       // Collapse
       panel.style.maxHeight = '0px';
+      panel.classList.remove('max-h-[999px]');
+      chevron.classList.remove('rotate-180');
       chevron.style.transform = 'rotate(0deg)';
       localStorage.setItem(`${toggleId}_expanded`, 'false');
     } else {
       // Expand
-      panel.style.maxHeight = panel.scrollHeight + 'px';
+      panel.style.maxHeight = 'max-content';
+      panel.classList.add('max-h-[999px]');
+      chevron.classList.add('rotate-180');
       chevron.style.transform = 'rotate(180deg)';
       localStorage.setItem(`${toggleId}_expanded`, 'true');
       
@@ -579,9 +625,22 @@ function setupCustomInstructions() {
     const instructions = instructionsTextarea.value;
     localStorage.setItem('globalCustomInstructions', instructions);
     
+    // Update MODEL_CONFIG with instructions
+    if (window.MODEL_CONFIG) {
+      window.MODEL_CONFIG.customInstructions = instructions;
+    }
+    
+    // Notify message service and other components
+    document.dispatchEvent(new CustomEvent('modelConfigChanged', {
+      detail: {
+        customInstructions: instructions,
+        timestamp: Date.now()
+      }
+    }));
+    
     // Show success notification
     if (typeof window.showNotification === 'function') {
-      window.showNotification('Custom instructions saved successfully', 'success');
+      window.showNotification('Custom instructions saved and applied to chat', 'success');
     }
   });
 }
@@ -639,14 +698,16 @@ async function newChatClickHandler() {
     if (typeof window.createNewChat === 'function') {
       try {
         console.log("Calling createNewChat function");
-        localStorage.setItem("modelName", "claude-3-sonnet-20240229"); // Ensure Claude is the selected model
+        // Use stored model name instead of hardcoding
+        const storedModel = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
+        
         const newChat = await window.createNewChat();
-        console.log("New chat created:", newChat); // Add logging
+        console.log("New chat created:", newChat);
         if (window.showNotification) {
           window.showNotification("Chat created successfully", "success");
         }
       } catch (error) {
-        console.error("Error creating new chat:", error); // Add logging
+        console.error("Error creating new chat:", error);
         if (window.showNotification) {
           window.showNotification("Error creating new chat: " + error.message, "error");
         }
