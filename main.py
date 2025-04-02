@@ -166,7 +166,7 @@ async def index():
 @app.get("/projects", include_in_schema=False)
 async def projects():
     """Return the projects HTML file."""
-    return FileResponse("static/projects.html")
+    return FileResponse("static/index.html")
 
 @app.get("/health")
 async def health_check():
