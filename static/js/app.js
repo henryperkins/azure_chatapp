@@ -1,5 +1,4 @@
 /**
- * app.js - REMEDIATED VERSION
  * ---------------------------
  * - Maintains a single API_CONFIG global object (no more double definitions).
  * - Uses one fetch wrapper (apiRequest).
@@ -310,8 +309,8 @@ function createProjectListItem(project) {
         // On projects page already - use query parameter
         window.location.search = `?project=${projectData.id}`;
       } else {
-        // Navigate to projects page with ID
-        window.location.href = `/projects.html?project=${projectData.id}`;
+        // Navigate to index.html (which is now the projects page)
+        window.location.href = `/?project=${projectData.id}`;
       }
       
       // Dispatch event for other components that might listen
@@ -802,6 +801,116 @@ async function initializeAllModules() {
   }
 }
 
+// Global function to ensure chat containers exist
+window.ensureChatContainers = function() {
+  console.log("Ensuring chat containers exist...");
+  
+  // Check for #projectChatContainer and #chatContainer
+  let projectChatContainer = document.querySelector('#projectChatContainer');
+  let chatContainer = document.querySelector('#chatContainer');
+  
+  // Also check for containers in project views
+  if (!projectChatContainer && !chatContainer) {
+    projectChatContainer = document.querySelector('#projectDetailsView #projectChatContainer');
+    chatContainer = document.querySelector('#projectChatUI');
+  }
+  
+  // If neither exists, create one in the main content area
+  if (!projectChatContainer && !chatContainer) {
+    console.log("No chat containers found, creating one");
+    const mainContent = document.querySelector('main');
+    
+    if (mainContent) {
+      // Create project chat container
+      const container = document.createElement('div');
+      container.id = 'projectChatContainer';
+      container.className = 'mt-4 transition-all duration-300 ease-in-out';
+      container.style.display = 'block'; // Ensure visibility
+      
+      // Create messages container
+      const messagesContainer = document.createElement('div');
+      messagesContainer.id = 'projectChatMessages';
+      messagesContainer.className = 'chat-message-container';
+      container.appendChild(messagesContainer);
+      
+      // Create input area
+      const inputArea = document.createElement('div');
+      inputArea.className = 'flex items-center border-t border-gray-200 dark:border-gray-700 p-2';
+      
+      const chatInput = document.createElement('input');
+      chatInput.id = 'projectChatInput';
+      chatInput.type = 'text';
+      chatInput.className = 'flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white';
+      chatInput.placeholder = 'Type your message...';
+      
+      const sendBtn = document.createElement('button');
+      sendBtn.id = 'projectChatSendBtn';
+      sendBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors';
+      sendBtn.textContent = 'Send';
+      
+      inputArea.appendChild(chatInput);
+      inputArea.appendChild(sendBtn);
+      container.appendChild(inputArea);
+      
+      // Add to DOM
+      mainContent.appendChild(container);
+      console.log("Created project chat container");
+      
+      // Ensure it's not hidden
+      container.classList.remove('hidden');
+      return container;
+    } else {
+      console.warn("Could not find main content element to add chat container");
+      
+      // Last resort - attach to body if main not found
+      const body = document.body;
+      if (body) {
+        const fallbackContainer = document.createElement('div');
+        fallbackContainer.id = 'chatContainer';
+        fallbackContainer.className = 'p-4 border rounded';
+        fallbackContainer.style.position = 'fixed';
+        fallbackContainer.style.bottom = '20px';
+        fallbackContainer.style.right = '20px';
+        fallbackContainer.style.width = '300px';
+        fallbackContainer.style.background = 'white';
+        fallbackContainer.style.zIndex = '1000';
+        fallbackContainer.innerHTML = `
+          <div id="chatMessages" class="chat-message-container"></div>
+          <div class="flex items-center border-t border-gray-200 mt-2 pt-2">
+            <input id="chatInput" type="text" class="flex-1 border rounded-l px-2 py-1" placeholder="Type your message...">
+            <button id="chatSendBtn" class="bg-blue-600 text-white px-3 py-1 rounded-r">Send</button>
+          </div>
+        `;
+        body.appendChild(fallbackContainer);
+        console.log("Created fallback chat container on body");
+        return fallbackContainer;
+      }
+    }
+  } else {
+    // Ensure existing containers are properly visible
+    const container = projectChatContainer || chatContainer;
+    container.classList.remove('hidden');
+    container.style.display = 'block';
+    
+    // Also ensure parent containers are visible
+    let parent = container.parentElement;
+    while (parent && parent !== document.body) {
+      if (parent.classList.contains('hidden')) {
+        parent.classList.remove('hidden');
+      }
+      if (parent.style.display === 'none') {
+        parent.style.display = 'block';
+      }
+      parent = parent.parentElement;
+    }
+    
+    console.log("Chat containers already exist and are now visible");
+    return container;
+  }
+  
+  return null;
+};
+
 // ---------------------------------------------------------------------
 // BOOTSTRAPPING
 // ---------------------------------------------------------------------
@@ -810,6 +919,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Initialize everything
     await initializeAllModules();
+    // Make sure chat containers exist before initializing chat
+    window.ensureChatContainers();
+    
     // If you have additional UI components:
     if (typeof window.initializeChat === 'function') {
       await InitUtils.initModule('chat', window.initializeChat);

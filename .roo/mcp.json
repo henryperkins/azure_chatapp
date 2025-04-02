@@ -12,7 +12,10 @@
     },
     "github.com/mendableai/firecrawl-mcp-server": {
       "command": "npx",
-      "args": ["-y", "firecrawl-mcp"],
+      "args": [
+        "-y",
+        "firecrawl-mcp"
+      ],
       "env": {
         "FIRECRAWL_API_KEY": "fc-a3ba8f1f4722412784295d42c24bb89f"
       },
@@ -21,21 +24,45 @@
     },
     "github.com/executeautomation/mcp-playwright": {
       "command": "npx",
-      "args": ["-y", "@executeautomation/playwright-mcp-server"],
+      "args": [
+        "-y",
+        "@executeautomation/playwright-mcp-server"
+      ],
       "disabled": false,
       "autoApprove": []
     },
     "github.com/modelcontextprotocol/servers/tree/main/src/puppeteer": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-puppeteer", "--", "--no-sandbox"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-puppeteer",
+        "--",
+        "--no-sandbox"
+      ],
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [],
+      "alwaysAllow": [
+        "puppeteer_navigate"
+      ]
     },
     "github.com/modelcontextprotocol/servers/tree/main/src/git": {
       "command": "/home/azureuser/azure_chatapp/venv/bin/python",
-      "args": ["-m", "mcp_server_git", "--repository", "/home/azureuser/azure_chatapp"],
+      "args": [
+        "-m",
+        "mcp_server_git",
+        "--repository",
+        "/home/azureuser/azure_chatapp"
+      ],
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [],
+      "alwaysAllow": [
+        "git_show",
+        "git_log",
+        "git_add",
+        "git_diff_staged",
+        "git_diff_unstaged",
+        "git_status"
+      ]
     },
     "github.com/modelcontextprotocol/servers/tree/main/src/github": {
       "command": "npx",
@@ -47,7 +74,14 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
       },
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [],
+      "alwaysAllow": [
+        "search_code",
+        "list_commits",
+        "get_file_contents",
+        "search_repositories",
+        "create_or_update_file"
+      ]
     },
     "github.com/AgentDeskAI/browser-tools-mcp": {
       "command": "npx",
@@ -56,7 +90,19 @@
         "@agentdeskai/browser-tools-mcp@1.2.0"
       ],
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [],
+      "alwaysAllow": [
+        "getConsoleLogs",
+        "getConsoleErrors",
+        "getNetworkErrors",
+        "getNetworkLogs",
+        "getSelectedElement",
+        "runDebuggerMode",
+        "runAuditMode",
+        "runBestPracticesAudit",
+        "takeScreenshot",
+        "wipeLogs"
+      ]
     }
   }
 }

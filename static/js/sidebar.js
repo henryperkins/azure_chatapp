@@ -13,7 +13,7 @@ let sidebar = null;
 let isOpen = false;
 let toggleBtn = null;
 let closeBtn = null;
-let savedTab = localStorage.getItem('sidebarActiveTab') || null;
+let savedTab = localStorage.getItem('sidebarActiveTab');
 
 // Define toggleSidebar first since it's used in initializeSidebarToggle
 window.toggleSidebar = function() {
@@ -622,9 +622,9 @@ async function newChatClickHandler() {
     // Clear selected project
     localStorage.removeItem('selectedProjectId');
 
-    // If on projects.html page, navigate to index.html
+    // If on projects page, navigate to index.html (formerly projects.html)
     if (window.location.pathname.includes('/projects')) {
-      window.location.href = '/';
+      window.location.href = '/index.html';
       return;
     }
 

@@ -5,12 +5,15 @@
 
 // Define UIComponents as a constructor function attached to window
 window.UIComponents = function(options = {}) {
-  // Allow message container selector to be passed in
-  const messageContainerSelector = options.messageContainerSelector || '#conversationArea';
+  // Store selectors at instance level
+  this.messageContainerSelector = options.messageContainerSelector || '#projectChatMessages';
+  this.inputSelector = options.inputSelector || '#chatInput';
+  this.sendButtonSelector = options.sendButtonSelector || '#sendBtn';
   
   // Message list component for rendering messages
   this.messageList = {
-    container: document.querySelector(messageContainerSelector),
+    container: document.querySelector(this.messageContainerSelector),
+    messageContainerSelector: this.messageContainerSelector, // Store selector for error reporting
     thinkingId: 'thinkingIndicator',
     // Use existing formatText from formatting.js
     formatText: window.formatText || function(text) { return text; },
@@ -69,12 +72,22 @@ window.UIComponents = function(options = {}) {
     },
 
     appendMessage: function(role, content, id = null, thinking = null, redacted = null, metadata = null) {
-      if (!this.container) {
-        console.error('Message container not found! Selector:', this.messageContainerSelector);
+      // Check container existence with fallback
+      const container = this.container || document.querySelector('#projectChatMessages');
+      if (!container || !document.contains(container)) {
+        console.error('Project chat container missing - verify:',
+          '\n1. Project UI initialization',
+          '\n2. Parent container existence (#projectChatContainer)',
+          '\n3. DOM loading sequence');
         return null;
       }
-      
+      this.container = container; // Maintain reference
+
       try {
+        // Verify container is writable
+        if (!container.appendChild || typeof container.appendChild !== 'function') {
+          throw new Error('Chat container is not a valid DOM element');
+        }
         console.log(`[UI] Appending ${role} message (${content.length} chars)`);
         if (content.length > 50) {
           console.debug('Message preview:', content.substring(0, 50) + '...');
