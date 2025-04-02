@@ -1022,7 +1022,12 @@
      * @param {Object} file - File to delete
      */
     _confirmDeleteFile(file) {
-      window.ModalManager.confirmAction({
+      if (!window.modalManager) {
+        console.error('modalManager not available');
+        return;
+      }
+      
+      window.modalManager.show('delete', {
         title: "Delete File",
         message: `Delete "${file.filename}"?`,
         confirmText: "Delete",
@@ -1112,8 +1117,18 @@
             window.projectManager.loadProjectConversations(projectId)
           ]);
 
-          // Close the modal immediately after successful deletion
-          window.ModalManager.closeActiveModal();
+          // Close the modal using the modalManager instance
+          try {
+            if (window.modalManager?.hide) {
+              window.modalManager.hide('delete');
+            } else {
+              // Fallback to direct DOM manipulation if modalManager not available
+              const modal = document.getElementById('deleteConfirmModal');
+              if (modal) modal.classList.add('hidden');
+            }
+          } catch (err) {
+            console.warn("Error closing modal:", err);
+          }
 
           // Then show the notification with undo
           window.showNotification("Conversation deleted", "success", {
@@ -1173,7 +1188,12 @@
      * @param {Object} artifact - Artifact to delete
      */
     _confirmDeleteArtifact(artifact) {
-      window.ModalManager.confirmAction({
+      if (!window.modalManager) {
+        console.error('modalManager not available');
+        return;
+      }
+      
+      window.modalManager.show('delete', {
         title: "Delete Artifact",
         message: `Delete "${artifact.title || 'this artifact'}"?`,
         confirmText: "Delete",

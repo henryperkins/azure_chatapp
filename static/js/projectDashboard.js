@@ -62,10 +62,8 @@ class ProjectDashboard {
       }
     };
 
-    // Modal manager check
-    this.modalManager = typeof window.ModalManager === "function"
-      ? new window.ModalManager()
-      : window.modalManager;
+    // Use centralized modal manager from Utils
+    this.modalManager = window.modalManager;
   }
 
   /**
