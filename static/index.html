@@ -11,9 +11,30 @@
   <!-- Ensure responsive, mobile-friendly behavior -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- CSRF token (if your backend sets it) -->
-  <meta name="csrf-token" content="" />
+  <!-- CSRF token with dynamic injection pattern -->
+  <meta name="csrf-token" content="" id="csrfToken" />
   
+  <script>
+    // Set up CSRF token handling - works with TokenManager
+    document.addEventListener('DOMContentLoaded', function() {
+      // Listen for auth state changes to update CSRF token
+      document.addEventListener('authStateChanged', function(event) {
+        const { authenticated } = event.detail;
+        if (authenticated && window.TokenManager && window.TokenManager.accessToken) {
+          // Extract CSRF token from JWT if available
+          try {
+            const payload = window.TokenManager.accessToken.split('.')[1];
+            const decoded = JSON.parse(atob(payload));
+            if (decoded.csrf) {
+              document.getElementById('csrfToken').setAttribute('content', decoded.csrf);
+            }
+          } catch (e) {
+            console.warn('Failed to extract CSRF token from JWT');
+          }
+        }
+      });
+    });
+  </script>
 </head>
 <body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
 
@@ -136,21 +157,36 @@
           Back to Chat
         </a>
         
-        <!-- Tab navigation for sidebar sections -->
-        <div class="flex mb-4 border-b border-gray-200 dark:border-gray-700">
-          <button id="recentChatsTab" class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm">
+        <!-- Tab navigation for sidebar sections - Improved accessibility -->
+        <div class="flex mb-4 border-b border-gray-200 dark:border-gray-700" role="tablist">
+          <button id="recentChatsTab" 
+                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="recentChatsSection"
+                  tabindex="-1">
             Recent
           </button>
-          <button id="starredChatsTab" class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm">
+          <button id="starredChatsTab" 
+                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="starredChatsSection"
+                  tabindex="-1">
             Starred
           </button>
-          <button id="projectsTab" class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm">
+          <button id="projectsTab" 
+                  class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="projectsSection"
+                  tabindex="0">
             Projects
           </button>
         </div>
         
         <!-- Recent Chats Section (hidden by default) -->
-        <div id="recentChatsSection" class="hidden flex-1 flex flex-col overflow-hidden">
+        <div id="recentChatsSection" class="hidden flex-1 flex flex-col overflow-hidden" role="tabpanel" aria-labelledby="recentChatsTab">
           <!-- Search input -->
           <div class="mb-3">
             <div class="relative">
@@ -168,7 +204,7 @@
         </div>
         
         <!-- Starred Chats Section (hidden by default) -->
-        <div id="starredChatsSection" class="hidden flex-1 flex flex-col overflow-hidden">
+        <div id="starredChatsSection" class="hidden flex-1 flex flex-col overflow-hidden" role="tabpanel" aria-labelledby="starredChatsTab">
           <!-- Starred chats explanation -->
           <p class="text-xs text-gray-500 mb-3">Starred chats are conversations you've marked as important for quick access.</p>
           
@@ -182,7 +218,7 @@
         </div>
         
         <!-- Projects Section (visible by default on projects page) -->
-        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden">
+        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel" aria-labelledby="projectsTab">
           <!-- Projects actions -->
           <div class="mb-3 flex space-x-2">
             <a href="/" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded text-xs transition-colors flex items-center justify-center font-medium">
@@ -333,7 +369,7 @@
             <div class="mb-4 flex items-center justify-between">
               <h2 class="text-xl font-semibold">Projects</h2>
               <div class="flex space-x-2">
-                <input id="projectSearchInput" type="search" placeholder="Search projects..." 
+                <input id="projectSearchInput" type="search" placeholder="Search projects..."
                        class="border px-2 py-1 rounded text-sm" />
                 <button id="createProjectBtn" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
                   New Project
@@ -365,7 +401,6 @@
           
           <!-- Project Details View (hidden by default) -->
           <div id="projectDetailsView" class="hidden">
-            <!-- Chat interface will be loaded here when viewing a project -->
             <!-- Breadcrumb navigation for better navigation -->
             <div class="flex items-center mb-4 text-sm text-gray-500">
               <button id="backToProjectsBtn" class="mr-2 text-gray-500 hover:text-gray-700 flex items-center">
@@ -445,21 +480,51 @@
             
             <!-- Enhanced tab navigation with active indicators - mobile optimized -->
             <div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-              <div class="flex whitespace-nowrap min-w-full -mb-px">
-                <button class="project-tab-btn active" role="tab" aria-selected="true" tabindex="0" data-tab="details">
+              <div class="flex whitespace-nowrap min-w-full -mb-px" role="tablist">
+                <button id="detailsTabBtn" 
+                        class="project-tab-btn active" 
+                        role="tab" 
+                        aria-selected="true" 
+                        aria-controls="detailsTab"
+                        tabindex="0" 
+                        data-tab="details">
                   Details
                 </button>
-                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="files">
+                <button id="filesTabBtn" 
+                        class="project-tab-btn" 
+                        role="tab" 
+                        aria-selected="false" 
+                        aria-controls="filesTab"
+                        tabindex="-1" 
+                        data-tab="files">
                   Files
                 </button>
-                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="conversations">
+                <button id="conversationsTabBtn" 
+                        class="project-tab-btn" 
+                        role="tab" 
+                        aria-selected="false" 
+                        aria-controls="conversationsTab"
+                        tabindex="-1" 
+                        data-tab="conversations">
                   <span class="hidden xs:inline">Conversations</span>
                   <span class="xs:hidden">Convos</span>
                 </button>
-                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="artifacts">
+                <button id="artifactsTabBtn" 
+                        class="project-tab-btn" 
+                        role="tab" 
+                        aria-selected="false" 
+                        aria-controls="artifactsTab"
+                        tabindex="-1" 
+                        data-tab="artifacts">
                   Artifacts
                 </button>
-                <button class="project-tab-btn" role="tab" aria-selected="false" tabindex="-1" data-tab="knowledge">
+                <button id="knowledgeTabBtn" 
+                        class="project-tab-btn" 
+                        role="tab" 
+                        aria-selected="false" 
+                        aria-controls="knowledgeTab"
+                        tabindex="-1" 
+                        data-tab="knowledge">
                   <span class="hidden xs:inline">Knowledge Base</span>
                   <span class="xs:hidden">KB</span>
                 </button>
@@ -469,7 +534,11 @@
             <!-- Tab content -->
             <div id="projectTabContent">
               <!-- Details tab -->
-              <div id="detailsTab" class="project-tab-content" role="tabpanel" tabindex="0">
+              <div id="detailsTab" 
+                   class="project-tab-content" 
+                   role="tabpanel" 
+                   aria-labelledby="detailsTabBtn"
+                   tabindex="0">
                 <div class="tab-section">
                   <h3 class="tab-heading">Description</h3>
                   <p id="projectDescription" class="tab-content">
@@ -494,7 +563,11 @@
               </div>
               
               <!-- Files tab -->
-              <div id="filesTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
+              <div id="filesTab" 
+                   class="project-tab-content hidden" 
+                   role="tabpanel" 
+                   aria-labelledby="filesTabBtn"
+                   tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Project Files</h3>
                   <div>
@@ -542,7 +615,11 @@
               </div>
               
               <!-- Enhanced conversations tab -->
-              <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
+              <div id="conversationsTab" 
+                   class="project-tab-content hidden" 
+                   role="tabpanel" 
+                   aria-labelledby="conversationsTabBtn"
+                   tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Conversations</h3>
                   <button id="newConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
@@ -560,7 +637,11 @@
               </div>
               
               <!-- Enhanced artifacts tab -->
-              <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
+              <div id="artifactsTab" 
+                   class="project-tab-content hidden" 
+                   role="tabpanel" 
+                   aria-labelledby="artifactsTabBtn"
+                   tabindex="0">
                 <div class="tab-section">
                   <h3 class="tab-heading">Generated Artifacts</h3>
                   <p class="tab-content mt-1">
@@ -574,7 +655,11 @@
               </div>
               
               <!-- Knowledge Base tab -->
-              <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel" tabindex="0">
+              <div id="knowledgeTab" 
+                   class="project-tab-content hidden" 
+                   role="tabpanel" 
+                   aria-labelledby="knowledgeTabBtn"
+                   tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Knowledge Base</h3>
                   <div id="knowledgeBaseActions" class="flex flex-col sm:flex-row gap-2 w-full">
@@ -992,111 +1077,155 @@
     </div>
   </div>
 
- <!-- Core scripts -->
- <script>
-   console.log('Base scripts loading...');
- </script>
- <script src="/static/js/chat-utils.js"></script>
- <script src="/static/js/chat-websocket.js"></script>
- <script src="/static/js/chat-messages.js"></script>
- <script src="/static/js/chat-conversations.js"></script>
- <script src="/static/js/chat-ui.js"></script>
- <script src="/static/js/chat-interface.js"></script>
- <script src="/static/js/chat-core.js"></script>
- <script src="/static/js/formatting.js"></script>
- <script src="/static/js/auth.js"></script>
- <script src="/static/js/modelConfig.js"></script>
+  <!-- Authentication Integration Script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Listen for auth state changes from the auth.js module
+      document.addEventListener('authStateChanged', function(event) {
+        const { authenticated, username } = event.detail;
+        
+        // Update UI based on authentication state
+        const authButton = document.getElementById('authButton');
+        const userMenu = document.getElementById('userMenu');
+        const authStatus = document.getElementById('authStatus');
+        const userStatus = document.getElementById('userStatus');
+        const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+        const projectManagerPanel = document.getElementById('projectManagerPanel');
+        
+        if (authenticated) {
+          // User is logged in
+          if (authButton) authButton.classList.add('hidden');
+          if (userMenu) userMenu.classList.remove('hidden');
+          if (authStatus) authStatus.textContent = username || 'Authenticated';
+          if (userStatus) userStatus.textContent = 'Online';
+          if (userStatus) userStatus.classList.add('text-green-600');
+          if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+          if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
+        } else {
+          // User is logged out
+          if (authButton) authButton.classList.remove('hidden');
+          if (userMenu) userMenu.classList.add('hidden');
+          if (authStatus) authStatus.textContent = 'Not Authenticated';
+          if (userStatus) userStatus.textContent = 'Offline';
+          if (userStatus) userStatus.classList.remove('text-green-600');
+          if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
+          if (projectManagerPanel) projectManagerPanel.classList.add('hidden');
+        }
+      });
+      
+      // Show login button by default on page load
+      const showLoginBtn = document.getElementById('showLoginBtn');
+      if (showLoginBtn) {
+        showLoginBtn.addEventListener('click', function() {
+          document.getElementById('authButton').click();
+        });
+      }
+    });
+  </script>
 
- <!-- Load project modal and component scripts -->
- <script src="/static/js/projectModal.js"></script>
- <script src="/static/js/projectListComponent.js"></script>
+  <!-- Tab Keyboard Navigation Script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      function setupTabKeyboardNavigation() {
+        const tabButtons = document.querySelectorAll('[role="tab"]');
+        
+        tabButtons.forEach(button => {
+          button.addEventListener('keydown', (e) => {
+            // Handle arrow key navigation
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              e.preventDefault();
+              
+              const tabs = Array.from(tabButtons);
+              const currentIndex = tabs.indexOf(e.target);
+              let newIndex;
+              
+              if (e.key === 'ArrowRight') {
+                newIndex = (currentIndex + 1) % tabs.length;
+              } else {
+                newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+              }
+              
+              // Focus the new tab
+              tabs[newIndex].focus();
+              // Activate the tab (simulate click)
+              tabs[newIndex].click();
+            }
+          });
+        });
+      }
+      
+      // Call this after tabs are initialized
+      if (window.isProjectDashboardUtilsReady && window.isProjectDashboardUtilsReady()) {
+        setupTabKeyboardNavigation();
+      } else {
+        document.addEventListener('dashboardUtilsReady', setupTabKeyboardNavigation);
+      }
+    });
+  </script>
 
- <!-- Core utilities must load first -->
- <script src="/static/js/knowledgeBaseState.js"></script>
- <script src="/static/js/projectDashboardUtils.js"></script>
+  <!-- Simplified Script Loading -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait for dashboard utilities to be ready
+      if (window.isProjectDashboardUtilsReady && window.isProjectDashboardUtilsReady()) {
+        loadProjectComponents();
+      } else {
+        document.addEventListener('dashboardUtilsReady', loadProjectComponents);
+      }
+      
+      function loadProjectComponents() {
+        const scripts = [
+          '/static/js/knowledgeBaseComponent.js',
+          '/static/js/projectDetailsComponent.js',
+          '/static/js/projectListComponent.js',
+          '/static/js/projectManager.js'
+        ];
+        
+        let loadedCount = 0;
+        scripts.forEach(src => {
+          const script = document.createElement('script');
+          script.src = src;
+          script.onload = () => {
+            loadedCount++;
+            if (loadedCount === scripts.length) {
+              // All component scripts loaded, now load dashboard
+              const dashboardScript = document.createElement('script');
+              dashboardScript.src = '/static/js/projectDashboard.js';
+              dashboardScript.onload = () => console.log('All dashboard components loaded successfully');
+              document.head.appendChild(dashboardScript);
+            }
+          };
+          document.head.appendChild(script);
+        });
+      }
+    });
+  </script>
 
- <!-- Ensure utilities are ready before loading components -->
- <script>
-   (function() {
-     let scriptsLoaded = {};
-     let pendingScripts = [
-       '/static/js/knowledgeBaseComponent.js',
-       '/static/js/projectDetailsComponent.js',
-       '/static/js/projectListComponent.js',
-       '/static/js/projectManager.js'
-     ];
-     
-     function waitForUtils() {
-       if (window.UIUtils && window.uiUtilsInstance && window.ModalManager) {
-         console.log('Dashboard utilities ready, loading components in sequence...');
-         loadScriptsSequentially();
-       } else {
-         console.log('Waiting for dashboard utilities...');
-         setTimeout(waitForUtils, 50);
-       }
-     }
-     
-     // Load scripts one after another to ensure proper order
-     function loadScriptsSequentially() {
-       if (pendingScripts.length === 0) {
-         // After all component scripts are loaded, load the dashboard
-         loadScript('/static/js/projectDashboard.js', function() {
-           console.log('All dashboard components loaded successfully.');
-         });
-         return;
-       }
-       
-       const nextScript = pendingScripts.shift();
-       loadScript(nextScript, function() {
-         // After script loads successfully, load the next one
-         loadScriptsSequentially();
-       });
-     }
-     
-     function loadScript(src, callback) {
-       if (scriptsLoaded[src]) {
-         if (callback) callback();
-         return;
-       }
-       
-       console.log('Loading script:', src);
-       const script = document.createElement('script');
-       script.src = src;
-       script.onload = function() {
-         console.log('Script loaded:', src);
-         scriptsLoaded[src] = true;
-         if (callback) callback();
-       };
-       script.onerror = function() {
-         console.error('Failed to load script:', src);
-         // Still try to continue with the next script
-         if (callback) callback();
-       };
-       document.head.appendChild(script);
-     }
-     
-     // Start checking for utilities
-     waitForUtils();
-   })();
- </script>
+  <!-- Core scripts -->
+  <script src="/static/js/chat-utils.js"></script>
+  <script src="/static/js/chat-websocket.js"></script>
+  <script src="/static/js/chat-messages.js"></script>
+  <script src="/static/js/chat-conversations.js"></script>
+  <script src="/static/js/chat-ui.js"></script>
+  <script src="/static/js/chat-interface.js"></script>
+  <script src="/static/js/chat-core.js"></script>
+  <script src="/static/js/formatting.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/modelConfig.js"></script>
 
- <!-- Ensure projectModal.js loads before sidebar.js and projectDashboard.js -->
- <!-- For clarity, let's move it to right after chat scripts -->
- <script src="/static/js/chat-websocket.js"></script>
- <script src="/static/js/chat-messages.js"></script>
- <script src="/static/js/chat-ui.js"></script>
- <script src="/static/js/chat-interface.js"></script>
- <script src="/static/js/chat-core.js"></script>
- <script src="/static/js/chat-utils.js"></script>
- <script src="/static/js/formatting.js"></script>
- 
- <!-- Make sure projectModal.js is loaded before sidebar.js -->
- <script src="/static/js/projectModal.js"></script>
- <script src="/static/js/sidebar.js"></script>
- <script src="/static/js/app.js"></script>
- <script>
-   console.log('All scripts loaded');
- </script>
+  <!-- Load project modal and component scripts -->
+  <script src="/static/js/projectModal.js"></script>
+  <script src="/static/js/projectListComponent.js"></script>
 
+  <!-- Core utilities must load first -->
+  <script src="/static/js/knowledgeBaseState.js"></script>
+  <script src="/static/js/projectDashboardUtils.js"></script>
+
+  <!-- Make sure projectModal.js is loaded before sidebar.js -->
+  <script src="/static/js/sidebar.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    console.log('All scripts loaded');
+  </script>
 </body>
 </html>
