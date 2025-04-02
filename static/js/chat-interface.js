@@ -28,7 +28,22 @@ window.ChatInterface = function(options = {}) {
   
   this.container = document.querySelector(options.containerSelector || '#chatUI');
   this.titleEl = document.querySelector(options.titleSelector || '#chatTitle');
-  this.messageContainerSelector = options.messageContainerSelector || '#conversationArea';
+  
+  // Set up container selectors
+  this._setupProjectContext();
+  
+  // Determine correct selectors based on context
+  this.containerSelector = options.containerSelector || (this.isProjectsPage ? '#projectChatUI' : '#chatUI');
+  this.messageContainerSelector = options.messageContainerSelector || (this.isProjectsPage ? '#projectChatMessages' : '#conversationArea');
+  this.inputSelector = options.inputSelector || (this.isProjectsPage ? '#projectChatInput' : '#chatInput');
+  this.sendButtonSelector = options.sendButtonSelector || (this.isProjectsPage ? '#projectChatSendBtn' : '#sendBtn');
+  
+  console.log('ChatInterface selectors:', {
+    container: this.containerSelector,
+    messages: this.messageContainerSelector, 
+    input: this.inputSelector,
+    sendButton: this.sendButtonSelector
+  });
 
   this.wsService = null;
   this.messageService = null;
@@ -101,13 +116,10 @@ window.ChatInterface.prototype.initialize = async function() {
     onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
   });
 
-  this.conversationService = new window.ConversationService({
-    onConversationLoaded: this._handleConversationLoaded.bind(this),
-    onLoadingStart: () => this.ui.messageList.setLoading(),
-    onLoadingEnd: () => {},
-    onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction),
-    showNotification: this.notificationFunction
-  });
+  // Initialize with current model config if available
+  if (window.MODEL_CONFIG) {
+    this.messageService.updateModelConfig(window.MODEL_CONFIG);
+  }
 
   // Create UI components, passing the message container selector
   this.ui = new window.UIComponents({
@@ -159,6 +171,18 @@ window.ChatInterface.prototype.initialize = async function() {
           });
       }
     });
+  }
+
+  // Initialize services
+  if (!this.conversationService) {
+    this.conversationService = window.ConversationService || {
+      createNewConversation: async () => {
+        throw new Error('ConversationService not properly initialized');
+      },
+      loadConversation: async () => {
+        throw new Error('ConversationService not properly initialized');
+      }
+    };
   }
 
   // Initial load or creation
@@ -229,6 +253,14 @@ window.ChatInterface.prototype._setupEventListeners = function() {
     
     if (chatId && chatId !== this.currentChatId) {
       this.loadConversation(chatId);
+    }
+  });
+
+  // Set up model config change listener
+  document.addEventListener('modelConfigChanged', (e) => {
+    if (this.messageService && e.detail) {
+      console.log("ChatInterface: Updating message service with new model config");
+      this.messageService.updateModelConfig(e.detail);
     }
   });
 };
@@ -330,6 +362,15 @@ window.ChatInterface.prototype.createNewConversation = async function() {
   
   try {
     console.log('Creating new conversation...');
+    
+    // Get current model from localStorage or MODEL_CONFIG
+    const currentModel = window.MODEL_CONFIG?.modelName || 
+                         localStorage.getItem("modelName") || 
+                         "claude-3-sonnet-20240229";
+                         
+    console.log(`Using model: ${currentModel} for new conversation`);
+    
+    // Pass the model to createNewConversation in conversationService
     const conversation = await this.conversationService.createNewConversation();
     console.log(`New conversation created successfully with ID: ${conversation.id}`);
     this.currentChatId = conversation.id;
@@ -337,29 +378,40 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     // Update URL
     window.history.pushState({}, '', `/?chatId=${conversation.id}`);
     
-    // Initialize message service with HTTP first (reliable fallback)
-    this.messageService.initialize(conversation.id, null);
-    console.log('Message service initialized with HTTP mode');
-    
-    // Try to connect WebSocket in the background
-        console.log('Attempting WebSocket connection...');
-        this.wsService.connect(conversation.id)
-          .then(() => {
-            console.log('WebSocket connected successfully, switching from HTTP to WebSocket mode');
-            // Re-initialize with WebSocket if connection succeeds
-            this.messageService.initialize(conversation.id, this.wsService);
-          })
-          .catch((error) => {
-            // Only show error if it's not the expected HTTP fallback error
-            if (error && error.message === 'Using HTTP fallback') {
-              console.log("Using HTTP fallback for messaging as expected");
-            } else {
-              console.warn("WebSocket connection failed, continuing with HTTP fallback:", error);
-            }
-            // Either way, ensure we're using HTTP mode
-            this.messageService.initialize(conversation.id, null);
-          });
+    // Initialize message service with latest config
+    if (this.messageService) {
+      // Ensure the message service has the latest config
+      if (window.MODEL_CONFIG) {
+        this.messageService.updateModelConfig(window.MODEL_CONFIG);
+      }
       
+      this.messageService.initialize(conversation.id, null);
+      console.log('Message service initialized with HTTP mode');
+      
+      // Try to connect WebSocket in the background
+      console.log('Attempting WebSocket connection...');
+      this.wsService.connect(conversation.id)
+        .then(() => {
+          console.log('WebSocket connected successfully, switching from HTTP to WebSocket mode');
+          // Re-initialize with WebSocket if connection succeeds
+          this.messageService.initialize(conversation.id, this.wsService);
+        })
+        .catch((error) => {
+          // Only show error if it's not the expected HTTP fallback error
+          if (error && error.message === 'Using HTTP fallback') {
+            console.log("Using HTTP fallback for messaging as expected");
+          } else {
+            console.warn("WebSocket connection failed, continuing with HTTP fallback:", error);
+          }
+          // Either way, ensure we're using HTTP mode
+          this.messageService.initialize(conversation.id, null);
+        });
+    } else {
+      console.error('Message service not available');
+      window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
+      return;
+    }
+    
     // Show chat UI
     if (this.container) {
       this.container.classList.remove('hidden');
