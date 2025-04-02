@@ -372,12 +372,12 @@
      * @param {Object} project - Project to delete
      */
     _confirmDelete(project) {
-      if (!window.ModalManager) {
-        console.error('ModalManager not available');
+      if (!window.modalManager) {
+        console.error('modalManager not available');
         return;
       }
       
-      window.ModalManager.confirmAction({
+      window.modalManager.show('delete', {
         title: "Delete Project",
         message: `Are you sure you want to delete "${project.name}"?`,
         confirmText: "Delete",

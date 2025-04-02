@@ -4,13 +4,13 @@
  */
 
 // Define MessageService as a constructor function attached to window
-window.MessageService = function(options = {}) {
-  this.onMessageReceived = options.onMessageReceived || (() => {});
-  this.onSending = options.onSending || (() => {});
+window.MessageService = function (options = {}) {
+  this.onMessageReceived = options.onMessageReceived || (() => { });
+  this.onSending = options.onSending || (() => { });
   this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error));
   this.chatId = null;
   this.wsService = null;
-  
+
   // Initialize with current model configuration if available
   this.modelConfig = window.MODEL_CONFIG || {
     modelName: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
@@ -21,23 +21,26 @@ window.MessageService = function(options = {}) {
     visionEnabled: localStorage.getItem("visionEnabled") === "true",
     visionDetail: localStorage.getItem("visionDetail") || "auto"
   };
-  
+
   console.log("MessageService initialized with model config:", this.modelConfig);
 };
 
-// Initialize service with chat ID and optional WebSocket service
-window.MessageService.prototype.initialize = function(chatId, wsService) {
+/**
+ * Initialize the service with a chat ID and optional WebSocket service
+ */
+window.MessageService.prototype.initialize = function (chatId, wsService) {
   this.chatId = chatId;
   this.wsService = wsService;
   if (wsService) {
     // Assign a default WebSocket 'onmessage' -> funnel to our handler
-    // But note that 'send()' uses an internal event listener for request correlation
     wsService.onMessage = this._handleWsMessage.bind(this);
   }
 };
 
-// Helper function to validate UUIDs in MessageService
-window.MessageService.prototype._isValidUUID = function(uuid) {
+/**
+ * Helper function to validate UUIDs in MessageService
+ */
+window.MessageService.prototype._isValidUUID = function (uuid) {
   if (!uuid) {
     console.warn('UUID validation failed: UUID is null or undefined');
     return false;
@@ -49,15 +52,25 @@ window.MessageService.prototype._isValidUUID = function(uuid) {
   return isValid;
 };
 
-// Send message using WebSocket or HTTP fallback
-window.MessageService.prototype.sendMessage = async function(content) {
+/**
+ * Update the model configuration
+ */
+window.MessageService.prototype.updateModelConfig = function (config) {
+  // Store current model configuration for message sending
+  this.modelConfig = config;
+  console.log("MessageService updated with new model config:", config);
+};
+
+/**
+ * Send a message (user_message) using WebSocket if available or HTTP fallback
+ */
+window.MessageService.prototype.sendMessage = async function (content) {
   try {
-    // Validate conversation ID first with better error message
+    // Validate conversation ID first
     if (!this.chatId) {
       console.error('Cannot send message: No conversation ID set');
       throw new Error('Invalid conversation ID: No conversation ID set');
     }
-    
     if (!this._isValidUUID(this.chatId)) {
       console.error(`Cannot send message: Invalid conversation ID format: ${this.chatId}`);
       throw new Error(`Invalid conversation ID: ${this.chatId}`);
@@ -69,13 +82,18 @@ window.MessageService.prototype.sendMessage = async function(content) {
     // Determine if we're in project context or standalone chat
     const isProjectContext = window.location.pathname.includes('/projects');
     const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
-    
-    // Use the stored model config if available, otherwise fall back to localStorage
+
+    // Check for updated model config from MODEL_CONFIG global
+    if (window.MODEL_CONFIG) {
+      this.updateModelConfig(window.MODEL_CONFIG);
+    }
+
+    // Create message payload with the latest model configuration
     const messagePayload = {
       type: "user_message",
       content: content,
       model_id: this.modelConfig?.modelName || localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
-      enable_thinking: this.modelConfig?.extendedThinking || localStorage.getItem("extendedThinking") === "true" || true,
+      enable_thinking: this.modelConfig?.extendedThinking ?? (localStorage.getItem("extendedThinking") === "true"),
       project_id: isProjectContext ? projectId : null
     };
 
@@ -85,20 +103,31 @@ window.MessageService.prototype.sendMessage = async function(content) {
       messagePayload.vision_image = this.modelConfig.visionImage;
       messagePayload.vision_detail = this.modelConfig.visionDetail || "auto";
     }
-    
+
     // Add reasoning parameters if available
     if (this.modelConfig?.reasoningEffort) {
       messagePayload.reasoning_effort = this.modelConfig.reasoningEffort;
     }
 
+    // Add custom instructions if available
+    const customInstructions = localStorage.getItem('globalCustomInstructions');
+    if (customInstructions) {
+      messagePayload.custom_instructions = customInstructions;
+    }
+
+    // Add project-specific custom instructions if in project context
+    if (isProjectContext && projectId) {
+      const projectInstructions = localStorage.getItem(`project_${projectId}_instructions`);
+      if (projectInstructions) {
+        messagePayload.project_instructions = projectInstructions;
+      }
+    }
+
     // Only include project_id if we're in project context
     if (isProjectContext && projectId) {
       messagePayload.project_id = projectId;
-      
-      // Add knowledge base integration
+      // Add knowledge base integration context
       try {
-        // Check if knowledge base is enabled for this project
-        // First check project-specific conversation setting, then check global project KB setting
         const kbStatus = await this._checkKnowledgeBaseStatus(projectId);
         if (kbStatus) {
           messagePayload.use_knowledge_base = kbStatus.enabled;
@@ -108,9 +137,9 @@ window.MessageService.prototype.sendMessage = async function(content) {
         console.warn("Error checking knowledge base status:", e);
       }
     }
-    
-    // Add thinking budget if available and model supports it
-    const thinkingBudget = this.modelConfig?.thinkingBudget || localStorage.getItem("thinkingBudget");
+
+    // Add thinking budget if available
+    const thinkingBudget = this.modelConfig?.thinkingBudget ?? localStorage.getItem("thinkingBudget");
     if (thinkingBudget) {
       try {
         const budget = parseInt(thinkingBudget, 10);
@@ -123,6 +152,7 @@ window.MessageService.prototype.sendMessage = async function(content) {
       }
     }
 
+    // Attempt WebSocket first, fallback to HTTP
     if (this.wsService && this.wsService.isConnected()) {
       try {
         const wsResponse = await this.wsService.send({
@@ -130,7 +160,7 @@ window.MessageService.prototype.sendMessage = async function(content) {
           chatId: this.chatId,
           ...messagePayload
         });
-        
+
         this.onMessageReceived({
           role: 'assistant',
           content: wsResponse.content || wsResponse.message || '',
@@ -139,46 +169,45 @@ window.MessageService.prototype.sendMessage = async function(content) {
           metadata: wsResponse.metadata || {}
         });
       } catch (wsError) {
-        // Use standardized error handling, then fall back to HTTP
         window.ChatUtils?.handleError?.('WebSocket message', wsError);
         console.warn('WebSocket message failed, using HTTP fallback:', wsError);
         await this._sendMessageHttp(messagePayload);
       }
     } else {
-      // Use HTTP if WebSocket not available
       await this._sendMessageHttp(messagePayload);
     }
   } catch (error) {
-    // Always use standardized error handling from ChatUtils
-    window.ChatUtils?.handleError?.('Sending message', error) || 
-    this.onError('Sending message', error);
+    window.ChatUtils?.handleError?.('Sending message', error) ||
+      this.onError('Sending message', error);
   }
 };
 
-// HTTP fallback for message sending
-window.MessageService.prototype._sendMessageHttp = async function(messagePayload) {
+/**
+ * HTTP fallback for message sending
+ */
+window.MessageService.prototype._sendMessageHttp = async function (messagePayload) {
   try {
     // Validate chatId before proceeding
     if (!this.chatId || !this._isValidUUID(this.chatId)) {
       throw new Error('Invalid conversation ID');
     }
-    
+
     // Get project context from URL or localStorage
     const projectId = localStorage.getItem("selectedProjectId") ||
       (window.location.pathname.match(/projects\/([^/]+)/) || [])[1];
-        
-    // Determine correct endpoint based on context
+
+    // Determine correct endpoint
     const endpoint = projectId
       ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
       : `/api/chat/conversations/${this.chatId}/messages`;
-    
-    // Create options with projectId if available
+
+    // Create request body
     const requestBody = {
       ...messagePayload,
       project_id: projectId || null
     };
-    
-    // Check if knowledge base should be used
+
+    // Check knowledge base again if in project context
     if (projectId) {
       try {
         const kbStatus = await this._checkKnowledgeBaseStatus(projectId);
@@ -190,8 +219,8 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
         console.warn("[HTTP] Error checking knowledge base status:", e);
       }
     }
-    
-    // Use fetch directly if apiRequest is not available
+
+    // Fallback to fetch if window.apiRequest is unavailable
     const fetchOptions = {
       method: 'POST',
       headers: {
@@ -200,35 +229,30 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       },
       body: JSON.stringify(requestBody)
     };
-    
-    const response = await (window.apiRequest ?
-      window.apiRequest(endpoint, 'POST', requestBody) :
-      fetch(endpoint, fetchOptions).then(res => res.json()));
-    
+
+    const response = await (window.apiRequest
+      ? window.apiRequest(endpoint, 'POST', requestBody)
+      : fetch(endpoint, fetchOptions).then(res => res.json()));
+
     const responseData = response.data || response;
-    
     console.log('API response data:', responseData);
-    
-    // Handle both response format variations
+
+    // Handle both possible response formats
     let assistantContent = '';
     let assistantThinking = null;
     let assistantRedactedThinking = null;
     let assistantMetadata = {};
-    
+
     if (responseData.assistant_message) {
+      // Attempt to parse the string if necessary
       try {
-        // Try to parse the assistant_message if it's a string
-        const assistantMsg = typeof responseData.assistant_message === 'string' 
-          ? JSON.parse(responseData.assistant_message) 
+        const assistantMsg = (typeof responseData.assistant_message === 'string')
+          ? JSON.parse(responseData.assistant_message)
           : responseData.assistant_message;
-          
+
         assistantContent = assistantMsg.content || assistantMsg.message || '';
-        
-        // Check for thinking in both places
         assistantThinking = assistantMsg.metadata?.thinking || assistantMsg.thinking;
         assistantRedactedThinking = assistantMsg.metadata?.redacted_thinking || assistantMsg.redacted_thinking;
-        
-        // Merge metadata from all possible sources
         assistantMetadata = {
           ...(assistantMsg.metadata || {}),
           thinking: assistantThinking,
@@ -236,23 +260,26 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
         };
       } catch (e) {
         console.warn('Failed to parse assistant_message:', e);
-        // Fallback to direct fields
-        assistantContent = responseData.assistant_content || responseData.content || responseData.message || '';
+        // Fallback if parsing fails
+        assistantContent = responseData.assistant_content ||
+          responseData.content ||
+          responseData.message ||
+          '';
       }
     } else {
-      // Use direct fields
+      // Direct fields
       assistantContent = responseData.content || responseData.message || '';
       assistantThinking = responseData.thinking;
       assistantRedactedThinking = responseData.redacted_thinking;
       assistantMetadata = responseData.metadata || {};
     }
-    
-    // Additional fallback for direct root-level fields
+
+    // Additional fallback
     if (!assistantContent && responseData.assistant_content) {
       assistantContent = responseData.assistant_content;
     }
-    
-    // Only call onMessageReceived if we actually got content
+
+    // Only call onMessageReceived if we got valid content
     if (assistantContent) {
       this.onMessageReceived({
         role: 'assistant',
@@ -265,22 +292,17 @@ window.MessageService.prototype._sendMessageHttp = async function(messagePayload
       console.error('Empty or missing assistant content in response:', responseData);
       this.onError('HTTP message', new Error('No response content received from API'));
     }
+
   } catch (error) {
-    // Use standardized error handling
-    window.ChatUtils?.handleError?.('HTTP message', error) || 
-    this.onError('HTTP message', error);
+    window.ChatUtils?.handleError?.('HTTP message', error) ||
+      this.onError('HTTP message', error);
   }
 };
 
-// Update model configuration
-window.MessageService.prototype.updateModelConfig = function(config) {
-  // Store current model configuration for message sending
-  this.modelConfig = config;
-  console.log("MessageService updated with new model config:", config);
-};
-
-// Handle WebSocket messages
-window.MessageService.prototype._handleWsMessage = function(event) {
+/**
+ * Handle WebSocket messages
+ */
+window.MessageService.prototype._handleWsMessage = function (event) {
   try {
     const data = JSON.parse(event.data);
     console.log('[WS IN] Raw message:', event.data);
@@ -291,8 +313,8 @@ window.MessageService.prototype._handleWsMessage = function(event) {
       console.debug('[WS] Keepalive:', data.type);
       return;
     }
-    
-    // If it's a plain message broadcast from the server
+
+    // Plain message broadcast from server
     if (data.type === 'message') {
       this.onMessageReceived({
         role: 'assistant',
@@ -302,8 +324,7 @@ window.MessageService.prototype._handleWsMessage = function(event) {
         metadata: data.metadata || {}
       });
     }
-    
-    // Handle Claude-specific response format
+    // Claude-specific response format
     else if (data.type === 'claude_response') {
       this.onMessageReceived({
         role: 'assistant',
@@ -318,8 +339,7 @@ window.MessageService.prototype._handleWsMessage = function(event) {
         }
       });
     }
-    
-    // Handle assistant message with specific role
+    // Assistant message with a role
     else if (data.role === 'assistant') {
       this.onMessageReceived({
         role: 'assistant',
@@ -333,15 +353,13 @@ window.MessageService.prototype._handleWsMessage = function(event) {
         }
       });
     }
-    
-    // Add status updates
+    // WebSocket status updates
     else if (data.type === 'status') {
       console.log('WebSocket status update:', data.message);
     }
   } catch (error) {
-    // Use standardized error handling
-    window.ChatUtils?.handleError?.('Processing WebSocket message', error) || 
-    this.onError('Processing WebSocket message', error);
+    window.ChatUtils?.handleError?.('Processing WebSocket message', error) ||
+      this.onError('Processing WebSocket message', error);
   }
 };
 
@@ -351,14 +369,14 @@ window.MessageService.prototype._handleWsMessage = function(event) {
  * @param {string} projectId - Project ID
  * @returns {Promise<Object>} Knowledge base status
  */
-window.MessageService.prototype._checkKnowledgeBaseStatus = async function(projectId) {
+window.MessageService.prototype._checkKnowledgeBaseStatus = async function (projectId) {
   try {
     // First check local cache
     const localSetting = localStorage.getItem(`kb_enabled_${projectId}`);
     if (localSetting !== null) {
       return { enabled: localSetting === "true", source: "localStorage" };
     }
-    
+
     // If window.knowledgeBaseState is available, use it
     if (window.knowledgeBaseState?.verifyKB) {
       const kbState = await window.knowledgeBaseState.verifyKB(projectId);
@@ -368,14 +386,13 @@ window.MessageService.prototype._checkKnowledgeBaseStatus = async function(proje
         return { enabled: kbState.isActive, exists: kbState.exists, source: "api" };
       }
     }
-    
-    // Fall back to API request
+
+    // Fall back to API request if above fails
     try {
       const response = await window.apiRequest(
         `/api/projects/${projectId}/knowledge-base-status`,
         "GET"
       );
-      
       const data = response.data || {};
       localStorage.setItem(`kb_enabled_${projectId}`, String(data.isActive));
       return { enabled: data.isActive, exists: data.exists, source: "api" };

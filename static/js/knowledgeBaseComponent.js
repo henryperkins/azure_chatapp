@@ -533,9 +533,19 @@
         this.elements.setupButton.addEventListener("click", () => this._showKnowledgeBaseModal());
       }
 
-      // KB form submit
-      document.getElementById("knowledgeBaseForm")?.addEventListener("submit", (e) => 
-        this._handleKnowledgeBaseFormSubmit(e));
+      // KB form submit and cancel
+      const kbForm = document.getElementById("knowledgeBaseForm");
+      if (kbForm) {
+        kbForm.addEventListener("submit", (e) => this._handleKnowledgeBaseFormSubmit(e));
+        
+        // Bind cancel button
+        const cancelBtn = document.getElementById("cancelKnowledgeBaseFormBtn");
+        if (cancelBtn) {
+          cancelBtn.addEventListener("click", () => {
+            window.modalManager?.hide("knowledge");
+          });
+        }
+      }
     }
     
     /**

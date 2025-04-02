@@ -80,7 +80,13 @@ window.ConversationService.prototype.loadConversation = async function(chatId) {
 // Create a new conversation with built-in retries
 window.ConversationService.prototype.createNewConversation = async function(maxRetries = 2) {
   const projectId = localStorage.getItem("selectedProjectId");
-  const model = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
+  
+  // Use current model config if available, otherwise fall back to localStorage
+  const model = window.MODEL_CONFIG?.modelName || 
+                localStorage.getItem("modelName") || 
+                "claude-3-sonnet-20240229";
+  
+  console.log(`Creating new conversation with model: ${model}`);
   
   // Generate a default title with timestamp
   const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
@@ -94,7 +100,7 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
       // Use window.apiRequest for API requests
       const data = await window.apiRequest(url, "POST", {
         title: defaultTitle,
-        model_id: model
+        model_id: model  // Pass the selected model ID
       });
 
       // Handle different API response formats

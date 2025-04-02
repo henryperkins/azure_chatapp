@@ -438,6 +438,7 @@ function setupVisionFileInput() {
    localStorage.setItem("maxTokens", clampedVal.toString());
    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
    window.MODEL_CONFIG.maxTokens = clampedVal;
+   
   // Reasoning effort
   const reasoningEffortRange = document.getElementById("reasoningEffortRange");
   if (reasoningEffortRange) {
@@ -475,20 +476,43 @@ function setupVisionFileInput() {
     window.MODEL_CONFIG.thinkingBudget = Number(thinkingBudgetSelect.value);
   }
 
+  // Load custom instructions if available
+  const globalCustomInstructions = localStorage.getItem("globalCustomInstructions");
+  if (globalCustomInstructions) {
+    window.MODEL_CONFIG.customInstructions = globalCustomInstructions;
+  }
+
+  // If there's a selected project, check for project instructions
+  const selectedProjectId = localStorage.getItem("selectedProjectId");
+  if (selectedProjectId) {
+    const projectInstructions = localStorage.getItem(`project_${selectedProjectId}_instructions`);
+    if (projectInstructions) {
+      window.MODEL_CONFIG.projectInstructions = projectInstructions;
+    }
+  }
+
   updateModelConfigDisplay();
+  
+  // Include all relevant model config in the event detail
+  const modelConfigData = {
+    modelName: localStorage.getItem('modelName'),
+    maxTokens: localStorage.getItem('maxTokens'),
+    visionEnabled: localStorage.getItem('visionEnabled'),
+    visionDetail: localStorage.getItem('visionDetail'),
+    extendedThinking: localStorage.getItem('extendedThinking'),
+    thinkingBudget: localStorage.getItem('thinkingBudget'),
+    reasoningEffort: localStorage.getItem('reasoningEffort'),
+    customInstructions: localStorage.getItem('globalCustomInstructions'),
+    timestamp: Date.now() // Add timestamp to ensure listeners detect the change
+  };
   
   // Dispatch config change event
   const event = new CustomEvent('modelConfigChanged', {
-    detail: {
-      modelName: localStorage.getItem('modelName'),
-      maxTokens: localStorage.getItem('maxTokens'),
-      visionEnabled: localStorage.getItem('visionEnabled'),
-      visionDetail: localStorage.getItem('visionDetail'),
-      extendedThinking: localStorage.getItem('extendedThinking'),
-      thinkingBudget: localStorage.getItem('thinkingBudget')
-    }
+    detail: modelConfigData
   });
   document.dispatchEvent(event);
+  
+  console.log("Model config persisted and event dispatched:", modelConfigData);
 }
 
 /**
