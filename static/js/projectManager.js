@@ -540,25 +540,101 @@
    * @returns {Promise<Object>}
    */
   async function createConversation(projectId) {
-    const payload = { title: "New Conversation" };
+    console.debug('[ProjectManager] Creating conversation for project:', projectId);
+    
     try {
+      // Validate project existence
+      if (!this.currentProject || this.currentProject.id !== projectId) {
+        await this.loadProjectDetails(projectId); 
+        if (!this.currentProject) {
+          throw new Error("Project not loaded after refresh");
+        }
+      }
+
+      const payload = { 
+        title: "New Conversation",
+        model: window.MODEL_CONFIG?.modelName || "claude-3-sonnet-20240229",
+        system_prompt: window.MODEL_CONFIG?.customInstructions || "" 
+      };
+
+      console.debug('[ProjectManager] Conversation payload:', payload);
+
       const response = await window.apiRequest(
         `/api/projects/${projectId}/conversations`,
         "POST",
-        {
-          ...payload,
-          project_id: projectId
-        }
+        payload
       );
 
-      if (response?.data?.id) {
-        return response.data;
+      // Validate response structure
+      if (!response?.id) {
+        console.error('[ProjectManager] Invalid conversation response:', response);
+        throw new Error(`Server returned invalid conversation ID: ${JSON.stringify(response)}`);
       }
-      throw new Error("Invalid conversation response");
-    } catch (err) {
-      console.error("[projectManager] Error creating conversation:", err);
-      throw err;
+
+      console.debug('[ProjectManager] Created conversation:', response.id);
+      
+      // Link conversation to knowledge base if available
+      if (this.currentProject.knowledge_base_id) {
+        await this.linkConversationToKnowledgeBase(response.id);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('[ProjectManager] Conversation creation failed:', {
+        error: error.message,
+        projectId,
+        model: window.MODEL_CONFIG?.modelName,
+        knowledgeBase: !!this.currentProject?.knowledge_base_id
+      });
+      
+      throw new Error(`Failed to create conversation: ${this.formatProjectError(error)}`);
     }
+  }
+
+  /**
+   * Link conversation to project's knowledge base
+   * @param {string} conversationId
+   * @returns {Promise<void>}
+   */
+  async function linkConversationToKnowledgeBase(conversationId) {
+    const kbId = this.currentProject.knowledge_base_id;
+    if (!kbId) return;
+
+    try {
+      console.debug(`[ProjectManager] Linking conversation ${conversationId} to KB ${kbId}`);
+      
+      await window.apiRequest(
+        `/api/knowledge-bases/${kbId}/conversations/${conversationId}`,
+        "PUT",
+        { association_type: "primary" }
+      );
+      
+      console.debug('[ProjectManager] Knowledge base link successful');
+    } catch (linkError) {
+      console.error('[ProjectManager] KB linking failed:', {
+        conversationId,
+        kbId,
+        error: linkError.message,
+        response: linkError?.response?.data
+      });
+      
+      throw new Error("Created conversation but failed to connect knowledge base");
+    }
+  }
+
+  /**
+   * Format project-related errors for user display
+   * @param {Error} error 
+   * @returns {string}
+   */
+  function formatProjectError(error) {
+    // Enhanced error mapping
+    const status = error?.response?.status;
+    const serverMessage = error?.response?.data?.error;
+    
+    return status === 403 ? "You don't have permissions to create conversations in this project" :
+           status === 404 ? "Project not found or unavailable" :
+           serverMessage || error.message || "Unknown project error";
   }
 
   /* ===========================
@@ -686,6 +762,7 @@
     // Conversations
     createConversation,
     deleteProjectConversation,
+    linkConversationToKnowledgeBase,
     // Knowledge Base
     isKnowledgeBaseReady,
     loadKnowledgeBaseDetails,
