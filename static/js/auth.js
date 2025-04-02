@@ -27,11 +27,9 @@ const TokenManager = {
     }
     
     try {
-      // Parse token to get version
-      const payload = access.split('.')[1];
-      const decoded = JSON.parse(atob(payload));
-      this.version = decoded.version;
-      console.log(`TokenManager: Set token version to ${this.version}`);
+      // Store token without parsing (security)
+      this.version = '1'; // Default version
+      console.log(`TokenManager: Set new access token`);
     } catch (e) {
       console.warn('Failed to parse token version:', e);
     }

@@ -245,9 +245,11 @@ window.initializeChat = async function () {
         // Ensure MODEL_CONFIG exists
         window.MODEL_CONFIG = window.MODEL_CONFIG || {};
         
-        // Update model name from event or localStorage
-        const modelName = e.detail?.modelName || localStorage.getItem('modelName') || "claude-3-sonnet-20240229";
-        window.MODEL_CONFIG.modelName = modelName;
+        // Create new config object to avoid mutations
+        window.MODEL_CONFIG = {
+          ...(window.MODEL_CONFIG || {}),
+          modelName: e.detail?.modelName || localStorage.getItem('modelName') || "claude-3-sonnet-20240229"
+        };
         
         // Update max tokens with proper fallback
         const storedMaxTokens = localStorage.getItem('maxTokens') || "500";
