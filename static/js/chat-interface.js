@@ -371,7 +371,26 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     console.log(`Using model: ${currentModel} for new conversation`);
     
     // Pass the model to createNewConversation in conversationService
-    const conversation = await this.conversationService.createNewConversation();
+    let conversation;
+    try {
+      const projectId = localStorage.getItem('selectedProjectId');
+      if (projectId && window.projectManager?.createConversation) {
+        // Use project-specific creation if in project context
+        conversation = await window.projectManager.createConversation(projectId);
+      } else {
+        // Fall back to standard conversation creation
+        conversation = await this.conversationService.createNewConversation();
+      }
+    } catch (error) {
+      console.error('Conversation creation failed:', error);
+      this.notificationFunction(
+        error.message.includes('knowledge base') ? 
+          'Created chat but knowledge integration failed' :
+          'Failed to create conversation',
+        'error'
+      );
+      throw error;
+    }
     console.log(`New conversation created successfully with ID: ${conversation.id}`);
     this.currentChatId = conversation.id;
     
