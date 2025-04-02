@@ -622,7 +622,7 @@
                    tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Conversations</h3>
-                  <button id="newConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
+                  <button id="projectNewConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
@@ -1145,10 +1145,14 @@
                 newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
               }
               
-              // Focus the new tab
+              // Update ARIA and focus state
+              tabs.forEach(tab => {
+                tab.setAttribute('aria-selected', 'false');
+                tab.setAttribute('tabindex', '-1');
+              });
+              tabs[newIndex].setAttribute('aria-selected', 'true');
+              tabs[newIndex].setAttribute('tabindex', '0');
               tabs[newIndex].focus();
-              // Activate the tab (simulate click)
-              tabs[newIndex].click();
             }
           });
         });
@@ -1213,17 +1217,17 @@
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/modelConfig.js"></script>
 
-  <!-- Load project modal and component scripts -->
-  <script src="/static/js/projectModal.js"></script>
-  <script src="/static/js/projectListComponent.js"></script>
-
   <!-- Core utilities must load first -->
-  <script src="/static/js/knowledgeBaseState.js"></script>
-  <script src="/static/js/projectDashboardUtils.js"></script>
+  <script src="/static/js/projectModal.js" defer></script>
+  <script src="/static/js/knowledgeBaseState.js" defer></script>
+  <script src="/static/js/projectDashboardUtils.js" defer></script>
 
-  <!-- Make sure projectModal.js is loaded before sidebar.js -->
-  <script src="/static/js/sidebar.js"></script>
-  <script src="/static/js/app.js"></script>
+  <!-- Component scripts -->
+  <script src="/static/js/projectListComponent.js" defer></script>
+
+  <!-- Load remaining scripts with defer -->
+  <script src="/static/js/sidebar.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
   <script>
     console.log('All scripts loaded');
   </script>
