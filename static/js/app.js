@@ -609,7 +609,14 @@ function handleWindowResize() {
   if (window.innerWidth >= 768) {
     sidebarEl.classList.remove('fixed', 'inset-0', 'z-50');
   }
+  // Trigger viewport height update
+  setViewportHeight();
 }
+
+// Handle orientation changes
+window.addEventListener('orientationchange', () => {
+  window.dispatchEvent(new Event('resize'));
+});
 
 // ---------------------------------------------------------------------
 // UTILITY: Search
@@ -716,8 +723,18 @@ function setupGlobalKeyboardShortcuts() {
   });
 }
 
+// Mobile viewport height fix
+function setViewportHeight() {
+  const vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
 // Example main initialization
 async function initializeApplication() {
+  // Set initial viewport height
+  setViewportHeight();
+  // Update on resize
+  window.addEventListener('resize', setViewportHeight);
   try {
     console.log("Starting main application initialization");
     // We do not call initAuth here; it's called in auth.js
