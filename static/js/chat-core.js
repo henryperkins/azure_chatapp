@@ -84,21 +84,40 @@ window.initializeChat = async function () {
       const container = document.querySelector('#projectChatContainer') || 
                        document.querySelector('#chatContainer');
                       
-      // Adjust the containerSelector based on what was found
-      const containerSelector = container?.id === 'chatContainer' ? 
-                               '#chatContainer' : 
-                               '#projectChatContainer';
+      // Determine if we're in project context
+      const isProjectContext = window.location.pathname.includes('/projects') || 
+                               container?.id === 'projectChatContainer';
                                
-      // Also adjust message container selector similarly
-      const messageSelector = container?.id === 'chatContainer' ? 
-                             '#chatMessages' : 
-                             '#projectChatMessages';
+      // Adjust the containerSelector based on what was found and context
+      const containerSelector = isProjectContext ? 
+                               '#projectChatUI' : 
+                               '#chatUI';
+                               
+      // Also adjust message container and input selectors similarly
+      const messageSelector = isProjectContext ? 
+                             '#projectChatMessages' : 
+                             '#conversationArea';
                              
-      console.log(`Initializing chat with container: ${containerSelector}, messages: ${messageSelector}`);
+      const inputSelector = isProjectContext ?
+                           '#projectChatInput' :
+                           '#chatInput';
+                           
+      const sendBtnSelector = isProjectContext ?
+                            '#projectChatSendBtn' :
+                            '#sendBtn';
+                            
+      console.log(`Initializing chat with selectors:`, {
+        container: containerSelector,
+        messages: messageSelector,
+        input: inputSelector,
+        sendBtn: sendBtnSelector
+      });
       
       window.chatInterface = new window.ChatInterface({
         containerSelector: containerSelector,
-        messageContainerSelector: messageSelector
+        messageContainerSelector: messageSelector,
+        inputSelector: inputSelector,
+        sendButtonSelector: sendBtnSelector
       });
       
       try {
@@ -254,10 +273,22 @@ window.initializeChat = async function () {
         console.log("Updated MODEL_CONFIG:", window.MODEL_CONFIG);
         
         // Update message service if available
-        if (chatInterface && chatInterface.messageService) {
-          // Pass the updated config to message service if needed
-          chatInterface.messageService.updateModelConfig(window.MODEL_CONFIG);
+        if (window.chatInterface && window.chatInterface.messageService) {
+          // Pass the updated config to message service
+          window.chatInterface.messageService.updateModelConfig(window.MODEL_CONFIG);
         }
+        
+        // Update project chat interface if it exists and is different from the main chat interface
+        if (window.projectChatInterface && 
+            window.projectChatInterface !== window.chatInterface && 
+            window.projectChatInterface.messageService) {
+          window.projectChatInterface.messageService.updateModelConfig(window.MODEL_CONFIG);
+        }
+        
+        // Notify other components about the config change
+        document.dispatchEvent(new CustomEvent('modelConfigUpdated', {
+          detail: window.MODEL_CONFIG
+        }));
       } catch (error) {
         console.error("Error handling model config change:", error);
       }
