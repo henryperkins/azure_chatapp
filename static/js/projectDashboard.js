@@ -127,7 +127,7 @@ class ProjectDashboard {
     this.state.currentView = "list";
     this.components.projectList?.show();
     this.components.projectDetails?.hide();
-    window.history.pushState({}, "", window.location.pathname);
+    window.history.pushState({}, "", "/");
     this.loadProjects().catch(err => {
       console.error("[ProjectDashboard] showProjectList load error:", err);
     });
@@ -149,9 +149,6 @@ class ProjectDashboard {
   }
 
   processUrlParams() {
-    if (!window.location.pathname.includes("/projects")) {
-      return;
-    }
     const urlParams = new URLSearchParams(window.location.search);
     const projectId = urlParams.get("project");
 
@@ -415,7 +412,14 @@ class ProjectDashboard {
           if (!this.element) {
             this.element = document.createElement("div");
             this.element.id = this.elementId;
-            document.querySelector("#projectListView")?.appendChild(this.element);
+            // Ensure projectListView exists or create it
+            let projectListView = document.querySelector("#projectListView");
+            if (!projectListView) {
+              projectListView = document.createElement("div");
+              projectListView.id = "projectListView";
+              document.body.appendChild(projectListView);
+            }
+            projectListView.appendChild(this.element);
           }
         }
         show() {
@@ -472,11 +476,6 @@ class ProjectDashboard {
   async _completeInitialization() {
     if (!window.projectManager) {
       throw new Error("projectManager is required but not available");
-    }
-
-    // Only run project UI if we're on the /projects page
-    if (!window.location.pathname.includes("/projects")) {
-      return;
     }
 
     // Create fallback DOM elements if needed
