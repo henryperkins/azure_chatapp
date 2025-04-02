@@ -4,7 +4,7 @@ message.py
 Defines the Message model for storing messages associated with a Conversation.
 Tracks role ("user", "assistant", "system"), content, metadata for tokens.
 """
-from sqlalchemy import Integer, String, Text, TIMESTAMP, text, ForeignKey, event, CheckConstraint
+from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, event, CheckConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from typing import Optional

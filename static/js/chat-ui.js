@@ -7,8 +7,14 @@
 window.UIComponents = function(options = {}) {
   // Store selectors at instance level
   this.messageContainerSelector = options.messageContainerSelector || '#projectChatMessages';
-  this.inputSelector = options.inputSelector || '#chatInput';
-  this.sendButtonSelector = options.sendButtonSelector || '#sendBtn';
+  this.inputSelector = options.inputSelector || '#projectChatInput';
+  this.sendButtonSelector = options.sendButtonSelector || '#projectChatSendBtn';
+  
+  console.log('UIComponents initialized with selectors:', {
+    messageContainer: this.messageContainerSelector,
+    input: this.inputSelector,
+    sendButton: this.sendButtonSelector
+  });
   
   // Message list component for rendering messages
   this.messageList = {
@@ -317,8 +323,8 @@ window.UIComponents = function(options = {}) {
 
   // Input component
   this.input = {
-    element: document.querySelector(options.inputSelector || '#chatInput'),
-    button: document.querySelector(options.sendButtonSelector || '#sendBtn'),
+    element: null,
+    button: null,
     onSend: options.onSend || (() => {}),
 
     getValue: function() {
@@ -334,21 +340,141 @@ window.UIComponents = function(options = {}) {
     },
 
     init: function() {
-      if (this.element) {
-        this.element.addEventListener("keyup", (e) => {
-          if (e.key === "Enter") this._send();
-        });
+      // More robust element finding logic
+      // First try with the provided selectors
+      if (options.inputSelector) {
+        this.element = document.querySelector(options.inputSelector);
       }
+
+      if (options.sendButtonSelector) {
+        this.button = document.querySelector(options.sendButtonSelector);
+      }
+
+      // If not found, try common selectors and fallbacks
+      if (!this.element) {
+        console.log('Input element not found with selector:', options.inputSelector);
+        // Try common input selectors
+        const possibleInputs = [
+          '#chatInput',
+          '#projectChatInput',
+          'input[placeholder*="message" i]',
+          '.chat-input',
+          'input[type="text"]'
+        ];
+        
+        for (const selector of possibleInputs) {
+          const element = document.querySelector(selector);
+          if (element) {
+            console.log('Found input element with fallback selector:', selector);
+            this.element = element;
+            break;
+          }
+        }
+      }
+
+      // If button not found, try common button selectors or find sibling button
+      if (!this.button) {
+        console.log('Send button not found with selector:', options.sendButtonSelector);
+        // Try common button selectors
+        const possibleButtons = [
+          '#sendBtn',
+          '#projectChatSendBtn',
+          'button:has-text("Send")',
+          'button.chat-send-button',
+          // Look for a button near the input
+          this.element ? this.element.nextElementSibling : null
+        ];
+        
+        for (const selector of possibleButtons) {
+          if (!selector) continue; // Skip null entries
+          
+          // Handle DOM element directly
+          if (selector instanceof Element) {
+            if (selector.tagName === 'BUTTON') {
+              console.log('Found button element as sibling of input');
+              this.button = selector;
+              break;
+            }
+            continue;
+          }
+          
+          // Handle selector strings
+          const element = document.querySelector(selector);
+          if (element) {
+            console.log('Found button element with fallback selector:', selector);
+            this.button = element;
+            break;
+          }
+        }
+        
+        // Last resort - look for any button in the chat container
+        if (!this.button) {
+          const chatContainer = document.querySelector('#projectChatUI') || 
+                               document.querySelector('#chatUI');
+          if (chatContainer) {
+            const containerButton = chatContainer.querySelector('button');
+            if (containerButton) {
+              console.log('Found fallback button in chat container');
+              this.button = containerButton;
+            }
+          }
+        }
+      }
+
+      // Log final element status
+      console.log('Final input element:', this.element);
+      console.log('Final button element:', this.button);
+      
+      // Set up event listeners if elements were found
+      if (this.element) {
+        // Use safer event listener removal and re-attachment
+        const keyupHandler = (e) => {
+          if (e.key === "Enter") this._send();
+        };
+        
+        this.element.removeEventListener("keyup", keyupHandler);
+        this.element.addEventListener("keyup", keyupHandler);
+      } else {
+        console.error('Could not find input element for chat');
+      }
+      
       if (this.button) {
-        this.button.addEventListener("click", () => this._send());
+        // Create a new click handler
+        const clickHandler = () => {
+          console.log('Send button clicked');
+          this._send();
+        };
+        
+        // Remove any existing listeners to prevent duplicates
+        const newButton = this.button.cloneNode(true);
+        if (this.button.parentNode) {
+          this.button.parentNode.replaceChild(newButton, this.button);
+        }
+        this.button = newButton;
+        
+        // Add the click event listener
+        this.button.addEventListener("click", clickHandler);
+      } else {
+        console.error('Could not find send button for chat');
+      }
+      
+      // Check for model configuration events
+      if (!this._hasModelConfigListener) {
+        document.addEventListener('modelConfigChanged', (e) => {
+          console.log('Model config changed, updating UI if needed:', e.detail);
+          // Any UI updates needed can be added here
+        });
+        this._hasModelConfigListener = true;
       }
     },
 
     _send: function() {
       const msg = this.getValue();
       if (msg) {
+        console.log('Sending message:', msg);
         this.onSend(msg);
         this.clear();
+        this.focus(); // Auto focus after sending
       }
     }
   };

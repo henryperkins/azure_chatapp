@@ -1,26 +1,27 @@
 """
 conversation.py
 --------------
-Defines the Conversation model, representing a conversation's metadata: 
+Defines the Conversation model, representing a conversation's metadata:
 - ID (UUID)
 - user ownership
 - optional model_id referencing an AI model
 - title for display
 """
 import logging
-from sqlalchemy import String, Integer, Boolean, TIMESTAMP, text, ForeignKey, select
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import String, Integer, Boolean, TIMESTAMP, text, ForeignKey, select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from models.project import Project
-from models.knowledge_base import KnowledgeBase
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
+
 from db import Base
-from typing import Optional
-from datetime import datetime
+from models.knowledge_base import KnowledgeBase
+from models.project import Project  # noqa: F401
+from models.project_file import ProjectFile
 
 logger = logging.getLogger(__name__)
-import uuid
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -70,15 +71,12 @@ class Conversation(Base):
             if not getattr(kb, 'is_active', False):
                 raise ValueError("Project's knowledge base is not active")
 
-            from models.project_file import ProjectFile
-            from sqlalchemy import func, or_
-
             # Check for any files that are either:
             # 1. Successfully processed (has chunks)
             # 2. In processing state (pending)
             # 3. Failed but retryable
             stmt = select(
-                func.count().label("total_files"),
+                func.count().label("total_files"),  # pylint: disable=not-callable
                 func.sum(
                     ProjectFile.config["search_processing"]["chunk_count"].as_integer()
                 ).label("total_chunks")
@@ -92,8 +90,9 @@ class Conversation(Base):
             
             result = await db.execute(stmt)
             stats = result.mappings().first()
-            total_chunks = stats["total_chunks"] or 0
-            total_files = stats["total_files"] or 0
+            stats = stats or {}
+            total_chunks = stats.get("total_chunks", 0)
+            total_files = stats.get("total_files", 0)
 
             if total_chunks <= 0 and total_files > 0:
                 raise ValueError(
@@ -107,7 +106,7 @@ class Conversation(Base):
                 )
 
     @validates('use_knowledge_base')
-    def validate_kb_flag(self, key, value):
+    def validate_kb_flag(self, _, value):
         """Validate knowledge base flag is consistent with project association"""
         if value and not self.project_id:
             raise ValueError("Knowledge base requires project association")
@@ -116,8 +115,6 @@ class Conversation(Base):
     @validates('project_id')
     def validate_knowledge_base_requirements(self, key, project_id):
         """Auto-enable KB if project has one"""
-        from sqlalchemy import select
-        from models.project import Project
         
         # Check if we're actually changing the project_id
         if project_id == getattr(self, key, None):
