@@ -324,20 +324,27 @@ function setupUIListeners() {
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
       
-      // Instead of reloading page, which causes the blank page issue,
-      // directly update the UI and load conversations after a short delay
-      // to ensure all dependencies are initialized
+      // Reset UI to project list view
+      const projectListView = document.getElementById('projectListView');
+      const projectDetailsView = document.getElementById('projectDetailsView');
+      if (projectListView) projectListView.classList.remove('hidden');
+      if (projectDetailsView) projectDetailsView.classList.add('hidden');
+      
+      // Load initial data after a short delay
       setTimeout(() => {
-        if (typeof window.loadConversationList === 'function' && window.conversationManager) {
-          window.loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-        }
-        if (typeof window.loadSidebarProjects === 'function' && window.projectManager) {
+        if (typeof window.loadSidebarProjects === 'function') {
           window.loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
         }
-        if (typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId && window.chatInterface) {
+        if (typeof window.loadProjectList === 'function') {
+          window.loadProjectList().catch(err => console.warn("Failed to load project list:", err));
+        }
+        
+        // Only create new chat if we're on the chat interface page
+        const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
+        if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
           window.createNewChat().catch(err => console.warn("Failed to create chat:", err));
         }
-      }, 500); // 500ms delay to allow other components to initialize
+      }, 500);
     } catch (error) {
       console.error("Login failed:", error);
       notify(error.message || "Login failed", "error");
@@ -553,7 +560,8 @@ const authVerificationCache = {
 
 async function verifyAuthState() {
   if (isDevelopment) {
-    console.log('Development mode - skipping auth verification');
+    console.log('[DEV MODE] Bypassing authentication checks');
+    console.debug('Full auth verification would run here in production');
     return true;
   }
 

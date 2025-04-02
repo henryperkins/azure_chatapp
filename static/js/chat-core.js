@@ -418,28 +418,28 @@ window.testWebSocketConnection = async function () {
   }
 };
 
-// Auto-initialize chat for either page type
-document.addEventListener('DOMContentLoaded', () => {
-  // Ensure chat containers exist first
-  if (typeof window.ensureChatContainers === 'function') {
-    console.log("Ensuring chat containers exist...");
-    window.ensureChatContainers();
-  }
-  
-  // Check for chat UI elements from either page type with a slightly longer delay
-  setTimeout(() => {
-    if (document.getElementById('chatUI') || 
-        document.getElementById('projectChatContainer') || 
-        document.getElementById('chatContainer') ||
-        document.getElementById('projectChatUI')) {
-      console.log("Chat UI element found, initializing chat system...");
-      setTimeout(() => {
-        window.initializeChat().catch(error => {
-          console.error("Failed to auto-initialize chat:", error);
-        });
-      }, 800); // Longer delay to ensure DOM is fully ready
-    } else {
-      console.log("No chat UI elements found, skipping chat initialization");
+// Only initialize chat interface when explicitly in a project context
+document.addEventListener('projectSelected', async (e) => {
+  const projectId = e.detail?.projectId;
+  if (!projectId) return;
+
+  try {
+    // Ensure chat containers exist
+    if (typeof window.ensureChatContainers === 'function') {
+      await window.ensureChatContainers();
     }
-  }, 200);
+
+    // Initialize chat interface
+    if (!window.chatInterface) {
+      await window.initializeChat();
+    }
+
+    // Show project chat interface
+    const projectChatContainer = document.getElementById('projectChatContainer');
+    if (projectChatContainer) {
+      projectChatContainer.classList.remove('hidden');
+    }
+  } catch (error) {
+    console.error("Failed to initialize project chat:", error);
+  }
 });
