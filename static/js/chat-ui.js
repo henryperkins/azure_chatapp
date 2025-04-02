@@ -91,12 +91,17 @@ window.UIComponents = function(options = {}) {
 
       try {
         // Verify container is writable
-        if (!container.appendChild || typeof container.appendChild !== 'function') {
+        if (!container?.appendChild || typeof container.appendChild !== 'function') {
           throw new Error('Chat container is not a valid DOM element');
         }
-        console.log(`[UI] Appending ${role} message (${content.length} chars)`);
-        if (content.length > 50) {
-          console.debug('Message preview:', content.substring(0, 50) + '...');
+        
+        // Handle null/undefined content
+        const safeContent = content || '';
+        const contentLength = safeContent.length;
+        
+        console.log(`[UI] Appending ${role} message (${contentLength} chars)`);
+        if (contentLength > 50) {
+          console.debug('Message preview:', safeContent.substring(0, 50) + '...');
         }
         // Create message container
         const msgDiv = document.createElement('div');
@@ -119,7 +124,7 @@ window.UIComponents = function(options = {}) {
             ${role === 'assistant' ? 'Claude' : 'You'}
           </span>
           <span class="ml-2 text-xs text-gray-500">
-            ${new Date().toLocaleTimeString()}
+            ${metadata?.created_at ? new Date(metadata.created_at).toLocaleTimeString() : new Date().toLocaleTimeString()}
           </span>
         `;
         msgDiv.appendChild(header);
@@ -152,10 +157,11 @@ window.UIComponents = function(options = {}) {
         // Ensure newlines are preserved and apply formatting
         // Use window.formatText from formatting.js
         try {
+          const safeContent = processedContent || '';
           if (window.formatText) {
-            contentDiv.innerHTML = window.formatText(processedContent.replace(/\\n/g, '<br>'));
+            contentDiv.innerHTML = window.formatText(safeContent.replace(/\\n/g, '<br>'));
           } else {
-            contentDiv.textContent = processedContent; // Fallback to plain text
+            contentDiv.textContent = safeContent; // Fallback to plain text
           }
         } catch (err) {
           console.error('Error formatting message content:', err);
