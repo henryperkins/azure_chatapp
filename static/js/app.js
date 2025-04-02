@@ -300,23 +300,21 @@ function createProjectListItem(project) {
     li.addEventListener('click', () => {
       localStorage.setItem('selectedProjectId', projectData.id);
       
-      // Multiple ways to navigate to project details
-      if (window.projectDashboard?.showProjectDetails) {
-        window.projectDashboard.showProjectDetails(projectData.id);
-      } else if (window.projectDashboard?.handleViewProject) {
-        window.projectDashboard.handleViewProject(projectData.id);
-      } else if (window.location.pathname.includes('/projects')) {
-        // On projects page already - use query parameter
-        window.location.search = `?project=${projectData.id}`;
-      } else {
-        // Navigate to index.html (which is now the projects page)
-        window.location.href = `/?project=${projectData.id}`;
-      }
-      
-      // Dispatch event for other components that might listen
+      // Hide project list and show details view
+      const projectListView = document.getElementById('projectListView');
+      const projectDetailsView = document.getElementById('projectDetailsView');
+      if (projectListView) projectListView.classList.add('hidden');
+      if (projectDetailsView) projectDetailsView.classList.remove('hidden');
+
+      // Dispatch project selected event
       document.dispatchEvent(new CustomEvent('projectSelected', {
         detail: { projectId: projectData.id }
       }));
+
+      // Load project details
+      if (window.loadProjectDetails) {
+        window.loadProjectDetails(projectData.id);
+      }
     });
 
     return li;
@@ -943,6 +941,8 @@ function updateAuthUI(authenticated, username = null) {
   const userMenu = document.getElementById('userMenu');
   const authStatus = document.getElementById('authStatus');
   const userStatus = document.getElementById('userStatus');
+  const projectPanel = document.getElementById('projectManagerPanel');
+  const loginMsg = document.getElementById('loginRequiredMessage');
 
   if (authenticated) {
     // Update UI for logged in state
@@ -955,6 +955,14 @@ function updateAuthUI(authenticated, username = null) {
       userStatus.classList.add('text-green-500');
     }
     if (authDropdown) authDropdown.classList.add('hidden');
+    if (projectPanel) projectPanel.classList.remove('hidden');
+    if (loginMsg) loginMsg.classList.add('hidden');
+    
+    // Ensure we're showing project list view by default
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    if (projectListView) projectListView.classList.remove('hidden');
+    if (projectDetailsView) projectDetailsView.classList.add('hidden');
   } else {
     // Update UI for logged out state
     if (authBtn) authBtn.classList.remove('hidden');
@@ -965,6 +973,8 @@ function updateAuthUI(authenticated, username = null) {
       userStatus.classList.remove('text-green-500');
       userStatus.classList.add('text-gray-500');
     }
+    if (projectPanel) projectPanel.classList.add('hidden');
+    if (loginMsg) loginMsg.classList.remove('hidden');
   }
 }
 

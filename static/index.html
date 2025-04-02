@@ -52,7 +52,7 @@
           </button>
           
           <!-- Auth Dropdown (hidden by default) -->
-          <div id="authDropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded shadow-lg p-3 z-dropdown animate-slide-in" style="display: none;">
+          <div id="authDropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded shadow-lg p-3 z-dropdown animate-slide-in hidden">
             <div class="flex border-b border-gray-200 dark:border-gray-700 mb-2 justify-center">
               <button id="loginTab" class="px-2 py-1 text-xs font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">Login</button>
               <button id="registerTab" class="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">Register</button>
@@ -318,10 +318,16 @@
 
       <!-- Scroll container -->
       <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
-      
-        
-        <!-- Project Manager Section -->
-        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6">
+        <!-- Login required message (shown when not authenticated) -->
+        <div id="loginRequiredMessage" class="hidden text-center py-8">
+          <p class="text-lg">Please log in to access projects</p>
+          <button id="showLoginBtn" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Login
+          </button>
+        </div>
+
+        <!-- Project Manager Section (shown when authenticated) -->
+        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 hidden">
           <!-- Project List View -->
           <div id="projectListView">
             <div class="mb-4 flex items-center justify-between">
@@ -357,8 +363,9 @@
             </div>
           </div>
           
-          <!-- Project Details View -->
+          <!-- Project Details View (hidden by default) -->
           <div id="projectDetailsView" class="hidden">
+            <!-- Chat interface will be loaded here when viewing a project -->
             <!-- Breadcrumb navigation for better navigation -->
             <div class="flex items-center mb-4 text-sm text-gray-500">
               <button id="backToProjectsBtn" class="mr-2 text-gray-500 hover:text-gray-700 flex items-center">
