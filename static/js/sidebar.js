@@ -16,7 +16,7 @@ let closeBtn = null;
 let savedTab = localStorage.getItem('sidebarActiveTab');
 
 // Define toggleSidebar first since it's used in initializeSidebarToggle
-let isOpen = false;
+isOpen = false;
 let isAnimating = false;
 
 window.toggleSidebar = function(forceState) {
