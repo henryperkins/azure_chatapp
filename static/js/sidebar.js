@@ -16,22 +16,31 @@ let closeBtn = null;
 let savedTab = localStorage.getItem('sidebarActiveTab');
 
 // Define toggleSidebar first since it's used in initializeSidebarToggle
-window.toggleSidebar = function() {
+let isOpen = false;
+let isAnimating = false;
+
+window.toggleSidebar = function(forceState) {
+  if (isAnimating) return;
+  isAnimating = true;
+  
   const isMobile = window.innerWidth < 768;
-  
-  // Only allow toggle on mobile view
-  if (isMobile) {
-    isOpen = !isOpen;
-    updateSidebarState();
-    updateBackdrop(isOpen);
-    updateAccessibilityAttributes();
+  let newState = typeof forceState === 'boolean' ? forceState : !isOpen;
+
+  // Always close on mobile first click if open
+  if (isMobile && isOpen) {
+    newState = false;
   }
+
+  isOpen = newState;
   
-  // Always show sidebar on desktop when toggled
-  if (!isMobile) {
-    isOpen = true;
-    updateSidebarState();
-  }
+  // Use transitionsend event for animation completion
+  sidebar.addEventListener('transitionend', () => {
+    isAnimating = false;
+  }, { once: true });
+
+  updateSidebarState();
+  updateBackdrop(isOpen);
+  updateAccessibilityAttributes();
 }
 
 function initializeSidebarToggle() {
@@ -39,9 +48,28 @@ function initializeSidebarToggle() {
   toggleBtn = document.getElementById('navToggleBtn');
   closeBtn = document.getElementById('closeSidebarBtn');
 
+  // Add null checks and error handling
   if (!sidebar || !toggleBtn) {
-    console.error("Sidebar elements missing");
+    console.error("Sidebar elements missing:");
+    console.log("- Sidebar element:", !!sidebar);
+    console.log("- Toggle button:", !!toggleBtn);
     return;
+  }
+
+  // Set up MutationObserver
+  const observer = new MutationObserver((mutations) => {
+    if (!document.contains(sidebar)) {
+      console.warn('Sidebar removed from DOM, cleaning up');
+      cleanupSidebarListeners();
+      observer.disconnect();
+    }
+  });
+
+  if (sidebar) {
+    observer.observe(sidebar.parentElement, {
+      childList: true,
+      subtree: true
+    });
   }
 
   const isMobile = window.innerWidth < 768;
@@ -72,35 +100,40 @@ function updateSidebarState() {
 }
 
 function handleResize() {
-  const wasMobile = window.innerWidth < 768;
   const isNowMobile = window.innerWidth < 768;
   
-  if (wasMobile !== isNowMobile) {
-    isOpen = !isNowMobile; // Always show on desktop, hide on mobile by default
+  if (isNowMobile && isOpen) {
+    // Close sidebar when switching to mobile if it was open
+    toggleSidebar(false);
+  } else if (!isNowMobile) {
+    // Reset state for desktop
+    isOpen = true;
     updateSidebarState();
-    updateBackdrop(isNowMobile && isOpen);
-    updateAccessibilityAttributes();
+    updateBackdrop(false);
   }
 }
 
 function updateBackdrop(show) {
   let backdrop = document.getElementById('sidebarBackdrop');
   
+  // Ensure click handler works reliably
+  const handleBackdropClick = () => {
+    toggleSidebar();
+    document.activeElement?.blur(); // Remove focus from toggle button
+  };
+
   if (!backdrop) {
     backdrop = document.createElement('div');
     backdrop.id = 'sidebarBackdrop';
     backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
     backdrop.setAttribute('aria-hidden', 'true');
-    backdrop.setAttribute('data-testid', 'sidebar-backdrop');
-    
-    // Accessible click handler
-    backdrop.addEventListener('click', () => {
-      toggleSidebar();
-      document.getElementById('navToggleBtn')?.focus();
-    });
-    
+    backdrop.setAttribute('role', 'presentation');
+    backdrop.style.touchAction = 'manipulation'; // Prevent scroll bleed
     document.body.appendChild(backdrop);
   }
+
+  // Use more reliable event handling
+  backdrop.replaceEventListener('click', handleBackdropClick);
 
   if (show) {
     backdrop.style.display = 'block';
