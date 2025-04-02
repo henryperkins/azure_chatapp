@@ -397,12 +397,14 @@
         modal._handleKeyDown = handleKeyDown;
         document.addEventListener('keydown', handleKeyDown);
 
-        // Handle close button click
+        // Handle close button click with proper listener management
         const closeBtn = modal.querySelector('[id^="close"]');
         if (closeBtn) {
-          closeBtn.addEventListener('click', () => {
-            this.hide(modal.id.replace('Modal', ''));
-          });
+          if (closeBtn._clickHandler) {
+            closeBtn.removeEventListener('click', closeBtn._clickHandler);
+          }
+          closeBtn._clickHandler = () => this.hide(modal.id.replace('Modal', ''));
+          closeBtn.addEventListener('click', closeBtn._clickHandler);
         }
       }
 

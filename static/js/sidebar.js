@@ -132,8 +132,13 @@ function updateBackdrop(show) {
     document.body.appendChild(backdrop);
   }
 
-  // Use more reliable event handling
-  backdrop.replaceEventListener('click', handleBackdropClick);
+  // Clean up previous listener if exists
+  if (backdrop._clickHandler) {
+    backdrop.removeEventListener('click', backdrop._clickHandler);
+  }
+  // Store new handler reference and add listener
+  backdrop._clickHandler = handleBackdropClick;
+  backdrop.addEventListener('click', backdrop._clickHandler);
 
   if (show) {
     backdrop.style.display = 'block';
