@@ -20,29 +20,20 @@ isOpen = false;
 let isAnimating = false;
 
 window.toggleSidebar = function(forceState) {
-  // Declare and initialize newState at function start
-  let newState = typeof forceState === 'boolean' ? forceState : !isOpen;
+  // Initialize newState properly
+  let newState;
   const isMobile = window.innerWidth < 768;
 
-  // Modern mobile swipe logic
-  const handleMobileToggle = () => {
-    if (typeof forceState === 'boolean') {
-      newState = forceState;
-    } else if (isMobile) {
-      newState = !isOpen;
-    }
-  };
+  if (typeof forceState === 'boolean') {
+    newState = forceState;
+  } else if (isMobile) {
+    newState = !isOpen;
+  } else {
+    newState = !isOpen;
+  }
 
   if (isAnimating) return;
   isAnimating = true;
-  
-  handleMobileToggle();
-  
-  // Final validation
-  if (typeof newState !== 'boolean') {
-    console.warn('Invalid newState, defaulting to toggle');
-    newState = !isOpen;
-  }
 
   isOpen = newState;
   
@@ -99,7 +90,7 @@ function initializeSidebarToggle() {
   
   // Add body class to prevent scroll when sidebar is open
   if (isMobile) {
-    document.body.classList.toggle('sidebar-open', newState);
+    document.body.classList.toggle('sidebar-open', isOpen);
   }
   
   // Set up fresh listeners with proper event handling
