@@ -390,66 +390,6 @@ function setupVisionFileInput() {
   }
 }
 
-/**
- * Save changes to localStorage and (optionally) to a global object
- */
-function persistSettings() {
-  // Use a mutex lock to prevent race conditions
-  if (window._persistSettingsLock) return;
-  window._persistSettingsLock = true;
-
-  try {
-    const elements = {
-      model: document.getElementById('modelSelect'),
-      maxTokens: document.getElementById('maxTokensInput') || 
-                document.getElementById('maxTokensSlider'),
-      vision: document.getElementById('visionToggle'),
-      reasoning: document.getElementById('reasoningEffortRange'),
-      extendedThinking: document.getElementById('extendedThinking'),
-      thinkingBudget: document.getElementById('thinkingBudget')
-    };
-
-    // Initialize config object if needed
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-
-    // Validate all elements exist before saving
-    Object.entries(elements).forEach(([key, el]) => {
-      if (el && el.value !== undefined) {
-        const storageKey = key === 'maxTokens' ? 'maxTokens' : `${key}Name`;
-        const value = key === 'maxTokens' ? 
-          Math.max(100, Math.min(100000, el.value)) : 
-          (el.type === 'checkbox' ? el.checked : el.value);
-        
-        localStorage.setItem(storageKey, value);
-        window.MODEL_CONFIG[storageKey] = value;
-      }
-    });
-
-    // Handle special cases
-    if (elements.reasoning) {
-      let effort = '';
-      if (elements.reasoning.value === '1') effort = 'low';
-      else if (elements.reasoning.value === '2') effort = 'medium';
-      else effort = 'high';
-      localStorage.setItem("reasoningEffort", effort);
-      window.MODEL_CONFIG.reasoningEffort = effort;
-    }
-
-    // Load any custom instructions
-    const globalCustomInstructions = localStorage.getItem("globalCustomInstructions");
-    if (globalCustomInstructions) {
-      window.MODEL_CONFIG.customInstructions = globalCustomInstructions;
-    }
-
-    updateModelConfigDisplay();
-    
-    // Dispatch event after all storage is updated
-    document.dispatchEvent(new CustomEvent('modelConfigChanged', {
-      detail: { ...window.MODEL_CONFIG, timestamp: Date.now() }
-    }));
-  } finally {
-    window._persistSettingsLock = false;
-  }
 }
 
 /**
