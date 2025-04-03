@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.conversation import Conversation
 from models.message import Message
 from models.project import Project
-from utils.openai import openai_chat, claude_chat
+from utils.openai import openai_chat, claude_chat, CLAUDE_MODELS
 from config import settings
 from utils.db_utils import get_by_id, save_model
 from utils.response_utils import create_standard_response
