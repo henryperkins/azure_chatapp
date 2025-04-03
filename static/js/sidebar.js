@@ -20,33 +20,27 @@ isOpen = false;
 let isAnimating = false;
 
 window.toggleSidebar = function(forceState) {
-  // Ensure clean state for each toggle
-  let newState; 
-  
+  // Declare and initialize newState at function start
+  let newState = typeof forceState === 'boolean' ? forceState : !isOpen;
+  const isMobile = window.innerWidth < 768;
+
   // Modern mobile swipe logic
   const handleMobileToggle = () => {
-    const isMobile = window.innerWidth < 768;
-    const wasOpenedBySwipe = !!forceState;
-    
-    if (isMobile) {
-      newState = wasOpenedBySwipe ? true : !isOpen;
-    } else {
-      newState = typeof forceState === 'boolean' ? forceState : !isOpen;
-    }
-    
-    if (isMobile && isOpen && !wasOpenedBySwipe) {
-      newState = false;
+    if (typeof forceState === 'boolean') {
+      newState = forceState;
+    } else if (isMobile) {
+      newState = !isOpen;
     }
   };
 
   if (isAnimating) return;
   isAnimating = true;
   
-  handleMobileToggle(); // Apply new swipe logic
+  handleMobileToggle();
   
-  // Validate state
-  if (typeof newState === 'undefined') {
-    console.error('Invalid newState calculation');
+  // Final validation
+  if (typeof newState !== 'boolean') {
+    console.warn('Invalid newState, defaulting to toggle');
     newState = !isOpen;
   }
 
