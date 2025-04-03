@@ -426,18 +426,16 @@
 }
 
 /* Dark mode specific improvements */
-.dark {
-  .card {
-    @apply bg-surface-dark border-border-dark shadow-xl;
-  }
-  
-  .btn-outline {
-    @apply border-border-dark text-gray-200 hover:bg-surface-hover-dark;
-  }
+.dark .card {
+  @apply bg-surface-dark border-border-dark shadow-xl;
+}
 
-  .project-card {
-    @apply bg-surface-dark border-border-dark hover:border-primary-500;
-  }
+.dark .btn-outline {
+  @apply border-border-dark text-gray-200 hover:bg-surface-hover-dark;
+}
+
+.dark .project-card {
+  @apply bg-surface-dark border-border-dark hover:border-primary-500;
 }
 
 .dark .btn-outline {
