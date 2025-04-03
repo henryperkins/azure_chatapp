@@ -172,8 +172,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       'Pragma': 'no-cache',
       ...authHeaders
     },
-    credentials: 'include',
-    cache: 'no-store'
+    credentials: 'include',  // Important for cookies
+    cache: 'no-store',
+    redirect: 'follow'
   };
 
   // Body for POST/PUT
