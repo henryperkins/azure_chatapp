@@ -18,6 +18,26 @@ import httpx
 
 from config import settings
 from utils.response_utils import azure_api_request
+from fastapi import HTTPException
+
+# Supported Claude models
+CLAUDE_MODELS = {
+    "claude-3-7-sonnet-20250219": {
+        "max_tokens": 128000,
+        "min_thinking": 2048,
+        "supports_vision": True
+    },
+    "claude-3-opus-20240229": {
+        "max_tokens": 200000,
+        "min_thinking": 1024,
+        "supports_vision": False  
+    },
+    "claude-3-sonnet-20240229": {
+        "max_tokens": 200000,
+        "min_thinking": 1024,
+        "supports_vision": False
+    }
+}
 
 logger = logging.getLogger(__name__)
 
@@ -163,12 +183,41 @@ async def claude_chat(
     model_name: str,
     max_tokens: int = 1000,
     enable_thinking: bool = False,
-    thinking_budget: Optional[int] = None
+    thinking_budget: Optional[int] = None,
+    image_data: Optional[str] = None,
+    stream: bool = False
 ) -> dict:
+    """Handle Claude API requests with proper validation and error handling"""
     """Handle Claude API requests"""
     from config import settings
     from fastapi import HTTPException
     
+    # Validate model
+    if model_name not in CLAUDE_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported Claude model: {model_name}. Supported models: {list(CLAUDE_MODELS.keys())}"
+        )
+
+    model_config = CLAUDE_MODELS[model_name]
+    
+    # Enforce streaming for large responses
+    if max_tokens > 21333 and not stream:
+        raise HTTPException(
+            status_code=400,
+            detail="Streaming is required for max_tokens > 21,333"
+        )
+
+    # Validate thinking budget
+    if enable_thinking:
+        thinking_budget = thinking_budget or model_config["min_thinking"]
+        thinking_budget = max(thinking_budget, model_config["min_thinking"])
+        if thinking_budget >= max_tokens:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Thinking budget ({thinking_budget}) must be less than max_tokens ({max_tokens})"
+            )
+
     # Debug info - log API key presence and model
     api_key = settings.CLAUDE_API_KEY
     if not api_key:

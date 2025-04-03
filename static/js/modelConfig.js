@@ -528,11 +528,13 @@ function getModelOptions() {
     {
       id: 'claude-3-7-sonnet-20250219',
       name: 'Claude 3.7 Sonnet',
-      description: 'Latest Claude model with enhanced capabilities (128K context)',
+      description: 'Latest Claude model with enhanced capabilities (128K context, vision support)',
       supportsExtendedThinking: true,
+      supportsVision: true,
       maxTokens: 128000,
       defaultThinkingBudget: 16000,
-      minThinkingBudget: 2048
+      minThinkingBudget: 2048,
+      requiresStreaming: 21333  // Streaming required above this token count
     },
     {
       id: 'gpt-4',

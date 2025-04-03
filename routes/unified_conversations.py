@@ -572,16 +572,24 @@ async def create_message(
                     db=db,
                 )
 
-            assistant_msg = await generate_ai_response(
-                conversation_id=conversation.id,
-                messages=kb_context + msg_dicts,
-                model_id=conversation.model_id,
-                image_data=new_msg.get("image_data"),
-                vision_detail=new_msg.get("vision_detail", "auto"),
-                enable_thinking=new_msg.get("enable_thinking", False),
-                thinking_budget=new_msg.get("thinking_budget"),
-                db=db,
-            )
+            try:
+                assistant_msg = await generate_ai_response(
+                    conversation_id=conversation.id,
+                    messages=kb_context + msg_dicts,
+                    model_id=conversation.model_id,
+                    image_data=new_msg.get("image_data"),
+                    vision_detail=new_msg.get("vision_detail", "auto"),
+                    enable_thinking=new_msg.get("enable_thinking", False),
+                    thinking_budget=new_msg.get("thinking_budget"),
+                    db=db,
+                )
+            except HTTPException as e:
+                await websocket.send_json({
+                    "type": "error",
+                    "code": e.status_code,
+                    "message": e.detail
+                })
+                continue
 
             if assistant_msg:
                 metadata = (
