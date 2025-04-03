@@ -355,10 +355,21 @@ async function loginUser(username, password) {
       username: username.trim(),
       password
     });
+    
+    // Debug logging
+    console.log('Login response data:', data);
+    
     if (!data.access_token) {
       throw new Error("Invalid response from server");
     }
+    
+    // Store tokens in TokenManager AND cookies
     TokenManager.setTokens(data.access_token, data.refresh_token);
+    
+    // Enforce cookie-based authentication
+    document.cookie = `access_token=${data.access_token}; path=/; ${
+      window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
+    }`;
 
     // Store user info
     if (data.username) {
