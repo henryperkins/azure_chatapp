@@ -411,14 +411,37 @@ const TAB_CONFIG = {
 
 function setupSidebarTabs() {
   const tabs = {};
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   
-  // Initialize tab elements
+  // Initialize tab elements with error handling
   Object.entries(TAB_CONFIG).forEach(([name, config]) => {
-    tabs[name] = {
-      button: document.getElementById(config.buttonId),
-      content: document.getElementById(config.sectionId),
-      loader: config.loader
-    };
+    try {
+      const button = document.getElementById(config.buttonId);
+      const content = document.getElementById(config.sectionId);
+      
+      if (!button || !content) {
+        throw new Error(`Tab elements missing for ${name}: 
+          Button - ${config.buttonId}, 
+          Content - ${config.sectionId}`);
+      }
+
+      tabs[name] = {
+        button,
+        content,
+        loader: config.loader
+      };
+
+      // Set ARIA attributes
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', 'false');
+      button.setAttribute('aria-controls', config.sectionId);
+      content.setAttribute('role', 'tabpanel');
+      content.setAttribute('aria-labelledby', config.buttonId);
+
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
   });
   // Determine if we're on the projects page
   const isProjectsPage = window.location.pathname.includes('/projects') ||
@@ -561,14 +584,22 @@ function setupCollapsibleSections() {
  * @param {Function} onExpand - Optional callback when panel is expanded
  */
 function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
-  const toggleButton = document.getElementById(toggleId);
-  const panel = document.getElementById(panelId);
-  const chevron = document.getElementById(chevronId);
-  
-  if (!toggleButton || !panel || !chevron) {
-    console.warn(`Elements for collapsible section '${toggleId}' not found`);
-    return;
-  }
+  try {
+    const toggleButton = document.getElementById(toggleId);
+    const panel = document.getElementById(panelId);
+    const chevron = document.getElementById(chevronId);
+    
+    if (!toggleButton || !panel || !chevron) {
+      throw new Error(`Collapsible section elements not found: 
+        Toggle - ${toggleId}, 
+        Panel - ${panelId}, 
+        Chevron - ${chevronId}`);
+    }
+
+    // Set up keyboard interaction
+    toggleButton.setAttribute('role', 'button');
+    toggleButton.setAttribute('aria-expanded', 'false');
+    toggleButton.setAttribute('aria-controls', panelId);
   
   // Load saved state
   const isExpanded = localStorage.getItem(`${toggleId}_expanded`) === 'true';
