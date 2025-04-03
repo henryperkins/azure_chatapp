@@ -59,7 +59,12 @@ class Project(Base):
     
     # Relationship to files
     files = relationship("ProjectFile", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
-    user = relationship("User", back_populates="projects")
+    
+    # Many-to-many relationship to users through association table
+    members: Mapped[List["ProjectUserAssociation"]] = relationship(
+        back_populates="project", 
+        cascade="all, delete-orphan"
+    )
     
     # Simple one-way relationship to knowledge base
     knowledge_base = relationship(
@@ -76,3 +81,25 @@ def validate_knowledge_base_assignment(target, value, oldvalue, initiator):
     if value and oldvalue and value != oldvalue:
         raise ValueError("Cannot change knowledge base association - create a new knowledge base instead")
     return value
+
+
+class ProjectUserAssociation(Base):
+    __tablename__ = "project_users"
+    
+    project_id: Mapped[UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), 
+        primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), 
+        primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(50), default="member")
+    joined_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, 
+        server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    # Relationships
+    project: Mapped["Project"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="project_associations")
