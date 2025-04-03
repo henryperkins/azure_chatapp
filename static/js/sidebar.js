@@ -26,13 +26,18 @@ window.toggleSidebar = function(forceState) {
   const isMobile = window.innerWidth < 768;
   let newState = typeof forceState === 'boolean' ? forceState : !isOpen;
 
-  // Always close on mobile first click if open
+  // Handle mobile close on first click if open
   if (isMobile && isOpen) {
     newState = false;
   }
 
   isOpen = newState;
   
+  // Add body class to prevent scroll when sidebar is open
+  if (isMobile) {
+    document.body.classList.toggle('sidebar-open', newState);
+  }
+
   // Use transitionsend event for animation completion
   sidebar.addEventListener('transitionend', () => {
     isAnimating = false;
@@ -932,7 +937,8 @@ function setupMobileToggle() {
     const deltaX = touchEndX - touchStartX;
     
     if (touchStartX < 50 && deltaX > threshold) { // Right edge swipe
-      toggleSidebar(true);
+      const isMobile = window.innerWidth < 768;
+      toggleSidebar(!isMobile); // Open on desktop, close on mobile
       e.preventDefault();
     }
   });
