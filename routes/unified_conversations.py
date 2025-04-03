@@ -421,9 +421,12 @@ async def list_conversation_messages(
     Retrieve messages from a conversation.
     """
     if project_id:
+        from sqlalchemy.dialects.postgresql import UUID
         additional_filters: Sequence[BinaryExpression[bool]] = [
             cast(BinaryExpression[bool], Conversation.project_id == project_id),
+            cast(BinaryExpression[bool], Conversation.user_id == current_user.id),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
+            cast(BinaryExpression[bool], cast(Conversation.project_id, UUID) == cast(project_id, UUID))
         ]
     else:
         additional_filters: Sequence[BinaryExpression[bool]] = [
