@@ -5,7 +5,7 @@ Provides standardized functions for serializing database models to dictionaries.
 Ensures consistent response formats across endpoints.
 """
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Sequence
+from typing import Dict, Any, Optional, List, Sequence, Union
 
 from models.project import Project
 from models.conversation import Conversation
@@ -15,11 +15,25 @@ from models.project_file import ProjectFile
 from models.knowledge_base import KnowledgeBase
 
 
-def serialize_datetime(dt: Optional[datetime]) -> Optional[str]:
-    """Convert datetime to ISO format string if not None"""
-    if dt is not None:
+def serialize_datetime(dt: Optional[Union[datetime, str]]) -> Optional[str]:
+    """Convert datetime or ISO string to ISO format string"""
+    if dt is None:
+        return None
+
+    if isinstance(dt, str):
+        # If already ISO formatted, return as-is
+        if "T" in dt and dt.endswith(("Z", "+00:00")):
+            return dt
+        # Try parsing if it's a non-ISO string
+        try:
+            dt = datetime.fromisoformat(dt)
+        except ValueError:
+            return dt  # Return raw string if formatting fails
+    
+    try:
         return dt.isoformat()
-    return None
+    except AttributeError:
+        return str(dt)  # Fallback to string conversion
 
 
 def serialize_uuid(id_value: Any) -> Optional[str]:
@@ -71,13 +85,17 @@ def serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
     """
     conv_dict = conversation if isinstance(conversation, dict) else conversation.__dict__
     
+    # Explicitly handle datetime fields
+    created_at = conv_dict.get('created_at')
+    updated_at = conv_dict.get('updated_at')
+    
     return {
         "id": serialize_uuid(conv_dict.get('id')),
         "title": conv_dict.get('title'),
         "model_id": conv_dict.get('model_id'),
         "project_id": serialize_uuid(conv_dict.get('project_id')),
-        "created_at": serialize_datetime(conv_dict.get('created_at')),
-        "updated_at": serialize_datetime(conv_dict.get('updated_at')),
+        "created_at": serialize_datetime(created_at),
+        "updated_at": serialize_datetime(updated_at),
         "is_deleted": conv_dict.get('is_deleted', False),
         "extra_data": conv_dict.get('extra_data', {})
     }
