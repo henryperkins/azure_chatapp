@@ -61,23 +61,25 @@ def serialize_project(project: Project) -> Dict[str, Any]:
 
 def serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
     """
-    Serialize a Conversation model to a dictionary.
+    Serialize a Conversation model or dict to a dictionary.
     
     Args:
-        conversation: Conversation database model
+        conversation: Conversation database model or dict
         
     Returns:
         Dictionary with serialized conversation data
     """
+    conv_dict = conversation if isinstance(conversation, dict) else conversation.__dict__
+    
     return {
-        "id": serialize_uuid(conversation.id),
-        "title": conversation.title,
-        "model_id": conversation.model_id,
-        "project_id": serialize_uuid(conversation.project_id),
-        "created_at": serialize_datetime(conversation.created_at),
-        "updated_at": serialize_datetime(conversation.updated_at),
-        "is_deleted": conversation.is_deleted,
-        "extra_data": conversation.extra_data or {}
+        "id": serialize_uuid(conv_dict.get('id')),
+        "title": conv_dict.get('title'),
+        "model_id": conv_dict.get('model_id'),
+        "project_id": serialize_uuid(conv_dict.get('project_id')),
+        "created_at": serialize_datetime(conv_dict.get('created_at')),
+        "updated_at": serialize_datetime(conv_dict.get('updated_at')),
+        "is_deleted": conv_dict.get('is_deleted', False),
+        "extra_data": conv_dict.get('extra_data', {})
     }
 
 
