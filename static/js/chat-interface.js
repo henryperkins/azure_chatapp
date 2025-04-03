@@ -311,7 +311,7 @@ window.ChatInterface.prototype._findLastAssistantMessage = function() {
 
 // Load a conversation
 window.ChatInterface.prototype.loadConversation = function(chatId) {
-  if (!chatId) {
+  if (!chatId || !window.ChatUtils?.isValidUUID(chatId)) {
     return Promise.reject(new Error('No conversation ID provided'));
   }
 
@@ -323,14 +323,27 @@ window.ChatInterface.prototype.loadConversation = function(chatId) {
   console.log(`Loading conversation with ID: ${chatId}`);
   this._isLoadingConversation = true;
   
-  // Clear previous conversation state
-  if (this.ui?.messageList) {
-    this.ui.messageList.clear();
+  // Store previous chat ID for proper cleanup
+  const previousChatId = this.currentChatId;
+  
+  // Update current ID first to avoid race conditions
+  this.currentChatId = chatId;
+  
+  // Gracefully disconnect from previous WebSocket and clear messageService
+  if (this.wsService && this.wsService.chatId !== chatId && this.wsService.isConnected()) {
+    console.log('Disconnecting from previous WebSocket before connecting to new conversation');
+    this.wsService.disconnect();
   }
+  
+  // Clear message service state
   if (this.messageService) {
     this.messageService.clear();
   }
-  this.currentChatId = chatId;
+  
+  // Clear UI if available
+  if (this.ui?.messageList) {
+    this.ui.messageList.clear();
+  }
 
   return this.conversationService.loadConversation(chatId)
     .then(success => {
@@ -381,6 +394,7 @@ window.ChatInterface.prototype.loadConversation = function(chatId) {
       }
       return success;
     }).catch(error => {
+      this._isLoadingConversation = false;
       console.error(`Error loading conversation ${chatId}:`, error);
       // Ensure the error is propagated
       throw error;
@@ -709,6 +723,22 @@ window.ChatInterface.prototype._handleSendMessage = async function(userMsg) {
     console.log('Message sent successfully');
   } catch (sendError) {
     console.error('Error sending message:', sendError);
+    
+    // Check for AI-specific errors
+    if (sendError.code?.startsWith('AI_') || 
+        sendError.message?.includes('AI') || 
+        sendError.message?.includes('generate')) {
+      
+      // Show a more helpful error in the chat UI
+      this.ui.messageList.showAIErrorMessage(
+        sendError.message,
+        sendError.userAction || "Try rephrasing your message"
+      );
+      
+      // Only show notification for non-AI errors
+      return;
+    }
+    
     window.ChatUtils?.handleError?.('Sending message', sendError, this.notificationFunction);
     
     // If the error is specifically about invalid conversation ID despite our checks

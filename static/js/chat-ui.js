@@ -324,6 +324,66 @@ window.UIComponents = function(options = {}) {
         default:
           return "bg-white";
       }
+    },
+
+    showAIErrorMessage: function(message, suggestedAction) {
+      if (!this.container) return null;
+      
+      // Remove thinking indicator if present
+      this.removeThinking();
+      
+      // Create an error message element
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'mb-4 p-4 rounded-lg shadow-sm bg-yellow-50 text-yellow-800 border border-yellow-200';
+      
+      // Add header with error icon
+      const header = document.createElement('div');
+      header.className = 'flex items-center mb-2';
+      header.innerHTML = `
+        <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span class="font-medium">Claude couldn't generate a response</span>
+      `;
+      errorDiv.appendChild(header);
+      
+      // Add error message
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'mb-2';
+      messageDiv.textContent = message;
+      errorDiv.appendChild(messageDiv);
+      
+      // Add suggested action if provided
+      if (suggestedAction) {
+        const actionDiv = document.createElement('div');
+        actionDiv.className = 'text-sm font-medium';
+        actionDiv.textContent = `Suggestion: ${suggestedAction}`;
+        errorDiv.appendChild(actionDiv);
+      }
+      
+      // Add retry button
+      const buttonDiv = document.createElement('div');
+      buttonDiv.className = 'mt-3 flex justify-end';
+      
+      const retryButton = document.createElement('button');
+      retryButton.className = 'px-3 py-1 text-sm bg-yellow-200 hover:bg-yellow-300 text-yellow-900 rounded transition-colors';
+      retryButton.textContent = 'Try Again';
+      retryButton.onclick = () => {
+        // Remove this error message
+        errorDiv.remove();
+        // Trigger regenerate event
+        document.dispatchEvent(new CustomEvent('regenerateChat'));
+      };
+      
+      buttonDiv.appendChild(retryButton);
+      errorDiv.appendChild(buttonDiv);
+      
+      // Add to container
+      this.container.appendChild(errorDiv);
+      this.container.scrollTop = this.container.scrollHeight;
+      
+      return errorDiv;
     }
   };
 
@@ -571,4 +631,14 @@ window.UIComponents.prototype.init = function() {
   this.input.init();
   this.imageUpload.init();
   return this;
+};
+
+// Make the method available globally
+window.UIUtils = window.UIUtils || {};
+window.UIUtils.showAIErrorHint = function(message, suggestedAction) {
+  // Find active chat interface
+  const chatInterface = window.chatInterface || window.projectChatInterface;
+  if (chatInterface?.ui?.messageList?.showAIErrorMessage) {
+    chatInterface.ui.messageList.showAIErrorMessage(message, suggestedAction);
+  }
 };
