@@ -159,6 +159,7 @@ async def list_conversations(
     db: AsyncSession = Depends(get_async_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
     List conversations.
@@ -339,6 +340,7 @@ async def delete_conversation(
     project_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
+    conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
     Soft-delete a conversation.
