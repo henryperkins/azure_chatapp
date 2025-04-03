@@ -43,8 +43,7 @@
         console.error(`ProjectListComponent: Element with ID '${this.elementId}' not found - creating fallback`);
         this.element = document.createElement('div');
         this.element.id = this.elementId;
-        this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3';
-        this.element.style.minHeight = '200px';
+        this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 h-full overflow-y-auto';
         const listView = document.getElementById('projectListView');
         if (listView) {
           listView.appendChild(this.element);
@@ -66,7 +65,10 @@
       const listView = document.getElementById('projectListView');
       const detailsView = document.getElementById('projectDetailsView');
       
-      if (listView) listView.classList.remove('hidden');
+      if (listView) {
+        listView.classList.remove('hidden');
+        listView.classList.add('flex-1', 'min-h-0');
+      }
       if (detailsView) detailsView.classList.add('hidden');
       if (this.element) this.element.style.display = 'grid';
     }
