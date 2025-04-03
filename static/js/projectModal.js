@@ -154,14 +154,12 @@ if (typeof window.ProjectModal === 'undefined') {
   }
 
   openModal() {
-    // Ensure we remove any "hidden" class
-    this.modal.classList.remove('hidden');
+    // Reset all inline styles first
+    this.modal.removeAttribute('style');
     
-    // Responsive width
-    this.modal.style.width = '100%';
-    if (window.innerWidth >= 640) {
-      this.modal.style.maxWidth = '500px';
-    }
+    // Apply base modal classes
+    this.modal.classList.remove('hidden');
+    this.modal.classList.add('project-modal-container');
 
     // Focus the name input
     this.nameInput.focus();

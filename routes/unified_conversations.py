@@ -1,17 +1,10 @@
-"""
-conversations.py
-----------------
-Unified routes handling both project-based and standalone conversations
-by using optional project_id in the same set of handlers.
-"""
-
 import json
 import logging
 import asyncio
 from typing import Optional, Sequence, cast
 from uuid import UUID
 from sqlalchemy.sql.expression import BinaryExpression
-from db import AsyncSessionLocal
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import (
     APIRouter,
@@ -21,27 +14,30 @@ from fastapi import (
     WebSocketDisconnect,
     status,
     Query,
+    Request,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-# Import from your existing modules
+# DB Session
+from db import AsyncSessionLocal, get_async_session
+
+# Models
 from models.user import User
 from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
 
+# Services
 from services.project_service import validate_project_access
 from services import get_conversation_service
 from services.conversation_service import ConversationService
-from typing import Any
 from services.context_integration import augment_with_knowledge
-from db import get_async_session
+
+# Utils
 from utils.auth_utils import (
     get_current_user_and_token,
     extract_token,
     get_user_from_token,
-    validate_project_membership,
 )
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -57,15 +53,13 @@ from utils.ai_response import generate_ai_response
 
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["Conversations"])
-
 manager = ConnectionManager()
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Pydantic Models
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 class ConversationCreate(BaseModel):
     """Model for creating a new conversation."""
 
@@ -84,31 +78,29 @@ class ConversationUpdate(BaseModel):
     model_id: Optional[str] = None
 
 
-# ------------------------------------------------------------------------------
-# Helper: resolve optional project
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Helper: Resolve optional project
+# --------------------------------------------------------------------------
 async def resolve_project_if_any(
     project_id: Optional[UUID], current_user: User, db: AsyncSession
 ) -> Optional[Project]:
     """
     If project_id is provided, validate access and return the Project.
-    If None, this is a standalone conversation scenario, return None.
+    If None, return None for standalone usage.
     """
     if project_id:
-        project = await validate_project_access(
-            project_id, current_user, db
-        )
-        if not project:
+        proj = await validate_project_access(project_id, current_user, db)
+        if not proj:
             raise HTTPException(
                 status_code=404, detail="Project not found or not accessible"
             )
-        return project
+        return proj
     return None
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Create Conversation
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.post("/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
 @router.post(
     "/projects/{project_id}/conversations",
@@ -117,33 +109,34 @@ async def resolve_project_if_any(
 )
 async def create_conversation(
     conversation_data: ConversationCreate,
-    project_id: Optional[UUID] = None,  # type: ignore[type-var]
+    project_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
-    Creates a new conversation.
-    - If `project_id` is provided, the conversation is bound to that project.
-    - If no `project_id`, it's a standalone conversation.
+    Create a new conversation.
+    - If `project_id`, conversation is bound to that project.
+    - Otherwise, it's standalone.
     """
-    logger.info(f"Attempting to create conversation. Project ID: {project_id}")
+    logger.info(f"Attempting to create conversation. project_id={project_id}")
     logger.info(f"Received ConversationCreate data: {conversation_data.dict()}")
 
     project = await resolve_project_if_any(project_id, current_user, db)
 
-    # Use either the provided model_id or project default (else fallback).
+    # Use the provided model_id or the project's default model, or fallback
     model_id = conversation_data.model_id
     if not model_id and project:
         model_id = project.default_model
     if not model_id:
         default_model_fallback = "claude-3-sonnet-20240229"
-        logger.info(f"No model_id provided or found in project, using default: {default_model_fallback}")
+        logger.info(
+            "No model_id provided/found; using default: %s", default_model_fallback
+        )
         model_id = default_model_fallback
     else:
-        logger.info(f"Using model_id: {model_id} for conversation creation")
+        logger.info(f"Using model_id: {model_id}")
 
-    # Create via service layer
     try:
         conv = await conv_service.create_conversation(
             user_id=current_user.id,
@@ -154,22 +147,30 @@ async def create_conversation(
 
         if conv is None:
             logger.error("Conversation service returned None unexpectedly.")
-            raise HTTPException(status_code=500, detail="Failed to create conversation object.")
+            raise HTTPException(
+                status_code=500, detail="Failed to create conversation object."
+            )
 
         return await create_standard_response(
             serialize_conversation(conv), "Conversation created successfully"
         )
+
     except HTTPException as http_exc:
-        logger.warning(f"HTTPException during conversation creation: {http_exc.status_code} - {http_exc.detail}")
-        raise http_exc
+        logger.warning(
+            f"HTTPException during conversation creation: {http_exc.status_code} - {http_exc.detail}"
+        )
+        raise
     except Exception as e:
-        logger.exception(f"Unexpected error during conversation creation: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.exception("Unexpected error during conversation creation: %s", e)
+        # Here you can comply with lint recommendation using `from e`
+        raise HTTPException(
+            status_code=500, detail=f"Internal server error: {str(e)}"
+        ) from e
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # List Conversations
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.get("/conversations", response_model=dict)
 @router.get("/projects/{project_id}/conversations", response_model=dict)
 async def list_conversations(
@@ -182,11 +183,10 @@ async def list_conversations(
 ):
     """
     List conversations.
-    - If `project_id` given, list that project's conversations.
-    - Else, list the user's standalone conversations.
+    - If `project_id`, list that project's conversations.
+    - Else, list user’s standalone conversations.
     """
     if project_id:
-        # Validate access & list project-based
         await resolve_project_if_any(project_id, current_user, db)
         conversations = await conv_service.list_conversations(
             user_id=current_user.id,
@@ -195,7 +195,7 @@ async def list_conversations(
             limit=limit,
         )
     else:
-        # Standalone conversations: project_id is NULL
+        # Standalone
         conversations = await get_all_by_condition(
             db,
             Conversation,
@@ -212,14 +212,15 @@ async def list_conversations(
     )
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Get Conversation
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.get("/conversations/{conversation_id}", response_model=dict)
 @router.get(
     "/projects/{project_id}/conversations/{conversation_id}", response_model=dict
 )
 async def get_conversation(
+    request: Request,
     conversation_id: UUID,
     project_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user_and_token),
@@ -227,38 +228,49 @@ async def get_conversation(
 ):
     """
     Retrieve metadata about a specific conversation.
-    - If `project_id` is provided, the conversation must belong to that project.
-    - Otherwise, it must be a standalone conversation.
+    - If `project_id`, it must belong to that project.
+    - Otherwise, must be standalone.
     """
     project = await resolve_project_if_any(project_id, current_user, db)
 
-    # Build additional filters depending on whether it's standalone or project-based
-    if project:
-        additional_filters: Sequence[BinaryExpression[bool]] = [
-            cast(BinaryExpression[bool], Conversation.project_id == project.id),
-            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
-        ]
-    else:
-        additional_filters: Sequence[BinaryExpression[bool]] = [
-            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
-            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
-        ]
-
-    conversation = await validate_resource_access(
-        conversation_id,
-        Conversation,
-        current_user,
-        db,
-        "Conversation",
-        additional_filters,
+    logger.info(
+        "Conversation GET Request:\n"
+        f"- User: {current_user.id}\n"
+        f"- Project: {project_id}\n"
+        f"- Conversation: {conversation_id}\n"
+        f"- Headers: {json.dumps(dict(request.headers), indent=2)}"
     )
 
-    return await create_standard_response(serialize_conversation(conversation))
+    try:
+        conversation = await db.get(Conversation, conversation_id)
+        logger.info(f"Conversation lookup result: {conversation}")
+
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if conversation.is_deleted:
+            raise HTTPException(status_code=404, detail="Conversation was deleted")
+        if project and conversation.project_id != project.id:
+            raise HTTPException(
+                status_code=404,
+                detail="Conversation does not belong to the specified project",
+            )
+
+        return await create_standard_response(serialize_conversation(conversation))
+
+    except HTTPException as e:
+        logger.error(f"Conversation access failed: {e.status_code} {e.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        # Lint recommends `from e`
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Update Conversation
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.patch("/conversations/{conversation_id}", response_model=dict)
 @router.patch(
     "/projects/{project_id}/conversations/{conversation_id}", response_model=dict
@@ -272,18 +284,20 @@ async def update_conversation(
 ):
     """
     Update a conversation's title or model_id.
-    - If `project_id` is provided, the conversation must be in that project.
-    - Otherwise, it must be standalone.
+    - If `project_id`, conversation must belong to that project.
+    - Otherwise, it's standalone.
     """
     project = await resolve_project_if_any(project_id, current_user, db)
 
+    # Build filters if you truly need them; otherwise just check `project` alignment
+    filters_to_use: list[BinaryExpression[bool]] = []
     if project:
-        additional_filters: Sequence[BinaryExpression[bool]] = [
+        filters_to_use = [
             cast(BinaryExpression[bool], Conversation.project_id == project.id),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
     else:
-        additional_filters: Sequence[BinaryExpression[bool]] = [
+        filters_to_use = [
             cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
@@ -294,7 +308,7 @@ async def update_conversation(
         current_user,
         db,
         "Conversation",
-        additional_filters,
+        additional_filters=filters_to_use,  # or rename param if needed
     )
 
     if update_data.title is not None:
@@ -310,9 +324,9 @@ async def update_conversation(
     )
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Delete/Restore Conversation
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.post(
     "/projects/{project_id}/conversations/{conversation_id}/restore",
     response_model=dict,
@@ -324,11 +338,18 @@ async def restore_conversation(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Restores a soft-deleted conversation. Only relevant for project-based.
-    (Standalone restore logic is optional; omit if you don't need it.)
+    Restore a soft-deleted conversation. Only relevant for project-based.
     """
-    additional_filters: Sequence[BinaryExpression[bool]] = [
-        cast(BinaryExpression[bool], Conversation.project_id == project_id),
+    # Validate project
+    project = await validate_project_access(project_id, current_user, db)
+    if not project:
+        raise HTTPException(
+            status_code=404, detail="Project not found or not accessible"
+        )
+
+    # Validate conversation belongs to that project and is deleted
+    filters_to_use = [
+        cast(BinaryExpression[bool], Conversation.project_id == project.id),
         cast(BinaryExpression[bool], Conversation.is_deleted.is_(True)),
     ]
     conversation = await validate_resource_access(
@@ -337,7 +358,7 @@ async def restore_conversation(
         current_user,
         db,
         "Conversation",
-        additional_filters,
+        additional_filters=filters_to_use,
     )
 
     conversation.is_deleted = False
@@ -363,7 +384,7 @@ async def delete_conversation(
 ):
     """
     Soft-delete a conversation.
-    - If `project_id` is provided, delete from that project.
+    - If `project_id`, delete from that project.
     - Otherwise, delete standalone conversation.
     """
     if project_id:
@@ -376,10 +397,10 @@ async def delete_conversation(
             {"conversation_id": str(deleted_id)}, "Conversation deleted successfully"
         )
     else:
-        # Standalone logic:
-        additional_filters: Sequence[BinaryExpression] = [
-            Conversation.project_id.is_(None),
-            Conversation.is_deleted.is_(False),
+        # Standalone logic
+        filters_to_use = [
+            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
         conversation = await validate_resource_access(
             conversation_id,
@@ -387,7 +408,7 @@ async def delete_conversation(
             current_user,
             db,
             "Conversation",
-            additional_filters,
+            additional_filters=filters_to_use,
         )
         conversation.is_deleted = True
         conversation.deleted_at = None  # or datetime.utcnow()
@@ -401,9 +422,9 @@ async def delete_conversation(
         )
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # List Conversation Messages
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.get("/conversations/{conversation_id}/messages", response_model=dict)
 @router.get(
     "/projects/{project_id}/conversations/{conversation_id}/messages",
@@ -418,21 +439,20 @@ async def list_conversation_messages(
     limit: int = Query(100, ge=1, le=500),
 ):
     """
-    Retrieve messages from a conversation.
+    Retrieve messages in a conversation.
     """
-    if project_id:
-        from sqlalchemy.dialects.postgresql import UUID
-        additional_filters: Sequence[BinaryExpression[bool]] = [
+    # Validate conversation
+    filters_to_use = (
+        [
             cast(BinaryExpression[bool], Conversation.project_id == project_id),
-            cast(BinaryExpression[bool], Conversation.user_id == current_user.id),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
-            cast(BinaryExpression[bool], cast(Conversation.project_id, UUID) == cast(project_id, UUID))
         ]
-    else:
-        additional_filters: Sequence[BinaryExpression[bool]] = [
+        if project_id
+        else [
             cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
+    )
 
     conversation = await validate_resource_access(
         conversation_id,
@@ -440,7 +460,7 @@ async def list_conversation_messages(
         current_user,
         db,
         "Conversation",
-        additional_filters,
+        additional_filters=filters_to_use,
     )
 
     messages = await get_all_by_condition(
@@ -460,9 +480,9 @@ async def list_conversation_messages(
     )
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Create New Message
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.post(
     "/conversations/{conversation_id}/messages",
     response_model=dict,
@@ -475,44 +495,41 @@ async def list_conversation_messages(
 )
 async def create_message(
     conversation_id: UUID,
-    new_msg: dict,  # or a Pydantic model e.g. MessageCreate
+    new_msg: dict,  # ideally use Pydantic model
     project_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Adds a new message to the specified conversation.
-    Triggers an AI response if message.role == "user".
+    Add a new message to the specified conversation.
+    Triggers an AI response if message.role == 'user'.
     """
-    # If you have a Pydantic model like `MessageCreate`, you can parse it here
-    # e.g.: new_msg: MessageCreate
-    # Just ensure it has fields content, role, image_data, etc.
+    logger.debug(
+        f"Creating message in conversation {conversation_id}, project {project_id}, user {current_user.id}"
+    )
 
-    # Validate project scope
+    # Validate project if provided
     if project_id:
-        # Validate project ownership
-        additional_filters_project: Sequence[BinaryExpression[bool]] = [
-            cast(BinaryExpression[bool], Project.user_id == current_user.id),
-            cast(BinaryExpression[bool], Project.archived.is_(False)),
-        ]
-        await validate_resource_access(
-            project_id,
-            Project,
-            current_user,
-            db,
-            "Project",
-            additional_filters_project
-        )
+        project = await validate_project_access(project_id, current_user, db)
+        if not project:
+            logger.error(f"Project validation failed for {project_id}")
+            raise HTTPException(
+                status_code=404, detail="Project not found or not accessible"
+            )
 
-        additional_filters = [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False),
+    # Validate conversation
+    filters_to_use = (
+        [
+            cast(BinaryExpression[bool], Conversation.project_id == project_id),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
-    else:
-        additional_filters = [
-            Conversation.project_id.is_(None),
-            Conversation.is_deleted.is_(False),
+        if project_id
+        else [
+            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
+            cast(BinaryExpression[bool], Conversation.user_id == current_user.id),
         ]
+    )
 
     conversation = await validate_resource_access(
         conversation_id,
@@ -520,7 +537,8 @@ async def create_message(
         current_user,
         db,
         "Conversation",
-        additional_filters,
+        additional_filters=filters_to_use,
+        require_ownership=False,
     )
 
     # Validate image data if present
@@ -531,34 +549,31 @@ async def create_message(
     role = (new_msg.get("role") or "user").lower().strip()
     content = (new_msg.get("content") or "").strip()
     message = await create_user_message(
-        conversation_id=cast(
-            UUID, conversation.id
-        ),  # Cast to ensure type compatibility
+        conversation_id=conversation.id,
         content=content,
         role=role,
         db=db,
     )
-
     response_payload = serialize_message(message)
 
-    # Generate AI response if user role
+    # Generate AI response if user message
     if message.role == "user":
         try:
             msg_dicts = await get_conversation_messages(
-                cast(UUID, conversation.id), db, include_system_prompt=True
+                conversation.id, db, include_system_prompt=True
             )
 
-            # Knowledge base context if enabled
+            # Possibly augment with knowledge base
             kb_context = []
             if conversation.use_knowledge_base:
                 kb_context = await augment_with_knowledge(
-                    conversation_id=cast(UUID, conversation.id),
+                    conversation_id=conversation.id,
                     user_message=content,
                     db=db,
                 )
 
             assistant_msg = await generate_ai_response(
-                conversation_id=cast(UUID, conversation.id),
+                conversation_id=conversation.id,
                 messages=kb_context + msg_dicts,
                 model_id=conversation.model_id,
                 image_data=new_msg.get("image_data"),
@@ -593,11 +608,12 @@ async def create_message(
                             "redacted_thinking"
                         ]
 
-                # Update token usage
+                # Update usage (roughly 4 chars/1 token)
                 token_estimate = len(assistant_msg.content) // 4
                 await update_project_token_usage(conversation, token_estimate, db)
             else:
                 response_payload["assistant_error"] = "Failed to generate response"
+
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
             response_payload["assistant_error"] = str(e)
@@ -605,9 +621,9 @@ async def create_message(
     return await create_standard_response(response_payload)
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # WebSocket for Real-time Chat
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 @router.websocket("/conversations/{conversation_id}/ws")
 @router.websocket("/projects/{project_id}/conversations/{conversation_id}/ws")
 async def websocket_chat_endpoint(
@@ -619,56 +635,45 @@ async def websocket_chat_endpoint(
     """
     Real-time chat updates for either standalone or project-based conversations.
     """
-    # Initialize websocket variables (just once)
     user = None
     heartbeat_task = None
+    connection_id = None
 
     async with AsyncSessionLocal() as db:
         try:
+            # Accept WebSocket
+            await websocket.accept()
+
+            # Validate token and user
             user_token = token or extract_token(websocket)
             if not user_token:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
+                raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
 
             user = await get_user_from_token(user_token, db, "access")
             if not user or not user.is_active:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
+                raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
 
-            # Validate conversation access based on project/standalone context
+            # Validate project if needed
             if project_id:
-                # Validate project MEMBERSHIP not just existence
-                project = await validate_project_membership(user, project_id, db)
-                additional_filters = [Conversation.project_id == project_id]
-                
-                # Get conversation and verify it belongs to this project
-                conversation = await validate_resource_access(
-                    conversation_id,
-                    Conversation,
-                    user,
-                    db,
-                    "Conversation",
-                    additional_filters
-                )
-                
-                if str(conversation.project_id) != str(project_id):
-                    logger.error(
-                        f"Critical mismatch: Conversation {conversation.id} belongs to "
-                        f"project {conversation.project_id} but request has {project_id}"
-                    )
+                prj = await validate_project_access(project_id, user, db)
+                if not prj:
+                    logger.error(f"Project validation failed for {project_id}")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
+                additional_filters = [Conversation.project_id == project_id]
             else:
-                # Validate standalone conversation ownership
+                # Must belong to user and be standalone
                 additional_filters = [
                     Conversation.project_id.is_(None),
                     Conversation.user_id == user.id,
-                    Conversation.is_deleted.is_(False)
+                    Conversation.is_deleted.is_(False),
                 ]
 
-            logger.info(f"Validating conversation {conversation_id} with filters: {additional_filters}")
+            logger.info(
+                f"Validating conversation {conversation_id} with filters: {additional_filters}"
+            )
 
-            # Validate conversation exists and matches project context
+            # Validate conversation
             try:
                 conversation = await validate_resource_access(
                     conversation_id,
@@ -676,37 +681,32 @@ async def websocket_chat_endpoint(
                     user,
                     db,
                     "Conversation",
-                    additional_filters
+                    additional_filters=additional_filters,
                 )
-
-                # Explicit project-conversation verification
-                if project_id and str(conversation.project_id) != str(project_id):
-                    logger.error(
-                        f"Authorization failed: Conversation {conversation.id} belongs to "
-                        f"project {conversation.project_id} but request has {project_id}"
-                    )
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
             except HTTPException as e:
-                logger.error(f"WebSocket authorization failed: {e.detail}")
+                logger.error(f"WebSocket conversation authorization failed: {e.detail}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Extra validation - ensure conversation.project_id matches URL project_id
-            if project_id and str(conversation.project_id) != str(project_id):
+            # Further check project alignment
+            if project_id and conversation.project_id != project_id:
                 logger.error(
                     f"Conversation project mismatch. URL:{project_id} vs Conv:{conversation.project_id}"
                 )
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Connect
-            connection_success = await manager.connect(
-                websocket, str(conversation_id), str(user.id)
+            # Connect to manager
+            connection_id = await manager.connect_with_state(
+                websocket,
+                conversation_id=str(conversation_id),
+                db=db,
+                user_id=str(user.id),
+                state="connecting",
             )
-            if not connection_success:
-                return
+            await manager.update_connection_state(connection_id, "connected")
 
+            # Heartbeat to keep connection alive
             async def heartbeat():
                 while True:
                     await asyncio.sleep(25)
@@ -717,7 +717,7 @@ async def websocket_chat_endpoint(
 
             heartbeat_task = asyncio.create_task(heartbeat())
 
-            # Send connected
+            # Send connected status
             await manager.send_personal_message(
                 {
                     "type": "connected",
@@ -735,21 +735,15 @@ async def websocket_chat_endpoint(
                     if "content" not in data_dict:
                         raise ValueError("Missing 'content' in message")
 
-                    role = data_dict.get("role", "user")
-                    if role not in ["user", "system"]:
-                        await manager.send_personal_message(
-                            {"type": "error", "message": "Invalid role"}, websocket
-                        )
-                        continue
-
-                    # Check for token refresh
                     if data_dict.get("type") == "token_refresh" and data_dict.get(
                         "token"
                     ):
+                        # token refresh scenario
                         try:
                             new_token = data_dict["token"]
                             user = await get_user_from_token(new_token, db, "access")
-                            # Possibly re-verify user or project
+                            if user is None or not user.is_active:
+                                raise ValueError("Invalid or inactive user token")
                             await manager.send_personal_message(
                                 {
                                     "type": "token_refresh_success",
@@ -758,11 +752,11 @@ async def websocket_chat_endpoint(
                                 websocket,
                             )
                             continue
-                        except Exception as token_error:
+                        except Exception as token_err:
                             await manager.send_personal_message(
                                 {
                                     "type": "error",
-                                    "message": f"Token refresh failed: {token_error}",
+                                    "message": f"Token refresh failed: {token_err}",
                                 },
                                 websocket,
                             )
@@ -775,15 +769,16 @@ async def websocket_chat_endpoint(
                     continue
 
                 # Create message
+                role = data_dict.get("role", "user")
                 message_id = data_dict.get("messageId")
-                message = await create_user_message(
-                    conversation_id=cast(UUID, conversation.id),
+                msg = await create_user_message(
+                    conversation_id=conversation.id,
                     content=data_dict["content"],
                     role=role,
                     db=db,
                 )
 
-                # Acknowledge
+                # Acknowledge receipt
                 if message_id:
                     await manager.send_personal_message(
                         {
@@ -794,21 +789,21 @@ async def websocket_chat_endpoint(
                         websocket,
                     )
 
-                # If user message, generate AI response
-                if message.role == "user":
+                # If user message => generate AI response
+                if msg.role == "user":
                     try:
                         msg_dicts = await get_conversation_messages(
-                            cast(UUID, conversation.id), db, include_system_prompt=True
+                            conversation.id, db, include_system_prompt=True
                         )
                         kb_context = []
                         if conversation.use_knowledge_base:
                             kb_context = await augment_with_knowledge(
-                                conversation_id=cast(UUID, conversation.id),
-                                user_message=message.content,
+                                conversation_id=conversation.id,
+                                user_message=msg.content,
                                 db=db,
                             )
                         assistant_msg = await generate_ai_response(
-                            conversation_id=cast(UUID, conversation.id),
+                            conversation_id=conversation.id,
                             messages=kb_context + msg_dicts,
                             model_id=conversation.model_id,
                             image_data=data_dict.get("image_data"),
@@ -832,7 +827,7 @@ async def websocket_chat_endpoint(
                                 "timestamp": assistant_msg.created_at.isoformat(),
                             }
                             if metadata:
-                                response_data["metadata"] = metadata  # type: ignore
+                                response_data["metadata"] = metadata
                                 if "thinking" in metadata:
                                     response_data["thinking"] = metadata["thinking"]
                                 if "redacted_thinking" in metadata:
@@ -846,8 +841,7 @@ async def websocket_chat_endpoint(
                             await manager.send_personal_message(
                                 response_data, websocket
                             )
-
-                            # Update token usage
+                            # Update usage
                             token_estimate = len(assistant_msg.content) // 4
                             await update_project_token_usage(
                                 conversation, token_estimate, db

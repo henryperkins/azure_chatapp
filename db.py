@@ -68,9 +68,19 @@ async def init_db():
     """
     logger.info("Starting database initialization and schema alignment")
     
-    # First, create all tables if they don't exist
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # First check which tables exist
+    existing_tables = set()
+    async with async_engine.connect() as conn:
+        result = await conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
+        existing_tables = {row[0] for row in result.fetchall()}
+        await conn.commit()
+
+    # Only create tables that don't exist
+    tables_to_create = [t for t in Base.metadata.tables.keys() if t not in existing_tables]
+    if tables_to_create:
+        logger.info(f"Creating missing tables: {', '.join(tables_to_create)}")
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     
     # Execute comprehensive schema alignment to handle any discrepancies
     await fix_db_schema()
