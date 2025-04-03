@@ -19,7 +19,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .openai import openai_chat
-from .api_utils import api_request
 
 
 logger = logging.getLogger(__name__)
@@ -164,44 +163,37 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
 
 async def estimate_token_count(messages: List[Dict[str, str]], model: str = "claude-3-sonnet-20240229") -> int:
     """
-    Count tokens using Claude's API with proper fallback handling
+    Count tokens using available methods with proper fallback handling.
     
     Args:
         messages: List of message dicts with role/content
-        model: Claude model name
+        model: Model name (for future model-specific handling)
         
     Returns:
-        Accurate token count when possible, fallback estimate otherwise
+        Token count estimate
     """
-    try:
-        # Use Claude's official token counting endpoint
-        response = await api_request(
-            "/v1/messages/count_tokens",
-            "POST",
-            {
-                "model": model,
-                "messages": messages,
-                "thinking": {
-                    "type": "enabled",
-                    "budget_tokens": 1024  # Minimum for counting purposes
-                } if any(m.get('thinking') for m in messages) else None
-            }
-        )
-        return response["input_tokens"]
-    except Exception as e:
-        logger.warning(f"Token counting API failed, falling back to estimation: {str(e)}")
-        # Fallback to tiktoken if available
-        if TIKTOKEN_AVAILABLE:
-            try:
-                encoding = tiktoken.get_encoding("cl100k_base")
-                return sum(len(encoding.encode(msg["content"])) for msg in messages)
-            except Exception:
-                pass
-        # Final fallback
-        return sum(len(msg["content"]) // 4 for msg in messages)
+    # First try tiktoken if available
+    if TIKTOKEN_AVAILABLE:
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+            return sum(len(encoding.encode(msg.get("content", ""))) for msg in messages)
+        except Exception as e:
+            logger.debug(f"tiktoken failed: {str(e)}")
+
+    # Fallback to rough estimate (4 chars ≈ 1 token)
+    total = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        # Add message content tokens
+        total += len(content) // 4
+        # Add metadata tokens if present
+        if "metadata" in msg and isinstance(msg["metadata"], dict):
+            total += len(str(msg["metadata"])) // 8  # Rough estimate for metadata
+    
+    return total
 
 async def estimate_tokens(text: str, model: str = "claude-3-sonnet-20240229") -> int:
-    """Count tokens with model-specific handling"""
+    """Simplified version for single text strings"""
     if not text:
         return 0
     return await estimate_token_count([{"role": "user", "content": text}], model)
