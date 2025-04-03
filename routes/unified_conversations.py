@@ -126,6 +126,9 @@ async def create_conversation(
     - If `project_id` is provided, the conversation is bound to that project.
     - If no `project_id`, it's a standalone conversation.
     """
+    logger.info(f"Attempting to create conversation. Project ID: {project_id}")
+    logger.info(f"Received ConversationCreate data: {conversation_data.dict()}")
+
     project = await resolve_project_if_any(project_id, current_user, db)
 
     # Use either the provided model_id or project default (else fallback).
@@ -133,19 +136,34 @@ async def create_conversation(
     if not model_id and project:
         model_id = project.default_model
     if not model_id:
-        model_id = "claude-3-sonnet-20240229"  # Example fallback for standalone
+        default_model_fallback = "claude-3-sonnet-20240229"
+        logger.info(f"No model_id provided or found in project, using default: {default_model_fallback}")
+        model_id = default_model_fallback
+    else:
+        logger.info(f"Using model_id: {model_id} for conversation creation")
 
     # Create via service layer
-    conv = await conv_service.create_conversation(
-        user_id=current_user.id,
-        title=conversation_data.title.strip(),
-        model_id=model_id,
-        project_id=project.id if project else None,
-    )
+    try:
+        conv = await conv_service.create_conversation(
+            user_id=current_user.id,
+            title=conversation_data.title.strip(),
+            model_id=model_id,
+            project_id=project.id if project else None,
+        )
 
-    return await create_standard_response(
-        serialize_conversation(conv), "Conversation created successfully"
-    )
+        if conv is None:
+            logger.error("Conversation service returned None unexpectedly.")
+            raise HTTPException(status_code=500, detail="Failed to create conversation object.")
+
+        return await create_standard_response(
+            serialize_conversation(conv), "Conversation created successfully"
+        )
+    except HTTPException as http_exc:
+        logger.warning(f"HTTPException during conversation creation: {http_exc.status_code} - {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        logger.exception(f"Unexpected error during conversation creation: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # ------------------------------------------------------------------------------
