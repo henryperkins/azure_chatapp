@@ -5,9 +5,9 @@ Defines the Project model used to group files, notes, and references
 that can be attached to one or more conversations for context.
 """
 from typing import List
-from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint, Index
+from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint, Index, case, and_
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import relationship, Mapped, mapped_column, hybrid_property
 from db import Base
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime
