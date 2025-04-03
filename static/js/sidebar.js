@@ -116,44 +116,34 @@ function handleResize() {
 function updateBackdrop(show) {
   let backdrop = document.getElementById('sidebarBackdrop');
   
-  // Ensure click handler works reliably
-  const handleBackdropClick = () => {
-    toggleSidebar();
-    document.activeElement?.blur(); // Remove focus from toggle button
-  };
+  // Check if we need to modify the backdrop
+  if (show && backdrop) return; // Already exists and visible
 
-  if (!backdrop) {
+  // Remove existing backdrop if not needed
+  if (!show && backdrop) {
+    backdrop.remove();
+    return;
+  }
+
+  // Create new backdrop if showing
+  if (show && !backdrop) {
     backdrop = document.createElement('div');
     backdrop.id = 'sidebarBackdrop';
     backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
     backdrop.setAttribute('aria-hidden', 'true');
     backdrop.setAttribute('role', 'presentation');
-    backdrop.style.touchAction = 'manipulation'; // Prevent scroll bleed
+    backdrop.style.touchAction = 'none'; // Prevent scroll bleed
+    
+    // Handle both touch and click events
+    const handleBackdrop = () => {
+      toggleSidebar();
+      document.activeElement?.blur();
+    };
+    
+    backdrop.addEventListener('click', handleBackdrop);
+    backdrop.addEventListener('touchstart', handleBackdrop); // Add touch support
+    
     document.body.appendChild(backdrop);
-  }
-
-  // Clean up previous listener if exists
-  if (backdrop._clickHandler) {
-    backdrop.removeEventListener('click', backdrop._clickHandler);
-  }
-  // Store new handler reference and add listener
-  backdrop._clickHandler = handleBackdropClick;
-  backdrop.addEventListener('click', backdrop._clickHandler);
-
-  if (show) {
-    backdrop.style.display = 'block';
-    backdrop.classList.add('opacity-100');
-    backdrop.classList.remove('opacity-0');
-    backdrop.setAttribute('aria-hidden', 'false');
-  } else {
-    backdrop.classList.add('opacity-0');
-    backdrop.classList.remove('opacity-100');
-    backdrop.setAttribute('aria-hidden', 'true');
-    backdrop.addEventListener('transitionend', () => {
-      if (parseFloat(backdrop.style.opacity) === 0) {
-        backdrop.style.display = 'none';
-      }
-    }, { once: true });
   }
 }
 
