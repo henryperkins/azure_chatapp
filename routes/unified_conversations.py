@@ -642,13 +642,13 @@ async def websocket_chat_endpoint(
                     Conversation.is_deleted.is_(False),
                 ]
             else:
-                # standalone
+                # standalone - ensure no project association
                 additional_filters: Sequence[BinaryExpression[Any]] = [
                     Conversation.project_id.is_(None),
                     Conversation.is_deleted.is_(False),
                 ]
 
-            # Validate conversation
+            # Validate conversation exists and matches project context
             conversation = await validate_resource_access(
                 conversation_id,
                 Conversation,
@@ -657,6 +657,14 @@ async def websocket_chat_endpoint(
                 "Conversation",
                 additional_filters,
             )
+
+            # Extra validation - ensure conversation.project_id matches URL project_id
+            if project_id and str(conversation.project_id) != str(project_id):
+                logger.error(
+                    f"Conversation project mismatch. URL:{project_id} vs Conv:{conversation.project_id}"
+                )
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
             # Connect
             connection_success = await manager.connect(
