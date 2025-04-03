@@ -20,8 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from utils.auth_utils import (
     clean_expired_tokens,
     get_current_user_and_token,
+    get_user_from_token,
     create_access_token,
-    revoke_token_id
+    revoke_token_id,
+    verify_token
 )
 
 from config import settings
@@ -209,11 +211,29 @@ async def login_user(
         token_id
     )
 
+    refresh_token_id = str(uuid.uuid4())
+    refresh_payload = {
+        "sub": lower_username,
+        "exp": datetime.utcnow() + timedelta(days=7),
+        "iat": datetime.utcnow(),
+        "jti": refresh_token_id,
+        "type": "refresh",
+        "version": user.token_version,
+        "user_id": user.id
+    }
+    refresh_token = create_access_token(refresh_payload)
+
     set_secure_cookie(
         response, 
         "access_token", 
         token, 
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    set_secure_cookie(
+        response,
+        "refresh_token",
+        refresh_token,
+        max_age=60*60*24*7  # 7 days
     )
 
     return LoginResponse(
@@ -222,11 +242,26 @@ async def login_user(
     )
 
 
+async def get_refresh_token_user(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session)
+) -> User:
+    """Special dependency for refresh token verification"""
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+    try:
+        decoded = await verify_token(token, "refresh", session)
+        user = await get_user_from_token(token, session, "refresh")
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
 @router.post("/refresh", response_model=LoginResponse)
 async def refresh_token(
     response: Response,
-    request: Request,
-    current_user_and_token: User = Depends(get_current_user_and_token),
+    user: User = Depends(get_refresh_token_user),
     session: AsyncSession = Depends(get_async_session)
 ) -> LoginResponse:
     """Provides new token with rotation for session continuity."""
@@ -290,7 +325,7 @@ async def verify_auth_status(
 @router.post("/logout")
 async def logout_user(
     response: Response,
-    current_user_and_token: User = Depends(get_current_user_and_token),
+    user: User = Depends(get_refresh_token_user),
     session: AsyncSession = Depends(get_async_session)
 ) -> dict:
     """Invalidates token and clears authentication cookie."""
@@ -329,12 +364,8 @@ async def logout_user(
                 current_user_and_token.username, token_id)
 
     # Use the same parameters as during login to ensure cookie is deleted
-    set_secure_cookie(
-        response,
-        "access_token",
-        "",
-        max_age=0  # Immediate expiration
-    )
+    set_secure_cookie(response, "access_token", "", max_age=0)
+    set_secure_cookie(response, "refresh_token", "", max_age=0)
 
     return {"status": "logged out"}
 
