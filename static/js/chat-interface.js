@@ -116,11 +116,19 @@ window.ChatInterface.prototype.initialize = async function() {
     onError: (err) => window.ChatUtils?.handleError?.('WebSocket', err, this.notificationFunction)
   });
 
-  this.messageService = new window.MessageService({
-    onMessageReceived: this._handleMessageReceived.bind(this),
-    onSending: () => this.ui.messageList.addThinking(),
-    onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
-  });
+  try {
+    if (!window.MessageService) {
+      throw new Error('MessageService not available');
+    }
+    this.messageService = new window.MessageService({
+      onMessageReceived: this._handleMessageReceived.bind(this),
+      onSending: () => this.ui.messageList.addThinking(),
+      onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
+    });
+  } catch (error) {
+    console.error('Failed to initialize MessageService:', error);
+    throw new Error(`MessageService initialization failed: ${error.message}`);
+  }
 
   // Initialize with current model config if available
   if (window.MODEL_CONFIG) {
@@ -179,16 +187,14 @@ window.ChatInterface.prototype.initialize = async function() {
     });
   }
 
-  // Initialize services
-  if (!window.ConversationService) {
-    console.error('ConversationService not loaded - delaying initialization');
-    setTimeout(() => {
-      if (!window.ConversationService) {
-        console.error('ConversationService still not available after delay');
-      }
-      this.initialize();
-    }, 100);
-    return;
+  // Check dependencies
+  const requiredServices = ['ConversationService', 'MessageService', 'WebSocketService', 'UIComponents'];
+  const missingServices = requiredServices.filter(service => !window[service]);
+  
+  if (missingServices.length > 0) {
+    const errorMsg = `Required services not loaded: ${missingServices.join(', ')}`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   // Create new instance of ConversationService with required callbacks
