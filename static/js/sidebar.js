@@ -65,7 +65,22 @@ function initializeSidebarToggle() {
     if (!sidebar || !toggleBtn) {
       throw new Error(`Sidebar elements missing: 
         Sidebar - ${!!sidebar}, 
-        ToggleBtn - ${!!toggleBtn}`);
+        ToggleBtn - ${!!toggleBtn},
+        CloseBtn - ${!!closeBtn}`);
+    }
+
+    // Ensure closeBtn exists or create fallback
+    if (!closeBtn) {
+      console.warn('Close button not found, creating fallback');
+      closeBtn = document.createElement('button');
+      closeBtn.id = 'closeSidebarBtn';
+      closeBtn.className = 'md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300';
+      closeBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>`;
+      sidebar?.appendChild(closeBtn);
+    }
     }
 
     // Set up MutationObserver for cleanup
@@ -1013,8 +1028,8 @@ function updateAccessibilityAttributes() {
   toggleBtn.setAttribute('aria-label', isOpen ? 'Close sidebar' : 'Open sidebar');
   sidebar.setAttribute('aria-hidden', !isOpen);
   
-  // Manage focus when closing
-  if (!isOpen && document.activeElement === closeBtn) {
+  // Manage focus when closing if closeBtn exists
+  if (closeBtn && !isOpen && document.activeElement === closeBtn) {
     toggleBtn.focus();
   }
 }
