@@ -248,7 +248,7 @@ app.include_router(
 # -----------------------------
 app.include_router(
     unified_conversations_router,
-    prefix="/api",  # so routes become /api/conversations and /api/projects/{project_id}/conversations
+    prefix="/api/chat",  # to match frontend expectations
     tags=["conversations"],
 )
 
