@@ -6,10 +6,9 @@ Organizes all project-related routes into a logical, hierarchical structure.
 from fastapi import APIRouter
 from ..unified_conversations import router as conversations_router
 
-from . import projects, files, artifacts, knowledge_base
+from . import projects, files, artifacts  # Removed knowledge_base from imports
 
 router = APIRouter()
-
 
 # Project-associated resources (include first)
 router.include_router(
