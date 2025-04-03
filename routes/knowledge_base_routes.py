@@ -49,6 +49,86 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
+@router.get(
+    "/projects/{project_id}/status",
+    response_model=Dict[str, Any],
+    summary="Get knowledge base status",
+    description="Returns detailed status including processing stats and vector DB connection"
+)
+async def get_project_knowledge_base_status(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Get detailed status of project knowledge base"""
+    # Validate project access
+    project = await validate_resource_access(
+        project_id,
+        Project,
+        current_user,
+        db,
+        resource_name="Project"
+    )
+    
+    # Get knowledge base details
+    kb = await db.get(KnowledgeBase, project.knowledge_base_id) if project.knowledge_base_id else None
+    
+    # Get file processing stats
+    processed_files = 0
+    total_files = 0
+    if project.knowledge_base_id:
+        files = await db.execute(
+            select(ProjectFile)
+            .where(ProjectFile.project_id == project_id)
+        )
+        files = files.scalars().all()
+        total_files = len(files)
+        processed_files = sum(
+            1 for f in files
+            if f.config and f.config.get("search_processing", {}).get("status") == "success"
+        )
+    
+    # Check vector DB connection and health
+    vector_db_status = "not_initialized"
+    vector_db_health = {}
+    if kb:
+        try:
+            vector_db = await get_vector_db(
+                model_name=str(kb.embedding_model) if kb.embedding_model else DEFAULT_EMBEDDING_MODEL,
+                storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+                load_existing=True
+            )
+            # Test vector DB connection
+            try:
+                test_results = await vector_db.test_connection()
+                vector_db_status = "connected"
+                vector_db_health = {
+                    "index_count": test_results.get("index_count", 0),
+                    "is_healthy": test_results.get("is_healthy", False)
+                }
+            except Exception as e:
+                vector_db_status = f"connection_error: {str(e)}"
+        except Exception as e:
+            vector_db_status = f"initialization_error: {str(e)}"
+    
+    return {
+        "exists": bool(kb),
+        "is_active": kb.is_active if kb else False,
+        "embedding_model": kb.embedding_model if kb else None,
+        "files": {
+            "total": total_files,
+            "processed": processed_files,
+            "unprocessed": total_files - processed_files
+        },
+        "vector_db": {
+            "status": vector_db_status,
+            "health": vector_db_health,
+            "model": kb.embedding_model if kb else None,
+            "storage_path": os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)) if kb else None
+        },
+        "ready_for_search": bool(kb and kb.is_active and processed_files > 0)
+    }
+
 # ============================
 # Pydantic Schemas
 # ============================

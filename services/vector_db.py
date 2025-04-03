@@ -70,51 +70,20 @@ class VectorDB:
         use_faiss: bool = True,
         storage_path: Optional[str] = None
     ):
-        # Initialize FAISS if available
-        self._faiss = None
-        if FAISS_AVAILABLE:
-            try:
-                import faiss
-                self._faiss = faiss
-            except ImportError:
-                logger.warning("FAISS import failed despite FAISS_AVAILABLE=True")
-        # Initialize FAISS if available
-        self._faiss = None
-        if FAISS_AVAILABLE:
-            try:
-                import faiss
-                self._faiss = faiss
-            except ImportError:
-                logger.warning("FAISS import failed despite FAISS_AVAILABLE=True")
-        # Initialize FAISS if available
-        self._faiss = None
-        if FAISS_AVAILABLE:
-            try:
-                import faiss
-                self._faiss = faiss
-            except ImportError:
-                logger.warning("FAISS import failed despite FAISS_AVAILABLE=True")
-        # Initialize FAISS if available
-        self._faiss = None
-        if FAISS_AVAILABLE:
-            try:
-                import faiss
-                self._faiss = faiss
-            except ImportError:
-                logger.warning("FAISS import failed despite FAISS_AVAILABLE=True")
-        # Initialize FAISS if available
-        self._faiss = None
-        if FAISS_AVAILABLE:
-            try:
-                import faiss
-                self._faiss = faiss
-            except ImportError:
-                logger.warning("FAISS import failed despite FAISS_AVAILABLE=True")
+        """Initialize vector database with specified embedding model."""
+        self.embedding_model_name = embedding_model
+        self.storage_path = storage_path
+        self.use_faiss = use_faiss and FAISS_AVAILABLE
+
         # Initialize FAISS if available
         self.faiss = None
-        if FAISS_AVAILABLE:
-            import faiss
-            self.faiss = faiss
+        if self.use_faiss:
+            try:
+                import faiss
+                self.faiss = faiss
+            except ImportError:
+                logger.warning("FAISS import failed despite FAISS_AVAILABLE=True")
+                self.use_faiss = False
         """Initialize vector database with specified embedding model."""
         self.embedding_model_name = embedding_model
         self.storage_path = storage_path
@@ -375,8 +344,6 @@ class VectorDB:
         except Exception as e:
             logger.error(f"Search failed: {str(e)}")
             raise VectorDBError(f"Search operation failed: {str(e)}")
-        else:
-            return await self._search_manual(query_vector, top_k, filter_metadata)
 
     async def _search_with_faiss(
         self,

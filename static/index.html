@@ -368,18 +368,64 @@
               </div>
             </div>
             
-            <!-- Projects filter tabs -->
-            <div class="flex border-b border-gray-200 mb-4">
-              <button class="project-filter-btn px-3 py-2 text-blue-600 border-b-2 border-blue-600" data-filter="all">
-                All Projects
+            <!-- Projects filter tabs with enhanced styling and click handlers -->
+            <div class="flex border-b border-gray-200 dark:border-gray-700 mb-4" id="projectFilterTabs">
+              <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200"
+                      data-filter="all"
+                      aria-current="page"
+                      onclick="handleProjectFilterClick('all', this)">
+                <span class="relative py-1.5">
+                  <span class="block">All Projects</span>
+                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>
+                </span>
               </button>
-              <button class="project-filter-btn px-3 py-2 text-gray-600" data-filter="pinned">
-                Pinned
+              <button class="project-filter-btn px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
+                      data-filter="pinned"
+                      onclick="handleProjectFilterClick('pinned', this)">
+                <span class="relative py-1.5">
+                  <span class="block">Pinned</span>
+                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
+                </span>
               </button>
-              <button class="project-filter-btn px-3 py-2 text-gray-600" data-filter="archived">
-                Archived
+              <button class="project-filter-btn px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
+                      data-filter="archived"
+                      onclick="handleProjectFilterClick('archived', this)">
+                <span class="relative py-1.5">
+                  <span class="block">Archived</span>
+                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
+                </span>
               </button>
             </div>
+
+            <script>
+              function handleProjectFilterClick(filter, clickedButton) {
+                // Update active tab styling
+                const tabs = document.querySelectorAll('#projectFilterTabs .project-filter-btn');
+                tabs.forEach(tab => {
+                  const span = tab.querySelector('span span:last-child');
+                  if (tab === clickedButton) {
+                    tab.setAttribute('aria-current', 'page');
+                    span.classList.remove('bg-transparent');
+                    span.classList.add('bg-blue-600');
+                    tab.classList.remove('text-gray-500', 'dark:text-gray-400');
+                    tab.classList.add('text-blue-600', 'dark:text-blue-400');
+                  } else {
+                    tab.removeAttribute('aria-current');
+                    span.classList.add('bg-transparent');
+                    span.classList.remove('bg-blue-600');
+                    tab.classList.add('text-gray-500', 'dark:text-gray-400');
+                    tab.classList.remove('text-blue-600', 'dark:text-blue-400');
+                  }
+                });
+
+                // Load projects with selected filter
+                if (window.projectManager && window.projectManager.loadProjects) {
+                  window.projectManager.loadProjects(filter);
+                } else {
+                  console.error('Project manager not available');
+                }
+              }
+            </script>
             
             <!-- Project list container -->
             <div id="projectList" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 h-full overflow-y-auto p-2"></div>

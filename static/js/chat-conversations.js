@@ -74,24 +74,36 @@ return true;
   }
 
   async createNewConversation(maxRetries = 2) {
-  const projectId = localStorage.getItem("selectedProjectId");
-  const model = window.MODEL_CONFIG?.modelName ||
-    localStorage.getItem("modelName") ||
-    "claude-3-sonnet-20240229";
+    // First verify auth state
+    const authState = await window.ChatUtils?.isAuthenticated?.() ||
+                     (window.auth?.verify ? await window.auth.verify() : false);
+    
+    if (!authState) {
+      this.showNotification("Please log in to create conversations", "error");
+      window.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: { authenticated: false }
+      }));
+      throw new Error("Not authenticated");
+    }
 
-  console.log(`Creating new conversation with model: ${model}`);
-  const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
+    const projectId = localStorage.getItem("selectedProjectId");
+    const model = window.MODEL_CONFIG?.modelName ||
+      localStorage.getItem("modelName") ||
+      "claude-3-sonnet-20240229";
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const url = projectId
-        ? `/api/projects/${projectId}/conversations`
-        : `/api/chat/conversations`;
+    console.log(`Creating new conversation with model: ${model}`);
+    const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
 
-      const data = await apiRequest(url, "POST", {
-        title: defaultTitle,
-        model_id: model
-      });
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const url = projectId
+          ? `/api/projects/${projectId}/conversations`
+          : `/api/chat/conversations`;
+
+        const data = await apiRequest(url, "POST", {
+          title: defaultTitle,
+          model_id: model
+        });
 
       const conversation = data.data?.id
         ? data.data
