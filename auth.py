@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import text
 import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
