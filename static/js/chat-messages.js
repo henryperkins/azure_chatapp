@@ -141,14 +141,18 @@ window.MessageService.prototype.sendMessage = async function (content) {
       } catch (wsError) {
         console.warn("WebSocket send failed, falling back to HTTP:", wsError);
         // Fall through to HTTP
-        await this._sendMessageHttp(messagePayload);
+        return await this._sendMessageHttp(messagePayload);
       }
     } else {
-      await this._sendMessageHttp(messagePayload);
+      return await this._sendMessageHttp(messagePayload);
     }
   } catch (error) {
-    window.ChatUtils?.handleError?.('WebSocket message', error) ||
-      this.onError('Sending message', error);
+    // Only handle error if it hasn't been handled yet
+    if (!error._handled) {
+      window.ChatUtils?.handleError?.('Sending message', error) ||
+        this.onError('Sending message', error);
+      error._handled = true;
+    }
     throw error;
   }
 };

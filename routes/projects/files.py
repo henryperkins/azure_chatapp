@@ -95,7 +95,10 @@ async def list_project_files(
                 "filename": file.filename,
                 "file_type": file.file_type,
                 "file_size": file.file_size,
-                "created_at": file.created_at.isoformat() if file.created_at else None
+                "created_at": file.created_at.isoformat() if file.created_at else None,
+                "processing_status": file.config.get("search_processing", {}).get("status", "not_processed") if file.config else "not_processed",
+                "chunk_count": file.config.get("search_processing", {}).get("chunk_count", 0) if file.config else 0,
+                "last_processed": file.config.get("search_processing", {}).get("processed_at") if file.config else None
             }
             for file in project_files
         ],

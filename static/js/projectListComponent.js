@@ -95,25 +95,15 @@
           console.error('ProjectListComponent: Missing container element');
           return;
         }
-        console.log('[DEBUG] renderProjects received:', eventOrProjects);
         
         // Extract projects from various input formats
         const projects = this._extractProjects(eventOrProjects);
         this.state.projects = projects;
-        
-        console.log('[DEBUG] Projects to render:', projects?.length || 0);
-          
-        if (!this.element) {
-          console.error('Project list container element not found');
-          return;
-        }
 
-        console.log('[DEBUG] Projects data before render:', {
-          count: projects.length,
-          firstProject: projects[0] || null,
-          lastProject: projects[projects.length - 1] || null
-        });
+        // Get current filter from state
+        const currentFilter = this.state.filter || 'all';
         
+        // Clear existing content
         this.element.innerHTML = "";
 
         // Handle error case
@@ -122,17 +112,31 @@
           return;
         }
 
+        // Filter projects based on current filter
+        let filteredProjects = projects;
+        if (currentFilter === 'pinned') {
+          filteredProjects = projects.filter(p => p.pinned);
+        } else if (currentFilter === 'archived') {
+          filteredProjects = projects.filter(p => p.archived);
+        }
+
         // Handle empty state
-        if (projects.length === 0) {
-          this._renderEmptyState();
+        if (filteredProjects.length === 0) {
+          const emptyMsg = document.createElement('div');
+          emptyMsg.className = 'text-gray-500 dark:text-gray-400 text-center py-8 col-span-3';
+          emptyMsg.textContent = currentFilter === 'all'
+            ? 'No projects available'
+            : `No ${currentFilter} projects found`;
+          this.element.appendChild(emptyMsg);
+          if (this.messageEl) this.messageEl.classList.add("hidden");
           return;
         }
 
         // Hide "no projects" message if we have projects
         if (this.messageEl) this.messageEl.classList.add("hidden");
         
-        // Render each project
-        projects.forEach(project => {
+        // Render each filtered project
+        filteredProjects.forEach(project => {
           try {
             const card = this._createProjectCard(project);
             if (card) {
@@ -412,33 +416,139 @@
      */
     _bindFilterEvents() {
       const filterButtons = document.querySelectorAll('.project-filter-btn');
+      if (!filterButtons.length) {
+        console.warn('No project filter buttons found');
+        return;
+      }
+
+      // Set initial active filter from URL or default
+      const urlParams = new URLSearchParams(window.location.search);
+      const initialFilter = urlParams.get('filter') || 'all';
+      this.state.filter = initialFilter;
+
+      // Set initial active button with ARIA attributes
+      filterButtons.forEach(btn => {
+        const isActive = btn.dataset.filter === initialFilter;
+        btn.classList.toggle('project-tab-btn-active', isActive);
+        btn.classList.toggle('text-gray-500', !isActive);
+        btn.setAttribute('aria-selected', isActive);
+        btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+      });
+
+      // Load initial projects with filter
+      if (window.projectManager?.loadProjects) {
+        this._showLoadingState();
+        window.projectManager.loadProjects(initialFilter)
+          .catch(err => {
+            console.error('Initial project load failed:', err);
+            this._showErrorState('Failed to load projects');
+          })
+          .finally(() => {
+            this._hideLoadingState();
+          });
+      }
+
+      // Add click handlers
       filterButtons.forEach(button => {
         button.addEventListener('click', () => {
-          // Remove existing active classes
-          filterButtons.forEach(btn => {
-            btn.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
-            btn.classList.add('text-gray-600');
-          });
-          
-          // Set active state on clicked button
-          button.classList.add('project-tab-btn-active');
-          button.classList.remove('text-gray-500');
-          
           // Get filter from data attribute
           const filter = button.dataset.filter;
-          this.state.filter = filter;
+          if (this.state.filter === filter) return; // Skip if already active
           
-          // Reload projects with filter
-          if (window.projectManager?.loadProjects) {
-            window.projectManager.loadProjects(filter);
-          }
+          // Show loading state
+          this._showLoadingState();
+          
+          // Update UI state
+          filterButtons.forEach(btn => {
+            const isActive = btn === button;
+            btn.classList.toggle('project-tab-btn-active', isActive);
+            btn.classList.toggle('text-gray-500', !isActive);
+            btn.setAttribute('aria-selected', isActive);
+            btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+          });
+          
+          // Update component state
+          this.state.filter = filter;
           
           // Update URL without reload
           const url = new URL(window.location);
           url.searchParams.set('filter', filter);
-          window.history.replaceState({}, '', url);
+          window.history.pushState({}, '', url);
+          
+          // Reload projects with new filter
+          window.projectManager.loadProjects(filter)
+            .catch(err => {
+              console.error('Project filter failed:', err);
+              this._showErrorState('Filter operation failed');
+            })
+            .finally(() => {
+              this._hideLoadingState();
+            });
         });
       });
+
+      // Handle back/forward navigation
+      window.addEventListener('popstate', () => {
+        const params = new URLSearchParams(window.location.search);
+        const newFilter = params.get('filter') || 'all';
+        if (newFilter !== this.state.filter) {
+          this._showLoadingState();
+          this.state.filter = newFilter;
+          filterButtons.forEach(btn => {
+            const isActive = btn.dataset.filter === newFilter;
+            btn.classList.toggle('project-tab-btn-active', isActive);
+            btn.classList.toggle('text-gray-500', !isActive);
+            btn.setAttribute('aria-selected', isActive);
+            btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+          });
+          window.projectManager.loadProjects(newFilter)
+            .catch(err => {
+              console.error('Navigation project load failed:', err);
+              this._showErrorState('Failed to load projects');
+            })
+            .finally(() => {
+              this._hideLoadingState();
+            });
+        }
+      });
+    }
+
+    /**
+     * Show loading state for project list
+     * @private
+     */
+    _showLoadingState() {
+      if (!this.element) return;
+      this.element.classList.add('opacity-50');
+      this.element.style.pointerEvents = 'none';
+      
+      // Add loading spinner if not already present
+      if (!this.element.querySelector('.loading-spinner')) {
+        const spinner = document.createElement('div');
+        spinner.className = 'loading-spinner absolute inset-0 flex items-center justify-center';
+        spinner.innerHTML = `
+          <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        `;
+        this.element.appendChild(spinner);
+      }
+    }
+
+    /**
+     * Hide loading state for project list
+     * @private
+     */
+    _hideLoadingState() {
+      if (!this.element) return;
+      this.element.classList.remove('opacity-50');
+      this.element.style.pointerEvents = '';
+      
+      const spinner = this.element.querySelector('.loading-spinner');
+      if (spinner) {
+        spinner.remove();
+      }
     }
 
     /**

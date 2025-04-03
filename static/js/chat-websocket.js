@@ -134,7 +134,7 @@
   this.maxRetries = options.maxRetries || 3;
   this.reconnectInterval = options.reconnectInterval || 3000;
   this.connectionTimeout = options.connectionTimeout || 10000;
-  this.messageTimeout = options.messageTimeout || 30000;
+  this.messageTimeout = options.messageTimeout || 60000; // Increased from 30s to 60s
 
   // State
   this.state = CONNECTION_STATES.DISCONNECTED;
@@ -696,13 +696,17 @@ window.WebSocketService.prototype.send = function (payload) {
   return new Promise((resolve, reject) => {
     const messageId = crypto.randomUUID?.() || `msg-${Date.now()}`;
     
+    // Allow per-message timeout override
+    const timeoutMs = payload.timeoutMs || this.messageTimeout;
+    
     // Set up timeout for this message
     const messageTmout = setTimeout(() => {
       if (this.pendingMessages.has(messageId)) {
         this.pendingMessages.delete(messageId);
+        console.debug(`[WebSocket] Message ${messageId} timed out after ${timeoutMs}ms`);
         reject(new Error('Message timeout'));
       }
-    }, this.messageTimeout);
+    }, timeoutMs);
 
     this.pendingMessages.set(messageId, { 
       resolve, 

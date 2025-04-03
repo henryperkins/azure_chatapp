@@ -4,6 +4,11 @@
  */
 
 window.ChatUtils = {
+  // Track recently shown errors to prevent duplicates
+  _lastError: null,
+  _lastErrorTime: 0,
+  _errorDebounceMs: 1000, // Don't show same error within 1 second
+
   /**
    * Check if user is authenticated
    * @returns {Promise<boolean>}
@@ -19,21 +24,40 @@ window.ChatUtils = {
    * @param {Function} [fallbackNotify] - Notification function if Notifications unavailable
    */
   handleError(context, error, fallbackNotify) {
+    // Check if this is a duplicate of the last shown error
+    const now = Date.now();
+    const errorStr = error instanceof Error ? error.message : String(error);
+    
+    if (this._lastError === errorStr &&
+        now - this._lastErrorTime < this._errorDebounceMs) {
+      console.debug(`[${context}] Duplicate error suppressed:`, errorStr);
+      return;
+    }
+    
+    this._lastError = errorStr;
+    this._lastErrorTime = now;
     console.error(`[${context}]`, error);
     
     // Extract meaningful error message
     let message;
     let isAIError = false;
+    let isAuthError = false;
     
     if (typeof error === 'string') {
       message = error;
       isAIError = message.includes('generate response') || message.includes('AI ');
+      isAuthError = message.includes('Not authenticated') || message.includes('Session expired');
     } else if (error instanceof Error) {
       message = error.message || error.toString();
       isAIError = (
-        message.includes('generate response') || 
-        message.includes('AI ') || 
+        message.includes('generate response') ||
+        message.includes('AI ') ||
         error.code?.startsWith('AI_')
+      );
+      isAuthError = (
+        message.includes('Not authenticated') ||
+        message.includes('Session expired') ||
+        error.status === 401
       );
 
       // Special case for connection errors - don't show these to user as they're handled internally
@@ -43,6 +67,13 @@ window.ChatUtils = {
       }
     } else {
       message = 'Unknown error occurred';
+    }
+
+    // Handle auth errors
+    if (isAuthError) {
+      window.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: { authenticated: false }
+      }));
     }
 
     // Format notification based on context and message
