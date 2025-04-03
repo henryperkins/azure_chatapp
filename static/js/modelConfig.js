@@ -1,11 +1,14 @@
-const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
 /**
  * model-config.js
  * ----------------
  * Manages model selection, token limits, and optional reasoning/vision toggles.
  * Production-ready: no placeholders. Adjust HTML element IDs to match your UI.
  */
+
+// Remove any existing isDevelopment declaration to prevent conflicts
+if (typeof isDevelopment !== 'undefined') {
+  delete window.isDevelopment;
+}
 
 /**
  * Initialize model configuration module
@@ -388,56 +391,54 @@ function setupVisionFileInput() {
 }
 
 /**
- /**
-  * Save changes to localStorage and (optionally) to a global object
-  */
- function persistSettings() {
- 
-   // Model
-   const modelSelect = document.getElementById("modelSelect");
-   if (modelSelect) {
-     localStorage.setItem("modelName", modelSelect.value);
-     window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-     window.MODEL_CONFIG.modelName = modelSelect.value;
-   }
- 
-   // Max tokens - Try multiple sources for the token value
-   let maxTokensValue;
-   
-   // First try the slider
-   const maxTokensSlider = document.getElementById("maxTokensSlider");
-   if (maxTokensSlider) {
-     maxTokensValue = Number(maxTokensSlider.value);
-   }
-   
-   // Then try the input field
-   if (!maxTokensValue) {
-     const maxTokensInput = document.getElementById("maxTokensInput");
-     if (maxTokensInput) {
-       maxTokensValue = Number(maxTokensInput.value);
-     }
-   }
-   
-   // Finally try the hidden field
-   if (!maxTokensValue) {
-     const maxTokensHidden = document.getElementById("maxTokensHidden");
-     if (maxTokensHidden) {
-       maxTokensValue = Number(maxTokensHidden.value);
-     }
-   }
-   
-   // Use a sensible default if all else fails
-   if (!maxTokensValue || isNaN(maxTokensValue)) {
-     maxTokensValue = 500;
-   }
-   
-   // Clamp to a reasonable range
-   const clampedVal = Math.min(Math.max(maxTokensValue, 100), 100000);
-   
-   // Update all token-related elements
-   localStorage.setItem("maxTokens", clampedVal.toString());
-   window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-   window.MODEL_CONFIG.maxTokens = clampedVal;
+ * Save changes to localStorage and (optionally) to a global object
+ */
+function persistSettings() {
+  // Model
+  const modelSelect = document.getElementById("modelSelect");
+  if (modelSelect) {
+    localStorage.setItem("modelName", modelSelect.value);
+    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+    window.MODEL_CONFIG.modelName = modelSelect.value;
+  }
+
+  // Max tokens - Try multiple sources for the token value
+  let maxTokensValue;
+  
+  // First try the slider
+  const maxTokensSlider = document.getElementById("maxTokensSlider");
+  if (maxTokensSlider) {
+    maxTokensValue = Number(maxTokensSlider.value);
+  }
+  
+  // Then try the input field
+  if (!maxTokensValue) {
+    const maxTokensInput = document.getElementById("maxTokensInput");
+    if (maxTokensInput) {
+      maxTokensValue = Number(maxTokensInput.value);
+    }
+  }
+  
+  // Finally try the hidden field
+  if (!maxTokensValue) {
+    const maxTokensHidden = document.getElementById("maxTokensHidden");
+    if (maxTokensHidden) {
+      maxTokensValue = Number(maxTokensHidden.value);
+    }
+  }
+  
+  // Use a sensible default if all else fails
+  if (!maxTokensValue || isNaN(maxTokensValue)) {
+    maxTokensValue = 500;
+  }
+  
+  // Clamp to a reasonable range
+  const clampedVal = Math.min(Math.max(maxTokensValue, 100), 100000);
+  
+  // Update all token-related elements
+  localStorage.setItem("maxTokens", clampedVal.toString());
+  window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+  window.MODEL_CONFIG.maxTokens = clampedVal;
    
   // Reasoning effort
   const reasoningEffortRange = document.getElementById("reasoningEffortRange");
