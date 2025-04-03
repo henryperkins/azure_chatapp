@@ -172,7 +172,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       'Pragma': 'no-cache',
       ...authHeaders
     },
-    credentials: 'include',  // Important for cookies
+    credentials: 'include',  // Critical for cookies
     cache: 'no-store',
     redirect: 'follow'
   };

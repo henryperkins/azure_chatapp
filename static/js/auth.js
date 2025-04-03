@@ -48,9 +48,12 @@ const TokenManager = {
   },
 
   getAuthHeader() {
-    return this.accessToken
-      ? { "Authorization": `Bearer ${this.accessToken}` }
-      : {};
+    const accessToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('access_token='))
+      ?.split('=')[1];
+    
+    return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
   },
 
   isExpired() {
@@ -64,18 +67,16 @@ const TokenManager = {
    * Uses concurrency guard in sessionStorage to prevent parallel refresh calls.
    */
   async refreshTokens() {
-    const MAX_RETRIES = 3;
-    
     try {
-        // Try using the refresh token from cookies
-        const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
-            skipAuthCheck: true  // Prevent infinite loops
-        });
-        
-        if (response?.access_token) {
-            this.setTokens(response.access_token, response.refresh_token);
-            return true;
-        }
+      const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
+        skipAuthCheck: true,
+        skipRetry: true
+      });
+      
+      if (response?.access_token) {
+        window.location.reload(); // Full refresh to get new cookies
+        return true;
+      }
     } catch (error) {
         console.error('Token refresh failed:', error);
         if (error.status === 401) {
