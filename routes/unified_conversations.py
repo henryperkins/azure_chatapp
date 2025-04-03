@@ -654,8 +654,7 @@ async def websocket_chat_endpoint(
                     user,
                     db,
                     "Conversation",
-                    additional_filters,
-                    include_deleted=False
+                    additional_filters
                 )
             except HTTPException as e:
                 logger.error(f"WebSocket authorization failed: {e.detail}")
