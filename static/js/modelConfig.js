@@ -533,11 +533,16 @@ function getModelOptions() {
       supportsVision: true,
       maxTokens: 128000,
       defaultThinkingBudget: 16000,
-      minThinkingBudget: 1024,  // Updated to match Claude's minimum
+      minThinkingBudget: 1024,
       requiresStreaming: 21333,
       betaHeaders: {
         'anthropic-beta': 'output-128k-2025-02-19',
+        'anthropic-version': '2023-06-01',
         'anthropic-features': 'extended-thinking-2025-02-19,long-context-2025-02-19'
+      },
+      // Additional Claude-specific requirements
+      requiredHeaders: {
+        'anthropic-version': '2023-06-01'
       }
     },
     {
