@@ -69,29 +69,21 @@ class ConnectionManager:
             WebSocketException: If authentication fails with proper error codes
         """
         try:
-            # Authenticate first using auth_utils
-            success, user = await authenticate_websocket(websocket, db)
-            if not success or not user:
-                logger.error("WebSocket authentication failed")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                raise WebSocketException(
-                    code=status.WS_1008_POLICY_VIOLATION,
-                    reason="Authentication failed"
-                )
-                
+            # Skip duplicate authentication - the connection is already authenticated
+            # in the websocket_chat_endpoint function
             connection_id = str(id(websocket))
             
             self._connections[connection_id] = {
                 'websocket': websocket,
                 'conversation_id': conversation_id,
-                'user_id': user_id or (user.id if user else None),
+                'user_id': user_id,
                 'state': state or self.CONNECTED
             }
             
             self._by_conversation[conversation_id].add(connection_id)
-            self._by_user[str(user.id)].add(connection_id)
+            self._by_user[str(user_id)].add(connection_id)
             
-            logger.info(f"WebSocket connected for user {user.id}, conversation {conversation_id}")
+            logger.info(f"WebSocket connected for user {user_id}, conversation {conversation_id}")
             return connection_id
             
         except Exception as e:

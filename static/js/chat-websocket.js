@@ -523,9 +523,9 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
       wsUrl: this.wsUrl,
       timestamp: new Date().toISOString()
     };
-    console.error('WebSocket policy violation:', errorDetails, errorInfo);
+    console.error('WebSocket policy violation - authentication failure', errorDetails, errorInfo);
 
-    // For policy violations, we should not attempt to reconnect
+    // For policy violations, we immediately switch to HTTP fallback without retries
     this.useHttpFallback = true;
     this.setState(CONNECTION_STATES.DISCONNECTED);
     
@@ -535,10 +535,29 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
       this.reconnectTimeout = null;
     }
 
-    if (this.onError) {
-      const error = new Error('Authentication failed - please refresh your session');
-      error.details = errorInfo;
-      this.onError(error);
+    // Try to refresh the token once, then switch to HTTP fallback
+    try {
+      if (window.TokenManager?.refreshTokens) {
+        await window.TokenManager.refreshTokens();
+        
+        // After refresh, update UI but still use HTTP fallback
+        if (this.onError) {
+          const message = 'Session refreshed. Using reliable HTTP messaging.';
+          this.onError({
+            name: 'AuthenticationRefreshed',
+            message,
+            statusText: message
+          });
+        }
+      }
+    } catch (refreshError) {
+      console.error('Token refresh failed after policy violation:', refreshError);
+      // Send more specific error to UI
+      if (this.onError) {
+        const error = new Error('Session expired - please log in again');
+        error.details = errorInfo;
+        this.onError(error);
+      }
     }
     return;
   }
