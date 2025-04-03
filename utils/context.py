@@ -161,28 +161,39 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
         )
 
 
-def estimate_token_count(messages: List[Dict[str, str]]) -> int:
+async def estimate_token_count(messages: List[Dict[str, str]], model: str = "claude-3-sonnet-20240229") -> int:
     """
-    Estimate the token count for a list of messages.
-
+    Count tokens using Claude's API with proper fallback handling
+    
     Args:
-        messages: List of message dictionaries
-
+        messages: List of message dicts with role/content
+        model: Claude model name
+        
     Returns:
-        Estimated token count
+        Accurate token count when possible, fallback estimate otherwise
     """
-    encoder = tiktoken.encoding_for_model("gpt-4")
-    return sum(len(encoder.encode(msg["content"])) for msg in messages)
+    try:
+        # Try API counting first
+        response = await api_request(
+            "/api/claude/count_tokens",
+            "POST",
+            {"model": model, "messages": messages}
+        )
+        return response["input_tokens"]
+    except Exception as e:
+        logger.warning(f"Token counting API failed, falling back to estimation: {str(e)}")
+        # Fallback to tiktoken if available
+        if TIKTOKEN_AVAILABLE:
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")
+                return sum(len(encoding.encode(msg["content"])) for msg in messages)
+            except Exception:
+                pass
+        # Final fallback
+        return sum(len(msg["content"]) // 4 for msg in messages)
 
-async def estimate_tokens(text: str) -> int:
-    """Estimate token count for text using tiktoken if available"""
+async def estimate_tokens(text: str, model: str = "claude-3-sonnet-20240229") -> int:
+    """Count tokens with model-specific handling"""
     if not text:
         return 0
-        
-    if TIKTOKEN_AVAILABLE:
-        try:
-            encoding = tiktoken.get_encoding("cl100k_base")
-            return len(encoding.encode(text))
-        except Exception:
-            return len(text) // 4  # Fallback
-    return len(text) // 4  # Default fallback
+    return await estimate_token_count([{"role": "user", "content": text}], model)

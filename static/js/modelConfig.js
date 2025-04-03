@@ -533,8 +533,12 @@ function getModelOptions() {
       supportsVision: true,
       maxTokens: 128000,
       defaultThinkingBudget: 16000,
-      minThinkingBudget: 2048,
-      requiresStreaming: 21333  // Streaming required above this token count
+      minThinkingBudget: 1024,  // Updated to match Claude's minimum
+      requiresStreaming: 21333,
+      betaHeaders: {
+        'anthropic-beta': 'output-128k-2025-02-19',
+        'anthropic-features': 'extended-thinking-2025-02-19,long-context-2025-02-19'
+      }
     },
     {
       id: 'gpt-4',
