@@ -631,32 +631,36 @@ async def websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # If project-based, verify project access
+            # Validate conversation access based on project/standalone context
             if project_id:
-                project = await resolve_project_if_any(project_id, user, db)
-                if not project:
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-                additional_filters: Sequence[BinaryExpression[Any]] = [
-                    Conversation.project_id == project.id,
-                    Conversation.is_deleted.is_(False),
-                ]
+                # Validate project ownership
+                project = await validate_project_access(project_id, user, db)
+                additional_filters = [Conversation.project_id == project_id]
             else:
-                # standalone - ensure no project association
-                additional_filters: Sequence[BinaryExpression[Any]] = [
+                # Validate standalone conversation ownership
+                additional_filters = [
                     Conversation.project_id.is_(None),
-                    Conversation.is_deleted.is_(False),
+                    Conversation.user_id == user.id,
+                    Conversation.is_deleted.is_(False)
                 ]
 
+            logger.info(f"Validating conversation {conversation_id} with filters: {additional_filters}")
+
             # Validate conversation exists and matches project context
-            conversation = await validate_resource_access(
-                conversation_id,
-                Conversation,
-                user,
-                db,
-                "Conversation",
-                additional_filters,
-            )
+            try:
+                conversation = await validate_resource_access(
+                    conversation_id,
+                    Conversation,
+                    user,
+                    db,
+                    "Conversation",
+                    additional_filters,
+                    include_deleted=False
+                )
+            except HTTPException as e:
+                logger.error(f"WebSocket authorization failed: {e.detail}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
             # Extra validation - ensure conversation.project_id matches URL project_id
             if project_id and str(conversation.project_id) != str(project_id):
