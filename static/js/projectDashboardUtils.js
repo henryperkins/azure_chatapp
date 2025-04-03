@@ -578,3 +578,112 @@
 
   console.log('projectDashboardUtils.js loaded successfully');
 })();
+
+/**
+ * Project Dashboard Utilities
+ * Helper functions for the project dashboard interface
+ */
+
+window.projectDashboardUtils = window.projectDashboardUtils || {};
+
+/**
+ * Enhanced notification system for the project dashboard
+ */
+window.projectDashboardUtils.notifications = {
+  /**
+   * Show an error notification
+   * @param {string} message - Error message
+   * @param {Object} [options] - Additional options
+   */
+  apiError: function(message, options = {}) {
+    // Check if it's an AI error
+    const isAIError = message.includes('AI') || 
+                      message.includes('generate') || 
+                      (options.code && options.code.startsWith('AI_'));
+    
+    // Get notification container
+    const container = document.getElementById('notificationArea') || 
+                     document.createElement('div');
+    
+    if (!document.body.contains(container)) {
+      container.id = 'notificationArea';
+      container.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
+      document.body.appendChild(container);
+    }
+    
+    // Create notification
+    const notification = document.createElement('div');
+    notification.className = `p-3 rounded shadow-lg transition-all transform duration-300 flex items-start ${
+      isAIError ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+    }`;
+    
+    // Add icon
+    const icon = document.createElement('div');
+    icon.className = 'mr-2 flex-shrink-0';
+    icon.innerHTML = isAIError 
+      ? `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+         </svg>`
+      : `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+         </svg>`;
+    
+    // Add content
+    const content = document.createElement('div');
+    content.className = 'flex-1';
+    
+    const title = document.createElement('div');
+    title.className = 'font-medium';
+    title.textContent = isAIError ? 'AI Response Issue' : 'Error';
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'text-sm';
+    messageEl.textContent = message;
+    
+    content.appendChild(title);
+    content.appendChild(messageEl);
+    
+    // If it's an AI error, add help text
+    if (isAIError && options.helpText) {
+      const helpEl = document.createElement('div');
+      helpEl.className = 'text-xs mt-1 italic';
+      helpEl.textContent = options.helpText;
+      content.appendChild(helpEl);
+    }
+    
+    // Add close button
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ml-4 text-gray-500 hover:text-gray-800';
+    closeBtn.innerHTML = `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>`;
+    closeBtn.onclick = () => {
+      notification.classList.add('opacity-0', 'translate-x-full');
+      setTimeout(() => notification.remove(), 300);
+    };
+    
+    // Assemble notification
+    notification.appendChild(icon);
+    notification.appendChild(content);
+    notification.appendChild(closeBtn);
+    
+    // Add to container
+    container.appendChild(notification);
+    
+    // Auto-dismiss
+    setTimeout(() => {
+      notification.classList.add('opacity-0', 'translate-x-full');
+      setTimeout(() => notification.remove(), 300);
+    }, isAIError ? 7000 : 5000);  // AI errors stay longer
+    
+    return notification;
+  },
+  
+  // Other notification methods can be added here
+};
+
+// Replace the simple API error function with our enhanced version
+window.Notifications = window.Notifications || {};
+window.Notifications.apiError = window.projectDashboardUtils.notifications.apiError;

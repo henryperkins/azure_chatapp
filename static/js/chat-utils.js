@@ -1,99 +1,102 @@
 /**
  * chat-utils.js
- * Shared utilities for chat functionality
+ * Centralized utility functions for chat application
  */
 
-// Standard error handling that integrates with app.js functionality
 window.ChatUtils = {
   /**
-   * Standardized error handler that uses app.js's handleAPIError when available
-   * @param {string} context - The context where the error occurred
-   * @param {Error} error - The error object
-   * @param {Function} [fallbackNotify] - Optional fallback notification function
+   * Check if user is authenticated
+   * @returns {Promise<boolean>}
+   */
+  isAuthenticated: async function() {
+    return window.auth?.verify?.() || false;
+  },
+
+  /**
+   * Centralized error handler for chat components
+   * @param {string} context - Error context description
+   * @param {Error|string} error - Error object or message
+   * @param {Function} [fallbackNotify] - Notification function if Notifications unavailable
    */
   handleError(context, error, fallbackNotify) {
-    // Use app.js handleAPIError if available
-    if (typeof window.handleAPIError === 'function') {
-      return window.handleAPIError(context, error);
-    }
+    console.error(`[${context}]`, error);
     
-    // Otherwise, fallback to basic error handling
-    console.error(`[${context}] Error:`, error);
+    // Extract meaningful error message
+    let message;
+    let isAIError = false;
     
-    // Extract best message based on error type
-    let message = this.extractErrorMessage(error);
-    
-    // Use provided fallback or show notification via available methods
-    if (typeof fallbackNotify === 'function') {
-      fallbackNotify(message, 'error');
-    } else if (window.Notifications?.apiError) {
-      window.Notifications.apiError(message);
-    } else if (window.showNotification) {
-      window.showNotification(message, 'error');
-    } else {
-      console.error(message);
-    }
-  },
-  
-  /**
-   * Extract the most appropriate error message from an error object
-   * @param {Error|Object} error - The error object
-   * @returns {string} The extracted error message
-   */
-  extractErrorMessage(error) {
-    if (!error) return 'Unknown error occurred';
-    
-    // Check for network errors
-    if (error instanceof TypeError || error.name === 'TypeError') {
-      return 'Network error - please check your connection';
-    }
-    
-    // Check for authentication errors
-    if (error.response) {
-      if (error.response.status === 401) {
-        return 'Session expired - please log in again';
-      } else if (error.response.status === 403) {
-        return 'You don\'t have permission to perform this action';
-      } else if (error.response.status === 404) {
-        return 'The requested resource was not found';
-      } else if (error.response.status === 429) {
-        return 'Too many requests - please try again later';
-      } else if (error.response.status >= 500) {
-        return 'Server error - please try again later';
+    if (typeof error === 'string') {
+      message = error;
+      isAIError = message.includes('generate response') || message.includes('AI ');
+    } else if (error instanceof Error) {
+      message = error.message || error.toString();
+      isAIError = (
+        message.includes('generate response') || 
+        message.includes('AI ') || 
+        error.code?.startsWith('AI_')
+      );
+
+      // Special case for connection errors - don't show these to user as they're handled internally
+      if (message.includes('Connection closed') && context === 'WebSocket') {
+        console.debug('WebSocket closed, using fallback mechanism');
+        return; // Silent return - this is an expected fallback scenario
       }
+    } else {
+      message = 'Unknown error occurred';
+    }
+
+    // Format notification based on context and message
+    let userMessage = message;
+    let errorType = 'error';
+    
+    // Special case for AI generation errors
+    if (isAIError) {
+      userMessage = message.replace('Error: ', '');
+      errorType = 'warning'; // Less severe visual indicator
+    } else if (message.includes('Invalid conversation ID')) { 
+      userMessage = 'Unable to access conversation';
+    }
+
+    // Send notification
+    if (typeof window.Notifications?.apiError === 'function') {
+      window.Notifications.apiError(userMessage);
+    } else if (typeof fallbackNotify === 'function') {
+      fallbackNotify(userMessage, errorType);
+    } else {
+      console.error(`${context} error:`, userMessage);
     }
     
-    // Check for specific error messages
-    if (error.message) {
-      // Sanitize error message to prevent potential XSS
-      const sanitizedMessage = error.message
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-        
-      // Truncate very long messages
-      return sanitizedMessage.length > 150 
-        ? sanitizedMessage.substring(0, 150) + '...' 
-        : sanitizedMessage;
+    // For AI errors, also display UI hint if possible
+    if (isAIError && typeof window.UIUtils?.showAIErrorHint === 'function') {
+      window.UIUtils.showAIErrorHint(userMessage, error.userAction);
     }
-    
-    // Fallback for unknown errors
-    return 'An unexpected error occurred';
   },
-  
+
   /**
-   * Standardized authentication check that uses auth.js's verify when available
-   * @returns {Promise<boolean>} Whether the user is authenticated
+   * Validates a UUID v4 string
+   * @param {string} uuid - String to validate
+   * @returns {boolean} - Is valid UUID
    */
-  async isAuthenticated() {
-    // Use auth.js verify if available (preferred method)
-    if (window.auth?.verify) {
-      return await window.auth.verify();
-    }
-    
-    // Fallback to session check
-    return !!(
-      sessionStorage.getItem('auth_state') && 
-      sessionStorage.getItem('userInfo')
-    );
+  isValidUUID: function(uuid) {
+    if (!uuid) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+  },
+
+  /**
+   * Extracts error message from various response formats
+   * @param {any} error - Error object or response
+   * @returns {string} - Extracted error message
+   */
+  extractErrorMessage: function(error) {
+    if (typeof error === 'string') return error;
+    if (!error) return 'Unknown error';
+
+    // Handle various error response structures
+    if (error.response?.data?.detail) return error.response.data.detail;
+    if (error.response?.data?.error) return error.response.data.error;
+    if (error.message) return error.message;
+    if (error.detail) return error.detail;
+
+    return 'Operation failed';
   }
 };
