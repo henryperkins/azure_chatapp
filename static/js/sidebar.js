@@ -498,22 +498,20 @@ function setupSidebarTabs() {
     }
   }
   
-  // Set current tab based on saved preference or page
-  // (Note: isProjectsPage is already defined above)
+  // Determine active tab based on both page context and saved state
+  const isProjectsPage = window.location.pathname.includes('/projects') || 
+                        document.getElementById('projectManagerPanel');
   
-  // Load user preference from localStorage or use default
-  savedTab = localStorage.getItem('sidebarActiveTab');
+  let activeTab = localStorage.getItem('sidebarActiveTab');
   
-  // Override with 'projects' if on projects page and not already set to projects
-  if (isProjectsPage && savedTab !== 'projects') {
-    localStorage.setItem('sidebarActiveTab', 'projects');
-    savedTab = 'projects';
+  // Validate tab against current page context
+  if (!activeTab || (isProjectsPage && activeTab !== 'projects')) {
+    activeTab = isProjectsPage ? 'projects' : 'recent';
+    localStorage.setItem('sidebarActiveTab', activeTab);
   }
-  
-  // Use default if no saved tab
-  if (!savedTab) {
-    savedTab = isProjectsPage ? 'projects' : 'recent';
-  }
+
+  // Update tab activation to use this determined value
+  activateTab(activeTab);
   
   // Function to activate a tab
   function activateTab(tabName) {
