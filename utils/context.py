@@ -173,11 +173,18 @@ async def estimate_token_count(messages: List[Dict[str, str]], model: str = "cla
         Accurate token count when possible, fallback estimate otherwise
     """
     try:
-        # Try API counting first
+        # Use Claude's official token counting endpoint
         response = await api_request(
-            "/api/claude/count_tokens",
+            "/v1/messages/count_tokens",
             "POST",
-            {"model": model, "messages": messages}
+            {
+                "model": model,
+                "messages": messages,
+                "thinking": {
+                    "type": "enabled",
+                    "budget_tokens": 1024  # Minimum for counting purposes
+                } if any(m.get('thinking') for m in messages) else None
+            }
         )
         return response["input_tokens"]
     except Exception as e:
