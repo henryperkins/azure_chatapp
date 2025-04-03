@@ -101,12 +101,21 @@ async def augment_with_knowledge(
                 "metadata": {
                     "kb_context": True,
                     "source": source,
-                    "file_id": file_id,  # Safely handled file_id
+                    "file_id": file_id,
                     "score": float(result.get("score", 0)),
                     "tokens": result_tokens,
-                    "chunk_index": metadata.get("chunk_index") if metadata else None
+                    "chunk_index": metadata.get("chunk_index") if metadata else None,
+                    # Add thinking validation fields
+                    "thinking_validated": False,
+                    "redacted_thinking": None
                 }
             }
+            
+            # Validate thinking budget if enabled
+            if self.model_config.get("extended_thinking"):
+                if result_tokens < 1024:
+                    raise ValueError(f"Thinking budget too small (min 1024 tokens, got {result_tokens})")
+                context_msg["metadata"]["thinking_budget"] = result_tokens
             context_messages.append(context_msg)
             total_tokens += result_tokens
         
