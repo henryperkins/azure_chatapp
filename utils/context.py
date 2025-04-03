@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .openai import openai_chat
+from .api_utils import api_request
 
 
 logger = logging.getLogger(__name__)
