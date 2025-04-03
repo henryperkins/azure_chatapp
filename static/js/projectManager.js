@@ -231,7 +231,7 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectConversations(projectId) {
-    const endpoint = `/api/projects/${projectId}/conversations`;
+    const endpoint = `/api/chat/projects/${projectId}/conversations`;
     try {
       const response = await window.apiRequest(endpoint, "GET");
       let conversations = [];
@@ -517,7 +517,7 @@
    * @returns {Promise<Array>} - resolves with updated stats & conversation list
    */
   async function deleteProjectConversation(projectId, conversationId) {
-    await window.apiRequest(`/api/projects/${projectId}/conversations/${conversationId}`, "DELETE");
+    await window.apiRequest(`/api/chat/projects/${projectId}/conversations/${conversationId}`, "DELETE");
     return Promise.all([
       loadProjectStats(projectId),
       loadProjectConversations(projectId)
@@ -560,7 +560,7 @@
       console.debug('[ProjectManager] Conversation payload:', payload);
 
       const response = await window.apiRequest(
-        `/api/projects/${projectId}/conversations`,
+        `/api/chat/projects/${projectId}/conversations`,
         "POST",
         payload
       );

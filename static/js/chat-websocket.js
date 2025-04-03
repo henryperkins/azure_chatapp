@@ -245,19 +245,21 @@ window.WebSocketService.prototype.connect = async function (chatId) {
     
     console.log(`WebSocketService connecting with projectId: ${this.projectId}, chatId: ${chatId}`);
 
-        // Get current conversation details if available
-        const currentConversation = window.chatInterface?.conversationService?.currentConversation;
-        const conversationProjectId = currentConversation?.project_id;
+        // Determine correct WebSocket URL
         const selectedProjectId = localStorage.getItem("selectedProjectId");
+        const currentConversation = window.chatInterface?.conversationService?.currentConversation;
+        const isProjectConversation = currentConversation?.project_id && 
+                                    selectedProjectId && 
+                                    currentConversation.project_id === selectedProjectId;
 
         let basePath;
-        if (selectedProjectId && conversationProjectId && selectedProjectId === conversationProjectId) {
+        if (isProjectConversation) {
             console.log(`Using project-scoped WebSocket for conversation ${chatId} in project ${selectedProjectId}`);
-            basePath = `/api/projects/${selectedProjectId}/conversations/${chatId}/ws`;
+            basePath = `/api/chat/projects/${selectedProjectId}/conversations/${chatId}/ws`;
             this.projectId = selectedProjectId;
         } else {
             console.log(`Using standalone WebSocket for conversation ${chatId}`);
-            basePath = `/api/conversations/${chatId}/ws`;
+            basePath = `/api/chat/conversations/${chatId}/ws`;
             this.projectId = null;
         }
 
