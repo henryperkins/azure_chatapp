@@ -184,9 +184,10 @@ async def validate_resource_access(
     db: AsyncSession,
     resource_name: str = "Resource",
     additional_filters: Optional[Sequence[BinaryExpression[Any]]] = None,
+    require_ownership: bool = True
 ) -> T:
     """
-    Generic method for validating access to any resource.
+    Generic method for validating access to any resource with enhanced debugging.
     
     Args:
         resource_id: UUID of the resource
@@ -195,39 +196,66 @@ async def validate_resource_access(
         db: Database session
         resource_name: Human-readable name for error messages
         additional_filters: Optional additional filter conditions
+        require_ownership: Whether to validate user ownership (default True)
         
     Returns:
         The resource object if found and accessible
         
     Raises:
-        HTTPException: If resource not found or user lacks permission
+        HTTPException: With specific error details if validation fails
     """
-    # Build query with base conditions
-    query = select(model_class).where(
-        model_class.id == resource_id,
-        model_class.user_id == user.id,
+    logger.debug(
+        f"Validating access to {resource_name} {resource_id} for user {user.id}\n"
+        f"Model: {model_class.__name__}\n"
+        f"Additional filters: {additional_filters}"
     )
+
+    # Build base query
+    query = select(model_class).where(model_class.id == resource_id)
+    
+    # Add ownership check if required
+    if require_ownership and hasattr(model_class, 'user_id'):
+        query = query.where(model_class.user_id == user.id)
 
     # Apply additional filters if specified
     if additional_filters:
         for condition in additional_filters:
             query = query.where(condition)
 
-    # Execute query
+    # Log and execute query
+    logger.debug(f"Executing query: {query}")
     result = await db.execute(query)
     resource = result.scalars().first()
 
-    # Handle not found case
     if not resource:
+        # Check if resource exists at all
+        exists = await db.execute(select(model_class.id).where(model_class.id == resource_id))
+        if not exists.scalar():
+            logger.warning(f"{resource_name} {resource_id} does not exist")
+            raise HTTPException(
+                status_code=404,
+                detail=f"{resource_name} not found"
+            )
+        
+        # Resource exists but filters/ownership failed
+        logger.warning(
+            f"Access denied to {resource_name} {resource_id}\n"
+            f"User {user.id} failed validation checks"
+        )
         raise HTTPException(
-            status_code=404, 
-            detail=f"{resource_name} not found or you don't have access to it"
+            status_code=404,
+            detail=f"{resource_name} exists but you don't have access"
         )
 
-    # Check if the resource is archived (if applicable)
+    # Check archived status if applicable
     if hasattr(resource, 'archived') and resource.archived:
-        raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
+        logger.warning(f"Attempt to access archived {resource_name} {resource_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"{resource_name} is archived and cannot be modified"
+        )
 
+    logger.debug(f"Access granted to {resource_name} {resource_id}")
     return resource
 
 
