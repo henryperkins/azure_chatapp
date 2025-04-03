@@ -265,17 +265,17 @@ async def refresh_token(
     session: AsyncSession = Depends(get_async_session)
 ) -> LoginResponse:
     """Provides new token with rotation for session continuity."""
-    username = current_user_and_token.username
-    user_id = current_user_and_token.id
+    username = user.username
+    user_id = user.id
 
     # Update last_login time
-    current_user_and_token.last_login = datetime.utcnow()
-    session.add(current_user_and_token)
+    user.last_login = datetime.utcnow()
+    session.add(user)
     await session.commit()
 
     # Increment token version
-    current_user_and_token.token_version = current_user_and_token.token_version + 1 if current_user_and_token.token_version else int(datetime.utcnow().timestamp())
-    session.add(current_user_and_token)
+    user.token_version = user.token_version + 1 if user.token_version else int(datetime.utcnow().timestamp())
+    session.add(user)
     await session.commit()
 
     token_id = str(uuid.uuid4())
@@ -289,7 +289,7 @@ async def refresh_token(
         "iat": datetime.utcnow(),
         "jti": token_id,
         "type": "access",
-        "version": current_user_and_token.token_version,  # Include token version
+        "version": user.token_version,  # Include token version
         "user_id": user_id
     }
 
@@ -330,9 +330,12 @@ async def logout_user(
 ) -> dict:
     """Invalidates token and clears authentication cookie."""
     # Get JTI from the token
-    token_id = current_user_and_token.jti
-    expires = current_user_and_token.exp
-    user_id = current_user_and_token.id
+    # Get token info from request
+    token = request.cookies.get("refresh_token")
+    decoded = await verify_token(token, "refresh", session)
+    token_id = decoded.get("jti")
+    expires = decoded.get("exp")
+    user_id = user.id
     
     # Add token to database blacklist
     blacklisted_token = TokenBlacklist(
@@ -347,7 +350,7 @@ async def logout_user(
         # Get user with lock to prevent concurrent updates
         locked_user = await session.get(
             User, 
-            current_user_and_token.id, 
+            user.id,
             with_for_update=True
         )
         
@@ -361,7 +364,7 @@ async def logout_user(
     revoke_token_id(token_id)
     
     logger.info("User %s logged out successfully. Token %s invalidated and token version incremented.", 
-                current_user_and_token.username, token_id)
+                user.username, token_id)
 
     # Use the same parameters as during login to ensure cookie is deleted
     set_secure_cookie(response, "access_token", "", max_age=0)
