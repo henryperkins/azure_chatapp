@@ -62,14 +62,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 async def verify_token(token: str, expected_type: Optional[str] = None, db: Optional[AsyncSession] = None, request: Optional[Request] = None) -> Dict[str, Any]:
     """
     Verify and decode a JWT token with enhanced debugging.
-    """
-    # Add additional logging for debugging
-    if request:
-        logger.debug(f"Verifying token from source: {token[:10]}... (cookie: {'access_token' in request.cookies})")
 
     Args:
         token: JWT token to verify
-        expected_type: Optional token type to validate
+        expected_type: Optional token type to validate 
         db: Optional database session for checking blacklisted tokens
 
     Returns:
@@ -78,6 +74,9 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
     Raises:
         HTTPException: If token validation fails
     """
+    # Add additional logging for debugging
+    if request:
+        logger.debug(f"Verifying token from source: {token[:10]}... (cookie: {'access_token' in request.cookies})")
     # Initialize variables that may be referenced in error handling
     decoded = None
     token_id = None
