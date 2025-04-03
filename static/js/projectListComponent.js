@@ -264,7 +264,7 @@
     _addCardHeader(card, project) {
       const header = window.uiUtilsInstance.createElement("div", { className: "flex justify-between mb-2" });
       const title = window.uiUtilsInstance.createElement("h3", { 
-        className: "font-semibold text-md", 
+        className: "text-lg font-semibold", 
         textContent: project.name 
       });
       const statusIndicator = window.uiUtilsInstance.createElement("div", {
