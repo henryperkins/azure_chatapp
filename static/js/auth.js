@@ -65,45 +65,28 @@ const TokenManager = {
    */
   async refreshTokens() {
     const MAX_RETRIES = 3;
-    const RETRY_DELAY = 1000;
-
-    // If another refresh is in progress, just wait
-    if (sessionStorage.getItem('refreshing')) {
-      await new Promise(r => setTimeout(r, 500));
-      return;
+    
+    try {
+        // Try using the refresh token from cookies
+        const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
+            skipAuthCheck: true  // Prevent infinite loops
+        });
+        
+        if (response?.access_token) {
+            this.setTokens(response.access_token, response.refresh_token);
+            return true;
+        }
+    } catch (error) {
+        console.error('Token refresh failed:', error);
+        if (error.status === 401) {
+            // Full re-authentication required
+            this.clearTokens();
+            window.dispatchEvent(new CustomEvent('authStateChanged', {
+                detail: { authenticated: false }
+            }));
+        }
     }
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        sessionStorage.setItem('refreshing', 'true');
-        console.log(`TokenManager: Attempting token refresh (attempt ${attempt})`);
-
-        if (!window.apiRequest) {
-          throw new Error('Missing apiRequest implementation');
-        }
-
-        const data = await window.apiRequest('/api/auth/refresh', 'POST');
-        if (!data?.access_token) {
-          throw new Error('Invalid refresh response');
-        }
-
-        this.setTokens(data.access_token, data.refresh_token);
-        console.log('TokenManager: Token refresh successful');
-        return true;
-      } catch (error) {
-        console.error(`Token refresh failed (attempt ${attempt}):`, error);
-
-        if (attempt === MAX_RETRIES) {
-          // Clear tokens on final failure
-          this.clearTokens();
-          throw error;
-        }
-        // Exponential-ish backoff
-        await new Promise(r => setTimeout(r, RETRY_DELAY * attempt));
-      } finally {
-        sessionStorage.removeItem('refreshing');
-      }
-    }
+    return false;
   }
 };
 
