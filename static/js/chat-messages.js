@@ -134,10 +134,22 @@ window.MessageService.prototype.sendMessage = async function (content) {
     content: content,
     role: "user", 
     type: "message",
-    enable_thinking: this.modelConfig?.extendedThinking || false,
-    thinking_budget: this.modelConfig?.thinkingBudget || null,
     vision_detail: this.modelConfig?.visionDetail || "auto"
   };
+
+  // Add extended thinking config if enabled
+  if (this.modelConfig?.extendedThinking) {
+    messagePayload.thinking = {
+      type: "enabled",
+      budget_tokens: Math.max(
+        1024, // Minimum required by Claude
+        Math.min(
+          this.modelConfig.thinkingBudget || 16000,
+          this.modelConfig.maxTokens - 1000 // Leave room for response
+        )
+      )
+    };
+  }
 
   // Add image data if present
   if (this.currentImage) {

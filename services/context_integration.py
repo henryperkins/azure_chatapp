@@ -116,6 +116,9 @@ async def augment_with_knowledge(
                 if result_tokens < 1024:
                     raise ValueError(f"Thinking budget too small (min 1024 tokens, got {result_tokens})")
                 context_msg["metadata"]["thinking_budget"] = result_tokens
+        
+                # Add signature verification placeholder
+                context_msg["metadata"]["requires_signature_verification"] = True
             context_messages.append(context_msg)
             total_tokens += result_tokens
         
