@@ -63,8 +63,18 @@ function ensureModulesLoaded() {
 
 // Initialize the chat functionality
 window.initializeChat = async function () {
+  console.log('Initializing chat system...');
+  console.log('Checking dependencies...');
+  
   try {
-    console.log("Initializing chat system...");
+    await ensureModulesLoaded();
+    console.log('Dependencies loaded:', {
+      ChatUtils: !!window.ChatUtils,
+      ConversationService: !!window.ConversationService,
+      MessageService: !!window.MessageService,
+      WebSocketService: !!window.WebSocketService,
+      UIComponents: !!window.UIComponents
+    });
 
     // Ensure required modules are loaded
     await ensureModulesLoaded();
