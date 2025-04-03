@@ -103,19 +103,11 @@ function initializeSidebarToggle() {
 
 function updateSidebarState() {
   const isMobile = window.innerWidth < 768;
-  sidebar.classList.toggle('translate-x-0', isOpen);
-  sidebar.classList.toggle('-translate-x-full', !isOpen);
+  sidebar.classList.toggle('translate-x-0', isOpen && !isMobile);
+  sidebar.classList.toggle('-translate-x-full', !isOpen && isMobile);
   
   if (isMobile) {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.pointerEvents = 'none';
-      sidebar.style.pointerEvents = 'auto';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.pointerEvents = '';
-      sidebar.style.pointerEvents = '';
-    }
+    document.body.classList.toggle('overflow-hidden', isOpen);
   }
   
   updateBackdrop(isOpen);
@@ -579,17 +571,17 @@ function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
   const isExpanded = localStorage.getItem(`${toggleId}_expanded`) === 'true';
   
   // Apply initial state
+  panel.classList.add('collapsible-panel');
   if (isExpanded) {
-    panel.style.maxHeight = 'max-content'; // Use max-content for proper rendering
-    panel.classList.add('max-h-[999px]');
+    panel.classList.add('max-h-[500px]');
     chevron.classList.add('rotate-180');
-    
+        
     // Call onExpand callback if provided and panel is expanded
     if (typeof onExpand === 'function') {
       setTimeout(onExpand, 100); // Slightly longer timeout to ensure DOM is ready
     }
   } else {
-    panel.style.maxHeight = '0px';
+    panel.classList.add('max-h-0');
   }
   
   toggleButton.addEventListener('click', () => {
