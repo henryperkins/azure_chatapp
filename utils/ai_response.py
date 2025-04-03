@@ -177,8 +177,8 @@ async def generate_ai_response(
                 "content": knowledge_context
             })
         
-        # Check if it's a Claude model (including 3.7 Sonnet)
-        is_claude_model = chosen_model in settings.CLAUDE_MODELS or chosen_model == "claude-3-7-sonnet-20250219"
+        # Check if it's a supported Claude model
+        is_claude_model = chosen_model in CLAUDE_MODELS
         
         if is_claude_model:
             # Call Claude API with model-specific settings
@@ -192,7 +192,9 @@ async def generate_ai_response(
                 model_name=chosen_model,
                 max_tokens=max_response_tokens,
                 enable_thinking=enable_thinking if enable_thinking is not None else settings.CLAUDE_EXTENDED_THINKING_ENABLED,
-                thinking_budget=thinking_budget if thinking_budget is not None else settings.CLAUDE_EXTENDED_THINKING_BUDGET
+                thinking_budget=thinking_budget if thinking_budget is not None else settings.CLAUDE_EXTENDED_THINKING_BUDGET,
+                image_data=image_data,
+                stream=False  # WebSocket handles streaming separately
             )
             assistant_content = claude_response["choices"][0]["message"]["content"]
             
