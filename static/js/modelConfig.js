@@ -394,51 +394,40 @@ function setupVisionFileInput() {
  * Save changes to localStorage and (optionally) to a global object
  */
 function persistSettings() {
-  // Model
-  const modelSelect = document.getElementById("modelSelect");
-  if (modelSelect) {
-    localStorage.setItem("modelName", modelSelect.value);
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.modelName = modelSelect.value;
+  // Ensure all elements exist before saving
+  const elements = {
+    model: document.getElementById('modelSelect'),
+    maxTokens: document.getElementById('maxTokensInput') || document.getElementById('maxTokensSlider'),
+    vision: document.getElementById('visionToggle'),
+    reasoning: document.getElementById('reasoningEffortRange')
+  };
+
+  window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+
+  if (elements.model) {
+    localStorage.setItem("modelName", elements.model.value);
+    window.MODEL_CONFIG.modelName = elements.model.value;
   }
 
-  // Max tokens - Try multiple sources for the token value
-  let maxTokensValue;
-  
-  // First try the slider
-  const maxTokensSlider = document.getElementById("maxTokensSlider");
-  if (maxTokensSlider) {
-    maxTokensValue = Number(maxTokensSlider.value);
+  if (elements.maxTokens) {
+    const value = Math.max(100, Math.min(100000, elements.maxTokens.value));
+    localStorage.setItem("maxTokens", value);
+    window.MODEL_CONFIG.maxTokens = value;
   }
-  
-  // Then try the input field
-  if (!maxTokensValue) {
-    const maxTokensInput = document.getElementById("maxTokensInput");
-    if (maxTokensInput) {
-      maxTokensValue = Number(maxTokensInput.value);
-    }
+
+  if (elements.vision) {
+    localStorage.setItem("visionEnabled", elements.vision.checked);
+    window.MODEL_CONFIG.visionEnabled = elements.vision.checked;
   }
-  
-  // Finally try the hidden field
-  if (!maxTokensValue) {
-    const maxTokensHidden = document.getElementById("maxTokensHidden");
-    if (maxTokensHidden) {
-      maxTokensValue = Number(maxTokensHidden.value);
-    }
+
+  if (elements.reasoning) {
+    let effort = '';
+    if (elements.reasoning.value === '1') effort = 'low';
+    else if (elements.reasoning.value === '2') effort = 'medium';
+    else effort = 'high';
+    localStorage.setItem("reasoningEffort", effort);
+    window.MODEL_CONFIG.reasoningEffort = effort;
   }
-  
-  // Use a sensible default if all else fails
-  if (!maxTokensValue || isNaN(maxTokensValue)) {
-    maxTokensValue = 500;
-  }
-  
-  // Clamp to a reasonable range
-  const clampedVal = Math.min(Math.max(maxTokensValue, 100), 100000);
-  
-  // Update all token-related elements
-  localStorage.setItem("maxTokens", clampedVal.toString());
-  window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-  window.MODEL_CONFIG.maxTokens = clampedVal;
    
   // Reasoning effort
   const reasoningEffortRange = document.getElementById("reasoningEffortRange");
