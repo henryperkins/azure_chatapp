@@ -79,9 +79,22 @@ function initializeSidebarToggle() {
   toggleBtn?.replaceWith(toggleBtn.cloneNode(true));
   closeBtn?.replaceWith(closeBtn.cloneNode(true));
 
-  // Set up fresh listeners
-  toggleBtn?.addEventListener('click', toggleSidebar);
-  closeBtn?.addEventListener('click', toggleSidebar);
+  // Set up fresh listeners with proper event handling
+  toggleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSidebar();
+  });
+  
+  toggleBtn?.addEventListener('touchstart', (e) => {
+    e.stopPropagation();
+    toggleSidebar();
+  });
+  
+  closeBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSidebar();
+  });
+  
   window.addEventListener('resize', handleResize);
   
   updateSidebarState();
@@ -89,14 +102,23 @@ function initializeSidebarToggle() {
 }
 
 function updateSidebarState() {
-    const isMobile = window.innerWidth < 768;
-    sidebar.classList.toggle('translate-x-0', isOpen);
-    sidebar.classList.toggle('-translate-x-full', !isOpen);
-    
-    if (isMobile) {
-        document.body.classList.toggle('overflow-hidden', isOpen);
-        updateBackdrop(isOpen);
+  const isMobile = window.innerWidth < 768;
+  sidebar.classList.toggle('translate-x-0', isOpen);
+  sidebar.classList.toggle('-translate-x-full', !isOpen);
+  
+  if (isMobile) {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.pointerEvents = 'none';
+      sidebar.style.pointerEvents = 'auto';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.pointerEvents = '';
+      sidebar.style.pointerEvents = '';
     }
+  }
+  
+  updateBackdrop(isOpen);
 }
 
 function handleResize() {
@@ -114,10 +136,10 @@ function handleResize() {
 }
 
 function updateBackdrop(show) {
-  let backdrop = document.getElementById('sidebarBackdrop');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const isMobile = window.innerWidth < 768;
   
-  // Check if we need to modify the backdrop
-  if (show && backdrop) return; // Already exists and visible
+  if (show && !isMobile) return; // Only needed for mobile
 
   // Remove existing backdrop if not needed
   if (!show && backdrop) {
@@ -125,25 +147,28 @@ function updateBackdrop(show) {
     return;
   }
 
-  // Create new backdrop if showing
   if (show && !backdrop) {
-    backdrop = document.createElement('div');
-    backdrop.id = 'sidebarBackdrop';
-    backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
-    backdrop.setAttribute('aria-hidden', 'true');
-    backdrop.setAttribute('role', 'presentation');
-    backdrop.style.touchAction = 'none'; // Prevent scroll bleed
+    const newBackdrop = document.createElement('div');
+    newBackdrop.id = 'sidebarBackdrop';
+    newBackdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden';
+    newBackdrop.setAttribute('aria-hidden', 'true');
+    newBackdrop.setAttribute('role', 'presentation');
+    newBackdrop.style.touchAction = 'none';
+    newBackdrop.style.pointerEvents = 'auto';
     
-    // Handle both touch and click events
-    const handleBackdrop = () => {
-      toggleSidebar();
-      document.activeElement?.blur();
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target === newBackdrop) {
+        toggleSidebar();
+        document.activeElement?.blur();
+      }
     };
+
+    newBackdrop.addEventListener('touchstart', handler, { passive: false });
+    newBackdrop.addEventListener('click', handler);
     
-    backdrop.addEventListener('click', handleBackdrop);
-    backdrop.addEventListener('touchstart', handleBackdrop); // Add touch support
-    
-    document.body.appendChild(backdrop);
+    document.body.appendChild(newBackdrop);
   }
 }
 
