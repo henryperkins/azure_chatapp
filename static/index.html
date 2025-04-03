@@ -13,28 +13,23 @@
 
   <!-- CSRF token with dynamic injection pattern -->
   <meta name="csrf-token" content="" id="csrfToken" />
-  
-  <script>
-    // Auth initialization will be handled by auth.js after it loads
-  </script>
 </head>
 <body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
 
   <!--
     Top Navbar
     -------------------------------------------------------------------------
-    Includes:
-      - Main brand / logo
-      - Toggle button for sidebar on mobile
-      - Live user status indicator (Online/Offline)
-      - Possibly a logout/account button or route link
   -->
   <header role="banner" class="bg-white shadow-sm border-b border-gray-200 dark:border-gray-700 dark:bg-gray-800">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
       <div class="flex items-center">
-        <button id="navToggleBtn" class="mr-3 focus:outline-none md:hidden" aria-label="Toggle sidebar navigation">
-          <!-- Some icon for toggling the sidebar on mobile -->
-          <svg role="img" aria-label="Menu icon" class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
+        <!-- Enhance toggle button with proper accessibility attributes -->
+        <button id="navToggleBtn"
+                class="mr-3 focus:outline-none md:hidden"
+                aria-label="Toggle sidebar navigation"
+                aria-expanded="false"
+                aria-controls="mainSidebar">
+          <svg role="img" aria-hidden="true" class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
                viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 6h16M4 12h16M4 18h16" />
@@ -47,7 +42,7 @@
         <!-- User status (when logged in) -->
         <span id="userStatus" class="transition-colors text-sm font-medium">Offline</span>
         
-        <!-- Auth Status / Auth Button Group -->
+        <!-- Auth container -->
         <div class="relative" id="authContainer">
           <!-- When logged out: Auth Button -->
           <button id="authButton" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700 transition-colors">
@@ -100,33 +95,24 @@
   <!--
     Main Container
     -------------------------------------------------------------------------
-    Contains:
-      - Collapsible sidebar for conversation listing, project listing, or search
-      - Main content area with separate panels for:
-          * Model Selection
-          * Chat UI
-          * Project Manager
-          * Summaries or advanced features
-      - Overlaid ephemeral notifications at top or bottom
   -->
   <div class="flex flex-1 overflow-hidden">
-    <!-- Enhanced Sidebar Interface (hidden on mobile by default) -->
-    <nav id="mainSidebar" aria-hidden="false" aria-label="Main navigation"
+    <!-- Enhanced Sidebar with improved accessibility attributes -->
+    <nav id="mainSidebar"
+         aria-labelledby="sidebarHeading"
+         aria-hidden="true"
          class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg md:shadow-none
                 transform transition-transform duration-300 ease-in-out
                 -translate-x-full md:translate-x-0">
-      <!-- Mobile close button -->
+      <!-- Accessible heading for screen readers -->
+      <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
       
-      <button id="closeSidebarBtn" class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <!-- Improve close button accessibility -->
+      <button id="closeSidebarBtn"
+              class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              aria-label="Close sidebar">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      
-      <!-- Pin/unpin sidebar button (desktop only) -->
-      <button id="pinSidebarBtn" class="hidden md:block absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
         </svg>
       </button>
       
@@ -142,7 +128,7 @@
         <!-- Tab navigation for sidebar sections - Improved accessibility -->
         <div class="flex mb-4 border-b border-gray-200 dark:border-gray-700" role="tablist">
           <button id="recentChatsTab" 
-                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm"
+                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                   role="tab"
                   aria-selected="false"
                   aria-controls="recentChatsSection"
@@ -150,7 +136,7 @@
             Recent
           </button>
           <button id="starredChatsTab" 
-                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm"
+                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                   role="tab"
                   aria-selected="false"
                   aria-controls="starredChatsSection"
@@ -158,7 +144,7 @@
             Starred
           </button>
           <button id="projectsTab" 
-                  class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm"
+                  class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                   role="tab"
                   aria-selected="true"
                   aria-controls="projectsSection"
@@ -168,31 +154,36 @@
         </div>
         
         <!-- Recent Chats Section (hidden by default) -->
-        <div id="recentChatsSection" class="hidden flex-1 flex flex-col overflow-hidden" role="tabpanel" aria-labelledby="recentChatsTab">
+        <div id="recentChatsSection"
+             class="hidden flex-1 flex flex-col overflow-hidden"
+             role="tabpanel"
+             aria-labelledby="recentChatsTab"
+             tabindex="0">
           <!-- Search input -->
           <div class="mb-3">
             <div class="relative">
+              <label for="chatSearchInput" class="sr-only">Search conversations</label>
               <input type="search" aria-label="Search conversations" id="chatSearchInput"
                      placeholder="Search conversations..."
                      class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
           </div>
           
           <!-- Conversations list -->
-          <ul id="sidebarConversations" class="overflow-y-auto flex-1 space-y-1 text-sm"></ul>
+          <ul id="sidebarConversations" class="overflow-y-auto flex-1 space-y-1 text-sm" role="list"></ul>
         </div>
         
         <!-- Starred Chats Section (hidden by default) -->
-        <div id="starredChatsSection" class="hidden flex-1 flex flex-col overflow-hidden" role="tabpanel" aria-labelledby="starredChatsTab">
-          <!-- Starred chats explanation -->
+        <div id="starredChatsSection"
+             class="hidden flex-1 flex flex-col overflow-hidden"
+             role="tabpanel"
+             aria-labelledby="starredChatsTab"
+             tabindex="0">
           <p class="text-xs text-gray-500 mb-3">Starred chats are conversations you've marked as important for quick access.</p>
-          
-          <!-- Starred conversations list -->
-          <ul id="starredConversations" class="overflow-y-auto flex-1 space-y-1 text-sm">
-            <!-- Will be populated dynamically, show placeholder when empty -->
+          <ul id="starredConversations" class="overflow-y-auto flex-1 space-y-1 text-sm" role="list">
             <li class="text-center text-gray-500 py-4">
               No starred conversations yet. Click the star icon on any conversation to add it here.
             </li>
@@ -200,7 +191,11 @@
         </div>
         
         <!-- Projects Section (visible by default on projects page) -->
-        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel" aria-labelledby="projectsTab">
+        <div id="projectsSection"
+             class="flex-1 flex flex-col overflow-hidden"
+             role="tabpanel"
+             aria-labelledby="projectsTab"
+             tabindex="0">
           <!-- Projects actions -->
           <div class="mb-3 flex space-x-2">
             <a href="/" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded text-xs transition-colors flex items-center justify-center font-medium">
@@ -217,17 +212,18 @@
             </button>
           </div>
           
-          <!-- Projects list -->
+          <!-- Projects search input -->
           <div class="relative mb-2">
+            <label for="sidebarProjectSearch" class="sr-only">Search projects</label>
             <input type="search" id="sidebarProjectSearch" aria-label="Search projects"
                    placeholder="Search projects..."
                    class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100" />
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
           
-          <ul id="sidebarProjects" class="overflow-y-auto flex-1 space-y-1 text-sm">
+          <ul id="sidebarProjects" class="overflow-y-auto flex-1 space-y-1 text-sm" role="list">
             <!-- Projects will be loaded dynamically -->
           </ul>
         </div>
@@ -235,15 +231,21 @@
         <!-- Settings section (collapsible) -->
         <div class="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
           <!-- Model configuration toggle button -->
-          <button id="toggleModelConfig" class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium">
+          <button id="toggleModelConfig"
+                  class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                  aria-expanded="false"
+                  aria-controls="modelConfigPanel"
+                  role="button">
             <span>Model Configuration</span>
-            <svg id="modelConfigChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg id="modelConfigChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
           
           <!-- Model Configuration UI (collapsible) -->
-          <div id="modelConfigPanel" class="text-sm overflow-hidden transition-all duration-300 max-h-0">
+          <div id="modelConfigPanel"
+               class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
+               aria-labelledby="toggleModelConfig">
             <div class="pt-2 pb-1">
               <!-- Model Selection -->
               <div class="mb-3">
@@ -263,11 +265,12 @@
                 <!-- Slider and input will be injected by modelConfig.js -->
               </div>
 
-              <!-- Reasoning Effort Panel (for the slider) -->
+              <!-- Reasoning Effort Panel (slider) -->
               <div id="reasoningPanel" class="bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2 mb-3">
-                <!-- The slider is injected by modelConfig.js -->
+                <!-- Slider is injected by modelConfig.js -->
               </div>
 
+              <!-- Vision Panel (for image upload) -->
               <div id="visionPanel" class="hidden mb-3">
                 <label class="block font-medium dark:text-gray-200 text-xs">Image Upload (o1 Vision)</label>
                 <input type="file" accept="image/png,image/jpeg"
@@ -282,38 +285,44 @@
                 <div id="visionPreview" class="mt-2"></div>
               </div>
               
-              <!-- Placeholder for persistent user model config display -->
+              <!-- Live region for model config display -->
               <div id="modelConfigDisplay"
-                   class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs dark:text-gray-200">
-                <span>Selected Model: <span id="currentModelName">o3-mini</span></span><br/>
-                <span>Max Tokens: <span id="currentMaxTokens">500</span></span><br/>
-                <span>Reasoning Effort: <span id="currentReasoning">N/A</span></span><br/>
-                <span>Vision: <span id="visionEnabledStatus">Disabled</span></span>
+                   class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs dark:text-gray-200"
+                   aria-live="polite">
+                <p><span class="font-medium">Selected Model:</span> <span id="currentModelName">o3-mini</span></p>
+                <p><span class="font-medium">Max Tokens:</span> <span id="currentMaxTokens">500</span></p>
+                <p><span class="font-medium">Reasoning Effort:</span> <span id="currentReasoning">N/A</span></p>
+                <p><span class="font-medium">Vision:</span> <span id="visionEnabledStatus">Disabled</span></p>
               </div>
 
               <!-- Loading indicator for config changes -->
-              <div id="modelConfigLoading" class="mt-3 hidden text-blue-600 flex items-center text-xs">
+              <div id="modelConfigLoading" class="mt-3 hidden text-blue-600 flex items-center text-xs" aria-hidden="true">
                 <svg class="animate-spin h-4 w-4 mr-2 text-blue-600"
-                     xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                     xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor"
-                        d="M4 12a8 8 0 018-8v8H4z"></path>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                 </svg>
-                Updating configuration...
+                <span>Updating configuration...</span>
               </div>
             </div>
           </div>
           
           <!-- Custom Instructions toggle button -->
-          <button id="toggleCustomInstructions" class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium">
+          <button id="toggleCustomInstructions"
+                  class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                  aria-expanded="false"
+                  aria-controls="customInstructionsPanel"
+                  role="button">
             <span>Custom Instructions</span>
-            <svg id="customInstructionsChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg id="customInstructionsChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
           
           <!-- Custom Instructions panel (collapsible) -->
-          <div id="customInstructionsPanel" class="text-sm overflow-hidden transition-all duration-300 max-h-0">
+          <div id="customInstructionsPanel"
+               class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
+               aria-labelledby="toggleCustomInstructions">
             <div class="pt-2 pb-1">
               <p class="text-xs text-gray-500 mb-2">Set default instructions for how the AI should respond.</p>
               <textarea id="globalCustomInstructions" 
@@ -433,7 +442,7 @@
               </div>
             </div>
             
-            <!-- Enhanced project stats panel with animations -->
+            <!-- Project stats panel -->
             <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-2 sm:p-4 rounded-lg mb-4 sm:mb-6 shadow-sm" data-testid="project-stats">
               <div class="mb-2 sm:mb-4">
                 <div class="flex justify-between mb-1">
@@ -460,7 +469,7 @@
               </div>
             </div>
             
-            <!-- Enhanced tab navigation with active indicators - mobile optimized -->
+            <!-- Tab navigation -->
             <div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
               <div class="flex whitespace-nowrap min-w-full -mb-px" role="tablist">
                 <button id="detailsTabBtn" 
@@ -596,7 +605,7 @@
                 </div>
               </div>
               
-              <!-- Enhanced conversations tab -->
+              <!-- Conversations tab -->
               <div id="conversationsTab" 
                    class="project-tab-content hidden" 
                    role="tabpanel" 
@@ -618,7 +627,7 @@
                 
               </div>
               
-              <!-- Enhanced artifacts tab -->
+              <!-- Artifacts tab -->
               <div id="artifactsTab" 
                    class="project-tab-content hidden" 
                    role="tabpanel" 
@@ -662,7 +671,7 @@
                     <button id="knowledgeBaseSettingsBtn"
                       class="w-full sm:w-auto px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 001.066-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       Settings
@@ -802,7 +811,7 @@
     </main>
   </div>
 
-  <!-- Enhanced Project Creation/Edit Modal -->
+  <!-- Project Creation/Edit Modal -->
   <div id="projectFormModal"
        class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center"
        aria-modal="true"
@@ -821,7 +830,7 @@
       <form id="projectForm">
         <input type="hidden" id="projectIdInput" name="projectId" value="" />
         <div class="mb-4">
-          <label for="projectNameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label for="projectForm-nameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Project Name <span class="text-red-500">*</span>
           </label>
           <input id="projectForm-nameInput"
