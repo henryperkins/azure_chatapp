@@ -216,9 +216,16 @@ async def claude_chat(
 
     # Validate thinking parameters
     if enable_thinking:
-        # Enforce minimum thinking budget
+        # Enforce minimum thinking budget (1024 tokens)
         thinking_budget = thinking_budget or model_config["default_thinking"]
-        thinking_budget = max(thinking_budget, model_config["min_thinking"])
+        thinking_budget = max(thinking_budget, 1024)  # Absolute minimum
+        
+        # Ensure budget is less than max_tokens with buffer
+        if thinking_budget >= max_tokens - 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Thinking budget ({thinking_budget}) must be at least 100 tokens less than max_tokens ({max_tokens})"
+            )
         
         # Ensure budget is less than max_tokens
         if thinking_budget >= max_tokens:
