@@ -345,9 +345,9 @@
         </div>
 
         <!-- Project Manager Section (shown when authenticated) -->
-        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 hidden">
+        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 hidden flex flex-col min-h-0">
           <!-- Project List View -->
-          <div id="projectListView">
+          <div id="projectListView" class="flex-1 flex flex-col min-h-0">
             <div class="mb-4 flex items-center justify-between">
               <h2 class="text-xl font-semibold">Projects</h2>
               <div class="flex space-x-2">
@@ -373,7 +373,7 @@
             </div>
             
             <!-- Project list container -->
-            <div id="projectList" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"></div>
+            <div id="projectList" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 h-full overflow-y-auto p-2"></div>
             
             <!-- No projects message -->
             <div id="noProjectsMessage" class="hidden text-center py-8 text-gray-500">
