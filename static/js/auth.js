@@ -366,7 +366,8 @@ async function loginUser(username, password) {
     // Store tokens in TokenManager AND cookies
     TokenManager.setTokens(data.access_token, data.refresh_token);
     
-    // Enforce cookie-based authentication
+    // Force cookie refresh by first clearing then setting
+    document.cookie = `access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     document.cookie = `access_token=${data.access_token}; path=/; ${
       window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
     }`;

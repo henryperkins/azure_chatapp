@@ -342,8 +342,8 @@ async def logout_user(
 def set_secure_cookie(response, key, value, max_age=None):
     """Set a secure cookie with consistent settings."""
     secure_cookie = settings.ENV == "production"
-    # Allow cross-site cookies in development
-    samesite_value = "none" if not secure_cookie else "strict"
+    # Changed to lax for development to avoid cookie rejection
+    samesite_value = "lax" if not secure_cookie else "strict"
     
     # Development can't set Secure=True without HTTPS
     secure_value = secure_cookie
