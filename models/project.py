@@ -31,8 +31,18 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     goals: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    token_usage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    max_tokens: Mapped[int] = mapped_column(Integer, default=200000, nullable=False)
+    token_usage: Mapped[int] = mapped_column(
+        Integer, 
+        default=0, 
+        nullable=False,
+        server_default="0"  # Ensure DB-level default
+    )
+    max_tokens: Mapped[int] = mapped_column(
+        Integer, 
+        default=200000, 
+        nullable=False,
+        server_default="200000"  # Ensure DB-level default
+    )
     custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
