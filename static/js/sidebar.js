@@ -568,8 +568,20 @@ function setupSidebarTabs() {
     }
   }
   
-  // Load user preference or use default
-  activateTab(savedTab);
+  // Determine active tab based on both page context and saved state
+  const isProjectsPage = window.location.pathname.includes('/projects') || 
+                        document.getElementById('projectManagerPanel');
+  
+  let activeTab = localStorage.getItem('sidebarActiveTab');
+  
+  // Validate tab against current page context
+  if (!activeTab || (isProjectsPage && activeTab !== 'projects')) {
+    activeTab = isProjectsPage ? 'projects' : 'recent';
+    localStorage.setItem('sidebarActiveTab', activeTab);
+  }
+
+  // Update tab activation to use this determined value
+  activateTab(activeTab);
   
   // Set up click handlers for tabs
   Object.keys(tabs).forEach(tab => {
