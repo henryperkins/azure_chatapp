@@ -329,8 +329,29 @@ window.MessageService.prototype._handleWsMessage = function (event) {
         content: data.content || data.message || '',
         thinking: data.thinking,
         redacted_thinking: data.redacted_thinking,
-        metadata: data.metadata || {}
+        metadata: data.metadata || {},
+        is_streaming: false
       });
+    }
+    // Handle streaming thinking blocks
+    else if (data.type === 'content_block_delta') {
+      if (data.delta?.type === 'thinking_delta') {
+        this.onMessageReceived({
+          role: 'assistant',
+          content: '',
+          thinking: data.delta.thinking,
+          is_streaming: true
+        });
+      }
+      // Handle redacted thinking in streams
+      if (data.delta?.type === 'redacted_thinking') {
+        this.onMessageReceived({
+          role: 'assistant', 
+          content: '',
+          redacted_thinking: data.delta.content,
+          is_streaming: true
+        });
+      }
     }
     // Claude-specific response format
     else if (data.type === 'claude_response') {
