@@ -20,23 +20,46 @@ isOpen = false;
 let isAnimating = false;
 
 window.toggleSidebar = function(forceState) {
+  // Ensure clean state for each toggle
+  let newState; 
+  
+  // Modern mobile swipe logic
+  const handleMobileToggle = () => {
+    const isMobile = window.innerWidth < 768;
+    const wasOpenedBySwipe = !!forceState;
+    
+    if (isMobile) {
+      newState = wasOpenedBySwipe ? true : !isOpen;
+    } else {
+      newState = typeof forceState === 'boolean' ? forceState : !isOpen;
+    }
+    
+    if (isMobile && isOpen && !wasOpenedBySwipe) {
+      newState = false;
+    }
+  };
+
   if (isAnimating) return;
   isAnimating = true;
   
-  const isMobile = window.innerWidth < 768;
-  let newState = typeof forceState === 'boolean' ? forceState : !isOpen;
-
-  // Handle mobile close on first click if open
-  if (isMobile && isOpen) {
-    newState = false;
+  handleMobileToggle(); // Apply new swipe logic
+  
+  // Validate state
+  if (typeof newState === 'undefined') {
+    console.error('Invalid newState calculation');
+    newState = !isOpen;
   }
 
   isOpen = newState;
   
   // Add body class to prevent scroll when sidebar is open
-  if (isMobile) {
+  if (window.innerWidth < 768) {
     document.body.classList.toggle('sidebar-open', newState);
   }
+
+  // Update accessibility attributes
+  toggleBtn?.setAttribute('aria-expanded', newState);
+  sidebar?.setAttribute('aria-hidden', !newState);
 
   // Use transitionsend event for animation completion
   sidebar.addEventListener('transitionend', () => {
