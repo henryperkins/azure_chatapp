@@ -3,6 +3,12 @@
  * Chat interface that coordinates all components
  */
 
+// Converted from ES modules to global references
+const ConversationService = window.ConversationService;
+const WebSocketService = window.WebSocketService;
+const MessageService = window.MessageService;
+const UIComponents = window.UIComponents;
+
 // Initialize the interface
 window.ChatInterface = function(options = {}) {
   this._setupProjectContext = function() {

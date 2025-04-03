@@ -15,25 +15,7 @@
   <meta name="csrf-token" content="" id="csrfToken" />
   
   <script>
-    // Set up CSRF token handling - works with TokenManager
-    document.addEventListener('DOMContentLoaded', function() {
-      // Listen for auth state changes to update CSRF token
-      document.addEventListener('authStateChanged', function(event) {
-        const { authenticated } = event.detail;
-        if (authenticated && window.TokenManager && window.TokenManager.accessToken) {
-          // Extract CSRF token from JWT if available
-          try {
-            const payload = window.TokenManager.accessToken.split('.')[1];
-            const decoded = JSON.parse(atob(payload));
-            if (decoded.csrf) {
-              document.getElementById('csrfToken').setAttribute('content', decoded.csrf);
-            }
-          } catch (e) {
-            console.warn('Failed to extract CSRF token from JWT');
-          }
-        }
-      });
-    });
+    // Auth initialization will be handled by auth.js after it loads
   </script>
 </head>
 <body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
@@ -1077,9 +1059,36 @@
     </div>
   </div>
 
+  <!-- Main app script must load first -->
+  <script type="module" src="/static/js/app.js"></script>
+
+  <!-- Core scripts as modules -->
+  <script type="module" src="/static/js/auth.js"></script>
+  <script type="module" src="/static/js/chat-core.js"></script>
+  <script type="module" src="/static/js/chat-interface.js"></script>
+  <script type="module" src="/static/js/chat-conversations.js"></script>
+  <script type="module" src="/static/js/chat-messages.js"></script>
+  <script type="module" src="/static/js/chat-websocket.js"></script>
+  <script type="module" src="/static/js/chat-ui.js"></script>
+  <script type="module" src="/static/js/formatting.js"></script>
+  <script type="module" src="/static/js/modelConfig.js"></script>
+  <script type="module" src="/static/js/chat-utils.js"></script>
+
+  <!-- Utility scripts -->
+  <script src="/static/js/projectModal.js"></script>
+  <script src="/static/js/knowledgeBaseState.js"></script>
+  <script src="/static/js/projectDashboardUtils.js"></script>
+
+  <!-- Component scripts -->
+  <script src="/static/js/projectListComponent.js"></script>
+  <script src="/static/js/sidebar.js"></script>
+
   <!-- Authentication Integration Script -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      // Initialize auth using window.auth instead of module import
+      window.auth.init();
+      
       // Listen for auth state changes from the auth.js module
       document.addEventListener('authStateChanged', function(event) {
         const { authenticated, username } = event.detail;
@@ -1205,29 +1214,6 @@
     });
   </script>
 
-  <!-- Core scripts -->
-  <script src="/static/js/chat-utils.js"></script>
-  <script src="/static/js/chat-websocket.js"></script>
-  <script src="/static/js/chat-messages.js"></script>
-  <script src="/static/js/chat-conversations.js"></script>
-  <script src="/static/js/chat-ui.js"></script>
-  <script src="/static/js/chat-interface.js"></script>
-  <script src="/static/js/chat-core.js"></script>
-  <script src="/static/js/formatting.js"></script>
-  <script src="/static/js/auth.js"></script>
-  <script src="/static/js/modelConfig.js"></script>
-
-  <!-- Core utilities must load first -->
-  <script src="/static/js/projectModal.js" defer></script>
-  <script src="/static/js/knowledgeBaseState.js" defer></script>
-  <script src="/static/js/projectDashboardUtils.js" defer></script>
-
-  <!-- Component scripts -->
-  <script src="/static/js/projectListComponent.js" defer></script>
-
-  <!-- Load remaining scripts with defer -->
-  <script src="/static/js/sidebar.js" defer></script>
-  <script src="/static/js/app.js" defer></script>
   <script>
     console.log('All scripts loaded');
   </script>

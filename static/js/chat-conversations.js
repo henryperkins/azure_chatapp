@@ -3,92 +3,84 @@
  * Conversation management service for chat functionality
  */
 
-// Define ConversationService as a constructor function attached to window
-window.ConversationService = function(options = {}) {
-  this.onConversationLoaded = options.onConversationLoaded || (() => {});
-  this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error, options.showNotification));
-  this.onLoadingStart = options.onLoadingStart || (() => {});
-  this.onLoadingEnd = options.onLoadingEnd || (() => {});
-  this.onConversationDeleted = options.onConversationDeleted || (() => {});
-  this.showNotification = options.showNotification || window.showNotification || console.log;
-  this.currentConversation = null;
-};
+// Converted from ES module to global reference
+if (typeof apiRequest === 'undefined') {
+  const apiRequest = window.apiRequest;
+}
 
-// Helper method to validate UUID
-window.ConversationService.prototype._isValidUUID = function(uuid) {
-  if (!uuid) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
-};
-
-// Load an existing conversation
-window.ConversationService.prototype.loadConversation = async function(chatId) {
-  if (!chatId || !this._isValidUUID(chatId)) {
-    this.onError('Loading conversation', new Error('Invalid conversation ID'));
-    return false;
+window.ConversationService = class ConversationService {
+  constructor(options = {}) {
+    this.onConversationLoaded = options.onConversationLoaded || (() => {});
+    this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error, options.showNotification));
+    this.onLoadingStart = options.onLoadingStart || (() => {});
+    this.onLoadingEnd = options.onLoadingEnd || (() => {});
+    this.onConversationDeleted = options.onConversationDeleted || (() => {});
+    this.showNotification = options.showNotification || window.showNotification || console.log;
+    this.currentConversation = null;
   }
 
-  // Use standardized auth check
-  const authState = await window.ChatUtils?.isAuthenticated?.() || 
-                   (window.auth?.verify ? await window.auth.verify() : false);
-    
-  if (!authState) {
-    this.showNotification("Please log in to access conversations", "error");
-    return false;
+  _isValidUUID(uuid) {
+    if (!uuid) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
   }
 
-  this.onLoadingStart();
-
-  try {
-    const projectId = localStorage.getItem("selectedProjectId");
-    let convUrl, msgUrl;
-
-    if (projectId) {
-      convUrl = `/api/projects/${projectId}/conversations/${chatId}`;
-      msgUrl = `/api/projects/${projectId}/conversations/${chatId}/messages`;
-    } else {
-      convUrl = `/api/chat/conversations/${chatId}`;
-      msgUrl = `/api/chat/conversations/${chatId}/messages`;
+  async loadConversation(chatId) {
+    if (!chatId || !this._isValidUUID(chatId)) {
+      this.onError('Loading conversation', new Error('Invalid conversation ID'));
+      return false;
     }
 
-    // Include project_id in request if available
-    const options = projectId ? { project_id: projectId } : {};
+    const authState = await window.ChatUtils?.isAuthenticated?.() || 
+                     (window.auth?.verify ? await window.auth.verify() : false);
     
-    // Use window.apiRequest for API requests
-    const conversation = await window.apiRequest(convUrl, "GET", options);
-    const messages = await window.apiRequest(msgUrl, "GET", options);
+    if (!authState) {
+      this.showNotification("Please log in to access conversations", "error");
+      return false;
+    }
 
-    this.currentConversation = {
-      id: chatId,
-      ...(conversation.data || conversation),
-      messages: messages.data?.messages || []
-    };
+    this.onLoadingStart();
 
-    this.onConversationLoaded(this.currentConversation);
-    this.onLoadingEnd();
-    return true;
-  } catch (error) {
-    this.onLoadingEnd();
-    
-    // Use standardized error handling
-    window.ChatUtils?.handleError?.('Loading conversation', error, this.showNotification) || 
-    this.onError('Loading conversation', error);
-    
-    return false;
-  }
+    try {
+      const projectId = localStorage.getItem("selectedProjectId");
+      let convUrl, msgUrl;
+
+      if (projectId) {
+        convUrl = `/ api / projects / ${ projectId } /conversations/${ chatId } `;
+        msgUrl = `/ api / projects / ${ projectId } /conversations/${ chatId }/messages`;
+      } else {
+  convUrl = `/api/chat/conversations/${chatId}`;
+  msgUrl = `/api/chat/conversations/${chatId}/messages`;
+}
+
+const options = projectId ? { project_id: projectId } : {};
+
+const conversation = await apiRequest(convUrl, "GET", options);
+const messages = await apiRequest(msgUrl, "GET", options);
+
+this.currentConversation = {
+  id: chatId,
+  ...(conversation.data || conversation),
+  messages: messages.data?.messages || []
 };
 
-// Create a new conversation with built-in retries
-window.ConversationService.prototype.createNewConversation = async function(maxRetries = 2) {
+this.onConversationLoaded(this.currentConversation);
+this.onLoadingEnd();
+return true;
+    } catch (error) {
+  this.onLoadingEnd();
+  window.ChatUtils?.handleError?.('Loading conversation', error, this.showNotification) ||
+    this.onError('Loading conversation', error);
+  return false;
+}
+  }
+
+  async createNewConversation(maxRetries = 2) {
   const projectId = localStorage.getItem("selectedProjectId");
-  
-  // Use current model config if available, otherwise fall back to localStorage
-  const model = window.MODEL_CONFIG?.modelName || 
-                localStorage.getItem("modelName") || 
-                "claude-3-sonnet-20240229";
-  
+  const model = window.MODEL_CONFIG?.modelName ||
+    localStorage.getItem("modelName") ||
+    "claude-3-sonnet-20240229";
+
   console.log(`Creating new conversation with model: ${model}`);
-  
-  // Generate a default title with timestamp
   const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -97,49 +89,41 @@ window.ConversationService.prototype.createNewConversation = async function(maxR
         ? `/api/projects/${projectId}/conversations`
         : `/api/chat/conversations`;
 
-      // Use window.apiRequest for API requests
-      const data = await window.apiRequest(url, "POST", {
+      const data = await apiRequest(url, "POST", {
         title: defaultTitle,
-        model_id: model  // Pass the selected model ID
+        model_id: model
       });
 
-      // Handle different API response formats
       const conversation = data.data?.id
         ? data.data
         : (data.id ? data : { id: null });
 
-      if (!conversation.id) {
-        throw new Error("Invalid response format");
-      }
+      if (!conversation.id) throw new Error("Invalid response format");
 
       this.currentConversation = conversation;
       return conversation;
     } catch (error) {
       if (attempt === maxRetries) {
-        // Use standardized error handling on final attempt
         window.ChatUtils?.handleError?.('Creating conversation', error, this.showNotification) ||
-        this.onError('Creating conversation', error);
+          this.onError('Creating conversation', error);
         throw error;
       }
-      
+
       console.warn(`Conversation creation attempt ${attempt + 1} failed:`, error);
-      
-      // Exponential-ish backoff
       await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
   }
-};
+}
 
-// Delete a conversation (soft delete)
-window.ConversationService.prototype.deleteConversation = async function(chatId, projectId = localStorage.getItem("selectedProjectId")) {
+  async deleteConversation(chatId, projectId = localStorage.getItem("selectedProjectId")) {
   if (!chatId || !this._isValidUUID(chatId)) {
     this.onError('Deleting conversation', new Error('Invalid conversation ID'));
     return false;
   }
 
   const authState = await window.ChatUtils?.isAuthenticated?.() ||
-                   (window.auth?.verify ? await window.auth.verify() : false);
-    
+    (window.auth?.verify ? await window.auth.verify() : false);
+
   if (!authState) {
     this.showNotification("Please log in to delete conversations", "error");
     return false;
@@ -148,14 +132,13 @@ window.ConversationService.prototype.deleteConversation = async function(chatId,
   this.onLoadingStart();
 
   try {
-    // Use passed projectId or fallback to localStorage
     const finalProjectId = projectId;
     if (!finalProjectId) {
       throw new Error("Project ID is required for conversation deletion");
     }
     const deleteUrl = `/api/projects/${finalProjectId}/conversations/${chatId}`;
 
-    await window.apiRequest(deleteUrl, "DELETE");
+    await apiRequest(deleteUrl, "DELETE");
 
     if (this.currentConversation?.id === chatId) {
       this.currentConversation = null;
@@ -168,7 +151,8 @@ window.ConversationService.prototype.deleteConversation = async function(chatId,
   } catch (error) {
     this.onLoadingEnd();
     window.ChatUtils?.handleError?.('Deleting conversation', error, this.showNotification) ||
-    this.onError('Deleting conversation', error);
+      this.onError('Deleting conversation', error);
     return false;
   }
-};
+}
+}
