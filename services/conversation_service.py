@@ -92,7 +92,7 @@ class ConversationService:
         model_id: str,
         project_id: Optional[UUID] = None,
         use_knowledge_base: bool = False,
-    ) -> Dict:
+    ) -> Conversation:
         """Create new conversation with validation."""
         await self.validate_model(model_id)
 
@@ -121,7 +121,7 @@ class ConversationService:
                 conv.use_knowledge_base = False
 
         await save_model(self.db, conv)
-        return serialize_conversation(conv)
+        return conv
 
     async def get_conversation(
         self,
