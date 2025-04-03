@@ -57,17 +57,38 @@ window.toggleSidebar = function(forceState) {
 }
 
 function initializeSidebarToggle() {
-  sidebar = document.getElementById('mainSidebar');
-  toggleBtn = document.getElementById('navToggleBtn');
-  closeBtn = document.getElementById('closeSidebarBtn');
+  try {
+    sidebar = document.getElementById('mainSidebar');
+    toggleBtn = document.getElementById('navToggleBtn');
+    closeBtn = document.getElementById('closeSidebarBtn');
 
-  // Add null checks and error handling
-  if (!sidebar || !toggleBtn) {
-    console.error("Sidebar elements missing:");
-    console.log("- Sidebar element:", !!sidebar);
-    console.log("- Toggle button:", !!toggleBtn);
-    return;
-  }
+    if (!sidebar || !toggleBtn) {
+      throw new Error(`Sidebar elements missing: 
+        Sidebar - ${!!sidebar}, 
+        ToggleBtn - ${!!toggleBtn}`);
+    }
+
+    // Set up MutationObserver for cleanup
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (!document.contains(sidebar)) {
+          console.warn('Sidebar removed from DOM, cleaning up');
+          cleanupSidebarListeners();
+          observer.disconnect();
+        }
+      });
+    });
+
+    observer.observe(sidebar.parentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    // Initialize reduced motion preference
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      sidebar.style.transition = 'none';
+    }
 
   // Set up MutationObserver
   const observer = new MutationObserver((mutations) => {
