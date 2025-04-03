@@ -41,6 +41,7 @@ from utils.auth_utils import (
     get_current_user_and_token,
     extract_token,
     get_user_from_token,
+    validate_project_membership,
 )
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -637,9 +638,21 @@ async def websocket_chat_endpoint(
                 project = await validate_project_membership(user, project_id, db)
                 additional_filters = [Conversation.project_id == project_id]
                 
-                # Verify conversation belongs to this project
+                # Get conversation and verify it belongs to this project
+                conversation = await validate_resource_access(
+                    conversation_id,
+                    Conversation,
+                    user,
+                    db,
+                    "Conversation",
+                    additional_filters
+                )
+                
                 if str(conversation.project_id) != str(project_id):
-                    logger.error(f"Critical mismatch: Conversation {conversation.id} has project {conversation.project_id} but connection claims {project_id}")
+                    logger.error(
+                        f"Critical mismatch: Conversation {conversation.id} belongs to "
+                        f"project {conversation.project_id} but request has {project_id}"
+                    )
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
             else:
