@@ -507,16 +507,13 @@ function setupSidebarTabs() {
     
     // Update UI for all tabs
     Object.keys(tabs).forEach(tab => {
-      if (tabs[tab].button && tabs[tab].content) {
-        const isActive = tab === tabName;
-        
-        // Update button styling
-        tabs[tab].button.classList.toggle('border-b-2', isActive);
-        tabs[tab].button.classList.toggle('border-blue-600', isActive);
-        tabs[tab].button.classList.toggle('text-blue-600', isActive);
+      const isActive = tab === tabName;
+      if (tabs[tab].button) {
+        tabs[tab].button.setAttribute('aria-selected', isActive);
+        tabs[tab].button.classList.toggle('project-tab-btn-active', isActive);
         tabs[tab].button.classList.toggle('text-gray-500', !isActive);
-        
-        // Show/hide content
+      }
+      if (tabs[tab].content) {
         tabs[tab].content.classList.toggle('hidden', !isActive);
       }
     });
