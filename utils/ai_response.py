@@ -246,13 +246,19 @@ async def generate_ai_response(
         if db:
             await save_model(db, assistant_msg)
             
-            # Update token usage if applicable - use more accurate estimation for Claude 3.7
+            # Update token usage with accurate counting
             if conversation and conversation.project_id:
-                if is_claude_model and chosen_model == "claude-3-7-sonnet-20250219":
-                    token_estimate = len(assistant_content) // 3  # More accurate for Claude 3.7
-                else:
-                    token_estimate = len(assistant_content) // 4
-                await update_project_token_usage(conversation, token_estimate, db)
+                try:
+                    from utils.openai import count_claude_tokens
+                    token_count = await count_claude_tokens(
+                        messages=[{"role": "assistant", "content": assistant_content}],
+                        model_name=chosen_model
+                    )
+                except Exception as e:
+                    logger.warning(f"Token counting failed, falling back to estimation: {str(e)}")
+                    token_count = len(assistant_content) // 4
+                
+                await update_project_token_usage(conversation, token_count, db)
         
         return assistant_msg
     except Exception as e:

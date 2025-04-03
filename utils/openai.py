@@ -24,18 +24,24 @@ from fastapi import HTTPException
 CLAUDE_MODELS = {
     "claude-3-7-sonnet-20250219": {
         "max_tokens": 128000,
-        "min_thinking": 2048,
-        "supports_vision": True
+        "min_thinking": 1024,  # Minimum required by API
+        "default_thinking": 16000,
+        "supports_vision": True,
+        "requires_streaming": 21333  # Tokens threshold requiring streaming
     },
     "claude-3-opus-20240229": {
         "max_tokens": 200000,
         "min_thinking": 1024,
-        "supports_vision": False  
+        "default_thinking": 8000,
+        "supports_vision": False,
+        "requires_streaming": 21333
     },
     "claude-3-sonnet-20240229": {
         "max_tokens": 200000,
-        "min_thinking": 1024,
-        "supports_vision": False
+        "min_thinking": 1024, 
+        "default_thinking": 4000,
+        "supports_vision": False,
+        "requires_streaming": 21333
     }
 }
 
@@ -208,14 +214,24 @@ async def claude_chat(
             detail="Streaming is required for max_tokens > 21,333"
         )
 
-    # Validate thinking budget
+    # Validate thinking parameters
     if enable_thinking:
-        thinking_budget = thinking_budget or model_config["min_thinking"]
+        # Enforce minimum thinking budget
+        thinking_budget = thinking_budget or model_config["default_thinking"]
         thinking_budget = max(thinking_budget, model_config["min_thinking"])
+        
+        # Ensure budget is less than max_tokens
         if thinking_budget >= max_tokens:
             raise HTTPException(
                 status_code=400,
                 detail=f"Thinking budget ({thinking_budget}) must be less than max_tokens ({max_tokens})"
+            )
+        
+        # Enforce streaming for large responses
+        if max_tokens > model_config["requires_streaming"] and not stream:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Streaming is required for max_tokens > {model_config['requires_streaming']}"
             )
 
     # Debug info - log API key presence and model
@@ -414,6 +430,38 @@ async def claude_chat(
         logger.error(f"Claude API Unexpected Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Claude service unavailable: {str(e)}")
 
+
+async def count_claude_tokens(messages: List[Dict[str, str]], model_name: str) -> int:
+    """Count tokens using Claude's token counting API"""
+    if model_name not in CLAUDE_MODELS:
+        raise ValueError(f"Unsupported model: {model_name}")
+    
+    headers = {
+        "x-api-key": settings.CLAUDE_API_KEY,
+        "anthropic-version": settings.CLAUDE_API_VERSION,
+        "content-type": "application/json"
+    }
+    
+    payload = {
+        "model": model_name,
+        "messages": messages
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings.CLAUDE_BASE_URL}/count_tokens",
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()["input_tokens"]
+    except Exception as e:
+        logger.error(f"Token counting failed: {str(e)}")
+        # Fallback to rough estimate (4 chars per token)
+        total_chars = sum(len(msg.get("content", "")) for msg in messages)
+        return total_chars // 4
 
 async def get_moderation(text: str) -> Dict[str, Any]:
     """
