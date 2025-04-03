@@ -324,6 +324,7 @@ async def verify_auth_status(
 
 @router.post("/logout")
 async def logout_user(
+    request: Request,
     response: Response,
     user: User = Depends(get_refresh_token_user),
     session: AsyncSession = Depends(get_async_session)
