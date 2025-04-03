@@ -28,6 +28,14 @@
   }
 }
 
+/* Collapsible panels */
+@layer components {
+  .collapsible-panel {
+    @apply transition-all duration-300 ease-in-out overflow-hidden;
+    will-change: max-height;
+  }
+}
+
 /* Animation utilities - consolidated */
 @keyframes slideIn {
   from {
@@ -71,7 +79,8 @@
   .btn-primary {
     @apply px-4 py-2 bg-primary-600 text-white rounded-lg 
            hover:bg-primary-700 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 
-           transition-colors duration-200 font-medium text-sm;
+           transition-colors duration-200 font-medium text-sm
+           dark:bg-primary-500 dark:hover:bg-primary-600;
   }
   
   /* Secondary button */
@@ -97,7 +106,12 @@
   
   /* Small button variant */
   .btn-sm {
-    @apply px-3 py-1.5 text-xs min-w-[48px] min-h-[48px];
+    @apply px-3 py-1.5 text-xs min-w-[44px] min-h-[44px];
+  }
+
+  /* List items */
+  .content-item {
+    @apply min-h-[44px] px-4 py-3;
   }
 
   /* Modal close button touch targets */
@@ -412,8 +426,18 @@
 }
 
 /* Dark mode specific improvements */
-.dark .card {
-  @apply bg-gray-800 border-gray-700 shadow-xl;
+.dark {
+  .card {
+    @apply bg-surface-dark border-border-dark shadow-xl;
+  }
+  
+  .btn-outline {
+    @apply border-border-dark text-gray-200 hover:bg-surface-hover-dark;
+  }
+
+  .project-card {
+    @apply bg-surface-dark border-border-dark hover:border-primary-500;
+  }
 }
 
 .dark .btn-outline {
