@@ -345,32 +345,34 @@ function createProjectListItem(project) {
 }
 
 function renderConversationList(data) {
-  const container = getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
+  const container = document.getElementById('sidebarConversations');
   if (!container) return;
+
+  // Clear existing content
   container.innerHTML = '';
 
+  // Deduplicate conversations
+  const seenIds = new Set();
+  const conversations = (data?.data?.conversations || data?.conversations || [])
+    .filter(conv => {
+      if (!conv?.id || seenIds.has(conv.id)) return false;
+      seenIds.add(conv.id);
+      return true;
+    });
+
+  // Store in global config
   window.chatConfig = window.chatConfig || {};
-
-  let conversations = [];
-  if (data?.data?.conversations) {
-    conversations = data.data.conversations;
-  } else if (data?.conversations) {
-    conversations = data.conversations;
-  } else if (data?.data && Array.isArray(data.data)) {
-    conversations = data.data;
-  } else if (Array.isArray(data)) {
-    conversations = data;
-  }
-
   window.chatConfig.conversations = conversations;
 
-  if (conversations.length > 0) {
-    conversations.forEach(item => {
-      container.appendChild(createConversationListItem(item));
-    });
-  } else {
-    showEmptyState(container, MESSAGES.NO_CONVERSATIONS, 'py-4');
+  if (conversations.length === 0) {
+    showEmptyState(container, 'No conversations yet', 'py-4');
+    return;
   }
+
+  conversations.forEach(conv => {
+    const item = createConversationListItem(conv);
+    if (item) container.appendChild(item);
+  });
 }
 
 function createConversationListItem(item) {
