@@ -1,7 +1,7 @@
 import json
 import logging
 import asyncio
-from typing import Optional, Sequence, cast
+from typing import Optional, cast
 from uuid import UUID
 from sqlalchemy.sql.expression import BinaryExpression
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -641,242 +641,131 @@ async def websocket_chat_endpoint(
 
     async with AsyncSessionLocal() as db:
         try:
-            # Accept WebSocket
-            await websocket.accept()
-
-            # Validate token and user
+            # Try to authenticate the WebSocket connection
             user_token = token or extract_token(websocket)
             if not user_token:
+                logger.warning("No token provided for WebSocket connection")
                 raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
-
-            user = await get_user_from_token(user_token, db, "access")
-            if not user or not user.is_active:
-                raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
-
-            # Validate project if needed
+                
+            # Verify token and get user
+            try:
+                user = await get_user_from_token(user_token, db)
+                if not user:
+                    raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
+            except Exception as auth_err:
+                logger.warning(f"WebSocket authentication failed: {str(auth_err)}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+                
+            # Validate project access if project_id is provided
             if project_id:
-                prj = await validate_project_access(project_id, user, db)
-                if not prj:
-                    logger.error(f"Project validation failed for {project_id}")
+                try:
+                    project = await validate_project_access(project_id, user, db)
+                    if not project:
+                        logger.error(f"Project {project_id} not found or not accessible")
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                except HTTPException as e:
+                    logger.error(f"WebSocket conversation authorization failed: {e.detail}")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                additional_filters = [Conversation.project_id == project_id]
-            else:
-                # Must belong to user and be standalone
-                additional_filters = [
-                    Conversation.project_id.is_(None),
-                    Conversation.user_id == user.id,
-                    Conversation.is_deleted.is_(False),
-                ]
-
-            logger.info(
-                f"Validating conversation {conversation_id} with filters: {additional_filters}"
-            )
-
-            # Validate conversation
+                    
+            # Validate conversation access
             try:
-                conversation = await validate_resource_access(
-                    conversation_id,
-                    Conversation,
-                    user,
-                    db,
-                    "Conversation",
-                    additional_filters=additional_filters,
-                )
-            except HTTPException as e:
-                logger.error(f"WebSocket conversation authorization failed: {e.detail}")
+                conversation = await db.get(Conversation, conversation_id)
+                if not conversation or conversation.user_id != user.id:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            except Exception as e:
+                logger.error(f"Failed to get conversation: {str(e)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-
-            # Further check project alignment
-            if project_id and conversation.project_id != project_id:
-                logger.error(
-                    f"Conversation project mismatch. URL:{project_id} vs Conv:{conversation.project_id}"
-                )
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            # Connect to manager
+                
+            # Accept WebSocket
+            await websocket.accept()
+            
+            # Register connection with manager
             connection_id = await manager.connect_with_state(
                 websocket,
-                conversation_id=str(conversation_id),
-                db=db,
-                user_id=str(user.id),
-                state="connecting",
+                str(conversation_id),
+                db,
+                str(user.id)
             )
-            await manager.update_connection_state(connection_id, "connected")
-
-            # Heartbeat to keep connection alive
-            async def heartbeat():
+            
+            # Setup heartbeat/ping handler
+            async def handle_heartbeat():
                 while True:
-                    await asyncio.sleep(25)
+                    await asyncio.sleep(30)  # 30-second ping interval
                     try:
-                        await websocket.send_json({"type": "pong"})
+                        await websocket.send_json({"type": "ping"})
                     except Exception:
-                        break
-
-            heartbeat_task = asyncio.create_task(heartbeat())
-
-            # Send connected status
+                        break  # Exit the heartbeat loop if sending fails
+                        
+            # Start heartbeat task
+            heartbeat_task = asyncio.create_task(handle_heartbeat())
+            
+            # Send connected confirmation
             await manager.send_personal_message(
                 {
-                    "type": "connected",
+                    "type": "status",
                     "message": "WebSocket established",
-                    "conversation_id": str(conversation_id),
+                    "userId": str(user.id)
                 },
                 websocket,
             )
-
-            # Main receive loop
+            
+            # Main message processing loop
             while True:
                 raw_data = await websocket.receive_text()
                 try:
-                    data_dict = json.loads(raw_data)
-                    if "content" not in data_dict:
-                        raise ValueError("Missing 'content' in message")
-
-                    if data_dict.get("type") == "token_refresh" and data_dict.get(
-                        "token"
-                    ):
-                        # token refresh scenario
-                        try:
-                            new_token = data_dict["token"]
-                            user = await get_user_from_token(new_token, db, "access")
-                            if user is None or not user.is_active:
-                                raise ValueError("Invalid or inactive user token")
-                            await manager.send_personal_message(
-                                {
-                                    "type": "token_refresh_success",
-                                    "message": "Token refreshed successfully",
-                                },
-                                websocket,
-                            )
-                            continue
-                        except Exception as token_err:
-                            await manager.send_personal_message(
-                                {
-                                    "type": "error",
-                                    "message": f"Token refresh failed: {token_err}",
-                                },
-                                websocket,
-                            )
-                            continue
-
-                except (json.JSONDecodeError, ValueError) as e:
+                    data = json.loads(raw_data)
+                    
+                    # Handle ping/pong for heartbeat
+                    if data.get("type") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                        continue
+                        
+                    # Handle token refresh
+                    if data.get("type") == "token_refresh":
+                        await manager.send_personal_message(
+                            {"type": "token_refresh_success"},
+                            websocket,
+                        )
+                        continue
+                    
+                    # Handle user message
+                    if data.get("type") == "message":
+                        # Get conversation service
+                        conv_service = ConversationService(db)
+                        
+                        # Process message
+                        response_data = await conv_service.handle_ws_message(
+                            websocket=websocket,
+                            conversation_id=conversation_id,
+                            user_id=user.id,
+                            message_data=data,
+                            project_id=project_id
+                        )
+                        
+                        # Send response back to client
+                        await manager.send_personal_message(
+                            response_data, websocket
+                        )
+                        continue
+                        
+                except json.JSONDecodeError as e:
                     await manager.send_personal_message(
                         {"type": "error", "message": str(e)}, websocket
                     )
-                    continue
-
-                # Create message
-                role = data_dict.get("role", "user")
-                message_id = data_dict.get("messageId")
-                msg = await create_user_message(
-                    conversation_id=conversation.id,
-                    content=data_dict["content"],
-                    role=role,
-                    db=db,
-                )
-
-                # Acknowledge receipt
-                if message_id:
-                    await manager.send_personal_message(
-                        {
-                            "type": "message_received",
-                            "messageId": message_id,
-                            "message": "Message stored",
-                        },
-                        websocket,
-                    )
-
-                # If user message => generate AI response
-                if msg.role == "user":
-                    try:
-                        msg_dicts = await get_conversation_messages(
-                            conversation.id, db, include_system_prompt=True
-                        )
-                        kb_context = []
-                        if conversation.use_knowledge_base:
-                            kb_context = await augment_with_knowledge(
-                                conversation_id=conversation.id,
-                                user_message=msg.content,
-                                db=db,
-                            )
-                        assistant_msg = await generate_ai_response(
-                            conversation_id=conversation.id,
-                            messages=kb_context + msg_dicts,
-                            model_id=conversation.model_id,
-                            image_data=data_dict.get("image_data"),
-                            vision_detail=data_dict.get("vision_detail", "auto"),
-                            enable_thinking=data_dict.get("enable_thinking", False),
-                            thinking_budget=data_dict.get("thinking_budget"),
-                            db=db,
-                        )
-
-                        if assistant_msg:
-                            metadata = (
-                                assistant_msg.get_metadata_dict()
-                                if hasattr(assistant_msg, "get_metadata_dict")
-                                else {}
-                            )
-                            response_data = {
-                                "type": "message",
-                                "role": "assistant",
-                                "content": assistant_msg.content,
-                                "message": assistant_msg.content,
-                                "timestamp": assistant_msg.created_at.isoformat(),
-                            }
-                            if metadata:
-                                response_data["metadata"] = metadata
-                                if "thinking" in metadata:
-                                    response_data["thinking"] = metadata["thinking"]
-                                if "redacted_thinking" in metadata:
-                                    response_data["redacted_thinking"] = metadata[
-                                        "redacted_thinking"
-                                    ]
-
-                            if message_id:
-                                response_data["messageId"] = message_id
-
-                            await manager.send_personal_message(
-                                response_data, websocket
-                            )
-                            # Update usage
-                            token_estimate = len(assistant_msg.content) // 4
-                            await update_project_token_usage(
-                                conversation, token_estimate, db
-                            )
-                        else:
-                            await manager.send_personal_message(
-                                {
-                                    "type": "error",
-                                    "messageId": message_id,
-                                    "message": "Failed to generate AI response",
-                                },
-                                websocket,
-                            )
-
-                    except Exception as e:
-                        logger.error(f"Error with AI response: {e}")
-                        await manager.send_personal_message(
-                            {
-                                "type": "error",
-                                "messageId": message_id,
-                                "message": str(e),
-                            },
-                            websocket,
-                        )
-
+                    
         except (WebSocketDisconnect, asyncio.CancelledError):
             logger.info(
                 f"WebSocket disconnected for user {user.id if user else 'unknown'}, conversation {conversation_id}"
             )
+        except Exception as e:
+            logger.exception(f"WebSocket error: {str(e)}")
         finally:
-            if heartbeat_task and not heartbeat_task.done():
+            # Clean up
+            if heartbeat_task:
                 heartbeat_task.cancel()
-                try:
-                    await heartbeat_task
-                except asyncio.CancelledError:
-                    pass
             await manager.disconnect(websocket)
-            await db.close()

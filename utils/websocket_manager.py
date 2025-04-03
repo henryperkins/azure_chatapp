@@ -96,7 +96,8 @@ class ConnectionManager:
             
         except Exception as e:
             logger.error(f"WebSocket connection error: {str(e)}")
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            if not self._is_connection_closed(websocket):
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
             raise WebSocketException(
                 code=status.WS_1011_INTERNAL_ERROR,
                 reason=str(e)
