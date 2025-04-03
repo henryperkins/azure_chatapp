@@ -177,11 +177,12 @@ async def login_user(
         if locked_user:
             locked_user.last_login = datetime.utcnow()
             
-            # Atomic token version update
-            if locked_user.token_version is None:
-                locked_user.token_version = int(datetime.utcnow().timestamp())
-            else:
+            # Atomic token version update with fresh timestamp
+            current_timestamp = int(datetime.utcnow().timestamp())
+            if locked_user.token_version:
                 locked_user.token_version += 1
+            else:
+                locked_user.token_version = current_timestamp
         
         token_id = str(uuid.uuid4())
         expire = datetime.utcnow() + timedelta(
@@ -347,19 +348,19 @@ async def logout_user(
     session.add(blacklisted_token)
     
     # Increment token version to invalidate all existing tokens for this user
-    async with session.begin_nested():
-        # Get user with lock to prevent concurrent updates
-        locked_user = await session.get(
-            User, 
-            user.id,
-            with_for_update=True
-        )
-        
-        # Increment token version
-        if locked_user:
-            locked_user.token_version = locked_user.token_version + 1 if locked_user.token_version else int(datetime.utcnow().timestamp())
-    
-    await session.commit()
+    try:
+        async with session.begin_nested():
+            # Get fresh timestamp for version increment
+            current_timestamp = int(datetime.utcnow().timestamp())
+            # Use direct UPDATE to prevent race conditions
+            await session.execute(
+                text("UPDATE users SET token_version = coalesce(token_version, :ts) + 1 WHERE id = :uid"),
+                {"uid": user.id, "ts": current_timestamp}
+            )
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to update token version during logout: {e}")
+        raise HTTPException(status_code=500, detail="Failed to invalidate session")
     
     # Also add to in-memory blacklist for immediate effect
     revoke_token_id(token_id)
