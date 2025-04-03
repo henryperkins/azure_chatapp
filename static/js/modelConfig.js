@@ -394,115 +394,62 @@ function setupVisionFileInput() {
  * Save changes to localStorage and (optionally) to a global object
  */
 function persistSettings() {
-  // Ensure all elements exist before saving
-  const elements = {
-    model: document.getElementById('modelSelect'),
-    maxTokens: document.getElementById('maxTokensInput') || document.getElementById('maxTokensSlider'),
-    vision: document.getElementById('visionToggle'),
-    reasoning: document.getElementById('reasoningEffortRange')
-  };
+  // Use a mutex lock to prevent race conditions
+  if (window._persistSettingsLock) return;
+  window._persistSettingsLock = true;
 
-  window.MODEL_CONFIG = window.MODEL_CONFIG || {};
+  try {
+    const elements = {
+      model: document.getElementById('modelSelect'),
+      maxTokens: document.getElementById('maxTokensInput') || 
+                document.getElementById('maxTokensSlider'),
+      vision: document.getElementById('visionToggle'),
+      reasoning: document.getElementById('reasoningEffortRange'),
+      extendedThinking: document.getElementById('extendedThinking'),
+      thinkingBudget: document.getElementById('thinkingBudget')
+    };
 
-  if (elements.model) {
-    localStorage.setItem("modelName", elements.model.value);
-    window.MODEL_CONFIG.modelName = elements.model.value;
-  }
-
-  if (elements.maxTokens) {
-    const value = Math.max(100, Math.min(100000, elements.maxTokens.value));
-    localStorage.setItem("maxTokens", value);
-    window.MODEL_CONFIG.maxTokens = value;
-  }
-
-  if (elements.vision) {
-    localStorage.setItem("visionEnabled", elements.vision.checked);
-    window.MODEL_CONFIG.visionEnabled = elements.vision.checked;
-  }
-
-  if (elements.reasoning) {
-    let effort = '';
-    if (elements.reasoning.value === '1') effort = 'low';
-    else if (elements.reasoning.value === '2') effort = 'medium';
-    else effort = 'high';
-    localStorage.setItem("reasoningEffort", effort);
-    window.MODEL_CONFIG.reasoningEffort = effort;
-  }
-   
-  // Reasoning effort
-  const reasoningEffortRange = document.getElementById("reasoningEffortRange");
-  if (reasoningEffortRange) {
-    let effort = '';
-    if (reasoningEffortRange.value === '1') effort = 'low';
-    else if (reasoningEffortRange.value === '2') effort = 'medium';
-    else effort = 'high';
-
-    localStorage.setItem("reasoningEffort", effort);
+    // Initialize config object if needed
     window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.reasoningEffort = effort;
-  }
 
-  // Vision toggle
-  const visionToggle = document.getElementById("visionToggle");
-  if (visionToggle) {
-    localStorage.setItem("visionEnabled", String(visionToggle.checked));
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.visionEnabled = visionToggle.checked;
-  }
-  
-  // Extended thinking toggle
-  const extendedThinkingToggle = document.getElementById("extendedThinking");
-  if (extendedThinkingToggle) {
-    localStorage.setItem("extendedThinking", String(extendedThinkingToggle.checked));
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.extendedThinking = extendedThinkingToggle.checked;
-  }
-  
-  // Thinking budget
-  const thinkingBudgetSelect = document.getElementById("thinkingBudget");
-  if (thinkingBudgetSelect) {
-    localStorage.setItem("thinkingBudget", thinkingBudgetSelect.value);
-    window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-    window.MODEL_CONFIG.thinkingBudget = Number(thinkingBudgetSelect.value);
-  }
+    // Validate all elements exist before saving
+    Object.entries(elements).forEach(([key, el]) => {
+      if (el && el.value !== undefined) {
+        const storageKey = key === 'maxTokens' ? 'maxTokens' : `${key}Name`;
+        const value = key === 'maxTokens' ? 
+          Math.max(100, Math.min(100000, el.value)) : 
+          (el.type === 'checkbox' ? el.checked : el.value);
+        
+        localStorage.setItem(storageKey, value);
+        window.MODEL_CONFIG[storageKey] = value;
+      }
+    });
 
-  // Load custom instructions if available
-  const globalCustomInstructions = localStorage.getItem("globalCustomInstructions");
-  if (globalCustomInstructions) {
-    window.MODEL_CONFIG.customInstructions = globalCustomInstructions;
-  }
-
-  // If there's a selected project, check for project instructions
-  const selectedProjectId = localStorage.getItem("selectedProjectId");
-  if (selectedProjectId) {
-    const projectInstructions = localStorage.getItem(`project_${selectedProjectId}_instructions`);
-    if (projectInstructions) {
-      window.MODEL_CONFIG.projectInstructions = projectInstructions;
+    // Handle special cases
+    if (elements.reasoning) {
+      let effort = '';
+      if (elements.reasoning.value === '1') effort = 'low';
+      else if (elements.reasoning.value === '2') effort = 'medium';
+      else effort = 'high';
+      localStorage.setItem("reasoningEffort", effort);
+      window.MODEL_CONFIG.reasoningEffort = effort;
     }
-  }
 
-  updateModelConfigDisplay();
-  
-  // Include all relevant model config in the event detail
-  const modelConfigData = {
-    modelName: localStorage.getItem('modelName'),
-    maxTokens: localStorage.getItem('maxTokens'),
-    visionEnabled: localStorage.getItem('visionEnabled'),
-    visionDetail: localStorage.getItem('visionDetail'),
-    extendedThinking: localStorage.getItem('extendedThinking'),
-    thinkingBudget: localStorage.getItem('thinkingBudget'),
-    reasoningEffort: localStorage.getItem('reasoningEffort'),
-    customInstructions: localStorage.getItem('globalCustomInstructions'),
-    timestamp: Date.now() // Add timestamp to ensure listeners detect the change
-  };
-  
-  // Dispatch config change event
-  const event = new CustomEvent('modelConfigChanged', {
-    detail: modelConfigData
-  });
-  document.dispatchEvent(event);
-  
-  console.log("Model config persisted and event dispatched:", modelConfigData);
+    // Load any custom instructions
+    const globalCustomInstructions = localStorage.getItem("globalCustomInstructions");
+    if (globalCustomInstructions) {
+      window.MODEL_CONFIG.customInstructions = globalCustomInstructions;
+    }
+
+    updateModelConfigDisplay();
+    
+    // Dispatch event after all storage is updated
+    document.dispatchEvent(new CustomEvent('modelConfigChanged', {
+      detail: { ...window.MODEL_CONFIG, timestamp: Date.now() }
+    }));
+  } finally {
+    window._persistSettingsLock = false;
+  }
 }
 
 /**
