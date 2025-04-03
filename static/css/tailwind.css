@@ -421,9 +421,27 @@
 #mainSidebar {
     @apply transform transition-transform duration-300 ease-out will-change-transform;
     transform: translateX(-100%);
-    z-index: 100; /* Lower than backdrop */
-    transition-property: transform, opacity;
-    backface-visibility: hidden;
+    z-index: 100; /* Lower than backdrop when closed */
+}
+
+#mainSidebar.translate-x-0 {
+    transform: translateX(0);
+    z-index: 110; /* Higher than backdrop when open */
+}
+
+#sidebarBackdrop {
+  @apply md:hidden;
+}
+
+/* Ensure mobile viewport click-through when hidden */
+#sidebarBackdrop[aria-hidden="true"] {
+  pointer-events: none;
+  opacity: 0;
+}
+
+#sidebarBackdrop[aria-hidden="false"] {
+  pointer-events: auto;
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion) {
