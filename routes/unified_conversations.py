@@ -584,12 +584,8 @@ async def create_message(
                     db=db,
                 )
             except HTTPException as e:
-                await websocket.send_json({
-                    "type": "error",
-                    "code": e.status_code,
-                    "message": e.detail
-                })
-                continue
+                response_payload["assistant_error"] = e.detail
+                return await create_standard_response(response_payload, success=False, status_code=e.status_code)
 
             if assistant_msg:
                 metadata = (
