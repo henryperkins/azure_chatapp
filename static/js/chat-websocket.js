@@ -121,6 +121,15 @@
       return activeInstances.get(this);
     }
     activeInstances.set(this, this);
+    
+    // Track project context
+    this.activeProjectId = localStorage.getItem('selectedProjectId') || null;
+    
+    // Update on project selection events
+    document.addEventListener('projectSelected', (event) => {
+      this.activeProjectId = event.detail?.projectId || null;
+      localStorage.setItem('selectedProjectId', this.activeProjectId);
+    });
   // Configuration
   this.maxRetries = options.maxRetries || 3;
   this.reconnectInterval = options.reconnectInterval || 3000;
