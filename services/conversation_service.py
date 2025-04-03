@@ -32,7 +32,7 @@ def handle_service_errors(error_message="Service operation failed"):
                 return await func(*args, **kwargs)
             except Exception as e:
                 logger.error(f"{error_message}: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"{error_message}: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"{error_message}: {str(e)}") from e
         return wrapper
     return decorator
 
@@ -58,7 +58,7 @@ async def get_conversation_context(
         conversation_id=conversation_id,
         user_message=user_message,
         db=db,
-        max_context_tokens=max_tokens
+        max_context_tokens=max_tokens if max_tokens is not None else 2000
     )
 
 async def validate_model(model_id: str):
@@ -119,6 +119,11 @@ async def create_conversation(
             conv.knowledge_base_id = None
         
         saved_conv = await save_model(db, conv)
+        if saved_conv is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to save conversation"
+            )
         return saved_conv
         
     except Exception as e:
