@@ -8,7 +8,18 @@ background cleanup operations, and other database maintenance functions.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Callable, Awaitable, Any, List, Type, Optional, TypeVar, Union, Protocol
+from typing import (
+    Callable,
+    Awaitable,
+    Any,
+    List,
+    Type,
+    Optional,
+    TypeVar,
+    Union,
+    Protocol,
+    Sequence,
+)
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -144,21 +155,21 @@ async def get_all_by_condition(
         List of model instances matching the conditions
     """
     query = select(model_class)
-    
+
     # Apply all where conditions
     for condition in where_clauses:
         query = query.where(condition)
-    
+
     # Apply ordering if specified
     if order_by is not None:
         query = query.order_by(order_by)
-    
+
     # Apply pagination if specified
     if offset is not None:
         query = query.offset(offset)
     if limit is not None:
         query = query.limit(limit)
-    
+
     try:
         result = await db.execute(query)
         return list(result.scalars().all())
@@ -172,7 +183,7 @@ async def validate_resource_access(
     user: User,
     db: AsyncSession,
     resource_name: str = "Resource",
-    additional_filters: Optional[List[BinaryExpression]] = None,
+    additional_filters: Optional[Sequence[BinaryExpression[Any]]] = None,
 ) -> T:
     """
     Generic method for validating access to any resource.
@@ -196,28 +207,29 @@ async def validate_resource_access(
         model_class.id == resource_id,
         model_class.user_id == user.id,
     )
-    
+
     # Apply additional filters if specified
     if additional_filters:
         for condition in additional_filters:
             query = query.where(condition)
-    
+
     # Execute query
     result = await db.execute(query)
     resource = result.scalars().first()
-    
+
     # Handle not found case
     if not resource:
         raise HTTPException(
             status_code=404, 
             detail=f"{resource_name} not found or you don't have access to it"
         )
-    
+
     # Check if the resource is archived (if applicable)
     if hasattr(resource, 'archived') and resource.archived:
         raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
-    
+
     return resource
+
 
 async def get_by_id(
     db: AsyncSession,

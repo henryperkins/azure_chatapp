@@ -7,8 +7,11 @@ by using optional project_id in the same set of handlers.
 
 import json
 import logging
+import asyncio
 from typing import Optional, Sequence, cast
 from uuid import UUID
+from sqlalchemy.sql.expression import BinaryExpression
+from db import AsyncSessionLocal
 
 from fastapi import (
     APIRouter,
@@ -21,7 +24,6 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.expression import BinaryExpression
 
 # Import from your existing modules
 from models.user import User
@@ -131,7 +133,7 @@ async def create_conversation(
 
     # Create via service layer
     conv = await conversation_service.create_conversation(
-        project_id=project.id if project else None,
+        project_id=cast(UUID, project.id) if project else None,
         user_id=current_user.id,
         title=conversation_data.title.strip(),
         model_id=model_id,
@@ -211,13 +213,13 @@ async def get_conversation(
     # Build additional filters depending on whether it's standalone or project-based
     if project:
         additional_filters: Sequence[BinaryExpression[bool]] = [
-            Conversation.project_id == project.id,
-            Conversation.is_deleted.is_(False),
+            cast(BinaryExpression[bool], Conversation.project_id == project.id),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
     else:
         additional_filters: Sequence[BinaryExpression[bool]] = [
-            Conversation.project_id.is_(None),
-            Conversation.is_deleted.is_(False),
+            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
 
     conversation = await validate_resource_access(
@@ -255,13 +257,13 @@ async def update_conversation(
 
     if project:
         additional_filters: Sequence[BinaryExpression[bool]] = [
-            Conversation.project_id == project.id,
-            Conversation.is_deleted.is_(False),
+            cast(BinaryExpression[bool], Conversation.project_id == project.id),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
     else:
         additional_filters: Sequence[BinaryExpression[bool]] = [
-            Conversation.project_id.is_(None),
-            Conversation.is_deleted.is_(False),
+            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
 
     conversation = await validate_resource_access(
@@ -304,8 +306,8 @@ async def restore_conversation(
     (Standalone restore logic is optional; omit if you don't need it.)
     """
     additional_filters: Sequence[BinaryExpression[bool]] = [
-        Conversation.project_id == project_id,
-        Conversation.is_deleted.is_(True),
+        cast(BinaryExpression[bool], Conversation.project_id == project_id),
+        cast(BinaryExpression[bool], Conversation.is_deleted.is_(True)),
     ]
     conversation = await validate_resource_access(
         conversation_id,
@@ -397,14 +399,14 @@ async def list_conversation_messages(
     Retrieve messages from a conversation.
     """
     if project_id:
-        additional_filters: Sequence[BinaryExpression] = [
-            Conversation.project_id == project_id,
-            Conversation.is_deleted.is_(False),
+        additional_filters: Sequence[BinaryExpression[bool]] = [
+            cast(BinaryExpression[bool], Conversation.project_id == project_id),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
     else:
-        additional_filters: Sequence[BinaryExpression] = [
-            Conversation.project_id.is_(None),
-            Conversation.is_deleted.is_(False),
+        additional_filters: Sequence[BinaryExpression[bool]] = [
+            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
+            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
 
     conversation = await validate_resource_access(
@@ -464,21 +466,25 @@ async def create_message(
     # Validate project scope
     if project_id:
         # Validate project ownership
-        additional_filters_project: Sequence[BinaryExpression[bool]] = [  # type: ignore[type-arg]
-            Project.user_id == current_user.id,
-            Project.archived.is_(False),
+        additional_filters_project: Sequence[BinaryExpression[bool]] = [
+            cast(BinaryExpression[bool], Project.user_id == current_user.id),
+            cast(BinaryExpression[bool], Project.archived.is_(False)),
         ]
         await validate_resource_access(
-            project_id, Project, current_user, db, "Project", additional_filters_project
+            project_id,
+            Project,
+            current_user,
+            db,
+            "Project",
+            additional_filters_project
         )
 
-        additional_filters_conv: Sequence[BinaryExpression] = [
+        additional_filters = [
             Conversation.project_id == project_id,
             Conversation.is_deleted.is_(False),
         ]
     else:
-        # Standalone
-        additional_filters_conv: Sequence[BinaryExpression] = [
+        additional_filters = [
             Conversation.project_id.is_(None),
             Conversation.is_deleted.is_(False),
         ]
@@ -489,7 +495,7 @@ async def create_message(
         current_user,
         db,
         "Conversation",
-        additional_filters_conv,
+        additional_filters,
     )
 
     # Validate image data if present
@@ -584,18 +590,15 @@ async def websocket_chat_endpoint(
     conversation_id: UUID,
     project_id: Optional[UUID] = None,
     token: str = Query(None),
-    chatId: str = Query(None),  # Kept for backward compatibility
 ):
     """
     Real-time chat updates for either standalone or project-based conversations.
     """
-    from db import AsyncSessionLocal
-    import asyncio
+    # Initialize websocket variables (just once)
+    user = None
+    heartbeat_task = None
 
     async with AsyncSessionLocal() as db:
-        user = None
-        heartbeat_task: Optional[asyncio.Task] = None
-
         try:
             user_token = token or extract_token(websocket)
             if not user_token:
@@ -613,13 +616,13 @@ async def websocket_chat_endpoint(
                 if not project:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                additional_filters: Sequence[BinaryExpression] = [
+                additional_filters: Sequence[BinaryExpression[Any]] = [
                     Conversation.project_id == project.id,
                     Conversation.is_deleted.is_(False),
                 ]
             else:
                 # standalone
-                additional_filters: Sequence[BinaryExpression] = [
+                additional_filters: Sequence[BinaryExpression[Any]] = [
                     Conversation.project_id.is_(None),
                     Conversation.is_deleted.is_(False),
                 ]
@@ -766,7 +769,7 @@ async def websocket_chat_endpoint(
                                 "timestamp": assistant_msg.created_at.isoformat(),
                             }
                             if metadata:
-                                response_data["metadata"] = metadata
+                                response_data["metadata"] = metadata  # type: ignore
                                 if "thinking" in metadata:
                                     response_data["thinking"] = metadata["thinking"]
                                 if "redacted_thinking" in metadata:
