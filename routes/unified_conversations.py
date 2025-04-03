@@ -31,7 +31,8 @@ from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
 
-from services import project_service, conversation_service
+from services.project_service import validate_project_access
+from services import get_conversation_service
 from services.context_integration import augment_with_knowledge
 from db import get_async_session
 from utils.auth_utils import (
@@ -116,6 +117,7 @@ async def create_conversation(
     project_id: Optional[UUID] = None,  # type: ignore[type-var]
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
+    conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
     Creates a new conversation.
@@ -132,12 +134,11 @@ async def create_conversation(
         model_id = "claude-3-sonnet-20240229"  # Example fallback for standalone
 
     # Create via service layer
-    conv = await conversation_service.create_conversation(
-        project_id=cast(UUID, project.id) if project else None,
+    conv = await conv_service.create_conversation(
         user_id=current_user.id,
         title=conversation_data.title.strip(),
         model_id=model_id,
-        db=db,
+        project_id=project.id if project else None,
     )
 
     return await create_standard_response(
