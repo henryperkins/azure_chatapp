@@ -33,7 +33,8 @@ from routes.unified_conversations import router as unified_conversations_router
 from routes import unified_conversations  # for direct WebSocketRoute reference
 from auth import router as auth_router
 from routes.file_upload import router as file_upload_router
-from routes.projects import router as projects_router
+from routes.projects.projects import router as projects_router
+from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
 from routes.projects.artifacts import router as project_artifacts_router
@@ -225,6 +226,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
+app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(
     project_files_router,
     prefix="/api/projects/{project_id}/files",
