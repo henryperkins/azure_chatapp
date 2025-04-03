@@ -18,7 +18,6 @@ __all__ = [
     "VectorDB", "get_vector_db", "process_file_for_search",
     
     # Knowledge base
-    # Removed list_project_files, get_project_file, upload_file_to_project
     "delete_project_file", "get_project_files_stats", "search_project_context",
     "create_knowledge_base",
     
@@ -33,7 +32,7 @@ __all__ = [
     "validate_artifact_type",
     
     # Conversation
-    "validate_model", "get_conversation_service",
+    "validate_model", "get_conversation_service", "ConversationService",
     
     # User
     "get_user_by_username",
@@ -97,6 +96,7 @@ from .artifact_service import (
 from .conversation_service import (
     validate_model,
     get_conversation_service,
+    ConversationService,
 )
 
 # User services
