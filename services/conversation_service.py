@@ -94,8 +94,6 @@ class ConversationService:
         use_knowledge_base: bool = False,
     ) -> Conversation:
         """Create new conversation with validation."""
-        await self.validate_model(model_id)
-
         # Create base conversation object
         conv = Conversation(
             user_id=user_id,
