@@ -163,11 +163,6 @@
   position: absolute;
 }
 
-#mainSidebar {
-  z-index: var(--z-sidebar);
-  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-  will-change: transform;
-}
 
 #sidebarBackdrop {
   z-index: var(--z-sidebar);
@@ -481,141 +476,110 @@
   @apply bg-gray-800 text-gray-100;
 }
 
-/* Consolidated transition classes */
+/* Consolidated sidebar styles */
 #mainSidebar {
-    @apply transform transition-transform duration-300 ease-out will-change-transform;
-    transform: translateX(-100%);
-    z-index: 100; /* Lower than backdrop when closed */
-    touch-action: none; /* Let inner content handle scrolling */
-}
-
-#mainSidebar > * {
-    touch-action: auto; /* Re-enable for child elements */
-}
-
-#sidebarBackdrop {
-    touch-action: none;
-    overscroll-behavior: contain;
-}
-
-#mainSidebar.translate-x-0 {
-    transform: translateX(0);
-    z-index: 110; /* Higher than backdrop when open */
-}
-
-#sidebarBackdrop {
-  @apply md:hidden;
-}
-
-/* Ensure mobile viewport click-through when hidden */
-#sidebarBackdrop[aria-hidden="true"] {
-  pointer-events: none;
-  opacity: 0;
-}
-
-#sidebarBackdrop[aria-hidden="false"] {
-  pointer-events: auto;
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion) {
-    #mainSidebar {
-        transition: none;
-    }
-}
-
-#mainSidebar.translate-x-0 {
-    transform: translateX(0);
-}
-
-#sidebarBackdrop {
-    @apply z-[99] transition-opacity duration-300 ease-out;
-    will-change: opacity;
-}
-
-/* Motion reduction preference */
-@media (prefers-reduced-motion) {
-    #mainSidebar,
-    #sidebarBackdrop {
-        @apply transition-none;
-    }
-}
-
-/* Mobile-first styles */
-@media (max-width: 767px) {
-    #mainSidebar {
-        @apply fixed inset-y-0 left-0 w-full max-w-xs;
-    }
-}
-
-/* Desktop styles */
-@media (min-width: 768px) {
-    #mainSidebar {
-        @apply relative translate-x-0 transform-none;
-    }
-    
-    #sidebarBackdrop {
-        @apply hidden !important;
-    }
-}
-
-/* Improve spacing on mobile */
-@media (max-width: 640px) {
-  .container {
-    @apply px-4;
-  }
-  
-  .card {
-    @apply p-3;
-  }
-  
-  .btn-primary, .btn-secondary, .btn-outline, .btn-danger {
-    @apply px-3 py-1.5 text-sm;
-  }
-}
-
-/* Mobile sidebar styles */
-#mainSidebar {
+  @apply fixed md:relative inset-y-0 left-0 w-64 bg-white dark:bg-gray-800;
+  z-index: var(--z-sidebar);
   transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
 }
 
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  #mainSidebar {
+    transition: none;
+  }
+}
+
+/* Mobile-specific sidebar styles */
 @media (max-width: 767px) {
   #mainSidebar {
     width: 85% !important;
-    z-index: 1000 !important;
+    max-width: 320px;
+    transform: translateX(-100%);
+  }
+  
+  #mainSidebar.translate-x-0 {
+    transform: translateX(0);
   }
   
   #sidebarBackdrop {
-    z-index: 999 !important;
     backdrop-filter: blur(2px);
-  }
-  
-  #closeSidebarBtn {
-    display: block !important;
   }
 }
 
-/* Desktop behavior - always visible */
+/* Desktop behavior */
 @media (min-width: 768px) {
   #mainSidebar {
     transform: none !important;
   }
+  
+  #sidebarBackdrop {
+    @apply hidden !important;
+  }
 }
 
-/* Improve button tap targets */
-#navToggleBtn {
-  min-width: 48px;
-  min-height: 48px;
-  padding: 12px;
+/* Sidebar tab styling */
+.project-tab-btn {
+  @apply px-3 sm:px-4 py-2.5 font-medium text-sm border-b-2 border-transparent
+         transition-colors duration-200 focus:outline-none focus:ring-2
+         focus:ring-opacity-50 focus:ring-blue-500;
 }
 
+.project-tab-btn-active {
+  @apply border-blue-600 text-blue-600 dark:text-blue-400;
+}
+
+.project-tab-btn:not(.active) {
+  @apply text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300;
+}
+
+/* Collapsible panel styles */
+.collapsible-panel {
+  @apply transition-all duration-300 ease-in-out overflow-hidden;
+  will-change: max-height;
+}
+
+/* Sidebar backdrop styling */
+#sidebarBackdrop {
+  @apply fixed inset-0 bg-black/50 z-[99] md:hidden;
+  transition: opacity 0.3s ease-out;
+  will-change: opacity;
+}
+
+/* Body state when sidebar is open on mobile */
 body.sidebar-open {
-  overflow: hidden;
+  @apply overflow-hidden;
   position: fixed;
   width: 100%;
   height: 100%;
 }
 
+/* Pinned sidebar state */
+body.pinned-sidebar #mainSidebar {
+  @apply w-72 border-r border-gray-200 dark:border-gray-700;
+}
+
+/* Improved tap target size for buttons */
+#navToggleBtn, #closeSidebarBtn, #pinSidebarBtn {
+  min-width: 48px;
+  min-height: 48px;
+  @apply flex items-center justify-center;
+}
+
+/* Enhanced focus states for accessibility */
+.focus-visible-within:focus-within {
+  @apply ring-2 ring-blue-500 ring-opacity-70 outline-none;
+}
+
+/* Toggle checkbox styling for settings panels */
+.toggle-checkbox:checked {
+  @apply translate-x-full border-blue-500;
+}
+
+.toggle-checkbox:checked + .toggle-label {
+  @apply bg-blue-500;
+}
 @media (min-width: 1920px) {
   #mainSidebar {
     width: 20rem; /* 320px */
