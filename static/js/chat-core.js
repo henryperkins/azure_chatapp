@@ -33,31 +33,33 @@ function addMarkdownStyles() {
 function ensureModulesLoaded() {
   const requiredModules = [
     { name: 'ChatUtils', path: '/static/js/chat-utils.js' },
-    { name: 'WebSocketService', path: '/static/js/chat-websocket.js' },
-    { name: 'MessageService', path: '/static/js/chat-messages.js' },
     { name: 'ConversationService', path: '/static/js/chat-conversations.js' },
+    { name: 'MessageService', path: '/static/js/chat-messages.js' }, 
+    { name: 'WebSocketService', path: '/static/js/chat-websocket.js' },
     { name: 'UIComponents', path: '/static/js/chat-ui.js' },
     { name: 'ChatInterface', path: '/static/js/chat-interface.js' }
   ];
 
-  const missingModules = requiredModules.filter(mod => !window[mod.name]);
-
-  if (missingModules.length === 0) return Promise.resolve();
-
-  // Function to load a script
-  const loadScript = (path) => {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = path;
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
+  return requiredModules.reduce((promise, module) => {
+    return promise.then(() => {
+      if (!window[module.name]) {
+        console.log(`Loading ${module.name} from ${module.path}`);
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = module.path;
+          script.onload = () => {
+            console.log(`Loaded ${module.name}`);
+            resolve();
+          };
+          script.onerror = (err) => {
+            console.error(`Failed to load ${module.name}:`, err);
+            reject(new Error(`Failed to load ${module.path}`));
+          };
+          document.head.appendChild(script);
+        });
+      }
+      return Promise.resolve();
     });
-  };
-
-  // Load missing modules sequentially
-  return missingModules.reduce((promise, module) => {
-    return promise.then(() => loadScript(module.path));
   }, Promise.resolve());
 }
 
