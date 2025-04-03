@@ -253,7 +253,6 @@ function initModelConfig() {
   } catch (error) {
     console.error("Model config initialization failed:", error);
     throw error;
-  }
 }
 
 /**
