@@ -1114,29 +1114,63 @@
     </div>
   </div>
 
-  <!-- Main app script must load first -->
+  <!-- Core Configuration & Utilities -->
   <script type="module" src="/static/js/app.js"></script>
-
-  <!-- Core scripts as modules -->
   <script type="module" src="/static/js/auth.js"></script>
-  <script type="module" src="/static/js/chat-core.js"></script>
-  <script type="module" src="/static/js/chat-interface.js"></script>
+  <script type="module" src="/static/js/chat-utils.js"></script>
+
+  <!-- Chat Services (foundational) -->
   <script type="module" src="/static/js/chat-conversations.js"></script>
   <script type="module" src="/static/js/chat-messages.js"></script>
   <script type="module" src="/static/js/chat-websocket.js"></script>
+
+  <!-- UI Components -->
   <script type="module" src="/static/js/chat-ui.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
-  <script type="module" src="/static/js/chat-utils.js"></script>
 
-  <!-- Utility scripts -->
+  <!-- Chat Core (depends on above) -->
+  <script type="module" src="/static/js/chat-core.js"></script>
+  <script type="module" src="/static/js/chat-interface.js"></script>
+
+  <!-- Project Utilities -->
   <script src="/static/js/projectModal.js"></script>
   <script src="/static/js/knowledgeBaseState.js"></script>
   <script src="/static/js/projectDashboardUtils.js"></script>
 
-  <!-- Component scripts -->
+  <!-- UI Components -->
   <script src="/static/js/projectListComponent.js"></script>
   <script src="/static/js/sidebar.js"></script>
+
+  <!-- Error handling -->
+  <script>
+    window.handleScriptError = function(src, error) {
+      console.error(`Failed to load ${src}:`, error);
+      if (window.showNotification) {
+        window.showNotification('Failed to load required components', 'error');
+      }
+    };
+    
+    // Track script loading progress
+    document.addEventListener('DOMContentLoaded', function() {
+      const scripts = document.querySelectorAll('script[src]');
+      window.scriptLoading = {
+        loaded: 0,
+        total: scripts.length,
+        checkComplete: function() {
+          this.loaded++;
+          if (this.loaded === this.total && window.initializeAllModules) {
+            window.initializeAllModules();
+          }
+        }
+      };
+      
+      // Add error handlers to all scripts
+      scripts.forEach(script => {
+        script.onerror = () => handleScriptError(script.src, new Error('Load failed'));
+      });
+    });
+  </script>
 
   <!-- Authentication Integration Script -->
   <script>
