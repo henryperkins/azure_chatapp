@@ -87,6 +87,24 @@ class Project(Base):
     def __repr__(self):
         return f"<Project {self.name} (#{self.id}) user_id={self.user_id}>"
 
+    @hybrid_property
+    def token_status(self) -> bool:
+        usage = self.token_usage if self.token_usage is not None else 0
+        limit = self.max_tokens if self.max_tokens is not None else 200000
+        return usage <= limit
+
+    @token_status.expression
+    def token_status(cls):
+        return case(
+            [
+                (and_(
+                    cls.token_usage.is_not(None),
+                    cls.max_tokens.is_not(None)
+                ), cls.token_usage <= cls.max_tokens)
+            ],
+            else_=False
+        )
+
 @event.listens_for(Project.knowledge_base_id, 'set', retval=True)
 def validate_knowledge_base_assignment(target, value, oldvalue, initiator):
     if value and oldvalue and value != oldvalue:

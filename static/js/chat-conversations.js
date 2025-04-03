@@ -41,16 +41,16 @@ window.ConversationService = class ConversationService {
     this.onLoadingStart();
 
     try {
-      const projectId = localStorage.getItem("selectedProjectId");
+      const projectId = localStorage.getItem("selectedProjectId")?.trim();
+      
       let convUrl, msgUrl;
-
-      if (projectId) {
-        convUrl = `/ api / projects / ${ projectId } /conversations/${ chatId } `;
-        msgUrl = `/ api / projects / ${ projectId } /conversations/${ chatId }/messages`;
+      if (projectId && this._isValidUUID(projectId) && this._isValidUUID(chatId)) {
+        convUrl = `/api/projects/${projectId}/conversations/${chatId}`;
+        msgUrl = `/api/projects/${projectId}/conversations/${chatId}/messages`;
       } else {
-  convUrl = `/api/chat/conversations/${chatId}`;
-  msgUrl = `/api/chat/conversations/${chatId}/messages`;
-}
+        convUrl = `/api/chat/conversations/${chatId}`;
+        msgUrl = `/api/chat/conversations/${chatId}/messages`;
+      }
 
 const options = projectId ? { project_id: projectId } : {};
 
