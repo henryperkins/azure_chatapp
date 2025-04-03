@@ -141,7 +141,7 @@ class ConversationService:
         project_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[Dict]:
+    ) -> List[Conversation]:
         """List conversations with pagination."""
         filters = [
             Conversation.user_id == user_id,
@@ -153,7 +153,7 @@ class ConversationService:
         else:
             filters.append(Conversation.project_id.is_(None))
 
-        conversations = await get_all_by_condition(
+        return await get_all_by_condition(
             self.db,
             Conversation,
             *filters,
@@ -161,7 +161,6 @@ class ConversationService:
             limit=limit,
             offset=skip,
         )
-        return [serialize_conversation(c) for c in conversations]
 
     async def update_conversation(
         self,

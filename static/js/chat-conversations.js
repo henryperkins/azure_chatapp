@@ -45,17 +45,15 @@ window.ConversationService = class ConversationService {
       let convUrl, msgUrl;
 
       if (projectId) {
-        convUrl = `/ api / projects / ${ projectId } /conversations/${ chatId } `;
-        msgUrl = `/ api / projects / ${ projectId } /conversations/${ chatId }/messages`;
+        convUrl = `/api/chat/projects/${projectId}/conversations/${chatId}`;
+        msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
       } else {
   convUrl = `/api/chat/conversations/${chatId}`;
   msgUrl = `/api/chat/conversations/${chatId}/messages`;
 }
 
-const options = projectId ? { project_id: projectId } : {};
-
-const conversation = await apiRequest(convUrl, "GET", options);
-const messages = await apiRequest(msgUrl, "GET", options);
+const conversation = await apiRequest(convUrl, "GET");
+const messages = await apiRequest(msgUrl, "GET");
 
 this.currentConversation = {
   id: chatId,

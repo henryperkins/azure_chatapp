@@ -21,6 +21,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
     Query,
+    Request
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -219,6 +220,7 @@ async def list_conversations(
     "/projects/{project_id}/conversations/{conversation_id}", response_model=dict
 )
 async def get_conversation(
+    request: Request,
     conversation_id: UUID,
     project_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user_and_token),
@@ -243,16 +245,58 @@ async def get_conversation(
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
 
-    conversation = await validate_resource_access(
-        conversation_id,
-        Conversation,
-        current_user,
-        db,
-        "Conversation",
-        additional_filters,
+    # Log full request details for debugging
+    logger.info(
+        f"Conversation GET Request:\n"
+        f"- User: {current_user.id}\n"
+        f"- Project: {project_id}\n"
+        f"- Conversation: {conversation_id}\n"
+        f"- Headers: {json.dumps(dict(request.headers), indent=2)}"
     )
 
-    return await create_standard_response(serialize_conversation(conversation))
+    try:
+        # First verify project if specified
+        if project_id:
+            project = await db.get(Project, project_id)
+            logger.info(f"Project lookup result: {project}")
+            if not project or project.user_id != current_user.id or project.archived:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Project not found or inaccessible"
+                )
+
+        # Then verify conversation
+        conversation = await db.get(Conversation, conversation_id)
+        logger.info(f"Conversation lookup result: {conversation}")
+        
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if conversation.is_deleted:
+            raise HTTPException(status_code=404, detail="Conversation was deleted")
+        if project_id and str(conversation.project_id) != str(project_id):
+            raise HTTPException(
+                status_code=404,
+                detail="Conversation not in specified project"
+            )
+
+        logger.info("Conversation access granted")
+        return await create_standard_response(serialize_conversation(conversation))
+
+    except HTTPException as e:
+        logger.error(
+            f"Conversation access failed:\n"
+            f"- Error: {e.status_code} {e.detail}\n"
+            f"- Trace: {traceback.format_exc()}"
+        )
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
 
 
 # ------------------------------------------------------------------------------
@@ -484,21 +528,28 @@ async def create_message(
     # e.g.: new_msg: MessageCreate
     # Just ensure it has fields content, role, image_data, etc.
 
-    # Validate project scope
+    logger.debug(
+        f"Creating message in conversation {conversation_id} "
+        f"for project {project_id} (user: {current_user.id})"
+    )
+
+    # First validate project if specified
     if project_id:
-        # Validate project ownership
-        additional_filters_project: Sequence[BinaryExpression[bool]] = [
-            cast(BinaryExpression[bool], Project.user_id == current_user.id),
-            cast(BinaryExpression[bool], Project.archived.is_(False)),
-        ]
-        await validate_resource_access(
-            project_id,
-            Project,
-            current_user,
-            db,
-            "Project",
-            additional_filters_project
-        )
+        try:
+            project = await validate_resource_access(
+                project_id,
+                Project,
+                current_user,
+                db,
+                "Project",
+                additional_filters=[
+                    Project.archived.is_(False)
+                ]
+            )
+            logger.debug(f"Validated access to project {project_id}")
+        except HTTPException as e:
+            logger.error(f"Project validation failed: {e.detail}")
+            raise
 
         additional_filters = [
             Conversation.project_id == project_id,
@@ -510,14 +561,21 @@ async def create_message(
             Conversation.is_deleted.is_(False),
         ]
 
-    conversation = await validate_resource_access(
-        conversation_id,
-        Conversation,
-        current_user,
-        db,
-        "Conversation",
-        additional_filters,
-    )
+    # Validate conversation access
+    try:
+        conversation = await validate_resource_access(
+            conversation_id,
+            Conversation,
+            current_user,
+            db,
+            "Conversation",
+            additional_filters,
+            require_ownership=False  # Ownership checked via project
+        )
+        logger.debug(f"Validated access to conversation {conversation_id}")
+    except HTTPException as e:
+        logger.error(f"Conversation validation failed: {e.detail}")
+        raise
 
     # Validate image data if present
     if "image_data" in new_msg and new_msg["image_data"]:
@@ -615,21 +673,23 @@ async def websocket_chat_endpoint(
     """
     Real-time chat updates for either standalone or project-based conversations.
     """
-    # Initialize websocket variables (just once)
     user = None
     heartbeat_task = None
-
+    connection_id = None
+    
     async with AsyncSessionLocal() as db:
         try:
+            # Accept connection first to establish WebSocket
+            await websocket.accept()
+            
+            # Validate token and user
             user_token = token or extract_token(websocket)
             if not user_token:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
+                raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
 
             user = await get_user_from_token(user_token, db, "access")
             if not user or not user.is_active:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
+                raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
 
             # Validate conversation access based on project/standalone context
             if project_id:
@@ -669,12 +729,16 @@ async def websocket_chat_endpoint(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
-            # Connect
-            connection_success = await manager.connect(
-                websocket, str(conversation_id), str(user.id)
+            # Track connection state properly
+            connection_id = await manager.connect_with_state(
+                websocket, 
+                conversation_id=str(conversation_id),
+                user_id=str(user.id),
+                state="connecting"
             )
-            if not connection_success:
-                return
+            
+            # Finalize connection
+            await manager.update_connection_state(connection_id, "connected")
 
             async def heartbeat():
                 while True:
