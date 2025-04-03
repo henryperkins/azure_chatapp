@@ -33,7 +33,7 @@ __all__ = [
     "validate_artifact_type",
     
     # Conversation
-    "validate_model", "create_conversation", "list_project_conversations",
+    "validate_model", "get_conversation_service",
     
     # User
     "get_user_by_username",
@@ -96,8 +96,7 @@ from .artifact_service import (
 # Conversation services
 from .conversation_service import (
     validate_model,
-    create_conversation,
-    list_project_conversations,
+    get_conversation_service,
 )
 
 # User services

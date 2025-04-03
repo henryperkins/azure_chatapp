@@ -5,25 +5,35 @@ Enhanced service layer with full support for both project-based and standalone c
 """
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from uuid import UUID
 from datetime import datetime
 
-from fastapi import HTTPException, WebSocket
+from fastapi import Depends, HTTPException, WebSocket
+from db import get_async_session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_
 from sqlalchemy.orm import joinedload
 
 from models.conversation import Conversation
 from models.message import Message
 from models.project import Project
-from models.user import User
+from utils.ai_response import generate_ai_response
 from config import settings
 from services.context_integration import augment_with_knowledge
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
 
 logger = logging.getLogger(__name__)
+
+def validate_model(model_id: str) -> bool:
+    """Validate model against allowed configurations."""
+    if model_id not in settings.CLAUDE_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model ID. Allowed: {', '.join(settings.CLAUDE_MODELS)}"
+        )
+    return True
 
 class ConversationService:
     def __init__(self, db: AsyncSession):
@@ -71,13 +81,8 @@ class ConversationService:
         return project
 
     async def validate_model(self, model_id: str) -> bool:
-        """Validate model against allowed configurations."""
-        if model_id not in settings.ALLOWED_MODELS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid model ID. Allowed: {', '.join(settings.ALLOWED_MODELS)}"
-            )
-        return True
+        """Validate model against allowed configurations (instance method)."""
+        return validate_model(model_id)
 
     async def create_conversation(
         self,
@@ -364,7 +369,7 @@ class ConversationService:
         project_id: Optional[UUID] = None,
     ) -> Dict:
         """Process WebSocket message and return response."""
-        conv = await self._validate_conversation_access(
+        await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
 
