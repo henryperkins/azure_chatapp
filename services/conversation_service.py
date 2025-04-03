@@ -96,10 +96,7 @@ class ConversationService:
         """Create new conversation with validation."""
         await self.validate_model(model_id)
 
-        # Knowledge base only available for project conversations
-        if use_knowledge_base and not project_id:
-            use_knowledge_base = False
-
+        # Create base conversation object
         conv = Conversation(
             user_id=user_id,
             title=title.strip(),
@@ -108,17 +105,20 @@ class ConversationService:
             use_knowledge_base=use_knowledge_base
         )
 
-        # Validate knowledge base if enabled
-        if use_knowledge_base:
+        # Auto-enable knowledge base if project has one
+        if project_id:
             project = await self._validate_project_access(project_id, user_id)
-            conv.knowledge_base_id = project.knowledge_base_id
-            try:
-                if not await conv.validate_knowledge_base(self.db):
+            if project and project.knowledge_base_id:
+                conv.use_knowledge_base = True
+                conv.knowledge_base_id = project.knowledge_base_id
+                try:
+                    await conv.validate_knowledge_base(self.db)
+                except ValueError as e:
+                    logger.warning(f"Knowledge base validation failed: {str(e)}")
                     conv.use_knowledge_base = False
-                    logger.warning(f"Disabled KB for conversation {conv.id} - validation failed")
-            except Exception as e:
-                logger.error(f"KB validation error: {str(e)}")
-                conv.use_knowledge_base = False
+                except Exception as e:
+                    logger.error(f"KB validation error: {str(e)}")
+                    conv.use_knowledge_base = False
 
         await save_model(self.db, conv)
         return conv
