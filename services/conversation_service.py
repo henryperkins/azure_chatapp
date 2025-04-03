@@ -110,6 +110,12 @@ class ConversationService:
                 conv.use_knowledge_base = True
                 conv.knowledge_base_id = project.knowledge_base_id
                 try:
+                    if project.token_usage is None or project.max_tokens is None:
+                        raise ValueError("Project token limits not configured")
+                    
+                    if project.token_usage > project.max_tokens:
+                        raise ValueError("Project token limit exceeded")
+                    
                     await conv.validate_knowledge_base(self.db)
                 except ValueError as e:
                     logger.warning(f"Knowledge base validation failed: {str(e)}")
