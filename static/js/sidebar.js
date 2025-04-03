@@ -498,6 +498,25 @@ function setupSidebarTabs() {
     }
   }
   
+  // Determine if we're on the projects page
+  const isProjectsPage = window.location.pathname.includes('/projects') ||
+                        document.getElementById('projectManagerPanel');
+                        
+  // Check required tab buttons based on page
+  if (isProjectsPage) {
+    // On projects page, we only need the projects tab
+    if (!tabs.projects.button || !tabs.projects.content) {
+      console.warn('Projects tab elements not found in the DOM');
+      return;
+    }
+  } else {
+    // On chat page, check if at least the recent tab is available
+    if (!tabs.recent.button || !tabs.recent.content) {
+      console.warn('Recent tab elements not found in the DOM');
+      return;
+    }
+  }
+  
   // Determine active tab based on both page context and saved state
   const isProjectsPage = window.location.pathname.includes('/projects') || 
                         document.getElementById('projectManagerPanel');
