@@ -88,7 +88,7 @@ middleware = [
     Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts, www_redirect=False),
     Middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=["*"],  # Lock this down in production
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -59,9 +59,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-async def verify_token(token: str, expected_type: Optional[str] = None, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
+async def verify_token(token: str, expected_type: Optional[str] = None, db: Optional[AsyncSession] = None, request: Optional[Request] = None) -> Dict[str, Any]:
     """
-    Verify and decode a JWT token.
+    Verify and decode a JWT token with enhanced debugging.
+    """
+    # Add additional logging for debugging
+    if request:
+        logger.debug(f"Verifying token from source: {token[:10]}... (cookie: {'access_token' in request.cookies})")
 
     Args:
         token: JWT token to verify
@@ -201,26 +205,23 @@ async def load_revocation_list(db: AsyncSession) -> None:
 
 
 def extract_token(request_or_websocket):
-    """Extract token from HTTP request or WebSocket connection."""
-    token = None
-    
-    # For WebSockets, check query params first
-    if isinstance(request_or_websocket, WebSocket):
-        params = request_or_websocket.query_params
-        token = params.get("token")
+    """Extract token from HTTP request or WebSocket connection with proper priority"""
+    # First check cookies for ALL requests
+    if hasattr(request_or_websocket, "cookies"):
+        token = request_or_websocket.cookies.get("access_token")
         if token:
             return token
-        
-    # CHANGED ORDER - Check Authorization header first
+    
+    # Then check Authorization header
     auth_header = request_or_websocket.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header[7:]  # Remove "Bearer " prefix
+        return auth_header[7:]  # Remove "Bearer " prefix
     
-    # Then check cookies for regular requests
-    if not token and hasattr(request_or_websocket, "cookies"):
-        token = request_or_websocket.cookies.get("access_token")
+    # Finally check query params for WebSockets
+    if isinstance(request_or_websocket, WebSocket):
+        return request_or_websocket.query_params.get("token")
     
-    return token
+    return None
 
 
 async def get_user_from_token(

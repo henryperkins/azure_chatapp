@@ -340,15 +340,14 @@ async def logout_user(
 
 
 def set_secure_cookie(response, key, value, max_age=None):
-    """Set a secure cookie with consistent settings."""
+    """Set a secure cookie with development-friendly settings"""
     secure_cookie = settings.ENV == "production"
-    # Changed to lax for development to avoid cookie rejection
-    samesite_value = "lax" if not secure_cookie else "strict"
+    samesite_value = "lax"  # Changed to lax for development compatibility
     
-    # Development can't set Secure=True without HTTPS
+    # Allow insecure cookies in development for localhost
     secure_value = secure_cookie
-    if settings.ENV != "production" and os.getenv("ENABLE_INSECURE_COOKIES"):
-        secure_value = False
+    if settings.ENV != "production":
+        secure_value = False  # Permit cookies over HTTP
 
     cookie_params = {
         "key": key,
@@ -356,13 +355,9 @@ def set_secure_cookie(response, key, value, max_age=None):
         "httponly": True,
         "secure": secure_value,
         "samesite": samesite_value,
-        "path": "/"
+        "path": "/",
     }
     
-    # Add domain only in production
-    if settings.ENV == "production" and settings.COOKIE_DOMAIN:
-        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
-
     if max_age is not None:
         cookie_params["max_age"] = max_age
 
