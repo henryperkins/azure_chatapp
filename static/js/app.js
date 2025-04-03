@@ -113,10 +113,18 @@ document.addEventListener('authStateChanged', (e) => {
 // ---------------------------------------------------------------------
 // SINGLE FETCH WRAPPER (apiRequest)
 // ---------------------------------------------------------------------
-async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
-  const maxRetries = 2;
+function sanitizeUrl(url) {
+    // Remove extra spaces and normalize slashes
+    return url.replace(/\s+/g, '').replace(/\/+/g, '/');
+}
 
-  // If an auth check is in progress (to avoid collision with refresh), wait
+async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
+    const maxRetries = 2;
+
+    // Sanitize URL first
+    endpoint = sanitizeUrl(endpoint);
+
+    // If an auth check is in progress (to avoid collision with refresh), wait
   if (window.API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
     if (retryCount > 5) {
       console.warn('Too many auth check delays, proceeding with request anyway');

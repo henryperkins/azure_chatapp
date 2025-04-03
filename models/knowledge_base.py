@@ -14,8 +14,6 @@ from datetime import datetime
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
     __table_args__ = (
-        Index('ix_knowledge_bases_is_active', 'is_active'),
-        Index('ix_knowledge_bases_project_id', 'project_id'),
         Index('ix_knowledge_bases_embedding_model', 'embedding_model'),
     )
     
