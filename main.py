@@ -24,17 +24,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import inspect
+from starlette.routing import WebSocketRoute
 
-# ------------------------------------------------------------------------------
-# OLD conversation route imports removed:
-# from routes.conversations import router as conversations_router
-# from routes.projects.conversations import router as project_conversations_router
-# ------------------------------------------------------------------------------
-
-# Import your new unified conversations router
+# -------------------------
+# Import your routes
+# -------------------------
 from routes.unified_conversations import router as unified_conversations_router
-
-# Other router imports
+from routes import unified_conversations  # for direct WebSocketRoute reference
 from auth import router as auth_router
 from routes.file_upload import router as file_upload_router
 from routes.projects import router as projects_router
@@ -42,15 +38,17 @@ from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
 from routes.projects.artifacts import router as project_artifacts_router
 
-# Import database utilities
+# -------------------------
+# Import DB & Config
+# -------------------------
 from db import init_db, get_async_session_context, async_engine
+from config import settings
 
-# Import utility functions
+# -------------------------
+# Import Utility Functions
+# -------------------------
 from utils.auth_utils import load_revocation_list, clean_expired_tokens
 from utils.db_utils import schedule_token_cleanup
-
-# Import configuration
-from config import settings
 
 warnings.filterwarnings(
     "ignore", category=CryptographyDeprecationWarning, module="pypdf"
@@ -92,26 +90,26 @@ middleware = [
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["*"]
+        expose_headers=["*"],
     ),
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
         session_cookie="session",
-        same_site="lax",  # Modified from strict
-        https_only=settings.ENV == "production"
-    )
+        same_site="lax",  # changed from 'strict'
+        https_only=settings.ENV == "production",
+    ),
 ]
 
 app = FastAPI(
     middleware=middleware,
     title="Azure OpenAI Chat Application",
-    description="""
-A secure, robust, and intuitively designed web-based chat application 
-leveraging Azure OpenAI's o1-series models with advanced features 
-like context summarization, vision support (for 'o1'), JWT-based auth, 
-file uploads, and more.
-""",
+    description=(
+        "A secure, robust, and intuitively designed web-based chat application "
+        "leveraging Azure OpenAI's o1-series models with advanced features "
+        "like context summarization, vision support (for 'o1'), JWT-based auth, "
+        "file uploads, and more."
+    ),
     version="1.0.0",
     openapi_tags=[
         {
@@ -204,9 +202,9 @@ async def favicon():
     return FileResponse("static/favicon.ico")
 
 
-# --------------------------------
+# ---------------------------
 # CUSTOM 422 HANDLER
-# --------------------------------
+# ---------------------------
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
@@ -220,48 +218,63 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(status_code=422, content=content)
 
 
-# -------------------------
+# --------------------------------------------------
 # Register Routers
-# -------------------------
+# --------------------------------------------------
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
-
 app.include_router(
     project_files_router,
     prefix="/api/projects/{project_id}/files",
     tags=["project-files"],
 )
-
 app.include_router(
     project_artifacts_router,
     prefix="/api/projects/{project_id}/artifacts",
     tags=["project-artifacts"],
 )
 
-# -----------------------------
-# Unified Conversations Router
-# -----------------------------
+# Unified conversations router
 app.include_router(
     unified_conversations_router,
-    prefix="/api/chat",  # to match frontend expectations
+    prefix="/api/chat",  # new prefix
+    tags=["conversations"],
+)
+app.include_router(
+    unified_conversations_router,
+    prefix="/api",  # old prefix for compatibility
     tags=["conversations"],
 )
 
+# Manually add WebSocket routes with /api/chat prefix to match HTTP routes
+app.routes.extend([
+    WebSocketRoute(
+        "/api/chat/conversations/{conversation_id}/ws",
+        unified_conversations.websocket_chat_endpoint,
+        name="standalone_websocket_chat",
+    ),
+    WebSocketRoute(
+        "/api/chat/projects/{project_id}/conversations/{conversation_id}/ws",
+        unified_conversations.websocket_chat_endpoint,
+        name="project_websocket_chat",
+    )
+])
 
-# -------------------------
-# Startup & Shutdown Events
-# -------------------------
+
+# --------------------------------------------------
+# Startup & Shutdown
+# --------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
-    """Performs necessary startup tasks: database init, migrations, token cleanup."""
+    """Performs necessary startup tasks: DB init, migrations, token cleanup."""
     os.environ.pop("AZUREML_ENVIRONMENT_UPDATE", None)
     try:
-        # Initialize database with enhanced schema alignment
+        # 1. Initialize DB with migration checks
         await init_db()
 
-        # Validate schema using SQLAlchemy inspector
+        # 2. Validate schema with SQLAlchemy inspector
         async with async_engine.connect() as conn:
             inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
 
@@ -288,31 +301,30 @@ async def on_startup():
                 if missing:
                     raise RuntimeError(f"Missing columns in {table}: {missing}")
 
-        # Create secure uploads directory
+        # 3. Create secure uploads directory
         upload_path = Path("./uploads/project_files")
         upload_path.mkdir(parents=True, exist_ok=True)
-        upload_path.chmod(0o700)  # Restrictive permissions
+        upload_path.chmod(0o700)
 
-        # Initialize auth system
+        # 4. Initialize auth system
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
             await load_revocation_list(session)
             logger.info(f"Cleaned {deleted_count} expired tokens during startup")
 
-        # Schedule periodic token cleanup
+        # 5. Schedule periodic token cleanup
         await schedule_token_cleanup(interval_minutes=30)
 
-        logger.info(
-            "Startup completed: Database validated, uploads ready, auth initialized"
-        )
+        logger.info("Startup completed: DB validated, uploads ready, auth initialized")
+
     except Exception as e:
-        logger.critical("Startup initialization failed: %s", e)
+        logger.critical(f"Startup initialization failed: {e}")
         raise
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    """Performs cleanup tasks when the application is shutting down."""
+    """Perform cleanup tasks when the application shuts down."""
     logger.info("Application shutting down")
     try:
         async with get_async_session_context() as session:
