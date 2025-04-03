@@ -7,7 +7,8 @@ that can be attached to one or more conversations for context.
 from typing import List
 from sqlalchemy import String, Integer, Text, TIMESTAMP, text, ForeignKey, Boolean, CheckConstraint, Index, case, and_
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import relationship, Mapped, mapped_column, hybrid_property
+from sqlalchemy.ext.hybrid import hybrid_property  # Correct source
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime
