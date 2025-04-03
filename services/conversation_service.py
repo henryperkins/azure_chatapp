@@ -57,14 +57,22 @@ class ConversationService:
         
         if project_id is not None:
             filters.append(Conversation.project_id == project_id)
+            # Verify the conversation actually belongs to the project
+            result = await self.db.execute(
+                select(Conversation)
+                .where(and_(*filters))
+                .options(joinedload(Conversation.project))
+            )
+            conv = result.scalar_one_or_none()
+            
+            if not conv or str(conv.project_id) != str(project_id):
+                raise HTTPException(403, "Conversation not in specified project")
         else:
             filters.append(Conversation.project_id.is_(None))
-
-        result = await self.db.execute(
-            select(Conversation).where(and_(*filters))
-            .options(joinedload(Conversation.project))
-        )
-        conv = result.scalar_one_or_none()
+            result = await self.db.execute(
+                select(Conversation).where(and_(*filters))
+            )
+            conv = result.scalar_one_or_none()
         
         if not conv:
             raise HTTPException(
