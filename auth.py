@@ -342,21 +342,28 @@ async def logout_user(
 def set_secure_cookie(response, key, value, max_age=None):
     """Set a secure cookie with consistent settings."""
     secure_cookie = settings.ENV == "production"
-    samesite_value = "strict" if secure_cookie else "lax"
+    # Allow cross-site cookies in development
+    samesite_value = "none" if not secure_cookie else "strict"
     
+    # Development can't set Secure=True without HTTPS
+    secure_value = secure_cookie
+    if settings.ENV != "production" and os.getenv("ENABLE_INSECURE_COOKIES"):
+        secure_value = False
+
     cookie_params = {
         "key": key,
         "value": value,
         "httponly": True,
-        "secure": secure_cookie,
+        "secure": secure_value,
         "samesite": samesite_value,
         "path": "/"
     }
     
+    # Add domain only in production
+    if settings.ENV == "production" and settings.COOKIE_DOMAIN:
+        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
+
     if max_age is not None:
         cookie_params["max_age"] = max_age
-        
-    if settings.COOKIE_DOMAIN:
-        cookie_params["domain"] = settings.COOKIE_DOMAIN.strip()
-        
+
     response.set_cookie(**cookie_params)

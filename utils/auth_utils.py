@@ -202,34 +202,21 @@ def extract_token(request_or_websocket):
     """Extract token from HTTP request or WebSocket connection."""
     token = None
     
-    # Check if it's a WebSocket
-    is_websocket = hasattr(request_or_websocket, 'query_params') and not hasattr(request_or_websocket, 'cookies')
-    
     # For WebSockets, check query params first
-    if is_websocket:
-        token = request_or_websocket.query_params.get("token")
-        if not token:
-            # Fall back to cookies if no token in query
-            cookie_header = request_or_websocket.headers.get("cookie", "")
-            if cookie_header:
-                for cookie in cookie_header.split(";"):
-                    parts = cookie.strip().split("=", 1)
-                    if len(parts) == 2 and parts[0].strip() == "access_token":
-                        token = parts[1].strip()
-                        break
-    else:
-        # Regular request
+    if isinstance(request_or_websocket, WebSocket):
+        params = request_or_websocket.query_params
+        token = params.get("token")
+        if token:
+            return token
+        
+    # CHANGED ORDER - Check Authorization header first
+    auth_header = request_or_websocket.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # Remove "Bearer " prefix
+    
+    # Then check cookies for regular requests
+    if not token and hasattr(request_or_websocket, "cookies"):
         token = request_or_websocket.cookies.get("access_token")
-    
-    # Try authorization header if no token in cookies
-    if not token:
-        auth_header = request_or_websocket.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[7:]  # Remove "Bearer " prefix
-    
-    # Try query params for WebSocket
-    if not token and is_websocket:
-        token = request_or_websocket.query_params.get("token")
     
     return token
 

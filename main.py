@@ -87,24 +87,21 @@ allowed_hosts = (
 middleware = [
     Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts, www_redirect=False),
     Middleware(
-        SessionMiddleware,
-        secret_key=os.environ["SESSION_SECRET"],  # Enforced environment variable
-        session_cookie="session",
-        same_site="lax",
-        https_only=True if settings.ENV == "production" else False,
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"]
     ),
-]
-
-if settings.ENV != "production":
-    middleware.append(
-        Middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    Middleware(
+        SessionMiddleware,
+        secret_key=os.environ["SESSION_SECRET"],
+        session_cookie="session",
+        same_site="lax",  # Modified from strict
+        https_only=settings.ENV == "production"
     )
+]
 
 app = FastAPI(
     middleware=middleware,
