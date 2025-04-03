@@ -6,12 +6,11 @@ Handles connection state, message broadcasting, and connection cleanup.
 """
 import logging
 import json
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, Set, Any, Optional
 from collections import defaultdict
-from fastapi import WebSocket, status
+from fastapi import WebSocket, status, WebSocketException
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.user import User
-from utils.auth_utils import authenticate_websocket, get_user_from_token
+from utils.auth_utils import authenticate_websocket
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,14 @@ class ConnectionManager:
         """Return number of active connections."""
         return len(self._connections)
 
-    async def connect_with_state(self, websocket: WebSocket, conversation_id: str, db: AsyncSession) -> str:
+    async def connect_with_state(
+        self,
+        websocket: WebSocket,
+        conversation_id: str,
+        db: AsyncSession,
+        user_id: Optional[str] = None,
+        state: Optional[str] = None
+    ) -> str:
         """
         Connect WebSocket with proper authentication and state tracking.
         
@@ -60,28 +66,41 @@ class ConnectionManager:
             connection_id: The unique connection ID
             
         Raises:
-            WebSocketException: If authentication fails
+            WebSocketException: If authentication fails with proper error codes
         """
-        # Authenticate first using auth_utils
-        success, user = await authenticate_websocket(websocket, db)
-        if not success or not user:
-            logger.error("WebSocket authentication failed")
-            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+        try:
+            # Authenticate first using auth_utils
+            success, user = await authenticate_websocket(websocket, db)
+            if not success or not user:
+                logger.error("WebSocket authentication failed")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                raise WebSocketException(
+                    code=status.WS_1008_POLICY_VIOLATION,
+                    reason="Authentication failed"
+                )
+                
+            connection_id = str(id(websocket))
             
-        connection_id = str(id(websocket))
-        
-        self._connections[connection_id] = {
-            'websocket': websocket,
-            'conversation_id': conversation_id,
-            'user_id': user.id,
-            'state': self.CONNECTED  # Already authenticated at this point
-        }
-        
-        self._by_conversation[conversation_id].add(connection_id)
-        self._by_user[str(user.id)].add(connection_id)
-        
-        logger.info(f"WebSocket connected for user {user.id}, conversation {conversation_id}")
-        return connection_id
+            self._connections[connection_id] = {
+                'websocket': websocket,
+                'conversation_id': conversation_id,
+                'user_id': user_id or (user.id if user else None),
+                'state': state or self.CONNECTED
+            }
+            
+            self._by_conversation[conversation_id].add(connection_id)
+            self._by_user[str(user.id)].add(connection_id)
+            
+            logger.info(f"WebSocket connected for user {user.id}, conversation {conversation_id}")
+            return connection_id
+            
+        except Exception as e:
+            logger.error(f"WebSocket connection error: {str(e)}")
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            raise WebSocketException(
+                code=status.WS_1011_INTERNAL_ERROR,
+                reason=str(e)
+            )
 
     async def update_connection_state(self, connection_id: str, new_state: str) -> None:
         """
@@ -121,7 +140,7 @@ class ConnectionManager:
             # Close WebSocket if still connected
             if not self._is_connection_closed(websocket):
                 try:
-                    await websocket.close()
+                    await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
                 except RuntimeError as e:
                     if "Unexpected ASGI message" not in str(e):
                         logger.warning(f"WebSocket close error: {str(e)}")
