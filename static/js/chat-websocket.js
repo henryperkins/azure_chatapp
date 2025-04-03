@@ -737,11 +737,15 @@ window.WebSocketService.prototype.disconnect = function () {
     this.reconnectTimeout = null;
   }
 
-  // Clear any pending messages
+  // Clear any pending messages with graceful rejection
   if (this.pendingMessages.size > 0) {
+    console.log(`Safely rejecting ${this.pendingMessages.size} pending messages`);
     this.pendingMessages.forEach(({ reject, timeout }) => {
       clearTimeout(timeout);
-      reject(new Error('Connection closed'));
+      // Use a custom error that can be filtered by error handlers
+      const closeError = new Error('Connection closed - safe disconnect');
+      closeError.code = 'SAFE_DISCONNECT';
+      reject(closeError);
     });
     this.pendingMessages.clear();
   }
@@ -752,17 +756,27 @@ window.WebSocketService.prototype.disconnect = function () {
     this.heartbeatInterval = null;
   }
 
-  // Close the socket if it exists
+  // Only try to close the socket if we're not already disconnected
   if (this.socket) {
     try {
-      this.socket.close();
+      // Check if socket is already closed to avoid errors
+      if (this.socket.readyState !== WebSocket.CLOSED && 
+          this.socket.readyState !== WebSocket.CLOSING) {
+        console.debug('Closing WebSocket connection');
+        this.socket.onclose = null; // Remove onclose handler to prevent error callbacks
+        this.socket.close();
+      }
     } catch (err) {
-      console.error('Error closing WebSocket:', err);
+      console.debug('Non-critical error during WebSocket close:', err);
     }
     this.socket = null;
   }
 
-  this.setState(CONNECTION_STATES.DISCONNECTED);
+  // Set state to disconnected only if we weren't already
+  if (this.state !== CONNECTION_STATES.DISCONNECTED) {
+    this.setState(CONNECTION_STATES.DISCONNECTED);
+  }
+  
   console.debug('WebSocket disconnected and cleaned up');
 };
 

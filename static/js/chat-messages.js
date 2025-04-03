@@ -31,14 +31,22 @@ window.MessageService = function (options = {}) {
 window.MessageService.prototype.clear = function() {
   this.chatId = null;
   
+  // Gracefully handle WebSocket disconnection to prevent error cascade
   try {
     // Disconnect WebSocket if connected
     if (this.wsService && typeof this.wsService.disconnect === 'function') {
-      this.wsService.disconnect();
-      this.wsService = null;
+      console.log('MessageService: Safely disconnecting WebSocket');
+      // Store current state to avoid error on disconnect
+      const currentState = this.wsService.state;
+      
+      // Only disconnect if in connected state
+      if (this.wsService.isConnected()) {
+        this.wsService.disconnect();
+      }
     }
   } catch (error) {
     console.error('Error disconnecting WebSocket:', error);
+    // Don't rethrow, just log - this prevents error cascade
   }
   
   try {
@@ -91,120 +99,57 @@ window.MessageService.prototype.updateModelConfig = function (config) {
  * Send a message (user_message) using WebSocket if available or HTTP fallback
  */
 window.MessageService.prototype.sendMessage = async function (content) {
-  try {
-    // Validate conversation ID first
-    if (!this.chatId) {
-      console.error('Cannot send message: No conversation ID set');
-      throw new Error('Invalid conversation ID: No conversation ID set');
-    }
-    if (!this._isValidUUID(this.chatId)) {
-      console.error(`Cannot send message: Invalid conversation ID format: ${this.chatId}`);
-      throw new Error(`Invalid conversation ID: ${this.chatId}`);
-    }
+  if (!this.chatId) {
+    throw new Error('Invalid conversation ID: No conversation ID set');
+  }
+  
+  if (!window.ChatUtils.isValidUUID(this.chatId)) {
+    console.error(`Cannot send message: Invalid conversation ID format: ${this.chatId}`);
+    throw new Error(`Invalid conversation ID: ${this.chatId}`);
+  }
 
-    console.log(`Sending message to conversation: ${this.chatId}`);
+  // Notify UI that message is being sent
+  if (typeof this.onSending === 'function') {
     this.onSending();
+  }
 
-    // Determine if we're in project context or standalone chat
-    const isProjectContext = window.location.pathname.includes('/projects');
-    const projectId = isProjectContext ? localStorage.getItem("selectedProjectId") : null;
+  // Create the message payload
+  const messagePayload = {
+    content: content,
+    role: "user",
+    type: "message"
+  };
 
-    // Check for updated model config from MODEL_CONFIG global
-    if (window.MODEL_CONFIG) {
-      this.updateModelConfig(window.MODEL_CONFIG);
-    }
+  // Add image data if present
+  if (this.currentImage) {
+    messagePayload.image_data = this.currentImage;
+    this.currentImage = null; // Clear after using
+  }
 
-    // Create message payload with the latest model configuration
-    const messagePayload = {
-      type: "user_message",
-      content: content,
-      model_id: this.modelConfig?.modelName || localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
-      enable_thinking: this.modelConfig?.extendedThinking ?? (localStorage.getItem("extendedThinking") === "true"),
-      project_id: isProjectContext ? projectId : null
-    };
+  // Add model configuration details
+  if (this.modelConfig) {
+    messagePayload.vision_detail = this.modelConfig.visionDetail || "auto";
+    messagePayload.enable_thinking = this.modelConfig.enableThinking || false;
+    messagePayload.thinking_budget = this.modelConfig.thinkingBudget || null;
+  }
 
-    // Add vision parameters if enabled
-    if (this.modelConfig?.visionEnabled && this.modelConfig?.visionImage) {
-      messagePayload.vision_enabled = true;
-      messagePayload.vision_image = this.modelConfig.visionImage;
-      messagePayload.vision_detail = this.modelConfig.visionDetail || "auto";
-    }
-
-    // Add reasoning parameters if available
-    if (this.modelConfig?.reasoningEffort) {
-      messagePayload.reasoning_effort = this.modelConfig.reasoningEffort;
-    }
-
-    // Add custom instructions if available
-    const customInstructions = localStorage.getItem('globalCustomInstructions');
-    if (customInstructions) {
-      messagePayload.custom_instructions = customInstructions;
-    }
-
-    // Add project-specific custom instructions if in project context
-    if (isProjectContext && projectId) {
-      const projectInstructions = localStorage.getItem(`project_${projectId}_instructions`);
-      if (projectInstructions) {
-        messagePayload.project_instructions = projectInstructions;
-      }
-    }
-
-    // Only include project_id if we're in project context
-    if (isProjectContext && projectId) {
-      messagePayload.project_id = projectId;
-      // Add knowledge base integration context
-      try {
-        const kbStatus = await this._checkKnowledgeBaseStatus(projectId);
-        if (kbStatus) {
-          messagePayload.use_knowledge_base = kbStatus.enabled;
-          console.log(`Using knowledge base for project ${projectId}: ${kbStatus.enabled}`);
-        }
-      } catch (e) {
-        console.warn("Error checking knowledge base status:", e);
-      }
-    }
-
-    // Add thinking budget if available
-    const thinkingBudget = this.modelConfig?.thinkingBudget ?? localStorage.getItem("thinkingBudget");
-    if (thinkingBudget) {
-      try {
-        const budget = parseInt(thinkingBudget, 10);
-        if (!isNaN(budget) && budget > 0) {
-          messagePayload.thinking_budget = budget;
-          console.log(`Applied thinking budget of ${budget} tokens`);
-        }
-      } catch (e) {
-        console.warn('Error parsing thinking budget:', e);
-      }
-    }
-
-    // Attempt WebSocket first, fallback to HTTP
+  try {
+    // Try WebSocket first if available
     if (this.wsService && this.wsService.isConnected()) {
       try {
-        const wsResponse = await this.wsService.send({
-          type: 'message',
-          chatId: this.chatId,
-          ...messagePayload
-        });
-
-        this.onMessageReceived({
-          role: 'assistant',
-          content: wsResponse.content || wsResponse.message || '',
-          thinking: wsResponse.thinking,
-          redacted_thinking: wsResponse.redacted_thinking,
-          metadata: wsResponse.metadata || {}
-        });
+        return await this.wsService.send(messagePayload);
       } catch (wsError) {
-        window.ChatUtils?.handleError?.('WebSocket message', wsError);
-        console.warn('WebSocket message failed, using HTTP fallback:', wsError);
+        console.warn("WebSocket send failed, falling back to HTTP:", wsError);
+        // Fall through to HTTP
         await this._sendMessageHttp(messagePayload);
       }
     } else {
       await this._sendMessageHttp(messagePayload);
     }
   } catch (error) {
-    window.ChatUtils?.handleError?.('Sending message', error) ||
+    window.ChatUtils?.handleError?.('WebSocket message', error) ||
       this.onError('Sending message', error);
+    throw error;
   }
 };
 
@@ -212,117 +157,131 @@ window.MessageService.prototype.sendMessage = async function (content) {
  * HTTP fallback for message sending
  */
 window.MessageService.prototype._sendMessageHttp = async function (messagePayload) {
-  try {
-    // Validate chatId before proceeding
-    if (!this.chatId || !this._isValidUUID(this.chatId)) {
-      throw new Error('Invalid conversation ID');
-    }
-
-    // Get project context from URL or localStorage
-    const projectId = localStorage.getItem("selectedProjectId") ||
-      (window.location.pathname.match(/projects\/([^/]+)/) || [])[1];
-
-    // Determine correct endpoint
-    const endpoint = projectId
-      ? `/api/projects/${projectId}/conversations/${this.chatId}/messages`
-      : `/api/chat/conversations/${this.chatId}/messages`;
-
-    // Create request body
-    const requestBody = {
-      ...messagePayload,
-      project_id: projectId || null
-    };
-
-    // Check knowledge base again if in project context
-    if (projectId) {
-      try {
-        const kbStatus = await this._checkKnowledgeBaseStatus(projectId);
-        if (kbStatus) {
-          requestBody.use_knowledge_base = kbStatus.enabled;
-          console.log(`[HTTP] Using knowledge base for project ${projectId}: ${kbStatus.enabled}`);
-        }
-      } catch (e) {
-        console.warn("[HTTP] Error checking knowledge base status:", e);
-      }
-    }
-
-    // Fallback to fetch if window.apiRequest is unavailable
-    const fetchOptions = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      },
-      body: JSON.stringify(requestBody)
-    };
-
-    const response = await (window.apiRequest
-      ? window.apiRequest(endpoint, 'POST', requestBody)
-      : fetch(endpoint, fetchOptions).then(res => res.json()));
-
-    const responseData = response.data || response;
-    console.log('API response data:', responseData);
-
-    // Handle both possible response formats
-    let assistantContent = '';
-    let assistantThinking = null;
-    let assistantRedactedThinking = null;
-    let assistantMetadata = {};
-
-    if (responseData.assistant_message) {
-      // Attempt to parse the string if necessary
-      try {
-        const assistantMsg = (typeof responseData.assistant_message === 'string')
-          ? JSON.parse(responseData.assistant_message)
-          : responseData.assistant_message;
-
-        assistantContent = assistantMsg.content || assistantMsg.message || '';
-        assistantThinking = assistantMsg.metadata?.thinking || assistantMsg.thinking;
-        assistantRedactedThinking = assistantMsg.metadata?.redacted_thinking || assistantMsg.redacted_thinking;
-        assistantMetadata = {
-          ...(assistantMsg.metadata || {}),
-          thinking: assistantThinking,
-          redacted_thinking: assistantRedactedThinking
-        };
-      } catch (e) {
-        console.warn('Failed to parse assistant_message:', e);
-        // Fallback if parsing fails
-        assistantContent = responseData.assistant_content ||
-          responseData.content ||
-          responseData.message ||
-          '';
-      }
-    } else {
-      // Direct fields
-      assistantContent = responseData.content || responseData.message || '';
-      assistantThinking = responseData.thinking;
-      assistantRedactedThinking = responseData.redacted_thinking;
-      assistantMetadata = responseData.metadata || {};
-    }
-
-    // Additional fallback
-    if (!assistantContent && responseData.assistant_content) {
-      assistantContent = responseData.assistant_content;
-    }
-
-    // Only call onMessageReceived if we got valid content
-    if (assistantContent) {
-      this.onMessageReceived({
-        role: 'assistant',
-        content: assistantContent,
-        thinking: assistantThinking,
-        redacted_thinking: assistantRedactedThinking,
-        metadata: assistantMetadata
-      });
-    } else {
-      console.error('Empty or missing assistant content in response:', responseData);
-      this.onError('HTTP message', new Error('No response content received from API'));
-    }
-
-  } catch (error) {
-    window.ChatUtils?.handleError?.('HTTP message', error) ||
-      this.onError('HTTP message', error);
+  // Validate conversation ID again before HTTP request
+  if (!this.chatId || !window.ChatUtils.isValidUUID(this.chatId)) {
+    throw new Error('Invalid conversation ID');
   }
+
+  try {
+    // Construct the API endpoint URL
+    const projectId = localStorage.getItem('selectedProjectId')?.trim();
+    let apiUrl;
+    
+    if (projectId) {
+      apiUrl = `/api/chat/projects/${projectId}/conversations/${this.chatId}/messages`;
+    } else {
+      apiUrl = `/api/chat/conversations/${this.chatId}/messages`;
+    }
+    
+    // Make the HTTP request
+    const response = await window.apiRequest(apiUrl, 'POST', messagePayload);
+    
+    // Parse and handle the response
+    if (response.data?.assistant_message) {
+      // Handle assistant response message
+      if (typeof this.onMessageReceived === 'function') {
+        this.onMessageReceived({
+          role: 'assistant',
+          content: response.data.assistant_message.content,
+          thinking: response.data.thinking,
+          redacted_thinking: response.data.redacted_thinking,
+          metadata: response.data.assistant_message.metadata || {}
+        });
+      }
+    } else if (response.data?.assistant_error) {
+      // Extract detailed error information
+      const errorMsg = this._extractAIErrorMessage(response.data.assistant_error);
+      throw new Error(errorMsg);
+    }
+    
+    return response.data;
+  } catch (error) {
+    // Enhanced error handling
+    const enhancedError = this._handleAIError(error);
+    window.ChatUtils?.handleError?.('HTTP message', enhancedError) ||
+      this.onError('HTTP send', enhancedError);
+    throw enhancedError;
+  }
+};
+
+/**
+ * Extract detailed error message from AI response error
+ * @param {string} errorStr - Error message from AI
+ * @returns {string} - User-friendly error message
+ */
+window.MessageService.prototype._extractAIErrorMessage = function(errorStr) {
+  // If it's a generic "Failed to generate response" error, provide more context
+  if (errorStr === "Failed to generate response") {
+    return "AI couldn't generate a response. This may be due to content moderation, system load, or connection issues. Please try again or rephrase your message.";
+  }
+  
+  // Handle common error patterns and map to better user-facing messages
+  if (errorStr.includes("token") && errorStr.includes("limit")) {
+    return "Response exceeded maximum length. Please try a shorter prompt or break your request into smaller parts.";
+  }
+  
+  if (errorStr.includes("content policy") || errorStr.includes("moderation")) {
+    return "Your request was flagged by content moderation. Please modify your message and try again.";
+  }
+  
+  if (errorStr.includes("rate limit") || errorStr.includes("throttling")) {
+    return "Too many requests. Please wait a moment before trying again.";
+  }
+  
+  if (errorStr.includes("timeout")) {
+    return "The AI response timed out. This could be due to high system load or a complex request. Please try again later.";
+  }
+  
+  // If we can't categorize the error, return the original with a prefix
+  return `AI generation error: ${errorStr}`;
+};
+
+/**
+ * Transform general errors into more specific AI errors
+ */
+window.MessageService.prototype._handleAIError = function(error) {
+  // If it's already an Error object
+  if (error instanceof Error) {
+    // For the generic "Failed to generate response" error
+    if (error.message === "Failed to generate response") {
+      error.message = this._extractAIErrorMessage("Failed to generate response");
+      error.code = "AI_GENERATION_FAILED";
+      error.userAction = "Try rephrasing your query or waiting a moment before trying again.";
+    }
+    return error;
+  }
+  
+  // If it's a string, create a proper Error
+  if (typeof error === 'string') {
+    const enhancedError = new Error(this._extractAIErrorMessage(error));
+    enhancedError.code = "AI_GENERATION_FAILED";
+    enhancedError.originalMessage = error;
+    return enhancedError;
+  }
+  
+  // If it's an API error object with status
+  if (error.status) {
+    const statusCode = error.status;
+    let message = error.message || "Unknown error";
+    
+    // Map HTTP status codes to better error messages
+    if (statusCode === 429) {
+      message = "Too many requests. Please wait a moment before trying again.";
+    } else if (statusCode === 400 && message.includes("Failed to generate")) {
+      message = this._extractAIErrorMessage("Failed to generate response");
+    } else if (statusCode >= 500) {
+      message = "The AI service is currently unavailable. Please try again later.";
+    }
+    
+    const enhancedError = new Error(message);
+    enhancedError.status = statusCode;
+    enhancedError.code = "AI_SERVICE_ERROR";
+    enhancedError.originalError = error;
+    return enhancedError;
+  }
+  
+  // Return original if we can't enhance it
+  return error;
 };
 
 /**
