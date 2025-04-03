@@ -162,11 +162,12 @@
       let projects = [];
       
       const extractProjects = (obj) => {
-        return obj?.data?.projects || obj?.projects || [];
+        const rawProjects = obj?.data?.projects || obj?.projects || [];
+        return rawProjects.map(p => p.to_dict ? p.to_dict() : p);
       };
 
       if (Array.isArray(eventOrProjects)) {
-        projects = eventOrProjects;
+        projects = eventOrProjects.map(p => p.to_dict ? p.to_dict() : p);
       } else if (eventOrProjects instanceof Event) {
         projects = extractProjects(eventOrProjects.detail);
       } else {
