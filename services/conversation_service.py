@@ -110,10 +110,13 @@ class ConversationService:
                 conv.use_knowledge_base = True
                 conv.knowledge_base_id = project.knowledge_base_id
                 try:
-                    if project.token_usage is None or project.max_tokens is None:
-                        raise ValueError("Project token limits not configured")
+                    # Add explicit numeric type casting
+                    usage = project.token_usage
+                    limit = project.max_tokens
+                    if usage is None or limit is None:
+                        raise ValueError("Project missing token configuration")
                     
-                    if project.token_usage > project.max_tokens:
+                    if int(usage) > int(limit):
                         raise ValueError("Project token limit exceeded")
                     
                     await conv.validate_knowledge_base(self.db)
@@ -123,6 +126,13 @@ class ConversationService:
                 except Exception as e:
                     logger.error(f"KB validation error: {str(e)}")
                     conv.use_knowledge_base = False
+
+        # Verify project assignment before saving
+        if project_id and str(conv.project_id) != str(project_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Conversation cannot be created outside designated project"
+            )
 
         await save_model(self.db, conv)
         return conv

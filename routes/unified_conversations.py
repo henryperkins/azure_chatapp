@@ -662,6 +662,15 @@ async def websocket_chat_endpoint(
                     "Conversation",
                     additional_filters
                 )
+
+                # Explicit project-conversation verification
+                if project_id and str(conversation.project_id) != str(project_id):
+                    logger.error(
+                        f"Authorization failed: Conversation {conversation.id} belongs to "
+                        f"project {conversation.project_id} but request has {project_id}"
+                    )
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
             except HTTPException as e:
                 logger.error(f"WebSocket authorization failed: {e.detail}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
