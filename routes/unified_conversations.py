@@ -16,6 +16,7 @@ from fastapi import (
     Query,
     Request,
 )
+from config import settings
 from pydantic import BaseModel, Field
 
 # DB Session
@@ -36,7 +37,6 @@ from services.context_integration import augment_with_knowledge
 # Utils
 from utils.auth_utils import (
     get_current_user_and_token,
-    extract_token,
     get_user_from_token,
 )
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
@@ -637,27 +637,51 @@ async def websocket_chat_endpoint(
     """
     user = None
     heartbeat_task = None
-    connection_id = None
 
     async with AsyncSessionLocal() as db:
         try:
-            # Try to authenticate the WebSocket connection
-            user_token = token or extract_token(websocket)
-            if not user_token:
-                logger.warning("No token provided for WebSocket connection")
-                raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
-                
-            # Verify token and get user
+            # Accept WebSocket connection first
             try:
-                user = await get_user_from_token(user_token, db)
-                if not user:
-                    raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION)
-            except Exception as auth_err:
-                logger.warning(f"WebSocket authentication failed: {str(auth_err)}")
+                await websocket.accept()
+                logger.info(f"WebSocket connection accepted for {conversation_id}")
+            except Exception as e:
+                logger.error(f"WebSocket accept failed: {str(e)}")
+                return
+
+            # Enhanced token handling with proper error handling
+            try:
+                user_token = (
+                    token
+                    or websocket.headers.get("Authorization", "").replace("Bearer ", "")
+                    or websocket.cookies.get("session")
+                )
+                if not user_token:
+                    logger.warning("No token found in WebSocket handshake")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+
+                logger.info("WebSocket token received (first 10 chars): %s...", user_token[:10])
+                logger.debug("Full token: %s", user_token if settings.ENV != "production" else "[REDACTED]")
+
+                # Immediate token validation check
+                try:
+                    user = await get_user_from_token(user_token, db)
+                    if not user:
+                        logger.error("Token validation failed - no user found")
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    logger.info("WebSocket authenticated for user: %s", user.id)
+                except Exception as e:
+                    logger.error("Token validation error: %s", str(e))
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            except Exception as e:
+                logger.error("WebSocket token extraction failed: %s", str(e))
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
                 
-            # Validate project access if project_id is provided
+            # Remove duplicate token validation - this was causing the issue
+            # Keep project validation
             if project_id:
                 try:
                     project = await validate_project_access(project_id, user, db)
@@ -666,11 +690,10 @@ async def websocket_chat_endpoint(
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                 except HTTPException as e:
-                    logger.error(f"WebSocket conversation authorization failed: {e.detail}")
+                    logger.error(f"WebSocket authorization failed: {e.detail}")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
                     
-            # Validate conversation access
             try:
                 conversation = await db.get(Conversation, conversation_id)
                 if not conversation or conversation.user_id != user.id:
@@ -680,12 +703,9 @@ async def websocket_chat_endpoint(
                 logger.error(f"Failed to get conversation: {str(e)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-                
-            # Accept WebSocket
-            await websocket.accept()
             
             # Register connection with manager
-            connection_id = await manager.connect_with_state(
+            await manager.connect_with_state(
                 websocket,
                 str(conversation_id),
                 db,

@@ -362,17 +362,27 @@ async def authenticate_websocket(
 
     if not token:
         logger.warning("WebSocket connection rejected: No token provided")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", websocket.headers, websocket.query_params)
+        try:
+            if not websocket.client_state == websocket.client_state.DISCONNECTED:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        except Exception as e:
+            logger.error(f"Error closing websocket: {e}")
+        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", 
+                    websocket.headers, websocket.query_params)
         return False, None
 
     # Validate token and get user
     try:
         user = await get_user_from_token(token, db, "access")
-        # Accept WebSocket only AFTER successful authentication
-        await websocket.accept()
+        # Log successful authentication
+        logger.info(f"WebSocket authenticated for user: {user.id}, username: {user.username}")
         return True, user
     except Exception as e:
         logger.warning(f"WebSocket authentication failed: {str(e)}")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        try:
+            # Only attempt to close if not already closed
+            if not websocket.client_state == websocket.client_state.DISCONNECTED:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        except Exception as close_err:
+            logger.error(f"Error closing websocket: {close_err}")
         return False, None
