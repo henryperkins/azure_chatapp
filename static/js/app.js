@@ -1,22 +1,18 @@
 /**
  * ---------------------------
- * - Maintains a single API_CONFIG global object (no more double definitions).
+ * - Maintains a single API_CONFIG global object.
  * - Uses one fetch wrapper (apiRequest).
  * - Listens for authStateChanged to manage the authenticated vs. logged-out UI.
- * - Minimizes overlap with auth.js token logic. (auth.js will call apiRequest and dispatch events.)
+ * - Minimizes overlap with auth.js token logic (auth.js calls apiRequest, dispatches events).
  */
 
 // ---------------------------------------------------------------------
 // GLOBAL APP CONFIG & CONSTANTS
 // ---------------------------------------------------------------------
 
-// Consolidated global config (no second "const API_CONFIG")
 window.API_CONFIG = {
   baseUrl: '',
-  WS_ENDPOINT: window.location.origin.replace(/^http/, 'ws'), // Use current origin with ws/wss protocol
-  isAuthenticated: false,
-  authCheckInProgress: false,
-  lastErrorStatus: null,
+  WS_ENDPOINT: window.location.origin.replace(/^http/, 'ws'),
   isAuthenticated: false,
   authCheckInProgress: false,
   lastErrorStatus: null
@@ -63,7 +59,6 @@ const API_ENDPOINTS = {
   PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations'
 };
 
-// Simple notifications system
 const Notifications = {
   apiError: (msg) => console.error('API Error:', msg),
   projectNotFound: () => console.warn('Project not found')
@@ -89,42 +84,39 @@ function showEmptyState(container, message, extraClasses = '') {
 function setChatUIVisibility(visible) {
   const chatUI = getElement(SELECTORS.CHAT_UI);
   const noChatMsg = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
-  
-  if (visible) {
-    chatUI?.classList?.remove('hidden');
-    noChatMsg?.classList?.add('hidden');
-  } else {
-    chatUI?.classList?.add('hidden');
-    noChatMsg?.classList?.remove('hidden');
+
+  if (chatUI && noChatMsg) {
+    if (visible) {
+      chatUI.classList.remove('hidden');
+      noChatMsg.classList.add('hidden');
+    } else {
+      chatUI.classList.add('hidden');
+      noChatMsg.classList.remove('hidden');
+    }
   }
 }
 
-// Auth UI updates are now handled by auth.js's broadcastAuth
-// Listen for auth state changes from auth.js
+// Called on auth state changes
 document.addEventListener('authStateChanged', (e) => {
   const { authenticated, username } = e.detail;
   const authStatus = getElement(SELECTORS.AUTH_STATUS);
-  
+
   if (authStatus) {
     authStatus.textContent = authenticated ? (username || 'Authenticated') : 'Not Authenticated';
     authStatus.classList.toggle('text-green-600', authenticated);
     authStatus.classList.toggle('text-red-600', !authenticated);
   }
-  
+
   window.API_CONFIG.isAuthenticated = authenticated;
 });
 
 // ---------------------------------------------------------------------
 // SINGLE FETCH WRAPPER (apiRequest)
 // ---------------------------------------------------------------------
-/**
- * The one and only fetch wrapper used by the app. Auth refresh logic is
- * in auth.js (TokenManager.refreshTokens), but we'll call it here if 401.
- */
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
   const maxRetries = 2;
 
-  // If an auth check is in progress, we wait. (Kept for backward-compat.)
+  // If an auth check is in progress (to avoid collision with refresh), wait
   if (window.API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
     if (retryCount > 5) {
       console.warn('Too many auth check delays, proceeding with request anyway');
@@ -147,10 +139,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   const baseUrl = getBaseUrl();
   method = method.toUpperCase();
 
-  // Handle data for GET/HEAD/DELETE requests
+  // Handle data for GET/HEAD
   let finalUrl;
   if (data && ['GET', 'HEAD'].includes(method)) {
-    // Convert data to URL query parameters
     const queryParams = new URLSearchParams();
     for (const [key, value] of Object.entries(data)) {
       if (Array.isArray(value)) {
@@ -172,7 +163,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   console.log('Constructing API request for endpoint:', finalUrl);
   const authHeaders = TokenManager.getAuthHeader();
   console.log('Using auth headers:', authHeaders);
-  
+
   const options = {
     method,
     headers: {
@@ -185,9 +176,10 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     cache: 'no-store'
   };
 
+  // Body for POST/PUT
   if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
     if (data instanceof FormData) {
-      // Let the browser set Content-Type for FormData
+      // let the browser set Content-Type for FormData
       options.body = data;
     } else {
       options.headers['Content-Type'] = 'application/json';
@@ -199,11 +191,11 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     console.log(`Making ${method} request to: ${finalUrl}`);
     const response = await fetch(finalUrl, options);
 
-    // The rest of the error handling remains unchanged
     if (!response.ok) {
       window.API_CONFIG.lastErrorStatus = response.status;
       console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
+      // Attempt to refresh tokens if 401
       if (response.status === 401 && retryCount < maxRetries) {
         try {
           if (window.TokenManager?.refreshTokens) {
@@ -223,6 +215,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
           console.error('Could not parse validation error', parseErr);
         }
       } else if (response.status === 401) {
+        // Clear local user info
         sessionStorage.removeItem('userInfo');
         sessionStorage.removeItem('auth_state');
         window.API_CONFIG.isAuthenticated = false;
@@ -244,6 +237,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
       jsonData = null;
     }
 
+    // If server returns new tokens in the response
     if (jsonData?.access_token && window.TokenManager?.setTokens) {
       TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
     }
@@ -255,19 +249,36 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   }
 }
 
-// Helpers
 function getBaseUrl() {
   if (!window.API_CONFIG.baseUrl) {
-    // Always use same protocol as the page
+    // Default to window.location.origin
     window.API_CONFIG.baseUrl = window.location.origin;
+
+    if (window.API_CONFIG.backendHost) {
+      window.API_CONFIG.baseUrl = `http://${window.API_CONFIG.backendHost}`;
+    }
     console.log('Set API base URL:', window.API_CONFIG.baseUrl);
   }
   return window.API_CONFIG.baseUrl;
 }
 
-// Expose so other modules can use it
+// Make fetch wrapper global
 window.apiRequest = apiRequest;
 window.getBaseUrl = getBaseUrl;
+
+
+// ---------------------------------------------------------------------
+// [REMOVED DUPLICATE DOMContentLoaded FOR initializeApplication()]
+//
+// OLD CODE (REMOVED):
+//   document.addEventListener('DOMContentLoaded', () => {
+//     initializeApplication().catch(err => {
+//       console.error('Application initialization failed:', err);
+//     });
+//   });
+//
+// ---------------------------------------------------------------------
+
 
 // ---------------------------------------------------------------------
 // DATA LOADING & RENDERING
@@ -299,8 +310,8 @@ function createProjectListItem(project) {
 
     li.addEventListener('click', () => {
       localStorage.setItem('selectedProjectId', projectData.id);
-      
-      // Hide project list and show details view
+
+      // Switch UI to project details
       const projectListView = document.getElementById('projectListView');
       const projectDetailsView = document.getElementById('projectDetailsView');
       if (projectListView) projectListView.classList.add('hidden');
@@ -330,7 +341,7 @@ function renderConversationList(data) {
   container.innerHTML = '';
 
   window.chatConfig = window.chatConfig || {};
-  
+
   let conversations = [];
   if (data?.data?.conversations) {
     conversations = data.data.conversations;
@@ -341,7 +352,7 @@ function renderConversationList(data) {
   } else if (Array.isArray(data)) {
     conversations = data;
   }
-  
+
   window.chatConfig.conversations = conversations;
 
   if (conversations.length > 0) {
@@ -454,71 +465,10 @@ function handleAPIError(context, error) {
   }
 }
 
-function loadSidebarProjects() {
-  const isAuthenticated = window.API_CONFIG?.isAuthenticated ||
-    (sessionStorage.getItem('userInfo') !== null && sessionStorage.getItem('auth_state') !== null);
-  
-  if (!isAuthenticated) {
-    console.log("Not authenticated, skipping sidebar projects load");
-    return Promise.resolve([]);
-  }
-
-  // NEW: Ensure sidebar element exists with retry logic and proper ID
-  let sidebarProjects = getElement(SELECTORS.SIDEBAR_PROJECTS);
-  
-  // Try additional known IDs if the preferred one isn't found
-  if (!sidebarProjects) {
-    sidebarProjects = document.getElementById("projectsList") ||
-                      document.getElementById("sidebarProjects");
-  }
-  
-  if (!sidebarProjects) {
-    console.warn("Sidebar projects container not found, retrying in 100ms");
-    return new Promise(resolve => {
-      setTimeout(() => {
-        loadSidebarProjects().then(resolve);
-      }, 100);
-    });
-  }
-
-  if (window.API_CONFIG.authCheckInProgress) {
-    console.log("Auth check in progress, deferring sidebar projects load");
-    return Promise.resolve([]);
-  }
-
-  // Use base projects endpoint without any parameters
-  const endpoint = API_ENDPOINTS.PROJECTS.replace(/^https?:\/\/[^/]+/, '');
-  console.log("Loading sidebar projects from:", endpoint);
-  
-  return apiRequest(endpoint)
-    .then(response => {
-      // If response.data is an array, it's probably { data: [projects] }
-      // Or it might be { data: { projects: [] } }
-      const projects = Array.isArray(response.data)
-        ? response.data
-        : response.data?.projects || [];
-
-      sidebarProjects.innerHTML = '';
-      if (projects.length === 0) {
-        showEmptyState(sidebarProjects, MESSAGES.NO_PROJECTS);
-        return [];
-      }
-      projects.forEach(proj => {
-        const item = createProjectListItem(proj);
-        if (item) sidebarProjects.appendChild(item);
-      });
-      return projects;
-    })
-    .catch(err => {
-      handleAPIError('loading sidebar projects', err);
-      return [];
-    });
-}
-
 function loadConversationList() {
   const isAuthenticated = window.API_CONFIG?.isAuthenticated ||
     (sessionStorage.getItem('userInfo') !== null && sessionStorage.getItem('auth_state') !== null);
-  
+
   if (!isAuthenticated) {
     console.log("Not authenticated, skipping conversation list load");
     return Promise.resolve([]);
@@ -563,14 +513,13 @@ function loadConversationList() {
 }
 
 // ---------------------------------------------------------------------
-// NAVIGATION & STATE MANAGEMENT
+// NAVIGATION & STATE
 // ---------------------------------------------------------------------
 
 function handleNavigationChange() {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
 
-  // We still might do a verify, but typically we'd rely on authStateChanged
   apiRequest(API_ENDPOINTS.AUTH_VERIFY)
     .then(() => {
       if (chatId) {
@@ -595,22 +544,6 @@ function handleNavigationChange() {
     .catch(error => {
       handleAPIError('auth verification', error);
     });
-}
-
-// ---------------------------------------------------------------------
-// SIDEBAR MANAGEMENT
-// ---------------------------------------------------------------------
-
-// Removed duplicate toggleSidebar function - now handled in sidebar.js
-
-function handleWindowResize() {
-  const sidebarEl = getElement(SELECTORS.MAIN_SIDEBAR);
-  if (!sidebarEl) return;
-  if (window.innerWidth >= 768) {
-    sidebarEl.classList.remove('fixed', 'inset-0', 'z-50');
-  }
-  // Trigger viewport height update
-  setViewportHeight();
 }
 
 // Handle orientation changes
@@ -656,13 +589,6 @@ function safeInitialize() {
     elementMap[key] = document.querySelector(selector);
   });
 
-  // Auth dropdown handling is done in auth.js
-
-  // Toggle sidebar is handled by sidebar.js
-  if (!elementMap.NAV_TOGGLE_BTN) {
-    console.error("Nav toggle button not found");
-  }
-
   // Project search
   if (elementMap.SIDEBAR_PROJECT_SEARCH) {
     elementMap.SIDEBAR_PROJECT_SEARCH.addEventListener('input', (e) => {
@@ -689,7 +615,7 @@ function safeInitialize() {
   }
 
   // New conversation
-  document.addEventListener('click', function(event) {
+  document.addEventListener('click', function (event) {
     if (event.target.closest('#newConversationBtn')) {
       const projectId = localStorage.getItem('selectedProjectId');
       if (projectId && window.projectManager?.createConversation) {
@@ -710,7 +636,7 @@ function safeInitialize() {
 function setupGlobalKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-      // NOTE: This hijacks Ctrl+R
+      // e.g. Ctrl+R for "regenerate", Ctrl+C for "copy"
       if (e.key.toLowerCase() === 'r') {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('regenerateChat'));
@@ -729,30 +655,39 @@ function setViewportHeight() {
   document.documentElement.style.setProperty('--vh', `${vh}px`);
 }
 
-// Example main initialization
 async function initializeApplication() {
   // Set initial viewport height
   setViewportHeight();
   // Update on resize
   window.addEventListener('resize', setViewportHeight);
+
   try {
     console.log("Starting main application initialization");
-    // We do not call initAuth here; it's called in auth.js
-    // or we might rely on "auth.js" to call it prior or afterwards.
 
-    // Initialize base URL
-    getBaseUrl(); // sets window.API_CONFIG.baseUrl if not set
+    // We do not call initAuth here if auth.js is already doing it, but we can:
+    if (window.auth?.init) {
+      await window.auth.init();
+    } else {
+      console.error('Auth module not available');
+    }
+
+    // Basic UI setup
+    getBaseUrl();
     safeInitialize();
 
-    // Example default localStorage settings
+    // Example default localStorage
     if (!localStorage.getItem("modelName")) {
       localStorage.setItem("modelName", "claude-3-7-sonnet-20250219");
       if (!localStorage.getItem("thinkingBudget")) {
         localStorage.setItem("thinkingBudget", "16000");
       }
     }
-
     setupGlobalKeyboardShortcuts();
+
+    // If authenticated, load sidebar projects
+    if (window.API_CONFIG.isAuthenticated && window.loadSidebarProjects) {
+      await window.loadSidebarProjects();
+    }
 
     console.log("✅ Main application initialization complete");
     return true;
@@ -763,12 +698,12 @@ async function initializeApplication() {
   }
 }
 
-// Some minimal module init approach
+// A convenience wrapper for modules
 const InitUtils = {
   async initModule(name, initFn, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        console.log(`Initializing ${name} module (attempt ${i+1}/${maxRetries})...`);
+        console.log(`Initializing ${name} module (attempt ${i + 1}/${maxRetries})...`);
         await initFn();
         console.log(`✅ ${name} module initialized`);
         return true;
@@ -779,21 +714,15 @@ const InitUtils = {
       }
     }
   },
-  coreModules: [
-    // You can define a list of core modules if needed
-  ],
-  featureModules: [
-    // List your optional feature modules if needed
-  ]
+  coreModules: [],
+  featureModules: []
 };
 
 async function initializeAllModules() {
   try {
     console.log("Starting application initialization sequence");
-    // Initialize any modules in whatever order you prefer
-    // e.g. initAuth from auth.js, project dashboard, etc.
 
-    // Then main app init
+    // The main "app-level" init
     await initializeApplication();
 
     // Possibly init other feature modules
@@ -816,68 +745,61 @@ async function initializeAllModules() {
   }
 }
 
-// Global function to ensure chat containers exist
-window.ensureChatContainers = function() {
+// Ensure chat containers exist
+window.ensureChatContainers = function () {
   console.log("Ensuring chat containers exist...");
-  
-  // Check for #projectChatContainer and #chatContainer
+
   let projectChatContainer = document.querySelector('#projectChatContainer');
   let chatContainer = document.querySelector('#chatContainer');
-  
-  // Also check for containers in project views
+
+  // Also check project views
   if (!projectChatContainer && !chatContainer) {
     projectChatContainer = document.querySelector('#projectDetailsView #projectChatContainer');
     chatContainer = document.querySelector('#projectChatUI');
   }
-  
-  // If neither exists, create one in the main content area
+
+  // If neither exists, create one
   if (!projectChatContainer && !chatContainer) {
     console.log("No chat containers found, creating one");
     const mainContent = document.querySelector('main');
-    
     if (mainContent) {
-      // Create project chat container
       const container = document.createElement('div');
       container.id = 'projectChatContainer';
       container.className = 'mt-4 transition-all duration-300 ease-in-out';
-      container.style.display = 'block'; // Ensure visibility
-      
-      // Create messages container
+      container.style.display = 'block';
+
+      // messages container
       const messagesContainer = document.createElement('div');
       messagesContainer.id = 'projectChatMessages';
       messagesContainer.className = 'chat-message-container';
       container.appendChild(messagesContainer);
-      
-      // Create input area
+
+      // input area
       const inputArea = document.createElement('div');
       inputArea.className = 'flex items-center border-t border-gray-200 dark:border-gray-700 p-2';
-      
+
       const chatInput = document.createElement('input');
       chatInput.id = 'projectChatInput';
       chatInput.type = 'text';
       chatInput.className = 'flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white';
       chatInput.placeholder = 'Type your message...';
-      
+
       const sendBtn = document.createElement('button');
       sendBtn.id = 'projectChatSendBtn';
       sendBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors';
       sendBtn.textContent = 'Send';
-      
+
       inputArea.appendChild(chatInput);
       inputArea.appendChild(sendBtn);
       container.appendChild(inputArea);
-      
-      // Add to DOM
+
       mainContent.appendChild(container);
       console.log("Created project chat container");
-      
-      // Ensure it's not hidden
       container.classList.remove('hidden');
       return container;
     } else {
-      console.warn("Could not find main content element to add chat container");
-      
-      // Last resort - attach to body if main not found
+      console.warn("Could not find <main> element to add chat container");
+      // fallback to body
       const body = document.body;
       if (body) {
         const fallbackContainer = document.createElement('div');
@@ -902,12 +824,11 @@ window.ensureChatContainers = function() {
       }
     }
   } else {
-    // Ensure existing containers are properly visible
+    // Make sure existing container is visible
     const container = projectChatContainer || chatContainer;
     container.classList.remove('hidden');
     container.style.display = 'block';
-    
-    // Also ensure parent containers are visible
+
     let parent = container.parentElement;
     while (parent && parent !== document.body) {
       if (parent.classList.contains('hidden')) {
@@ -918,11 +839,9 @@ window.ensureChatContainers = function() {
       }
       parent = parent.parentElement;
     }
-    
     console.log("Chat containers already exist and are now visible");
     return container;
   }
-  
   return null;
 };
 
@@ -930,17 +849,18 @@ window.ensureChatContainers = function() {
 // BOOTSTRAPPING
 // ---------------------------------------------------------------------
 
+// SINGLE DOMContentLoaded -> calls initializeAllModules() -> calls initializeApplication() -> calls auth.init()
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Initialize everything
+    console.log("DOMContentLoaded: Starting full app init via initializeAllModules()");
     await initializeAllModules();
-    // Make sure chat containers exist before initializing chat
+
+    // Ensure chat containers exist, then optionally init chat
     window.ensureChatContainers();
-    
-    // If you have additional UI components:
     if (typeof window.initializeChat === 'function') {
       await InitUtils.initModule('chat', window.initializeChat);
     }
+
     console.log("✅ DOMContentLoaded: App initialization complete");
   } catch (error) {
     console.error("❌ DOMContentLoaded: App initialization error:", error);
@@ -949,7 +869,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ---------------------------------------------------------------------
-// AUTH EVENT LISTENER (Single place for UI toggle on login/logout)
+// AUTH EVENT LISTENER (UI toggle on login/logout)
 // ---------------------------------------------------------------------
 
 function updateAuthUI(authenticated, username = null) {
@@ -962,36 +882,36 @@ function updateAuthUI(authenticated, username = null) {
   const loginMsg = document.getElementById('loginRequiredMessage');
 
   if (authenticated) {
-    // Update UI for logged in state
-    if (authBtn) authBtn.classList.add('hidden');
-    if (userMenu) userMenu.classList.remove('hidden');
+    // Logged in UI
+    authBtn?.classList.add('hidden');
+    userMenu?.classList.remove('hidden');
     if (authStatus) authStatus.textContent = username || 'Authenticated';
     if (userStatus) {
       userStatus.textContent = 'Online';
       userStatus.classList.remove('text-gray-500');
       userStatus.classList.add('text-green-500');
     }
-    if (authDropdown) authDropdown.classList.add('hidden');
-    if (projectPanel) projectPanel.classList.remove('hidden');
-    if (loginMsg) loginMsg.classList.add('hidden');
-    
-    // Ensure we're showing project list view by default
+    authDropdown?.classList.add('hidden');
+    projectPanel?.classList.remove('hidden');
+    loginMsg?.classList.add('hidden');
+
+    // Show project list by default
     const projectListView = document.getElementById('projectListView');
     const projectDetailsView = document.getElementById('projectDetailsView');
-    if (projectListView) projectListView.classList.remove('hidden');
-    if (projectDetailsView) projectDetailsView.classList.add('hidden');
+    projectListView?.classList.remove('hidden');
+    projectDetailsView?.classList.add('hidden');
   } else {
-    // Update UI for logged out state
-    if (authBtn) authBtn.classList.remove('hidden');
-    if (userMenu) userMenu.classList.add('hidden');
+    // Logged out UI
+    authBtn?.classList.remove('hidden');
+    userMenu?.classList.add('hidden');
     if (authStatus) authStatus.textContent = 'Not Authenticated';
     if (userStatus) {
       userStatus.textContent = 'Offline';
       userStatus.classList.remove('text-green-500');
       userStatus.classList.add('text-gray-500');
     }
-    if (projectPanel) projectPanel.classList.add('hidden');
-    if (loginMsg) loginMsg.classList.remove('hidden');
+    projectPanel?.classList.add('hidden');
+    loginMsg?.classList.remove('hidden');
   }
 }
 
@@ -1000,11 +920,11 @@ document.addEventListener('authStateChanged', (e) => {
   updateAuthUI(authenticated, username);
 
   if (authenticated) {
-    // If user is logged in, load side data
+    // If user is logged in, load data
     loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
     loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
 
-    // Also handle chatId if needed
+    // If there's a chatId in URL, load it
     const urlParams = new URLSearchParams(window.location.search);
     const chatId = urlParams.get('chatId');
     if (chatId && typeof window.loadConversation === 'function') {
@@ -1013,12 +933,11 @@ document.addEventListener('authStateChanged', (e) => {
       });
     }
   } else {
-    // Clear the conversation area if you want
+    // Clear the conversation area or show “Please log in”
     const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
     if (conversationArea) {
       conversationArea.innerHTML = '';
     }
-    // Show login required UI
     const loginMsg = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
     loginMsg?.classList.remove('hidden');
   }
@@ -1028,9 +947,31 @@ document.addEventListener('authStateChanged', (e) => {
 // PUBLIC EXPORTS
 // ---------------------------------------------------------------------
 
-// Make apiRequest available globally for all other scripts
 window.apiRequest = apiRequest;
 
-// Expose functions directly on window for backward compatibility
 window.loadConversationList = loadConversationList;
-window.loadSidebarProjects = loadSidebarProjects;
+
+if (!window.loadSidebarProjects) {
+  window.loadSidebarProjects = async function () {
+    try {
+      const projects = await apiRequest(API_ENDPOINTS.PROJECTS);
+      const container = getElement(SELECTORS.SIDEBAR_PROJECTS);
+
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (projects?.length > 0) {
+        projects.forEach(project => {
+          const li = createProjectListItem(project);
+          if (li) container.appendChild(li);
+        });
+      } else {
+        showEmptyState(container, MESSAGES.NO_PROJECTS, 'py-4');
+      }
+      return projects;
+    } catch (error) {
+      console.error('Failed to load sidebar projects:', error);
+      throw error;
+    }
+  };
+}

@@ -1,6 +1,5 @@
-// auth.js - Updated to rely on app.js's apiRequest and a single refresh approach
-// apiRequest availability will be checked when actually needed
-
+// Development mode flag
+const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 // -------------------------
 // Token Management
@@ -8,32 +7,24 @@
 const TokenManager = {
   accessToken: null,
   refreshToken: null,
-  isInitialized: false, // Add initialization flag
+  isInitialized: false,
+  tokenExpiry: null,
+  version: '1',
 
   setTokens(access, refresh) {
     if (!access) {
       console.warn('Attempted to set null/undefined access token');
       return;
     }
-
     console.log('TokenManager: Setting new access token');
     this.accessToken = access;
     this.refreshToken = refresh;
     this.tokenExpiry = Date.now() + (30 * 60 * 1000); // Default 30 minute expiry
-    
+
     // Notify WebSocket connections of token refresh
     if (typeof this.onTokenRefresh === 'function') {
       this.onTokenRefresh(access);
     }
-    
-    try {
-      // Store token without parsing (security)
-      this.version = '1'; // Default version
-      console.log(`TokenManager: Set new access token`);
-    } catch (e) {
-      console.warn('Failed to parse token version:', e);
-    }
-    this.isInitialized = true;
 
     // Also store tokens in session for reload persistence
     sessionStorage.setItem('auth_state', JSON.stringify({
@@ -46,6 +37,8 @@ const TokenManager = {
     if (window.API_CONFIG) {
       window.API_CONFIG.isAuthenticated = true;
     }
+
+    this.isInitialized = true;
   },
 
   clearTokens() {
@@ -62,21 +55,20 @@ const TokenManager = {
 
   isExpired() {
     if (!this.accessToken) return true;
-    if (!this.tokenExpiry) return false; // If no expiry set, assume not expired
+    if (!this.tokenExpiry) return false;
     return Date.now() >= this.tokenExpiry;
   },
 
   /**
    * The sole place for token refresh logic.
-   * Uses concurrency guard via sessionStorage.getItem('refreshing')
-   * to prevent parallel refresh calls.
+   * Uses concurrency guard in sessionStorage to prevent parallel refresh calls.
    */
   async refreshTokens() {
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 1000;
-    
+
+    // If another refresh is in progress, just wait
     if (sessionStorage.getItem('refreshing')) {
-      // Wait for existing refresh to complete
       await new Promise(r => setTimeout(r, 500));
       return;
     }
@@ -85,13 +77,12 @@ const TokenManager = {
       try {
         sessionStorage.setItem('refreshing', 'true');
         console.log(`TokenManager: Attempting token refresh (attempt ${attempt})`);
-        
+
         if (!window.apiRequest) {
           throw new Error('Missing apiRequest implementation');
         }
 
         const data = await window.apiRequest('/api/auth/refresh', 'POST');
-        
         if (!data?.access_token) {
           throw new Error('Invalid refresh response');
         }
@@ -99,17 +90,15 @@ const TokenManager = {
         this.setTokens(data.access_token, data.refresh_token);
         console.log('TokenManager: Token refresh successful');
         return true;
-        
       } catch (error) {
         console.error(`Token refresh failed (attempt ${attempt}):`, error);
-        
+
         if (attempt === MAX_RETRIES) {
           // Clear tokens on final failure
           this.clearTokens();
           throw error;
         }
-        
-        // Exponential backoff
+        // Exponential-ish backoff
         await new Promise(r => setTimeout(r, RETRY_DELAY * attempt));
       } finally {
         sessionStorage.removeItem('refreshing');
@@ -118,138 +107,94 @@ const TokenManager = {
   }
 };
 
-// Make TokenManager directly available on window for easier access
+// Make TokenManager directly available
 window.TokenManager = TokenManager;
 
 // ---------------------------------------------------------------------
-// Initialization
-// ---------------------------------------------------------------------
-async function initAuth() {
-  // Add guard against double initialization
-  if (window.auth && window.auth.isInitialized) {
-    console.log("Auth module already initialized, skipping");
-    return true;
-  }
-  
-  // Track that initialization is in progress
-  if (window.API_CONFIG) {
-    window.API_CONFIG.authCheckInProgress = true;
-  }
-
-  try {
-    console.log("Initializing auth module");
-
-    // If we have saved tokens in session, rehydrate them
-    const authState = JSON.parse(sessionStorage.getItem('auth_state'));
-    if (authState?.accessToken) {
-      TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-      console.log("TokenManager initialized from session storage");
-      
-      // Get user info from session if available
-      const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
-      const username = userInfo?.username;
-
-      // Always broadcast authenticated state when tokens exist
-      broadcastAuth(true, username);
-
-      // Optionally verify from server to ensure they're still valid
-      await verifyAuthState();
-    } else {
-      // No tokens found, mark user as logged out
-      clearSession();
-      broadcastAuth(false);
-    }
-
-    setupUIListeners();
-    
-    // Mark as initialized before completing
-    if (window.auth) {
-      window.auth.isInitialized = true;
-    }
-    
-    console.log("Auth module initialized successfully");
-    return true;
-  } catch (error) {
-    console.error("Auth initialization failed:", error);
-    clearSession();
-    broadcastAuth(false);
-    return false;
-  } finally {
-    // Clear the in-progress flag
-    if (window.API_CONFIG) {
-      window.API_CONFIG.authCheckInProgress = false;
-    }
-  }
-}
-
-// ---------------------------------------------------------------------
-// Export to window for external usage
+// Export auth to window for external usage
 // ---------------------------------------------------------------------
 window.auth = {
-  init: initAuth,
+  init: async function () {
+    // Prevent double initialization
+    if (this.isInitialized) {
+      console.log("Auth module already initialized, skipping");
+      return true;
+    }
+
+    if (window.API_CONFIG) {
+      window.API_CONFIG.authCheckInProgress = true;
+    }
+
+    try {
+      console.log("Initializing auth module");
+
+      // If we have saved tokens in session, rehydrate them
+      const authState = JSON.parse(sessionStorage.getItem('auth_state'));
+      if (authState?.accessToken) {
+        TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+        console.log("TokenManager initialized from session storage");
+
+        // Get user info if available
+        const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
+        const username = userInfo?.username;
+
+        broadcastAuth(true, username);
+
+        // Optionally verify from server
+        await verifyAuthState();
+      } else {
+        // No tokens found, mark logged out
+        clearSession();
+        broadcastAuth(false);
+      }
+
+      setupUIListeners();
+
+      this.isInitialized = true;
+      console.log("Auth module initialized successfully");
+      return true;
+    } catch (error) {
+      console.error("Auth initialization failed:", error);
+      clearSession();
+      broadcastAuth(false);
+      return false;
+    } finally {
+      if (window.API_CONFIG) {
+        window.API_CONFIG.authCheckInProgress = false;
+      }
+    }
+  },
   verify: verifyAuthState,
   updateStatus: updateAuthStatus,
   login: loginUser,
   logout: logout,
   manager: TokenManager,
-  isInitialized: false  // Track initialization state
+  isInitialized: false
 };
 
-
-/**
- * UI Event Listeners: Toggle login/register forms, handle login submission, etc.
- * We do NOT do large-scale UI toggles like "authButton hidden" here.
- * app.js handles that in updateAuthUI().
- */
+// -------------------------------------------------------------
+// UI & Form Handlers
+// -------------------------------------------------------------
 function setupUIListeners() {
   const authBtn = document.getElementById("authButton");
   const authDropdown = document.getElementById("authDropdown");
 
   if (authBtn && authDropdown) {
-    console.log("Setting up auth button click handler");
-    console.log("Auth button element:", authBtn);
-    console.log("Auth dropdown element:", authDropdown);
-    
-    authBtn.addEventListener("click", function(e) {
+    authBtn.addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
-      
-      console.group("Auth Button Click Debug");
-      console.log("1. Auth button clicked");
-      console.log("2. Current dropdown classes:", authDropdown.className);
-      console.log("3. Dropdown computed display:", window.getComputedStyle(authDropdown).display);
-      console.log("4. Dropdown computed visibility:", window.getComputedStyle(authDropdown).visibility);
-      
-      // Force correct z-index and positioning
-      authDropdown.style.zIndex = "1000";
-      authDropdown.style.position = "absolute";
-      console.log("5. Set z-index and position");
-      
-      // Clean up animation classes
-      authDropdown.classList.remove("animate-slide-in", "slide-in");
-      console.log("6. Removed animation classes");
-      
+
       if (authDropdown.classList.contains("hidden")) {
-        console.log("7. Dropdown is hidden - showing it");
         authDropdown.classList.remove("hidden");
-        console.log("8. Removed hidden class");
-        
         setTimeout(() => {
-          console.log("9. Adding animate-slide-in class");
           authDropdown.classList.add("animate-slide-in");
-          console.log("10. Current classes after add:", authDropdown.className);
-          console.log("11. Dropdown computed display:", window.getComputedStyle(authDropdown).display);
         }, 10);
       } else {
-        console.log("7. Dropdown is visible - hiding it");
         setTimeout(() => {
           authDropdown.classList.add("hidden");
-          console.log("8. Added hidden class");
         }, 200);
       }
-      
-      console.groupEnd();
-      
+
       // Close any other open dropdowns
       document.querySelectorAll('.dropdown-content').forEach(dropdown => {
         if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
@@ -268,7 +213,6 @@ function setupUIListeners() {
     });
   }
 
-  // Switch between login/register forms
   const loginTab = document.getElementById("loginTab");
   const registerTab = document.getElementById("registerTab");
   const loginForm = document.getElementById("loginForm");
@@ -286,10 +230,10 @@ function setupUIListeners() {
   }
 
   // Login form submission
-  document.getElementById("loginForm")?.addEventListener("submit", async function(e) {
-    e.preventDefault(); // Make sure this is working
-    console.log("Login form submitted via JS handler"); // Add logging
-    
+  loginForm?.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    console.log("Login form submitted via JS handler");
+
     const formData = new FormData(e.target);
     const username = formData.get("username");
     const password = formData.get("password");
@@ -301,34 +245,22 @@ function setupUIListeners() {
     const submitBtn = this.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = `
-      <svg class="animate-spin h-4 w-4 mx-auto text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962
-               7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-        </path>
-      </svg>
-    `;
+    submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" ...>...</svg>`;
 
     try {
-      console.log("Calling loginUser with:", username);
       await loginUser(username, password);
-      console.log("Login successful");
-      
       // Hide dropdown
-      const authDropdown = document.getElementById("authDropdown");
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
-      
-      // Reset UI to project list view
+
+      // Example post-login UI refresh
       const projectListView = document.getElementById('projectListView');
       const projectDetailsView = document.getElementById('projectDetailsView');
       if (projectListView) projectListView.classList.remove('hidden');
       if (projectDetailsView) projectDetailsView.classList.add('hidden');
-      
-      // Load initial data after a short delay
+
+      // Load any initial data
       setTimeout(() => {
         if (typeof window.loadSidebarProjects === 'function') {
           window.loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
@@ -336,8 +268,6 @@ function setupUIListeners() {
         if (typeof window.loadProjectList === 'function') {
           window.loadProjectList().catch(err => console.warn("Failed to load project list:", err));
         }
-        
-        // Only create new chat if we're on the chat interface page
         const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
         if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
           window.createNewChat().catch(err => console.warn("Failed to create chat:", err));
@@ -353,7 +283,7 @@ function setupUIListeners() {
   });
 
   // Register form submission
-  document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
+  registerForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     await handleRegister(formData);
@@ -363,9 +293,6 @@ function setupUIListeners() {
   document.getElementById("logoutBtn")?.addEventListener("click", logout);
 }
 
-/**
- * Switch between Login and Register forms (tabs).
- */
 function switchForm(isLogin) {
   const loginTab = document.getElementById("loginTab");
   const registerTab = document.getElementById("registerTab");
@@ -392,11 +319,9 @@ function switchForm(isLogin) {
 // ---------------------------------------------------------------------
 // Authentication Handlers
 // ---------------------------------------------------------------------
-
 async function handleRegister(formData) {
   const username = formData.get("username");
   const password = formData.get("password");
-
   if (!username || !password) {
     notify("Please fill out all fields", "error");
     return;
@@ -407,10 +332,9 @@ async function handleRegister(formData) {
   }
 
   try {
-    // Register
-    await window.apiRequest('/api/auth/register', 'POST', { 
-      username: username.trim(), 
-      password 
+    await window.apiRequest('/api/auth/register', 'POST', {
+      username: username.trim(),
+      password
     });
     // Immediately login
     await loginUser(username, password);
@@ -424,7 +348,6 @@ async function handleRegister(formData) {
 
 async function loginUser(username, password) {
   try {
-    console.log("Making login API request");
     if (!window.apiRequest) {
       throw new Error('Cannot login - apiRequest not available');
     }
@@ -432,14 +355,12 @@ async function loginUser(username, password) {
       username: username.trim(),
       password
     });
-    console.log("Login API response:", data);
-    
     if (!data.access_token) {
       throw new Error("Invalid response from server");
     }
-
     TokenManager.setTokens(data.access_token, data.refresh_token);
-    // If server returned user info, store it
+
+    // Store user info
     if (data.username) {
       sessionStorage.setItem('userInfo', JSON.stringify({
         username: data.username,
@@ -448,12 +369,8 @@ async function loginUser(username, password) {
       }));
     }
 
-    // Let app.js handle UI toggles
     broadcastAuth(true, data.username || username);
-
-    // Set up token refresh interval
     setupTokenRefresh();
-
     return data;
   } catch (error) {
     console.error("loginUser error details:", error);
@@ -482,7 +399,6 @@ async function logout(e) {
         console.warn("Logout API error:", apiErr);
       }
     }
-
     TokenManager.clearTokens();
     sessionStorage.clear();
 
@@ -490,7 +406,6 @@ async function logout(e) {
     document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
     broadcastAuth(false);
-
     if (e) {
       notify("Logged out", "success");
       window.location.href = '/index.html';
@@ -509,7 +424,6 @@ async function logout(e) {
 // ---------------------------------------------------------------------
 // Token Refresh Management
 // ---------------------------------------------------------------------
-
 let tokenRefreshTimer;
 
 function setupTokenRefresh() {
@@ -518,7 +432,6 @@ function setupTokenRefresh() {
   tokenRefreshTimer = setInterval(() => {
     TokenManager.refreshTokens().catch(err => {
       console.error("Periodic token refresh failed:", err);
-      // If refresh fails, force logout
       logout();
     });
   }, 15 * 60 * 1000);
@@ -541,14 +454,12 @@ function clearTokenTimers() {
 // ---------------------------------------------------------------------
 // Auth Verification & Status Updates
 // ---------------------------------------------------------------------
-
 const authVerificationCache = {
   lastVerified: 0,
   cacheDuration: 5000, // 5 seconds
   result: null,
   isValid() {
-    return this.result !== null &&
-           Date.now() - this.lastVerified < this.cacheDuration;
+    return this.result !== null && (Date.now() - this.lastVerified < this.cacheDuration);
   },
   set(result) {
     this.result = result;
@@ -558,8 +469,7 @@ const authVerificationCache = {
 
 async function verifyAuthState() {
   if (isDevelopment) {
-    console.log('[DEV MODE] Bypassing authentication checks');
-    console.debug('Full auth verification would run here in production');
+    console.log('[DEV MODE] Skipping auth check');
     return true;
   }
 
@@ -567,43 +477,32 @@ async function verifyAuthState() {
     if (authVerificationCache.isValid()) {
       return authVerificationCache.result;
     }
-
-    // If we have no tokens, definitely not authenticated
+    // If we have no tokens, not authenticated
     const hasTokens = TokenManager.accessToken || sessionStorage.getItem('auth_state');
     if (!hasTokens) {
       authVerificationCache.set(false);
       return false;
     }
-
     // Handle expired tokens
     if (TokenManager.isExpired()) {
-      console.log('verifyAuthState: Refreshing token because it is expired');
+      console.log('verifyAuthState: Token expired -> refreshing');
       try {
         await TokenManager.refreshTokens();
       } catch (refreshError) {
         console.warn('Token refresh failed:', refreshError);
-        // Clear tokens and cache on refresh failure
         TokenManager.clearTokens();
         authVerificationCache.set(false);
         broadcastAuth(false);
         throw new Error('Session expired. Please login again.');
       }
     }
-
     // Check with server
     if (!window.apiRequest) {
       return !!TokenManager.accessToken;
     }
-
     try {
       const response = await window.apiRequest('/api/auth/verify');
-      // If server says we're authenticated
-      if (response.authenticated && !TokenManager.accessToken) {
-        await updateAuthStatus();
-        authVerificationCache.set(true);
-        return true;
-      }
-
+      // If server says we’re authenticated
       authVerificationCache.set(response.authenticated);
       return response.authenticated;
     } catch (verifyError) {
@@ -618,7 +517,7 @@ async function verifyAuthState() {
     }
   } catch (error) {
     console.warn('Auth verification error:', error);
-    // If it's a network error, we might still have local tokens
+    // For network errors, fallback to local token presence
     if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
       const result = !!TokenManager.accessToken;
       authVerificationCache.set(result);
@@ -631,15 +530,12 @@ async function verifyAuthState() {
 
 async function updateAuthStatus() {
   try {
-    if (!window.apiRequest) {
-      return false;
-    }
+    if (!window.apiRequest) return false;
+
     const data = await window.apiRequest('/api/auth/verify');
     if (data.access_token) {
       TokenManager.setTokens(data.access_token, data.refresh_token);
     }
-
-    // If the server returns user info, store it
     sessionStorage.setItem('userInfo', JSON.stringify({
       username: data.username,
       roles: data.roles || [],
@@ -672,10 +568,9 @@ function clearSession() {
   clearTokenTimers();
 }
 
-// Use standard Notifications from app.js
 function notify(message, type = "info") {
   if (window.Notifications) {
-    switch(type) {
+    switch (type) {
       case 'error':
         window.Notifications.apiError(message);
         break;
@@ -691,7 +586,6 @@ function notify(message, type = "info") {
   }
 }
 
-// Defer initialization until apiRequest is available
 function waitForApiRequest() {
   return new Promise((resolve) => {
     if (window.apiRequest) {
@@ -710,10 +604,10 @@ function waitForApiRequest() {
 // Initialize WebSocket token refresh handler
 TokenManager.onTokenRefresh = (newToken) => {
   const wsServices = [
-    window.chatInterface?.wsService, 
+    window.chatInterface?.wsService,
     window.projectChatInterface?.wsService
   ].filter(Boolean);
-  
+
   wsServices.forEach(ws => {
     if (ws?.socket?.readyState === WebSocket.OPEN) {
       ws.socket.send(JSON.stringify({
@@ -724,14 +618,8 @@ TokenManager.onTokenRefresh = (newToken) => {
   });
 };
 
-// Ensure initAuth runs when ready
-document.addEventListener('DOMContentLoaded', async () => {
-  console.log("DOMContentLoaded - Waiting for apiRequest");
-  try {
-    await waitForApiRequest();
-    console.log("apiRequest available - Running initAuth");
-    await initAuth();
-  } catch (err) {
-    console.error("Failed to initialize auth:", err);
-  }
-});
+/**
+ * NOTE: We intentionally do NOT attach a second DOMContentLoaded listener here
+ * to avoid double initialization. Let app.js (or your main script) call
+ * `window.auth.init()` exactly once, after `apiRequest` is defined.
+ */

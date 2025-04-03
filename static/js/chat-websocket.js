@@ -749,10 +749,11 @@ function validateWebSocketUrl(url) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = WebSocketService;
   }
-  // Export version and constants for debugging
-  WebSocketService.version = '1.1.0';
-  WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
   
+  // Export version and constants for debugging after class is fully defined
+  window.WebSocketService.version = '1.1.0';
+  window.WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
+
   /**
    * Changelog:
    * v1.1.0 - Improved WebSocket reliability
