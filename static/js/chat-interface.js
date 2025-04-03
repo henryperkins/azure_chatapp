@@ -410,9 +410,21 @@ window.ChatInterface.prototype.createNewConversation = async function() {
   try {
     console.log('Creating new conversation...');
     
+    // First verify auth state
+    const authState = await window.ChatUtils?.isAuthenticated?.() ||
+                     (window.auth?.verify ? await window.auth.verify() : false);
+    
+    if (!authState) {
+      this.notificationFunction("Please log in to create conversations", "error");
+      window.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: { authenticated: false }
+      }));
+      throw new Error("Not authenticated");
+    }
+
     // Get current model from localStorage or MODEL_CONFIG
-    const currentModel = window.MODEL_CONFIG?.modelName || 
-                         localStorage.getItem("modelName") || 
+    const currentModel = window.MODEL_CONFIG?.modelName ||
+                         localStorage.getItem("modelName") ||
                          "claude-3-sonnet-20240229";
                          
     console.log(`Using model: ${currentModel} for new conversation`);
@@ -430,12 +442,16 @@ window.ChatInterface.prototype.createNewConversation = async function() {
       }
     } catch (error) {
       console.error('Conversation creation failed:', error);
-      this.notificationFunction(
-        error.message.includes('knowledge base') ? 
-          'Created chat but knowledge integration failed' :
-          'Failed to create conversation',
-        'error'
-      );
+      let message = 'Failed to create conversation';
+      if (error.message.includes('Not authenticated')) {
+        message = 'Session expired - please log in again';
+        window.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: { authenticated: false }
+        }));
+      } else if (error.message.includes('knowledge base')) {
+        message = 'Created chat but knowledge integration failed';
+      }
+      this.notificationFunction(message, 'error');
       throw error;
     }
     console.log(`New conversation created successfully with ID: ${conversation.id}`);

@@ -341,6 +341,14 @@
         return;
       }
 
+      // Set loading state timeout (5s)
+      const loadingTimeout = setTimeout(() => {
+        if (this.state.isSearching) {
+          this.state.isSearching = false;
+          window.showNotification("Search taking longer than expected - please wait", "info");
+        }
+      }, 5000);
+
       try {
         if (typeof this._showSearchLoading === 'function') {
           this._showSearchLoading();
@@ -350,28 +358,38 @@
         // Get top_k value from UI or use default
         const topK = document.getElementById('knowledgeTopK')?.value || 5;
         
-        // UPDATED: Use the correct search endpoint from knowledge_base_routes.py
+        // Use explicit 5s timeout for the search request
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases/search`,
           "POST",
           {
             query: query.trim(),
             top_k: parseInt(topK, 10)
-          }
+          },
+          0, // retryCount
+          5000 // timeoutMs
         );
 
+        clearTimeout(loadingTimeout);
         this.state.isSearching = false;
+        
         // Ensure results is always an array
         const results = Array.isArray(response.data?.results) ? response.data.results : [];
-        if (typeof this._renderSearchResults === 'function' && results.length > 0) {
+        if (results.length === 0) {
+          window.showNotification("No matching results found", "info");
+        }
+        
+        if (typeof this._renderSearchResults === 'function') {
           this._renderSearchResults(results);
         }
       } catch (err) {
+        clearTimeout(loadingTimeout);
         this.state.isSearching = false;
-        console.error("Error searching knowledge base:", err);
         
         let errorMsg = "Search failed";
-        if (err.response?.status === 404) {
+        if (err.code === 'ETIMEDOUT') {
+          errorMsg = "Search timed out - try again or check knowledge base status";
+        } else if (err.response?.status === 404) {
           errorMsg = "Project or knowledge base not found";
         } else if (err.message?.includes("No project selected")) {
           errorMsg = "Please select a project first";
@@ -381,6 +399,7 @@
         if (typeof this._showNoResults === 'function') {
           this._showNoResults();
         }
+        console.error("Knowledge base search error:", err);
       }
     }
 

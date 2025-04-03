@@ -499,40 +499,58 @@ function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
  * Setup pinning/unpinning sidebar functionality
  */
 function setupPinningSidebar() {
-  const pinButton = document.getElementById('pinSidebarBtn');
-  if (!pinButton || !sidebar) {
-    console.warn('Pinning elements not found in the DOM');
-    return;
-  }
-
-  // Check saved pinned state
-  const isPinned = localStorage.getItem('sidebarPinned') === 'true';
-
-  // Apply initial state
-  if (isPinned) {
-    pinButton.classList.add('text-yellow-500');
-    pinButton.querySelector('svg')?.setAttribute('fill', 'currentColor');
-    document.body.classList.add('pinned-sidebar');
-  }
-
-  // Add click handler
-  trackListener(pinButton, 'click', () => {
-    const isPinnedNow = document.body.classList.contains('pinned-sidebar');
-
-    if (isPinnedNow) {
-      // Unpin sidebar
-      document.body.classList.remove('pinned-sidebar');
-      pinButton.classList.remove('text-yellow-500');
-      pinButton.querySelector('svg')?.setAttribute('fill', 'none');
-      localStorage.setItem('sidebarPinned', 'false');
-    } else {
-      // Pin sidebar
-      document.body.classList.add('pinned-sidebar');
-      pinButton.classList.add('text-yellow-500');
-      pinButton.querySelector('svg')?.setAttribute('fill', 'currentColor');
-      localStorage.setItem('sidebarPinned', 'true');
+  try {
+    const pinButton = document.getElementById('pinSidebarBtn');
+    if (!pinButton) {
+      console.debug('Pin button element not found in DOM - pinning functionality disabled');
+      return;
     }
-  });
+    
+    if (!sidebar) {
+      console.warn('Sidebar element not initialized - pinning functionality disabled');
+      return;
+    }
+
+    // Check saved pinned state
+    const isPinned = localStorage.getItem('sidebarPinned') === 'true';
+
+    // Apply initial state
+    if (isPinned) {
+      pinButton.classList.add('text-yellow-500');
+      const svg = pinButton.querySelector('svg');
+      if (svg) {
+        svg.setAttribute('fill', 'currentColor');
+      }
+      document.body.classList.add('pinned-sidebar');
+    }
+
+    // Add click handler
+    trackListener(pinButton, 'click', () => {
+      const isPinnedNow = document.body.classList.contains('pinned-sidebar');
+
+      if (isPinnedNow) {
+        // Unpin sidebar
+        document.body.classList.remove('pinned-sidebar');
+        pinButton.classList.remove('text-yellow-500');
+        const svg = pinButton.querySelector('svg');
+        if (svg) {
+          svg.setAttribute('fill', 'none');
+        }
+        localStorage.setItem('sidebarPinned', 'false');
+      } else {
+        // Pin sidebar
+        document.body.classList.add('pinned-sidebar');
+        pinButton.classList.add('text-yellow-500');
+        const svg = pinButton.querySelector('svg');
+        if (svg) {
+          svg.setAttribute('fill', 'currentColor');
+        }
+        localStorage.setItem('sidebarPinned', 'true');
+      }
+    });
+  } catch (error) {
+    console.error('Error initializing sidebar pinning:', error);
+  }
 }
 
 /**

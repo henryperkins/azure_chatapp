@@ -118,8 +118,10 @@ function sanitizeUrl(url) {
     return url.replace(/\s+/g, '').replace(/\/+/g, '/');
 }
 
-async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0) {
+async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000) {
     const maxRetries = 2;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     // Sanitize URL first
     endpoint = sanitizeUrl(endpoint);
@@ -182,7 +184,8 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
     },
     credentials: 'include',  // Critical for cookies
     cache: 'no-store',
-    redirect: 'follow'
+    redirect: 'follow',
+    signal: controller.signal
   };
 
   // Body for POST/PUT
@@ -197,8 +200,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
   }
 
   try {
-    console.log(`Making ${method} request to: ${finalUrl}`);
+    console.log(`Making ${method} request to: ${finalUrl} (timeout: ${timeoutMs}ms)`);
     const response = await fetch(finalUrl, options);
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       window.API_CONFIG.lastErrorStatus = response.status;
@@ -253,6 +257,13 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0)
 
     return jsonData;
   } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error(`Request timed out after ${timeoutMs}ms`);
+      timeoutError.name = 'TimeoutError';
+      timeoutError.code = 'ETIMEDOUT';
+      throw timeoutError;
+    }
     console.error('API request failed:', error);
     throw error;
   }
