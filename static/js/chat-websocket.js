@@ -275,9 +275,16 @@ window.WebSocketService.prototype.connect = async function (chatId) {
         this.wsUrl = `${finalProtocol}${host}${basePath}?${params}`;
         console.log('Constructed WebSocket URL:', this.wsUrl);
   } catch (error) {
-    console.error('Error constructing WebSocket URL:', error);
+    const enhancedError = new Error(`Failed to construct WebSocket URL: ${error.message}`);
+    enhancedError.code = 'WS_URL_CONSTRUCTION_FAILED';
+    enhancedError.originalError = error;
+    console.error('Error constructing WebSocket URL:', {
+      error: enhancedError,
+      chatId: this.chatId,
+      projectId: this.projectId
+    });
     this.useHttpFallback = true;
-    throw new Error('Invalid WebSocket endpoint configuration');
+    throw enhancedError;
   }
 
   if (!validateWebSocketUrl(this.wsUrl)) {
@@ -368,19 +375,28 @@ window.WebSocketService.prototype.establishConnection = function () {
     this.pendingPongs = 0;
     // Validate URL again right before connection as a safety check
     if (!validateWebSocketUrl(this.wsUrl)) {
-      return reject(new Error(`Invalid WebSocket URL: ${this.wsUrl}`));
+      const err = new Error(`Invalid WebSocket URL: ${this.wsUrl}`);
+      err.code = 'INVALID_WS_URL';
+      return reject(err);
     }
 
     const socket = new WebSocket(this.wsUrl);
     const timeout = setTimeout(() => {
+      const err = new Error(`Connection timeout after ${this.connectionTimeout}ms`);
+      err.code = 'CONNECTION_TIMEOUT';
       socket.close();
-      reject(new Error('Connection timeout'));
+      reject(err);
     }, this.connectionTimeout);
 
     socket.onopen = () => {
       clearTimeout(timeout);
       this.socket = socket;
       this.reconnectAttempts = 0;
+      console.debug('WebSocket connection established', {
+        url: this.wsUrl,
+        chatId: this.chatId,
+        projectId: this.projectId
+      });
       resolve();
     };
 
@@ -427,14 +443,22 @@ window.WebSocketService.prototype.establishConnection = function () {
         console.error('Message parsing error:', err);
       }
     };
+socket.onerror = (error) => {
+  clearTimeout(timeout);
+  const enhancedError = new Error(`WebSocket connection error: ${error.message || 'Unknown error'}`);
+  enhancedError.code = 'WS_CONNECTION_ERROR';
+  enhancedError.details = {
+    url: this.wsUrl,
+    chatId: this.chatId,
+    state: this.state,
+    originalError: error
+  };
+  console.error('WebSocket connection failed:', enhancedError.details);
+  this.handleConnectionError(enhancedError);
+  reject(enhancedError);
+};
 
-    socket.onerror = (error) => {
-      clearTimeout(timeout);
-      this.handleConnectionError(error);
-      reject(error);
-    };
-
-    socket.onclose = (event) => {
+socket.onclose = (event) => {
       clearTimeout(timeout);
       
       // Skip error handling for normal closures (1000, 1001, 1005)
@@ -491,20 +515,30 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
 
   // Special handling for code 1008 (Policy Violation)
   if (errorCode === 1008) {
-    console.error('WebSocket policy violation:', errorDetails, {
+    const errorInfo = {
       state: this.state,
       chatId: this.chatId,
       projectId: this.projectId,
       reconnectAttempt: this.reconnectAttempts,
-      wsUrl: this.wsUrl
-    });
+      wsUrl: this.wsUrl,
+      timestamp: new Date().toISOString()
+    };
+    console.error('WebSocket policy violation:', errorDetails, errorInfo);
 
     // For policy violations, we should not attempt to reconnect
     this.useHttpFallback = true;
     this.setState(CONNECTION_STATES.DISCONNECTED);
     
+    // Clear any pending reconnection attempts
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
     if (this.onError) {
-      this.onError(new Error('Connection terminated due to policy violation. Using HTTP fallback.'));
+      const error = new Error('Authentication failed - please refresh your session');
+      error.details = errorInfo;
+      this.onError(error);
     }
     return;
   }
@@ -565,13 +599,23 @@ window.WebSocketService.prototype.handleConnectionError = async function (error)
 
 window.WebSocketService.prototype.attemptReconnection = function () {
   if (this.reconnectAttempts >= this.maxRetries) {
-    console.warn('Max reconnection attempts reached', {
+    const errorInfo = {
       attempts: this.reconnectAttempts,
       maxRetries: this.maxRetries,
-      lastError: this.lastError
-    });
+      lastError: this.lastError,
+      chatId: this.chatId,
+      projectId: this.projectId,
+      timestamp: new Date().toISOString()
+    };
+    console.warn('Max reconnection attempts reached', errorInfo);
     this.useHttpFallback = true;
     this.setState(CONNECTION_STATES.DISCONNECTED);
+    
+    if (this.onError) {
+      const error = new Error('Failed to reconnect - using HTTP fallback');
+      error.details = errorInfo;
+      this.onError(error);
+    }
     return;
   }
 
@@ -582,18 +626,25 @@ window.WebSocketService.prototype.attemptReconnection = function () {
   // Calculate delay with exponential backoff and jitter
   const baseDelay = this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
   const jitter = baseDelay * 0.5 * Math.random(); // Up to 50% jitter
-  const delay = Math.min(60000, baseDelay + jitter); // Cap at 60 seconds
+  const delay = Math.min(30000, baseDelay + jitter); // Cap at 30 seconds
 
-  console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxRetries})`, {
+  const attemptInfo = {
+    attempt: this.reconnectAttempts,
+    maxRetries: this.maxRetries,
+    delay,
     baseDelay,
     jitter,
-    maxDelay: 60000
-  });
+    chatId: this.chatId,
+    projectId: this.projectId,
+    timestamp: new Date().toISOString()
+  };
+  console.log('Scheduling reconnection attempt', attemptInfo);
 
   this.reconnectTimeout = setTimeout(() => {
     // Validate URL before reconnection attempt
     if (!validateWebSocketUrl(this.wsUrl)) {
       const error = new Error(`Invalid WebSocket URL for reconnection: ${this.wsUrl}`);
+      error.details = attemptInfo;
       console.error(error.message);
       this.lastError = error;
       this.useHttpFallback = true;
