@@ -633,9 +633,15 @@ async def websocket_chat_endpoint(
 
             # Validate conversation access based on project/standalone context
             if project_id:
-                # Validate project ownership
-                project = await validate_project_access(project_id, user, db)
+                # Validate project MEMBERSHIP not just existence
+                project = await validate_project_membership(user, project_id, db)
                 additional_filters = [Conversation.project_id == project_id]
+                
+                # Verify conversation belongs to this project
+                if str(conversation.project_id) != str(project_id):
+                    logger.error(f"Critical mismatch: Conversation {conversation.id} has project {conversation.project_id} but connection claims {project_id}")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
             else:
                 # Validate standalone conversation ownership
                 additional_filters = [

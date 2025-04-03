@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from db import get_async_session
 from models.user import User, TokenBlacklist
+from models.project import Project, ProjectUserAssociation
+from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +186,30 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     return deleted_count
 
 
+async def validate_project_membership(
+    user: User, 
+    project_id: UUID, 
+    db: AsyncSession
+) -> Project:
+    """Full-stack validation for project access including membership check"""
+    # First verify basic project existence/ownership
+    project = await validate_project_access(project_id, user, db)
+
+    # Then check explicit membership
+    if project.is_public:
+        return project
+        
+    result = await db.execute(
+        select(ProjectUserAssociation)
+        .where(ProjectUserAssociation.user_id == user.id)
+        .where(ProjectUserAssociation.project_id == project_id)
+    )
+    if not result.scalar():
+        logger.warning(f"User {user.id} lacks membership in project {project_id}")
+        raise HTTPException(status_code=403, detail="Not a project member")
+
+    return project
+
 async def load_revocation_list(db: AsyncSession) -> None:
     """
     Load active revoked tokens into memory on startup.
@@ -264,9 +290,21 @@ async def get_user_from_token(
         logger.warning(f"Attempt to use token for disabled account: {username}")
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # Attach JWT claims to user object for access in logout and other functions
+    # Critical token version validation
+    token_version = decoded.get("version")
+    if user.token_version != token_version:
+        logger.critical(
+            f"Token version mismatch for {username}: "
+            f"Token v{token_version} vs User v{user.token_version}"
+        )
+        # Auto-revoke compromised tokens
+        revoke_token_id(decoded["jti"])
+        raise HTTPException(403, detail="Session invalidated - please reauthenticate")
+
+    # Attach JWT claims to user object
     user.jti = decoded.get("jti")
     user.exp = decoded.get("exp")
+    user.active_project_id = decoded.get("project_context")
 
     return user
 
