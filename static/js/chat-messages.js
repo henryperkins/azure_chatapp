@@ -56,6 +56,22 @@ window.MessageService.prototype.clear = function() {
     }
   } catch (error) {
     console.error('Error clearing messages:', error);
+  },
+
+  /**
+   * Count tokens using Claude's token counting API
+   */
+  async countClaudeTokens(text) {
+    try {
+      const response = await window.apiRequest(
+        '/api/claude/count_tokens', 
+        'POST',
+        { text, model: this.modelConfig?.modelName }
+      );
+      return response.data?.input_tokens || Math.ceil(text.length / 4);
+    } catch {
+      return Math.ceil(text.length / 4); // Fallback
+    }
   }
 };
 
@@ -113,11 +129,14 @@ window.MessageService.prototype.sendMessage = async function (content) {
     this.onSending();
   }
 
-  // Create the message payload
+  // Create the message payload with Claude-specific fields
   const messagePayload = {
     content: content,
-    role: "user",
-    type: "message"
+    role: "user", 
+    type: "message",
+    enable_thinking: this.modelConfig?.extendedThinking || false,
+    thinking_budget: this.modelConfig?.thinkingBudget || null,
+    vision_detail: this.modelConfig?.visionDetail || "auto"
   };
 
   // Add image data if present
@@ -311,6 +330,21 @@ window.MessageService.prototype._handleWsMessage = function (event) {
         thinking: data.thinking,
         redacted_thinking: data.redacted_thinking,
         metadata: data.metadata || {}
+      });
+    }
+    // Claude-specific response format
+    else if (data.type === 'claude_response') {
+      this.onMessageReceived({
+        role: 'assistant',
+        content: data.answer || data.content || '',
+        thinking: data.thinking,
+        redacted_thinking: data.redacted_thinking,
+        metadata: {
+          model: data.model || '',
+          tokens: data.token_count || 0,
+          thinking: data.thinking,
+          redacted_thinking: data.redacted_thinking
+        }
       });
     }
     // Claude-specific response format

@@ -8,6 +8,26 @@ if (typeof apiRequest === 'undefined') {
   const apiRequest = window.apiRequest;
 }
 
+// Add helper methods for Claude 3.7 Sonnet features
+window.ConversationService.prototype._handleRedactedThinking = function(data) {
+  return {
+    ...data,
+    content: data.redacted_thinking ? 
+      "[Some reasoning was redacted for safety]" : 
+      data.content
+  };
+};
+
+window.ConversationService.prototype._checkContextWindow = function(model, text) {
+  const MAX_TOKENS = {
+    "claude-3-7-sonnet-20250219": 128000,
+    "claude-3-opus-20240229": 200000, 
+    "claude-3-sonnet-20240229": 200000
+  };
+  
+  return (text.length / 4) < (MAX_TOKENS[model] * 0.9); // 90% safety margin
+};
+
 window.ConversationService = class ConversationService {
   constructor(options = {}) {
     this.onConversationLoaded = options.onConversationLoaded || (() => {});
@@ -89,7 +109,18 @@ return true;
     const projectId = localStorage.getItem("selectedProjectId");
     const model = window.MODEL_CONFIG?.modelName ||
       localStorage.getItem("modelName") ||
-      "claude-3-sonnet-20240229";
+      "claude-3-7-sonnet-20250219";
+      
+    // Validate model against supported Claude models
+    const CLAUDE_MODELS = [
+      "claude-3-7-sonnet-20250219",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229"
+    ];
+    
+    if (!CLAUDE_MODELS.includes(model)) {
+      throw new Error(`Unsupported model: ${model}`);
+    }
 
     console.log(`Creating new conversation with model: ${model}`);
     const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
