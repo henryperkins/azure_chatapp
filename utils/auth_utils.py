@@ -114,15 +114,17 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
         # Check token version if available
         token_version = decoded.get("version")
         username = decoded.get("sub")
-        if db and token_version is not None and username:
+        if db and username:
             query = select(User).where(User.username == username)
             result = await db.execute(query)
             user = result.scalar_one_or_none()
-            if user and (user.token_version is None or token_version < user.token_version):
-                logger.warning(f"Token version mismatch for {username}: "
-                              f"Token version {token_version} < "
-                              f"User version {user.token_version}")
-                raise HTTPException(status_code=401, detail="Token has been invalidated")
+            if user:
+                current_version = user.token_version or 0
+                if token_version is None or token_version < current_version:
+                    logger.warning(f"Token version mismatch for {username}: "
+                                  f"Token version {token_version} < "
+                                  f"User version {current_version}")
+                    raise HTTPException(status_code=401, detail="Token has been invalidated")
 
         logger.debug(f"Token verification successful for jti: {token_id}, user: {username}")
         return decoded
