@@ -75,25 +75,15 @@ function initializeSidebarToggle() {
   const isMobile = window.innerWidth < 768;
   isOpen = !isMobile; // Show on desktop by default
   
-  // Remove duplicate listeners
-  toggleBtn?.replaceWith(toggleBtn.cloneNode(true));
-  closeBtn?.replaceWith(closeBtn.cloneNode(true));
-
+  // Add body class to prevent scroll when sidebar is open
+  if (isMobile) {
+    document.body.classList.toggle('sidebar-open', newState);
+  }
+  
   // Set up fresh listeners with proper event handling
-  toggleBtn?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSidebar();
-  });
+  setupMobileToggle();
   
-  toggleBtn?.addEventListener('touchstart', (e) => {
-    e.stopPropagation();
-    toggleSidebar();
-  });
-  
-  closeBtn?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSidebar();
-  });
+  closeBtn?.addEventListener('click', handleToggle);
   
   window.addEventListener('resize', handleResize);
   
@@ -922,6 +912,35 @@ function handleKeydown(e) {
         e.preventDefault();
         toggleSidebar();
     }
+}
+
+function setupMobileToggle() {
+  let touchStartX = 0;
+  const threshold = 30; // Minimum horizontal swipe distance
+  
+  // Handle both click and touch events
+  toggleBtn?.addEventListener('touchstart', handleToggle, { passive: true });
+  toggleBtn?.addEventListener('click', handleToggle);
+
+  // Add edge swipe detection
+  document.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const deltaX = touchEndX - touchStartX;
+    
+    if (touchStartX < 50 && deltaX > threshold) { // Right edge swipe
+      toggleSidebar(true);
+      e.preventDefault();
+    }
+  });
+}
+
+function handleToggle(e) {
+  e.stopPropagation();
+  toggleSidebar();
 }
 
 function updateAccessibilityAttributes() {
