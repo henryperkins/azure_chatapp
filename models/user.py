@@ -7,6 +7,7 @@ and ownership of conversations/projects in the Azure Chat Application.
 from typing import List
 from sqlalchemy import Integer, String, TIMESTAMP, text, Boolean, CheckConstraint, Index, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.ext.hybrid import hybrid_property
 from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
