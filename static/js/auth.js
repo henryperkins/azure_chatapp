@@ -68,6 +68,21 @@ const TokenManager = {
    */
   async refreshTokens() {
     try {
+      // First check if we have a refresh token available
+      const refreshToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('refresh_token='))
+        ?.split('=')[1] || this.refreshToken;
+
+      if (!refreshToken) {
+        console.error('Refresh token missing - cannot refresh');
+        this.clearTokens();
+        window.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: { authenticated: false }
+        }));
+        throw new Error('Session expired. Please login again.');
+      }
+
       const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
         skipAuthCheck: true,
         skipRetry: true
@@ -78,14 +93,16 @@ const TokenManager = {
         return true;
       }
     } catch (error) {
-        console.error('Token refresh failed:', error);
-        if (error.status === 401) {
-            // Full re-authentication required
-            this.clearTokens();
-            window.dispatchEvent(new CustomEvent('authStateChanged', {
-                detail: { authenticated: false }
-            }));
-        }
+      console.error('Token refresh failed:', error);
+      if (error.status === 401) {
+        // Full re-authentication required
+        this.clearTokens();
+        window.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: { authenticated: false }
+        }));
+        throw new Error('Session expired. Please login again.');
+      }
+      throw error;
     }
     return false;
   }
@@ -353,6 +370,9 @@ async function loginUser(username, password) {
     // Force cookie refresh by first clearing then setting
     document.cookie = `access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     document.cookie = `access_token=${data.access_token}; path=/; ${
+      window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
+    }`;
+    document.cookie = `refresh_token=${data.refresh_token}; path=/; ${
       window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
     }`;
 

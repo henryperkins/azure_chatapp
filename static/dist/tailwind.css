@@ -1275,8 +1275,8 @@ video {
 .z-50 {
   z-index: 50;
 }
-.z-\[1030\] {
-  z-index: 1030;
+.z-\[1050\] {
+  z-index: 1050;
 }
 .z-\[99\] {
   z-index: 99;
@@ -1470,6 +1470,9 @@ video {
 }
 .max-h-\[999px\] {
   max-height: 999px;
+}
+.min-h-0 {
+  min-height: 0px;
 }
 .min-h-\[200px\] {
   min-height: 200px;
@@ -2274,6 +2277,16 @@ video {
 .ease-out {
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
 }
+/* Scrolling fixes */
+.min-h-0 {
+    min-height: 0;
+  }
+.content-overflow {
+  min-height: 0px;
+  flex: 1 1 0%;
+  overflow-y: auto;
+    min-height: 0;
+}
 /* Smooth scrolling */
 .scroll-smooth {
     scroll-behavior: smooth;
@@ -2437,7 +2450,7 @@ video {
 .confirm-modal {
   position: fixed;
   inset: 0px;
-  z-index: 1030;
+  z-index: 1050;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2446,6 +2459,10 @@ video {
 }
 
 .confirm-modal-content {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
   width: 100%;
   max-width: 28rem;
   border-radius: 0.5rem;
@@ -2460,6 +2477,53 @@ video {
 :is(.dark .confirm-modal-content) {
   --tw-bg-opacity: 1;
   background-color: rgb(31 41 55 / var(--tw-bg-opacity));
+}
+
+/* Project modal specific styles */
+.project-modal-container {
+  position: fixed;
+  inset: 0px;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.project-modal-container > div {
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  max-width: 28rem;
+  border-radius: 0.5rem;
+  --tw-bg-opacity: 1;
+  background-color: rgb(255 255 255 / var(--tw-bg-opacity));
+  --tw-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --tw-shadow-colored: 0 20px 25px -5px var(--tw-shadow-color), 0 8px 10px -6px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+:is(.dark .project-modal-container > div) {
+  --tw-bg-opacity: 1;
+  background-color: rgb(31 41 55 / var(--tw-bg-opacity));
+}
+
+.project-modal-container > div {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+@media (min-width: 640px) {
+  .project-modal-container > div {
+    max-width: 32rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .project-modal-container > div {
+    max-width: 36rem;
+  }
 }
 
 .confirm-modal-header {
@@ -2548,6 +2612,22 @@ video {
   color: rgb(229 231 235 / var(--tw-text-opacity));
 }
 
+/* Project list scrolling */
+#projectListView {
+  display: flex;
+  min-height: 0px;
+  flex: 1 1 0%;
+  flex-direction: column;
+    min-height: 0;
+}
+
+#projectList {
+  min-height: 0px;
+  flex: 1 1 0%;
+  overflow-y: auto;
+    min-height: 0;
+}
+
 /* Dark mode specific improvements */
 .dark .card {
   --tw-border-opacity: 1;
@@ -2613,9 +2693,40 @@ video {
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
   will-change: transform;
     transform: translateX(-100%);
-    z-index: 100; /* Lower than backdrop */
-    transition-property: transform, opacity;
-    backface-visibility: hidden;
+    z-index: 100; /* Lower than backdrop when closed */
+    touch-action: none; /* Let inner content handle scrolling */
+}
+
+#mainSidebar > * {
+    touch-action: auto; /* Re-enable for child elements */
+}
+
+#sidebarBackdrop {
+    touch-action: none;
+    overscroll-behavior: contain;
+}
+
+#mainSidebar.translate-x-0 {
+    transform: translateX(0);
+    z-index: 110; /* Higher than backdrop when open */
+}
+
+@media (min-width: 768px) {
+
+  #sidebarBackdrop {
+    display: none;
+  }
+}
+
+/* Ensure mobile viewport click-through when hidden */
+#sidebarBackdrop[aria-hidden="true"] {
+  pointer-events: none;
+  opacity: 0;
+}
+
+#sidebarBackdrop[aria-hidden="false"] {
+  pointer-events: auto;
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion) {
@@ -2667,6 +2778,7 @@ video {
   }
 
 #mainSidebar#mainSidebar {
+    z-index: 110; /* Higher than backdrop when open */
     transform: translateX(0);
 }
     
