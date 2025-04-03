@@ -33,6 +33,8 @@ from models.message import Message
 
 from services.project_service import validate_project_access
 from services import get_conversation_service
+from services.conversation_service import ConversationService
+from typing import Any
 from services.context_integration import augment_with_knowledge
 from db import get_async_session
 from utils.auth_utils import (
@@ -92,7 +94,7 @@ async def resolve_project_if_any(
     If None, this is a standalone conversation scenario, return None.
     """
     if project_id:
-        project = await project_service.validate_project_access(
+        project = await validate_project_access(
             project_id, current_user, db
         )
         if not project:
@@ -166,10 +168,9 @@ async def list_conversations(
     if project_id:
         # Validate access & list project-based
         await resolve_project_if_any(project_id, current_user, db)
-        conversations = await conversation_service.list_project_conversations(
-            project_id=project_id,
-            db=db,
+        conversations = await conv_service.list_conversations(
             user_id=current_user.id,
+            project_id=project_id,
             skip=skip,
             limit=limit,
         )
@@ -345,11 +346,10 @@ async def delete_conversation(
     - Otherwise, delete standalone conversation.
     """
     if project_id:
-        deleted_id = await conversation_service.delete_conversation(
-            project_id=project_id,
+        deleted_id = await conv_service.delete_conversation(
             conversation_id=conversation_id,
-            db=db,
             user_id=current_user.id,
+            project_id=project_id,
         )
         return await create_standard_response(
             {"conversation_id": str(deleted_id)}, "Conversation deleted successfully"
