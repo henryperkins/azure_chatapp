@@ -137,6 +137,10 @@ def validate_knowledge_base_assignment(_target, value, _oldvalue, _initiator):
 
 class ProjectUserAssociation(Base):
     __tablename__ = "project_users"
+    __table_args__ = (
+        Index('ix_project_users_joined_at', 'joined_at'),
+        Index('ix_project_users_role', 'role'),
+    )
 
     project_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -144,7 +148,9 @@ class ProjectUserAssociation(Base):
         primary_key=True
     )
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+        Integer,  # Matches User.id which uses Integer for user IDs
+        ForeignKey("users.id", ondelete="CASCADE"), 
+        primary_key=True
     )
     role: Mapped[str] = mapped_column(String(50), default="member")
     joined_at: Mapped[datetime] = mapped_column(
