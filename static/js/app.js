@@ -10,7 +10,7 @@
 // GLOBAL APP CONFIG & CONSTANTS
 // ---------------------------------------------------------------------
 
-window.API_CONFIG = {
+const API_CONFIG = {
   baseUrl: '',
   WS_ENDPOINT: window.location.origin.replace(/^http/, 'ws'),
   isAuthenticated: false,
@@ -18,7 +18,7 @@ window.API_CONFIG = {
   lastErrorStatus: null
 };
 
-window.SELECTORS = {
+const SELECTORS = {
   MAIN_SIDEBAR: '#mainSidebar',
   NAV_TOGGLE_BTN: '#navToggleBtn',
   USER_STATUS: '#userStatus',
@@ -64,6 +64,9 @@ const Notifications = {
   projectNotFound: () => console.warn('Project not found')
 };
 
+// Cache for DOM elements
+const ELEMENTS = {};
+
 // ---------------------------------------------------------------------
 // UTILITY FUNCTIONS
 // ---------------------------------------------------------------------
@@ -82,8 +85,8 @@ function showEmptyState(container, message, extraClasses = '') {
 }
 
 function setChatUIVisibility(visible) {
-  const chatUI = getElement(SELECTORS.CHAT_UI);
-  const noChatMsg = getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
+  const chatUI = ELEMENTS.CHAT_UI || getElement(SELECTORS.CHAT_UI);
+  const noChatMsg = ELEMENTS.NO_CHAT_SELECTED_MESSAGE || getElement(SELECTORS.NO_CHAT_SELECTED_MESSAGE);
 
   if (chatUI && noChatMsg) {
     if (visible) {
@@ -96,44 +99,38 @@ function setChatUIVisibility(visible) {
   }
 }
 
-// Called on auth state changes
-document.addEventListener('authStateChanged', (e) => {
-  const { authenticated, username } = e.detail;
-  const authStatus = getElement(SELECTORS.AUTH_STATUS);
-
-  if (authStatus) {
-    authStatus.textContent = authenticated ? (username || 'Authenticated') : 'Not Authenticated';
-    authStatus.classList.toggle('text-green-600', authenticated);
-    authStatus.classList.toggle('text-red-600', !authenticated);
-  }
-
-  window.API_CONFIG.isAuthenticated = authenticated;
-});
-
-// ---------------------------------------------------------------------
-// SINGLE FETCH WRAPPER (apiRequest)
-// ---------------------------------------------------------------------
-function sanitizeUrl(url) {
-    // Remove extra spaces and normalize slashes
-    return url.replace(/\s+/g, '').replace(/\/+/g, '/');
+// Mobile viewport height fix
+function setViewportHeight() {
+  const vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
 }
 
-async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000) {
-    const maxRetries = 2;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+// ---------------------------------------------------------------------
+// API REQUEST FUNCTIONS
+// ---------------------------------------------------------------------
 
-    // Sanitize URL first
-    endpoint = sanitizeUrl(endpoint);
+function sanitizeUrl(url) {
+  // Remove extra spaces and normalize slashes
+  return url.replace(/\s+/g, '').replace(/\/+/g, '/');
+}
 
-    // If an auth check is in progress (to avoid collision with refresh), wait
-  if (window.API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
+async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
+  const maxRetries = 2;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  // Sanitize URL first
+  endpoint = sanitizeUrl(endpoint);
+
+  // If an auth check is in progress (to avoid collision with refresh), wait
+  // Skip this check if skipAuthCheck is specified
+  if (!options.skipAuthCheck && API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
     if (retryCount > 5) {
       console.warn('Too many auth check delays, proceeding with request anyway');
     } else {
       console.log(`Delaying API call to ${endpoint} until auth check completes (attempt ${retryCount + 1})`);
       await new Promise(resolve => setTimeout(resolve, 500));
-      return apiRequest(endpoint, method, data, retryCount + 1);
+      return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
     }
   }
 
@@ -171,10 +168,12 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
   }
 
   console.log('Constructing API request for endpoint:', finalUrl);
-  const authHeaders = TokenManager.getAuthHeader();
+
+  // Make sure TokenManager is available
+  const authHeaders = window.TokenManager?.getAuthHeader() || {};
   console.log('Using auth headers:', authHeaders);
 
-  const options = {
+  const requestOptions = {
     method,
     headers: {
       'Accept': 'application/json',
@@ -192,28 +191,28 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
   if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
     if (data instanceof FormData) {
       // let the browser set Content-Type for FormData
-      options.body = data;
+      requestOptions.body = data;
     } else {
-      options.headers['Content-Type'] = 'application/json';
-      options.body = JSON.stringify(data);
+      requestOptions.headers['Content-Type'] = 'application/json';
+      requestOptions.body = JSON.stringify(data);
     }
   }
 
   try {
     console.log(`Making ${method} request to: ${finalUrl} (timeout: ${timeoutMs}ms)`);
-    const response = await fetch(finalUrl, options);
+    const response = await fetch(finalUrl, requestOptions);
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      window.API_CONFIG.lastErrorStatus = response.status;
+      API_CONFIG.lastErrorStatus = response.status;
       console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
-      // Attempt to refresh tokens if 401
-      if (response.status === 401 && retryCount < maxRetries) {
+      // Attempt to refresh tokens if 401 and not skipRetry
+      if (response.status === 401 && retryCount < maxRetries && !options.skipRetry) {
         try {
           if (window.TokenManager?.refreshTokens) {
             await window.TokenManager.refreshTokens();
-            return apiRequest(endpoint, method, data, retryCount + 1);
+            return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
           }
         } catch (refreshError) {
           console.error('Token refresh failed:', refreshError);
@@ -231,7 +230,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         // Clear local user info
         sessionStorage.removeItem('userInfo');
         sessionStorage.removeItem('auth_state');
-        window.API_CONFIG.isAuthenticated = false;
+        API_CONFIG.isAuthenticated = false;
         document.dispatchEvent(new CustomEvent('authStateChanged', {
           detail: { authenticated: false }
         }));
@@ -252,7 +251,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
     // If server returns new tokens in the response
     if (jsonData?.access_token && window.TokenManager?.setTokens) {
-      TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
+      window.TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
     }
 
     return jsonData;
@@ -270,35 +269,17 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 }
 
 function getBaseUrl() {
-  if (!window.API_CONFIG.baseUrl) {
+  if (!API_CONFIG.baseUrl) {
     // Default to window.location.origin
-    window.API_CONFIG.baseUrl = window.location.origin;
+    API_CONFIG.baseUrl = window.location.origin;
 
-    if (window.API_CONFIG.backendHost) {
-      window.API_CONFIG.baseUrl = `http://${window.API_CONFIG.backendHost}`;
+    if (API_CONFIG.backendHost) {
+      API_CONFIG.baseUrl = `http://${API_CONFIG.backendHost}`;
     }
-    console.log('Set API base URL:', window.API_CONFIG.baseUrl);
+    console.log('Set API base URL:', API_CONFIG.baseUrl);
   }
-  return window.API_CONFIG.baseUrl;
+  return API_CONFIG.baseUrl;
 }
-
-// Make fetch wrapper global
-window.apiRequest = apiRequest;
-window.getBaseUrl = getBaseUrl;
-
-
-// ---------------------------------------------------------------------
-// [REMOVED DUPLICATE DOMContentLoaded FOR initializeApplication()]
-//
-// OLD CODE (REMOVED):
-//   document.addEventListener('DOMContentLoaded', () => {
-//     initializeApplication().catch(err => {
-//       console.error('Application initialization failed:', err);
-//     });
-//   });
-//
-// ---------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------
 // DATA LOADING & RENDERING
@@ -457,38 +438,8 @@ function createConversationListItem(item) {
   return li;
 }
 
-function navigateToConversation(conversationId) {
-  window.history.pushState({}, '', `/?chatId=${conversationId}`);
-  setChatUIVisibility(true);
-
-  if (typeof window.loadConversation === 'function') {
-    return window.loadConversation(conversationId).catch(error => {
-      handleAPIError('loading conversation', error);
-      setChatUIVisibility(false);
-    });
-  }
-  return Promise.resolve();
-}
-
-function handleAPIError(context, error) {
-  console.error(`[${context}] API Error:`, error);
-  let message = 'An error occurred';
-  if (error instanceof TypeError) {
-    message = 'Network error - please check your connection';
-  } else if (error.response && error.response.status === 401) {
-    message = 'Session expired - please log in again';
-  } else if (error.message) {
-    message = error.message;
-  }
-  if (typeof UIUtils !== 'undefined' && UIUtils.showNotification) {
-    UIUtils.showNotification(message, 'error');
-  } else {
-    alert(message);
-  }
-}
-
 function loadConversationList() {
-  const isAuthenticated = window.API_CONFIG?.isAuthenticated ||
+  const isAuthenticated = API_CONFIG.isAuthenticated ||
     (sessionStorage.getItem('userInfo') !== null && sessionStorage.getItem('auth_state') !== null);
 
   if (!isAuthenticated) {
@@ -496,7 +447,7 @@ function loadConversationList() {
     return Promise.resolve([]);
   }
 
-  if (window.API_CONFIG.authCheckInProgress) {
+  if (API_CONFIG.authCheckInProgress) {
     console.log("Auth check in progress, deferring conversation list load");
     return Promise.resolve([]);
   }
@@ -538,6 +489,19 @@ function loadConversationList() {
 // NAVIGATION & STATE
 // ---------------------------------------------------------------------
 
+function navigateToConversation(conversationId) {
+  window.history.pushState({}, '', `/?chatId=${conversationId}`);
+  setChatUIVisibility(true);
+
+  if (typeof window.loadConversation === 'function') {
+    return window.loadConversation(conversationId).catch(error => {
+      handleAPIError('loading conversation', error);
+      setChatUIVisibility(false);
+    });
+  }
+  return Promise.resolve();
+}
+
 function handleNavigationChange() {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
@@ -568,10 +532,26 @@ function handleNavigationChange() {
     });
 }
 
-// Handle orientation changes
-window.addEventListener('orientationchange', () => {
-  window.dispatchEvent(new Event('resize'));
-});
+// ---------------------------------------------------------------------
+// ERROR HANDLING
+// ---------------------------------------------------------------------
+
+function handleAPIError(context, error) {
+  console.error(`[${context}] API Error:`, error);
+  let message = 'An error occurred';
+  if (error instanceof TypeError) {
+    message = 'Network error - please check your connection';
+  } else if (error.response && error.response.status === 401) {
+    message = 'Session expired - please log in again';
+  } else if (error.message) {
+    message = error.message;
+  }
+  if (typeof UIUtils !== 'undefined' && UIUtils.showNotification) {
+    UIUtils.showNotification(message, 'error');
+  } else {
+    alert(message);
+  }
+}
 
 // ---------------------------------------------------------------------
 // UTILITY: Search
@@ -604,171 +584,210 @@ function searchSidebarProjects(query) {
 // INITIALIZATION
 // ---------------------------------------------------------------------
 
-function safeInitialize() {
-  // Map SELECTORS to elements
-  const elementMap = {};
+function cacheElements() {
+  // Cache DOM elements for better performance
   Object.entries(SELECTORS).forEach(([key, selector]) => {
-    elementMap[key] = document.querySelector(selector);
+    ELEMENTS[key] = document.querySelector(selector);
+  });
+  console.log("DOM elements cached:", Object.keys(ELEMENTS).filter(k => ELEMENTS[k]));
+}
+
+function setupEventListeners() {
+  // Document level listeners
+  document.addEventListener('authStateChanged', handleAuthStateChange);
+  document.addEventListener('keydown', handleKeyDown);
+
+  // Window level listeners
+  window.addEventListener('orientationchange', () => {
+    window.dispatchEvent(new Event('resize'));
+  });
+  window.addEventListener('resize', setViewportHeight);
+
+  // UI element listeners
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#newConversationBtn')) {
+      handleNewConversationClick();
+    }
   });
 
+  console.log("Event listeners registered");
+}
+
+// Event handler functions
+function handleAuthStateChange(e) {
+  const { authenticated, username } = e.detail;
+
+  // Update auth status elements
+  const authStatus = ELEMENTS.AUTH_STATUS || getElement(SELECTORS.AUTH_STATUS);
+  if (authStatus) {
+    authStatus.textContent = authenticated ? (username || 'Authenticated') : 'Not Authenticated';
+    authStatus.classList.toggle('text-green-600', authenticated);
+    authStatus.classList.toggle('text-red-600', !authenticated);
+  }
+
+  // Update UI based on auth state
+  updateAuthUI(authenticated, username);
+
+  // Update stored authentication state
+  API_CONFIG.isAuthenticated = authenticated;
+
+  // Load data if authenticated
+  if (authenticated) {
+    loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+    loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+
+    // Check for chatId in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatId = urlParams.get('chatId');
+    if (chatId && typeof window.loadConversation === 'function') {
+      window.loadConversation(chatId).catch(err => {
+        console.warn("Failed to load conversation:", err);
+      });
+    }
+  } else {
+    // Clear the conversation area or show "Please log in"
+    const conversationArea = ELEMENTS.CONVERSATION_AREA || getElement(SELECTORS.CONVERSATION_AREA);
+    if (conversationArea) {
+      conversationArea.innerHTML = '';
+    }
+    const loginMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
+    loginMsg?.classList.remove('hidden');
+  }
+}
+
+function handleKeyDown(e) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    // e.g. Ctrl+R for "regenerate", Ctrl+C for "copy"
+    if (e.key.toLowerCase() === 'r') {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('regenerateChat'));
+    }
+    if (e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('copyMessage'));
+    }
+  }
+}
+
+function handleNewConversationClick() {
+  const projectId = localStorage.getItem('selectedProjectId');
+  if (projectId && window.projectManager?.createConversation) {
+    window.projectManager.createConversation(projectId)
+      .then(newConversation => {
+        window.location.href = `/?chatId=${newConversation.id}`;
+      })
+      .catch(err => {
+        handleAPIError('creating conversation', err);
+      });
+  } else {
+    Notifications.apiError('no project selected');
+  }
+}
+
+function updateAuthUI(authenticated, username = null) {
+  const authBtn = ELEMENTS.AUTH_BUTTON || document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  const userMenu = ELEMENTS.USER_MENU || document.getElementById('userMenu');
+  const authStatus = ELEMENTS.AUTH_STATUS || document.getElementById('authStatus');
+  const userStatus = ELEMENTS.USER_STATUS || document.getElementById('userStatus');
+  const projectPanel = ELEMENTS.PROJECT_MANAGER_PANEL || document.getElementById('projectManagerPanel');
+  const loginMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || document.getElementById('loginRequiredMessage');
+
+  if (authenticated) {
+    // Logged in UI
+    authBtn?.classList.add('hidden');
+    userMenu?.classList.remove('hidden');
+    if (authStatus) authStatus.textContent = username || 'Authenticated';
+    if (userStatus) {
+      userStatus.textContent = 'Online';
+      userStatus.classList.remove('text-gray-500');
+      userStatus.classList.add('text-green-500');
+    }
+    authDropdown?.classList.add('hidden');
+    projectPanel?.classList.remove('hidden');
+    loginMsg?.classList.add('hidden');
+
+    // Show project list by default
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    projectListView?.classList.remove('hidden');
+    projectDetailsView?.classList.add('hidden');
+  } else {
+    // Logged out UI
+    authBtn?.classList.remove('hidden');
+    userMenu?.classList.add('hidden');
+    if (authStatus) authStatus.textContent = 'Not Authenticated';
+    if (userStatus) {
+      userStatus.textContent = 'Offline';
+      userStatus.classList.remove('text-green-500');
+      userStatus.classList.add('text-gray-500');
+    }
+    projectPanel?.classList.add('hidden');
+    loginMsg?.classList.remove('hidden');
+  }
+}
+
+function safeInitialize() {
   // Project search
-  if (elementMap.SIDEBAR_PROJECT_SEARCH) {
-    elementMap.SIDEBAR_PROJECT_SEARCH.addEventListener('input', (e) => {
+  const projectSearch = ELEMENTS.SIDEBAR_PROJECT_SEARCH;
+  if (projectSearch) {
+    projectSearch.addEventListener('input', (e) => {
       searchSidebarProjects(e.target.value);
     });
   }
 
   // New project button
-  if (elementMap.SIDEBAR_NEW_PROJECT_BTN) {
-    elementMap.SIDEBAR_NEW_PROJECT_BTN.addEventListener('click', () => {
+  const newProjectBtn = ELEMENTS.SIDEBAR_NEW_PROJECT_BTN;
+  if (newProjectBtn) {
+    newProjectBtn.addEventListener('click', () => {
       if (window.projectManager?.showProjectCreateForm) {
         window.projectManager.showProjectCreateForm();
-      } else if (elementMap.CREATE_PROJECT_BTN) {
-        elementMap.CREATE_PROJECT_BTN.click();
+      } else if (ELEMENTS.CREATE_PROJECT_BTN) {
+        ELEMENTS.CREATE_PROJECT_BTN.click();
       }
     });
   }
 
   // Show login
-  if (elementMap.SHOW_LOGIN_BTN && elementMap.AUTH_BUTTON) {
-    elementMap.SHOW_LOGIN_BTN.addEventListener('click', () => {
-      elementMap.AUTH_BUTTON.click();
+  const showLoginBtn = ELEMENTS.SHOW_LOGIN_BTN;
+  const authButton = ELEMENTS.AUTH_BUTTON;
+  if (showLoginBtn && authButton) {
+    showLoginBtn.addEventListener('click', () => {
+      authButton.click();
     });
   }
+}
 
-  // New conversation
-  document.addEventListener('click', function (event) {
-    if (event.target.closest('#newConversationBtn')) {
-      const projectId = localStorage.getItem('selectedProjectId');
-      if (projectId && window.projectManager?.createConversation) {
-        window.projectManager.createConversation(projectId)
-          .then(newConversation => {
-            window.location.href = `/?chatId=${newConversation.id}`;
-          })
-          .catch(err => {
-            handleAPIError('creating conversation', err);
+function loadSidebarProjects() {
+  try {
+    return apiRequest(API_ENDPOINTS.PROJECTS)
+      .then(projects => {
+        const container = ELEMENTS.SIDEBAR_PROJECTS || getElement(SELECTORS.SIDEBAR_PROJECTS);
+
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (projects?.length > 0) {
+          projects.forEach(project => {
+            const li = createProjectListItem(project);
+            if (li) container.appendChild(li);
           });
-      } else {
-        Notifications.apiError('no project selected');
-      }
-    }
-  });
-}
-
-function setupGlobalKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-      // e.g. Ctrl+R for "regenerate", Ctrl+C for "copy"
-      if (e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent('regenerateChat'));
-      }
-      if (e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent('copyMessage'));
-      }
-    }
-  });
-}
-
-// Mobile viewport height fix
-function setViewportHeight() {
-  const vh = window.innerHeight * 0.01;
-  document.documentElement.style.setProperty('--vh', `${vh}px`);
-}
-
-async function initializeApplication() {
-  // Set initial viewport height
-  setViewportHeight();
-  // Update on resize
-  window.addEventListener('resize', setViewportHeight);
-
-  try {
-    console.log("Starting main application initialization");
-
-    // We do not call initAuth here if auth.js is already doing it, but we can:
-    if (window.auth?.init) {
-      await window.auth.init();
-    } else {
-      console.error('Auth module not available');
-    }
-
-    // Basic UI setup
-    getBaseUrl();
-    safeInitialize();
-
-    // Example default localStorage
-    if (!localStorage.getItem("modelName")) {
-      localStorage.setItem("modelName", "claude-3-7-sonnet-20250219");
-      if (!localStorage.getItem("thinkingBudget")) {
-        localStorage.setItem("thinkingBudget", "16000");
-      }
-    }
-    setupGlobalKeyboardShortcuts();
-
-    // If authenticated, load sidebar projects
-    if (window.API_CONFIG.isAuthenticated && window.loadSidebarProjects) {
-      await window.loadSidebarProjects();
-    }
-
-    console.log("✅ Main application initialization complete");
-    return true;
+        } else {
+          showEmptyState(container, MESSAGES.NO_PROJECTS, 'py-4');
+        }
+        return projects;
+      })
+      .catch(error => {
+        console.error('Failed to load sidebar projects:', error);
+        throw error;
+      });
   } catch (error) {
-    console.error("❌ Main application initialization failed:", error);
-    Notifications.apiError("Failed to initialize application");
-    return false;
+    console.error('Failed to load sidebar projects:', error);
+    throw error;
   }
 }
 
-// A convenience wrapper for modules
-const InitUtils = {
-  async initModule(name, initFn, maxRetries = 3) {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        console.log(`Initializing ${name} module (attempt ${i + 1}/${maxRetries})...`);
-        await initFn();
-        console.log(`✅ ${name} module initialized`);
-        return true;
-      } catch (error) {
-        console.error(`Failed to initialize ${name} module:`, error);
-        if (i === maxRetries - 1) throw error;
-        await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
-      }
-    }
-  },
-  coreModules: [],
-  featureModules: []
-};
-
-async function initializeAllModules() {
-  try {
-    console.log("Starting application initialization sequence");
-
-    // The main "app-level" init
-    await initializeApplication();
-
-    // Possibly init other feature modules
-    for (const module of InitUtils.featureModules) {
-      if (module.init) {
-        await InitUtils.initModule(module.name, module.init);
-      }
-    }
-
-    console.log("✅ Application initialization sequence complete");
-    return true;
-  } catch (error) {
-    console.error("❌ Module initialization failed:", error);
-    Notifications.apiError("Application initialization failed");
-    const loginRequiredMsg = document.getElementById('loginRequiredMessage');
-    if (loginRequiredMsg) {
-      loginRequiredMsg.classList.remove('hidden');
-    }
-    return false;
-  }
-}
-
-// Ensure chat containers exist
-window.ensureChatContainers = function () {
+function ensureChatContainers() {
   console.log("Ensuring chat containers exist...");
 
   let projectChatContainer = document.querySelector('#projectChatContainer');
@@ -865,155 +884,199 @@ window.ensureChatContainers = function () {
     return container;
   }
   return null;
+}
+
+const InitUtils = {
+  async initModule(name, initFn, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        console.log(`Initializing ${name} module (attempt ${i + 1}/${maxRetries})...`);
+        await initFn();
+        console.log(`✅ ${name} module initialized`);
+        return true;
+      } catch (error) {
+        console.error(`Failed to initialize ${name} module:`, error);
+        if (i === maxRetries - 1) throw error;
+        await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+      }
+    }
+  },
+  coreModules: [],
+  featureModules: []
 };
 
+async function initializeApplication() {
+  // Set initial viewport height
+  setViewportHeight();
+
+  // Cache DOM elements
+  cacheElements();
+
+  // Register event listeners
+  setupEventListeners();
+
+  try {
+    console.log("Starting main application initialization");
+
+    // Basic UI setup
+    getBaseUrl();
+    safeInitialize();
+
+    // Initialize auth - this must happen AFTER apiRequest is available
+    // but BEFORE we try to make any authenticated requests
+    if (window.auth?.init) {
+      console.log("Initializing auth module");
+      await window.auth.init();
+      console.log("Auth initialization complete");
+    } else {
+      console.warn('Auth module not available, authentication features will not work');
+    }
+
+    // Example default localStorage
+    if (!localStorage.getItem("modelName")) {
+      localStorage.setItem("modelName", "claude-3-7-sonnet-20250219");
+      if (!localStorage.getItem("thinkingBudget")) {
+        localStorage.setItem("thinkingBudget", "16000");
+      }
+    }
+
+    // If authenticated, load sidebar projects
+    if (API_CONFIG.isAuthenticated && window.loadSidebarProjects) {
+      await window.loadSidebarProjects();
+    }
+
+    console.log("✅ Main application initialization complete");
+    return true;
+  } catch (error) {
+    console.error("❌ Main application initialization failed:", error);
+    Notifications.apiError("Failed to initialize application");
+    return false;
+  }
+}
+
+async function initializeAllModules() {
+  try {
+    console.log("Starting application initialization sequence");
+
+    // The main "app-level" init
+    await initializeApplication();
+
+    // Possibly init other feature modules
+    for (const module of InitUtils.featureModules) {
+      if (module.init) {
+        await InitUtils.initModule(module.name, module.init);
+      }
+    }
+
+    console.log("✅ Application initialization sequence complete");
+    return true;
+  } catch (error) {
+    console.error("❌ Module initialization failed:", error);
+    Notifications.apiError("Application initialization failed");
+    const loginRequiredMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || document.getElementById('loginRequiredMessage');
+    if (loginRequiredMsg) {
+      loginRequiredMsg.classList.remove('hidden');
+    }
+    return false;
+  }
+}
+
+// Text extractor initialization
+function initializeTextExtractor() {
+  window.textExtractor = {
+    extract: async (file) => {
+      // Try API-based extraction first
+      if (window.apiRequest) {
+        try {
+          // Initialize service if needed
+          await window.apiRequest('/api/text-extractor/initialize', 'POST');
+
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const response = await window.apiRequest(
+            '/api/text-extractor/extract',
+            'POST',
+            formData,
+            {
+              'Content-Type': 'multipart/form-data'
+            }
+          );
+          return response;
+        } catch (apiError) {
+          console.warn('API text extraction failed, using fallback:', apiError);
+        }
+      }
+
+      // Fallback implementation
+      try {
+        const fileContent = await file.text();
+        return {
+          text: fileContent,
+          metadata: {
+            token_count: fileContent.split(/\s+/).length,
+            fallback: true
+          }
+        };
+      } catch (error) {
+        throw new Error(`Text extraction failed: ${error.message}`);
+      }
+    }
+  };
+}
+
 // ---------------------------------------------------------------------
-// BOOTSTRAPPING
+// MAIN INITIALIZATION
 // ---------------------------------------------------------------------
 
-// SINGLE DOMContentLoaded -> calls initializeAllModules() -> calls initializeApplication() -> calls auth.init()
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     console.log("DOMContentLoaded: Starting full app init via initializeAllModules()");
+
+    // Make sure TokenManager is available before we initialize the app
+    if (!window.TokenManager) {
+      console.log("Waiting for TokenManager to be available...");
+      const maxWaitTime = 5000;
+      const startTime = Date.now();
+
+      while (!window.TokenManager && Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      if (!window.TokenManager) {
+        console.warn("TokenManager not available after waiting. Authentication may not work properly.");
+      } else {
+        console.log("TokenManager found, proceeding with initialization");
+      }
+    }
+
     await initializeAllModules();
 
     // Ensure chat containers exist, then optionally init chat
-    window.ensureChatContainers();
+    ensureChatContainers();
     if (typeof window.initializeChat === 'function') {
       await InitUtils.initModule('chat', window.initializeChat);
     }
 
-    // Initialize TextExtractor service if available
-    try {
-      if (window.apiRequest) {
-        const response = await window.apiRequest('/api/text-extractor/initialize', 'POST');
-        if (response?.success) {
-          window.textExtractor = {
-            extractText: async (content, filename) => {
-              const formData = new FormData();
-              formData.append('file', new Blob([content]), filename);
-              const result = await window.apiRequest('/api/text-extractor/extract', 'POST', formData);
-              return result.data;
-            }
-          };
-          console.log('TextExtractor service initialized');
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to initialize TextExtractor:', error);
-    }
+    // Initialize TextExtractor service
+    initializeTextExtractor();
 
-    console.log("✅ DOMContentLoaded: App initialization complete");
+    console.log("Application fully initialized");
   } catch (error) {
-    console.error("❌ DOMContentLoaded: App initialization error:", error);
-    Notifications.apiError("Application initialization failed");
+    console.error("Application initialization failed:", error);
+    alert("Failed to initialize the application. Please refresh the page and try again.");
   }
 });
 
 // ---------------------------------------------------------------------
-// AUTH EVENT LISTENER (UI toggle on login/logout)
+// EXPORT TO WINDOW
 // ---------------------------------------------------------------------
 
-function updateAuthUI(authenticated, username = null) {
-  const authBtn = document.getElementById('authButton');
-  const authDropdown = document.getElementById('authDropdown');
-  const userMenu = document.getElementById('userMenu');
-  const authStatus = document.getElementById('authStatus');
-  const userStatus = document.getElementById('userStatus');
-  const projectPanel = document.getElementById('projectManagerPanel');
-  const loginMsg = document.getElementById('loginRequiredMessage');
-
-  if (authenticated) {
-    // Logged in UI
-    authBtn?.classList.add('hidden');
-    userMenu?.classList.remove('hidden');
-    if (authStatus) authStatus.textContent = username || 'Authenticated';
-    if (userStatus) {
-      userStatus.textContent = 'Online';
-      userStatus.classList.remove('text-gray-500');
-      userStatus.classList.add('text-green-500');
-    }
-    authDropdown?.classList.add('hidden');
-    projectPanel?.classList.remove('hidden');
-    loginMsg?.classList.add('hidden');
-
-    // Show project list by default
-    const projectListView = document.getElementById('projectListView');
-    const projectDetailsView = document.getElementById('projectDetailsView');
-    projectListView?.classList.remove('hidden');
-    projectDetailsView?.classList.add('hidden');
-  } else {
-    // Logged out UI
-    authBtn?.classList.remove('hidden');
-    userMenu?.classList.add('hidden');
-    if (authStatus) authStatus.textContent = 'Not Authenticated';
-    if (userStatus) {
-      userStatus.textContent = 'Offline';
-      userStatus.classList.remove('text-green-500');
-      userStatus.classList.add('text-gray-500');
-    }
-    projectPanel?.classList.add('hidden');
-    loginMsg?.classList.remove('hidden');
-  }
-}
-
-document.addEventListener('authStateChanged', (e) => {
-  const { authenticated, username } = e.detail;
-  updateAuthUI(authenticated, username);
-
-  if (authenticated) {
-    // If user is logged in, load data
-    loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-    loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
-
-    // If there's a chatId in URL, load it
-    const urlParams = new URLSearchParams(window.location.search);
-    const chatId = urlParams.get('chatId');
-    if (chatId && typeof window.loadConversation === 'function') {
-      window.loadConversation(chatId).catch(err => {
-        console.warn("Failed to load conversation:", err);
-      });
-    }
-  } else {
-    // Clear the conversation area or show “Please log in”
-    const conversationArea = getElement(SELECTORS.CONVERSATION_AREA);
-    if (conversationArea) {
-      conversationArea.innerHTML = '';
-    }
-    const loginMsg = getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
-    loginMsg?.classList.remove('hidden');
-  }
-});
-
-// ---------------------------------------------------------------------
-// PUBLIC EXPORTS
-// ---------------------------------------------------------------------
-
+// Export all needed functions to window - consolidated in one place
+window.API_CONFIG = API_CONFIG;
+window.SELECTORS = SELECTORS;
 window.apiRequest = apiRequest;
-
+window.getBaseUrl = getBaseUrl;
 window.loadConversationList = loadConversationList;
-
-if (!window.loadSidebarProjects) {
-  window.loadSidebarProjects = async function () {
-    try {
-      const projects = await apiRequest(API_ENDPOINTS.PROJECTS);
-      const container = getElement(SELECTORS.SIDEBAR_PROJECTS);
-
-      if (!container) return;
-      container.innerHTML = '';
-
-      if (projects?.length > 0) {
-        projects.forEach(project => {
-          const li = createProjectListItem(project);
-          if (li) container.appendChild(li);
-        });
-      } else {
-        showEmptyState(container, MESSAGES.NO_PROJECTS, 'py-4');
-      }
-      return projects;
-    } catch (error) {
-      console.error('Failed to load sidebar projects:', error);
-      throw error;
-    }
-  };
-}
+window.loadSidebarProjects = loadSidebarProjects;
+window.ensureChatContainers = ensureChatContainers;

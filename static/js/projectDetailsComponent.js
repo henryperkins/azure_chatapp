@@ -375,11 +375,23 @@
               totalTokens += tokenCount;
             } catch (error) {
               console.error(`Error counting tokens for ${file.name}:`, error);
-              throw new Error(`Could not analyze ${file.name}: ${error.message}`);
+              let errorMsg = 'File analysis failed';
+              if (error.response?.data?.code === 'TEXT_EXTRACTION_ERROR') {
+                errorMsg = error.response.data.message || 'File processing error';
+              } else if (error.message.includes('Text extraction failed')) {
+                errorMsg = 'Unsupported file content';
+              } else if (error.message.includes('object tuple')) {
+                errorMsg = 'File processing error - please try a different file';
+              }
+              throw new Error(`Could not analyze ${file.name}: ${errorMsg}`);
             }
           } catch (error) {
             console.error(`Error counting tokens for ${file.name}:`, error);
-            throw new Error(`Could not analyze ${file.name}: ${error.message}`);
+            let errorMsg = error.message;
+            if (error.response?.data?.code === 'TEXT_EXTRACTION_ERROR') {
+              errorMsg = error.response.data.message || 'File processing error';
+            }
+            throw new Error(`Could not analyze ${file.name}: ${errorMsg}`);
           }
         }
 
@@ -421,34 +433,40 @@
           return this._processFiles(projectId, files);
         }
 
-        try {
-          const kbState = await window.knowledgeBaseState.verifyKB(projectId);
-          console.debug('Verified KB state:', kbState);
-
-          if (kbState && typeof kbState === 'object') {
-            if (kbState.error) {
-              console.warn('KB verification error - proceeding with upload:', kbState.error);
-              return this._processFiles(projectId, files);
-            }
-            else if (!kbState.exists) {
-              console.debug('KB check - exists:', kbState.exists, 'active:', kbState.isActive);
-              if (Array.isArray(files) && window.knowledgeBaseState.shouldRecommendForFiles(files)) {
-                return await this._handleMissingKB(projectId, files);
-              }
-              console.debug('KB recommendation not shown (conditions not met)');
-            }
-            else if (!kbState.isActive) {
-              console.debug('KB inactive - showing limited functionality warning');
-              window.showNotification(
-                `Knowledge Base (${kbState.name}) is inactive - some features disabled`,
-                "warning"
+            try {
+              const response = await window.apiRequest(
+                '/api/text-extractor/extract', 
+                'POST',
+                formData,
+                {
+                  'Content-Type': 'multipart/form-data'
+                }
               );
+              
+              // Validate response structure
+              if (!response || !response.metadata) {
+                throw new Error('Invalid response from text extraction service');
+              }
+              
+              // Get token count directly from metadata
+              const tokenCount = response.metadata?.token_count;
+              
+              if (typeof tokenCount !== 'number' || tokenCount < 0) {
+                throw new Error('Invalid or missing token count in response');
+              }
+              
+              tokenCounts[file.name] = tokenCount;
+              totalTokens += tokenCount;
+            } catch (error) {
+              console.error(`Error counting tokens for ${file.name}:`, error);
+              let errorMsg = error.message;
+              if (error.response?.data?.message) {
+                errorMsg = error.response.data.message;
+              } else if (error.response?.data?.detail) {
+                errorMsg = error.response.data.detail;
+              }
+              throw new Error(`Could not analyze ${file.name}: ${errorMsg}`);
             }
-          }
-        } catch (error) {
-          console.error('KB verification failed:', error);
-          return this._processFiles(projectId, files);
-        }
 
         // 4. Proceed with normal upload flow
         console.debug('Proceeding with normal file upload flow');
