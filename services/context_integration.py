@@ -20,7 +20,8 @@ async def augment_with_knowledge(
     conversation_id: UUID,
     user_message: str,
     db: AsyncSession,
-    max_context_tokens: int = 2000  # Default token budget for KB context
+    max_context_tokens: int = 2000,  # Default token budget for KB context
+    model_config: Dict[str, Any] = None
 ) -> List[Dict[str, Any]]:
     """
     Retrieves and formats relevant knowledge for a conversation.
@@ -112,7 +113,7 @@ async def augment_with_knowledge(
             }
             
             # Validate thinking budget if enabled
-            if self.model_config.get("extended_thinking"):
+            if model_config and model_config.get("extended_thinking"):
                 if result_tokens < 1024:
                     raise ValueError(f"Thinking budget too small (min 1024 tokens, got {result_tokens})")
                 context_msg["metadata"]["thinking_budget"] = result_tokens

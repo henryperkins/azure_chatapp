@@ -22,7 +22,7 @@
          STATE MANAGEMENT
          =========================== */
       this.onBack = options.onBack;
-      this.state = { 
+      this.state = {
         currentProject: null,
         activeTab: 'files'
       };
@@ -330,10 +330,78 @@
       try {
         // 1. Get current project and KB status
         const project = window.projectManager?.currentProject;
-        let knowledgeBaseId = project?.knowledge_base_id;
-        let isKbActive = project?.knowledge_base?.is_active !== false;
+        if (!project) {
+          throw new Error("No project selected");
+        }
 
-        // 2. New: Attempt to auto-create KB if missing
+        // 2. Count tokens for each file before upload
+        if (!window.textExtractor) {
+          throw new Error("Text extraction service not available");
+        }
+
+        let totalTokens = 0;
+        const tokenCounts = {};
+        
+        // Count tokens for each file
+        for (const file of files) {
+          try {
+            // Create proper FormData for the API
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+              const response = await window.apiRequest(
+                '/api/text-extractor/extract',
+                'POST', 
+                formData,
+                {
+                  'Content-Type': 'multipart/form-data'
+                }
+              );
+              
+              // Validate response structure
+              if (!response || !response.metadata) {
+                throw new Error('Invalid response from text extraction service');
+              }
+              
+              // Get token count directly from metadata
+              const tokenCount = response.metadata?.token_count;
+              
+              if (typeof tokenCount !== 'number' || tokenCount < 0) {
+                throw new Error('Invalid or missing token count in response');
+              }
+              
+              tokenCounts[file.name] = tokenCount;
+              totalTokens += tokenCount;
+            } catch (error) {
+              console.error(`Error counting tokens for ${file.name}:`, error);
+              throw new Error(`Could not analyze ${file.name}: ${error.message}`);
+            }
+          } catch (error) {
+            console.error(`Error counting tokens for ${file.name}:`, error);
+            throw new Error(`Could not analyze ${file.name}: ${error.message}`);
+          }
+        }
+
+        // Check against project limits
+        const availableTokens = project.max_tokens - (project.token_usage || 0);
+        if (totalTokens > availableTokens) {
+          const errorMsg = `These files would exceed token limit by ${(totalTokens - availableTokens).toLocaleString()} tokens\n` +
+            `Current usage: ${project.token_usage.toLocaleString()}/${project.max_tokens.toLocaleString()} tokens\n` +
+            `Options:\n1. Increase project token limit\n2. Split large files\n3. Delete unused files`;
+          throw new Error(errorMsg);
+        } else if (totalTokens > availableTokens * 0.8) {
+          window.showNotification(
+            `Warning: Upload will use ${Math.round((totalTokens / availableTokens) * 100)}% of remaining tokens`,
+            "warning",
+            { timeout: 8000 }
+          );
+        }
+
+        let knowledgeBaseId = project.knowledge_base_id;
+        let isKbActive = project.knowledge_base?.is_active !== false;
+
+        // 3. Attempt to auto-create KB if missing
         if (!knowledgeBaseId) {
           try {
             const newKb = await this._attemptAutoCreateKB(projectId);
@@ -368,7 +436,7 @@
                 return await this._handleMissingKB(projectId, files);
               }
               console.debug('KB recommendation not shown (conditions not met)');
-            } 
+            }
             else if (!kbState.isActive) {
               console.debug('KB inactive - showing limited functionality warning');
               window.showNotification(
@@ -448,7 +516,7 @@
               }
             },
             onSecondaryAction: () => {
-              this._processFiles(projectId, files, {skipKb: true})
+              this._processFiles(projectId, files, { skipKb: true })
                 .then(resolve)
                 .catch(reject);
             },
@@ -613,7 +681,7 @@
       } catch (error) {
         console.error('Error creating conversation:', error);
         window.showNotification(
-          `Failed to create conversation: ${error.message || 'Unknown error'}`, 
+          `Failed to create conversation: ${error.message || 'Unknown error'}`,
           'error'
         );
       }
@@ -684,7 +752,7 @@
                 } else {
                   console.error('[DEBUG] Knowledge base modal not found in DOM');
                   window.showNotification(
-                    'Failed to open knowledge base settings. Please refresh the page.', 
+                    'Failed to open knowledge base settings. Please refresh the page.',
                     'error'
                   );
                 }
@@ -692,7 +760,7 @@
             } catch (error) {
               console.error('[DEBUG] Error showing knowledge base modal:', error);
               window.showNotification(
-                'Error opening knowledge base settings. Please try again.', 
+                'Error opening knowledge base settings. Please try again.',
                 'error'
               );
             }
@@ -762,13 +830,13 @@
           } else {
             errorMsg = `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB limit)`;
           }
-          invalidFiles.push({file, error: errorMsg});
+          invalidFiles.push({ file, error: errorMsg });
         }
       });
 
       // Show errors for invalid files
       if (invalidFiles.length > 0) {
-        invalidFiles.forEach(({file, error}) => {
+        invalidFiles.forEach(({ file, error }) => {
           window.showNotification(`Skipped ${file.name}: ${error}`, 'error');
           this.fileUploadStatus.failed++;
           this.fileUploadStatus.completed++;
@@ -838,14 +906,21 @@
                   errorMessage = "File format not supported or validation failed";
                 } else if (errorMessage.includes("too large")) {
                   errorMessage = "File exceeds size limit";
-                } else if (errorMessage.includes("token")) {
-                  errorMessage = "Project token limit exceeded";
+                } else if (errorMessage.includes("token") || errorMessage.includes("exceeds the project's token limit")) {
+                  // Extract token counts from error message if available
+                  const tokenMatch = errorMessage.match(/(\d+) tokens.*limit \((\d+)/);
+                  if (tokenMatch) {
+                    const fileTokens = parseInt(tokenMatch[1]).toLocaleString();
+                    const limitTokens = parseInt(tokenMatch[2]).toLocaleString();
+                    errorMessage = `File too large (${fileTokens} tokens > project limit of ${limitTokens}).\nOptions:\n1. Increase project token limit\n2. Split file into smaller parts\n3. Delete unused files`;
+                  } else {
+                    errorMessage = "Project token limit exceeded";
+                  }
                 } else if (error.response?.status === 422) {
                   errorMessage = "File validation failed - unsupported format or content";
                 } else if (error.response?.status === 400) {
-                  // Additional user-friendly message for 400 Bad Request errors
                   if (errorMessage.includes("File upload failed")) {
-                    errorMessage = "File contains potentially unsafe content. Please remove script tags or other executable code.";
+                    errorMessage = "File upload failed - check format and content";
                   }
                 }
                  
@@ -888,7 +963,7 @@
       }
       
       if (this.elements.uploadStatus) {
-        this.elements.uploadStatus.textContent = 
+        this.elements.uploadStatus.textContent =
           `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
       }
       
@@ -1273,7 +1348,7 @@
           icon: "⚠"
         },
         'pending': {
-          class: "bg-yellow-100 text-yellow-800", 
+          class: "bg-yellow-100 text-yellow-800",
           text: "Processing...",
           icon: "⏳"
         },
@@ -1353,18 +1428,18 @@
 
       const statusDiv = fileItem.querySelector('.processing-status');
       if (statusDiv) {
-        statusDiv.textContent = status === 'success' ? 'Search Ready' : 
+        statusDiv.textContent = status === 'success' ? 'Search Ready' :
           status === 'error' ? `Error: ${error?.substring(0, 30)}...` :
-          'Processing...';
+            'Processing...';
         
-        statusDiv.className = `processing-status text-xs px-2 py-1 rounded ${
-          status === 'success' ? 'bg-green-100 text-green-800' :
-          status === 'error' ? 'bg-red-100 text-red-800' :
-          'bg-yellow-100 text-yellow-800'
-        }`;
+        statusDiv.className = `processing-status text-xs px-2 py-1 rounded ${status === 'success' ? 'bg-green-100 text-green-800' :
+            status === 'error' ? 'bg-red-100 text-red-800' :
+              'bg-yellow-100 text-yellow-800'
+          }`;
       }
     }
   }
+   
 
   // Export to window
   window.ProjectDetailsComponent = ProjectDetailsComponent;

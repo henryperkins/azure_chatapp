@@ -80,17 +80,25 @@ async def check_knowledge_base_status(
 async def validate_project_access(
     project_id: UUID,
     user: User,
-    db: AsyncSession
+    db: AsyncSession,
+    skip_ownership_check: bool = False
 ) -> Project:
     """
     Ensures the project with UUID-based ID belongs to the user
     and is not archived. Raises 404 if not found, 400 if archived.
+
+    Args:
+        project_id: UUID of project to validate
+        user: User object (only checked if skip_ownership_check=False)
+        db: Database session
+        skip_ownership_check: If True, skips user ownership validation
     """
-    result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id, Project.user_id == user.id)
-        .options(joinedload(Project.knowledge_base))
-    )
+    query = select(Project).where(Project.id == project_id)
+    if not skip_ownership_check:
+        query = query.where(Project.user_id == user.id)
+    query = query.options(joinedload(Project.knowledge_base))
+    
+    result = await db.execute(query)
     project = result.scalars().first()
 
     if not project:

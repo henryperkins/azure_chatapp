@@ -8,9 +8,8 @@ import logging
 import json
 from typing import Dict, Set, Any, Optional
 from collections import defaultdict
-from fastapi import WebSocket, status, WebSocketException
+from fastapi import WebSocket, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from utils.auth_utils import authenticate_websocket
 
 logger = logging.getLogger(__name__)
 
@@ -55,45 +54,33 @@ class ConnectionManager:
         state: Optional[str] = None
     ) -> str:
         """
-        Connect WebSocket with proper authentication and state tracking.
+        Connect WebSocket with state tracking (authentication is handled by endpoint).
         
         Args:
-            websocket: The WebSocket connection
+            websocket: The WebSocket connection (already authenticated)
             conversation_id: The conversation ID
-            db: Database session for authentication
+            db: Database session
+            user_id: Pre-validated user ID
+            state: Initial connection state
             
         Returns:
             connection_id: The unique connection ID
-            
-        Raises:
-            WebSocketException: If authentication fails with proper error codes
         """
-        try:
-            # Skip duplicate authentication - the connection is already authenticated
-            # in the websocket_chat_endpoint function
-            connection_id = str(id(websocket))
-            
-            self._connections[connection_id] = {
-                'websocket': websocket,
-                'conversation_id': conversation_id,
-                'user_id': user_id,
-                'state': state or self.CONNECTED
-            }
-            
-            self._by_conversation[conversation_id].add(connection_id)
+        connection_id = str(id(websocket))
+        
+        self._connections[connection_id] = {
+            'websocket': websocket,
+            'conversation_id': conversation_id,
+            'user_id': user_id,
+            'state': state or self.CONNECTED
+        }
+        
+        self._by_conversation[conversation_id].add(connection_id)
+        if user_id:
             self._by_user[str(user_id)].add(connection_id)
-            
-            logger.info(f"WebSocket connected for user {user_id}, conversation {conversation_id}")
-            return connection_id
-            
-        except Exception as e:
-            logger.error(f"WebSocket connection error: {str(e)}")
-            if not self._is_connection_closed(websocket):
-                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-            raise WebSocketException(
-                code=status.WS_1011_INTERNAL_ERROR,
-                reason=str(e)
-            )
+        
+        logger.info(f"WebSocket connected for user {user_id}, conversation {conversation_id}")
+        return connection_id
 
     async def update_connection_state(self, connection_id: str, new_state: str) -> None:
         """
