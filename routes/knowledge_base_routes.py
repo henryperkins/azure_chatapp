@@ -26,7 +26,7 @@ from fastapi import (
 )
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,12 @@ from models.user import User
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from services.knowledgebase_service import DEFAULT_EMBEDDING_MODEL
+from services.text_extraction import (
+    PDF_AVAILABLE,
+    DOCX_AVAILABLE,
+    TIKTOKEN_AVAILABLE,
+    get_text_extractor,
+)
 
 from db import get_async_session
 from utils.auth_utils import get_current_user_and_token
@@ -570,11 +576,16 @@ async def get_knowledge_base_health(
         load_existing=True
     )
 
-    # Get file processing stats
-    processed_files = await db.execute(
-        select(func.count()).where(
-            ProjectFile.project_id == kb.project_id,
-            ProjectFile.metadata["search_processing"]["success"].as_boolean()
+    # Get count of successfully processed files
+    processed_files = await db.scalar(
+        select(
+            select(ProjectFile.id)
+            .where(
+                ProjectFile.project_id == kb.project_id,
+                ProjectFile.metadata["search_processing"]["success"].as_boolean()
+            )
+            .exists()
+            .select()
         )
     )
 
@@ -642,6 +653,66 @@ async def upload_file_to_knowledge_base(
             }
         )
 
+
+class TextExtractionRequest(BaseModel):
+    """Request model for text extraction"""
+    file: UploadFile = File(...)
+    estimate_tokens: bool = Field(True, description="Whether to estimate token count")
+
+@router.post("/text-extractor/initialize", response_model=dict)
+async def initialize_text_extractor(
+    current_user: User = Depends(get_current_user_and_token)
+):
+    """
+    Initialize the text extractor service.
+    Returns status and capabilities.
+    """
+    try:
+        return {
+            "success": True,
+            "capabilities": {
+                "pdf": PDF_AVAILABLE,
+                "docx": DOCX_AVAILABLE,
+                "tiktoken": TIKTOKEN_AVAILABLE
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize text extractor: {str(e)}"
+        )
+
+@router.post("/text-extractor/extract", response_model=dict)
+async def extract_text(
+    request: TextExtractionRequest = Depends(),
+    current_user: User = Depends(get_current_user_and_token)
+):
+    """
+    Extract text and metadata from a file.
+    Returns chunks, token count, and file metadata.
+    """
+    try:
+        extractor = get_text_extractor()
+        content = await request.file.read()
+        chunks, metadata = await extractor.extract_text(
+            content,
+            request.file.filename
+        )
+        
+        result = {
+            "chunks": chunks,
+            "metadata": metadata
+        }
+        
+        if not request.estimate_tokens:
+            result["metadata"].pop("token_count", None)
+            
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Text extraction failed: {str(e)}"
+        )
 
 @router.post("/projects/{project_id}/knowledge-bases/toggle", response_model=dict)
 async def toggle_project_knowledge_base(

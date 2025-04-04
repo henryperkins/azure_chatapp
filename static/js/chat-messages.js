@@ -56,22 +56,23 @@ window.MessageService.prototype.clear = function() {
     }
   } catch (error) {
     console.error('Error clearing messages:', error);
-  },
+  }
+  
+};
 
-  /**
-   * Count tokens using Claude's token counting API
-   */
-  async countClaudeTokens(text) {
-    try {
-      const response = await window.apiRequest(
-        '/api/claude/count_tokens', 
-        'POST',
-        { text, model: this.modelConfig?.modelName }
-      );
-      return response.data?.input_tokens || Math.ceil(text.length / 4);
-    } catch {
-      return Math.ceil(text.length / 4); // Fallback
-    }
+/**
+ * Count tokens using Claude's token counting API
+ */
+window.MessageService.prototype.countClaudeTokens = async function(text) {
+  try {
+    const response = await window.apiRequest(
+      '/api/claude/count_tokens', 
+      'POST',
+      { text, model: this.modelConfig?.modelName }
+    );
+    return response.data?.input_tokens || Math.ceil(text.length / 4);
+  } catch {
+    return Math.ceil(text.length / 4); // Fallback
   }
 };
 

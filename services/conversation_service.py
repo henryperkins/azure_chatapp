@@ -287,11 +287,17 @@ class ConversationService:
         )
 
         # Create user message
+        extra_data = {}
+        if image_data:
+            if not isinstance(image_data, str) or not image_data.startswith(('data:image/jpeg;base64,', 'data:image/png;base64,')):
+                raise ValueError("Invalid image data format")
+            extra_data['image_data'] = image_data
+
         message = Message(
             conversation_id=conversation_id,
             content=content.strip(),
             role=role,
-            image_data=image_data,
+            extra_data=extra_data if extra_data else None
         )
         await save_model(self.db, message)
         response = {"user_message": serialize_message(message)}
@@ -398,6 +404,11 @@ class ConversationService:
         if message_data.get("type") == "token_refresh":
             return {"type": "token_refresh_success"}
 
+        # Prepare message data
+        extra_data = {}
+        if message_data.get("image_data"):
+            extra_data["image_data"] = message_data["image_data"]
+
         # Create message
         message = await self.create_message(
             conversation_id=conversation_id,
@@ -406,7 +417,7 @@ class ConversationService:
             role=message_data.get("role", "user"),
             project_id=project_id,
             image_data=message_data.get("image_data"),
-            vision_detail=message_data.get("vision_detail", "auto"),
+            vision_detail=message_data.get("vision_detail", "auto")
         )
 
         # Format WebSocket response

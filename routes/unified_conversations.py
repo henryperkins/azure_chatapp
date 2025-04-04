@@ -644,15 +644,7 @@ async def websocket_chat_endpoint(
 
     async with AsyncSessionLocal() as db:
         try:
-            # Accept WebSocket connection first
-            try:
-                await websocket.accept()
-                logger.info(f"WebSocket connection accepted for {conversation_id}")
-            except Exception as e:
-                logger.error(f"WebSocket accept failed: {str(e)}")
-                return
-
-            # Enhanced token handling with proper error handling
+            # Validate token BEFORE accepting WebSocket connection
             try:
                 user_token = (
                     token
@@ -667,28 +659,41 @@ async def websocket_chat_endpoint(
                 logger.info("WebSocket token received (first 10 chars): %s...", user_token[:10])
                 logger.debug("Full token: %s", user_token if settings.ENV != "production" else "[REDACTED]")
 
-                # Immediate token validation check
+                # Validate token
                 try:
                     user = await get_user_from_token(user_token, db)
                     if not user:
                         logger.error("Token validation failed - no user found")
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    logger.info("WebSocket authenticated for user: %s", user.id)
+                except HTTPException as e:
+                    if "expired" in str(e.detail).lower():
+                        logger.warning("Token validation error: %s", str(e))
+                        await websocket.close(
+                            code=status.WS_1008_POLICY_VIOLATION,
+                            reason="Token has expired - please refresh"
+                        )
+                    else:
+                        logger.error("Token validation error: %s", str(e))
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
                 except Exception as e:
                     logger.error("Token validation error: %s", str(e))
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
+
+                # Now accept WebSocket connection
+                await websocket.accept()
+                logger.info(f"WebSocket connection accepted for {conversation_id}")
             except Exception as e:
-                logger.error("WebSocket token extraction failed: %s", str(e))
+                logger.error(f"WebSocket setup failed: {str(e)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
                 
-            # Remove duplicate token validation - this was causing the issue
-            # Keep project validation
+            # Project validation (if project_id provided) - skip token check since user already validated
             if project_id:
                 try:
-                    project = await validate_project_access(project_id, user, db)
+                    project = await validate_project_access(project_id, user, db, skip_ownership_check=True)
                     if not project:
                         logger.error(f"Project {project_id} not found or not accessible")
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -698,6 +703,7 @@ async def websocket_chat_endpoint(
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
                     
+            # Conversation validation - skip token check since user already validated
             try:
                 conversation = await db.get(Conversation, conversation_id)
                 if not conversation or conversation.user_id != user.id:

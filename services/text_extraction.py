@@ -174,7 +174,7 @@ class TextExtractor:
         else:
             raise TypeError("Invalid file_content type. Must be bytes, bytearray, memoryview, BinaryIO, or a valid file path string.")
 
-    def extract_text(
+    async def extract_text(
         self,
         file_content: Union[bytes, BinaryIO, str],
         filename: Optional[str] = None,
