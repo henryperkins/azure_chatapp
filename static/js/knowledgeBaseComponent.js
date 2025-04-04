@@ -76,6 +76,7 @@
         );
       }
       
+      this.debouncedSearch = this._debounce(this.searchKnowledgeBase.bind(this), 300); // 300ms delay
       this._bindEvents();
     }
 
@@ -413,64 +414,81 @@
         return;
       }
 
-      // Get the button element for visual feedback
       const reprocessBtn = this.elements.reprocessButton;
       if (reprocessBtn) {
-        // Add loading state
+        // Set button to a "loading" state
         const originalText = reprocessBtn.innerHTML;
         reprocessBtn.innerHTML = `
           <div class="inline-flex items-center">
             <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Processing...
-          </div>
-        `;
+        </svg>
+        Processing...
+      </div>
+    `;
         reprocessBtn.disabled = true;
       }
 
       try {
+        // Optional: let user force a complete rebuild of the vector store
+        // by passing { force_reindex: true } if desired:
+        const requestBody = {
+          force_reindex: true
+        };
+
         window.showNotification("Reprocessing files for search...", "info");
+
+        // *** 1) Use the new route for reindexing ***
         const response = await window.apiRequest(
-          `/api/projects/${projectId}/files/reprocess`,
-          "POST"
+          `/api/projects/${projectId}/knowledge-base/reindex`,
+          "POST",
+          requestBody
         );
-        
-        const successCount = response.data?.processed_success || 0;
-        const failedCount = response.data?.processed_failed || 0;
+
+        // The new route typically returns something like:
+        // {
+        //   "success": true,
+        //   "message": "Queued X files for reindexing",
+        //   "queued_files": <number>,
+        //   "total_files": <number>
+        // }
+
+        // *** 2) Parse the new response fields ***
+        const queuedCount = response.data?.queued_files || 0;
         const totalCount = response.data?.total_files || 0;
-        
-        // Provide comprehensive feedback
-        let message = `Reprocessed ${successCount} files successfully`;
-        if (failedCount > 0) {
-          message += `, ${failedCount} failed`;
+        const successMsg = response.data?.message || "Files reindexed";
+
+        // Provide user feedback
+        if (queuedCount === 0 && totalCount === 0) {
+          window.showNotification("No files found to reprocess. Please upload files first.", "info");
+        } else {
+          // If the route includes a detailed 'message', we can show that:
+          window.showNotification(successMsg, "success");
         }
-        if (successCount === 0 && totalCount === 0) {
-          message = "No files to process. Upload files first.";
-        }
-        
-        window.showNotification(message, failedCount > 0 ? "warning" : "success");
-        
-        // Refresh the file list, stats, and knowledge base status
+
+        // *** 3) Refresh the file list, stats, etc. after reindex ***
         if (window.projectManager) {
           await Promise.all([
             window.projectManager.loadProjectFiles(projectId),
             window.projectManager.loadProjectStats(projectId),
             window.projectManager.loadProjectDetails(projectId)
           ]);
-          
-          // If we can get the KB ID, load its health
+
+          // Optionally check KB health again if you want to update the UI further
           const currentProject = window.projectManager.currentProject();
           if (currentProject?.knowledge_base_id) {
             await this._loadKnowledgeBaseHealth(currentProject.knowledge_base_id);
           }
         }
+
       } catch (error) {
-        // Handle specific status codes
-        const status = error?.response?.status;
+        console.error("Reprocessing error:", error);
+
         let errorMessage = "Failed to reprocess files";
-        
+        const status = error?.response?.status;
+
+        // Return a more specific error for certain statuses
         if (status === 422) {
           errorMessage = "Cannot process files: validation failed";
         } else if (status === 404) {
@@ -480,11 +498,10 @@
         } else if (error?.response?.data?.detail) {
           errorMessage = error.response.data.detail;
         }
-        
+
         window.showNotification(errorMessage, "error");
-        console.error("Reprocessing error:", error);
       } finally {
-        // Restore button state
+        // *** 4) Restore button state ***
         if (reprocessBtn) {
           reprocessBtn.innerHTML = originalText;
           reprocessBtn.disabled = false;
@@ -515,7 +532,7 @@
       this.elements.searchInput?.addEventListener("keyup", (e) => {
         if (e.key === "Enter") {
           const query = e.target.value.trim();
-          if (query) this.searchKnowledgeBase(query);
+          if (query) this.debouncedSearch(query); // Call debounced search
         }
       });
   
@@ -565,6 +582,15 @@
           });
         }
       }
+    }
+    
+    _debounce(func, delay) {
+      let timeout;
+      return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+      };
     }
     
     /**
@@ -652,11 +678,18 @@
         // Convert form data to object
         const kbData = Object.fromEntries(formData);
         
+        // **ENSURE DATA MATCHES Pydantic MODEL**
+        const payload = {
+          name: kbData.name,
+          description: kbData.description || null, // ensure null if empty
+          embedding_model: kbData.embedding_model
+        };
+        
         // UPDATED: Use the project-specific KB creation endpoint
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases`,
           "POST",
-          kbData
+          payload  // Use the properly formatted payload
         );
         
         console.log('[DEBUG] Knowledge base creation response:', response);
