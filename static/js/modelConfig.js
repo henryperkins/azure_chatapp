@@ -526,7 +526,7 @@ function getCurrentModelConfig() {
 
 function getModelOptions() {
   return [
-    // Claude models
+    // Claude models (existing, unchanged)
     {
       id: 'claude-3-opus-20240229',
       name: 'Claude 3 Opus',
@@ -567,42 +567,53 @@ function getModelOptions() {
       }
     },
 
-    // Azure OpenAI models
+    // Azure OpenAI models - Phase 1 core definitions
     {
       id: 'o3-mini',
       name: 'Azure o3-mini',
-      description: 'Advanced reasoning for code/science/math',
       provider: 'azure',
+      description: 'Advanced reasoning for code/science/math',
       parameters: {
+        type: 'reasoning',
         max_completion_tokens: 100000,
-        reasoning_effort: ['low', 'medium', 'high']
+        reasoning_effort: ['low', 'medium', 'high'],
+        markdown_mode: false
       },
       contextWindow: 200000,
-      visionSupported: false
+      visionSupported: false,
+      requires: ['max_completion_tokens', 'reasoning_effort']
     },
     {
       id: 'o1',
       name: 'Azure o1',
-      description: 'Multimodal reasoning with vision support',
-      supportsVision: true,
-      visionDetail: ['auto', 'low', 'high'],
-      contextWindow: 200000,
-      maxCompletionTokens: 100000,
+      provider: 'azure',
+      description: 'Multimodal reasoning with vision',
       parameters: {
-        reasoning_effort: ['low', 'medium', 'high']
-      }
+        type: 'multimodal-reasoning',
+        max_completion_tokens: 100000,
+        reasoning_effort: ['low', 'medium', 'high'],
+        vision_detail: ['auto', 'low', 'high']
+      },
+      contextWindow: 200000,
+      visionSupported: true,
+      requires: ['max_completion_tokens', 'vision_detail']
     },
     {
       id: 'gpt-4o',
       name: 'GPT-4o',
+      provider: 'azure',
       description: 'Advanced multimodal model with vision',
-      supportsVision: true,
-      visionDetail: ['auto', 'low', 'high'],
+      parameters: {
+        type: 'vision',
+        max_tokens: 4096,
+        vision_detail: ['auto', 'low', 'high']
+      },
       contextWindow: 128000,
-      maxTokens: 4096
+      visionSupported: true,
+      requires: ['max_tokens', 'vision_detail']
     },
 
-    // Legacy OpenAI models
+    // Legacy OpenAI models (existing, unchanged)
     {
       id: 'gpt-4',
       name: 'GPT-4',
