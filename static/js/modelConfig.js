@@ -36,7 +36,14 @@ function cleanupListeners() {
  */
 const modelConfigState = {
   modelName: "claude-3-sonnet-20240229",
+  provider: "anthropic",
   maxTokens: 500,
+  // Azure-specific state
+  azureParams: {
+    maxCompletionTokens: 5000,
+    reasoningEffort: 'medium',
+    visionDetail: 'auto'
+  },
   reasoningEffort: "medium",
   visionEnabled: false,
   visionDetail: "auto",
@@ -48,7 +55,9 @@ const modelConfigState = {
   // Load state from localStorage
   loadFromStorage() {
     this.modelName = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
+    this.provider = localStorage.getItem("provider") || "anthropic";
     this.maxTokens = parseInt(localStorage.getItem("maxTokens") || "500", 10);
+    this.loadAzureSettings();
     this.reasoningEffort = localStorage.getItem("reasoningEffort") || "medium";
     this.visionEnabled = localStorage.getItem("visionEnabled") === "true";
     this.visionDetail = localStorage.getItem("visionDetail") || "auto";
@@ -66,6 +75,8 @@ const modelConfigState = {
   // Save state to localStorage
   saveToStorage() {
     localStorage.setItem("modelName", this.modelName);
+    localStorage.setItem("provider", this.provider);
+    this.saveAzureSettings();
     localStorage.setItem("maxTokens", this.maxTokens);
     localStorage.setItem("reasoningEffort", this.reasoningEffort);
     localStorage.setItem("visionEnabled", this.visionEnabled);
@@ -508,6 +519,11 @@ function updateModelConfigDisplay() {
  * Get available models for the dropdown
  * @returns {Array} List of available models
  */
+function getCurrentModelConfig() {
+  const models = getModelOptions();
+  return models.find(m => m.id === modelConfigState.modelName) || models[0];
+}
+
 function getModelOptions() {
   return [
     // Claude models
@@ -515,6 +531,7 @@ function getModelOptions() {
       id: 'claude-3-opus-20240229',
       name: 'Claude 3 Opus',
       description: 'Most powerful Claude model for complex tasks',
+      provider: 'anthropic',
       supportsExtendedThinking: true,
       maxTokens: 200000
     },
@@ -555,12 +572,13 @@ function getModelOptions() {
       id: 'o3-mini',
       name: 'Azure o3-mini',
       description: 'Advanced reasoning for code/science/math',
-      contextWindow: 200000,
-      supportsReasoningEffort: true,
-      maxCompletionTokens: 100000,
+      provider: 'azure',
       parameters: {
+        max_completion_tokens: 100000,
         reasoning_effort: ['low', 'medium', 'high']
-      }
+      },
+      contextWindow: 200000,
+      visionSupported: false
     },
     {
       id: 'o1',
