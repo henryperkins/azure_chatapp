@@ -5,7 +5,7 @@ Enhanced service layer with full support for both project-based and standalone c
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Tuple
 from uuid import UUID
 from datetime import datetime
 
@@ -26,14 +26,25 @@ from utils.serializers import serialize_conversation, serialize_message
 
 logger = logging.getLogger(__name__)
 
+
+class ConversationError(Exception):
+    """Base exception for conversation-related errors."""
+
+    def __init__(self, message: str, status_code: int = 400):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(message)
+
+
 def validate_model(model_id: str) -> bool:
     """Validate model against allowed configurations."""
     if model_id not in settings.CLAUDE_MODELS:
-        raise HTTPException(
+        raise ConversationError(
+            f"Invalid model ID. Allowed: {', '.join(settings.CLAUDE_MODELS)}",
             status_code=400,
-            detail=f"Invalid model ID. Allowed: {', '.join(settings.CLAUDE_MODELS)}"
         )
     return True
+
 
 class ConversationService:
     def __init__(self, db: AsyncSession):
@@ -44,57 +55,43 @@ class ConversationService:
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
-        include_deleted: bool = False
+        include_deleted: bool = False,
     ) -> Conversation:
         """Centralized conversation access validation."""
-        filters = [
-            Conversation.id == conversation_id,
-            Conversation.user_id == user_id
-        ]
-        
+        filters = [Conversation.id == conversation_id, Conversation.user_id == user_id]
+
         if not include_deleted:
             filters.append(Conversation.is_deleted.is_(False))
-        
+
         if project_id is not None:
             filters.append(Conversation.project_id == project_id)
-            # Verify the conversation actually belongs to the project
             result = await self.db.execute(
                 select(Conversation)
                 .where(and_(*filters))
                 .options(joinedload(Conversation.project))
             )
             conv = result.scalar_one_or_none()
-            
+
             if not conv or str(conv.project_id) != str(project_id):
-                raise HTTPException(403, "Conversation not in specified project")
+                raise ConversationError("Conversation not in specified project", 403)
         else:
             filters.append(Conversation.project_id.is_(None))
-            result = await self.db.execute(
-                select(Conversation).where(and_(*filters))
-            )
+            result = await self.db.execute(select(Conversation).where(and_(*filters)))
             conv = result.scalar_one_or_none()
-        
+
         if not conv:
-            raise HTTPException(
-                status_code=404,
-                detail="Conversation not found or access denied"
-            )
+            raise ConversationError("Conversation not found or access denied", 404)
         return conv
 
     async def _validate_project_access(self, project_id: UUID, user_id: int) -> Project:
         """Validate project ownership."""
         project = await self.db.get(Project, project_id)
         if not project or project.user_id != user_id:
-            raise HTTPException(403, "Project access denied")
+            raise ConversationError("Project access denied", 403)
         return project
-
-    async def validate_model(self, model_id: str) -> bool:
-        """Validate model against allowed configurations (instance method)."""
-        return validate_model(model_id)
 
     async def create_conversation(
         self,
-        *,
         user_id: int,
         title: str,
         model_id: str,
@@ -102,13 +99,15 @@ class ConversationService:
         use_knowledge_base: bool = False,
     ) -> Conversation:
         """Create new conversation with validation."""
+        validate_model(model_id)
+
         # Create base conversation object
         conv = Conversation(
             user_id=user_id,
             title=title.strip(),
             model_id=model_id,
             project_id=project_id,
-            use_knowledge_base=use_knowledge_base
+            use_knowledge_base=use_knowledge_base,
         )
 
         # Auto-enable knowledge base if project has one
@@ -119,27 +118,21 @@ class ConversationService:
                 conv.knowledge_base_id = project.knowledge_base_id
                 try:
                     # Add explicit numeric type casting
-                    usage = project.token_usage
-                    limit = project.max_tokens
-                    if usage is None or limit is None:
-                        raise ValueError("Project missing token configuration")
-                    
+                    usage = project.token_usage or 0
+                    limit = project.max_tokens or 0
+
                     if int(usage) > int(limit):
                         raise ValueError("Project token limit exceeded")
-                    
+
                     await conv.validate_knowledge_base(self.db)
-                except ValueError as e:
-                    logger.warning(f"Knowledge base validation failed: {str(e)}")
-                    conv.use_knowledge_base = False
                 except Exception as e:
-                    logger.error(f"KB validation error: {str(e)}")
+                    logger.warning(f"Knowledge base setup issue: {str(e)}")
                     conv.use_knowledge_base = False
 
         # Verify project assignment before saving
         if project_id and str(conv.project_id) != str(project_id):
-            raise HTTPException(
-                status_code=403,
-                detail="Conversation cannot be created outside designated project"
+            raise ConversationError(
+                "Conversation cannot be created outside designated project", 403
             )
 
         await save_model(self.db, conv)
@@ -147,7 +140,6 @@ class ConversationService:
 
     async def get_conversation(
         self,
-        *,
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
@@ -160,18 +152,14 @@ class ConversationService:
 
     async def list_conversations(
         self,
-        *,
         user_id: int,
         project_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[Conversation]:
         """List conversations with pagination."""
-        filters = [
-            Conversation.user_id == user_id,
-            Conversation.is_deleted.is_(False)
-        ]
-        
+        filters = [Conversation.user_id == user_id, Conversation.is_deleted.is_(False)]
+
         if project_id is not None:
             filters.append(Conversation.project_id == project_id)
         else:
@@ -188,13 +176,12 @@ class ConversationService:
 
     async def update_conversation(
         self,
-        *,
         conversation_id: UUID,
         user_id: int,
+        project_id: Optional[UUID] = None,
         title: Optional[str] = None,
         model_id: Optional[str] = None,
         use_knowledge_base: Optional[bool] = None,
-        project_id: Optional[UUID] = None,
     ) -> Dict:
         """Update conversation attributes."""
         conv = await self._validate_conversation_access(
@@ -204,11 +191,13 @@ class ConversationService:
         if title is not None:
             conv.title = title.strip()
         if model_id is not None:
-            await self.validate_model(model_id)
+            validate_model(model_id)
             conv.model_id = model_id
         if use_knowledge_base is not None:
             if use_knowledge_base and not conv.project_id:
-                raise HTTPException(400, "Knowledge base requires project association")
+                raise ConversationError(
+                    "Knowledge base requires project association", 400
+                )
             conv.use_knowledge_base = use_knowledge_base
 
         await save_model(self.db, conv)
@@ -216,7 +205,6 @@ class ConversationService:
 
     async def delete_conversation(
         self,
-        *,
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
@@ -232,7 +220,6 @@ class ConversationService:
 
     async def restore_conversation(
         self,
-        *,
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
@@ -248,7 +235,6 @@ class ConversationService:
 
     async def list_messages(
         self,
-        *,
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
@@ -256,9 +242,7 @@ class ConversationService:
         limit: int = 100,
     ) -> List[Dict]:
         """List messages in conversation."""
-        await self._validate_conversation_access(
-            conversation_id, user_id, project_id
-        )
+        await self._validate_conversation_access(conversation_id, user_id, project_id)
 
         messages = await get_all_by_condition(
             self.db,
@@ -272,7 +256,6 @@ class ConversationService:
 
     async def create_message(
         self,
-        *,
         conversation_id: UUID,
         user_id: int,
         content: str,
@@ -287,19 +270,9 @@ class ConversationService:
         )
 
         # Create user message
-        extra_data = {}
-        if image_data:
-            if not isinstance(image_data, str) or not image_data.startswith(('data:image/jpeg;base64,', 'data:image/png;base64,')):
-                raise ValueError("Invalid image data format")
-            extra_data['image_data'] = image_data
-
-        message = Message(
-            conversation_id=conversation_id,
-            content=content.strip(),
-            role=role,
-            extra_data=extra_data if extra_data else None
+        message = await self._create_user_message(
+            conversation_id, content, role, image_data
         )
-        await save_model(self.db, message)
         response = {"user_message": serialize_message(message)}
 
         # Generate AI response if needed
@@ -320,9 +293,34 @@ class ConversationService:
 
         return response
 
+    async def _create_user_message(
+        self,
+        conversation_id: UUID,
+        content: str,
+        role: str,
+        image_data: Optional[str] = None,
+    ) -> Message:
+        """Create and save a user message."""
+        extra_data = {}
+        if image_data:
+            # Basic validation of image data format
+            if not image_data.startswith(
+                ("data:image/jpeg;base64,", "data:image/png;base64,")
+            ):
+                raise ConversationError("Invalid image data format", 400)
+            extra_data["image_data"] = image_data
+
+        message = Message(
+            conversation_id=conversation_id,
+            content=content.strip(),
+            role=role,
+            extra_data=extra_data if extra_data else None,
+        )
+        await save_model(self.db, message)
+        return message
+
     async def _generate_ai_response(
         self,
-        *,
         conversation: Conversation,
         user_message: str,
         image_data: Optional[str] = None,
@@ -359,9 +357,7 @@ class ConversationService:
         return None
 
     async def _get_conversation_context(
-        self,
-        conversation_id: UUID,
-        include_system_prompt: bool = False
+        self, conversation_id: UUID, include_system_prompt: bool = False
     ) -> List[Dict[str, str]]:
         """Get formatted message history for AI context."""
         messages = await get_all_by_condition(
@@ -373,41 +369,32 @@ class ConversationService:
 
         context = []
         if include_system_prompt:
-            context.append({
-                "role": "system",
-                "content": "You are a helpful assistant."
-            })
+            context.append(
+                {"role": "system", "content": "You are a helpful assistant."}
+            )
 
-        context.extend([{
-            "role": msg.role,
-            "content": msg.content,
-            "image_data": msg.image_data
-        } for msg in messages])
+        for msg in messages:
+            message_dict = {"role": msg.role, "content": msg.content}
+            if msg.extra_data and "image_data" in msg.extra_data:
+                message_dict["image_data"] = msg.extra_data["image_data"]
+            context.append(message_dict)
 
         return context
 
     async def handle_ws_message(
         self,
-        *,
         websocket: WebSocket,
         conversation_id: UUID,
         user_id: int,
-        message_data: Dict,
+        message_data: Dict[str, Any],
         project_id: Optional[UUID] = None,
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """Process WebSocket message and return response."""
-        await self._validate_conversation_access(
-            conversation_id, user_id, project_id
-        )
+        await self._validate_conversation_access(conversation_id, user_id, project_id)
 
         # Handle token refresh
         if message_data.get("type") == "token_refresh":
             return {"type": "token_refresh_success"}
-
-        # Prepare message data
-        extra_data = {}
-        if message_data.get("image_data"):
-            extra_data["image_data"] = message_data["image_data"]
 
         # Create message
         message = await self.create_message(
@@ -417,18 +404,29 @@ class ConversationService:
             role=message_data.get("role", "user"),
             project_id=project_id,
             image_data=message_data.get("image_data"),
-            vision_detail=message_data.get("vision_detail", "auto")
+            vision_detail=message_data.get("vision_detail", "auto"),
         )
 
         # Format WebSocket response
-        response = {
+        return {
             "type": "message",
             "messageId": message_data.get("messageId"),
-            **message
+            **message,
         }
-        return response
+
+
+# Middleware to translate custom exceptions to HTTP responses
+async def conversation_exception_handler(request, call_next):
+    try:
+        return await call_next(request)
+    except ConversationError as exc:
+        return HTTPException(status_code=exc.status_code, detail=exc.message)
 
 
 # Service instance factory for dependency injection
 async def get_conversation_service(db: AsyncSession = Depends(get_async_session)):
-    yield ConversationService(db)
+    try:
+        yield ConversationService(db)
+    except ConversationError as e:
+        # Convert custom exceptions to HTTP exceptions at the service boundary
+        raise HTTPException(status_code=e.status_code, detail=e.message)
