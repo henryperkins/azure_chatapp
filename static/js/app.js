@@ -883,6 +883,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       await InitUtils.initModule('chat', window.initializeChat);
     }
 
+    // Initialize TextExtractor service if available
+    try {
+      if (window.apiRequest) {
+        const response = await window.apiRequest('/api/text-extractor/initialize', 'POST');
+        if (response?.success) {
+          window.textExtractor = {
+            extractText: async (content, filename) => {
+              const formData = new FormData();
+              formData.append('file', new Blob([content]), filename);
+              const result = await window.apiRequest('/api/text-extractor/extract', 'POST', formData);
+              return result.data;
+            }
+          };
+          console.log('TextExtractor service initialized');
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to initialize TextExtractor:', error);
+    }
+
     console.log("✅ DOMContentLoaded: App initialization complete");
   } catch (error) {
     console.error("❌ DOMContentLoaded: App initialization error:", error);

@@ -15,18 +15,19 @@ from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator
 from uuid import UUID
 from fastapi import HTTPException, UploadFile, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update, exists
 from sqlalchemy.exc import SQLAlchemyError
+from functools import wraps
 
 import config
 from models.project_file import ProjectFile
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from models.user import User
+from models.conversation import Conversation
 
 # Import existing utilities to reduce duplication
 from utils.file_validation import FileValidator, sanitize_filename
-from utils.context import estimate_token_count
 from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
 from services.file_storage import get_file_storage
@@ -96,9 +97,7 @@ def extract_file_metadata(file_record: ProjectFile, include_token_count: bool = 
 def handle_service_errors(detail_message: str = "Operation failed", status_code: int = 500):
     """
     Decorator for consistent error handling in service functions.
-    """
-    from functools import wraps
-    
+    """    
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -110,11 +109,11 @@ def handle_service_errors(detail_message: str = "Operation failed", status_code:
             except ValueError as e:
                 # Handle validation errors with 400 status
                 logger.warning(f"Validation error in {func.__name__}: {str(e)}")
-                raise HTTPException(status_code=400, detail=f"{detail_message}: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"{detail_message}: {str(e)}") from e
             except SQLAlchemyError as e:
                 # Handle database errors
                 logger.error(f"Database error in {func.__name__}: {str(e)}", exc_info=True)
-                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
             except Exception as e:
                 # Handle all other errors
                 logger.exception(f"Unhandled error in {func.__name__}: {str(e)}")
@@ -715,8 +714,6 @@ async def search_project_context(
 @handle_service_errors("Error cleaning up KB references")
 async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
     """Clean up invalid KB references."""
-    from sqlalchemy import update, exists
-    
     # Projects with invalid KB references
     project_result = await db.execute(
         update(Project)
@@ -730,7 +727,6 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
     project_fixes = len(project_result.scalars().all())
     
     # Fix conversations
-    from models.conversation import Conversation
     conv_result = await db.execute(
         update(Conversation)
         .where(

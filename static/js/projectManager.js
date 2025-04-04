@@ -115,7 +115,17 @@
    */
   async function loadProjectDetails(projectId) {
     const projectEndpoint = `/api/projects/${projectId}/`;
+    
     try {
+      // Check auth state first
+      const authState = await checkAuthState();
+      if (!authState) {
+        emitEvent("projectDetailsError", {
+          error: new Error("Not authenticated - please login first")
+        });
+        return null;
+      }
+
       const response = await window.apiRequest(projectEndpoint, "GET");
       let projectData = null;
 
@@ -178,6 +188,20 @@
    * @returns {Promise<Object>}
    */
   async function loadProjectStats(projectId) {
+    const authState = await checkAuthState();
+    if (!authState) {
+      emitEvent("projectStatsError", {
+        error: new Error("Not authenticated - please login first")
+      });
+      return {
+        token_usage: 0,
+        max_tokens: 0,
+        file_count: 0,
+        conversation_count: 0,
+        artifact_count: 0
+      };
+    }
+
     try {
       const response = await window.apiRequest(`/api/projects/${projectId}/stats`, "GET");
       const stats = response.data || {};
@@ -211,6 +235,14 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectFiles(projectId) {
+    const authState = await checkAuthState();
+    if (!authState) {
+      emitEvent("projectFilesError", {
+        error: new Error("Not authenticated - please login first")
+      });
+      return [];
+    }
+
     try {
       const response = await window.apiRequest(`/api/projects/${projectId}/files`, "GET");
       const files = response.data?.files || response.data || [];
@@ -231,6 +263,14 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectConversations(projectId) {
+    const authState = await checkAuthState();
+    if (!authState) {
+      emitEvent("projectConversationsError", {
+        error: new Error("Not authenticated - please login first")
+      });
+      return [];
+    }
+
     const endpoint = `/api/chat/projects/${projectId}/conversations`;
     try {
       const response = await window.apiRequest(endpoint, "GET");
@@ -263,6 +303,14 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectArtifacts(projectId) {
+    const authState = await checkAuthState();
+    if (!authState) {
+      emitEvent("projectArtifactsError", {
+        error: new Error("Not authenticated - please login first")
+      });
+      return [];
+    }
+
     try {
       const response = await window.apiRequest(`/api/projects/${projectId}/artifacts`, "GET");
       const artifacts = response.data?.artifacts || response.data || [];
@@ -283,6 +331,11 @@
    * @returns {Promise<Object>}
    */
   async function createOrUpdateProject(projectId, formData) {
+    const authState = await checkAuthState();
+    if (!authState) {
+      throw new Error("Not authenticated - please login first");
+    }
+
     const method = projectId ? "PATCH" : "POST";
     const endpoint = projectId
       ? `/api/projects/${projectId}`
@@ -295,7 +348,11 @@
    * @param {string} projectId
    * @returns {Promise<Object>}
    */
-  function deleteProject(projectId) {
+  async function deleteProject(projectId) {
+    const authState = await checkAuthState();
+    if (!authState) {
+      throw new Error("Not authenticated - please login first");
+    }
     return window.apiRequest(`/api/projects/${projectId}`, "DELETE");
   }
 
@@ -485,19 +542,30 @@
   // Convert server errors to more user-friendly messages
   function parseFileUploadError(err) {
     const status = err?.response?.status;
+    const detail = err?.response?.data?.detail || err.message;
+    
     if (status === 422) {
       return new Error("File validation failed (unsupported/corrupted format)");
     } else if (status === 413) {
       return new Error("File too large (exceeds maximum allowed size)");
     } else if (status === 400) {
-      const detail = err?.response?.data?.detail || "Invalid file";
+      if (detail.includes("token limit")) {
+        const project = window.projectManager?.currentProject;
+        const maxTokens = project?.max_tokens || 200000;
+        return new Error(
+          `File exceeds project token limit (${maxTokens.toLocaleString()} tokens). ` +
+          `Options:\n1. Increase project token limit in settings\n` +
+          `2. Split large files into smaller parts\n` +
+          `3. Delete unused files to free up tokens`
+        );
+      }
       return new Error(`Bad request: ${detail}`);
     } else if (status === 404) {
       return new Error("Project knowledge base not found - please configure it first");
     } else if (status === 403) {
       return new Error("Knowledge base not active for this project");
     }
-    return new Error(err?.response?.data?.detail || err.message || "Upload failed");
+    return new Error(detail || "Upload failed");
   }
 
   /**
@@ -543,6 +611,15 @@
     console.debug('[ProjectManager] Creating conversation for project:', projectId);
     
     try {
+      // Check auth state first
+      const authState = await checkAuthState();
+      if (!authState) {
+        emitEvent("conversationError", {
+          error: new Error("Not authenticated - please login first")
+        });
+        throw new Error("Not authenticated - please login first");
+      }
+
       // Validate project existence
       if (!this.currentProject || this.currentProject.id !== projectId) {
         await this.loadProjectDetails(projectId); 

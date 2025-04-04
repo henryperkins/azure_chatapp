@@ -225,22 +225,37 @@ window.ChatInterface.prototype._handleInitialConversation = function() {
     // Load existing conversation if ID is in URL
     this.loadConversation(this.currentChatId);
   } else {
-    // Check if user is authenticated
-    window.ChatUtils?.isAuthenticated?.().then(isAuthenticated => {
-      if (isAuthenticated) {
-        // Create new conversation automatically if user is logged in but no chatId present
-        setTimeout(() => {
-          this.createNewConversation().catch((error) => {
-            window.ChatUtils?.handleError?.('Creating new conversation', error, this.notificationFunction);
-          });
-        }, 100);
-      } else {
+    // Verify auth state before proceeding
+    window.auth?.verify?.().then(isAuthenticated => {
+      if (!isAuthenticated) {
         // Show login required message
         const loginMsg = document.getElementById("loginRequiredMessage");
         if (loginMsg) loginMsg.classList.remove("hidden");
+        return;
+      }
+
+      // Wait for auth to fully initialize
+      return new Promise(resolve => {
+        const checkAuthReady = () => {
+          if (window.TokenManager?.isInitialized) {
+            resolve();
+          } else {
+            setTimeout(checkAuthReady, 50);
+          }
+        };
+        checkAuthReady();
+      });
+    }).then(() => {
+      // Only create conversation if still no chatId
+      if (!this.currentChatId) {
+        this.createNewConversation().catch((error) => {
+          window.ChatUtils?.handleError?.('Creating new conversation', error, this.notificationFunction);
+        });
       }
     }).catch(error => {
       window.ChatUtils?.handleError?.('Authentication check', error, this.notificationFunction);
+      const loginMsg = document.getElementById("loginRequiredMessage");
+      if (loginMsg) loginMsg.classList.remove("hidden");
     });
   }
 };

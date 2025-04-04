@@ -147,7 +147,6 @@ async def generate_ai_response(
         if project_id and last_user_message and db:
             try:
                 # Ensure project_id is proper UUID
-                from uuid import UUID
                 project_uuid = UUID(str(project_id)) if project_id else None
                 knowledge_context = await retrieve_knowledge_context(
                     query=last_user_message,
@@ -183,6 +182,9 @@ async def generate_ai_response(
         if is_claude_model:
             # Call Claude API with model-specific settings
             logger.info(f"Generating response using Claude model: {chosen_model}")
+            
+            # Get model config
+            model_config = CLAUDE_MODELS[chosen_model]
         
             # Use larger max_tokens for Claude 3.7 Sonnet
             max_response_tokens = 4000 if chosen_model == "claude-3-7-sonnet-20250219" else 1500
@@ -193,8 +195,8 @@ async def generate_ai_response(
                 max_tokens=max_response_tokens,
                 enable_thinking=enable_thinking if enable_thinking is not None else settings.CLAUDE_EXTENDED_THINKING_ENABLED,
                 thinking_budget=thinking_budget if thinking_budget is not None else settings.CLAUDE_EXTENDED_THINKING_BUDGET,
-                image_data=image_data,
-                stream=False  # WebSocket handles streaming separately
+                stream=False,  # WebSocket handles streaming separately
+                image_data=image_data if model_config.get("supports_vision", False) else None
             )
             assistant_content = claude_response["choices"][0]["message"]["content"]
             
@@ -247,18 +249,23 @@ async def generate_ai_response(
             await save_model(db, assistant_msg)
             
             # Update token usage with accurate counting
-            if conversation and conversation.project_id:
-                try:
-                    from utils.openai import count_claude_tokens
-                    token_count = await count_claude_tokens(
-                        messages=[{"role": "assistant", "content": assistant_content}],
-                        model_name=chosen_model
-                    )
-                except Exception as e:
-                    logger.warning(f"Token counting failed, falling back to estimation: {str(e)}")
-                    token_count = len(assistant_content) // 4
+            if conversation and conversation.project_id and db:
+                token_count = len(assistant_content) // 4  # Default fallback
                 
-                await update_project_token_usage(conversation, token_count, db)
+                if chosen_model in CLAUDE_MODELS:
+                    try:
+                        from utils.openai import count_claude_tokens
+                        token_count = await count_claude_tokens(
+                            messages=[{"role": "assistant", "content": assistant_content}],
+                            model_name=chosen_model
+                        )
+                    except Exception as e:
+                        logger.warning(f"Token counting failed, using estimation: {str(e)}")
+                
+                try:
+                    await update_project_token_usage(conversation, token_count, db)
+                except Exception as e:
+                    logger.error(f"Failed to update token usage: {str(e)}")
         
         return assistant_msg
     except Exception as e:
@@ -305,7 +312,6 @@ async def handle_websocket_response(
             if conversation.project_id:
                 try:
                     # Ensure project_id is proper UUID
-                    from uuid import UUID
                     project_uuid = UUID(str(conversation.project_id))
                     project = await get_by_id(db, Project, project_uuid)
                 except (ValueError, AttributeError):
