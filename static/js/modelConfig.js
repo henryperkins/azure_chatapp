@@ -246,6 +246,18 @@ function setupMaxTokensUI() {
   const maxTokensContainer = document.getElementById("maxTokensContainer");
   if (!maxTokensContainer) return;
 
+  const currentModel = getCurrentModelConfig();
+  let maxTokenLimit = currentModel.maxTokens || 4096;
+
+  // Adjust maxTokenLimit based on model provider and parameters
+  if (currentModel.provider === 'azure' && currentModel.parameters) {
+    if (currentModel.parameters.max_completion_tokens) {
+      maxTokenLimit = currentModel.parameters.max_completion_tokens;
+    } else if (currentModel.parameters.max_tokens) {
+      maxTokenLimit = currentModel.parameters.max_tokens;
+    }
+  }
+
   // Create UI elements
   const maxTokensGroup = document.createElement("div");
   maxTokensGroup.className = "flex flex-col gap-2";
