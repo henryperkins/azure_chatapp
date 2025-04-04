@@ -17,6 +17,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -43,7 +44,9 @@ class Project(Base):
     )
 
     id: Mapped[UUID] = mapped_column(
-        primary_key=True, server_default=text("gen_random_uuid()")
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     goals: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -136,7 +139,9 @@ class ProjectUserAssociation(Base):
     __tablename__ = "project_users"
 
     project_id: Mapped[UUID] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True
     )
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
