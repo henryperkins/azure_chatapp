@@ -510,20 +510,25 @@ function updateModelConfigDisplay() {
  */
 function getModelOptions() {
   return [
+    // Claude models
     {
       id: 'claude-3-opus-20240229',
       name: 'Claude 3 Opus',
-      description: 'Most powerful Claude model for complex tasks'
+      description: 'Most powerful Claude model for complex tasks',
+      supportsExtendedThinking: true,
+      maxTokens: 200000
     },
     {
       id: 'claude-3-sonnet-20240229',
       name: 'Claude 3 Sonnet',
-      description: 'Balanced model - good mix of capability and speed'
+      description: 'Balanced model - good mix of capability and speed',
+      maxTokens: 200000
     },
     {
       id: 'claude-3-haiku-20240307',
       name: 'Claude 3 Haiku',
-      description: 'Fastest Claude model - great for simple tasks'
+      description: 'Fastest Claude model - great for simple tasks',
+      maxTokens: 200000
     },
     {
       id: 'claude-3-7-sonnet-20250219',
@@ -540,25 +545,57 @@ function getModelOptions() {
         'anthropic-version': '2023-06-01',
         'anthropic-features': 'extended-thinking-2025-02-19,long-context-2025-02-19'
       },
-      // Additional Claude-specific requirements
       requiredHeaders: {
         'anthropic-version': '2023-06-01'
       }
     },
+
+    // Azure OpenAI models
+    {
+      id: 'o3-mini',
+      name: 'Azure o3-mini',
+      description: 'Advanced reasoning for code/science/math',
+      contextWindow: 200000,
+      supportsReasoningEffort: true,
+      maxCompletionTokens: 100000,
+      parameters: {
+        reasoning_effort: ['low', 'medium', 'high']
+      }
+    },
+    {
+      id: 'o1',
+      name: 'Azure o1',
+      description: 'Multimodal reasoning with vision support',
+      supportsVision: true,
+      visionDetail: ['auto', 'low', 'high'],
+      contextWindow: 200000,
+      maxCompletionTokens: 100000,
+      parameters: {
+        reasoning_effort: ['low', 'medium', 'high']
+      }
+    },
+    {
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      description: 'Advanced multimodal model with vision',
+      supportsVision: true,
+      visionDetail: ['auto', 'low', 'high'],
+      contextWindow: 128000,
+      maxTokens: 4096
+    },
+
+    // Legacy OpenAI models
     {
       id: 'gpt-4',
       name: 'GPT-4',
-      description: 'Highly capable GPT model'
+      description: 'Highly capable GPT model',
+      maxTokens: 8192
     },
     {
       id: 'gpt-3.5-turbo',
       name: 'GPT-3.5 Turbo',
-      description: 'Fast GPT model for simpler queries'
-    },
-    {
-      id: 'o1',
-      name: 'o1 (Vision)',
-      description: 'Azure OpenAI model with image understanding'
+      description: 'Fast GPT model for simpler queries',
+      maxTokens: 4096
     }
   ];
 }
