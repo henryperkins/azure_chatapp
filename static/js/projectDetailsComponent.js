@@ -447,17 +447,18 @@
               if (!response || !response.metadata) {
                 throw new Error('Invalid response from text extraction service');
               }
-              
               // Get token count directly from metadata
               const tokenCount = response.metadata?.token_count;
+              const fileName = file.name; // Store file name before try block
               
               if (typeof tokenCount !== 'number' || tokenCount < 0) {
                 throw new Error('Invalid or missing token count in response');
               }
               
-              tokenCounts[file.name] = tokenCount;
+              tokenCounts[fileName] = tokenCount;
               totalTokens += tokenCount;
             } catch (error) {
+              console.error(`Error counting tokens for ${fileName}:`, error);
               console.error(`Error counting tokens for ${file.name}:`, error);
               let errorMsg = error.message;
               if (error.response?.data?.message) {
