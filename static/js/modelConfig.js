@@ -611,7 +611,7 @@ function getModelOptions() {
       contextWindow: 128000,
       visionSupported: true,
       requires: ['max_tokens', 'vision_detail']
-    }
+    },
 
     // Legacy OpenAI models (existing, unchanged)
     {
