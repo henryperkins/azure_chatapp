@@ -37,12 +37,12 @@ function cleanupListeners() {
 const modelConfigState = {
   modelName: "claude-3-sonnet-20240229",
   provider: "anthropic",
-  maxTokens: 500,
+  maxTokens: 4096,
   // Azure-specific state
   azureParams: {
     maxCompletionTokens: 5000,
     reasoningEffort: 'medium',
-    visionDetail: 'auto'
+    visionDetail: 'auto',
   },
   reasoningEffort: "medium",
   visionEnabled: false,
@@ -56,7 +56,7 @@ const modelConfigState = {
   loadFromStorage() {
     this.modelName = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
     this.provider = localStorage.getItem("provider") || "anthropic";
-    this.maxTokens = parseInt(localStorage.getItem("maxTokens") || "500", 10);
+    this.maxTokens = parseInt(localStorage.getItem("maxTokens") || "4096", 10);
     this.loadAzureSettings();
     this.reasoningEffort = localStorage.getItem("reasoningEffort") || "medium";
     this.visionEnabled = localStorage.getItem("visionEnabled") === "true";
@@ -69,7 +69,7 @@ const modelConfigState = {
     this.maxTokens = Math.max(100, Math.min(100000, this.maxTokens));
     this.thinkingBudget = Math.max(2048, Math.min(32000, this.thinkingBudget));
 
-    return this;
+   return this;
   },
 
   // Save state to localStorage
@@ -77,7 +77,6 @@ const modelConfigState = {
     localStorage.setItem("modelName", this.modelName);
     localStorage.setItem("provider", this.provider);
     this.saveAzureSettings();
-    localStorage.setItem("maxTokens", this.maxTokens);
     localStorage.setItem("reasoningEffort", this.reasoningEffort);
     localStorage.setItem("visionEnabled", this.visionEnabled);
     localStorage.setItem("visionDetail", this.visionDetail);
@@ -90,6 +89,30 @@ const modelConfigState = {
     }
 
     return this;
+  },
+  loadAzureSettings() {
+    try {
+      const azureSettings = JSON.parse(localStorage.getItem("azureSettings") || "{}");
+      this.azureParams.maxCompletionTokens = azureSettings.maxCompletionTokens || 5000;
+      this.azureParams.reasoningEffort = azureSettings.reasoningEffort || 'medium';
+      this.azureParams.visionDetail = azureSettings.visionDetail || 'auto';
+    } catch (e) {
+      console.warn("Failed to load azure settings", e);
+    }
+  },
+  saveAzureSettings() {
+    try {
+      const azureSettings = {
+        maxCompletionTokens: this.azureParams.maxCompletionTokens,
+        reasoningEffort: this.azureParams.reasoningEffort,
+        visionDetail: this.azureParams.visionDetail
+      };
+
+      localStorage.setItem("azureSettings", JSON.stringify(azureSettings));
+    } catch (e) {
+      console.warn("Failed to save azure settings", e);
+    }
+
   },
 
   // Update the global MODEL_CONFIG object
@@ -128,6 +151,7 @@ const modelConfigState = {
 
     return this;
   }
+
 };
 
 /**
