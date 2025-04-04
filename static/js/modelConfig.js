@@ -236,7 +236,7 @@ function setupModelDropdown() {
 
     // Save and notify changes
     persistSettings();
-  });
+  }
 }
 
 /**
