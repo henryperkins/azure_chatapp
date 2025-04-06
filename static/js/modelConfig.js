@@ -237,7 +237,7 @@ function setupModelDropdown() {
 
     // Save and notify changes
     persistSettings();
-  }
+  });
 }
 
 /**
@@ -660,29 +660,9 @@ function getModelOptions() {
       description: 'Highly capable GPT model',
       maxTokens: 8192
     },
-    {
-      id: 'gpt-3.5-turbo',
-      name: 'GPT-3.5 Turbo',
-<<<<<<< HEAD
       description: 'Fast GPT model for simpler queries'
     },
     {
-      id: 'o1',
-      name: 'o1 (Vision)',
-      description: 'Azure OpenAI model with image understanding',
-      supportsVision: true
-    },
-    {
-      id: 'o3-mini',
-      name: 'o3-mini',
-      description: 'Azure OpenAI advanced reasoning model (large context, no vision support)',
-      supportsVision: false
-    },
-    {
-      id: 'gpt-4o',
-      name: 'GPT-4o',
-      description: 'Versatile GPT model optimized for chat + vision',
-      supportsVision: true
 =======
       description: 'Fast GPT model for simpler queries'
     },
@@ -703,7 +683,6 @@ function getModelOptions() {
       name: 'GPT-4o',
       description: 'Versatile GPT model optimized for chat + vision',
       supportsVision: true
->>>>>>> 893aa54b6efe6a8b60fcc130dae053c60222cdf0
     }
   ];
 }
