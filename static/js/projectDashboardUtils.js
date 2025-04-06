@@ -192,31 +192,31 @@ window.bus = new AppEventBus();
             notification.classList.add('opacity-0', 'transition-opacity', 'duration-300');
             setTimeout(() => notification.remove(), 300);
           }, options.timeout || 5000);
+          
+          // Handle action button if specified in options
+          if (options.action && options.onAction) {
+            // Implementation for notification with action button
+            console.log(`Action ${options.action} available for: ${message}`);
             
-            // Handle action button if specified in options
-            if (options.action && options.onAction) {
-              // Implementation for notification with action button
-              console.log(`Action ${options.action} available for: ${message}`);
-              
-              // If a second action is available
-              if (options.secondaryAction && options.onSecondaryAction) {
-                console.log(`Secondary action ${options.secondaryAction} available for: ${message}`);
-              }
+            // If a second action is available
+            if (options.secondaryAction && options.onSecondaryAction) {
+              console.log(`Secondary action ${options.secondaryAction} available for: ${message}`);
             }
-            
-            // Handle auto-timeout if specified
-            if (options.timeout && typeof options.timeout === 'number') {
-              setTimeout(() => {
-                // Find and remove notification if DOM manipulation is supported
-                const notifications = document.querySelectorAll('.notification');
-                for (const notif of notifications) {
-                  if (notif.textContent.includes(message)) {
-                    notif.remove();
-                    break;
-                  }
+          }
+          
+          // Handle auto-timeout if specified
+          if (options.timeout && typeof options.timeout === 'number') {
+            setTimeout(() => {
+              // Find and remove notification if DOM manipulation is supported
+              const notifications = document.querySelectorAll('.notification');
+              for (const notif of notifications) {
+                if (notif.textContent.includes(message)) {
+                  notif.remove();
+                  break;
                 }
-              }, options.timeout);
-            }
+              }
+            }, options.timeout);
+          }
       }
     };
     
@@ -509,9 +509,10 @@ window.bus = new AppEventBus();
 
   // Centralized global error handler
   window.addEventListener('error', function(event) {
-    console.error('Global error:', event.error?.message || event.message);
+    const errorMessage = event.error && event.error.message ? event.error.message : event.message;
+    console.error('Global error:', errorMessage);
     if (window.showNotification) {
-      window.showNotification('An error occurred: ' + (event.error?.message || event.message), 'error');
+      window.showNotification('An error occurred: ' + errorMessage, 'error');
     }
   });
   
