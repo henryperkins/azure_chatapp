@@ -972,8 +972,8 @@ window.appInitializer = {
     try {
       console.log("Starting centralized initialization");
       await initializeAllModules();
-      this.status = 'ready';
-      this.queue.forEach(c => c.init());
+      window.appInitializer.status = 'ready';
+      window.appInitializer.queue.forEach(c => c.init());
       console.log("Application fully initialized");
     } catch (error) {
       console.error("Initialization failed:", error);

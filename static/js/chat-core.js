@@ -1,497 +1,484 @@
 /**
- * chat-core.js
- * Main entry point for chat functionality
+ * improved-chat-core.js
+ * A refactored version of your chat-core functionality.
+ * Creates a single ChatManager object with streamlined code.
  */
-
-if (typeof window.chatInterface === 'undefined') {
-  window.chatInterface = null;
-}
-if (typeof window.projectChatInterface === 'undefined') {
-  window.projectChatInterface = null;
-}
-
-// Helper to add markdown styles
-function addMarkdownStyles() {
-  if (document.getElementById('markdown-styles')) return;
-  const style = document.createElement('style');
-  style.id = 'markdown-styles';
-  style.textContent = `
-    .markdown-table{width:100%;border-collapse:collapse;margin:1em 0}
-    .markdown-table th,.markdown-table td{padding:.5em;border:1px solid #ddd}
-    .markdown-code{background:#f5f5f5;padding:.2em .4em;border-radius:3px}
-    .markdown-pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto}
-    .markdown-quote{border-left:3px solid #ddd;padding:0 1em;color:#666}
-    .code-block-wrapper{position:relative}
-    .copy-code-btn{position:absolute;right:.5em;top:.5em;padding:.25em .5em;background:#fff;border:1px solid #ddd;
-      border-radius:3px;cursor:pointer;font-size:.8em}
-    .copy-code-btn:hover{background:#f5f5f5}
-  `;
-  document.head.appendChild(style);
-}
-
-// Check if modules are loaded, load if not
-function ensureModulesLoaded() {
-  const requiredModules = [
-    { name: 'ChatUtils', path: '/static/js/chat-utils.js' },
-    { name: 'ConversationService', path: '/static/js/chat-conversations.js' },
-    { name: 'MessageService', path: '/static/js/chat-messages.js' }, 
-    { name: 'WebSocketService', path: '/static/js/chat-websocket.js' },
-    { name: 'UIComponents', path: '/static/js/chat-ui.js' },
-    { name: 'ChatInterface', path: '/static/js/chat-interface.js' }
-  ];
-
-  return requiredModules.reduce((promise, module) => {
-    return promise.then(() => {
-      if (!window[module.name]) {
-        console.log(`Loading ${module.name} from ${module.path}`);
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = module.path;
-          script.onload = () => {
-            console.log(`Loaded ${module.name}`);
-            resolve();
-          };
-          script.onerror = (err) => {
-            console.error(`Failed to load ${module.name}:`, err);
-            reject(new Error(`Failed to load ${module.path}`));
-          };
-          document.head.appendChild(script);
-        });
-      }
-      return Promise.resolve();
-    });
-  }, Promise.resolve());
-}
-
-// Register chat system with central initializer
-window.initializeChat = function() {
-  window.appInitializer.register({
-    init: async () => {
-  console.log('Initializing chat system...');
-  console.log('Checking dependencies...');
-  
-  try {
-    await ensureModulesLoaded();
-    console.log('Dependencies loaded:', {
-      ChatUtils: !!window.ChatUtils,
-      ConversationService: !!window.ConversationService,
-      MessageService: !!window.MessageService,
-      WebSocketService: !!window.WebSocketService,
-      UIComponents: !!window.UIComponents
-    });
-
-    // Ensure required modules are loaded
-    await ensureModulesLoaded();
-
-    // Add markdown styles
-    addMarkdownStyles();
-
-    // Create the chat interface only if not already created
-    if (!window.chatInterface) {
-      // Ensure chat container exists and is visible
-      const chatContainer = await ensureChatContainerVisible();
-      if (!chatContainer) {
-        throw new Error('Chat container not found after multiple attempts');
-      }
-
-      // Use the same selector lookup logic as in ensureChatContainerVisible
-      const container = document.querySelector('#projectChatContainer') || 
-                       document.querySelector('#chatContainer');
-                      
-      // Determine if we're in project context
-      const isProjectContext = window.location.pathname.includes('/projects') || 
-                               container?.id === 'projectChatContainer';
-                               
-      // Adjust the containerSelector based on what was found and context
-      const containerSelector = isProjectContext ? 
-                               '#projectChatUI' : 
-                               '#chatUI';
-                               
-      // Also adjust message container and input selectors similarly
-      const messageSelector = isProjectContext ? 
-                             '#projectChatMessages' : 
-                             '#conversationArea';
-                             
-      const inputSelector = isProjectContext ?
-                           '#projectChatInput' :
-                           '#chatInput';
-                           
-      const sendBtnSelector = isProjectContext ?
-                            '#projectChatSendBtn' :
-                            '#sendBtn';
-                            
-      console.log(`Initializing chat with selectors:`, {
-        container: containerSelector,
-        messages: messageSelector,
-        input: inputSelector,
-        sendBtn: sendBtnSelector
-      });
-      
-      window.chatInterface = new window.ChatInterface({
-        containerSelector: containerSelector,
-        messageContainerSelector: messageSelector,
-        inputSelector: inputSelector,
-        sendButtonSelector: sendBtnSelector
-      });
-      
-      try {
-        await window.chatInterface.initialize();
-      } catch (err) {
-        console.error('Chat initialization failed:', err);
-        showChatError('Chat initialization failed. Please refresh the page.');
-        throw err;
-      }
-    }
-
-    // Helper function to ensure chat container is visible
-  async function ensureChatContainerVisible() {
-    let attempts = 0;
-    const maxAttempts = 15;
-    const delay = 400;
+(function () {
+  // ---------------------------
+  // 1) CENTRAL DOM SELECTORS
+  // ---------------------------
+  const SELECTORS = {
+    scripts: [
+      { name: 'ChatUtils', path: '/static/js/chat-utils.js' },
+      { name: 'ConversationService', path: '/static/js/chat-conversations.js' },
+      { name: 'MessageService', path: '/static/js/chat-messages.js' },
+      { name: 'WebSocketService', path: '/static/js/chat-websocket.js' },
+      { name: 'UIComponents', path: '/static/js/chat-ui.js' },
+      { name: 'ChatInterface', path: '/static/js/chat-interface.js' }
+    ],
+    markdownStyleId: 'markdown-styles',
+    markdownStyles: `
+      .markdown-table{width:100%;border-collapse:collapse;margin:1em 0}
+      .markdown-table th,.markdown-table td{padding:.5em;border:1px solid #ddd}
+      .markdown-code{background:#f5f5f5;padding:.2em .4em;border-radius:3px}
+      .markdown-pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto}
+      .markdown-quote{border-left:3px solid #ddd;padding:0 1em;color:#666}
+      .code-block-wrapper{position:relative}
+      .copy-code-btn{position:absolute;right:.5em;top:.5em;padding:.25em .5em;background:#fff;border:1px solid #ddd;
+        border-radius:3px;cursor:pointer;font-size:.8em}
+      .copy-code-btn:hover{background:#f5f5f5}
+    `,
+    // Container IDs (these can be switched if the user is in "project" context)
+    mainChatContainerId: 'chatContainer',
+    mainChatUI: 'chatUI',
+    mainMessages: 'conversationArea',
+    mainInput: 'chatInput',
+    mainSendBtn: 'sendBtn',
     
-    while (attempts < maxAttempts) {
-      // Use the existing project chat container
-      let container = document.querySelector('#projectChatContainer');
-        
-        // Check for containers that might be nested or within the project view
-        if (!container) {
-          container = document.querySelector('#projectChatUI') || 
-                      document.querySelector('#projectDetailsView #projectChatContainer');
+    projectChatContainerId: 'projectChatContainer',
+    projectChatUI: 'projectChatUI',
+    projectMessages: 'projectChatMessages',
+    projectInput: 'projectChatInput',
+    projectSendBtn: 'projectChatSendBtn'
+  };
+
+  // ---------------------------
+  // 2) ChatManager Definition
+  // ---------------------------
+  const ChatManager = {
+    chatInterface: null,
+    projectChatInterface: null,
+    MODEL_CONFIG: {},
+
+    /**
+     * Load required modules in parallel (unless there are strict dependencies).
+     */
+    ensureModulesLoaded: async function () {
+      const loadPromises = SELECTORS.scripts.map(mod => {
+        if (!window[mod.name]) {
+          console.log(`Loading ${mod.name} from ${mod.path}`);
+          return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = mod.path;
+            script.onload = () => {
+              console.log(`Loaded ${mod.name}`);
+              resolve();
+            };
+            script.onerror = (err) => {
+              console.error(`Failed to load ${mod.name}:`, err);
+              reject(new Error(`Failed to load ${mod.path}`));
+            };
+            document.head.appendChild(script);
+          });
         }
-                          
-        // If container doesn't exist, create it in main content
-        if (!container) {
-          console.log("Chat container not found, creating one...");
-          const mainContent = document.querySelector('main');
-          
-          if (mainContent) {
-            container = document.createElement('div');
-            container.id = 'projectChatContainer';
-            container.className = 'mt-4 transition-all duration-300 ease-in-out';
-            container.style.display = 'block'; // Ensure it's explicitly visible
-            
-            // Create messages container
-            const messagesContainer = document.createElement('div');
-            messagesContainer.id = 'projectChatMessages';
-            messagesContainer.className = 'chat-message-container';
-            container.appendChild(messagesContainer);
-            
-            // Create input area
-            const inputArea = document.createElement('div');
-            inputArea.className = 'flex items-center border-t border-gray-200 dark:border-gray-700 p-2';
-            
-            const chatInput = document.createElement('input');
-            chatInput.id = 'projectChatInput';
-            chatInput.type = 'text';
-            chatInput.className = 'flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white';
-            chatInput.placeholder = 'Type your message...';
-            
-            const sendBtn = document.createElement('button');
-            sendBtn.id = 'projectChatSendBtn';
-            sendBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors';
-            sendBtn.textContent = 'Send';
-            
-            inputArea.appendChild(chatInput);
-            inputArea.appendChild(sendBtn);
-            container.appendChild(inputArea);
-            
-            // Add to DOM
-            mainContent.appendChild(container);
-            console.log("Created chat container:", container.id);
-          }
+        // Already available
+        return Promise.resolve();
+      });
+
+      await Promise.all(loadPromises);
+    },
+
+    /**
+     * Inject global markdown styles if not present.
+     */
+    addMarkdownStyles: function () {
+      if (document.getElementById(SELECTORS.markdownStyleId)) return;
+      const style = document.createElement('style');
+      style.id = SELECTORS.markdownStyleId;
+      style.textContent = SELECTORS.markdownStyles;
+      document.head.appendChild(style);
+    },
+
+    /**
+     * Create or locate the required chat container for project or main chat.
+     * Return the container if found/created/visible, or null otherwise.
+     */
+    findOrCreateChatContainer: async function (isProjectContext = false) {
+      const containerId = isProjectContext
+        ? SELECTORS.projectChatContainerId
+        : SELECTORS.mainChatContainerId;
+
+      let container = document.querySelector(`#${containerId}`);
+      if (!container) {
+        console.log(`Chat container (#${containerId}) not found, creating...`);
+        const mainContent = document.querySelector('main');
+        if (mainContent) {
+          container = document.createElement('div');
+          container.id = containerId;
+          container.className = 'mt-4 transition-all duration-300 ease-in-out';
+          container.style.display = 'block'; // ensure visible
+
+          // Create messages container
+          const messagesContainer = document.createElement('div');
+          messagesContainer.id = isProjectContext
+            ? SELECTORS.projectMessages
+            : SELECTORS.mainMessages;
+          messagesContainer.className = 'chat-message-container';
+          container.appendChild(messagesContainer);
+
+          // Create input area
+          const inputArea = document.createElement('div');
+          inputArea.className = 'flex items-center border-t border-gray-200 dark:border-gray-700 p-2';
+
+          const chatInput = document.createElement('input');
+          chatInput.id = isProjectContext
+            ? SELECTORS.projectInput
+            : SELECTORS.mainInput;
+          chatInput.type = 'text';
+          chatInput.className = 'flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white';
+          chatInput.placeholder = 'Type your message...';
+
+          const sendBtn = document.createElement('button');
+          sendBtn.id = isProjectContext
+            ? SELECTORS.projectSendBtn
+            : SELECTORS.mainSendBtn;
+          sendBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors';
+          sendBtn.textContent = 'Send';
+
+          inputArea.appendChild(chatInput);
+          inputArea.appendChild(sendBtn);
+          container.appendChild(inputArea);
+
+          mainContent.appendChild(container);
+          console.log(`Created chat container: #${container.id}`);
         }
-                          
-        if (container) {
-          // Ensure the container is actually visible
-          container.classList.remove('hidden');
-          container.style.display = 'block';
-          
-          // Handle possible parent visibility
-          let parent = container.parentElement;
-          while (parent && parent !== document.body) {
-            if (parent.classList.contains('hidden')) {
-              parent.classList.remove('hidden');
-            }
-            if (parent.style.display === 'none') {
-              parent.style.display = 'block';
-            }
-            parent = parent.parentElement;
+      }
+      if (container) {
+        // ensure container is visible
+        container.classList.remove('hidden');
+        container.style.display = 'block';
+
+        // ensure parent is visible too
+        let parent = container.parentElement;
+        while (parent && parent !== document.body) {
+          if (parent.classList.contains('hidden')) {
+            parent.classList.remove('hidden');
           }
-          
-          // Double check it's actually visible now - may need interval for DOM to update
-          if (container.offsetParent !== null) {
-            console.log("Chat container found and visible:", container.id);
-            return container;
+          if (parent.style.display === 'none') {
+            parent.style.display = 'block';
           }
-          
-          console.log("Container found but not yet visible, waiting...");
+          parent = parent.parentElement;
         }
-        
-        // If not found, log for debugging
+      }
+      return container;
+    },
+
+    /**
+     * Ensure the chat container is visible, trying multiple times if needed.
+     */
+    ensureChatContainerVisible: async function (isProjectContext = false) {
+      let attempts = 0;
+      const maxAttempts = 15;
+      const delay = 400;
+
+      while (attempts < maxAttempts) {
+        const container = await this.findOrCreateChatContainer(isProjectContext);
+        if (container && container.offsetParent !== null) {
+          // container is found and visible
+          console.log(`Chat container #${container.id} found and visible.`);
+          return container;
+        }
         if (attempts % 3 === 0) {
-          console.log(`Searching for chat container (attempt ${attempts+1}/${maxAttempts})...`);
+          console.log(`Searching for chat container (attempt ${attempts + 1}/${maxAttempts})...`);
         }
-        
         attempts++;
         await new Promise(resolve => setTimeout(resolve, delay));
       }
-      
-      console.error("Could not find chat container with selectors: #projectChatContainer or #chatContainer");
+
+      console.error("Could not find chat container after multiple attempts.");
       return null;
-    }
+    },
 
-    function showChatError(message) {
-      const errorEl = document.createElement('div');
-      errorEl.className = 'p-4 bg-red-50 text-red-700 rounded mb-4';
-      errorEl.textContent = message;
-      document.querySelector('main')?.prepend(errorEl);
-    }
-    // Ensure projectChatInterface is available for project page
-    if (!window.projectChatInterface) {
-      window.projectChatInterface = window.chatInterface;
-    }
-
-    // Listen for model configuration changes with improved handling
-    document.addEventListener('modelConfigChanged', (e) => {
+    /**
+     * Primary initialization entry point.
+     */
+    initializeChat: async function () {
+      console.log('Initializing chat system...');
       try {
-        console.log("Model config changed event received:", e.detail);
-        
-        // Ensure MODEL_CONFIG exists
-        window.MODEL_CONFIG = window.MODEL_CONFIG || {};
-        
-        // Create new config object to avoid mutations
-        window.MODEL_CONFIG = {
-          ...(window.MODEL_CONFIG || {}),
-          modelName: e.detail?.modelName || localStorage.getItem('modelName') || "claude-3-sonnet-20240229"
-        };
-        
-        // Update max tokens with proper fallback
-        const storedMaxTokens = localStorage.getItem('maxTokens') || "500";
-        window.MODEL_CONFIG.maxTokens = Number(e.detail?.maxTokens) || Number(storedMaxTokens) || 500;
-        
-        // Update thinking budget with proper fallback
-        const storedThinkingBudget = localStorage.getItem('thinkingBudget') || "16000";
-        window.MODEL_CONFIG.thinkingBudget = Number(e.detail?.thinkingBudget) || Number(storedThinkingBudget) || 16000;
-        
-        // Update extended thinking settings
-        const storedExtendedThinking = localStorage.getItem('extendedThinking') === "true";
-        window.MODEL_CONFIG.extendedThinking = e.detail?.extendedThinking === "true" || storedExtendedThinking;
-        
-        // Update vision settings
-        const storedVisionEnabled = localStorage.getItem('visionEnabled') === "true";
-        window.MODEL_CONFIG.visionEnabled = e.detail?.visionEnabled === "true" || storedVisionEnabled;
-        window.MODEL_CONFIG.visionDetail = e.detail?.visionDetail || localStorage.getItem('visionDetail') || "auto";
-        
-        // Update reasoning effort setting
-        const storedReasoning = localStorage.getItem('reasoningEffort') || "medium";
-        window.MODEL_CONFIG.reasoningEffort = e.detail?.reasoningEffort || storedReasoning;
-        
-        console.log("Updated MODEL_CONFIG:", window.MODEL_CONFIG);
-        
-        // Update message service if available
-        if (window.chatInterface && window.chatInterface.messageService) {
-          // Pass the updated config to message service
-          window.chatInterface.messageService.updateModelConfig(window.MODEL_CONFIG);
+        // 1) Load dependencies (only once).
+        await this.ensureModulesLoaded();
+
+        // 2) Inject markdown styling.
+        this.addMarkdownStyles();
+
+        // 3) Check or create the main chat interface if none exists.
+        if (!this.chatInterface) {
+          // See if location or container indicates project context:
+          const isProjectContext =
+            window.location.pathname.includes('/projects') ||
+            document.querySelector(`#${SELECTORS.projectChatContainerId}`);
+
+          // Ensure the container is visible
+          const container = await this.ensureChatContainerVisible(isProjectContext);
+          if (!container) throw new Error('Chat container not found after multiple attempts');
+
+          // Build dynamic selectors
+          const containerSelector = isProjectContext
+            ? `#${SELECTORS.projectChatUI}`
+            : `#${SELECTORS.mainChatUI}`;
+          const messageSelector = isProjectContext
+            ? `#${SELECTORS.projectMessages}`
+            : `#${SELECTORS.mainMessages}`;
+          const inputSelector = isProjectContext
+            ? `#${SELECTORS.projectInput}`
+            : `#${SELECTORS.mainInput}`;
+          const sendBtnSelector = isProjectContext
+            ? `#${SELECTORS.projectSendBtn}`
+            : `#${SELECTORS.mainSendBtn}`;
+
+          console.log(`Initializing chat with selectors:`, {
+            container: containerSelector,
+            messages: messageSelector,
+            input: inputSelector,
+            sendBtn: sendBtnSelector
+          });
+
+          this.chatInterface = new window.ChatInterface({
+            containerSelector,
+            messageContainerSelector: messageSelector,
+            inputSelector,
+            sendButtonSelector: sendBtnSelector
+          });
+
+          await this.chatInterface.initialize();
+          // For backward compatibility
+          window.chatInterface = this.chatInterface;
+
+          // Also set projectChatInterface to the same instance unless changed later
+          if (!this.projectChatInterface) {
+            this.projectChatInterface = this.chatInterface;
+            window.projectChatInterface = this.projectChatInterface;
+          }
         }
-        
-        // Update project chat interface if it exists and is different from the main chat interface
-        if (window.projectChatInterface && 
-            window.projectChatInterface !== window.chatInterface && 
-            window.projectChatInterface.messageService) {
-          window.projectChatInterface.messageService.updateModelConfig(window.MODEL_CONFIG);
+
+        // 4) Setup global keyboard shortcuts
+        this.setupGlobalKeyboardShortcuts();
+        console.log('Chat system initialized successfully');
+        return this.chatInterface;
+      } catch (error) {
+        console.error('Failed to initialize chat system:', error);
+        window.ChatUtils?.handleError?.('Initializing chat', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Keyboard shortcuts (avoid capturing in input/textarea).
+     */
+    setupGlobalKeyboardShortcuts: function () {
+      document.addEventListener('keydown', (e) => {
+        // Avoid capturing key events in input fields
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+          // Ctrl+R: regeneration (overrides browser refresh!)
+          if (e.key.toLowerCase() === 'r') {
+            e.preventDefault();
+            document.dispatchEvent(new CustomEvent('regenerateChat'));
+          }
+          // Ctrl+C: copy message
+          if (e.key.toLowerCase() === 'c') {
+            e.preventDefault();
+            document.dispatchEvent(new CustomEvent('copyMessage'));
+          }
+          // Ctrl+N: new chat
+          if (e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            ChatManager.createNewChat();
+          }
         }
-        
+      });
+    },
+
+    /**
+     * Merge the new model config from events/localStorage into ChatManager.MODEL_CONFIG.
+     */
+    handleModelConfigChange: function (detail) {
+      try {
+        console.log("Model config changed event received:", detail);
+        const local = localStorage;
+
+        // Merge event detail with localStorage fallback
+        this.MODEL_CONFIG.modelName = detail?.modelName || local.getItem('modelName') || "claude-3-sonnet-20240229";
+        this.MODEL_CONFIG.maxTokens = Number(detail?.maxTokens) ||
+                                      Number(local.getItem('maxTokens')) || 500;
+        this.MODEL_CONFIG.thinkingBudget = Number(detail?.thinkingBudget) ||
+                                          Number(local.getItem('thinkingBudget')) || 16000;
+        const storedExtendedThinking = local.getItem('extendedThinking') === "true";
+        this.MODEL_CONFIG.extendedThinking = detail?.extendedThinking === "true" || storedExtendedThinking;
+
+        const storedVisionEnabled = local.getItem('visionEnabled') === "true";
+        this.MODEL_CONFIG.visionEnabled = detail?.visionEnabled === "true" || storedVisionEnabled;
+        this.MODEL_CONFIG.visionDetail = detail?.visionDetail ||
+                                         local.getItem('visionDetail') || "auto";
+
+        const storedReasoning = local.getItem('reasoningEffort') || "medium";
+        this.MODEL_CONFIG.reasoningEffort = detail?.reasoningEffort || storedReasoning;
+
+        console.log("Updated MODEL_CONFIG:", this.MODEL_CONFIG);
+
+        // Update messageService if available
+        if (this.chatInterface?.messageService) {
+          this.chatInterface.messageService.updateModelConfig(this.MODEL_CONFIG);
+        }
+        if (this.projectChatInterface &&
+            this.projectChatInterface !== this.chatInterface &&
+            this.projectChatInterface.messageService) {
+          this.projectChatInterface.messageService.updateModelConfig(this.MODEL_CONFIG);
+        }
+
         // Notify other components about the config change
         document.dispatchEvent(new CustomEvent('modelConfigUpdated', {
-          detail: window.MODEL_CONFIG
+          detail: this.MODEL_CONFIG
         }));
       } catch (error) {
         console.error("Error handling model config change:", error);
       }
-    });
+    },
 
-    // Set up global keyboard shortcuts
-    setupGlobalKeyboardShortcuts();
-
-    console.log("Chat system initialized successfully");
-    return chatInterface;
-  } catch (error) {
-    console.error("Failed to initialize chat system:", error);
-    window.ChatUtils?.handleError?.('Initializing chat', error);
-    throw error;
-  }
-  });
-};
-
-// Set up keyboard shortcuts
-function setupGlobalKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    // Avoid capturing key events in input fields
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-      // NOTE: This hijacks Ctrl+R - only use if needed
-      if (e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent('regenerateChat'));
+    /**
+     * Load an existing conversation by chatId, ensuring chat is initialized.
+     */
+    loadConversation: async function (chatId) {
+      try {
+        if (!this.chatInterface) {
+          await this.initializeChat();
+        }
+        if (!this.chatInterface.loadConversation) {
+          throw new Error('Chat interface not available');
+        }
+        return await this.chatInterface.loadConversation(chatId);
+      } catch (error) {
+        console.error('Failed to load conversation:', error);
+        throw error;
       }
-      // Ctrl+C for copying current message
-      if (e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent('copyMessage'));
-      }
-      // Ctrl+N for new chat
-      if (e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        window.createNewChat();
-      }
-    }
-  });
-}
+    },
 
-// Public API for backward compatibility
-window.loadConversation = async function (chatId) {
-  try {
-    if (!chatInterface) {
-      if (!window.initializeChat) {
-        throw new Error('Chat system not properly initialized');
+    /**
+     * Create a new conversation (chat).
+     */
+    createNewConversation: async function () {
+      if (!this.chatInterface) {
+        await this.initializeChat();
       }
-      await window.initializeChat();
-    }
-    
-    if (!chatInterface?.loadConversation) {
-      throw new Error('Chat interface not available');
-    }
-    
-    return await chatInterface.loadConversation(chatId);
-  } catch (error) {
-    console.error('Failed to load conversation:', error);
-    throw error;
-  }
-};
+      return this.chatInterface.createNewConversation();
+    },
 
-window.createNewChat = async function () {
-  if (!chatInterface) {
-    // Create a promise that resolves when chat is initialized
-    return window.initializeChat().then(() => chatInterface.createNewConversation());
-  }
-  return chatInterface.createNewConversation();
-};
-
-window.sendMessage = async function (chatId, userMsg) {
-  if (!chatInterface) {
-    // Create a promise that resolves when chat is initialized
-    return window.initializeChat().then(() => {
-      chatInterface.currentChatId = chatId;
-      return chatInterface._handleSendMessage(userMsg);
-    });
-  }
-  chatInterface.currentChatId = chatId;
-  return chatInterface._handleSendMessage(userMsg);
-};
-
-window.setupWebSocket = async function (chatId) {
-  if (!chatInterface) {
-    // Create a promise that resolves when chat is initialized
-    return window.initializeChat().then(() => {
-      if (!chatId && chatInterface.currentChatId) {
-        chatId = chatInterface.currentChatId;
+    /**
+     * Send a message to a specific chatId or the current chat if none given.
+     */
+    sendMessage: async function (chatId, userMsg) {
+      if (!this.chatInterface) {
+        await this.initializeChat();
       }
-      if (chatId && chatInterface.wsService) {
-        return chatInterface.wsService.connect(chatId).then(connected => {
+      this.chatInterface.currentChatId = chatId;
+      return this.chatInterface._handleSendMessage(userMsg);
+    },
+
+    /**
+     * Setup WebSocket for the given chat, or fallback to currentChatId.
+     */
+    setupWebSocket: async function (chatId) {
+      if (!this.chatInterface) {
+        await this.initializeChat();
+      }
+      if (!chatId && this.chatInterface.currentChatId) {
+        chatId = this.chatInterface.currentChatId;
+      }
+      if (chatId && this.chatInterface.wsService) {
+        try {
+          const connected = await this.chatInterface.wsService.connect(chatId);
           if (connected) {
-            chatInterface.messageService.initialize(chatId, chatInterface.wsService);
+            this.chatInterface.messageService.initialize(chatId, this.chatInterface.wsService);
             return true;
           }
-          return false;
-        }).catch(() => false);
+        } catch (error) {
+          console.warn("Failed to set up WebSocket:", error);
+        }
       }
       return false;
-    });
-  }
+    },
 
-  if (!chatId && chatInterface.currentChatId) {
-    chatId = chatInterface.currentChatId;
-  }
-  if (chatId && chatInterface.wsService) {
+    /**
+     * Test WebSocket connection prerequisites.
+     */
+    testWebSocketConnection: async function () {
+      try {
+        await this.ensureModulesLoaded();
+
+        // Check authentication if you have an auth module
+        let isAuthenticated = false;
+        if (window.auth?.isAuthenticated) {
+          isAuthenticated = await window.auth.isAuthenticated();
+        }
+        if (!isAuthenticated) {
+          return { success: false, authenticated: false, message: "Authentication required" };
+        }
+
+        // Construct WS URL
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const host = window.location.host;
+        if (!host) throw new Error('Cannot determine host for WebSocket connection');
+
+        const chatId = window.CHAT_CONFIG?.chatId;
+        if (!chatId) throw new Error('No chatId available for WebSocket connection');
+
+        const wsUrl = `${wsProtocol}${host}/ws?chatId=${chatId}`;
+
+        return {
+          success: true,
+          authenticated: true,
+          wsUrl,
+          message: "WebSocket prerequisites passed"
+        };
+      } catch (error) {
+        window.ChatUtils?.handleError?.('WebSocket test', error);
+        return {
+          success: false,
+          error: error.message,
+          message: "WebSocket test failed"
+        };
+      }
+    }
+  };
+
+  // ---------------------------
+  // 3) Attach to window
+  // ---------------------------
+  // For direct backward compatibility with any code referencing window.initializeChat, etc.
+  window.ChatManager = ChatManager;
+  window.initializeChat = ChatManager.initializeChat.bind(ChatManager);
+  window.loadConversation = ChatManager.loadConversation.bind(ChatManager);
+  window.createNewChat = ChatManager.createNewConversation.bind(ChatManager);
+  window.sendMessage = ChatManager.sendMessage.bind(ChatManager);
+  window.setupWebSocket = ChatManager.setupWebSocket.bind(ChatManager);
+  window.testWebSocketConnection = ChatManager.testWebSocketConnection.bind(ChatManager);
+
+  // ---------------------------
+  // 4) EVENT LISTENERS
+  // ---------------------------
+  // Listen for model config changes
+  document.addEventListener('modelConfigChanged', (e) => {
+    ChatManager.handleModelConfigChange(e.detail || {});
+  });
+
+  // Only initialize chat when in a project context or on a certain event
+  // If needed, or you can choose to always initialize on page load:
+  document.addEventListener('projectSelected', async (e) => {
+    const projectId = e.detail?.projectId;
+    if (!projectId) return;
     try {
-      const connected = await chatInterface.wsService.connect(chatId);
-      if (connected) {
-        chatInterface.messageService.initialize(chatId, chatInterface.wsService);
-        return true;
+      if (!ChatManager.chatInterface) {
+        await ChatManager.initializeChat();
+      }
+      // Show project chat container if it exists
+      const projectChatContainer = document.getElementById(SELECTORS.projectChatContainerId);
+      if (projectChatContainer) {
+        projectChatContainer.classList.remove('hidden');
       }
     } catch (error) {
-      console.warn("Failed to set up WebSocket:", error);
+      console.error("Failed to initialize project chat:", error);
     }
-  }
-  return false;
-};
+  });
 
-window.testWebSocketConnection = async function () {
-  await ensureModulesLoaded();
-
-  let isAuthenticated = false;
-  try {
-    isAuthenticated = await window.auth.isAuthenticated();
-  } catch (e) {
-    console.warn("[chat-core] Auth verification failed:", e);
-  }
-
-  if (!isAuthenticated) {
-    return { success: false, authenticated: false, message: "Authentication required" };
-  }
-
-  try {
-    // Check if we can construct a valid WebSocket URL
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const host = window.location.host;
-    if (!host) {
-      throw new Error('Cannot determine host for WebSocket connection');
-    }
-    const chatId = window.CHAT_CONFIG?.chatId;
-    if (!chatId) {
-      throw new Error('No chatId available for WebSocket connection');
-    }
-    const wsUrl = `${wsProtocol}${host}/ws?chatId=${chatId}`;
-
-    return {
-      success: true,
-      authenticated: true,
-      wsUrl,
-      message: "WebSocket prerequisites passed"
-    };
-  } catch (error) {
-    window.ChatUtils?.handleError?.('WebSocket test', error);
-    return {
-      success: false,
-      error: error.message,
-      message: "WebSocket test failed"
-    };
-  }
-};
-
-// Only initialize chat interface when explicitly in a project context
-document.addEventListener('projectSelected', async (e) => {
-  const projectId = e.detail?.projectId;
-  if (!projectId) return;
-
-  try {
-    // Ensure chat containers exist
-    if (typeof window.ensureChatContainers === 'function') {
-      await window.ensureChatContainers();
-    }
-
-    // Initialize chat interface
-    if (!window.chatInterface) {
-      await window.initializeChat();
-    }
-
-    // Show project chat interface
-    const projectChatContainer = document.getElementById('projectChatContainer');
-    if (projectChatContainer) {
-      projectChatContainer.classList.remove('hidden');
-    }
-  } catch (error) {
-    console.error("Failed to initialize project chat:", error);
-  }
-});
+})();

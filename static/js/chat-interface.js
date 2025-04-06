@@ -431,68 +431,82 @@ window.ChatInterface.prototype.createNewConversation = async function() {
   try {
     console.log('Creating new conversation...');
     
-    // Ensure auth system is fully ready with retries
-    let authVerified = false;
-    let retryCount = 0;
-    const maxRetries = 2;
+    // Enhanced auth verification with proper timeouts and retries
+    const MAX_RETRIES = 3;
+    const INIT_TIMEOUT = 2000; // 2s timeout for TokenManager init
+    const VERIFY_TIMEOUT = 5000; // 5s timeout for auth verification
     
-    while (!authVerified && retryCount <= maxRetries) {
+    let authVerified = false;
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         // First ensure TokenManager is initialized with timeout
-        await new Promise((resolve, reject) => {
-          const checkInitialized = () => {
-            if (window.TokenManager?.isInitialized) {
-              resolve(true);
-            } else if (retryCount * 50 > 1000) { // 1s timeout
-              reject(new Error("TokenManager initialization timeout"));
-            } else {
-              setTimeout(checkInitialized, 50);
-            }
-          };
-          checkInitialized();
-        });
+        await Promise.race([
+          new Promise((resolve) => {
+            const checkInitialized = () => {
+              if (window.TokenManager?.isInitialized) {
+                resolve(true);
+              } else {
+                setTimeout(checkInitialized, 50);
+              }
+            };
+            checkInitialized();
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('TokenManager initialization timeout')), INIT_TIMEOUT)
+          )
+        ]);
 
         // Initialize auth if needed
         if (!window.auth?.isInitialized) {
           await window.auth.init();
         }
 
-        // Check if we have tokens (may be expired)
-        const hasTokens = window.TokenManager?.hasTokens?.();
+        // Verify auth state with timeout
+        authVerified = await Promise.race([
+          window.auth.isAuthenticated({ forceVerify: true }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
+          )
+        ]);
         
-        // Verify auth state
-        authVerified = await window.auth.isAuthenticated({ forceVerify: true });
-        
-        if (!authVerified && hasTokens) {
-          // Attempt token refresh if we have tokens
+        // If we have tokens but verification failed, try refresh
+        if (!authVerified && window.TokenManager?.hasTokens?.()) {
           try {
             await window.TokenManager.refreshTokens();
             authVerified = await window.auth.isAuthenticated({ forceVerify: true });
           } catch (refreshError) {
             console.warn("[chat-interface] Token refresh failed:", refreshError);
+            lastError = refreshError;
           }
         }
         
-        if (!authVerified) {
-          retryCount++;
-          if (retryCount <= maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 300 * retryCount));
-          }
+        if (authVerified) break;
+        
+        // Exponential backoff between retries
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt-1)));
         }
       } catch (error) {
-        console.warn("[chat-interface] Auth verification attempt failed:", error);
-        retryCount++;
-        if (retryCount <= maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 300 * retryCount));
+        console.warn(`[chat-interface] Auth verification attempt ${attempt} failed:`, error);
+        lastError = error;
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt-1)));
         }
       }
     }
 
     if (!authVerified) {
+      const errorMsg = lastError?.message || "Authentication failed";
       window.dispatchEvent(new CustomEvent('authStateChanged', {
-        detail: { authenticated: false, redirectToLogin: true }
+        detail: { 
+          authenticated: false, 
+          redirectToLogin: true,
+          error: errorMsg
+        }
       }));
-      throw new Error("Please log in to create conversations");
+      throw new Error(`Auth verification failed: ${errorMsg}`);
     }
     // Dispatch auth success event
     window.dispatchEvent(new CustomEvent('authStateChanged', {
