@@ -431,21 +431,73 @@ window.ChatInterface.prototype.createNewConversation = async function() {
   try {
     console.log('Creating new conversation...');
     
-    // First verify auth state
-    let authState = false;
-    try {
-      authState = await window.auth.isAuthenticated();
-    } catch (e) {
-      console.warn("[chat-interface] Auth verification failed:", e);
-    }
+    // Ensure auth system is fully ready with retries
+    let authVerified = false;
+    let retryCount = 0;
+    const maxRetries = 2;
     
-    if (!authState) {
-      this.notificationFunction("Please log in to create conversations", "error");
-      window.dispatchEvent(new CustomEvent('authStateChanged', {
-        detail: { authenticated: false }
-      }));
-      throw new Error("Not authenticated");
+    while (!authVerified && retryCount <= maxRetries) {
+      try {
+        // First ensure TokenManager is initialized with timeout
+        await new Promise((resolve, reject) => {
+          const checkInitialized = () => {
+            if (window.TokenManager?.isInitialized) {
+              resolve(true);
+            } else if (retryCount * 50 > 1000) { // 1s timeout
+              reject(new Error("TokenManager initialization timeout"));
+            } else {
+              setTimeout(checkInitialized, 50);
+            }
+          };
+          checkInitialized();
+        });
+
+        // Initialize auth if needed
+        if (!window.auth?.isInitialized) {
+          await window.auth.init();
+        }
+
+        // Check if we have tokens (may be expired)
+        const hasTokens = window.TokenManager?.hasTokens?.();
+        
+        // Verify auth state
+        authVerified = await window.auth.isAuthenticated({ forceVerify: true });
+        
+        if (!authVerified && hasTokens) {
+          // Attempt token refresh if we have tokens
+          try {
+            await window.TokenManager.refreshTokens();
+            authVerified = await window.auth.isAuthenticated({ forceVerify: true });
+          } catch (refreshError) {
+            console.warn("[chat-interface] Token refresh failed:", refreshError);
+          }
+        }
+        
+        if (!authVerified) {
+          retryCount++;
+          if (retryCount <= maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 300 * retryCount));
+          }
+        }
+      } catch (error) {
+        console.warn("[chat-interface] Auth verification attempt failed:", error);
+        retryCount++;
+        if (retryCount <= maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 300 * retryCount));
+        }
+      }
     }
+
+    if (!authVerified) {
+      window.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: { authenticated: false, redirectToLogin: true }
+      }));
+      throw new Error("Please log in to create conversations");
+    }
+    // Dispatch auth success event
+    window.dispatchEvent(new CustomEvent('authStateChanged', {
+      detail: { authenticated: true }
+    }));
 
     // Get current model from localStorage or MODEL_CONFIG
     const currentModel = window.MODEL_CONFIG?.modelName ||

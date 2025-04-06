@@ -44,7 +44,7 @@ __all__ = [
     "get_artifact_stats",
     "validate_artifact_type",
     # Conversation
-    "validate_model",
+    "validate_model_and_params",
     "get_conversation_service",
     "ConversationService",
     # User
@@ -107,8 +107,7 @@ from .artifact_service import (
 
 # Conversation services
 from .conversation_service import (
-    validate_model,
-    validate_model_params,
+    validate_model_and_params,
     get_conversation_service,
     ConversationService,
 )

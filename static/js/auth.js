@@ -1,3 +1,7 @@
+/***************************************
+ * auth.js - Updated Authentication Module
+ ***************************************/
+
 // Development mode flag
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
@@ -5,39 +9,96 @@ const isDevelopment = window.location.hostname === 'localhost' || window.locatio
 // Token Management
 // -------------------------
 // Debug flag - set to true to enable verbose auth logging
-const AUTH_DEBUG = window.location.hostname === 'localhost' ||
-                   window.location.hostname === '127.0.0.1';
+const AUTH_DEBUG = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// For debouncing visibility refresh
+let visibilityTimeout;
+
+// Utility to decode JWT safely
+function decodeJwt(token) {
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(atob(payload));
+  } catch (err) {
+    if (AUTH_DEBUG) {
+      console.error('[Auth] Failed to decode JWT:', err);
+    }
+    return null;
+  }
+}
 
 const TokenManager = {
   accessToken: null,
   refreshToken: null,
   isInitialized: false,
-  tokenExpiry: null,
+  tokenExpiry: null,   // Unix timestamp in ms
   version: '1',
 
+  /**
+   * Attempts to read tokens from cookies and rehydrate in memory
+   */
+  rehydrateFromCookies() {
+    try {
+      const cookieToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('access_token='))
+        ?.split('=')[1];
+
+      const cookieRefresh = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('refresh_token='))
+        ?.split('=')[1];
+
+      if (cookieToken) {
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Rehydrating tokens from cookies');
+        }
+        this.setTokens(cookieToken, cookieRefresh);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('[Auth] Failed to rehydrate from cookies:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Sets tokens in memory and in localStorage. Decodes JWT to extract expiry.
+   */
   setTokens(access, refresh) {
     if (!access) {
-      console.warn('Attempted to set null/undefined access token');
+      console.warn('[Auth] Attempted to set null/undefined access token');
       return;
     }
     if (AUTH_DEBUG) {
       console.debug('[Auth] Setting tokens:', {
-        accessToken: access ? '***' + access.slice(-6) : null,
-        refreshToken: refresh ? '***' + refresh.slice(-6) : null,
-        expiry: new Date(Date.now() + (30 * 60 * 1000)).toISOString()
+        accessToken: '***' + access.slice(-6),
+        refreshToken: refresh ? '***' + refresh.slice(-6) : null
       });
     }
+
+    // Decode JWT to determine actual expiration
+    const decoded = decodeJwt(access);
+    if (decoded?.exp) {
+      // JWT exp is in seconds, convert to ms
+      this.tokenExpiry = decoded.exp * 1000;
+    } else {
+      // Fallback if not JWT or cannot decode
+      // Hardcode to 30 minutes from now
+      this.tokenExpiry = Date.now() + (30 * 60 * 1000);
+    }
+
     this.accessToken = access;
     this.refreshToken = refresh;
-    this.tokenExpiry = Date.now() + (30 * 60 * 1000); // Default 30 minute expiry
 
     // Notify WebSocket connections of token refresh
     if (typeof this.onTokenRefresh === 'function') {
       this.onTokenRefresh(access);
     }
 
-    // Also store tokens in session for reload persistence
-    sessionStorage.setItem('auth_state', JSON.stringify({
+    // Store tokens in localStorage
+    localStorage.setItem('auth_state', JSON.stringify({
       accessToken: access,
       refreshToken: refresh,
       timestamp: Date.now()
@@ -51,30 +112,38 @@ const TokenManager = {
     this.isInitialized = true;
   },
 
+  /**
+   * Clears tokens from memory, localStorage, and cookies
+   */
   clearTokens() {
     if (AUTH_DEBUG) {
       console.debug('[Auth] Clearing tokens');
     }
     this.accessToken = null;
     this.refreshToken = null;
-    sessionStorage.removeItem('auth_state');
-    sessionStorage.removeItem('tokenVersion');
-    // Clear cookies
+    this.tokenExpiry = null;
+
+    localStorage.removeItem('auth_state');
+    localStorage.removeItem('tokenVersion');
+    localStorage.removeItem('userInfo');
+    localStorage.removeItem('refreshMutex'); // concurrency guard
+
     document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
   },
 
+  /**
+   * Returns Authorization header with token if available
+   */
   getAuthHeader() {
-    // First try to get token from cookie
     const cookieToken = document.cookie
       .split('; ')
       .find(row => row.startsWith('access_token='))
       ?.split('=')[1];
-    
-    // Then check session storage
-    const storageToken = this.accessToken ||
-      (JSON.parse(sessionStorage.getItem('auth_state'))?.accessToken);
-    
+
+    const authState = JSON.parse(localStorage.getItem('auth_state'));
+    const storageToken = this.accessToken || authState?.accessToken;
+
     if (AUTH_DEBUG) {
       console.debug('[Auth] Token sources:', {
         cookieToken: cookieToken ? '***' + cookieToken.slice(-6) : null,
@@ -82,23 +151,24 @@ const TokenManager = {
         version: this.version
       });
     }
-    
-    // Validate versions match if available
+
     if (cookieToken && storageToken && this.version) {
-      const storedVersion = sessionStorage.getItem('tokenVersion');
+      const storedVersion = localStorage.getItem('tokenVersion');
       if (storedVersion && storedVersion !== this.version) {
-        console.warn('Token version mismatch - refreshing');
+        console.warn('[Auth] Token version mismatch - refreshing');
         this.refreshTokens().catch(err => {
-          console.error('Token refresh failed:', err);
+          console.error('[Auth] Token refresh failed:', err);
         });
       }
     }
-    
-    // Prefer cookie token but fallback to storage
+
     const accessToken = cookieToken || storageToken;
     return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
   },
 
+  /**
+   * Checks if token is expired based on tokenExpiry
+   */
   isExpired() {
     if (!this.accessToken) return true;
     if (!this.tokenExpiry) return false;
@@ -107,38 +177,37 @@ const TokenManager = {
 
   /**
    * The sole place for token refresh logic.
-   * Uses concurrency guard in sessionStorage to prevent parallel refresh calls.
+   * Uses a concurrency guard to prevent parallel refresh calls.
    */
   async refreshTokens() {
-    // Skip if already in progress
-    if (refreshMutex) {
+    const mutexKey = 'refreshMutex';
+    if (localStorage.getItem(mutexKey)) {
+      // Wait until the mutex is removed
       return new Promise((resolve) => {
         const checkInterval = setInterval(() => {
-          if (!refreshMutex) {
+          if (!localStorage.getItem(mutexKey)) {
             clearInterval(checkInterval);
             resolve(!!this.accessToken);
           }
         }, 100);
       });
     }
-    
-    refreshMutex = true;
+
+    localStorage.setItem(mutexKey, 'true'); // lock
     try {
       if (AUTH_DEBUG) {
         console.debug('[Auth] Starting token refresh');
       }
-      
-      // First check if we have a refresh token available
-      const refreshToken = document.cookie
+
+      // Check for refresh token
+      const cookieRefresh = document.cookie
         .split('; ')
         .find(row => row.startsWith('refresh_token='))
-        ?.split('=')[1] || this.refreshToken;
+        ?.split('=')[1];
 
+      const refreshToken = cookieRefresh || this.refreshToken;
       if (!refreshToken) {
-        if (AUTH_DEBUG) {
-          console.debug('[Auth] Refresh token missing');
-        }
-        console.error('Refresh token missing - cannot refresh');
+        console.error('[Auth] Refresh token missing - cannot refresh');
         this.clearTokens();
         window.dispatchEvent(new CustomEvent('authStateChanged', {
           detail: { authenticated: false }
@@ -148,42 +217,33 @@ const TokenManager = {
 
       if (AUTH_DEBUG) {
         console.debug('[Auth] Attempting refresh with token:',
-          refreshToken ? '***' + refreshToken.slice(-6) : null);
+          '***' + refreshToken.slice(-6));
       }
 
+      // NOTE: window.apiRequest is presumably your custom fetch wrapper
       const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
         skipAuthCheck: true,
         skipRetry: true
       });
-      
+
       if (response?.access_token) {
         if (AUTH_DEBUG) {
           console.debug('[Auth] Token refresh successful');
         }
-        // Update tokens directly without page reload
+        // Update tokens in memory
         this.setTokens(response.access_token, response.refresh_token);
-        
-        // Update cookies to match new tokens
-        document.cookie = `access_token=${response.access_token}; path=/; ${
-          window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
-        }`;
-        
-        if (response.refresh_token) {
-          document.cookie = `refresh_token=${response.refresh_token}; path=/; ${
-            window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
+
+        // Update cookies
+        document.cookie = `access_token=${response.access_token}; path=/; ${window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
           }`;
+        if (response.refresh_token) {
+          document.cookie = `refresh_token=${response.refresh_token}; path=/; ${window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
+            }`;
         }
-        
         return true;
       }
     } catch (error) {
-      if (AUTH_DEBUG) {
-        console.debug('[Auth] Token refresh failed:', {
-          status: error.status,
-          message: error.message
-        });
-      }
-      console.error('Token refresh failed:', error);
+      console.error('[Auth] Token refresh failed:', error);
       if (error.status === 401) {
         // Full re-authentication required
         this.clearTokens();
@@ -194,13 +254,12 @@ const TokenManager = {
       }
       throw error;
     } finally {
-      refreshMutex = false;
+      localStorage.removeItem(mutexKey); // unlock
     }
     return false;
   }
 };
 
-// Make TokenManager directly available
 window.TokenManager = TokenManager;
 
 // ---------------------------------------------------------------------
@@ -208,136 +267,170 @@ window.TokenManager = TokenManager;
 // ---------------------------------------------------------------------
 window.auth = {
   init: async function () {
-  // Prevent double initialization
-  if (this.isInitialized) {
-    if (AUTH_DEBUG) {
-      console.debug("[Auth] Already initialized, skipping");
-    }
-    return true;
-  }
-
-  if (window.API_CONFIG) {
-    window.API_CONFIG.authCheckInProgress = true;
-  }
-
-  try {
-    if (AUTH_DEBUG) {
-      console.debug("[Auth] Starting initialization");
-    }
-
-    // If we have saved tokens in session, rehydrate them
-    const authState = JSON.parse(sessionStorage.getItem('auth_state'));
-    if (authState?.accessToken) {
+    // Prevent double initialization
+    if (this.isInitialized) {
       if (AUTH_DEBUG) {
-        console.debug("[Auth] Found stored tokens, rehydrating");
+        console.debug("[Auth] Already initialized, skipping");
       }
-      TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+      return true;
+    }
 
-      // Get user info if available
-      const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
-      const username = userInfo?.username;
+    if (window.API_CONFIG) {
+      window.API_CONFIG.authCheckInProgress = true;
+    }
 
-      broadcastAuth(true, username);
+    try {
+      if (AUTH_DEBUG) {
+        console.debug("[Auth] Starting initialization");
+      }
 
-      // Verify from server but bypass cache during initialization
-      await verifyAuthState(true);
-    } else {
-      // No tokens found, mark logged out
+      // 1) Try to rehydrate from cookies first
+      const cookiesRehydrated = TokenManager.rehydrateFromCookies();
+      if (cookiesRehydrated) {
+        if (AUTH_DEBUG) {
+          console.debug("[Auth] Rehydrated from cookies");
+        }
+        // Read user info if available
+        const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
+        broadcastAuth(true, userInfo.username);
+        await verifyAuthState(true); // server verification
+      } else {
+        // 2) Fallback to localStorage if no cookies
+        const authState = JSON.parse(localStorage.getItem('auth_state'));
+        if (authState?.accessToken) {
+          if (AUTH_DEBUG) {
+            console.debug("[Auth] Found stored tokens in localStorage, rehydrating");
+          }
+          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+
+          const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
+          broadcastAuth(true, userInfo.username);
+          await verifyAuthState(true);
+        } else {
+          // Nothing found; mark as logged out
+          clearSession();
+          broadcastAuth(false);
+        }
+      }
+
+      setupUIListeners();
+      this.isInitialized = true;
+
+      console.log("[Auth] Module initialized successfully");
+      return true;
+    } catch (error) {
+      console.error("[Auth] Initialization failed:", error);
       clearSession();
       broadcastAuth(false);
+      return false;
+    } finally {
+      if (window.API_CONFIG) {
+        window.API_CONFIG.authCheckInProgress = false;
+      }
     }
+  },
 
-    setupUIListeners();
+  /**
+   * @deprecated - use isAuthenticated instead
+   */
+  verify: verifyAuthState,
 
-    this.isInitialized = true;
-    console.log("Auth module initialized successfully");
-    return true;
-  } catch (error) {
-    console.error("Auth initialization failed:", error);
-    clearSession();
-    broadcastAuth(false);
-    return false;
-  } finally {
-    if (window.API_CONFIG) {
-      window.API_CONFIG.authCheckInProgress = false;
-    }
-  }
-},
-  verify: verifyAuthState, // @deprecated - use isAuthenticated instead
+  /**
+   * Forces an update from the server
+   */
   updateStatus: updateAuthStatus,
+
+  /**
+   * Called upon user action to login
+   */
   login: loginUser,
+
+  /**
+   * Called upon user action to logout
+   */
   logout: logout,
+
+  /**
+   * Reference to TokenManager
+   */
   manager: TokenManager,
+
+  /**
+   * Indicates whether `init()` has completed
+   */
   isInitialized: false,
-  isAuthenticated: async function(options = {}) {
+
+  /**
+   * Checks local tokens or server for authentication status.
+   */
+  isAuthenticated: async function (options = {}) {
     const { skipCache = false, forceVerify = false } = options;
-    
+
     // Fast path: check memory state if cache is valid
     if (!skipCache && authVerificationCache.isValid()) {
       return authVerificationCache.result;
     }
-    
-    // Check tokens in memory first
+
+    // Check for token in memory
     if (!TokenManager.accessToken) {
-      // Rehydrate from sessionStorage if available
-      const authState = JSON.parse(sessionStorage.getItem('auth_state'));
-      if (authState?.accessToken) {
-        TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-      } else {
-        // No tokens available
-        authVerificationCache.set(false);
-        return false;
+      // Rehydrate from cookies
+      const cookiesRehydrated = TokenManager.rehydrateFromCookies();
+      if (!cookiesRehydrated) {
+        // Then from localStorage
+        const authState = JSON.parse(localStorage.getItem('auth_state'));
+        if (authState?.accessToken) {
+          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+        } else {
+          // No tokens found
+          authVerificationCache.set(false);
+          return false;
+        }
       }
     }
-    
-    // Check if token is expired and needs refresh
+
+    // Refresh if expired
     if (TokenManager.isExpired()) {
       try {
         const refreshed = await TokenManager.refreshTokens();
         if (!refreshed) {
-          // Refresh failed
           authVerificationCache.set(false);
           return false;
         }
       } catch (error) {
-        console.error("Token refresh failed:", error);
+        console.error("[Auth] Token refresh failed:", error);
         authVerificationCache.set(false);
         return false;
       }
     }
-    
-    // Skip server verification if not required and we have a token
+
+    // If not forced, skip server verify
     if (!forceVerify && TokenManager.accessToken) {
-      // Update global state
       if (window.API_CONFIG) {
         window.API_CONFIG.isAuthenticated = true;
       }
       authVerificationCache.set(true);
       return true;
     }
-    
-    // Verify with server if needed
+
+    // Otherwise, attempt server verification
     try {
       const response = await window.apiRequest('/api/auth/verify', 'GET', null, 0, 3000, {
         skipAuthCheck: true,
         skipRetry: true
       });
-      
       const isAuthenticated = response?.authenticated === true;
-      
-      // Update global state
+
       if (window.API_CONFIG) {
         window.API_CONFIG.isAuthenticated = isAuthenticated;
       }
       authVerificationCache.set(isAuthenticated);
-      
+
       if (!isAuthenticated) {
         TokenManager.clearTokens();
       }
-      
       return isAuthenticated;
     } catch (error) {
-      // For network errors, assume token is valid
+      // For network errors, assume token might still be valid
       if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
         const result = !!TokenManager.accessToken;
         if (window.API_CONFIG) {
@@ -346,8 +439,7 @@ window.auth = {
         authVerificationCache.set(result);
         return result;
       }
-      
-      // For auth errors, clear tokens
+      // If explicitly 401, definitely logout
       if (error.status === 401) {
         TokenManager.clearTokens();
         if (window.API_CONFIG) {
@@ -356,8 +448,7 @@ window.auth = {
         authVerificationCache.set(false);
         return false;
       }
-      
-      // For other errors, use current token state
+      // Default fallback
       const result = !!TokenManager.accessToken;
       if (window.API_CONFIG) {
         window.API_CONFIG.isAuthenticated = result;
@@ -368,9 +459,9 @@ window.auth = {
   }
 };
 
-// -------------------------------------------------------------
+// ------------------------------------------
 // UI & Form Handlers
-// -------------------------------------------------------------
+// ------------------------------------------
 function setupUIListeners() {
   const authBtn = document.getElementById("authButton");
   const authDropdown = document.getElementById("authDropdown");
@@ -391,7 +482,7 @@ function setupUIListeners() {
         }, 200);
       }
 
-      // Close any other open dropdowns
+      // Close other open dropdowns
       document.querySelectorAll('.dropdown-content').forEach(dropdown => {
         if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
           dropdown.classList.add("hidden");
@@ -400,7 +491,7 @@ function setupUIListeners() {
       });
     });
 
-    // Close dropdown if clicking outside
+    // Close dropdown if click outside
     document.addEventListener("click", (e) => {
       if (!e.target.closest("#authContainer") && !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
@@ -428,11 +519,12 @@ function setupUIListeners() {
   // Login form submission
   loginForm?.addEventListener("submit", async function (e) {
     e.preventDefault();
-    console.log("Login form submitted via JS handler");
+    console.log("[Auth] Login form submitted via JS handler");
 
     const formData = new FormData(e.target);
     const username = formData.get("username");
     const password = formData.get("password");
+
     if (!username || !password) {
       notify("Please enter both username and password", "error");
       return;
@@ -441,7 +533,7 @@ function setupUIListeners() {
     const submitBtn = this.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" ...>...</svg>`;
+    submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" viewBox="0 0 24 24">...</svg>`;
 
     try {
       await loginUser(username, password);
@@ -459,18 +551,18 @@ function setupUIListeners() {
       // Load any initial data
       setTimeout(() => {
         if (typeof window.loadSidebarProjects === 'function') {
-          window.loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+          window.loadSidebarProjects().catch(err => console.warn("[Auth] Failed to load sidebar projects:", err));
         }
         if (typeof window.loadProjectList === 'function') {
-          window.loadProjectList().catch(err => console.warn("Failed to load project list:", err));
+          window.loadProjectList().catch(err => console.warn("[Auth] Failed to load project list:", err));
         }
         const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
         if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
-          window.createNewChat().catch(err => console.warn("Failed to create chat:", err));
+          window.createNewChat().catch(err => console.warn("[Auth] Failed to create chat:", err));
         }
       }, 500);
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("[Auth] Login failed:", error);
       notify(error.message || "Login failed", "error");
     } finally {
       submitBtn.disabled = false;
@@ -547,41 +639,36 @@ async function loginUser(username, password) {
     if (AUTH_DEBUG) {
       console.debug('[Auth] Starting login for user:', username);
     }
-    
+
     if (!window.apiRequest) {
       throw new Error('Cannot login - apiRequest not available');
     }
+
     const data = await window.apiRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password
     });
-    
+
     if (AUTH_DEBUG) {
       console.debug('[Auth] Login response:', {
         hasToken: !!data?.access_token,
         username: data?.username || username
       });
     }
-    
+
     if (!data.access_token) {
       throw new Error("Invalid response from server");
     }
-    
-    // Store tokens in TokenManager AND cookies
+
+    // Store tokens in TokenManager
     TokenManager.setTokens(data.access_token, data.refresh_token);
-    
-    // Force cookie refresh by first clearing then setting
-    document.cookie = `access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    document.cookie = `access_token=${data.access_token}; path=/; ${
-      window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
-    }`;
-    document.cookie = `refresh_token=${data.refresh_token}; path=/; ${
-      window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
-    }`;
+
+    // Force cookie refresh
+    // Removed client-side cookie settings so server can manage cookies
 
     // Store user info
     if (data.username) {
-      sessionStorage.setItem('userInfo', JSON.stringify({
+      localStorage.setItem('userInfo', JSON.stringify({
         username: data.username,
         roles: data.roles || [],
         lastLogin: Date.now()
@@ -592,7 +679,7 @@ async function loginUser(username, password) {
     setupTokenRefresh();
     return data;
   } catch (error) {
-    console.error("loginUser error details:", error);
+    console.error("[Auth] loginUser error details:", error);
     let message = "Login failed";
     if (error.status === 401) {
       message = "Invalid username or password";
@@ -611,7 +698,6 @@ async function logout(e) {
     if (AUTH_DEBUG) {
       console.debug('[Auth] Starting logout');
     }
-    
     if (TokenManager.accessToken) {
       try {
         // Attempt to inform the server
@@ -619,34 +705,21 @@ async function logout(e) {
           await window.apiRequest('/api/auth/logout', 'POST');
         }
       } catch (apiErr) {
-        if (AUTH_DEBUG) {
-          console.debug('[Auth] Logout API error:', apiErr.message);
-        }
-        console.warn("Logout API error:", apiErr);
+        console.warn("[Auth] Logout API error:", apiErr);
       }
     }
-    
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Clearing tokens and session');
+      console.debug('[Auth] Clearing tokens and localStorage');
     }
+
     TokenManager.clearTokens();
-    sessionStorage.clear();
-
-    // Expire any cookies
-    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-
     broadcastAuth(false);
-    if (e) {
-      notify("Logged out", "success");
-      window.location.href = '/index.html';
-    }
+
+    notify("Logged out", "success");
+    window.location.href = '/index.html';
   } catch (error) {
-    if (AUTH_DEBUG) {
-      console.debug('[Auth] Logout failed:', error.message);
-    }
-    console.error("Logout error:", error);
+    console.error("[Auth] Logout error:", error);
     TokenManager.clearTokens();
-    sessionStorage.clear();
     broadcastAuth(false);
     if (e) {
       window.location.href = '/';
@@ -657,31 +730,54 @@ async function logout(e) {
 // ---------------------------------------------------------------------
 // Token Refresh Management
 // ---------------------------------------------------------------------
-let tokenRefreshTimer;
+let tokenRefreshTimer = null;
 
+/**
+ * Schedules a dynamic token refresh just before expiry
+ */
 function setupTokenRefresh() {
   clearTokenTimers();
-  // Refresh every 15 minutes
-  tokenRefreshTimer = setInterval(() => {
+
+  // Refresh 2 minutes before actual expiry:
+  const refreshBuffer = 2 * 60 * 1000;
+  const now = Date.now();
+  const expiresIn = (TokenManager.tokenExpiry || now) - now;
+  const timeUntilRefresh = Math.max(expiresIn - refreshBuffer, 0);
+
+  if (AUTH_DEBUG) {
+    console.debug('[Auth] Scheduling token refresh in (ms):', timeUntilRefresh);
+  }
+
+  tokenRefreshTimer = setTimeout(() => {
     TokenManager.refreshTokens().catch(err => {
-      console.error("Periodic token refresh failed:", err);
+      console.error("[Auth] Periodic token refresh failed:", err);
       logout();
     });
-  }, 15 * 60 * 1000);
+  }, timeUntilRefresh);
 
-  // Also refresh on visibility change if page is visible
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
+  // Debounce-based refresh on visibility change
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+}
+
+function handleVisibilityChange() {
+  clearTimeout(visibilityTimeout);
+  if (document.visibilityState === "visible") {
+    visibilityTimeout = setTimeout(() => {
       TokenManager.refreshTokens().catch(err => {
-        console.error("Visibility-based token refresh failed:", err);
+        console.error("[Auth] Visibility-based token refresh failed:", err);
         logout();
       });
-    }
-  });
+    }, 500);
+  }
 }
 
 function clearTokenTimers() {
-  clearInterval(tokenRefreshTimer);
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+  clearTimeout(visibilityTimeout);
 }
 
 // ---------------------------------------------------------------------
@@ -689,7 +785,7 @@ function clearTokenTimers() {
 // ---------------------------------------------------------------------
 const authVerificationCache = {
   lastVerified: 0,
-  cacheDuration: 5000, // 5 seconds
+  cacheDuration: 60000, // 60 seconds
   result: null,
   isValid() {
     return this.result !== null && (Date.now() - this.lastVerified < this.cacheDuration);
@@ -707,32 +803,30 @@ async function verifyAuthState(bypassCache = false) {
   }
 
   try {
-    // Skip cache check if bypassing (e.g. during initialization)
     if (!bypassCache && authVerificationCache.isValid()) {
       return authVerificationCache.result;
     }
 
-    // First rehydrate from sessionStorage if needed
-    const authState = JSON.parse(sessionStorage.getItem('auth_state'));
+    // Rehydrate from localStorage if needed
+    const authState = JSON.parse(localStorage.getItem('auth_state'));
     if (authState?.accessToken && !TokenManager.accessToken) {
-      console.debug('[Auth] Rehydrating tokens from sessionStorage');
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Rehydrating tokens from localStorage');
+      }
       TokenManager.setTokens(authState.accessToken, authState.refreshToken);
     }
 
-    // If we have no tokens, not authenticated
-    const hasTokens = TokenManager.accessToken || sessionStorage.getItem('auth_state');
-    if (!hasTokens) {
+    if (!TokenManager.accessToken) {
       authVerificationCache.set(false);
       return false;
     }
 
-    // Handle expired tokens
     if (TokenManager.isExpired()) {
-      console.log('verifyAuthState: Token expired -> refreshing');
+      console.log('[Auth] verifyAuthState: Token expired -> refreshing');
       try {
         await TokenManager.refreshTokens();
       } catch (refreshError) {
-        console.warn('Token refresh failed:', refreshError);
+        console.warn('[Auth] Token refresh failed:', refreshError);
         TokenManager.clearTokens();
         authVerificationCache.set(false);
         broadcastAuth(false);
@@ -740,28 +834,33 @@ async function verifyAuthState(bypassCache = false) {
       }
     }
 
-    // Check with server
+    // If no custom fetch, assume local presence is enough
     if (!window.apiRequest) {
       return !!TokenManager.accessToken;
     }
 
+    // Check with the server
     try {
       const response = await window.apiRequest('/api/auth/verify');
-      // If server says we're authenticated
       authVerificationCache.set(response.authenticated);
       return response.authenticated;
     } catch (verifyError) {
       if (verifyError.status === 401) {
-        console.warn('Auth verification failed - token invalid');
         TokenManager.clearTokens();
         authVerificationCache.set(false);
         broadcastAuth(false);
         throw new Error('Session expired. Please login again.');
       }
+      // If network error, assume token is valid
+      if (verifyError.message?.includes('NetworkError') || verifyError.message?.includes('Failed to fetch')) {
+        const result = !!TokenManager.accessToken;
+        authVerificationCache.set(result);
+        return result;
+      }
       throw verifyError;
     }
   } catch (error) {
-    console.warn('Auth verification error:', error);
+    console.warn('[Auth] Auth verification error:', error);
     // For network errors, fallback to local token presence
     if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
       const result = !!TokenManager.accessToken;
@@ -781,7 +880,7 @@ async function updateAuthStatus() {
     if (data.access_token) {
       TokenManager.setTokens(data.access_token, data.refresh_token);
     }
-    sessionStorage.setItem('userInfo', JSON.stringify({
+    localStorage.setItem('userInfo', JSON.stringify({
       username: data.username,
       roles: data.roles || [],
       lastVerified: Date.now()
@@ -791,7 +890,7 @@ async function updateAuthStatus() {
     broadcastAuth(true, data.username);
     return true;
   } catch (error) {
-    console.error('Auth status check failed:', error);
+    console.error('[Auth] Auth status check failed:', error);
     TokenManager.clearTokens();
     clearSession();
     broadcastAuth(false);
@@ -809,19 +908,23 @@ function broadcastAuth(authenticated, username = null) {
 }
 
 function clearSession() {
-  sessionStorage.clear();
+  // Selectively remove relevant keys
+  localStorage.removeItem('auth_state');
+  localStorage.removeItem('userInfo');
+  localStorage.removeItem('tokenVersion');
+  localStorage.removeItem('refreshMutex');
   clearTokenTimers();
 }
 
 function notify(message, type = "info") {
+  // Example notifications
   if (window.Notifications) {
     switch (type) {
       case 'error':
-        window.Notifications.apiError(message);
+        window.Notifications.apiError?.(message) || console.error(`[ERROR] ${message}`);
         break;
       case 'success':
-        window.Notifications.apiSuccess?.(message) ||
-          console.log(`[SUCCESS] ${message}`);
+        window.Notifications.apiSuccess?.(message) || console.log(`[SUCCESS] ${message}`);
         break;
       default:
         console.log(`[${type.toUpperCase()}] ${message}`);
@@ -864,7 +967,6 @@ TokenManager.onTokenRefresh = (newToken) => {
 };
 
 /**
- * NOTE: We intentionally do NOT attach a second DOMContentLoaded listener here
- * to avoid double initialization. Let app.js (or your main script) call
- * `window.auth.init()` exactly once, after `apiRequest` is defined.
+ * NOTE: This file intentionally does NOT call auth.init() automatically.
+ * Let your main script (app.js) call `window.auth.init()` after window.apiRequest is defined.
  */
