@@ -105,13 +105,38 @@ async def retrieve_knowledge_context(
 async def generate_ai_response(
     conversation_id: UUID,
     messages: List[Dict[str, str]],
-    model_id: Optional[str],
-    image_data: Optional[str] = None,
-    vision_detail: str = "auto",
-    enable_thinking: Optional[bool] = None,
-    thinking_budget: Optional[int] = None,
-    db: Optional[AsyncSession] = None,
+    model_id: str,
+    params: dict,
+    db: Optional[AsyncSession] = None
 ) -> Optional[Message]:
+    """Generate AI response using either Claude or Azure OpenAI"""
+    # Get conversation to check for project context
+    conversation = await get_by_id(db, Conversation, conversation_id) if db else None
+    
+    if model_id in settings.CLAUDE_MODELS:
+        return await claude_generate(
+            conversation_id=conversation_id,
+            messages=messages,
+            model_id=model_id,
+            enable_thinking=params.get("enable_thinking"),
+            thinking_budget=params.get("thinking_budget"),
+            db=db
+        )
+        
+    elif model_id in settings.AZURE_OPENAI_MODELS:
+        # Azure-specific processing
+        azure_params = {
+            "vision_detail": params.get("vision_detail", "auto"),
+            "reasoning_effort": params.get("reasoning_effort"),
+            "max_tokens": params.get("max_tokens", 4000),
+            "image_data": params.get("image_data"),
+            "stream": params.get("stream", False)
+        }
+        return await azure_chat_request(
+            model_id=model_id,
+            messages=messages,
+            params=azure_params
+        )
     """
     Generate an AI response for a conversation using OpenAI or Claude API.
 

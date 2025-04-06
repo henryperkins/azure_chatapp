@@ -112,16 +112,46 @@ async def openai_chat(
         detail=f"Unsupported model: {model_name}. Valid models: {list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())}"
     )
 
-async def azure_chat(
-    messages: List[Dict[str, str]],
-    model_name: str,
-    max_tokens: int = 500,
-    reasoning_effort: Optional[str] = None,
-    image_data: Optional[str] = None,
-    vision_detail: str = "auto",
-    temperature: float = 0.7,
-    stream: bool = False
+async def azure_chat_request(
+    model_id: str,
+    messages: List[Dict[str, str]], 
+    params: dict
 ) -> dict:
+    """Handle Azure OpenAI requests with model-specific processing"""
+    model_config = settings.AZURE_OPENAI_MODELS[model_id]
+    
+    # Vision processing
+    if "vision" in model_config["capabilities"] and "image_data" in params:
+        messages = process_vision_messages(
+            messages,
+            params["image_data"],
+            params.get("vision_detail", "auto")
+        )
+    
+    payload = {
+        "messages": messages,
+        "max_tokens": min(
+            params.get("max_tokens", 4000),
+            model_config["max_tokens"]
+        ),
+        "temperature": params.get("temperature", 0.7)
+    }
+    
+    # Model-specific parameters
+    if "reasoning_effort" in model_config["capabilities"]:
+        payload["reasoning_effort"] = params.get("reasoning_effort", "medium")
+    
+    # Special GPT-4o parameters
+    if model_id == "gpt-4o":
+        payload["vision_strategy"] = "enhanced"
+        if "stream" in params:
+            payload["stream"] = params["stream"]
+    
+    return await _send_azure_request(
+        model_id,
+        model_config.get("api_version", "2024-02-01"),
+        payload
+    )
     model_config = settings.AZURE_OPENAI_MODELS.get(model_name)
     if not model_config:
         raise HTTPException(400, f"Unsupported Azure model: {model_name}")

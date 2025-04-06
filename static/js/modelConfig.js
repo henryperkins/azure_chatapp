@@ -610,50 +610,42 @@ function getModelOptions() {
       }
     },
 
-    // Azure OpenAI models - Phase 1 core definitions
+    // Azure OpenAI models
+    {
+      id: 'o1',
+      name: 'Azure o1 (Vision)',
+      provider: 'azure',
+      description: 'Deep analysis with image understanding',
+      supportsVision: true,
+      parameters: {
+        vision_detail: ['low', 'high'],
+        reasoning_effort: ['low', 'medium', 'high']
+      },
+      maxTokens: 128000,
+      requires: ['vision_detail']
+    },
     {
       id: 'o3-mini',
       name: 'Azure o3-mini',
       provider: 'azure',
-      description: 'Advanced reasoning for code/science/math',
+      description: 'Specialized text reasoning',
       parameters: {
-        type: 'reasoning',
-        max_completion_tokens: 100000,
-        reasoning_effort: ['low', 'medium', 'high'],
-        markdown_mode: false
+        reasoning_effort: ['low', 'medium', 'high']
       },
-      contextWindow: 200000,
-      visionSupported: false,
-      requires: ['max_completion_tokens', 'reasoning_effort']
-    },
-    {
-      id: 'o1',
-      name: 'Azure o1',
-      provider: 'azure',
-      description: 'Multimodal reasoning with vision',
-      parameters: {
-        type: 'multimodal-reasoning',
-        max_completion_tokens: 100000,
-        reasoning_effort: ['low', 'medium', 'high'],
-        vision_detail: ['auto', 'low', 'high']
-      },
-      contextWindow: 200000,
-      visionSupported: true,
-      requires: ['max_completion_tokens', 'vision_detail']
+      maxTokens: 16385,
+      requires: ['reasoning_effort']
     },
     {
       id: 'gpt-4o',
       name: 'GPT-4o',
       provider: 'azure',
-      description: 'Advanced multimodal model with vision',
+      description: 'Auto-optimized multimodal',
+      supportsVision: true,
+      supportsStreaming: true,
       parameters: {
-        type: 'vision',
-        max_tokens: 4096,
         vision_detail: ['auto', 'low', 'high']
       },
-      contextWindow: 128000,
-      visionSupported: true,
-      requires: ['max_tokens', 'vision_detail']
+      maxTokens: 128000
     },
 
     // Legacy OpenAI models (existing, unchanged)
