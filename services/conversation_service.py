@@ -41,16 +41,20 @@ def validate_model(model_id: str) -> bool:
     if model_id in settings.CLAUDE_MODELS:
         return True
     
-    azure_config = settings.AZURE_OPENAI_MODELS.get(model_id)
-    if not azure_config:
-        allowed_models = list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())
-        raise ConversationError(
-            f"Invalid model ID. Allowed: {', '.join(sorted(allowed_models))}",
-            status_code=400,
-        )
+    if model_id in settings.AZURE_OPENAI_MODELS:
+        model_config = settings.AZURE_OPENAI_MODELS[model_id]
+        if image_data and "vision" not in model_config.get("capabilities", []):
+            raise ConversationError(
+                "This model doesn't support vision",
+                status_code=400
+            )
+        return True
     
-    # Additional Azure capability validation can be added here
-    return True
+    allowed_models = list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())
+    raise ConversationError(
+        f"Invalid model ID. Allowed: {', '.join(sorted(allowed_models))}",
+        status_code=400,
+    )
 
 
 class ConversationService:

@@ -48,30 +48,27 @@ class Settings:
     AZURE_OPENAI_MODELS = {
         "o1": {
             "type": "vision",
-            "description": "Multimodal model with deep analysis capabilities",
+            "description": "Multimodal analysis with image understanding", 
             "capabilities": ["vision", "reasoning_effort"],
-            "max_images": 10,
-            "max_tokens": 128000,
             "vision_details": ["low", "high"],
+            "max_images": 10,
             "max_temp": 1.5,
             "requires": ["max_completion_tokens", "vision_detail"]
         },
         "o3-mini": {
             "type": "text",
-            "description": "Advanced reasoning for complex problem solving",
-            "capabilities": ["reasoning_effort", "structured_output"],
-            "max_tokens": 16385,
+            "description": "Advanced reasoning model for complex problems",
+            "capabilities": ["reasoning_effort"],
             "max_temp": 1.2,
             "requires": ["reasoning_effort"]
         },
         "gpt-4o": {
             "type": "multimodal",
-            "description": "Optimized multimodal model with vision support",
-            "capabilities": ["vision", "streaming", "complex_analysis"],
-            "max_tokens": 128000,
+            "description": "Optimized multimodal with auto-detail vision",
+            "capabilities": ["vision", "streaming"],
             "vision_details": ["auto", "low", "high"],
             "max_temp": 2.0,
-            "requires": ["vision_detail"]
+            "api_version": "2024-05-01-preview"  # Special API version
         }
     }
 
