@@ -18,9 +18,10 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class FileValidator:
     """Core file validation utilities."""
-    
+
     # Supported file extensions mapped to categories
     ALLOWED_EXTENSIONS = {
         # Text files
@@ -28,17 +29,15 @@ class FileValidator:
         ".md": "text",
         ".csv": "data",
         ".json": "data",
-        
         # Documents
         ".pdf": "document",
-        ".doc": "document", 
+        ".doc": "document",
         ".docx": "document",
-        
         # Code
         ".py": "code",
         ".js": "code",
         ".html": "code",
-        ".css": "code"
+        ".css": "code",
     }
 
     MAX_FILE_SIZE = getattr(settings, "MAX_FILE_SIZE", 30_000_000)  # 30MB default
@@ -49,18 +48,18 @@ class FileValidator:
         """Validate file has allowed extension, handling edge cases."""
         if not filename:
             return False
-            
+
         # Handle multiple dots and case sensitivity
         filename = filename.strip()
-        parts = filename.split('.')
+        parts = filename.split(".")
         if len(parts) < 2:
             return False
-            
+
         ext = f".{parts[-1].lower()}"
-        
+
         # Debug log validation attempts
         logger.debug(f"Validating extension: {ext} in {cls.ALLOWED_EXTENSIONS.keys()}")
-        
+
         return ext in cls.ALLOWED_EXTENSIONS
         return ext in cls.ALLOWED_EXTENSIONS
 
@@ -79,20 +78,21 @@ class FileValidator:
         """
         _, ext = os.path.splitext(filename.lower())
         ext = ext.lower()
-        
+
         if ext in cls.ALLOWED_EXTENSIONS:
             return {
                 "extension": ext,
                 "category": cls.ALLOWED_EXTENSIONS[ext],
-                "mimetype": mimetypes.guess_type(filename)[0] or "application/octet-stream"
+                "mimetype": mimetypes.guess_type(filename)[0]
+                or "application/octet-stream",
             }
-        
+
         # Fallback to mimetype detection
         mimetype, _ = mimetypes.guess_type(filename)
         return {
             "extension": ext,
             "category": "unknown",
-            "mimetype": mimetype or "application/octet-stream"
+            "mimetype": mimetype or "application/octet-stream",
         }
 
     @classmethod
@@ -100,7 +100,7 @@ class FileValidator:
         """Get list of allowed extensions with dots"""
         return list(cls.ALLOWED_EXTENSIONS.keys())
 
-    @classmethod 
+    @classmethod
     def get_max_file_size_mb(cls) -> float:
         """Get max file size in MB"""
         return cls.MAX_FILE_SIZE / (1024 * 1024)
@@ -110,7 +110,7 @@ class FileValidator:
         cls,
         file: Union[BinaryIO, UploadFile],
         scan_content: bool = True,
-        preserve_spaces: bool = True
+        preserve_spaces: bool = True,
     ) -> Dict[str, Any]:
         """
         Comprehensive validation for uploaded files with enhanced security.
@@ -126,7 +126,7 @@ class FileValidator:
         """
         original_filename = getattr(file, "filename", "untitled")
         file_size = getattr(file, "size", None)
-        
+
         # Validate extension first
         if not cls.validate_extension(original_filename):
             raise ValueError(
@@ -137,47 +137,60 @@ class FileValidator:
         # Handle filename spaces
         if not preserve_spaces:
             original_filename = original_filename.replace(" ", "_")
-            
+
         if scan_content:
             # Sample first 2MB for deeper content scanning
             sample = await file.read(2 * 1024 * 1024)
             await file.seek(0)
-            
+
             # Enhanced malicious pattern detection
             malicious_patterns = [
                 # Web exploits
-                b'<?php', b'<script', b'eval(', b'document.cookie',
+                b"<?php",
+                b"<script",
+                b"eval(",
+                b"document.cookie",
                 # System commands
-                b'powershell', b'cmd.exe', b'/bin/bash', b'wget',
+                b"powershell",
+                b"cmd.exe",
+                b"/bin/bash",
+                b"wget",
                 # Suspicious patterns
-                b'base64_decode', b'exec(', b'system(', b'passthru(',
+                b"base64_decode",
+                b"exec(",
+                b"system(",
+                b"passthru(",
                 # Dangerous file operations
-                b'file_put_contents', b'fopen(', b'unlink('
+                b"file_put_contents",
+                b"fopen(",
+                b"unlink(",
             ]
-            
+
             lower_sample = sample.lower()
             found_patterns = [
-                pattern.decode('utf-8', errors='ignore')
+                pattern.decode("utf-8", errors="ignore")
                 for pattern in malicious_patterns
                 if pattern in lower_sample
             ]
-            
+
             if found_patterns:
                 raise ValueError(
-                    "File content contains potentially dangerous patterns:\n" +
-                    "\n".join(f"- {p}" for p in found_patterns)
+                    "File content contains potentially dangerous patterns:\n"
+                    + "\n".join(f"- {p}" for p in found_patterns)
                 )
-            
+
         file_info = cls.get_file_info(original_filename)
-        
+
         if file_size is not None and not cls.validate_size(file_size):
             raise ValueError(f"File too large (max {cls.get_max_file_size_mb()}MB)")
-            
+
         return file_info
+
 
 def validate_file_size(file_size: int) -> bool:
     """Validate file size is within limits."""
     return file_size <= FileValidator.MAX_FILE_SIZE
+
 
 def sanitize_filename(filename: str) -> str:
     """
@@ -186,13 +199,13 @@ def sanitize_filename(filename: str) -> str:
     """
     # Remove directory path attempts
     filename = os.path.basename(filename)
-    
+
     # Replace special chars
-    filename = re.sub(r'[^\w\-_.]', '_', filename)
-    
+    filename = re.sub(r"[^\w\-_.]", "_", filename)
+
     # Shorten if too long
     if len(filename) > 100:
         name, ext = os.path.splitext(filename)
         filename = f"{name[:50]}{ext}"
-        
+
     return filename

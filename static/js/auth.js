@@ -45,14 +45,36 @@ const TokenManager = {
     this.accessToken = null;
     this.refreshToken = null;
     sessionStorage.removeItem('auth_state');
+    sessionStorage.removeItem('tokenVersion');
+    // Clear cookies
+    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
   },
 
   getAuthHeader() {
-    const accessToken = document.cookie
+    // First try to get token from cookie
+    const cookieToken = document.cookie
       .split('; ')
       .find(row => row.startsWith('access_token='))
       ?.split('=')[1];
     
+    // Then check session storage
+    const storageToken = this.accessToken ||
+      (JSON.parse(sessionStorage.getItem('auth_state'))?.accessToken);
+    
+    // Validate versions match if available
+    if (cookieToken && storageToken && this.version) {
+      const storedVersion = sessionStorage.getItem('tokenVersion');
+      if (storedVersion && storedVersion !== this.version) {
+        console.warn('Token version mismatch - refreshing');
+        this.refreshTokens().catch(err => {
+          console.error('Token refresh failed:', err);
+        });
+      }
+    }
+    
+    // Prefer cookie token but fallback to storage
+    const accessToken = cookieToken || storageToken;
     return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
   },
 

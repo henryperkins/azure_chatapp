@@ -585,7 +585,9 @@ async def create_message(
                 )
             except HTTPException as e:
                 response_payload["assistant_error"] = e.detail
-                return await create_standard_response(response_payload, success=False, status_code=e.status_code)
+                return await create_standard_response(
+                    response_payload, success=False, status_code=e.status_code
+                )
 
             if assistant_msg:
                 metadata = (
@@ -656,8 +658,13 @@ async def websocket_chat_endpoint(
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
 
-                logger.info("WebSocket token received (first 10 chars): %s...", user_token[:10])
-                logger.debug("Full token: %s", user_token if settings.ENV != "production" else "[REDACTED]")
+                logger.info(
+                    "WebSocket token received (first 10 chars): %s...", user_token[:10]
+                )
+                logger.debug(
+                    "Full token: %s",
+                    user_token if settings.ENV != "production" else "[REDACTED]",
+                )
 
                 # Validate token
                 try:
@@ -671,7 +678,7 @@ async def websocket_chat_endpoint(
                         logger.warning("Token validation error: %s", str(e))
                         await websocket.close(
                             code=status.WS_1008_POLICY_VIOLATION,
-                            reason="Token has expired - please refresh"
+                            reason="Token has expired - please refresh",
                         )
                     else:
                         logger.error("Token validation error: %s", str(e))
@@ -689,20 +696,24 @@ async def websocket_chat_endpoint(
                 logger.error(f"WebSocket setup failed: {str(e)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-                
+
             # Project validation (if project_id provided) - skip token check since user already validated
             if project_id:
                 try:
-                    project = await validate_project_access(project_id, user, db, skip_ownership_check=True)
+                    project = await validate_project_access(
+                        project_id, user, db, skip_ownership_check=True
+                    )
                     if not project:
-                        logger.error(f"Project {project_id} not found or not accessible")
+                        logger.error(
+                            f"Project {project_id} not found or not accessible"
+                        )
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                 except HTTPException as e:
                     logger.error(f"WebSocket authorization failed: {e.detail}")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                    
+
             # Conversation validation - skip token check since user already validated
             try:
                 conversation = await db.get(Conversation, conversation_id)
@@ -713,15 +724,12 @@ async def websocket_chat_endpoint(
                 logger.error(f"Failed to get conversation: {str(e)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-            
+
             # Register connection with manager
             await manager.connect_with_state(
-                websocket,
-                str(conversation_id),
-                db,
-                str(user.id)
+                websocket, str(conversation_id), db, str(user.id)
             )
-            
+
             # Setup heartbeat/ping handler
             async def handle_heartbeat():
                 while True:
@@ -730,31 +738,31 @@ async def websocket_chat_endpoint(
                         await websocket.send_json({"type": "ping"})
                     except Exception:
                         break  # Exit the heartbeat loop if sending fails
-                        
+
             # Start heartbeat task
             heartbeat_task = asyncio.create_task(handle_heartbeat())
-            
+
             # Send connected confirmation
             await manager.send_personal_message(
                 {
                     "type": "status",
                     "message": "WebSocket established",
-                    "userId": str(user.id)
+                    "userId": str(user.id),
                 },
                 websocket,
             )
-            
+
             # Main message processing loop
             while True:
                 raw_data = await websocket.receive_text()
                 try:
                     data = json.loads(raw_data)
-                    
+
                     # Handle ping/pong for heartbeat
                     if data.get("type") == "ping":
                         await websocket.send_json({"type": "pong"})
                         continue
-                        
+
                     # Handle token refresh
                     if data.get("type") == "token_refresh":
                         await manager.send_personal_message(
@@ -762,32 +770,30 @@ async def websocket_chat_endpoint(
                             websocket,
                         )
                         continue
-                    
+
                     # Handle user message
                     if data.get("type") == "message":
                         # Get conversation service
                         conv_service = ConversationService(db)
-                        
+
                         # Process message
                         response_data = await conv_service.handle_ws_message(
                             websocket=websocket,
                             conversation_id=conversation_id,
                             user_id=user.id,
                             message_data=data,
-                            project_id=project_id
+                            project_id=project_id,
                         )
-                        
+
                         # Send response back to client
-                        await manager.send_personal_message(
-                            response_data, websocket
-                        )
+                        await manager.send_personal_message(response_data, websocket)
                         continue
-                        
+
                 except json.JSONDecodeError as e:
                     await manager.send_personal_message(
                         {"type": "error", "message": str(e)}, websocket
                     )
-                    
+
         except (WebSocketDisconnect, asyncio.CancelledError):
             logger.info(
                 f"WebSocket disconnected for user {user.id if user else 'unknown'}, conversation {conversation_id}"

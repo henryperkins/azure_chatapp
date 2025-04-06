@@ -84,6 +84,15 @@
       try {
         // Check for existing valid token
         if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
+          // Verify token version matches
+          if (window.TokenManager.version) {
+            const storedVersion = sessionStorage.getItem('tokenVersion');
+            if (storedVersion && storedVersion !== window.TokenManager.version) {
+              console.warn('Token version mismatch - refreshing token');
+              await window.TokenManager.refresh();
+              return window.TokenManager.accessToken;
+            }
+          }
           return window.TokenManager.accessToken;
         }
 
@@ -91,6 +100,10 @@
         if (window.TokenManager?.refresh) {
           await window.TokenManager.refresh();
           if (window.TokenManager.accessToken) {
+            // Store version after refresh
+            if (window.TokenManager.version) {
+              sessionStorage.setItem('tokenVersion', window.TokenManager.version);
+            }
             return window.TokenManager.accessToken;
           }
         }
@@ -99,6 +112,10 @@
         if (window.auth?.verify) {
           const verified = await window.auth.verify();
           if (verified && window.TokenManager?.accessToken) {
+            // Store version after verification
+            if (window.TokenManager.version) {
+              sessionStorage.setItem('tokenVersion', window.TokenManager.version);
+            }
             return window.TokenManager.accessToken;
           }
         }
@@ -476,23 +493,39 @@ window.WebSocketService.prototype.handleTokenRefresh = async function() {
   try {
     await window.TokenManager.refresh();
     
+    // Store token version after refresh
+    if (window.TokenManager.version) {
+      sessionStorage.setItem('tokenVersion', window.TokenManager.version);
+    }
+    
     // Add token to current connection
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({
         type: 'token_refresh',
-        token: window.TokenManager.accessToken
+        token: window.TokenManager.accessToken,
+        version: window.TokenManager.version
       }));
       
       // Reset reconnect attempts and try reconnecting
       this.reconnectAttempts = 0;
       await this.attemptReconnection();
     }
+    
+    // Update all pending messages with new token
+    this.pendingMessages.forEach(({ resolve, reject, timeout }) => {
+      clearTimeout(timeout);
+      reject(new Error('Token refreshed - please resend message'));
+    });
+    this.pendingMessages.clear();
+    
   } catch (error) {
     console.error('Token refresh failed:', error);
     // Graceful degradation
     this.useHttpFallback = true;
     if (this.onError) {
-      this.onError(new Error('Session expired - please reload'));
+      const enhancedError = new Error('Session expired - please reload');
+      enhancedError.code = 'TOKEN_REFRESH_FAILED';
+      this.onError(enhancedError);
     }
   }
 };

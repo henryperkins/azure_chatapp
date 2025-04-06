@@ -69,20 +69,24 @@ async def do_summarization(
 
 class ContextTokenTracker:
     """Tracks token usage during context management"""
+
     def __init__(self, max_tokens: int):
         self.used_tokens = 0
         self.max_tokens = max_tokens
 
     def add_context(self, tokens: int) -> None:
         if self.used_tokens + tokens > self.max_tokens:
-            raise ValueError(f"Token limit exceeded (used {self.used_tokens}/{self.max_tokens})")
+            raise ValueError(
+                f"Token limit exceeded (used {self.used_tokens}/{self.max_tokens})"
+            )
         self.used_tokens += tokens
+
 
 async def manage_context(
     messages: List[Dict[str, str]],
     user_message: Optional[str] = None,
     search_results: Optional[Dict[str, Any]] = None,
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = None,
 ) -> List[Dict[str, str]]:
     """
     Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
@@ -116,15 +120,17 @@ async def manage_context(
         # Ensure search_results exists and has results
         chunk_ids = []
         if search_results and search_results.get("results"):
-            chunk_ids = [str(r["id"]) for r in search_results["results"] if r and "id" in r]
-        
+            chunk_ids = [
+                str(r["id"]) for r in search_results["results"] if r and "id" in r
+            ]
+
         msg["context_used"] = {
             "query": user_message,
             "chunk_ids": chunk_ids,
             "token_count": total_tokens,
-            "summary": summary_text
+            "summary": summary_text,
         }
-    
+
     return new_conversation
 
 
@@ -161,14 +167,16 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
         )
 
 
-async def estimate_token_count(messages: List[Dict[str, str]], model: str = "claude-3-sonnet-20240229") -> int:
+async def estimate_token_count(
+    messages: List[Dict[str, str]], model: str = "claude-3-sonnet-20240229"
+) -> int:
     """
     Count tokens using available methods with proper fallback handling.
-    
+
     Args:
         messages: List of message dicts with role/content
         model: Model name (for future model-specific handling)
-        
+
     Returns:
         Token count estimate
     """
@@ -189,8 +197,9 @@ async def estimate_token_count(messages: List[Dict[str, str]], model: str = "cla
         # Add metadata tokens if present
         if "metadata" in msg and isinstance(msg["metadata"], dict):
             total += len(str(msg["metadata"])) // 8  # Rough estimate for metadata
-    
+
     return total
+
 
 async def estimate_tokens(text: str, model: str = "claude-3-sonnet-20240229") -> int:
     """Simplified version for single text strings"""

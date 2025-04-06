@@ -5,6 +5,7 @@ from pathlib import Path
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
+
 class Settings:
     """
     Central configuration class for environment variables used across the codebase.
@@ -15,12 +16,13 @@ class Settings:
     ENV = os.getenv("ENV", "development")
 
     # Session
-    SESSION_SECRET = os.getenv("SESSION_SECRET", "default-secret-key-change-in-production")
+    SESSION_SECRET = os.getenv(
+        "SESSION_SECRET", "default-secret-key-change-in-production"
+    )
 
     # Allowed hosts
     ALLOWED_HOSTS: list = os.getenv(
-        "ALLOWED_HOSTS",
-        "put.photo,www.put.photo,localhost,127.0.0.1,*"
+        "ALLOWED_HOSTS", "put.photo,www.put.photo,localhost,127.0.0.1,*"
     ).split(",")
 
     # CORS Origins
@@ -62,15 +64,21 @@ class Settings:
         "claude-3-7-sonnet-20250219",
     ]
     CLAUDE_BASE_URL = "https://api.anthropic.com/v1/messages"
-    CLAUDE_EXTENDED_THINKING_ENABLED = os.getenv("CLAUDE_EXTENDED_THINKING_ENABLED", "True").lower() == "true"
-    CLAUDE_EXTENDED_THINKING_BUDGET = int(os.getenv("CLAUDE_EXTENDED_THINKING_BUDGET", "16000"))
+    CLAUDE_EXTENDED_THINKING_ENABLED = (
+        os.getenv("CLAUDE_EXTENDED_THINKING_ENABLED", "True").lower() == "true"
+    )
+    CLAUDE_EXTENDED_THINKING_BUDGET = int(
+        os.getenv("CLAUDE_EXTENDED_THINKING_BUDGET", "16000")
+    )
 
     # ===== Add the lines below to define EMBEDDING_API and COHERE_API_KEY =====
     EMBEDDING_API = os.getenv("EMBEDDING_API", "")
     COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
 
     # Migration control
-    ALWAYS_APPLY_MIGRATIONS = os.getenv("ALWAYS_APPLY_MIGRATIONS", "false").lower() == "true"
+    ALWAYS_APPLY_MIGRATIONS = (
+        os.getenv("ALWAYS_APPLY_MIGRATIONS", "false").lower() == "true"
+    )
 
 
 settings = Settings()

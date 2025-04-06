@@ -3,6 +3,28 @@
  * Centralized utility functions for chat application
  */
 
+// Module initialization utilities
+window.InitUtils = {
+  featureModules: [],
+
+  /**
+   * Initialize a module with error handling
+   * @param {string} moduleName - Name of module for logging
+   * @param {Function} initFn - Initialization function
+   * @returns {Promise<void>}
+   */
+  initModule: async function(moduleName, initFn) {
+    try {
+      console.log(`⏳ Initializing ${moduleName}...`);
+      await initFn();
+      console.log(`✅ ${moduleName} initialized successfully`);
+    } catch (error) {
+      console.error(`❌ Failed to initialize ${moduleName}:`, error);
+      throw error;
+    }
+  }
+};
+
 window.ChatUtils = {
   // Track recently shown errors to prevent duplicates
   _lastError: null,

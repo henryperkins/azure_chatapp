@@ -1178,39 +1178,6 @@
       // Initialize auth using window.auth instead of module import
       window.auth.init();
       
-      // Listen for auth state changes from the auth.js module
-      document.addEventListener('authStateChanged', function(event) {
-        const { authenticated, username } = event.detail;
-        
-        // Update UI based on authentication state
-        const authButton = document.getElementById('authButton');
-        const userMenu = document.getElementById('userMenu');
-        const authStatus = document.getElementById('authStatus');
-        const userStatus = document.getElementById('userStatus');
-        const loginRequiredMessage = document.getElementById('loginRequiredMessage');
-        const projectManagerPanel = document.getElementById('projectManagerPanel');
-        
-        if (authenticated) {
-          // User is logged in
-          if (authButton) authButton.classList.add('hidden');
-          if (userMenu) userMenu.classList.remove('hidden');
-          if (authStatus) authStatus.textContent = username || 'Authenticated';
-          if (userStatus) userStatus.textContent = 'Online';
-          if (userStatus) userStatus.classList.add('text-green-600');
-          if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
-          if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
-        } else {
-          // User is logged out
-          if (authButton) authButton.classList.remove('hidden');
-          if (userMenu) userMenu.classList.add('hidden');
-          if (authStatus) authStatus.textContent = 'Not Authenticated';
-          if (userStatus) userStatus.textContent = 'Offline';
-          if (userStatus) userStatus.classList.remove('text-green-600');
-          if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
-          if (projectManagerPanel) projectManagerPanel.classList.add('hidden');
-        }
-      });
-      
       // Show login button by default on page load
       const showLoginBtn = document.getElementById('showLoginBtn');
       if (showLoginBtn) {
