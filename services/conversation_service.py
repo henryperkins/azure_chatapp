@@ -377,9 +377,9 @@ class ConversationService:
 
         # Augment with knowledge if enabled
         if conversation.use_knowledge_base:
+            if conversation.id is None:
+                raise ConversationError("Invalid conversation ID", 400)
             kb_context = await augment_with_knowledge(
-                if conversation.id is None:
-                    raise ConversationError("Invalid conversation ID", 400)
                 conversation_id=conversation.id,
                 user_message=user_message,
                 db=self.db,
@@ -417,14 +417,6 @@ class ConversationService:
             
             if isinstance(model_config.get("max_tokens"), (int, float)):
                 params["max_tokens"] = int(model_config["max_tokens"])
-            "max_tokens": int(conversation.max_tokens) if conversation.max_tokens else None,
-            "image_data": str(image_data) if image_data else None,
-            "vision_detail": str(vision_detail) if vision_detail else "auto",
-            "reasoning_effort": str(reasoning_effort) if reasoning_effort else None,
-            "stream": bool(getattr(conversation, "stream", False)),
-            "enable_thinking": bool(getattr(conversation, "enable_thinking", False)),
-            "thinking_budget": int(getattr(conversation, "thinking_budget", 0)) if getattr(conversation, "thinking_budget", None) is not None else None
-        }
 
         if model_config:
             # Vision handling
@@ -445,9 +437,9 @@ class ConversationService:
                 )
 
         # Generate response
+        if conversation.id is None:
+            raise ConversationError("Invalid conversation ID", 400)
         assistant_msg = await generate_ai_response(
-            if conversation.id is None:
-                raise ConversationError("Invalid conversation ID", 400)
             conversation_id=conversation.id,
             messages=messages,
             model_id=str(conversation.model_id),
