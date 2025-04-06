@@ -154,7 +154,7 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
     rows = result.mappings().all()
     messages = [{"role": r["role"], "content": r["content"]} for r in rows]
 
-    total_tokens = await estimate_token_count(messages)
+    total_tokens = estimate_token_count(messages)
     if total_tokens and total_tokens > CONVERSATION_TOKEN_LIMIT:
         await manage_context(messages)
         # Replace older messages in DB or handle them as needed
@@ -167,7 +167,7 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
         )
 
 
-async def estimate_token_count(
+def estimate_token_count(
     messages: List[Dict[str, str]], model: str = "claude-3-sonnet-20240229"
 ) -> int:
     """
@@ -205,4 +205,4 @@ async def estimate_tokens(text: str, model: str = "claude-3-sonnet-20240229") ->
     """Simplified version for single text strings"""
     if not text:
         return 0
-    return await estimate_token_count([{"role": "user", "content": text}], model)
+    return estimate_token_count([{"role": "user", "content": text}], model)

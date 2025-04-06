@@ -334,9 +334,19 @@
           throw new Error("No project selected");
         }
 
-        // 2. Count tokens for each file before upload
-        if (!window.textExtractor) {
-          throw new Error("Text extraction service not available");
+        // 2. Verify text extraction endpoint is available
+        try {
+          const response = await window.apiRequest('/api/text-extractor/initialize', 'GET');
+          if (response?.status !== 'ready') {
+            throw new Error('Text extraction service not ready');
+          }
+        } catch (err) {
+          const msg = "Text extraction service unavailable - please try again later";
+          console.error(msg, err);
+          if (window.Notifications?.apiError) {
+            window.Notifications.apiError(msg);
+          }
+          throw new Error(msg);
         }
 
         let totalTokens = 0;
