@@ -36,30 +36,27 @@ class ConversationError(Exception):
         super().__init__(message)
 
 
-def validate_model(model_id: str, image_data: Optional[str] = None) -> bool:
-    """Validate model against allowed configurations with capability checks.
+def validate_model_params(model_id: str, params: dict) -> None:
+    """Validate parameters based on model capabilities"""
+    model_config = settings.AZURE_OPENAI_MODELS.get(model_id) or settings.CLAUDE_MODELS.get(model_id)
     
-    Args:
-        model_id: The model ID to validate
-        image_data: Optional image data to check vision capability requirements
-    """
-    if model_id in settings.CLAUDE_MODELS:
-        return True
+    if not model_config:
+        raise ConversationError(f"Invalid model {model_id}", status_code=400)
     
-    if model_id in settings.AZURE_OPENAI_MODELS:
-        model_config = settings.AZURE_OPENAI_MODELS[model_id]
-        if image_data and "vision" not in model_config.get("capabilities", []):
+    # Validate required parameters
+    for required_param in model_config.get("requires", []):
+        if required_param not in params:
             raise ConversationError(
-                "This model doesn't support vision",
+                f"{required_param} is required for this model",
                 status_code=400
             )
-        return True
-    
-    allowed_models = list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())
-    raise ConversationError(
-        f"Invalid model ID. Allowed: {', '.join(sorted(allowed_models))}",
-        status_code=400,
-    )
+            
+    # Validate vision parameters
+    if "image_data" in params and "vision" not in model_config.get("capabilities", []):
+        raise ConversationError(
+            "This model doesn't support vision",
+            status_code=400
+        )
 
 
 class ConversationService:
