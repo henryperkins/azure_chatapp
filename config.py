@@ -44,31 +44,33 @@ class Settings:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-    # Azure OpenAI Configuration
+    # Azure OpenAI Models Configuration
     AZURE_OPENAI_MODELS = {
         "o1": {
-            "type": "vision",
-            "description": "Multimodal analysis with image understanding", 
-            "capabilities": ["vision", "reasoning_effort"],
+            "type": "multimodal",
+            "description": "Advanced vision model with reasoning capabilities",
+            "capabilities": ["vision", "structured_output", "image_analysis"],
             "vision_details": ["low", "high"],
+            "max_tokens": 128000,
             "max_images": 10,
-            "max_temp": 1.5,
-            "requires": ["max_completion_tokens", "vision_detail"]
+            "requires": ["vision_detail"],
+            "api_version": "2024-05-01-preview"
         },
         "o3-mini": {
-            "type": "text",
-            "description": "Advanced reasoning model for complex problems",
-            "capabilities": ["reasoning_effort"],
-            "max_temp": 1.2,
-            "requires": ["reasoning_effort"]
+            "type": "text", 
+            "description": "Specialized reasoning model",
+            "capabilities": ["reasoning_effort", "code_generation"],
+            "max_tokens": 16385,
+            "requires": ["reasoning_effort"],
+            "supports_system_msg": False
         },
         "gpt-4o": {
             "type": "multimodal",
-            "description": "Optimized multimodal with auto-detail vision",
-            "capabilities": ["vision", "streaming"],
+            "description": "Optimized vision with auto-detail",
+            "capabilities": ["vision", "streaming", "auto_detail"],
             "vision_details": ["auto", "low", "high"],
-            "max_temp": 2.0,
-            "api_version": "2024-05-01-preview"  # Special API version
+            "max_tokens": 128000,
+            "api_version": "2024-05-01-preview"
         }
     }
 
