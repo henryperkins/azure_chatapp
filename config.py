@@ -44,17 +44,40 @@ class Settings:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-    AZURE_OPENAI_MODELS = [
-        "o1",             # Vision model
-        "o3-mini",        # Fast text model
-        "o3",             # Full o3 model
-        "gpt-4o"          # Latest multimodal model
-    ]
+    # Azure OpenAI Configuration
+    AZURE_OPENAI_MODELS = {
+        "o1": {
+            "type": "vision",
+            "description": "Multimodal model with image understanding",
+            "capabilities": ["vision", "reasoning_effort"],
+            "max_images": 10,
+            "max_tokens": 128000,
+            "vision_detail": ["low", "high"]
+        },
+        "o3-mini": {
+            "type": "text", 
+            "description": "Fast text model with reasoning control",
+            "capabilities": ["reasoning_effort"],
+            "max_tokens": 16385
+        },
+        "gpt-4o": {
+            "type": "multimodal",
+            "description": "Advanced multimodal model",
+            "capabilities": ["vision"],
+            "max_tokens": 128000,
+            "vision_detail": ["auto", "low", "high"]
+        }
+    }
+    
     AZURE_O1_MAX_IMAGES = int(os.getenv("AZURE_O1_MAX_IMAGES", "10"))
     AZURE_REASONING_EFFORT_ENABLED = (
         os.getenv("AZURE_REASONING_EFFORT_ENABLED", "True").lower() == "true"
     )
-    AZURE_MAX_VISION_DETAIL_TOKENS = int(os.getenv("AZURE_MAX_VISION_DETAIL_TOKENS", "2000"))
+    AZURE_VISION_DETAIL_LEVELS = {  # Token cost per detail level
+        "low": 105,
+        "high": 1295, 
+        "auto": 100
+    }
 
     # JWT Configuration
     JWT_SECRET = os.getenv("JWT_SECRET", "")

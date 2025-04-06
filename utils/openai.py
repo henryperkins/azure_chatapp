@@ -99,8 +99,23 @@ async def validate_azure_params(model_name: str, kwargs: dict) -> None:
 
 async def openai_chat(
     messages: List[Dict[str, str]],
-    model_name: str = "o3-mini",
-    max_completion_tokens: int = 500,
+    model_name: str,
+    **kwargs
+) -> dict:
+    """Route to appropriate provider handler based on model"""
+    if model_name in settings.CLAUDE_MODELS:
+        return await claude_chat(messages, model_name=model_name, **kwargs)
+    elif model_name in settings.AZURE_OPENAI_MODELS:
+        return await azure_chat(messages, model_name=model_name, **kwargs)
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unsupported model: {model_name}. Valid models: {list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())}"
+    )
+
+async def azure_chat(
+    messages: List[Dict[str, str]],
+    model_name: str,
+    max_tokens: int = 500,
     reasoning_effort: Optional[str] = None,
     image_data: Optional[str] = None,
     vision_detail: str = "auto",
