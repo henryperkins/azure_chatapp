@@ -35,16 +35,21 @@ MAX_FILE_BYTES = 1_000_000  # 1 MB
 MIME_TEXT_PLAIN = "text/plain"
 
 
-@router.post("/files", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED, deprecated=True)
+@router.post(
+    "/files",
+    response_model=FileUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    deprecated=True,
+)
 async def upload_file(
     file: UploadFile = File(...),
     purpose: str = "assistants",
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     DEPRECATED: Please use /api/projects/{project_id}/files endpoints instead.
-    
+
     Uploads a file to Azure OpenAI. The file must be:
       - .txt extension
       - ≤ 1MB
@@ -56,7 +61,7 @@ async def upload_file(
     # Rest of the original code...
     raise HTTPException(
         status_code=410,
-        detail="This endpoint is deprecated. Please use /api/projects/{project_id}/files instead."
+        detail="This endpoint is deprecated. Please use /api/projects/{project_id}/files instead.",
     )
 
 
@@ -64,11 +69,11 @@ async def upload_file(
 async def get_file_info(
     file_id: str,
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     DEPRECATED: Please use /api/projects/{project_id}/files/{file_id} endpoints instead.
-    
+
     Gets details for a single file from Azure OpenAI, including status, size, purpose, etc.
     Mirrors the 'Files - Get' reference.
     """
@@ -76,7 +81,7 @@ async def get_file_info(
     # Rest of the original code...
     raise HTTPException(
         status_code=410,
-        detail="This endpoint is deprecated. Please use /api/projects/{project_id}/files/{file_id} instead."
+        detail="This endpoint is deprecated. Please use /api/projects/{project_id}/files/{file_id} instead.",
     )
 
 
@@ -84,17 +89,17 @@ async def get_file_info(
 async def get_file_content(
     file_id: str,
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     DEPRECATED: Please use /api/projects/{project_id}/files/{file_id} endpoints instead.
-    
-    Retrieves the content of the file from Azure OpenAI. 
+
+    Retrieves the content of the file from Azure OpenAI.
     'Files - Get Content' reference.
     """
     # Implementation remains the same...
     # Rest of the original code...
     raise HTTPException(
         status_code=410,
-        detail="This endpoint is deprecated. Please use /api/projects/{project_id}/files/{file_id} instead."
+        detail="This endpoint is deprecated. Please use /api/projects/{project_id}/files/{file_id} instead.",
     )

@@ -192,6 +192,7 @@ function initModelConfig() {
 }
 
 /**
+<<<<<<< HEAD
  * Set up the model selection dropdown
  */
 function setupModelDropdown() {
@@ -553,6 +554,9 @@ function updateModelConfigDisplay() {
 
 /**
  * Get available models for the dropdown
+=======
+ * Get available models for the dropdown (with new Azure OpenAI models)
+>>>>>>> 893aa54b6efe6a8b60fcc130dae053c60222cdf0
  * @returns {Array} List of available models
  */
 function getCurrentModelConfig() {
@@ -659,10 +663,387 @@ function getModelOptions() {
     {
       id: 'gpt-3.5-turbo',
       name: 'GPT-3.5 Turbo',
+<<<<<<< HEAD
       description: 'Fast GPT model for simpler queries',
       maxTokens: 4096
+=======
+      description: 'Fast GPT model for simpler queries'
+    },
+    {
+      id: 'o1',
+      name: 'o1 (Vision)',
+      description: 'Azure OpenAI model with image understanding',
+      supportsVision: true
+    },
+    {
+      id: 'o3-mini',
+      name: 'o3-mini',
+      description: 'Azure OpenAI advanced reasoning model (large context, no vision support)',
+      supportsVision: false
+    },
+    {
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      description: 'Versatile GPT model optimized for chat + vision',
+      supportsVision: true
+>>>>>>> 893aa54b6efe6a8b60fcc130dae053c60222cdf0
     }
   ];
+}
+
+/**
+ * Set up the model selection dropdown
+ */
+function setupModelDropdown() {
+  const modelSelect = document.getElementById("modelSelect");
+  if (!modelSelect) return;
+
+  // Get available models
+  const models = getModelOptions();
+
+  // Clear existing options
+  modelSelect.innerHTML = '';
+
+  // Add models to dropdown
+  models.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = model.name;
+    if (model.description) option.title = model.description;
+    modelSelect.appendChild(option);
+  });
+
+  // Set the current model
+  modelSelect.value = modelConfigState.modelName;
+
+  // Add change handler
+  trackListener(modelSelect, "change", () => {
+    modelConfigState.modelName = modelSelect.value;
+
+    // Check if model supports vision
+    const selectedModel = models.find(m => m.id === modelSelect.value);
+    const visionPanel = document.getElementById('visionPanel');
+    if (visionPanel) {
+      visionPanel.classList.toggle("hidden", !selectedModel?.supportsVision);
+    }
+
+    // Update related UI elements (extended thinking, etc.)
+    const extendedThinkingPanel = document.getElementById("extendedThinkingPanel");
+    if (extendedThinkingPanel) {
+      const supportsExtendedThinking = selectedModel?.supportsExtendedThinking;
+      extendedThinkingPanel.classList.toggle("hidden", !supportsExtendedThinking);
+    }
+
+    // Save and notify changes
+    persistSettings();
+  });
+}
+
+/**
+ * Set up max tokens UI elements
+ */
+function setupMaxTokensUI() {
+  const maxTokensContainer = document.getElementById("maxTokensContainer");
+  if (!maxTokensContainer) return;
+
+  // Create UI elements
+  const maxTokensGroup = document.createElement("div");
+  maxTokensGroup.className = "flex flex-col gap-2";
+
+  // Slider
+  const maxTokensSlider = document.createElement("input");
+  maxTokensSlider.type = "range";
+  maxTokensSlider.id = "maxTokensSlider";
+  maxTokensSlider.min = "100";
+  maxTokensSlider.max = "100000";
+  maxTokensSlider.value = modelConfigState.maxTokens;
+  maxTokensSlider.step = "100";
+  maxTokensSlider.className = "mt-2 flex-1";
+
+  // Number Input
+  const maxTokensInput = document.createElement("input");
+  maxTokensInput.type = "number";
+  maxTokensInput.id = "maxTokensInput";
+  maxTokensInput.min = "100";
+  maxTokensInput.max = "100000";
+  maxTokensInput.value = modelConfigState.maxTokens;
+  maxTokensInput.className = "w-24 px-2 py-1 border rounded";
+
+  // Add elements to container
+  maxTokensContainer.innerHTML = '';
+  maxTokensGroup.appendChild(maxTokensSlider);
+  maxTokensGroup.appendChild(maxTokensInput);
+  maxTokensContainer.appendChild(maxTokensGroup);
+
+  // Add hidden input for form submission
+  const maxTokensHidden = document.createElement("input");
+  maxTokensHidden.type = "hidden";
+  maxTokensHidden.id = "maxTokensHidden";
+  maxTokensHidden.value = maxTokensSlider.value;
+  maxTokensContainer.appendChild(maxTokensHidden);
+
+  // Sync function
+  const syncMaxTokens = (value) => {
+    const clamped = Math.max(100, Math.min(100000, value));
+    maxTokensSlider.value = clamped;
+    maxTokensInput.value = clamped;
+    maxTokensHidden.value = clamped;
+    modelConfigState.maxTokens = clamped;
+    persistSettings();
+  };
+
+  // Event handlers
+  trackListener(maxTokensSlider, "input", () => {
+    syncMaxTokens(maxTokensSlider.value);
+  });
+
+  trackListener(maxTokensInput, "change", () => {
+    syncMaxTokens(maxTokensInput.value);
+  });
+}
+
+/**
+ * Set up reasoning effort UI
+ */
+function setupReasoningUI() {
+  const reasoningPanel = document.getElementById("reasoningPanel");
+  if (!reasoningPanel) return;
+
+  // Clear existing content
+  reasoningPanel.innerHTML = '';
+
+  // Create label
+  const label = document.createElement("label");
+  label.textContent = "Reasoning Effort:";
+  label.className = "block text-sm font-medium dark:text-gray-200";
+  reasoningPanel.appendChild(label);
+
+  // Create slider
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.id = "reasoningEffortRange";
+  slider.min = "1";
+  slider.max = "3";
+  slider.value =
+    modelConfigState.reasoningEffort === "low"
+      ? "1"
+      : modelConfigState.reasoningEffort === "medium"
+      ? "2"
+      : "3";
+  slider.step = "1";
+  slider.className = "mt-2 w-full";
+  reasoningPanel.appendChild(slider);
+
+  // Create output display
+  const sliderOutput = document.createElement("span");
+  sliderOutput.className = "ml-2";
+  reasoningPanel.appendChild(sliderOutput);
+
+  // Update display function
+  const updateSliderOutput = (value) => {
+    if (value === "1") {
+      sliderOutput.textContent = "Low";
+      modelConfigState.reasoningEffort = "low";
+    } else if (value === "2") {
+      sliderOutput.textContent = "Medium";
+      modelConfigState.reasoningEffort = "medium";
+    } else {
+      sliderOutput.textContent = "High";
+      modelConfigState.reasoningEffort = "high";
+    }
+  };
+
+  // Set initial state
+  updateSliderOutput(slider.value);
+
+  // Listen for slider input
+  trackListener(slider, "input", () => {
+    updateSliderOutput(slider.value);
+    persistSettings();
+  });
+}
+
+/**
+ * Set up vision UI elements
+ */
+function setupVisionUI() {
+  const visionPanel = document.getElementById('visionPanel');
+  if (!visionPanel) return;
+
+  // Add vision detail selector if it doesn't exist
+  if (!document.getElementById('visionDetail')) {
+    const visionDetailLabel = document.createElement('div');
+    visionDetailLabel.className = 'mt-2';
+    visionDetailLabel.innerHTML = '<label class="block text-sm font-medium dark:text-gray-200">Image Detail:</label>';
+    visionPanel.appendChild(visionDetailLabel);
+
+    const visionDetailSelect = document.createElement('select');
+    visionDetailSelect.id = 'visionDetail';
+    visionDetailSelect.className = 'w-full px-2 py-1 mt-1 border rounded dark:bg-gray-700 dark:border-gray-600';
+    visionDetailSelect.innerHTML = `
+      <option value="auto">Auto</option>
+      <option value="low">Low Detail</option>
+      <option value="high">High Detail</option>
+    `;
+    visionDetailSelect.value = modelConfigState.visionDetail;
+    visionDetailLabel.appendChild(visionDetailSelect);
+
+    // Change handler
+    trackListener(visionDetailSelect, 'change', () => {
+      modelConfigState.visionDetail = visionDetailSelect.value;
+      persistSettings();
+    });
+  }
+
+  // Set up file input
+  setupVisionFileInput();
+
+  // Determine initial visibility (only for vision-capable models)
+  visionPanel.classList.toggle(
+    'hidden',
+    modelConfigState.modelName !== 'o1' && modelConfigState.modelName !== 'gpt-4o'
+  );
+}
+
+/**
+ * Set up extended thinking UI
+ */
+function setupExtendedThinkingUI() {
+  const extendedThinkingPanel = document.getElementById("extendedThinkingPanel");
+  if (!extendedThinkingPanel) return;
+
+  // Show or hide extendedThinkingPanel based on model
+  const supportsExtendedThinking =
+    modelConfigState.modelName === "claude-3-7-sonnet-20250219" ||
+    modelConfigState.modelName === "claude-3-opus-20240229";
+
+  extendedThinkingPanel.classList.toggle("hidden", !supportsExtendedThinking);
+
+  // Get UI elements
+  const extendedThinkingToggle = document.getElementById("extendedThinking");
+  const thinkingBudgetSelect = document.getElementById("thinkingBudget");
+
+  // Set initial values
+  if (extendedThinkingToggle) {
+    extendedThinkingToggle.checked = modelConfigState.extendedThinking;
+    trackListener(extendedThinkingToggle, "change", () => {
+      modelConfigState.extendedThinking = extendedThinkingToggle.checked;
+      persistSettings();
+    });
+  }
+
+  if (thinkingBudgetSelect) {
+    thinkingBudgetSelect.value = modelConfigState.thinkingBudget;
+    trackListener(thinkingBudgetSelect, "change", () => {
+      modelConfigState.thinkingBudget = parseInt(thinkingBudgetSelect.value, 10);
+      persistSettings();
+    });
+  }
+}
+
+/**
+ * Setup vision file input handler
+ */
+function setupVisionFileInput() {
+  const visionInputEl = document.getElementById('visionFileInput');
+  if (!visionInputEl) return;
+
+  const statusEl = document.getElementById('visionStatus');
+  const previewEl = document.getElementById('visionPreview');
+
+  // Clear any existing onChange
+  visionInputEl.removeEventListener('change', visionInputEl._changeHandler);
+
+  // Convert file to base64
+  async function convertToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  }
+
+  // Handle file selection
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate model
+    if (!["o1", "gpt-4o"].includes(modelConfigState.modelName)) {
+      if (statusEl) statusEl.textContent = 'Vision only works with o1 or gpt-4o model';
+      e.target.value = '';
+      return;
+    }
+
+    // Validate file type
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      if (statusEl) statusEl.textContent = 'Only JPEG/PNG allowed';
+      e.target.value = '';
+      return;
+    }
+
+    // Validate file size
+    if (file.size > 5 * 1024 * 1024) {
+      if (statusEl) statusEl.textContent = 'File must be <5MB';
+      e.target.value = '';
+      return;
+    }
+
+    // Show preview
+    if (previewEl) {
+      previewEl.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.className = 'max-h-32 object-contain mt-2 rounded';
+      previewEl.appendChild(img);
+    }
+
+    // Process image
+    if (statusEl) statusEl.textContent = 'Processing...';
+
+    try {
+      const base64 = await convertToBase64(file);
+      modelConfigState.visionImage = base64;
+      window.MODEL_CONFIG.visionImage = base64;
+
+      if (statusEl) statusEl.textContent = 'Ready for analysis';
+    } catch (err) {
+      if (statusEl) statusEl.textContent = 'Error processing image';
+      console.error('Error processing vision image:', err);
+    }
+  };
+
+  visionInputEl._changeHandler = handleFileChange;
+  trackListener(visionInputEl, 'change', handleFileChange);
+}
+
+/**
+ * Update the model configuration display
+ */
+function updateModelConfigDisplay() {
+  // Get display elements
+  const currentModelNameEl = document.getElementById("currentModelName");
+  const currentMaxTokensEl = document.getElementById("currentMaxTokens");
+  const currentReasoningEl = document.getElementById("currentReasoning");
+  const visionEnabledStatusEl = document.getElementById("visionEnabledStatus");
+
+  // Update display values if elements exist
+  if (currentModelNameEl) {
+    currentModelNameEl.textContent = modelConfigState.modelName;
+  }
+
+  if (currentMaxTokensEl) {
+    currentMaxTokensEl.textContent = `${modelConfigState.maxTokens} tokens`;
+  }
+
+  if (currentReasoningEl) {
+    currentReasoningEl.textContent = modelConfigState.reasoningEffort;
+  }
+
+  if (visionEnabledStatusEl) {
+    visionEnabledStatusEl.textContent = modelConfigState.visionEnabled ? "Enabled" : "Disabled";
+  }
 }
 
 /**
@@ -682,7 +1063,7 @@ function persistSettings() {
     // Notify other components
     modelConfigState.notifyChanges();
 
-    // Update loading indicator if present
+    // Loading indicator (if present)
     const loadingEl = document.getElementById('modelConfigLoading');
     if (loadingEl) {
       loadingEl.classList.remove('hidden');
@@ -693,7 +1074,7 @@ function persistSettings() {
   }
 }
 
-// Export functions
+// Exported functions
 window.initModelConfig = initModelConfig;
 window.initializeModelDropdown = function () {
   setupModelDropdown();

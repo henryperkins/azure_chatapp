@@ -116,6 +116,51 @@ class VectorDB:
         self.index = None
         self.id_map: List[str] = []  # Maps FAISS internal indices to document IDs
 
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test the vector database connection and basic functionality.
+        
+        Returns:
+            Dict with connection status and metrics including:
+            - is_healthy (bool): Overall health status
+            - index_count (int): Number of vectors in index
+            - model_ready (bool): Whether embedding model is available
+            - faiss_ready (bool): Whether FAISS is available and initialized
+        """
+        try:
+            # Test embedding model
+            model_ready = (
+                self.embedding_model is not None
+                or not SENTENCE_TRANSFORMERS_AVAILABLE
+            )
+            
+            # Test FAISS if configured to use it
+            faiss_ready = True
+            if self.use_faiss:
+                faiss_ready = FAISS_AVAILABLE and self.faiss is not None
+            
+            # Get index count
+            index_count = len(self.vectors)
+            
+            # Overall health status
+            is_healthy = model_ready and (not self.use_faiss or faiss_ready)
+            
+            return {
+                "is_healthy": is_healthy,
+                "index_count": index_count,
+                "model_ready": model_ready,
+                "faiss_ready": faiss_ready,
+            }
+            
+        except Exception as e:
+            logger.error(f"Connection test failed: {str(e)}")
+            return {
+                "is_healthy": False,
+                "index_count": 0,
+                "model_ready": False,
+                "faiss_ready": False,
+                "error": str(e),
+            }
+
     def get_embedding_dimension(self) -> int:
         """Get the dimension of embeddings for the current model."""
         if self.embedding_model and hasattr(

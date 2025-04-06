@@ -6,6 +6,7 @@ Centralizes message creation, validation, and processing logic.
 
 This version has been updated to use db_utils.py functions instead of direct DB access.
 """
+
 import logging
 import base64
 from typing import Dict, Optional, List
@@ -27,16 +28,16 @@ logger = logging.getLogger(__name__)
 async def validate_image_data(image_data: Optional[str]) -> bool:
     """
     Validate base64 image data for vision API.
-    
+
     Args:
         image_data: Base64 encoded image data
-        
+
     Returns:
         True if valid, raises HTTPException otherwise
     """
     if not image_data:
         return True
-        
+
     try:
         base64_str = extract_base64_data(image_data)
         base64.b64decode(base64_str, validate=True)
@@ -56,24 +57,22 @@ async def validate_websocket_message(data: dict) -> dict:
         raise ValueError("Invalid message role - must be 'user' or 'system'")
     return {
         "content": data["content"].strip(),
-        "role": data.get("role", "user").lower()
+        "role": data.get("role", "user").lower(),
     }
 
+
 async def create_user_message(
-    conversation_id: UUID,
-    content: str,
-    role: str,
-    db: AsyncSession
+    conversation_id: UUID, content: str, role: str, db: AsyncSession
 ) -> Message:
     """
     Create a new user or system message for a conversation.
-    
+
     Args:
         conversation_id: Conversation ID
         content: Message content
         role: Message role (user, system)
         db: Database session
-        
+
     Returns:
         Created Message object
     """
@@ -81,21 +80,21 @@ async def create_user_message(
         # Create message
         if not content:
             raise ValueError("Message content cannot be empty")
-            
+
         message = Message(
             conversation_id=conversation_id,
             role=role.lower().strip(),
-            content=content.strip()
+            content=content.strip(),
         )
-        
+
         # Save using utility function from db_utils
         await save_model(db, message)
-        
+
         logger.info(f"Message {message.id} saved for conversation {conversation_id}")
-        
+
         # Check token limit for conversation context
         await token_limit_check(str(conversation_id), db)
-        
+
         return message
     except Exception as e:
         await db.rollback()
@@ -104,18 +103,16 @@ async def create_user_message(
 
 
 async def get_conversation_messages(
-    conversation_id: UUID,
-    db: AsyncSession,
-    include_system_prompt: bool = True
+    conversation_id: UUID, db: AsyncSession, include_system_prompt: bool = True
 ) -> List[Dict[str, str]]:
     """
     Get all messages for a conversation formatted for OpenAI API.
-    
+
     Args:
         conversation_id: Conversation ID
         db: Database session
         include_system_prompt: Whether to include custom instructions from project
-        
+
     Returns:
         List of message dictionaries formatted for OpenAI API
     """
@@ -123,36 +120,36 @@ async def get_conversation_messages(
     conversation = await get_by_id(db, Conversation, conversation_id)
     if not conversation:
         raise HTTPException(404, "Conversation not found")
-    
+
     # Get all messages using function from db_utils
     messages = await get_all_by_condition(
         db,
         Message,
         Message.conversation_id == conversation_id,
-        order_by=Message.created_at.asc()
+        order_by=Message.created_at.asc(),
     )
-    
+
     # Format messages for API
     msg_dicts = [{"role": str(m.role), "content": str(m.content)} for m in messages]
-    
+
     # Add custom instructions if the conversation has a project
     if include_system_prompt and conversation.project_id:
         project = await get_by_id(db, Project, UUID(str(conversation.project_id)))
         if project and project.custom_instructions:
-            msg_dicts.insert(0, {"role": "system", "content": project.custom_instructions})
-    
+            msg_dicts.insert(
+                0, {"role": "system", "content": project.custom_instructions}
+            )
+
     # Manage context to prevent token overflow
     return await manage_context(msg_dicts)
 
 
 async def update_project_token_usage(
-    conversation: Conversation,
-    token_count: int,
-    db: AsyncSession
+    conversation: Conversation, token_count: int, db: AsyncSession
 ) -> None:
     """
     Update the token usage for a project.
-    
+
     Args:
         conversation: Conversation object
         token_count: Number of tokens to add
@@ -160,7 +157,7 @@ async def update_project_token_usage(
     """
     if not conversation.project_id:
         return
-        
+
     project = await get_by_id(db, Project, UUID(str(conversation.project_id)))
     if project:
         project.token_usage += token_count

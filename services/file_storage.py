@@ -8,20 +8,14 @@ Features:
     cloud dependencies, Consistent interface
     for saving, retrieving, and deleting files
 """
+
 import os
 import hashlib
 import logging
 import tempfile
 from pathlib import Path
 from io import IOBase
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    Union,
-    cast,
-    BinaryIO
-)
+from typing import Any, Dict, Optional, Union, cast, BinaryIO
 from uuid import UUID
 
 # Local imports
@@ -63,6 +57,7 @@ else:
 # ----------------------------------------------------
 FileContent = Union[bytes, bytearray, memoryview, BinaryIO]
 
+
 def ensure_bytes(file_content: FileContent) -> bytes:
     """
     Convert various input types to raw bytes:
@@ -83,7 +78,9 @@ def ensure_bytes(file_content: FileContent) -> bytes:
             file_content.seek(0)
         return content
 
-    raise TypeError("file_content must be bytes-like or a file-like object returning bytes")
+    raise TypeError(
+        "file_content must be bytes-like or a file-like object returning bytes"
+    )
 
 
 def format_bytes(size: float) -> str:
@@ -102,6 +99,7 @@ class FileStorage:
     """
     Handles storage operations for files, supporting local and cloud (Azure, S3).
     """
+
     def __init__(
         self,
         storage_type: str = "local",
@@ -128,18 +126,27 @@ class FileStorage:
                     "Install with 'pip install azure-storage-blob'"
                 )
             if not azure_connection_string or not azure_container_name:
-                raise ValueError("Must provide azure_connection_string and azure_container_name.")
-            
+                raise ValueError(
+                    "Must provide azure_connection_string and azure_container_name."
+                )
+
             # Import directly to ensure we have the correct class
             from azure.storage.blob.aio import BlobServiceClient
-            self.blob_service_client = BlobServiceClient.from_connection_string(azure_connection_string)
+
+            self.blob_service_client = BlobServiceClient.from_connection_string(
+                azure_connection_string
+            )
             self.azure_container_name = azure_container_name
-            self.container_client = self.blob_service_client.get_container_client(azure_container_name)
+            self.container_client = self.blob_service_client.get_container_client(
+                azure_container_name
+            )
 
         # ----- AWS S3 -----
         elif self.storage_type == "s3":
             if not AWS_AVAILABLE:
-                raise ImportError("AWS dependencies not installed. Install with 'pip install boto3'")
+                raise ImportError(
+                    "AWS dependencies not installed. Install with 'pip install boto3'"
+                )
             if not all([aws_access_key, aws_secret_key, aws_bucket_name, aws_region]):
                 raise ValueError("Must provide AWS credentials, bucket, and region.")
 
@@ -148,7 +155,7 @@ class FileStorage:
                 "s3",
                 aws_access_key_id=aws_access_key,
                 aws_secret_access_key=aws_secret_key,
-                region_name=aws_region
+                region_name=aws_region,
             )
         else:
             raise ValueError(f"Unsupported storage type: {storage_type}")
@@ -170,14 +177,20 @@ class FileStorage:
         # Create a hash-based prefix
         file_hash = hashlib.sha256(content).hexdigest()[:12]
         prefix = serialize_uuid(project_id) if project_id else None
-        storage_filename = f"{prefix}_{file_hash}_{filename}" if prefix else f"{file_hash}_{filename}"
+        storage_filename = (
+            f"{prefix}_{file_hash}_{filename}" if prefix else f"{file_hash}_{filename}"
+        )
 
         if self.storage_type == "local":
             return await self._save_bytes_local(content, storage_filename)
         elif self.storage_type == "azure":
-            return await self._save_bytes_azure(content, storage_filename, content_type, metadata)
+            return await self._save_bytes_azure(
+                content, storage_filename, content_type, metadata
+            )
         elif self.storage_type == "s3":
-            return await self._save_bytes_s3(content, storage_filename, content_type, metadata)
+            return await self._save_bytes_s3(
+                content, storage_filename, content_type, metadata
+            )
         else:
             raise ValueError(f"Unsupported storage type: {self.storage_type}")
 
@@ -185,7 +198,7 @@ class FileStorage:
         # Ensure directory exists - including any nested directories
         file_path = Path(self.local_path) / filename
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with file_path.open("wb") as f:
             f.write(content)
             f.flush()
@@ -203,6 +216,7 @@ class FileStorage:
         metadata: Optional[Dict[str, Any]],
     ) -> str:
         from azure.storage.blob import ContentSettings as AzureContentSettings
+
         blob_client = self.container_client.get_blob_client(filename)
 
         content_settings = None
@@ -216,7 +230,7 @@ class FileStorage:
             content,
             overwrite=True,
             content_settings=content_settings,
-            metadata=str_metadata
+            metadata=str_metadata,
         )
         return f"azure://{self.azure_container_name}/{filename}"
 
@@ -247,7 +261,7 @@ class FileStorage:
                 temp_file_path,
                 self.aws_bucket_name,
                 filename,
-                ExtraArgs=extra_args
+                ExtraArgs=extra_args,
             )
         finally:
             if os.path.exists(temp_file_path):
@@ -278,6 +292,7 @@ class FileStorage:
         # ----- S3 -----
         elif self.storage_type == "s3" and file_path.startswith("s3://"):
             import asyncio
+
             parts = file_path.replace("s3://", "").split("/", 1)
             if len(parts) != 2 or parts[0] != self.aws_bucket_name:
                 raise ValueError(f"Invalid S3 URL: {file_path}")
@@ -288,7 +303,7 @@ class FileStorage:
                     self.s3_client.download_fileobj,
                     self.aws_bucket_name,
                     s3_key,
-                    temp_file
+                    temp_file,
                 )
                 temp_file.seek(0)
                 return temp_file.read()
@@ -332,6 +347,7 @@ class FileStorage:
         # ----- S3 -----
         elif self.storage_type == "s3" and file_path.startswith("s3://"):
             import asyncio
+
             parts = file_path.replace("s3://", "").split("/", 1)
             if len(parts) != 2 or parts[0] != self.aws_bucket_name:
                 raise ValueError(f"Invalid S3 URL: {file_path}")
@@ -340,7 +356,7 @@ class FileStorage:
                 await asyncio.to_thread(
                     self.s3_client.delete_object,
                     Bucket=self.aws_bucket_name,
-                    Key=s3_key
+                    Key=s3_key,
                 )
                 return True
             except Exception as e:
@@ -362,7 +378,9 @@ async def get_storage_config() -> Dict[str, Any]:
     return {
         "storage_type": getattr(settings, "FILE_STORAGE_TYPE", "local"),
         "local_path": getattr(settings, "LOCAL_UPLOADS_DIR", "./uploads"),
-        "azure_connection_string": getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None),
+        "azure_connection_string": getattr(
+            settings, "AZURE_STORAGE_CONNECTION_STRING", None
+        ),
         "azure_container_name": getattr(settings, "AZURE_STORAGE_CONTAINER", None),
         "aws_access_key": getattr(settings, "AWS_ACCESS_KEY", None),
         "aws_secret_key": getattr(settings, "AWS_SECRET_KEY", None),
@@ -382,20 +400,15 @@ def get_file_storage(config: Dict[str, Any]) -> FileStorage:
 # Simpler top-level functions
 # ----------------------------------------------------
 async def save_file_to_storage(
-    file_content: FileContent,
-    filename: str,
-    project_id: Optional[UUID] = None
+    file_content: FileContent, filename: str, project_id: Optional[UUID] = None
 ) -> str:
     """
     Convenience function to save a file using the global config.
     """
     config = await get_storage_config()
     storage = get_file_storage(config)
-    return await storage.save_file(
-        file_content, 
-        filename, 
-        project_id=project_id
-    )
+    return await storage.save_file(file_content, filename, project_id=project_id)
+
 
 async def get_file_from_storage(file_path: str) -> bytes:
     """
@@ -404,6 +417,7 @@ async def get_file_from_storage(file_path: str) -> bytes:
     config = await get_storage_config()
     storage = get_file_storage(config)
     return await storage.get_file(file_path)
+
 
 async def delete_file_from_storage(file_path: str) -> bool:
     """

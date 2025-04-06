@@ -213,12 +213,11 @@ async def claude_chat(
     if image_data and model_config.get("supports_vision"):
         # Support both single image string and array of images
         image_list = [image_data] if isinstance(image_data, str) else image_data
-        
+
         # Validate number of images
         if len(image_list) > 100:
             raise HTTPException(
-                status_code=400,
-                detail="Maximum 100 images per request"
+                status_code=400, detail="Maximum 100 images per request"
             )
 
         # Process each image
@@ -226,62 +225,70 @@ async def claude_chat(
         for img in image_list:
             if not isinstance(img, str):
                 raise HTTPException(
-                    status_code=400,
-                    detail="Image data must be base64 string or URL"
+                    status_code=400, detail="Image data must be base64 string or URL"
                 )
 
             # Handle URL-based images
-            if img.startswith(('http://', 'https://')):
-                image_messages.append({
-                    "type": "image",
-                    "source": {
-                        "type": "url",
-                        "url": img
-                    }
-                })
+            if img.startswith(("http://", "https://")):
+                image_messages.append(
+                    {"type": "image", "source": {"type": "url", "url": img}}
+                )
             # Handle base64 encoded images
             else:
                 # Extract media type and data
-                if ';base64,' in img:
-                    media_type, data = img.split(';base64,')
-                    media_type = media_type.replace('data:', '')
+                if ";base64," in img:
+                    media_type, data = img.split(";base64,")
+                    media_type = media_type.replace("data:", "")
                 else:
-                    media_type = 'image/jpeg'  # default if not specified
+                    media_type = "image/jpeg"  # default if not specified
                     data = img
 
                 # Validate media type
-                if not any(media_type.startswith(f'image/{fmt}') for fmt in ['jpeg', 'png', 'gif', 'webp']):
+                if not any(
+                    media_type.startswith(f"image/{fmt}")
+                    for fmt in ["jpeg", "png", "gif", "webp"]
+                ):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Unsupported image format: {media_type}. Must be JPEG, PNG, GIF or WebP"
+                        detail=f"Unsupported image format: {media_type}. Must be JPEG, PNG, GIF or WebP",
                     )
 
-                image_messages.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": media_type,
-                        "data": data
+                image_messages.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": data,
+                        },
                     }
-                })
+                )
 
         # Get last user text message if exists
         last_user_text = next(
-            (msg["content"] for msg in reversed(messages) if msg["role"] == "user" and isinstance(msg["content"], str)),
-            ""
+            (
+                msg["content"]
+                for msg in reversed(messages)
+                if msg["role"] == "user" and isinstance(msg["content"], str)
+            ),
+            "",
         )
 
         # Format messages with images
         messages = [
-            msg for msg in messages
+            msg
+            for msg in messages
             if not (msg["role"] == "user" and isinstance(msg["content"], str))
-        ] + [{
-            "role": "user",
-            "content": image_messages + [{
-                "type": "text",
-                "text": last_user_text
-            }] if last_user_text else image_messages
-        }]
+        ] + [
+            {
+                "role": "user",
+                "content": (
+                    image_messages + [{"type": "text", "text": last_user_text}]
+                    if last_user_text
+                    else image_messages
+                ),
+            }
+        ]
 
     # Enforce streaming for large responses
     if max_tokens > 21333 and not stream:

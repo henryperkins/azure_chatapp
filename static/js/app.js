@@ -830,6 +830,8 @@ function updateAuthUI(authenticated, username = null) {
   const userStatus = ELEMENTS.USER_STATUS || document.getElementById('userStatus');
   const projectPanel = ELEMENTS.PROJECT_MANAGER_PANEL || document.getElementById('projectManagerPanel');
   const loginMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || document.getElementById('loginRequiredMessage');
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
 
   if (authenticated) {
     // Logged in UI
@@ -841,7 +843,13 @@ function updateAuthUI(authenticated, username = null) {
       userStatus.classList.remove('text-gray-500');
       userStatus.classList.add('text-green-500');
     }
+    // Ensure auth dropdown and forms are hidden
     authDropdown?.classList.add('hidden');
+    authDropdown?.classList.remove('slide-in');
+    loginForm?.reset();
+    loginForm?.classList.add('hidden');
+    registerForm?.reset();
+    registerForm?.classList.add('hidden');
     projectPanel?.classList.remove('hidden');
     loginMsg?.classList.add('hidden');
 

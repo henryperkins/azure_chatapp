@@ -35,7 +35,6 @@ from auth import router as auth_router
 from routes.file_upload import router as file_upload_router
 from routes.projects.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
-from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
 from routes.projects.artifacts import router as project_artifacts_router
 
@@ -251,18 +250,20 @@ app.include_router(
 )
 
 # Manually add WebSocket routes with /api/chat prefix to match HTTP routes
-app.routes.extend([
-    WebSocketRoute(
-        "/api/chat/conversations/{conversation_id}/ws",
-        unified_conversations.websocket_chat_endpoint,
-        name="standalone_websocket_chat",
-    ),
-    WebSocketRoute(
-        "/api/chat/projects/{project_id}/conversations/{conversation_id}/ws",
-        unified_conversations.websocket_chat_endpoint,
-        name="project_websocket_chat",
-    )
-])
+app.routes.extend(
+    [
+        WebSocketRoute(
+            "/api/chat/conversations/{conversation_id}/ws",
+            unified_conversations.websocket_chat_endpoint,
+            name="standalone_websocket_chat",
+        ),
+        WebSocketRoute(
+            "/api/chat/projects/{project_id}/conversations/{conversation_id}/ws",
+            unified_conversations.websocket_chat_endpoint,
+            name="project_websocket_chat",
+        ),
+    ]
+)
 
 
 # --------------------------------------------------

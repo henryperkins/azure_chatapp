@@ -5,6 +5,7 @@ Centralized authentication utilities for the application.
 Handles JWT token generation/validation and user authentication for both
 HTTP and WebSocket connections.
 """
+
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
@@ -46,28 +47,37 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
     to_encode.update({"exp": expire})
     encoded_jwt = encode(
-        to_encode, 
+        to_encode,
         JWT_SECRET,
         algorithm=JWT_ALGORITHM,
         headers={
             "kid": settings.JWT_KEY_ID,  # Key rotation support
-            "alg": JWT_ALGORITHM
-        }
+            "alg": JWT_ALGORITHM,
+        },
     )
-    logger.debug(f"Access token created for user: {data.get('sub')}, expires in {expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)}, jti: {data.get('jti')}")
+    logger.debug(
+        f"Access token created for user: {data.get('sub')}, expires in {expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)}, jti: {data.get('jti')}"
+    )
     return encoded_jwt
 
 
-async def verify_token(token: str, expected_type: Optional[str] = None, db: Optional[AsyncSession] = None, request: Optional[Request] = None) -> Dict[str, Any]:
+async def verify_token(
+    token: str,
+    expected_type: Optional[str] = None,
+    db: Optional[AsyncSession] = None,
+    request: Optional[Request] = None,
+) -> Dict[str, Any]:
     """
     Verify and decode a JWT token with enhanced debugging.
 
     Args:
         token: JWT token to verify
-        expected_type: Optional token type to validate 
+        expected_type: Optional token type to validate
         db: Optional database session for checking blacklisted tokens
 
     Returns:
@@ -78,17 +88,21 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
     """
     # Add additional logging for debugging
     if request:
-        logger.debug(f"Verifying token from source: {token[:10]}... (cookie: {'access_token' in request.cookies})")
+        logger.debug(
+            f"Verifying token from source: {token[:10]}... (cookie: {'access_token' in request.cookies})"
+        )
     # Initialize variables that may be referenced in error handling
     decoded = None
     token_id = None
-    
+
     try:
         decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
         # Validate token type if specified
         if expected_type and decoded.get("type") != expected_type:
-            logger.warning(f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}. Token type: {decoded.get('type')}, Expected type: {expected_type}")
+            logger.warning(
+                f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}. Token type: {decoded.get('type')}, Expected type: {expected_type}"
+            )
             raise HTTPException(status_code=401, detail="Invalid token type")
 
         # Check if token is revoked in memory for quick check
@@ -123,22 +137,30 @@ async def verify_token(token: str, expected_type: Optional[str] = None, db: Opti
             if user:
                 current_version = user.token_version or 0
                 if token_version is None or token_version < current_version:
-                    logger.warning(f"Token version mismatch for {username}: "
-                                  f"Token version {token_version} < "
-                                  f"User version {current_version}")
-                    raise HTTPException(status_code=401, detail="Token has been invalidated")
+                    logger.warning(
+                        f"Token version mismatch for {username}: "
+                        f"Token version {token_version} < "
+                        f"User version {current_version}"
+                    )
+                    raise HTTPException(
+                        status_code=401, detail="Token has been invalidated"
+                    )
 
-        logger.debug(f"Token verification successful for jti: {token_id}, user: {username}")
+        logger.debug(
+            f"Token verification successful for jti: {token_id}, user: {username}"
+        )
         return decoded
 
     except ExpiredSignatureError:
         now = datetime.utcnow().timestamp()
-        exp_time = decoded.get('exp') if decoded else None
+        exp_time = decoded.get("exp") if decoded else None
         diff = now - exp_time if exp_time else None
         logger.warning(
             f"Token expired - jti: {token_id}, "
             f"exp: {exp_time}, now: {now}, "
-            f"diff: {diff}s" if diff is not None else "diff: N/A"
+            f"diff: {diff}s"
+            if diff is not None
+            else "diff: N/A"
         )
         raise HTTPException(status_code=401, detail="Token has expired")
     except InvalidTokenError as e:
@@ -176,10 +198,10 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
     result = await db.execute(query)
     valid_jtis = {row[0] for row in result.fetchall()}
-    
+
     # Update in-memory list to match database (removes expired entries)
     REVOCATION_LIST = valid_jtis
-    
+
     if deleted_count > 0:
         logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
 
@@ -187,9 +209,7 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
 
 async def validate_project_membership(
-    user: User, 
-    project_id: UUID, 
-    db: AsyncSession
+    user: User, project_id: UUID, db: AsyncSession
 ) -> Project:
     """Full-stack validation for project access including membership check"""
     # First verify basic project existence/ownership
@@ -198,7 +218,7 @@ async def validate_project_membership(
     # Then check explicit membership
     if project.is_public:
         return project
-        
+
     result = await db.execute(
         select(ProjectUserAssociation)
         .where(ProjectUserAssociation.user_id == user.id)
@@ -209,6 +229,7 @@ async def validate_project_membership(
         raise HTTPException(status_code=403, detail="Not a project member")
 
     return project
+
 
 async def load_revocation_list(db: AsyncSession) -> None:
     """
@@ -238,23 +259,21 @@ def extract_token(request_or_websocket):
         token = request_or_websocket.cookies.get("access_token")
         if token:
             return token
-    
+
     # Then check Authorization header
     auth_header = request_or_websocket.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         return auth_header[7:]  # Remove "Bearer " prefix
-    
+
     # Finally check query params for WebSockets
     if isinstance(request_or_websocket, WebSocket):
         return request_or_websocket.query_params.get("token")
-    
+
     return None
 
 
 async def get_user_from_token(
-    token: str,
-    db: AsyncSession,
-    expected_type: Optional[str] = "access"
+    token: str, db: AsyncSession, expected_type: Optional[str] = "access"
 ) -> User:
     """
     Get user from a token.
@@ -276,14 +295,18 @@ async def get_user_from_token(
     username = decoded.get("sub")
     if not username:
         logger.warning("Token missing 'sub' claim in payload")
-        raise HTTPException(status_code=401, detail="Invalid token payload: missing subject")
+        raise HTTPException(
+            status_code=401, detail="Invalid token payload: missing subject"
+        )
 
     # Get user from database
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalars().first()
 
     if not user:
-        logger.warning(f"User with username '{username}' from token not found in database")
+        logger.warning(
+            f"User with username '{username}' from token not found in database"
+        )
         raise HTTPException(status_code=401, detail="User not found")
 
     if not user.is_active:
@@ -310,8 +333,7 @@ async def get_user_from_token(
 
 
 async def get_current_user_and_token(
-    request: Request,
-    db: AsyncSession = Depends(get_async_session)
+    request: Request, db: AsyncSession = Depends(get_async_session)
 ) -> User:
     """
     FastAPI dependency that extracts and validates JWT token from request,
@@ -344,8 +366,7 @@ async def get_current_user_and_token(
 
 
 async def authenticate_websocket(
-    websocket: WebSocket,
-    db: AsyncSession
+    websocket: WebSocket, db: AsyncSession
 ) -> Tuple[bool, Optional[User]]:
     """
     Authenticate a WebSocket connection.
@@ -367,15 +388,20 @@ async def authenticate_websocket(
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except Exception as e:
             logger.error(f"Error closing websocket: {e}")
-        logger.debug("WebSocket connection rejected - No token. Headers: %s, Query Params: %s", 
-                    websocket.headers, websocket.query_params)
+        logger.debug(
+            "WebSocket connection rejected - No token. Headers: %s, Query Params: %s",
+            websocket.headers,
+            websocket.query_params,
+        )
         return False, None
 
     # Validate token and get user
     try:
         user = await get_user_from_token(token, db, "access")
         # Log successful authentication
-        logger.info(f"WebSocket authenticated for user: {user.id}, username: {user.username}")
+        logger.info(
+            f"WebSocket authenticated for user: {user.id}, username: {user.username}"
+        )
         return True, user
     except Exception as e:
         logger.warning(f"WebSocket authentication failed: {str(e)}")

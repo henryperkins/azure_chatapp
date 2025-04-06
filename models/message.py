@@ -4,6 +4,7 @@ message.py
 Defines the Message model for storing messages associated with a Conversation.
 Tracks role ("user", "assistant", "system"), content, metadata for tokens.
 """
+
 from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, event, CheckConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -14,12 +15,12 @@ from datetime import datetime
 from jsonschema import ValidationError, validate
 from db import Base
 
+
 class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('user', 'assistant', 'system')",
-            name="valid_message_roles"
+            "role IN ('user', 'assistant', 'system')", name="valid_message_roles"
         ),
     )
 
@@ -27,34 +28,42 @@ class Message(Base):
         UUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
-        index=True
+        index=True,
     )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     role: Mapped[str] = mapped_column(
-        String, 
+        String,
         nullable=False,
         comment="Message role: user, assistant, or system",
-        server_default="user"
+        server_default="user",
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True), default=dict)
-    context_used: Mapped[Optional[dict]] = mapped_column(
-        JSONB(none_as_null=True),
-        comment="KB context actually used in this message"
+    extra_data: Mapped[Optional[dict]] = mapped_column(
+        JSONB(none_as_null=True), default=dict
     )
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"), nullable=False)
-    
+    context_used: Mapped[Optional[dict]] = mapped_column(
+        JSONB(none_as_null=True), comment="KB context actually used in this message"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
+
     conversation = relationship("Conversation", back_populates="messages")
-    
+
     def __repr__(self):
         return f"<Message #{self.id} role={self.role}, conversation_id={self.conversation_id}>"
-    
+
     def get_metadata_dict(self):
         return self.extra_data or {}
 
@@ -66,12 +75,13 @@ class Message(Base):
             "summary": {"type": "boolean"},
             "thinking": {"type": "string"},
             "redacted_thinking": {"type": "string"},
-            "has_thinking": {"type": "boolean"}
-        }
+            "has_thinking": {"type": "boolean"},
+        },
     }
 
+
 # Attach the 'set' event to the Message.extra_data attribute
-@event.listens_for(Message.extra_data, 'set', retval=True)
+@event.listens_for(Message.extra_data, "set", retval=True)
 def validate_message_metadata(target, value, oldvalue, initiator):
     if value:
         try:

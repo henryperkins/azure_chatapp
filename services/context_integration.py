@@ -16,22 +16,23 @@ from utils.context import estimate_token_count
 
 logger = logging.getLogger(__name__)
 
+
 async def augment_with_knowledge(
     conversation_id: UUID,
     user_message: str,
     db: AsyncSession,
     max_context_tokens: int = 2000,  # Default token budget for KB context
-    model_config: Dict[str, Any] = None
+    model_config: Dict[str, Any] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieves and formats relevant knowledge for a conversation.
-    
+
     Args:
         conversation_id: ID of the conversation
         user_message: The user's message text
         db: Database session
         max_context_tokens: Optional token limit for context
-        
+
     Returns:
         List of message dicts with injected knowledge context
     """
@@ -39,7 +40,9 @@ async def augment_with_knowledge(
 
     try:
         # Load conversation with project relationship
-        conversation = await db.get(Conversation, conversation_id, options=[joinedload(Conversation.project)])
+        conversation = await db.get(
+            Conversation, conversation_id, options=[joinedload(Conversation.project)]
+        )
         if not conversation or not conversation.project_id:
             logger.warning(f"Conversation {conversation_id} has no project")
             return []  # No KB for standalone conversations
@@ -55,11 +58,11 @@ async def augment_with_knowledge(
             # Search knowledge base
             search_results = await search_project_context(
                 project_id=UUID(str(conversation.project_id)),
-                query=user_message, 
+                query=user_message,
                 db=db,
-                top_k=5  # Default to 5 results
+                top_k=5,  # Default to 5 results
             )
-            
+
             if not search_results.get("results"):
                 return []
         except Exception as e:
@@ -71,13 +74,15 @@ async def augment_with_knowledge(
         total_tokens = 0
         seen_sources = set()
 
-        for result in sorted(search_results["results"], key=lambda x: x.get("score", 0), reverse=True):
+        for result in sorted(
+            search_results["results"], key=lambda x: x.get("score", 0), reverse=True
+        ):
             if total_tokens >= max_context_tokens:
                 break
 
             text = result["text"]
             source = result.get("metadata", {}).get("file_name", "unknown")
-            
+
             # Dedupe similar content from same source
             source_key = f"{source}:{hash(text) % 10000}"
             if source_key in seen_sources:
@@ -85,16 +90,14 @@ async def augment_with_knowledge(
             seen_sources.add(source_key)
 
             # Calculate tokens and check budget
-            result_tokens = estimate_token_count([
-                {"role": "system", "content": text}
-            ])
+            result_tokens = estimate_token_count([{"role": "system", "content": text}])
             if total_tokens + result_tokens > max_context_tokens:
                 continue
 
             # Get file_id safely
             metadata = result.get("metadata", {})
             file_id = metadata.get("file_id") if metadata else None
-            
+
             # Format as system message with metadata
             context_msg = {
                 "role": "system",
@@ -108,30 +111,32 @@ async def augment_with_knowledge(
                     "chunk_index": metadata.get("chunk_index") if metadata else None,
                     # Add thinking validation fields
                     "thinking_validated": False,
-                    "redacted_thinking": None
-                }
+                    "redacted_thinking": None,
+                },
             }
-            
+
             # Validate thinking budget if enabled
             if model_config and model_config.get("extended_thinking"):
                 if result_tokens < 1024:
-                    raise ValueError(f"Thinking budget too small (min 1024 tokens, got {result_tokens})")
+                    raise ValueError(
+                        f"Thinking budget too small (min 1024 tokens, got {result_tokens})"
+                    )
                 context_msg["metadata"]["thinking_budget"] = result_tokens
-        
+
                 # Add signature verification placeholder
                 context_msg["metadata"]["requires_signature_verification"] = True
             context_messages.append(context_msg)
             total_tokens += result_tokens
-        
+
         # Store search results in conversation
         conversation.search_results = {
             "query": user_message,
             "results": search_results["results"],
-            "token_count": total_tokens
+            "token_count": total_tokens,
         }
-        
+
         return context_messages
-        
+
     except Exception as e:
         logger.error(f"Error augmenting with knowledge: {str(e)}")
         return []
