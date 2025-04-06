@@ -110,6 +110,19 @@ const TokenManager = {
    * Uses concurrency guard in sessionStorage to prevent parallel refresh calls.
    */
   async refreshTokens() {
+    // Skip if already in progress
+    if (refreshMutex) {
+      return new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (!refreshMutex) {
+            clearInterval(checkInterval);
+            resolve(!!this.accessToken);
+          }
+        }, 100);
+      });
+    }
+    
+    refreshMutex = true;
     try {
       if (AUTH_DEBUG) {
         console.debug('[Auth] Starting token refresh');
@@ -180,6 +193,8 @@ const TokenManager = {
         throw new Error('Session expired. Please login again.');
       }
       throw error;
+    } finally {
+      refreshMutex = false;
     }
     return false;
   }
@@ -248,12 +263,109 @@ window.auth = {
     }
   }
 },
-  verify: verifyAuthState,
+  verify: verifyAuthState, // @deprecated - use isAuthenticated instead
   updateStatus: updateAuthStatus,
   login: loginUser,
   logout: logout,
   manager: TokenManager,
-  isInitialized: false
+  isInitialized: false,
+  isAuthenticated: async function(options = {}) {
+    const { skipCache = false, forceVerify = false } = options;
+    
+    // Fast path: check memory state if cache is valid
+    if (!skipCache && authVerificationCache.isValid()) {
+      return authVerificationCache.result;
+    }
+    
+    // Check tokens in memory first
+    if (!TokenManager.accessToken) {
+      // Rehydrate from sessionStorage if available
+      const authState = JSON.parse(sessionStorage.getItem('auth_state'));
+      if (authState?.accessToken) {
+        TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+      } else {
+        // No tokens available
+        authVerificationCache.set(false);
+        return false;
+      }
+    }
+    
+    // Check if token is expired and needs refresh
+    if (TokenManager.isExpired()) {
+      try {
+        const refreshed = await TokenManager.refreshTokens();
+        if (!refreshed) {
+          // Refresh failed
+          authVerificationCache.set(false);
+          return false;
+        }
+      } catch (error) {
+        console.error("Token refresh failed:", error);
+        authVerificationCache.set(false);
+        return false;
+      }
+    }
+    
+    // Skip server verification if not required and we have a token
+    if (!forceVerify && TokenManager.accessToken) {
+      // Update global state
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = true;
+      }
+      authVerificationCache.set(true);
+      return true;
+    }
+    
+    // Verify with server if needed
+    try {
+      const response = await window.apiRequest('/api/auth/verify', 'GET', null, 0, 3000, {
+        skipAuthCheck: true,
+        skipRetry: true
+      });
+      
+      const isAuthenticated = response?.authenticated === true;
+      
+      // Update global state
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = isAuthenticated;
+      }
+      authVerificationCache.set(isAuthenticated);
+      
+      if (!isAuthenticated) {
+        TokenManager.clearTokens();
+      }
+      
+      return isAuthenticated;
+    } catch (error) {
+      // For network errors, assume token is valid
+      if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
+        const result = !!TokenManager.accessToken;
+        if (window.API_CONFIG) {
+          window.API_CONFIG.isAuthenticated = result;
+        }
+        authVerificationCache.set(result);
+        return result;
+      }
+      
+      // For auth errors, clear tokens
+      if (error.status === 401) {
+        TokenManager.clearTokens();
+        if (window.API_CONFIG) {
+          window.API_CONFIG.isAuthenticated = false;
+        }
+        authVerificationCache.set(false);
+        return false;
+      }
+      
+      // For other errors, use current token state
+      const result = !!TokenManager.accessToken;
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = result;
+      }
+      authVerificationCache.set(result);
+      return result;
+    }
+  }
 };
 
 // -------------------------------------------------------------

@@ -67,17 +67,16 @@ def validate_model_params(model_id: str, params: dict) -> None:
             )
             
     # Validate vision parameters
-    # Get capabilities with proper type checking
+    # Get capabilities with basic validation
     capabilities = []
     if isinstance(model_config, dict):
-        caps = model_config.get("capabilities")
+        caps = model_config.get("capabilities", [])
         if isinstance(caps, (list, tuple)):
-            capabilities = [c for c in caps if isinstance(c, str)]
+            capabilities = [str(c) for c in caps if c is not None]
     
     # Validate vision support if needed
-    if isinstance(params, dict) and "image_data" in params and params["image_data"]:
-        if not any(isinstance(c, str) and c == "vision" for c in capabilities):
-            raise ConversationError("Model doesn't support vision", 400)
+    if "image_data" in params and params["image_data"] and "vision" not in capabilities:
+        raise ConversationError("Model doesn't support vision", 400)
         raise ConversationError(
             "This model doesn't support vision",
             status_code=400
@@ -118,6 +117,10 @@ class ConversationService:
             conv = result.scalar_one_or_none()
 
         if not conv:
+            logger.error(
+                f"Conversation validation failed - conv: {conv}, "
+                f"project_id: {project_id}, user_id: {user_id}"
+            )
             raise ConversationError("Conversation not found or access denied", 404)
         return conv
 
@@ -256,7 +259,7 @@ class ConversationService:
         await save_model(self.db, conv)
         if conv.id is None:
             raise ConversationError("Invalid conversation ID", 400)
-        return conv.id  # Assuming conv.id is already a UUID
+        return UUID(str(conv.id))  # Force conversion to standard UUID
 
     async def restore_conversation(
         self,
@@ -372,7 +375,7 @@ class ConversationService:
         """Generate and save AI response."""
         # Get conversation context
         messages = await self._get_conversation_context(
-            conversation.id, include_system_prompt=True
+            UUID(str(conversation.id)), include_system_prompt=True
         )
 
         # Augment with knowledge if enabled
@@ -380,7 +383,7 @@ class ConversationService:
             if conversation.id is None:
                 raise ConversationError("Invalid conversation ID", 400)
             kb_context = await augment_with_knowledge(
-                conversation_id=conversation.id,
+                conversation_id=UUID(str(conversation.id)),
                 user_message=user_message,
                 db=self.db,
             )
@@ -388,63 +391,80 @@ class ConversationService:
 
         model_config = settings.AZURE_OPENAI_MODELS.get(conversation.model_id) if conversation.model_id in settings.AZURE_OPENAI_MODELS else None
         
-        # Initialize empty dictionary
-        params = {}
+        # Initialize params with strict typing
+        params = {
+            "temperature": 0.7,
+            "max_tokens": None,
+            "image_data": None,
+            "vision_detail": "auto",
+            "reasoning_effort": None,
+            "stream": False,
+            "enable_thinking": False,
+            "thinking_budget": None
+        }
         
-        # Helper function for safe conversion
-        def set_param(key, value, convert_type, default=None):
-            try:
-                params[key] = convert_type(value) if value is not None else default
-            except (TypeError, ValueError):
-                params[key] = default
-        
-        # Set all parameters with type conversion
-        set_param("temperature", getattr(conversation, "temperature", None), float, 0.7)
-        set_param("max_tokens", getattr(conversation, "max_tokens", None), int)
-        set_param("image_data", image_data, str)
-        set_param("vision_detail", vision_detail, str, "auto")
-        set_param("reasoning_effort", reasoning_effort, str)
-        set_param("stream", getattr(conversation, "stream", None), bool, False)
-        set_param("enable_thinking", getattr(conversation, "enable_thinking", None), bool, False)
-        set_param("thinking_budget", getattr(conversation, "thinking_budget", None), int)
+        # Set values with explicit type conversion
+        try:
+            params["temperature"] = float(getattr(conversation, "temperature", 0.7))
+            if hasattr(conversation, "max_tokens") and conversation.max_tokens is not None:
+                params["max_tokens"] = int(conversation.max_tokens)
+            if image_data:
+                params["image_data"] = str(image_data)
+            if vision_detail:
+                params["vision_detail"] = str(vision_detail)
+            if reasoning_effort:
+                params["reasoning_effort"] = str(reasoning_effort)
+            if hasattr(conversation, "thinking_budget") and conversation.thinking_budget is not None:
+                params["thinking_budget"] = int(conversation.thinking_budget)
+        except (TypeError, ValueError) as e:
+            logger.error(f"Parameter validation failed: {str(e)}")
+            raise ConversationError("Invalid parameter values", 400)
         
         if isinstance(model_config, dict):
             try:
-                max_temp = float(model_config.get("max_temp", 1.0))
-                params["temperature"] = min(float(params["temperature"]), max_temp)
+                max_temp = float(str(model_config.get("max_temp", 1.0)))
+                params["temperature"] = min(float(str(params["temperature"])), max_temp)
             except (TypeError, ValueError):
                 pass
             
             if isinstance(model_config.get("max_tokens"), (int, float)):
-                params["max_tokens"] = int(model_config["max_tokens"])
+                params["max_tokens"] = int(str(model_config["max_tokens"]))
 
         if model_config:
             # Vision handling
             capabilities = model_config.get("capabilities", []) if isinstance(model_config.get("capabilities"), list) else []
-            if "vision" in capabilities and image_data:
+            if isinstance(capabilities, (list, tuple)) and "vision" in [str(c) for c in capabilities] and image_data:
                 params["image_data"] = image_data
                 params["vision_detail"] = vision_detail or ("auto" if conversation.model_id == "gpt-4o" else "high")
             
             # Reasoning effort
-            if "reasoning_effort" in capabilities:
+            if isinstance(capabilities, (list, tuple)) and "reasoning_effort" in [str(c) for c in capabilities]:
                 params["reasoning_effort"] = reasoning_effort or "medium"
                 
             # Token budgeting for vision
             if params.get("image_data"):
                 params["max_tokens"] = min(
                     int(params["max_tokens"]) if params["max_tokens"] else 0,
-                    int(model_config.get("max_tokens", 0)) - int(settings.AZURE_MAX_IMAGE_TOKENS)
+                    int(str(model_config.get("max_tokens", 0))) - int(str(settings.AZURE_MAX_IMAGE_TOKENS))
                 )
 
         # Generate response
         if conversation.id is None:
             raise ConversationError("Invalid conversation ID", 400)
         assistant_msg = await generate_ai_response(
-            conversation_id=conversation.id,
+            conversation_id=UUID(str(conversation.id)),
             messages=messages,
             model_id=str(conversation.model_id),
             db=self.db,
-            **params
+            **{
+                "image_data": str(params["image_data"]) if isinstance(params.get("image_data"), (str, bytes)) else None,
+                "vision_detail": str(params["vision_detail"]) if isinstance(params.get("vision_detail"), (str, bytes)) else "auto",
+                "enable_thinking": True if str(params.get("enable_thinking", "False")).lower() == "true" else False,
+                "thinking_budget": int(float(str(params["thinking_budget"]))) if params.get("thinking_budget") is not None else None,
+                "stream": True if str(params.get("stream", "False")).lower() == "true" else False,
+                "max_tokens": int(float(str(params["max_tokens"]))) if params.get("max_tokens") is not None else None,
+                "reasoning_effort": str(params["reasoning_effort"]) if isinstance(params.get("reasoning_effort"), (str, bytes)) else None
+            }
         )
 
         if assistant_msg:

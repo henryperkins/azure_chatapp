@@ -427,8 +427,12 @@ window.setupWebSocket = async function (chatId) {
 window.testWebSocketConnection = async function () {
   await ensureModulesLoaded();
 
-  const isAuthenticated = await window.ChatUtils?.isAuthenticated?.() ||
-    (window.auth?.verify ? await window.auth.verify() : false);
+  let isAuthenticated = false;
+  try {
+    isAuthenticated = await window.auth.isAuthenticated();
+  } catch (e) {
+    console.warn("[chat-core] Auth verification failed:", e);
+  }
 
   if (!isAuthenticated) {
     return { success: false, authenticated: false, message: "Authentication required" };

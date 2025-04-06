@@ -36,7 +36,12 @@ window.ChatUtils = {
    * @returns {Promise<boolean>}
    */
   isAuthenticated: async function() {
-    return window.auth?.verify?.() || false;
+    try {
+      return await window.auth?.isAuthenticated?.() || false;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      return false;
+    }
   },
 
   /**
