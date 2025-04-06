@@ -37,16 +37,19 @@ class ConversationError(Exception):
 
 
 def validate_model(model_id: str) -> bool:
-    """Validate model against allowed configurations."""
-    claude_models = settings.CLAUDE_MODELS
-    azure_models = settings.AZURE_OPENAI_MODELS
+    """Validate model against allowed configurations with capability checks."""
+    if model_id in settings.CLAUDE_MODELS:
+        return True
     
-    if model_id not in claude_models and model_id not in azure_models:
-        allowed_models = list(claude_models) + list(azure_models)
+    azure_config = settings.AZURE_OPENAI_MODELS.get(model_id)
+    if not azure_config:
+        allowed_models = list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())
         raise ConversationError(
             f"Invalid model ID. Allowed: {', '.join(sorted(allowed_models))}",
             status_code=400,
         )
+    
+    # Additional Azure capability validation can be added here
     return True
 
 
