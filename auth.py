@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordBearer
@@ -368,28 +369,17 @@ async def logout_user(
     return {"status": "logged out"}
 
 
-def set_secure_cookie(response: Response, key: str, value: str, max_age: int = None):
-    """
-    Helper to set a secure cookie with dev-friendly defaults.
-    Uses:
-      - httponly
-      - secure in production
-      - samesite='lax'
-      - path='/'
-    """
-    # Standard secure cookie settings
-    secure_cookie = True  # Always require HTTPS
-    samesite_mode = "lax"  # Balanced security
+def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int] = None):
+    secure_cookie = settings.ENV == "production"
+    samesite_mode = "lax"
 
-    cookie_params = {
-        "key": key,
-        "value": value,
-        "httponly": True,
-        "secure": secure_cookie,
-        "samesite": samesite_mode,
-        "path": "/",
-    }
-    if max_age is not None:
-        cookie_params["max_age"] = max_age
-
-    response.set_cookie(**cookie_params)
+    response.set_cookie(
+        key=key,
+        value=value,
+        httponly=True,
+        secure=secure_cookie,
+        samesite=samesite_mode,
+        path="/",
+        domain=settings.COOKIE_DOMAIN,
+        max_age=max_age
+    )
