@@ -36,6 +36,12 @@ class ConversationError(Exception):
         super().__init__(message)
 
 
+def validate_model(model_id: str) -> None:
+    """Validate if model is supported"""
+    if model_id not in settings.AZURE_OPENAI_MODELS and model_id not in settings.CLAUDE_MODELS:
+        raise ConversationError(f"Unsupported model: {model_id}", status_code=400)
+
+
 def validate_model_params(model_id: str, params: dict) -> None:
     """Validate parameters based on model capabilities"""
     model_config = settings.AZURE_OPENAI_MODELS.get(model_id) or settings.CLAUDE_MODELS.get(model_id)
