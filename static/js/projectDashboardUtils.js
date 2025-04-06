@@ -11,7 +11,24 @@
  * Centralized utility classes for the project dashboard
  */
 
-// IIFE to prevent global scope pollution
+// Unified Event Bus
+class AppEventBus {
+  constructor() {
+    this.channels = {};
+  }
+  
+  subscribe(channel, callback) {
+    if(!this.channels[channel]) this.channels[channel] = [];
+    this.channels[channel].push(callback);
+  }
+  
+  publish(channel, data) {
+    (this.channels[channel] || []).forEach(fn => fn(data));
+  }
+}
+
+window.bus = new AppEventBus();
+
 (function() {
   // Global initialization flag to prevent double initialization
   if (window._dashboardUtilsInitialized) {

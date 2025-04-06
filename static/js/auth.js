@@ -267,11 +267,20 @@ window.TokenManager = TokenManager;
 // ---------------------------------------------------------------------
 window.auth = {
   init: async function () {
-    // Prevent double initialization
+    if (window.__authInitializing) {
+      return new Promise(resolve => {
+        const check = () => {
+          if (this.isInitialized) resolve(true);
+          else setTimeout(check, 50);
+        };
+        check();
+      });
+    }
+    
+    window.__authInitializing = true;
     if (this.isInitialized) {
-      if (AUTH_DEBUG) {
-        console.debug("[Auth] Already initialized, skipping");
-      }
+      if (AUTH_DEBUG) console.debug("[Auth] Already initialized");
+      window.__authInitializing = false;
       return true;
     }
 

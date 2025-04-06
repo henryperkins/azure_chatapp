@@ -323,8 +323,23 @@
         return false;
       }
 
-      // Establish connection
-      await this.establishConnection();
+      // Check if another instance is already connecting
+      if (window.__wsConnecting === this.wsUrl) {
+        return new Promise(resolve => {
+          const check = () => {
+            if (this.state === CONNECTION_STATES.CONNECTED) resolve(true);
+            else setTimeout(check, 100);
+          };
+          check();
+        });
+      }
+
+      window.__wsConnecting = this.wsUrl;
+      try {
+        await this.establishConnection();
+      } finally {
+        window.__wsConnecting = null;
+      }
       this.setState(CONNECTION_STATES.CONNECTED);
       return true;
 
