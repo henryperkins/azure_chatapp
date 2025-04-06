@@ -52,6 +52,30 @@ AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
 AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
 API_VERSION = "2025-02-01-preview"
 
+AZURE_MODELS = {
+    "o1": {
+        "max_tokens": 128000,
+        "supports_vision": True,
+        "supports_reasoning_effort": True,
+        "vision_detail_levels": ["low", "high"],
+        "max_images": int(settings.AZURE_O1_MAX_IMAGES)
+    },
+    "o3-mini": {
+        "max_tokens": 16385,
+        "supports_reasoning_effort": True
+    },
+    "o3": {
+        "max_tokens": 128000,
+        "supports_reasoning_effort": False  # o3 uses different parameter
+    },
+    "gpt-4o": {
+        "max_tokens": 128000,
+        "supports_vision": True,
+        "vision_detail_levels": ["auto", "low", "high"],
+        "supports_streaming": True
+    }
+}
+
 
 async def openai_chat(
     messages: List[Dict[str, str]],
@@ -60,6 +84,8 @@ async def openai_chat(
     reasoning_effort: Optional[str] = None,
     image_data: Optional[str] = None,
     vision_detail: str = "auto",
+    temperature: float = 0.7,
+    stream: bool = False
 ) -> dict:
     """
     Calls Azure OpenAI's chat completion API.
@@ -159,6 +185,93 @@ def extract_base64_data(image_data: str) -> str:
     if "base64," in image_data:
         return image_data.split("base64,")[1]
     return image_data
+
+
+async def _handle_azure_vision_request(
+    messages: List[Dict[str, str]],
+    model_name: str,
+    image_data: str,
+    vision_detail: str,
+    model_config: dict,
+    max_tokens: int,
+    temperature: float,
+    stream: bool
+) -> dict:
+    """Specialized handler for vision-enabled models"""
+    # Validate detail level
+    if vision_detail not in model_config["vision_detail_levels"]:
+        raise ValueError(f"Invalid detail level for {model_name}: {vision_detail}")
+
+    # Image processing
+    base64_str = extract_base64_data(image_data)
+    vision_message = {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": messages[-1]["content"]},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_str}",
+                    "detail": vision_detail
+                }
+            }
+        ]
+    }
+
+    payload = {
+        "messages": messages[:-1] + [vision_message],
+        "max_tokens": min(
+            max_tokens,
+            model_config["max_tokens"] - settings.AZURE_MAX_VISION_DETAIL_TOKENS
+        ),
+        "temperature": temperature
+    }
+
+    # GPT-4o special parameters
+    if model_name == "gpt-4o":
+        payload["vision_strategy"] = "enhanced"  # Example new parameter
+
+    if stream:
+        payload["stream"] = True
+        return await _stream_azure_response(payload, model_name)
+
+    return await _send_azure_request(payload, model_name)
+
+
+async def _send_azure_request(payload: dict, model_name: str) -> dict:
+    """Send standard Azure OpenAI request"""
+    url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
+    headers = {"Content-Type": "application/json", "api-key": AZURE_OPENAI_API_KEY}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+            return response.json()
+    except httpx.RequestError as e:
+        logger.error("Error calling Azure OpenAI: %s", e)
+        raise RuntimeError("Unable to reach Azure OpenAI endpoint") from e
+    except httpx.HTTPStatusError as e:
+        logger.error("Azure OpenAI error: %s", e)
+        raise RuntimeError(
+            f"Azure OpenAI request failed: {e.response.status_code} => {e.response.text}"
+        ) from e
+
+
+async def _stream_azure_response(payload: dict, model_name: str):
+    """Handle streaming responses from Azure OpenAI"""
+    url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
+    headers = {"Content-Type": "application/json", "api-key": AZURE_OPENAI_API_KEY}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            async with client.stream("POST", url, json=payload, headers=headers, timeout=60) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+    except httpx.RequestError as e:
+        logger.error("Error streaming from Azure OpenAI: %s", e)
+        raise RuntimeError("Unable to stream from Azure OpenAI") from e
 
 
 async def get_completion(

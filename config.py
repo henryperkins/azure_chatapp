@@ -44,6 +44,17 @@ class Settings:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+    AZURE_OPENAI_MODELS = [
+        "o1",             # Vision model
+        "o3-mini",        # Fast text model
+        "o3",             # Full o3 model
+        "gpt-4o"          # Latest multimodal model
+    ]
+    AZURE_O1_MAX_IMAGES = int(os.getenv("AZURE_O1_MAX_IMAGES", "10"))
+    AZURE_REASONING_EFFORT_ENABLED = (
+        os.getenv("AZURE_REASONING_EFFORT_ENABLED", "True").lower() == "true"
+    )
+    AZURE_MAX_VISION_DETAIL_TOKENS = int(os.getenv("AZURE_MAX_VISION_DETAIL_TOKENS", "2000"))
 
     # JWT Configuration
     JWT_SECRET = os.getenv("JWT_SECRET", "")
