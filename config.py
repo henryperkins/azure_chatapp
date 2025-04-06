@@ -52,22 +52,29 @@ class Settings:
             "capabilities": ["vision", "reasoning_effort"],
             "max_images": 10,
             "max_tokens": 128000,
-            "vision_detail": ["low", "high"]
+            "max_temp": 1.5,
+            "vision_details": ["low", "high"]
         },
         "o3-mini": {
-            "type": "text", 
+            "type": "text",
             "description": "Fast text model with reasoning control",
-            "capabilities": ["reasoning_effort"],
-            "max_tokens": 16385
+            "capabilities": ["reasoning_effort", "long_context"],
+            "max_tokens": 16385,
+            "max_temp": 1.2
         },
         "gpt-4o": {
-            "type": "multimodal",
+            "type": "multimodal", 
             "description": "Advanced multimodal model",
-            "capabilities": ["vision"],
+            "capabilities": ["vision", "streaming"],
             "max_tokens": 128000,
-            "vision_detail": ["auto", "low", "high"]
+            "max_temp": 2.0,
+            "vision_details": ["auto", "low", "high"]
         }
     }
+    
+    # Azure-specific settings
+    AZURE_MAX_IMAGE_TOKENS = int(os.getenv("AZURE_MAX_IMAGE_TOKENS", "2000"))
+    AZURE_MAX_REASONING_EFFORT = os.getenv("AZURE_MAX_REASONING_EFFORT", "high")
     
     AZURE_O1_MAX_IMAGES = int(os.getenv("AZURE_O1_MAX_IMAGES", "10"))
     AZURE_REASONING_EFFORT_ENABLED = (
