@@ -873,42 +873,50 @@ function setupReasoningUI() {
  * Set up vision UI elements
  */
 function setupVisionUI() {
+  const model = getCurrentModelConfig();
   const visionPanel = document.getElementById('visionPanel');
   if (!visionPanel) return;
 
-  // Add vision detail selector if it doesn't exist
-  if (!document.getElementById('visionDetail')) {
-    const visionDetailLabel = document.createElement('div');
-    visionDetailLabel.className = 'mt-2';
-    visionDetailLabel.innerHTML = '<label class="block text-sm font-medium dark:text-gray-200">Image Detail:</label>';
-    visionPanel.appendChild(visionDetailLabel);
+  // Reset UI elements
+  visionPanel.innerHTML = '';
+  
+  if (model.supportsVision) {
+    // Add vision detail selector
+    const detailLabel = document.createElement('label');
+    detailLabel.className = 'block text-sm font-medium dark:text-gray-200';
+    detailLabel.textContent = 'Image Detail:';
+    visionPanel.appendChild(detailLabel);
 
-    const visionDetailSelect = document.createElement('select');
-    visionDetailSelect.id = 'visionDetail';
-    visionDetailSelect.className = 'w-full px-2 py-1 mt-1 border rounded dark:bg-gray-700 dark:border-gray-600';
-    visionDetailSelect.innerHTML = `
-      <option value="auto">Auto</option>
-      <option value="low">Low Detail</option>
-      <option value="high">High Detail</option>
-    `;
-    visionDetailSelect.value = modelConfigState.visionDetail;
-    visionDetailLabel.appendChild(visionDetailSelect);
-
-    // Change handler
-    trackListener(visionDetailSelect, 'change', () => {
-      modelConfigState.visionDetail = visionDetailSelect.value;
+    const detailSelector = document.createElement('select');
+    detailSelector.className = 'w-full px-2 py-1 mt-1 border rounded dark:bg-gray-700 dark:border-gray-600';
+    
+    // Add available detail levels
+    const detailLevels = model.parameters?.vision_detail || ['auto', 'low', 'high'];
+    detailLevels.forEach(level => {
+      const option = document.createElement('option');
+      option.value = level;
+      option.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+      if (level === 'auto' && model.id === 'gpt-4o') {
+        option.selected = true;
+      }
+      detailSelector.appendChild(option);
+    });
+    
+    // Connect to state
+    detailSelector.value = modelConfigState.visionDetail;
+    trackListener(detailSelector, 'change', () => {
+      modelConfigState.visionDetail = detailSelector.value;
       persistSettings();
     });
+
+    visionPanel.appendChild(detailSelector);
   }
 
   // Set up file input
   setupVisionFileInput();
 
-  // Determine initial visibility (only for vision-capable models)
-  visionPanel.classList.toggle(
-    'hidden',
-    modelConfigState.modelName !== 'o1' && modelConfigState.modelName !== 'gpt-4o'
-  );
+  // Toggle visibility based on model
+  visionPanel.classList.toggle('hidden', !model.supportsVision);
 }
 
 /**
