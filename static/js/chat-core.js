@@ -320,6 +320,7 @@ window.initializeChat = function() {
     window.ChatUtils?.handleError?.('Initializing chat', error);
     throw error;
   }
+  });
 };
 
 // Set up keyboard shortcuts
