@@ -270,22 +270,36 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       API_CONFIG.lastErrorStatus = response.status;
       console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
-      // Handle 401 Unauthorized with token refresh
-      if (response.status === 401 && retryCount < maxRetries && !options.skipRetry) {
-        try {
-          if (window.TokenManager?.refreshTokens) {
-            console.log('Attempting token refresh due to 401 response');
-            const refreshed = await window.TokenManager.refreshTokens();
-            if (refreshed) {
-              // Try request again with new token
-              return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
+      // Handle 401 Unauthorized
+      if (response.status === 401) {
+        // Skip token refresh for auth-related endpoints
+        const isAuthEndpoint = endpoint.includes('/auth/') &&
+          !endpoint.includes('/auth/verify');
+        
+        if (retryCount < maxRetries && !options.skipRetry && !isAuthEndpoint) {
+          try {
+            if (window.TokenManager?.refreshTokens) {
+              console.log('Attempting token refresh due to 401 response');
+              const refreshed = await window.TokenManager.refreshTokens();
+              if (refreshed) {
+                // Try request again with new token
+                return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
+              }
             }
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+            // Clear auth state and propagate error
+            clearAuthState();
+            throw new Error('Session expired. Please login again.');
           }
-        } catch (refreshError) {
-          console.error('Token refresh failed:', refreshError);
-          if (!endpoint.includes('/auth/')) {
-            await ensureAuthenticated();
-          }
+        } else if (isAuthEndpoint) {
+          // For auth endpoints, just propagate the error
+          const errorBody = await response.text();
+          throw new Error(errorBody || 'Authentication failed');
+        } else {
+          // Exhausted retries - clear auth state
+          clearAuthState();
+          throw new Error('Session expired. Please login again.');
         }
       } else if (response.status === 401 && (retryCount >= maxRetries || options.skipRetry)) {
         // Clear auth state after exhausting retries

@@ -199,20 +199,25 @@ const TokenManager = {
         console.debug('[Auth] Starting token refresh');
       }
 
-      // Check for refresh token
+      // Check for refresh token in cookies and memory
       const cookieRefresh = document.cookie
         .split('; ')
         .find(row => row.startsWith('refresh_token='))
         ?.split('=')[1];
 
       const refreshToken = cookieRefresh || this.refreshToken;
+      
       if (!refreshToken) {
-        console.error('[Auth] Refresh token missing - cannot refresh');
+        const errorMsg = 'No refresh token available - session expired';
+        console.error('[Auth]', errorMsg);
         this.clearTokens();
         window.dispatchEvent(new CustomEvent('authStateChanged', {
-          detail: { authenticated: false }
+          detail: {
+            authenticated: false,
+            error: errorMsg
+          }
         }));
-        throw new Error('Session expired. Please login again.');
+        throw new Error(errorMsg);
       }
 
       if (AUTH_DEBUG) {
@@ -220,35 +225,49 @@ const TokenManager = {
           '***' + refreshToken.slice(-6));
       }
 
-      // NOTE: window.apiRequest is presumably your custom fetch wrapper
+      // Make refresh request with short timeout
       const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
         skipAuthCheck: true,
         skipRetry: true
-      });
+      }, 5000); // 5 second timeout
 
-      if (response?.access_token) {
-        if (AUTH_DEBUG) {
-          console.debug('[Auth] Token refresh successful');
-        }
-        // Update tokens in memory
-        this.setTokens(response.access_token, response.refresh_token);
-        return true;
+      if (!response?.access_token) {
+        throw new Error('Invalid refresh response from server');
       }
+
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Token refresh successful');
+      }
+      
+      // Update tokens in memory
+      this.setTokens(response.access_token, response.refresh_token);
+      return true;
     } catch (error) {
       console.error('[Auth] Token refresh failed:', error);
-      if (error.status === 401) {
-        // Full re-authentication required
+      
+      // Clear tokens for any error except network issues
+      if (!error.message?.includes('NetworkError') &&
+          !error.message?.includes('Failed to fetch')) {
         this.clearTokens();
         window.dispatchEvent(new CustomEvent('authStateChanged', {
-          detail: { authenticated: false }
+          detail: {
+            authenticated: false,
+            error: 'Session expired. Please login again.'
+          }
         }));
-        throw new Error('Session expired. Please login again.');
       }
-      throw error;
+
+      // Rethrow with appropriate message
+      if (error.status === 401) {
+        throw new Error('Refresh token rejected - please login again');
+      } else if (error.message.includes('timeout')) {
+        throw new Error('Refresh request timed out - please try again');
+      } else {
+        throw new Error('Unable to refresh session - please login again');
+      }
     } finally {
       localStorage.removeItem(mutexKey); // unlock
     }
-    return false;
   }
 };
 
@@ -894,7 +913,7 @@ async function updateAuthStatus() {
     TokenManager.clearTokens();
     clearSession();
     broadcastAuth(false);
-    return false;
+    return false;n 
   }
 }
 

@@ -498,19 +498,49 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     }
 
     if (!authVerified) {
-      const errorMsg = lastError?.message || "Authentication failed";
+      let errorMsg = "Authentication failed";
+      let redirectToLogin = true;
+      
+      // More specific error messages
+      if (lastError?.message?.includes('timeout')) {
+        errorMsg = "Authentication check timed out - please try again";
+      } else if (lastError?.message?.includes('TokenManager')) {
+        errorMsg = "Session initialization failed - please refresh the page";
+      } else if (lastError?.status === 401) {
+        errorMsg = "Session expired - please log in again";
+      } else if (lastError?.message) {
+        errorMsg = lastError.message;
+      }
+
+      // Don't redirect for network errors
+      if (lastError?.message?.includes('NetworkError') ||
+          lastError?.message?.includes('Failed to fetch')) {
+        redirectToLogin = false;
+        errorMsg = "Network error - please check your connection";
+      }
+
       window.dispatchEvent(new CustomEvent('authStateChanged', {
-        detail: { 
-          authenticated: false, 
-          redirectToLogin: true,
+        detail: {
+          authenticated: false,
+          redirectToLogin,
           error: errorMsg
         }
       }));
+      
+      // Show notification if UI is available
+      if (this.notificationFunction) {
+        this.notificationFunction(errorMsg, 'error');
+      }
+      
       throw new Error(`Auth verification failed: ${errorMsg}`);
     }
+    
     // Dispatch auth success event
     window.dispatchEvent(new CustomEvent('authStateChanged', {
-      detail: { authenticated: true }
+      detail: {
+        authenticated: true,
+        username: window.TokenManager?.username || null
+      }
     }));
 
     // Get current model from localStorage or MODEL_CONFIG
@@ -524,6 +554,8 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     let conversation;
     try {
       const projectId = localStorage.getItem('selectedProjectId');
+      let conversation;
+      
       if (projectId && window.projectManager?.createConversation) {
         // Use project-specific creation if in project context
         conversation = await window.projectManager.createConversation(projectId);
@@ -531,18 +563,47 @@ window.ChatInterface.prototype.createNewConversation = async function() {
         // Fall back to standard conversation creation
         conversation = await this.conversationService.createNewConversation();
       }
+
+      // Verify the conversation was properly created
+      if (!conversation?.id) {
+        throw new Error('Invalid conversation response from server');
+      }
+
+      return conversation;
     } catch (error) {
       console.error('Conversation creation failed:', error);
+      
       let message = 'Failed to create conversation';
+      let showLogin = false;
+      
+      // More specific error handling
       if (error.message.includes('Not authenticated')) {
         message = 'Session expired - please log in again';
-        window.dispatchEvent(new CustomEvent('authStateChanged', {
-          detail: { authenticated: false }
-        }));
+        showLogin = true;
       } else if (error.message.includes('knowledge base')) {
         message = 'Created chat but knowledge integration failed';
+      } else if (error.message.includes('timeout')) {
+        message = 'Request timed out - please try again';
+      } else if (error.message.includes('NetworkError')) {
+        message = 'Network error - please check your connection';
       }
-      this.notificationFunction(message, 'error');
+
+      // Update auth state if needed
+      if (showLogin) {
+        window.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: {
+            authenticated: false,
+            redirectToLogin: true,
+            error: message
+          }
+        }));
+      }
+
+      // Show notification
+      if (this.notificationFunction) {
+        this.notificationFunction(message, 'error');
+      }
+
       throw error;
     }
     console.log(`New conversation created successfully with ID: ${conversation.id}`);
@@ -561,24 +622,43 @@ window.ChatInterface.prototype.createNewConversation = async function() {
       this.messageService.initialize(conversation.id, null);
       console.log('Message service initialized with HTTP mode');
       
-      // Try to connect WebSocket in the background
-      console.log('Attempting WebSocket connection...');
-      this.wsService.connect(conversation.id)
-        .then(() => {
+      // Enhanced WebSocket connection with retries and better error handling
+      const MAX_WS_RETRIES = 2;
+      let wsConnected = false;
+      
+      for (let attempt = 1; attempt <= MAX_WS_RETRIES; attempt++) {
+        try {
+          console.log(`Attempting WebSocket connection (attempt ${attempt})...`);
+          await this.wsService.connect(conversation.id);
+          wsConnected = true;
           console.log('WebSocket connected successfully, switching from HTTP to WebSocket mode');
-          // Re-initialize with WebSocket if connection succeeds
+          
+          // Re-initialize with WebSocket
           this.messageService.initialize(conversation.id, this.wsService);
-        })
-        .catch((error) => {
-          // Only show error if it's not the expected HTTP fallback error
-          if (error && error.message === 'Using HTTP fallback') {
-            console.log("Using HTTP fallback for messaging as expected");
-          } else {
-            console.warn("WebSocket connection failed, continuing with HTTP fallback:", error);
+          break;
+        } catch (error) {
+          console.warn(`WebSocket connection attempt ${attempt} failed:`, error);
+          
+          // Only show error notification on final attempt
+          if (attempt === MAX_WS_RETRIES) {
+            const msg = error.message.includes('auth')
+              ? 'WebSocket authentication failed - using HTTP mode'
+              : 'WebSocket connection failed - using HTTP mode';
+            this.notificationFunction(msg, 'warning');
           }
-          // Either way, ensure we're using HTTP mode
-          this.messageService.initialize(conversation.id, null);
-        });
+          
+          // Exponential backoff between retries (500ms, 1000ms)
+          if (attempt < MAX_WS_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          }
+        }
+      }
+      
+      // Fall back to HTTP if WebSocket failed
+      if (!wsConnected) {
+        console.log("Using HTTP fallback for messaging");
+        this.messageService.initialize(conversation.id, null);
+      }
     } else {
       console.error('Message service not available');
       window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
@@ -598,7 +678,45 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     return conversation;
   } catch (error) {
     console.error('Failed to create conversation:', error);
-    window.ChatUtils?.handleError?.('Creating conversation', error, this.notificationFunction);
+    
+    // Categorize errors and provide appropriate feedback
+    let userMessage = 'Failed to create conversation';
+    let isAuthError = false;
+    
+    if (error.message.includes('Not authenticated') ||
+        error.message.includes('401') ||
+        error.message.includes('token')) {
+      userMessage = 'Session expired - please log in again';
+      isAuthError = true;
+    } else if (error.message.includes('timeout')) {
+      userMessage = 'Request timed out - please try again';
+    } else if (error.message.includes('NetworkError')) {
+      userMessage = 'Network error - please check your connection';
+    }
+
+    // Update auth state if needed
+    if (isAuthError) {
+      window.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: {
+          authenticated: false,
+          redirectToLogin: true,
+          error: userMessage
+        }
+      }));
+    }
+
+    // Show notification to user
+    if (this.notificationFunction) {
+      this.notificationFunction(userMessage, 'error');
+    }
+
+    // Clean up any partial state
+    this.currentChatId = null;
+    if (this.wsService?.isConnected()) {
+      this.wsService.disconnect();
+    }
+
+    // Re-throw the error for upstream handling
     throw error;
   }
 };
