@@ -377,13 +377,13 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: int = N
       - samesite='lax'
       - path='/'
     """
-    secure_cookie = settings.ENV == "production"
+    secure_cookie = False
     cookie_params = {
         "key": key,
         "value": value,
         "httponly": True,
         "secure": secure_cookie,
-        "samesite": "lax",  # 'strict' or 'none' might break local dev
+        "samesite": "none",
         "path": "/",
     }
     if max_age is not None:
