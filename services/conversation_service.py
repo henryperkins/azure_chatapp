@@ -67,16 +67,17 @@ def validate_model_params(model_id: str, params: dict) -> None:
             )
             
     # Validate vision parameters
+    # Get capabilities with proper type checking
     capabilities = []
     if isinstance(model_config, dict):
-        caps = model_config.get("capabilities", [])
+        caps = model_config.get("capabilities")
         if isinstance(caps, (list, tuple)):
-            try:
-                capabilities = [str(c) for c in caps if c is not None]
-            except (TypeError, ValueError):
-                capabilities = []
-    if "image_data" in params and "vision" not in capabilities:
-        raise ConversationError("Model doesn't support vision", 400)
+            capabilities = [c for c in caps if isinstance(c, str)]
+    
+    # Validate vision support if needed
+    if isinstance(params, dict) and "image_data" in params and params["image_data"]:
+        if not any(isinstance(c, str) and c == "vision" for c in capabilities):
+            raise ConversationError("Model doesn't support vision", 400)
         raise ConversationError(
             "This model doesn't support vision",
             status_code=400
@@ -253,7 +254,9 @@ class ConversationService:
         conv.is_deleted = True
         conv.deleted_at = datetime.utcnow()
         await save_model(self.db, conv)
-        return conv.id  # type: ignore
+        if conv.id is None:
+            raise ConversationError("Invalid conversation ID", 400)
+        return conv.id  # Assuming conv.id is already a UUID
 
     async def restore_conversation(
         self,
@@ -375,7 +378,9 @@ class ConversationService:
         # Augment with knowledge if enabled
         if conversation.use_knowledge_base:
             kb_context = await augment_with_knowledge(
-                conversation_id=conversation.id,  # type: ignore
+                if conversation.id is None:
+                    raise ConversationError("Invalid conversation ID", 400)
+                conversation_id=conversation.id,
                 user_message=user_message,
                 db=self.db,
             )
@@ -384,33 +389,25 @@ class ConversationService:
         model_config = settings.AZURE_OPENAI_MODELS.get(conversation.model_id) if conversation.model_id in settings.AZURE_OPENAI_MODELS else None
         
         params = {
-        # Initialize params with safe defaults
-        params = dict(
-            temperature=float(getattr(conversation, "temperature", 0.7)),
-            max_tokens=None,
-            image_data=None,
-            vision_detail="auto",
-            reasoning_effort=None,
-            stream=False,
-            enable_thinking=False,
-            thinking_budget=None
-        )
+        # Initialize empty dictionary
+        params = {}
         
-        # Safely update params
-        try:
-            if hasattr(conversation, "max_tokens") and conversation.max_tokens is not None:
-                params["max_tokens"] = int(conversation.max_tokens)
-            if image_data:
-                params["image_data"] = str(image_data)
-            if vision_detail:
-                params["vision_detail"] = str(vision_detail)
-            if reasoning_effort:
-                params["reasoning_effort"] = str(reasoning_effort)
-            if hasattr(conversation, "thinking_budget") and conversation.thinking_budget is not None:
-                params["thinking_budget"] = int(conversation.thinking_budget)
-        except (TypeError, ValueError) as e:
-            logger.error(f"Parameter validation failed: {str(e)}")
-            raise ConversationError("Invalid parameter values", 400)
+        # Helper function for safe conversion
+        def set_param(key, value, convert_type, default=None):
+            try:
+                params[key] = convert_type(value) if value is not None else default
+            except (TypeError, ValueError):
+                params[key] = default
+        
+        # Set all parameters with type conversion
+        set_param("temperature", getattr(conversation, "temperature", None), float, 0.7)
+        set_param("max_tokens", getattr(conversation, "max_tokens", None), int)
+        set_param("image_data", image_data, str)
+        set_param("vision_detail", vision_detail, str, "auto")
+        set_param("reasoning_effort", reasoning_effort, str)
+        set_param("stream", getattr(conversation, "stream", None), bool, False)
+        set_param("enable_thinking", getattr(conversation, "enable_thinking", None), bool, False)
+        set_param("thinking_budget", getattr(conversation, "thinking_budget", None), int)
         
         if isinstance(model_config, dict):
             try:
@@ -450,7 +447,9 @@ class ConversationService:
 
         # Generate response
         assistant_msg = await generate_ai_response(
-            conversation_id=conversation.id,  # type: ignore
+            if conversation.id is None:
+                raise ConversationError("Invalid conversation ID", 400)
+            conversation_id=conversation.id,
             messages=messages,
             model_id=str(conversation.model_id),
             db=self.db,
