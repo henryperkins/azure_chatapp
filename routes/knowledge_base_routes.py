@@ -1,3 +1,5 @@
+from uuid import UUID
+
 """
 knowledge_base_routes.py
 ------------------------
@@ -797,12 +799,16 @@ async def reindex_project_knowledge_base(
     # Queue each file for background reprocessing
     processed_count = 0
     for file_record in files:
+        if not project.knowledge_base_id:
+            logger.warning(f"Skipping file {file_record.id} - project has no knowledge base")
+            continue
+            
         try:
             background_tasks.add_task(
                 knowledgebase_service.process_single_file_for_search,
-                file_id=file_record.id,
+                file_id=UUID(str(file_record.id)),
                 project_id=project_id,
-                knowledge_base_id=project.knowledge_base_id,
+                knowledge_base_id=UUID(str(project.knowledge_base_id)),
                 db=db,
             )
             processed_count += 1

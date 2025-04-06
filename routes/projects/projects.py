@@ -455,9 +455,9 @@ async def get_project_stats(
             ProjectFile.project_id == project_id
         )
     )
-    file_count, total_file_size = files_result.first()
-    file_count = file_count or 0
-    total_file_size = total_file_size or 0
+    files_row = files_result.first()
+    file_count = files_row[0] if files_row else 0
+    total_file_size = files_row[1] if files_row else 0
 
     # Get artifact count
     artifacts = await get_all_by_condition(
@@ -597,7 +597,7 @@ async def create_project_knowledge_base(
                 try:
                     # Get file record
                     file_query = select(ProjectFile).where(
-                        ProjectFile.id == UUID(file["id"]),
+                        ProjectFile.id == UUID(str(file["id"])),
                         ProjectFile.project_id == project_id,
                     )
                     file_result = await db.execute(file_query)
