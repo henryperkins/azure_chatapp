@@ -77,6 +77,26 @@ AZURE_MODELS = {
 }
 
 
+async def validate_azure_params(model_name: str, kwargs: dict) -> None:
+    """Validate Azure-specific parameters against model capabilities."""
+    model_config = AZURE_MODELS.get(model_name)
+    if not model_config:
+        raise ValueError(f"Unsupported Azure model: {model_name}")
+
+    # Vision parameters
+    if kwargs.get('image_data'):
+        if not model_config.get('supports_vision'):
+            raise ValueError(f"{model_name} doesn't support vision")
+        
+        vision_detail = kwargs.get('vision_detail', 'auto')
+        if vision_detail not in model_config.get('vision_detail_levels', []):
+            raise ValueError(f"Invalid vision_detail: {vision_detail}")
+
+    # Reasoning effort
+    if kwargs.get('reasoning_effort'):
+        if not model_config.get('supports_reasoning_effort'):
+            raise ValueError(f"{model_name} doesn't support reasoning_effort")
+
 async def openai_chat(
     messages: List[Dict[str, str]],
     model_name: str = "o3-mini",
@@ -87,6 +107,11 @@ async def openai_chat(
     temperature: float = 0.7,
     stream: bool = False
 ) -> dict:
+    await validate_azure_params(model_name, {
+        'image_data': image_data,
+        'vision_detail': vision_detail,
+        'reasoning_effort': reasoning_effort
+    })
     """
     Calls Azure OpenAI's chat completion API.
     Allows optional 'reasoning_effort' if using "o3-mini" or "o1".

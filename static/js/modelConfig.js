@@ -806,61 +806,67 @@ function setupMaxTokensUI() {
  * Set up reasoning effort UI
  */
 function setupReasoningUI() {
+  const model = getCurrentModelConfig();
   const reasoningPanel = document.getElementById("reasoningPanel");
   if (!reasoningPanel) return;
 
-  // Clear existing content
-  reasoningPanel.innerHTML = '';
+  // Hide panel if model doesn't support reasoning effort
+  reasoningPanel.classList.toggle('hidden', !model.supportsReasoningEffort);
+  
+  if (model.supportsReasoningEffort) {
+    // Clear existing content
+    reasoningPanel.innerHTML = '';
 
-  // Create label
-  const label = document.createElement("label");
-  label.textContent = "Reasoning Effort:";
-  label.className = "block text-sm font-medium dark:text-gray-200";
-  reasoningPanel.appendChild(label);
+    // Create label
+    const label = document.createElement("label");
+    label.textContent = "Reasoning Effort:";
+    label.className = "block text-sm font-medium dark:text-gray-200";
+    reasoningPanel.appendChild(label);
 
-  // Create slider
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.id = "reasoningEffortRange";
-  slider.min = "1";
-  slider.max = "3";
-  slider.value =
-    modelConfigState.reasoningEffort === "low"
-      ? "1"
-      : modelConfigState.reasoningEffort === "medium"
-      ? "2"
-      : "3";
-  slider.step = "1";
-  slider.className = "mt-2 w-full";
-  reasoningPanel.appendChild(slider);
+    // Create slider
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.id = "reasoningEffortRange";
+    slider.min = "1";
+    slider.max = "3";
+    slider.value =
+      modelConfigState.reasoningEffort === "low"
+        ? "1"
+        : modelConfigState.reasoningEffort === "medium"
+        ? "2"
+        : "3";
+    slider.step = "1";
+    slider.className = "mt-2 w-full";
+    reasoningPanel.appendChild(slider);
 
-  // Create output display
-  const sliderOutput = document.createElement("span");
-  sliderOutput.className = "ml-2";
-  reasoningPanel.appendChild(sliderOutput);
+    // Create output display
+    const sliderOutput = document.createElement("span");
+    sliderOutput.className = "ml-2";
+    reasoningPanel.appendChild(sliderOutput);
 
-  // Update display function
-  const updateSliderOutput = (value) => {
-    if (value === "1") {
-      sliderOutput.textContent = "Low";
-      modelConfigState.reasoningEffort = "low";
-    } else if (value === "2") {
-      sliderOutput.textContent = "Medium";
-      modelConfigState.reasoningEffort = "medium";
-    } else {
-      sliderOutput.textContent = "High";
-      modelConfigState.reasoningEffort = "high";
-    }
-  };
+    // Update display function
+    const updateSliderOutput = (value) => {
+      if (value === "1") {
+        sliderOutput.textContent = "Low";
+        modelConfigState.reasoningEffort = "low";
+      } else if (value === "2") {
+        sliderOutput.textContent = "Medium";
+        modelConfigState.reasoningEffort = "medium";
+      } else {
+        sliderOutput.textContent = "High";
+        modelConfigState.reasoningEffort = "high";
+      }
+    };
 
-  // Set initial state
-  updateSliderOutput(slider.value);
-
-  // Listen for slider input
-  trackListener(slider, "input", () => {
+    // Set initial state
     updateSliderOutput(slider.value);
-    persistSettings();
-  });
+
+    // Listen for slider input
+    trackListener(slider, "input", () => {
+      updateSliderOutput(slider.value);
+      persistSettings();
+    });
+  }
 }
 
 /**
