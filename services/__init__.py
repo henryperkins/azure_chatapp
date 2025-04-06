@@ -108,6 +108,7 @@ from .artifact_service import (
 # Conversation services
 from .conversation_service import (
     validate_model,
+    validate_model_params,
     get_conversation_service,
     ConversationService,
 )
