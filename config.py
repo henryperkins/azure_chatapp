@@ -48,42 +48,39 @@ class Settings:
     AZURE_OPENAI_MODELS = {
         "o1": {
             "type": "vision",
-            "description": "Multimodal model with image understanding",
+            "description": "Multimodal model with deep analysis capabilities",
             "capabilities": ["vision", "reasoning_effort"],
             "max_images": 10,
             "max_tokens": 128000,
+            "vision_details": ["low", "high"],
             "max_temp": 1.5,
-            "vision_details": ["low", "high"]
+            "requires": ["max_completion_tokens", "vision_detail"]
         },
         "o3-mini": {
             "type": "text",
-            "description": "Fast text model with reasoning control",
-            "capabilities": ["reasoning_effort", "long_context"],
+            "description": "Advanced reasoning for complex problem solving",
+            "capabilities": ["reasoning_effort", "structured_output"],
             "max_tokens": 16385,
-            "max_temp": 1.2
+            "max_temp": 1.2,
+            "requires": ["reasoning_effort"]
         },
         "gpt-4o": {
-            "type": "multimodal", 
-            "description": "Advanced multimodal model",
-            "capabilities": ["vision", "streaming"],
+            "type": "multimodal",
+            "description": "Optimized multimodal model with vision support",
+            "capabilities": ["vision", "streaming", "complex_analysis"],
             "max_tokens": 128000,
+            "vision_details": ["auto", "low", "high"],
             "max_temp": 2.0,
-            "vision_details": ["auto", "low", "high"]
+            "requires": ["vision_detail"]
         }
     }
-    
-    # Azure-specific settings
+
+    # Azure-specific vision configuration
     AZURE_MAX_IMAGE_TOKENS = int(os.getenv("AZURE_MAX_IMAGE_TOKENS", "2000"))
-    AZURE_MAX_REASONING_EFFORT = os.getenv("AZURE_MAX_REASONING_EFFORT", "high")
-    
-    AZURE_O1_MAX_IMAGES = int(os.getenv("AZURE_O1_MAX_IMAGES", "10"))
-    AZURE_REASONING_EFFORT_ENABLED = (
-        os.getenv("AZURE_REASONING_EFFORT_ENABLED", "True").lower() == "true"
-    )
-    AZURE_VISION_DETAIL_LEVELS = {  # Token cost per detail level
-        "low": 105,
-        "high": 1295, 
-        "auto": 100
+    AZURE_VISION_DETAIL_LEVELS = {
+        "low": 65,
+        "high": 1295,
+        "auto": 100  # Average estimate
     }
 
     # JWT Configuration
