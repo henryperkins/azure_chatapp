@@ -332,6 +332,7 @@ class ConversationService:
         user_message: str,
         image_data: Optional[str] = None,
         vision_detail: str = "auto",
+        reasoning_effort: Optional[str] = None,
     ) -> Optional[Message]:
         """Generate and save AI response."""
         # Get conversation context
@@ -348,14 +349,37 @@ class ConversationService:
             )
             messages = kb_context + messages
 
+        model_config = settings.AZURE_OPENAI_MODELS.get(conversation.model_id) if conversation.model_id in settings.AZURE_OPENAI_MODELS else None
+        
+        params = {
+            "temperature": min(conversation.temperature, model_config["max_temp"]) if model_config else 0.7,
+            "max_tokens": conversation.max_tokens
+        }
+
+        if model_config:
+            # Vision handling
+            if "vision" in model_config["capabilities"] and image_data:
+                params["image_data"] = image_data
+                params["vision_detail"] = vision_detail or ("auto" if conversation.model_id == "gpt-4o" else "high")
+            
+            # Reasoning effort
+            if "reasoning_effort" in model_config["capabilities"]:
+                params["reasoning_effort"] = reasoning_effort or "medium"
+                
+            # Token budgeting for vision
+            if params.get("image_data"):
+                params["max_tokens"] = min(
+                    params["max_tokens"],
+                    model_config["max_tokens"] - settings.AZURE_MAX_IMAGE_TOKENS
+                )
+
         # Generate response
         assistant_msg = await generate_ai_response(
             conversation_id=conversation.id,
             messages=messages,
             model_id=conversation.model_id,
-            image_data=image_data,
-            vision_detail=vision_detail,
             db=self.db,
+            **params
         )
 
         if assistant_msg:
