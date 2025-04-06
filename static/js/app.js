@@ -1,9 +1,10 @@
 /**
- * ---------------------------
- * - Maintains a single API_CONFIG global object.
- * - Uses one fetch wrapper (apiRequest).
- * - Listens for authStateChanged to manage the authenticated vs. logged-out UI.
- * - Minimizes overlap with auth.js token logic (auth.js calls apiRequest, dispatches events).
+ * ---------------------------------------------------------------------
+ * app.js - Maintains a single API_CONFIG global object.
+ * Uses one fetch wrapper (apiRequest).
+ * Listens for authStateChanged to manage the authenticated vs. logged-out UI.
+ * Relies on auth.js for all token logic and dispatching relevant events.
+ * ---------------------------------------------------------------------
  */
 
 // ---------------------------------------------------------------------
@@ -78,9 +79,10 @@ const ELEMENTS = {};
 async function ensureAuthenticated() {
   if (!window.auth?.isAuthenticated) {
     console.warn("Auth module not available - falling back to local checks");
+    // Fallback: simply see if we have any local token data
     const hasLocalAuth = window.TokenManager?.accessToken ||
-                        (sessionStorage.getItem('userInfo') !== null &&
-                         sessionStorage.getItem('auth_state') !== null);
+      (localStorage.getItem('userInfo') !== null &&
+        localStorage.getItem('auth_state') !== null);
     API_CONFIG.isAuthenticated = hasLocalAuth;
     return hasLocalAuth;
   }
@@ -88,16 +90,16 @@ async function ensureAuthenticated() {
   try {
     const isAuthenticated = await window.auth.isAuthenticated();
     API_CONFIG.isAuthenticated = isAuthenticated;
-    
+
     if (!isAuthenticated) {
       console.log("Authentication check failed");
       clearAuthState();
     }
-    
+
     return isAuthenticated;
   } catch (error) {
     console.error("Auth verification error:", error);
-    // Only clear state if it's an auth error
+    // Only clear state if it's a 401
     if (error.status === 401) {
       clearAuthState();
       return false;
@@ -114,13 +116,17 @@ async function ensureAuthenticated() {
  */
 function clearAuthState() {
   API_CONFIG.isAuthenticated = false;
-  sessionStorage.removeItem('userInfo');
-  sessionStorage.removeItem('auth_state');
-  
+
+  // Remove local references
+  localStorage.removeItem('userInfo');
+  localStorage.removeItem('auth_state');
+
+  // Let TokenManager handle cookies, etc.
   if (window.TokenManager?.clearTokens) {
     window.TokenManager.clearTokens();
   }
-  
+
+  // Dispatch global authStateChanged event
   document.dispatchEvent(new CustomEvent('authStateChanged', {
     detail: { authenticated: false }
   }));
@@ -247,7 +253,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
   // Body for POST/PUT
   if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
     if (data instanceof FormData) {
-      // let the browser set Content-Type for FormData
+      // Let the browser set Content-Type for FormData
       requestOptions.body = data;
     } else {
       requestOptions.headers['Content-Type'] = 'application/json';
@@ -271,25 +277,23 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
             console.log('Attempting token refresh due to 401 response');
             const refreshed = await window.TokenManager.refreshTokens();
             if (refreshed) {
-              // Try the request again with the new token
+              // Try request again with new token
               return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
             }
           }
         } catch (refreshError) {
           console.error('Token refresh failed:', refreshError);
-          // Now we can safely trigger auth check
           if (!endpoint.includes('/auth/')) {
-            // Use our new ensureAuthenticated to handle auth state properly
             await ensureAuthenticated();
           }
         }
       } else if (response.status === 401 && (retryCount >= maxRetries || options.skipRetry)) {
-        // Only clear auth state after we've exhausted retries
+        // Clear auth state after exhausting retries
         if (!endpoint.includes('/auth/')) {
           await ensureAuthenticated();
         }
       } else if (response.status === 404) {
-        // Handle 404 Not Found - don't affect auth state
+        // 404 Not Found
         const error = new Error(`Resource not found (404): ${finalUrl}`);
         error.status = 404;
         throw error;
@@ -310,11 +314,13 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       throw error;
     }
 
-    let jsonData;
-    try {
-      jsonData = response.status !== 204 ? await response.json() : null;
-    } catch (error) {
-      jsonData = null;
+    let jsonData = null;
+    if (response.status !== 204) {
+      try {
+        jsonData = await response.json();
+      } catch (err) {
+        jsonData = null;
+      }
     }
 
     // If server returns new tokens in the response
@@ -340,7 +346,6 @@ function getBaseUrl() {
   if (!API_CONFIG.baseUrl) {
     // Default to window.location.origin
     API_CONFIG.baseUrl = window.location.origin;
-
     if (API_CONFIG.backendHost) {
       API_CONFIG.baseUrl = `http://${API_CONFIG.backendHost}`;
     }
@@ -408,10 +413,8 @@ function renderConversationList(data) {
   const container = document.getElementById('sidebarConversations');
   if (!container) return;
 
-  // Clear existing content
   container.innerHTML = '';
 
-  // Deduplicate conversations
   const seenIds = new Set();
   const conversations = (data?.data?.conversations || data?.conversations || [])
     .filter(conv => {
@@ -420,7 +423,6 @@ function renderConversationList(data) {
       return true;
     });
 
-  // Store in global config
   window.chatConfig = window.chatConfig || {};
   window.chatConfig.conversations = conversations;
 
@@ -442,7 +444,6 @@ function createConversationListItem(item) {
   const container = document.createElement('div');
   container.className = 'flex flex-col';
 
-  // First line
   const firstLine = document.createElement('div');
   firstLine.className = 'flex items-center justify-between';
 
@@ -509,12 +510,12 @@ function createConversationListItem(item) {
 async function loadConversationList() {
   if (!await ensureAuthenticated()) {
     console.log("Not authenticated, skipping conversation list load");
-    return Promise.resolve([]);
+    return [];
   }
 
   if (API_CONFIG.authCheckInProgress) {
     console.log("Auth check in progress, deferring conversation list load");
-    return Promise.resolve([]);
+    return [];
   }
 
   const selectedProjectId = localStorage.getItem('selectedProjectId');
@@ -571,7 +572,6 @@ async function handleNavigationChange() {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
 
-  // Check auth state first
   if (!await ensureAuthenticated()) {
     const loginMsg = document.getElementById("loginRequiredMessage");
     if (loginMsg) loginMsg.classList.remove("hidden");
@@ -628,7 +628,7 @@ async function loadProjects(filter = "all") {
   if (!await ensureAuthenticated()) {
     document.dispatchEvent(
       new CustomEvent("projectsLoaded", {
-        detail: { 
+        detail: {
           data: {
             projects: [],
             count: 0,
@@ -639,13 +639,13 @@ async function loadProjects(filter = "all") {
         }
       })
     );
-    
+
     const loginMsg = document.getElementById('loginRequiredMessage');
     if (loginMsg) loginMsg.classList.remove('hidden');
-    
+
     return [];
   }
-  
+
   try {
     if (!window.projectManager) {
       throw new Error("projectManager not initialized");
@@ -668,7 +668,7 @@ async function loadSidebarProjects() {
     console.log("Not authenticated, skipping sidebar projects load");
     return [];
   }
-  
+
   try {
     return apiRequest(API_ENDPOINTS.PROJECTS)
       .then(projects => {
@@ -730,7 +730,6 @@ function setupEventListeners() {
   console.log("Event listeners registered");
 }
 
-// Event handler functions
 function handleAuthStateChange(e) {
   const { authenticated, username } = e.detail;
 
@@ -774,7 +773,6 @@ function handleAuthStateChange(e) {
 
 function handleKeyDown(e) {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-    // e.g. Ctrl+R for "regenerate", Ctrl+C for "copy"
     if (e.key.toLowerCase() === 'r') {
       e.preventDefault();
       document.dispatchEvent(new CustomEvent('regenerateChat'));
@@ -788,10 +786,10 @@ function handleKeyDown(e) {
 
 async function handleNewConversationClick() {
   if (!await ensureAuthenticated()) {
-    window.showNotification("Please log in to create a conversation", "error");
+    window.showNotification?.("Please log in to create a conversation", "error");
     return;
   }
-  
+
   const projectId = localStorage.getItem('selectedProjectId');
   if (projectId && window.projectManager?.createConversation) {
     window.projectManager.createConversation(projectId)
@@ -818,7 +816,6 @@ function updateAuthUI(authenticated, username = null) {
   const registerForm = document.getElementById('registerForm');
 
   if (authenticated) {
-    // Logged in UI
     authBtn?.classList.add('hidden');
     userMenu?.classList.remove('hidden');
     if (authStatus) authStatus.textContent = username || 'Authenticated';
@@ -827,7 +824,6 @@ function updateAuthUI(authenticated, username = null) {
       userStatus.classList.remove('text-gray-500');
       userStatus.classList.add('text-green-500');
     }
-    // Ensure auth dropdown and forms are hidden
     authDropdown?.classList.add('hidden');
     authDropdown?.classList.remove('slide-in');
     loginForm?.reset();
@@ -837,13 +833,11 @@ function updateAuthUI(authenticated, username = null) {
     projectPanel?.classList.remove('hidden');
     loginMsg?.classList.add('hidden');
 
-    // Show project list by default
     const projectListView = document.getElementById('projectListView');
     const projectDetailsView = document.getElementById('projectDetailsView');
     projectListView?.classList.remove('hidden');
     projectDetailsView?.classList.add('hidden');
   } else {
-    // Logged out UI
     authBtn?.classList.remove('hidden');
     userMenu?.classList.add('hidden');
     if (authStatus) authStatus.textContent = 'Not Authenticated';
@@ -858,24 +852,17 @@ function updateAuthUI(authenticated, username = null) {
 }
 
 async function initializeApplication() {
-  // Set initial viewport height
   setViewportHeight();
-
-  // Cache DOM elements
   cacheElements();
-
-  // Register event listeners
   setupEventListeners();
 
   try {
     console.log("Starting main application initialization");
 
-    // Basic UI setup
     getBaseUrl();
     safeInitialize();
 
-    // Initialize auth - this must happen AFTER apiRequest is available
-    // but BEFORE we try to make any authenticated requests
+    // Initialize auth - must happen AFTER apiRequest is available
     if (window.auth?.init) {
       console.log("Initializing auth module");
       await window.auth.init();
@@ -897,21 +884,19 @@ async function initializeAllModules() {
   try {
     console.log("Starting application initialization sequence");
 
-    // The main "app-level" init
+    // Main "app-level" init
     await initializeApplication();
-    
-    // Check authentication early
+
+    // Check authentication
     const isAuthenticated = await ensureAuthenticated();
     API_CONFIG.isAuthenticated = isAuthenticated;
-    
+
     // Only try to load user data if authenticated
     if (isAuthenticated) {
-      // Load sidebar projects and other user data
       if (typeof window.loadSidebarProjects === 'function') {
         await window.loadSidebarProjects();
       }
     } else {
-      // Show login required message
       const loginMsg = document.getElementById("loginRequiredMessage");
       if (loginMsg) loginMsg.classList.remove("hidden");
     }
@@ -937,15 +922,13 @@ async function initializeAllModules() {
 }
 
 function safeInitialize() {
-  // Projects search
   const projectSearch = ELEMENTS.SIDEBAR_PROJECT_SEARCH;
   if (projectSearch) {
     projectSearch.addEventListener('input', (e) => {
-      // Project search implementation would go here
+      // Project search logic goes here
     });
   }
 
-  // New project button
   const newProjectBtn = ELEMENTS.SIDEBAR_NEW_PROJECT_BTN;
   if (newProjectBtn) {
     newProjectBtn.addEventListener('click', () => {
@@ -957,7 +940,6 @@ function safeInitialize() {
     });
   }
 
-  // Show login
   const showLoginBtn = ELEMENTS.SHOW_LOGIN_BTN;
   const authButton = ELEMENTS.AUTH_BUTTON;
   if (showLoginBtn && authButton) {
