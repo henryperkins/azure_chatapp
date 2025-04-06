@@ -34,6 +34,7 @@ from utils.auth_utils import clean_expired_tokens
 
 logger = logging.getLogger(__name__)
 
+
 # Base protocol for models with common attributes
 class BaseModelProtocol(Protocol):
     id: Any
@@ -42,34 +43,37 @@ class BaseModelProtocol(Protocol):
 
 
 # Type variable for generic database models
-T = TypeVar('T', bound=BaseModelProtocol)
+T = TypeVar("T", bound=BaseModelProtocol)
 
 # Global flag to manage concurrent runs of scheduled tasks
 _task_running = False
 
+
 async def run_periodic_task(
     interval_seconds: int,
     task_func: Callable[[AsyncSession], Awaitable[Any]],
-    task_name: str
+    task_name: str,
 ) -> None:
     """
     Runs a periodic task at specified intervals.
-    
+
     Args:
         interval_seconds: Time in seconds between task runs
         task_func: Async function to run that takes a database session
         task_name: Name of the task for logging
     """
     global _task_running
-    
+
     if _task_running:
-        logger.warning(f"Periodic task '{task_name}' already running, skipping this execution")
+        logger.warning(
+            f"Periodic task '{task_name}' already running, skipping this execution"
+        )
         return
-        
+
     try:
         _task_running = True
         logger.info(f"Starting periodic task: {task_name}")
-        
+
         while True:
             try:
                 async with get_async_session_context() as session:
@@ -77,13 +81,13 @@ async def run_periodic_task(
                     result = await task_func(session)
                     end_time = datetime.utcnow()
                     duration = (end_time - start_time).total_seconds()
-                    
+
                     logger.info(
                         f"Periodic task '{task_name}' completed in {duration:.2f}s: {result}"
                     )
             except Exception as e:
                 logger.error(f"Error in periodic task '{task_name}': {str(e)}")
-                
+
             # Wait until next interval
             await asyncio.sleep(interval_seconds)
     finally:
@@ -93,7 +97,7 @@ async def run_periodic_task(
 async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
     """
     Schedules the token cleanup task to run periodically.
-    
+
     Args:
         interval_minutes: Time in minutes between cleanup runs
     """
@@ -102,7 +106,7 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
         run_periodic_task(
             interval_minutes * 60,  # Convert to seconds
             clean_expired_tokens,
-            "token_cleanup"
+            "token_cleanup",
         )
     )
     logger.info(f"Scheduled token cleanup to run every {interval_minutes} minutes")
@@ -111,11 +115,11 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
 async def save_model(db: AsyncSession, model_instance: Any) -> Optional[Any]:
     """
     Generic function to save a model instance to the database.
-    
+
     Args:
         db: Database session
         model_instance: SQLAlchemy model instance to save
-        
+
     Returns:
         The saved model instance if successful, None otherwise
     """
@@ -142,7 +146,7 @@ async def get_all_by_condition(
 ) -> List[T]:
     """
     Generic function to retrieve all model instances matching given conditions.
-    
+
     Args:
         db: Database session
         model_class: SQLAlchemy model class to query
@@ -150,7 +154,7 @@ async def get_all_by_condition(
         order_by: Optional order by clause
         limit: Optional limit for query results
         offset: Optional offset for query results
-        
+
     Returns:
         List of model instances matching the conditions
     """
@@ -184,11 +188,11 @@ async def validate_resource_access(
     db: AsyncSession,
     resource_name: str = "Resource",
     additional_filters: Optional[Sequence[BinaryExpression[Any]]] = None,
-    require_ownership: bool = True
+    require_ownership: bool = True,
 ) -> T:
     """
     Generic method for validating access to any resource with enhanced debugging.
-    
+
     Args:
         resource_id: UUID of the resource
         model_class: The SQLAlchemy model class of the resource
@@ -197,10 +201,10 @@ async def validate_resource_access(
         resource_name: Human-readable name for error messages
         additional_filters: Optional additional filter conditions
         require_ownership: Whether to validate user ownership (default True)
-        
+
     Returns:
         The resource object if found and accessible
-        
+
     Raises:
         HTTPException: With specific error details if validation fails
     """
@@ -212,9 +216,9 @@ async def validate_resource_access(
 
     # Build base query
     query = select(model_class).where(model_class.id == resource_id)
-    
+
     # Add ownership check if required
-    if require_ownership and hasattr(model_class, 'user_id'):
+    if require_ownership and hasattr(model_class, "user_id"):
         query = query.where(model_class.user_id == user.id)
 
     # Apply additional filters if specified
@@ -229,30 +233,28 @@ async def validate_resource_access(
 
     if not resource:
         # Check if resource exists at all
-        exists = await db.execute(select(model_class.id).where(model_class.id == resource_id))
+        exists = await db.execute(
+            select(model_class.id).where(model_class.id == resource_id)
+        )
         if not exists.scalar():
             logger.warning(f"{resource_name} {resource_id} does not exist")
-            raise HTTPException(
-                status_code=404,
-                detail=f"{resource_name} not found"
-            )
-        
+            raise HTTPException(status_code=404, detail=f"{resource_name} not found")
+
         # Resource exists but filters/ownership failed
         logger.warning(
             f"Access denied to {resource_name} {resource_id}\n"
             f"User {user.id} failed validation checks"
         )
         raise HTTPException(
-            status_code=404,
-            detail=f"{resource_name} exists but you don't have access"
+            status_code=404, detail=f"{resource_name} exists but you don't have access"
         )
 
     # Check archived status if applicable
-    if hasattr(resource, 'archived') and resource.archived:
+    if hasattr(resource, "archived") and resource.archived:
         logger.warning(f"Attempt to access archived {resource_name} {resource_id}")
         raise HTTPException(
             status_code=400,
-            detail=f"{resource_name} is archived and cannot be modified"
+            detail=f"{resource_name} is archived and cannot be modified",
         )
 
     logger.debug(f"Access granted to {resource_name} {resource_id}")
@@ -260,9 +262,7 @@ async def validate_resource_access(
 
 
 async def get_by_id(
-    db: AsyncSession,
-    model_class: Type[T],
-    model_id: Union[UUID, int]
+    db: AsyncSession, model_class: Type[T], model_id: Union[UUID, int]
 ) -> Optional[T]:
     """
     Generic function to retrieve a model instance by its ID.

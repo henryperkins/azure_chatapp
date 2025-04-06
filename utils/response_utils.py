@@ -14,44 +14,40 @@ AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
 API_VERSION = "2025-02-01-preview"
 
 
-async def create_standard_response(data=None, message="Success", success=True, status_code=200, headers=None):
+async def create_standard_response(
+    data=None, message="Success", success=True, status_code=200, headers=None
+):
     """Ensure consistent response structure with support for headers"""
     response_data = {
         "status": "success" if success else "error",
         "message": message,
         "data": data if data is not None else ([] if isinstance(data, list) else {}),
         "timestamp": datetime.now().isoformat(),
-        "request_id": str(uuid4())  # Add unique ID for tracking
+        "request_id": str(uuid4()),  # Add unique ID for tracking
     }
     return JSONResponse(
-        content=response_data,
-        status_code=status_code,
-        headers=headers or {}
+        content=response_data, status_code=status_code, headers=headers or {}
     )
 
 
 async def azure_api_request(
-    endpoint_path,
-    method="GET",
-    data=None,
-    params=None,
-    headers=None
+    endpoint_path, method="GET", data=None, params=None, headers=None
 ):
     """
     Makes an HTTP request to the Azure OpenAI API.
     """
     url = f"{AZURE_OPENAI_ENDPOINT}/{endpoint_path}?api-version={API_VERSION}"
-    
+
     # Set default headers
     request_headers = {
         "Content-Type": "application/json",
-        "api-key": AZURE_OPENAI_API_KEY
+        "api-key": AZURE_OPENAI_API_KEY,
     }
-    
+
     # Add custom headers if provided
     if headers:
         request_headers.update(headers)
-    
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.request(
@@ -60,7 +56,7 @@ async def azure_api_request(
                 json=data,
                 params=params,
                 headers=request_headers,
-                timeout=60
+                timeout=60,
             )
             response.raise_for_status()
             return response.json()

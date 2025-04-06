@@ -27,7 +27,7 @@ from fastapi import (
 )
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
@@ -624,14 +624,11 @@ async def get_knowledge_base_health(
 
     # Count of successfully processed files
     processed_files = await db.scalar(
-        select(
-            select(ProjectFile.id)
-            .where(
-                ProjectFile.project_id == kb.project_id,
-                ProjectFile.metadata["search_processing"]["status"].astext == "success",
-            )
-            .exists()
-            .select()
+        select(func.count())
+        .select_from(ProjectFile)
+        .where(
+            ProjectFile.project_id == kb.project_id,
+            ProjectFile.metadata["search_processing"]["status"].astext == "success",
         )
     )
 
@@ -647,11 +644,12 @@ async def get_knowledge_base_health(
 # Text Extraction Service
 # ----------------------------------------------------------------------
 
+
 @router.post("/text-extractor/initialize", response_model=Dict[str, Any])
 async def initialize_text_extractor():
     """
     Initialize the text extraction service.
-    
+
     Returns:
         Dictionary with service status and capabilities
     """
@@ -663,44 +661,41 @@ async def initialize_text_extractor():
             "features": {
                 "pdf_extraction": PDF_AVAILABLE,
                 "docx_extraction": DOCX_AVAILABLE,
-                "token_counting": TIKTOKEN_AVAILABLE
-            }
-        }
+                "token_counting": TIKTOKEN_AVAILABLE,
+            },
+        },
     }
+
 
 @router.post("/text-extractor/extract", response_model=Dict[str, Any])
 async def extract_text_from_file(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user_and_token)
+    current_user: User = Depends(get_current_user_and_token),
 ):
     """
     Extract text and metadata from uploaded file.
-    
+
     Returns:
         Dictionary with extracted text chunks and metadata
     """
     try:
         extractor = get_text_extractor()
         chunks, metadata = await extractor.extract_text(
-            file.file,
-            filename=file.filename,
-            mimetype=file.content_type
+            file.file, filename=file.filename, mimetype=file.content_type
         )
-        
-        return {
-            "chunks": chunks,
-            "metadata": metadata
-        }
-        
+
+        return {"chunks": chunks, "metadata": metadata}
+
     except Exception as e:
         logger.error(f"Text extraction failed: {str(e)}")
         raise HTTPException(
             status_code=400,
             detail={
                 "code": "TEXT_EXTRACTION_ERROR",
-                "message": f"Text extraction failed: {str(e)}"
-            }
+                "message": f"Text extraction failed: {str(e)}",
+            },
         )
+
 
 # ----------------------------------------------------------------------
 # File Upload & Reindex

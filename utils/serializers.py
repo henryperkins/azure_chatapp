@@ -4,6 +4,7 @@ serializers.py
 Provides standardized functions for serializing database models to dictionaries.
 Ensures consistent response formats across endpoints.
 """
+
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Sequence, Union
 
@@ -29,7 +30,7 @@ def serialize_datetime(dt: Optional[Union[datetime, str]]) -> Optional[str]:
             dt = datetime.fromisoformat(dt)
         except ValueError:
             return dt  # Return raw string if formatting fails
-    
+
     try:
         return dt.isoformat()
     except AttributeError:
@@ -46,10 +47,10 @@ def serialize_uuid(id_value: Any) -> Optional[str]:
 def serialize_project(project: Project) -> Dict[str, Any]:
     """
     Serialize a Project model to a dictionary.
-    
+
     Args:
         project: Project database model
-        
+
     Returns:
         Dictionary with serialized project data
     """
@@ -69,45 +70,47 @@ def serialize_project(project: Project) -> Dict[str, Any]:
         "created_at": serialize_datetime(project.created_at),
         "updated_at": serialize_datetime(project.updated_at),
         "knowledge_base_id": serialize_uuid(project.knowledge_base_id),
-        "extra_data": project.extra_data or {}
+        "extra_data": project.extra_data or {},
     }
 
 
 def serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
     """
     Serialize a Conversation model or dict to a dictionary.
-    
+
     Args:
         conversation: Conversation database model or dict
-        
+
     Returns:
         Dictionary with serialized conversation data
     """
-    conv_dict = conversation if isinstance(conversation, dict) else conversation.__dict__
-    
+    conv_dict = (
+        conversation if isinstance(conversation, dict) else conversation.__dict__
+    )
+
     # Explicitly handle datetime fields
-    created_at = conv_dict.get('created_at')
-    updated_at = conv_dict.get('updated_at')
-    
+    created_at = conv_dict.get("created_at")
+    updated_at = conv_dict.get("updated_at")
+
     return {
-        "id": serialize_uuid(conv_dict.get('id')),
-        "title": conv_dict.get('title'),
-        "model_id": conv_dict.get('model_id'),
-        "project_id": serialize_uuid(conv_dict.get('project_id')),
+        "id": serialize_uuid(conv_dict.get("id")),
+        "title": conv_dict.get("title"),
+        "model_id": conv_dict.get("model_id"),
+        "project_id": serialize_uuid(conv_dict.get("project_id")),
         "created_at": serialize_datetime(created_at),
         "updated_at": serialize_datetime(updated_at),
-        "is_deleted": conv_dict.get('is_deleted', False),
-        "extra_data": conv_dict.get('extra_data', {})
+        "is_deleted": conv_dict.get("is_deleted", False),
+        "extra_data": conv_dict.get("extra_data", {}),
     }
 
 
 def serialize_message(message: Message) -> Dict[str, Any]:
     """
     Serialize a Message model to a dictionary.
-    
+
     Args:
         message: Message database model
-        
+
     Returns:
         Dictionary with serialized message data
     """
@@ -118,18 +121,20 @@ def serialize_message(message: Message) -> Dict[str, Any]:
         "content": message.content,
         "metadata": message.get_metadata_dict(),
         "created_at": serialize_datetime(message.created_at),
-        "updated_at": serialize_datetime(message.updated_at)
+        "updated_at": serialize_datetime(message.updated_at),
     }
 
 
-def serialize_artifact(artifact: Artifact, include_content: bool = True) -> Dict[str, Any]:
+def serialize_artifact(
+    artifact: Artifact, include_content: bool = True
+) -> Dict[str, Any]:
     """
     Serialize an Artifact model to a dictionary.
-    
+
     Args:
         artifact: Artifact database model
         include_content: Whether to include the full content
-        
+
     Returns:
         Dictionary with serialized artifact data
     """
@@ -141,34 +146,33 @@ def serialize_artifact(artifact: Artifact, include_content: bool = True) -> Dict
         "content_type": artifact.content_type,
         "created_at": serialize_datetime(artifact.created_at),
         "updated_at": serialize_datetime(artifact.updated_at),
-        "extra_data": artifact.extra_data
+        "extra_data": artifact.extra_data,
     }
-    
+
     if include_content:
         result["content"] = artifact.content
     else:
         # Include a preview instead
         result["content_preview"] = (
-            artifact.content[:150] + "..." if artifact.content and len(artifact.content) > 150 
+            artifact.content[:150] + "..."
+            if artifact.content and len(artifact.content) > 150
             else artifact.content
         )
-    
+
     return result
 
 
 def serialize_project_file(
-    file: ProjectFile,
-    include_content: bool = False,
-    include_file_path: bool = False
+    file: ProjectFile, include_content: bool = False, include_file_path: bool = False
 ) -> Dict[str, Any]:
     """
     Serialize a ProjectFile model to a dictionary.
-    
+
     Args:
         file: ProjectFile database model
         include_content: Whether to include the content
         include_file_path: Whether to include the file path
-        
+
     Returns:
         Dictionary with serialized file data
     """
@@ -180,39 +184,42 @@ def serialize_project_file(
         "file_type": file.file_type,
         "created_at": serialize_datetime(file.created_at),
         "updated_at": serialize_datetime(file.updated_at),
-        "metadata": file.metadata or {}
+        "metadata": file.metadata or {},
     }
-    
+
     if include_file_path:
         result["file_path"] = file.file_path
-    
+
     if include_content and file.content:
         result["content"] = file.content
-    
+
     return result
 
 
-def serialize_list(items: Sequence[Any], serializer_func, **kwargs) -> List[Dict[str, Any]]:
+def serialize_list(
+    items: Sequence[Any], serializer_func, **kwargs
+) -> List[Dict[str, Any]]:
     """
     Serialize a list of items using the provided serializer function.
-    
+
     Args:
         items: List of database models
         serializer_func: Function to serialize each item
         **kwargs: Additional arguments to pass to the serializer
-        
+
     Returns:
         List of serialized dictionaries
     """
     return [serializer_func(item, **kwargs) for item in items]
 
-def serialize_knowledge_base(kb: 'KnowledgeBase') -> Dict[str, Any]:
+
+def serialize_knowledge_base(kb: "KnowledgeBase") -> Dict[str, Any]:
     """
     Serialize a KnowledgeBase model to a dictionary.
-    
+
     Args:
         kb: KnowledgeBase database model
-        
+
     Returns:
         Dictionary with serialized knowledge base data
     """
@@ -223,16 +230,17 @@ def serialize_knowledge_base(kb: 'KnowledgeBase') -> Dict[str, Any]:
         "embedding_model": kb.embedding_model,
         "is_active": kb.is_active,
         "created_at": serialize_datetime(kb.created_at),
-        "updated_at": serialize_datetime(kb.updated_at)
+        "updated_at": serialize_datetime(kb.updated_at),
     }
+
 
 def serialize_vector_result(result: Dict[str, Any]) -> Dict[str, Any]:
     """
     Standardize vector search results format.
-    
+
     Args:
         result: Raw vector search result dict
-        
+
     Returns:
         Standardized result dictionary
     """
@@ -241,5 +249,5 @@ def serialize_vector_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "score": round(float(result.get("score", 0)), 4),
         "text": (result.get("text", "") or "")[:500],  # Preview
         "metadata": result.get("metadata", {}),
-        "file_info": result.get("file_info", {})
+        "file_info": result.get("file_info", {}),
     }

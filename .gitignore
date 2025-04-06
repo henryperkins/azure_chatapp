@@ -13,3 +13,4 @@ uploads/*
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+migrations/*

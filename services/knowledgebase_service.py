@@ -34,9 +34,13 @@ from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
 from services.file_storage import get_file_storage
 from services.text_extraction import get_text_extractor, TextExtractionError
-from services.vector_db import get_vector_db, process_file_for_search  # Make sure process_file_for_search is from vector_db
+from services.vector_db import (
+    get_vector_db,
+    process_file_for_search,
+)  # Make sure process_file_for_search is from vector_db
 
 logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------
 # Configuration Constants
@@ -46,12 +50,17 @@ def get_kb_config() -> Dict[str, Any]:
     return {
         "max_file_bytes": getattr(config, "MAX_FILE_SIZE", 30_000_000),
         "stream_threshold": getattr(config, "STREAM_THRESHOLD", 10_000_000),
-        "default_embedding_model": getattr(config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
-        "vector_db_storage_path": getattr(config, "VECTOR_DB_STORAGE_PATH", "./data/vector_db"),
+        "default_embedding_model": getattr(
+            config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2"
+        ),
+        "vector_db_storage_path": getattr(
+            config, "VECTOR_DB_STORAGE_PATH", "./data/vector_db"
+        ),
         "default_chunk_size": getattr(config, "DEFAULT_CHUNK_SIZE", 1000),
         "default_chunk_overlap": getattr(config, "DEFAULT_CHUNK_OVERLAP", 200),
-        "allowed_sort_fields": {"created_at", "filename", "file_size"}
+        "allowed_sort_fields": {"created_at", "filename", "file_size"},
     }
+
 
 KB_CONFIG = get_kb_config()
 MAX_FILE_BYTES = KB_CONFIG["max_file_bytes"]
@@ -63,7 +72,9 @@ DEFAULT_CHUNK_OVERLAP = KB_CONFIG["default_chunk_overlap"]
 ALLOWED_SORT_FIELDS = KB_CONFIG["allowed_sort_fields"]
 
 
-def extract_file_metadata(file_record: ProjectFile, include_token_count: bool = True) -> Dict[str, Any]:
+def extract_file_metadata(
+    file_record: ProjectFile, include_token_count: bool = True
+) -> Dict[str, Any]:
     """Extract metadata from file record for API responses."""
     metadata = {}
 
@@ -93,10 +104,13 @@ def extract_file_metadata(file_record: ProjectFile, include_token_count: bool = 
 # ---------------------------------------------------------------------
 # Error Handling Decorator
 # ---------------------------------------------------------------------
-def handle_service_errors(detail_message: str = "Operation failed", status_code: int = 500):
+def handle_service_errors(
+    detail_message: str = "Operation failed", status_code: int = 500
+):
     """
     Decorator for consistent error handling in service functions.
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -106,14 +120,22 @@ def handle_service_errors(detail_message: str = "Operation failed", status_code:
                 raise
             except ValueError as e:
                 logger.warning(f"Validation error in {func.__name__}: {e}")
-                raise HTTPException(status_code=400, detail=f"{detail_message}: {str(e)}")
+                raise HTTPException(
+                    status_code=400, detail=f"{detail_message}: {str(e)}"
+                )
             except SQLAlchemyError as e:
-                logger.error(f"Database error in {func.__name__}: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Database error in {func.__name__}: {str(e)}", exc_info=True
+                )
                 raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
             except Exception as e:
                 logger.exception(f"Unhandled error in {func.__name__}: {str(e)}")
-                raise HTTPException(status_code=status_code, detail=f"{detail_message}: {str(e)}")
+                raise HTTPException(
+                    status_code=status_code, detail=f"{detail_message}: {str(e)}"
+                )
+
         return wrapper
+
     return decorator
 
 
@@ -121,9 +143,7 @@ def handle_service_errors(detail_message: str = "Operation failed", status_code:
 # Helper / Reuse
 # ---------------------------------------------------------------------
 async def _validate_user_and_project(
-    project_id: UUID,
-    user_id: Optional[int],
-    db: AsyncSession
+    project_id: UUID, user_id: Optional[int], db: AsyncSession
 ) -> Project:
     """
     Helper to validate user permissions and retrieve the Project.
@@ -131,6 +151,7 @@ async def _validate_user_and_project(
     """
     if user_id is not None:
         from services.project_service import validate_project_access
+
         the_user = await get_by_id(db, User, user_id)
         if not the_user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -146,7 +167,7 @@ async def _validate_file_access(
     project_id: UUID,
     file_id: Optional[UUID] = None,
     user_id: Optional[int] = None,
-    db: Optional[AsyncSession] = None
+    db: Optional[AsyncSession] = None,
 ) -> Tuple[Project, Optional[ProjectFile]]:
     """
     Validate access to the project and optionally a file. Returns (project, file_record).
@@ -176,7 +197,7 @@ async def _process_upload_file_info(file: UploadFile) -> Dict[str, Any]:
         "sanitized_filename": sanitized_filename,
         "file_size": getattr(file, "size", 0),
         "file_ext": ext[1:].lower() if ext else "",
-        "file_type": file_info.get("category", "unknown")
+        "file_type": file_info.get("category", "unknown"),
     }
 
 
@@ -193,7 +214,7 @@ async def _expand_query(original_query: str) -> str:
                     keywords.update(["method", "process", "reason"])
                 elif word in ["best", "good"]:
                     keywords.add("effective")
-        return ' '.join(keywords) + " " + original_query[:100]
+        return " ".join(keywords) + " " + original_query[:100]
     except Exception:
         return original_query[:150]
 
@@ -202,8 +223,7 @@ async def _expand_query(original_query: str) -> str:
 # Token Estimation
 # ---------------------------------------------------------------------
 async def estimate_tokens_from_file(
-    content: Union[bytes, BinaryIO, AsyncGenerator[bytes, None]],
-    filename: str
+    content: Union[bytes, BinaryIO, AsyncGenerator[bytes, None]], filename: str
 ) -> Tuple[int, Dict[str, Any]]:
     """
     Extract text, get token count from metadata, fallback if needed.
@@ -221,43 +241,46 @@ async def estimate_tokens_from_file(
         chunks, metadata = text_extractor.extract_text(content, filename)
         token_count = metadata.get("token_count", 0)
         if token_count == 0 and chunks:
-            joined = ' '.join(chunks)
+            joined = " ".join(chunks)
             token_count = len(joined) // 4
         extraction_method = getattr(text_extractor, "name", "unknown_extractor")
         return token_count, {
             "token_count": token_count,
             "extraction_method": extraction_method,
-            "extraction_time": datetime.now().isoformat()
+            "extraction_time": datetime.now().isoformat(),
         }
     except TextExtractionError as e:
         logger.error(f"Text extraction failed for {filename}: {str(e)}")
         return 0, {
             "token_count": 0,
             "extraction_error": str(e),
-            "extraction_time": datetime.now().isoformat()
+            "extraction_time": datetime.now().isoformat(),
         }
 
 
 async def _process_file_tokens(
-    contents: bytes,
-    filename: str,
-    file: UploadFile,
-    project: Project
+    contents: bytes, filename: str, file: UploadFile, project: Project
 ) -> Dict[str, Any]:
     """
     Helper that uses estimate_tokens_from_file, checks project token usage, etc.
     """
     try:
         # If large file, pass the file.file for streaming
-        content_to_process = contents if len(contents) <= STREAM_THRESHOLD else file.file
-        tok_count, tok_metadata = await estimate_tokens_from_file(content_to_process, filename)
+        content_to_process = (
+            contents if len(contents) <= STREAM_THRESHOLD else file.file
+        )
+        tok_count, tok_metadata = await estimate_tokens_from_file(
+            content_to_process, filename
+        )
     except Exception as e:
         logger.error(f"Error estimating tokens for {filename}: {str(e)}")
         tok_count, tok_metadata = 0, {"error": str(e)}
 
     # Check project limit
     if project.max_tokens and (project.token_usage + tok_count) > project.max_tokens:
-        raise ValueError(f"Adding this file ({tok_count} tokens) exceeds the project's token limit ({project.max_tokens}).")
+        raise ValueError(
+            f"Adding this file ({tok_count} tokens) exceeds the project's token limit ({project.max_tokens})."
+        )
 
     return {"token_estimate": tok_count, "metadata": tok_metadata}
 
@@ -266,13 +289,14 @@ async def _process_file_tokens(
 # Create / Manage KnowledgeBase
 # ---------------------------------------------------------------------
 
+
 @handle_service_errors("Error creating knowledge base")
 async def create_knowledge_base(
     name: str,
     project_id: UUID,
     description: Optional[str] = None,
     embedding_model: Optional[str] = None,
-    db: Optional[AsyncSession] = None
+    db: Optional[AsyncSession] = None,
 ) -> KnowledgeBase:
     """
     Create a new KnowledgeBase for a project.
@@ -292,7 +316,7 @@ async def create_knowledge_base(
         description=description,
         embedding_model=embedding_model or DEFAULT_EMBEDDING_MODEL,
         is_active=True,
-        project_id=project_id
+        project_id=project_id,
     )
 
     await save_model(db, kb)
@@ -308,13 +332,14 @@ async def create_knowledge_base(
 # Upload a File & Queue Processing
 # ---------------------------------------------------------------------
 
+
 @handle_service_errors("File upload failed")
 async def upload_file_to_project(
     project_id: UUID,
     file: UploadFile,
     db: AsyncSession,
     user_id: Optional[int] = None,
-    background_tasks: Optional[BackgroundTasks] = None
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> Dict[str, Any]:
     """
     Upload a file to a project + knowledge base, store in DB & disk,
@@ -323,7 +348,9 @@ async def upload_file_to_project(
     project, _ = await _validate_file_access(project_id, None, user_id, db)
 
     if not project.knowledge_base_id:
-        raise HTTPException(status_code=400, detail="Project does not have an associated knowledge base")
+        raise HTTPException(
+            status_code=400, detail="Project does not have an associated knowledge base"
+        )
 
     # Validate + sanitize
     file_info = await _process_upload_file_info(file)
@@ -336,7 +363,7 @@ async def upload_file_to_project(
     if file_size > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"File exceeds maximum size of {MAX_FILE_BYTES / 1024 / 1024:.1f} MB"
+            detail=f"File exceeds maximum size of {MAX_FILE_BYTES / 1024 / 1024:.1f} MB",
         )
 
     # Estimate tokens
@@ -347,7 +374,7 @@ async def upload_file_to_project(
     # Store file physically
     storage_config = {
         "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
     }
     storage = get_file_storage(storage_config)
 
@@ -366,7 +393,7 @@ async def upload_file_to_project(
         filename=sanitized_filename,
         file_path=stored_path,
         file_type=file_type,
-        file_size=file_size
+        file_size=file_size,
     )
     project_file.config = {
         "token_count": token_estimate,
@@ -375,8 +402,8 @@ async def upload_file_to_project(
         "upload_time": datetime.now().isoformat(),
         "search_processing": {
             "status": "pending",
-            "queued_at": datetime.now().isoformat()
-        }
+            "queued_at": datetime.now().isoformat(),
+        },
     }
 
     # Save file record + update project token usage
@@ -401,7 +428,7 @@ async def upload_file_to_project(
             file_id=project_file.id,
             project_id=project_id,
             knowledge_base_id=project.knowledge_base_id,
-            db=db
+            db=db,
         )
 
     return {
@@ -409,10 +436,12 @@ async def upload_file_to_project(
         "filename": project_file.filename,
         "file_type": project_file.file_type,
         "file_size": project_file.file_size,
-        "created_at": project_file.created_at.isoformat() if project_file.created_at else None,
+        "created_at": (
+            project_file.created_at.isoformat() if project_file.created_at else None
+        ),
         "token_count": token_estimate,
         "processing_status": "pending",
-        "project_id": str(project_id)
+        "project_id": str(project_id),
     }
 
 
@@ -420,12 +449,10 @@ async def upload_file_to_project(
 # Single-File Reprocessing (Used by Reindex + Upload)
 # ---------------------------------------------------------------------
 
+
 @handle_service_errors("File reindexing failed")
 async def process_single_file_for_search(
-    file_id: UUID,
-    project_id: UUID,
-    knowledge_base_id: UUID,
-    db: AsyncSession
+    file_id: UUID, project_id: UUID, knowledge_base_id: UUID, db: AsyncSession
 ):
     """
     This is called in a background task to:
@@ -444,7 +471,7 @@ async def process_single_file_for_search(
         # 2) Read the file from storage
         storage_config = {
             "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-            "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+            "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
         }
         storage = get_file_storage(storage_config)
         file_content = await storage.get_file(file_record.file_path)
@@ -455,7 +482,7 @@ async def process_single_file_for_search(
         vector_db = await get_vector_db(
             model_name=model_name,
             storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-            load_existing=True
+            load_existing=True,
         )
 
         # 4) Process (chunk + embed) via vector_db.process_file_for_search
@@ -464,7 +491,7 @@ async def process_single_file_for_search(
             vector_db=vector_db,
             file_content=file_content,
             chunk_size=DEFAULT_CHUNK_SIZE,
-            chunk_overlap=DEFAULT_CHUNK_OVERLAP
+            chunk_overlap=DEFAULT_CHUNK_OVERLAP,
         )
 
         # 5) Update the file record's status
@@ -472,7 +499,7 @@ async def process_single_file_for_search(
             "status": "success" if result.get("success") else "error",
             "chunk_count": result.get("chunk_count", 0),
             "error": result.get("error"),
-            "processed_at": datetime.now().isoformat()
+            "processed_at": datetime.now().isoformat(),
         }
         file_config = file_record.config or {}
         file_config["search_processing"] = search_proc
@@ -490,7 +517,7 @@ async def process_single_file_for_search(
                 file_config["search_processing"] = {
                     "status": "error",
                     "error": str(e),
-                    "processed_at": datetime.now().isoformat()
+                    "processed_at": datetime.now().isoformat(),
                 }
                 file_record.config = file_config
                 await save_model(db, file_record)
@@ -502,12 +529,10 @@ async def process_single_file_for_search(
 # File Deletion
 # ---------------------------------------------------------------------
 
+
 @handle_service_errors("File deletion failed")
 async def delete_project_file(
-    project_id: UUID,
-    file_id: UUID,
-    db: AsyncSession,
-    user_id: Optional[int] = None
+    project_id: UUID, file_id: UUID, db: AsyncSession, user_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Delete a file from storage, remove from vector DB, then from DB.
@@ -522,7 +547,7 @@ async def delete_project_file(
     # 1) Delete from storage
     storage_config = {
         "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads")
+        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
     }
     storage = get_file_storage(storage_config)
     file_deletion_status = "success"
@@ -537,11 +562,15 @@ async def delete_project_file(
     # 2) Remove from vector DB
     if project.knowledge_base_id:
         try:
-            model_name = project.knowledge_base.embedding_model if project.knowledge_base else DEFAULT_EMBEDDING_MODEL
+            model_name = (
+                project.knowledge_base.embedding_model
+                if project.knowledge_base
+                else DEFAULT_EMBEDDING_MODEL
+            )
             vector_db = await get_vector_db(
                 model_name=model_name,
                 storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-                load_existing=True
+                load_existing=True,
             )
             await vector_db.delete_by_filter({"file_id": str(file_id)})
         except Exception as e:
@@ -563,7 +592,7 @@ async def delete_project_file(
         "success": file_deletion_status == "success",
         "status": file_deletion_status,
         "file_id": str(file_id),
-        "tokens_removed": token_estimate
+        "tokens_removed": token_estimate,
     }
 
 
@@ -571,12 +600,10 @@ async def delete_project_file(
 # Searching in the Knowledge Base
 # ---------------------------------------------------------------------
 
+
 @handle_service_errors("Error searching project context")
 async def search_project_context(
-    project_id: UUID,
-    query: str,
-    db: AsyncSession,
-    top_k: int = 5
+    project_id: UUID, query: str, db: AsyncSession, top_k: int = 5
 ) -> Dict[str, Any]:
     """
     Search project knowledge base with enhanced error handling and validation.
@@ -596,7 +623,7 @@ async def search_project_context(
     vector_db = await get_vector_db(
         model_name=str(model_name) if model_name else DEFAULT_EMBEDDING_MODEL,
         storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-        load_existing=True
+        load_existing=True,
     )
 
     # Filter by project + KB
@@ -605,7 +632,9 @@ async def search_project_context(
         filter_metadata["knowledge_base_id"] = str(project.knowledge_base_id)
 
     # Expand the query if it's long
-    clean_query = await _expand_query(query) if len(query.split()) > 3 else query.strip()
+    clean_query = (
+        await _expand_query(query) if len(query.split()) > 3 else query.strip()
+    )
     if not clean_query:
         clean_query = query[:100]
 
@@ -613,7 +642,7 @@ async def search_project_context(
     results = await vector_db.search(
         query=clean_query,
         top_k=top_k * 2,  # gather extra, then do filtering below
-        filter_metadata=filter_metadata
+        filter_metadata=filter_metadata,
     )
 
     # Filter to ensure diversity by file_id
@@ -636,7 +665,9 @@ async def search_project_context(
                 fid_uuid = UUID(f_id)
                 file_rec = await get_by_id(db, ProjectFile, fid_uuid)
                 if file_rec:
-                    res["file_info"] = extract_file_metadata(file_rec, include_token_count=False)
+                    res["file_info"] = extract_file_metadata(
+                        file_rec, include_token_count=False
+                    )
             except Exception as e:
                 logger.error(f"Error adding file metadata: {e}")
         enhanced.append(res)
@@ -645,7 +676,7 @@ async def search_project_context(
     return {
         "query": query,
         "results": [serialize_vector_result(r) for r in enhanced],
-        "result_count": len(enhanced)
+        "result_count": len(enhanced),
     }
 
 
@@ -661,7 +692,7 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
         update(Project)
         .where(
             Project.knowledge_base_id.is_not(None),
-            ~exists().where(KnowledgeBase.id == Project.knowledge_base_id)
+            ~exists().where(KnowledgeBase.id == Project.knowledge_base_id),
         )
         .values(knowledge_base_id=None)
         .returning(Project.id)
@@ -674,9 +705,9 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
         .where(
             Conversation.use_knowledge_base.is_(True),
             ~exists().where(
-                (Project.id == Conversation.project_id) &
-                (Project.knowledge_base_id.is_not(None))
-            )
+                (Project.id == Conversation.project_id)
+                & (Project.knowledge_base_id.is_not(None))
+            ),
         )
         .values(use_knowledge_base=False)
         .returning(Conversation.id)
@@ -702,13 +733,15 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
     file_count = file_count_res.scalar() or 0
 
     # Total size
-    size_q = select(func.sum(ProjectFile.file_size)).where(ProjectFile.project_id == project_id)
+    size_q = select(func.sum(ProjectFile.file_size)).where(
+        ProjectFile.project_id == project_id
+    )
     size_res = await db.execute(size_q)
     total_size = size_res.scalar() or 0
 
     # Distribution
     type_q = (
-        select(ProjectFile.file_type, func.count().label('count'))
+        select(ProjectFile.file_type, func.count().label("count"))
         .where(ProjectFile.project_id == project_id)
         .group_by(ProjectFile.file_type)
     )

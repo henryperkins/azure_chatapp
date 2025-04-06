@@ -25,10 +25,9 @@ from models.conversation import Conversation
 #  Knowledge Base Validation
 # =======================================================
 
+
 async def validate_knowledge_base_access(
-    project_id: UUID,
-    knowledge_base_id: UUID,
-    db: AsyncSession
+    project_id: UUID, knowledge_base_id: UUID, db: AsyncSession
 ) -> KnowledgeBase:
     """
     Validate KB exists, is active, and belongs to the given project.
@@ -41,47 +40,48 @@ async def validate_knowledge_base_access(
     kb = await db.get(KnowledgeBase, knowledge_base_id)
     # kb.is_active ensures we can't use an inactive knowledge base
     if not kb or not kb.is_active or (kb.id != project.knowledge_base_id):
-        raise HTTPException(status_code=400, detail="Knowledge base not available for this project")
+        raise HTTPException(
+            status_code=400, detail="Knowledge base not available for this project"
+        )
 
     return kb
+
 
 # =======================================================
 #  Project Access
 # =======================================================
 
+
 async def check_knowledge_base_status(
-    project_id: UUID,
-    db: AsyncSession
+    project_id: UUID, db: AsyncSession
 ) -> Dict[str, Any]:
     """Check if project's knowledge base has indexed content"""
     from models.project_file import ProjectFile
     from sqlalchemy import select, func
-    
+
     # Count processed files and total chunks
     stmt = select(
         func.count().label("file_count"),
         func.sum(
             ProjectFile.config["search_processing"]["chunk_count"].as_integer()
-        ).label("total_chunks")
+        ).label("total_chunks"),
     ).where(
         ProjectFile.project_id == project_id,
-        ProjectFile.config["search_processing"]["success"].as_boolean()
+        ProjectFile.config["search_processing"]["success"].as_boolean(),
     )
-    
+
     result = await db.execute(stmt)
     stats = result.mappings().first()
-    
+
     return {
         "has_content": bool(stats and stats["total_chunks"]),
         "file_count": stats["file_count"] if stats else 0,
-        "chunk_count": stats["total_chunks"] if stats else 0
+        "chunk_count": stats["total_chunks"] if stats else 0,
     }
 
+
 async def validate_project_access(
-    project_id: UUID,
-    user: User,
-    db: AsyncSession,
-    skip_ownership_check: bool = False
+    project_id: UUID, user: User, db: AsyncSession, skip_ownership_check: bool = False
 ) -> Project:
     """
     Ensures the project with UUID-based ID belongs to the user
@@ -97,26 +97,25 @@ async def validate_project_access(
     if not skip_ownership_check:
         query = query.where(Project.user_id == user.id)
     query = query.options(joinedload(Project.knowledge_base))
-    
+
     result = await db.execute(query)
     project = result.scalars().first()
 
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found or unauthorized access")
+        raise HTTPException(
+            status_code=404, detail="Project not found or unauthorized access"
+        )
 
     if project.archived:
         raise HTTPException(status_code=400, detail="Project is archived")
 
     return project
 
-async def get_valid_project(
-    project_id: int,
-    user: User,
-    db: AsyncSession
-) -> Project:
+
+async def get_valid_project(project_id: int, user: User, db: AsyncSession) -> Project:
     """
-    Legacy approach for integer-based project IDs. 
-    Some older code may still rely on an int ID. 
+    Legacy approach for integer-based project IDs.
+    Some older code may still rely on an int ID.
     Raises 404 if not found, 400 if archived.
     """
     result = await db.execute(
@@ -125,21 +124,22 @@ async def get_valid_project(
     project = result.scalars().first()
 
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found or unauthorized access")
+        raise HTTPException(
+            status_code=404, detail="Project not found or unauthorized access"
+        )
 
     if project.archived:
         raise HTTPException(status_code=400, detail="Project is archived")
 
     return project
 
+
 # =======================================================
 #  Default Project
 # =======================================================
 
-async def get_default_project(
-    user: User, 
-    db: AsyncSession
-) -> Project:
+
+async def get_default_project(user: User, db: AsyncSession) -> Project:
     """
     Retrieves the default project for a user, or creates one if none exists.
     """
@@ -157,7 +157,7 @@ async def get_default_project(
             description="Your default project for conversations",
             is_default=True,
             max_tokens=200000,
-            default_model="claude-3-sonnet-20240229"
+            default_model="claude-3-sonnet-20240229",
         )
         db.add(default_project)
         await db.commit()
@@ -165,9 +165,11 @@ async def get_default_project(
 
     return default_project
 
+
 # =======================================================
 #  Project Creation
 # =======================================================
+
 
 async def create_project(
     user_id: int,
@@ -176,7 +178,7 @@ async def create_project(
     description: Optional[str] = None,
     goals: Optional[str] = None,
     max_tokens: int = 200000,
-    default_model: str = "claude-3-sonnet-20240229"
+    default_model: str = "claude-3-sonnet-20240229",
 ) -> Project:
     """
     Creates a new project with the given parameters.
@@ -192,7 +194,7 @@ async def create_project(
         description=description,
         goals=goals,
         max_tokens=max_tokens,
-        default_model=default_model
+        default_model=default_model,
     )
 
     db.add(project)
@@ -201,16 +203,17 @@ async def create_project(
 
     return project
 
+
 # =======================================================
 #  Token Usage
 # =======================================================
 
+
 async def validate_project_token_usage(
-    project: Project, 
-    additional_tokens: int
+    project: Project, additional_tokens: int
 ) -> None:
     """
-    Raises ValueError if the project doesn't have enough capacity 
+    Raises ValueError if the project doesn't have enough capacity
     for additional_tokens. Return 400 or 422 in routes if desired.
     """
     if project.token_usage + additional_tokens > project.max_tokens:
@@ -220,10 +223,8 @@ async def validate_project_token_usage(
             f"but only {project.max_tokens - project.token_usage} available"
         )
 
-async def get_project_token_usage(
-    project_id: UUID,
-    db: AsyncSession
-) -> dict:
+
+async def get_project_token_usage(project_id: UUID, db: AsyncSession) -> dict:
     """
     Retrieves token usage statistics for a project. Raises 404 if not found.
     """
@@ -231,17 +232,23 @@ async def get_project_token_usage(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    usage_percentage = (project.token_usage / project.max_tokens) * 100 if project.max_tokens > 0 else 0
+    usage_percentage = (
+        (project.token_usage / project.max_tokens) * 100
+        if project.max_tokens > 0
+        else 0
+    )
     return {
         "token_usage": project.token_usage,
         "max_tokens": project.max_tokens,
         "available_tokens": project.max_tokens - project.token_usage,
-        "usage_percentage": usage_percentage
+        "usage_percentage": usage_percentage,
     }
+
 
 # =======================================================
 #  Generic Resource Validation
 # =======================================================
+
 
 async def validate_resource_access(
     resource_id: UUID,
@@ -249,7 +256,7 @@ async def validate_resource_access(
     user: User,
     db: AsyncSession,
     resource_name: str = "Resource",
-    additional_conditions=None
+    additional_conditions=None,
 ) -> Any:
     """
     Generic method for validating access to any resource.
@@ -261,7 +268,7 @@ async def validate_resource_access(
     """
     query = select(model_class).where(model_class.id == resource_id)
 
-    if hasattr(model_class, 'user_id'):
+    if hasattr(model_class, "user_id"):
         query = query.where(model_class.user_id == user.id)
 
     if additional_conditions:
@@ -272,23 +279,24 @@ async def validate_resource_access(
     resource = result.scalars().first()
 
     if not resource:
-        raise HTTPException(status_code=404, detail=f"{resource_name} not found or unauthorized access")
+        raise HTTPException(
+            status_code=404, detail=f"{resource_name} not found or unauthorized access"
+        )
 
-    if hasattr(resource, 'archived') and resource.archived:
+    if hasattr(resource, "archived") and resource.archived:
         raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
 
     return resource
+
 
 # =======================================================
 #  Project Conversations
 # =======================================================
 
-async def get_project_conversations(
-    project_id: UUID, 
-    db: AsyncSession
-):
+
+async def get_project_conversations(project_id: UUID, db: AsyncSession):
     """
-    Return all conversations for a project. 
+    Return all conversations for a project.
     Could eventually add skip/limit if needed.
     """
     result = await db.execute(
@@ -296,9 +304,11 @@ async def get_project_conversations(
     )
     return result.scalars().all()
 
+
 # =======================================================
 #  Paginated Resource Query
 # =======================================================
+
 
 async def get_paginated_resources(
     db: AsyncSession,
@@ -308,7 +318,7 @@ async def get_paginated_resources(
     sort_desc: bool = True,
     skip: int = 0,
     limit: int = 100,
-    additional_filters: Optional[Any] = None
+    additional_filters: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """
     Generic method to retrieve items for a given project,
@@ -332,4 +342,5 @@ async def get_paginated_resources(
     items = result.scalars().all()
 
     from utils.serializers import serialize_list, serialize_project
+
     return serialize_list(items, serialize_project)
