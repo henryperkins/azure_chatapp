@@ -664,11 +664,10 @@ function getModelOptions() {
       maxTokens: 8192
     },
     {
-      id: 'gpt-3.5-turbo',
+      id: 'gpt-3.5-turbo', 
       name: 'GPT-3.5 Turbo',
       description: 'Fast GPT model for simpler queries'
     },
-    {
 =======
       description: 'Fast GPT model for simpler queries'
     },
