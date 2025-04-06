@@ -142,7 +142,7 @@ async def create_conversation(
             user_id=current_user.id,
             title=conversation_data.title.strip(),
             model_id=model_id,
-            project_id=project.id if project else None,
+            project_id=UUID(str(project.id)) if project else None,
         )
 
         if conv is None:
@@ -549,7 +549,7 @@ async def create_message(
     role = (new_msg.get("role") or "user").lower().strip()
     content = (new_msg.get("content") or "").strip()
     message = await create_user_message(
-        conversation_id=conversation.id,
+        conversation_id=UUID(str(conversation.id)),
         content=content,
         role=role,
         db=db,
@@ -560,23 +560,23 @@ async def create_message(
     if message.role == "user":
         try:
             msg_dicts = await get_conversation_messages(
-                conversation.id, db, include_system_prompt=True
+                UUID(str(conversation.id)), db, include_system_prompt=True
             )
 
             # Possibly augment with knowledge base
             kb_context = []
             if conversation.use_knowledge_base:
                 kb_context = await augment_with_knowledge(
-                    conversation_id=conversation.id,
+                    conversation_id=UUID(str(conversation.id)),
                     user_message=content,
                     db=db,
                 )
 
             try:
                 assistant_msg = await generate_ai_response(
-                    conversation_id=conversation.id,
+                    conversation_id=UUID(str(conversation.id)),
                     messages=kb_context + msg_dicts,
-                    model_id=conversation.model_id,
+                    model_id=conversation.model_id or "claude-3-sonnet-20240229",
                     image_data=new_msg.get("image_data"),
                     vision_detail=new_msg.get("vision_detail", "auto"),
                     enable_thinking=new_msg.get("enable_thinking", False),

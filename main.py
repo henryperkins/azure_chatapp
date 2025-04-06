@@ -96,7 +96,7 @@ middleware = [
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
         session_cookie="session",
-        same_site="lax",  # changed from 'strict'
+        same_site="none" if settings.ENV == "development" else "lax",
         https_only=settings.ENV == "production",
     ),
 ]

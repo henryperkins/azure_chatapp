@@ -44,13 +44,22 @@ def validate_model(model_id: str) -> None:
 
 def validate_model_params(model_id: str, params: dict) -> None:
     """Validate parameters based on model capabilities"""
-    model_config = settings.AZURE_OPENAI_MODELS.get(model_id) or settings.CLAUDE_MODELS.get(model_id)
+    model_config = {}
+    if isinstance(settings.AZURE_OPENAI_MODELS, dict):
+        model_config = settings.AZURE_OPENAI_MODELS.get(model_id, {})
+    if not model_config and isinstance(settings.CLAUDE_MODELS, dict):
+        model_config = settings.CLAUDE_MODELS.get(model_id, {})
     
-    if not model_config:
+    if not model_config or not isinstance(model_config, dict):
         raise ConversationError(f"Invalid model {model_id}", status_code=400)
     
     # Validate required parameters
-    for required_param in model_config.get("requires", []):
+    required_params = []
+    if isinstance(model_config, dict):
+        requires = model_config.get("requires")
+        if isinstance(requires, (list, tuple)):
+            required_params = [str(p) for p in requires if p is not None and str(p)]
+    for required_param in required_params:
         if required_param not in params:
             raise ConversationError(
                 f"{required_param} is required for this model",
@@ -58,7 +67,16 @@ def validate_model_params(model_id: str, params: dict) -> None:
             )
             
     # Validate vision parameters
-    if "image_data" in params and "vision" not in model_config.get("capabilities", []):
+    capabilities = []
+    if isinstance(model_config, dict):
+        caps = model_config.get("capabilities", [])
+        if isinstance(caps, (list, tuple)):
+            try:
+                capabilities = [str(c) for c in caps if c is not None]
+            except (TypeError, ValueError):
+                capabilities = []
+    if "image_data" in params and "vision" not in capabilities:
+        raise ConversationError("Model doesn't support vision", 400)
         raise ConversationError(
             "This model doesn't support vision",
             status_code=400
@@ -235,7 +253,7 @@ class ConversationService:
         conv.is_deleted = True
         conv.deleted_at = datetime.utcnow()
         await save_model(self.db, conv)
-        return conv.id
+        return conv.id  # type: ignore
 
     async def restore_conversation(
         self,
@@ -305,10 +323,12 @@ class ConversationService:
                 )
                 if assistant_msg:
                     response["assistant_message"] = serialize_message(assistant_msg)
-                    response["thinking"] = getattr(assistant_msg, "thinking", None)
+                    thinking = getattr(assistant_msg, "thinking", None)
+                    if thinking is not None:
+                        response["thinking"] = {"value": thinking}
             except Exception as e:
                 logger.error(f"AI response failed: {str(e)}")
-                response["assistant_error"] = str(e)
+                response["assistant_error"] = {"message": str(e)}
 
         return response
 
@@ -355,7 +375,7 @@ class ConversationService:
         # Augment with knowledge if enabled
         if conversation.use_knowledge_base:
             kb_context = await augment_with_knowledge(
-                conversation_id=conversation.id,
+                conversation_id=conversation.id,  # type: ignore
                 user_message=user_message,
                 db=self.db,
             )
@@ -364,32 +384,75 @@ class ConversationService:
         model_config = settings.AZURE_OPENAI_MODELS.get(conversation.model_id) if conversation.model_id in settings.AZURE_OPENAI_MODELS else None
         
         params = {
-            "temperature": min(conversation.temperature, model_config["max_temp"]) if model_config else 0.7,
-            "max_tokens": conversation.max_tokens
+        # Initialize params with safe defaults
+        params = dict(
+            temperature=float(getattr(conversation, "temperature", 0.7)),
+            max_tokens=None,
+            image_data=None,
+            vision_detail="auto",
+            reasoning_effort=None,
+            stream=False,
+            enable_thinking=False,
+            thinking_budget=None
+        )
+        
+        # Safely update params
+        try:
+            if hasattr(conversation, "max_tokens") and conversation.max_tokens is not None:
+                params["max_tokens"] = int(conversation.max_tokens)
+            if image_data:
+                params["image_data"] = str(image_data)
+            if vision_detail:
+                params["vision_detail"] = str(vision_detail)
+            if reasoning_effort:
+                params["reasoning_effort"] = str(reasoning_effort)
+            if hasattr(conversation, "thinking_budget") and conversation.thinking_budget is not None:
+                params["thinking_budget"] = int(conversation.thinking_budget)
+        except (TypeError, ValueError) as e:
+            logger.error(f"Parameter validation failed: {str(e)}")
+            raise ConversationError("Invalid parameter values", 400)
+        
+        if isinstance(model_config, dict):
+            try:
+                max_temp = float(model_config.get("max_temp", 1.0))
+                params["temperature"] = min(float(params["temperature"]), max_temp)
+            except (TypeError, ValueError):
+                pass
+            
+            if isinstance(model_config.get("max_tokens"), (int, float)):
+                params["max_tokens"] = int(model_config["max_tokens"])
+            "max_tokens": int(conversation.max_tokens) if conversation.max_tokens else None,
+            "image_data": str(image_data) if image_data else None,
+            "vision_detail": str(vision_detail) if vision_detail else "auto",
+            "reasoning_effort": str(reasoning_effort) if reasoning_effort else None,
+            "stream": bool(getattr(conversation, "stream", False)),
+            "enable_thinking": bool(getattr(conversation, "enable_thinking", False)),
+            "thinking_budget": int(getattr(conversation, "thinking_budget", 0)) if getattr(conversation, "thinking_budget", None) is not None else None
         }
 
         if model_config:
             # Vision handling
-            if "vision" in model_config["capabilities"] and image_data:
+            capabilities = model_config.get("capabilities", []) if isinstance(model_config.get("capabilities"), list) else []
+            if "vision" in capabilities and image_data:
                 params["image_data"] = image_data
                 params["vision_detail"] = vision_detail or ("auto" if conversation.model_id == "gpt-4o" else "high")
             
             # Reasoning effort
-            if "reasoning_effort" in model_config["capabilities"]:
+            if "reasoning_effort" in capabilities:
                 params["reasoning_effort"] = reasoning_effort or "medium"
                 
             # Token budgeting for vision
             if params.get("image_data"):
                 params["max_tokens"] = min(
-                    params["max_tokens"],
-                    model_config["max_tokens"] - settings.AZURE_MAX_IMAGE_TOKENS
+                    int(params["max_tokens"]) if params["max_tokens"] else 0,
+                    int(model_config.get("max_tokens", 0)) - int(settings.AZURE_MAX_IMAGE_TOKENS)
                 )
 
         # Generate response
         assistant_msg = await generate_ai_response(
-            conversation_id=conversation.id,
+            conversation_id=conversation.id,  # type: ignore
             messages=messages,
-            model_id=conversation.model_id,
+            model_id=str(conversation.model_id),
             db=self.db,
             **params
         )

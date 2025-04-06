@@ -4,6 +4,10 @@ const isDevelopment = window.location.hostname === 'localhost' || window.locatio
 // -------------------------
 // Token Management
 // -------------------------
+// Debug flag - set to true to enable verbose auth logging
+const AUTH_DEBUG = window.location.hostname === 'localhost' ||
+                   window.location.hostname === '127.0.0.1';
+
 const TokenManager = {
   accessToken: null,
   refreshToken: null,
@@ -16,7 +20,13 @@ const TokenManager = {
       console.warn('Attempted to set null/undefined access token');
       return;
     }
-    console.log('TokenManager: Setting new access token');
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Setting tokens:', {
+        accessToken: access ? '***' + access.slice(-6) : null,
+        refreshToken: refresh ? '***' + refresh.slice(-6) : null,
+        expiry: new Date(Date.now() + (30 * 60 * 1000)).toISOString()
+      });
+    }
     this.accessToken = access;
     this.refreshToken = refresh;
     this.tokenExpiry = Date.now() + (30 * 60 * 1000); // Default 30 minute expiry
@@ -42,6 +52,9 @@ const TokenManager = {
   },
 
   clearTokens() {
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Clearing tokens');
+    }
     this.accessToken = null;
     this.refreshToken = null;
     sessionStorage.removeItem('auth_state');
@@ -61,6 +74,14 @@ const TokenManager = {
     // Then check session storage
     const storageToken = this.accessToken ||
       (JSON.parse(sessionStorage.getItem('auth_state'))?.accessToken);
+    
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Token sources:', {
+        cookieToken: cookieToken ? '***' + cookieToken.slice(-6) : null,
+        storageToken: storageToken ? '***' + storageToken.slice(-6) : null,
+        version: this.version
+      });
+    }
     
     // Validate versions match if available
     if (cookieToken && storageToken && this.version) {
@@ -90,6 +111,10 @@ const TokenManager = {
    */
   async refreshTokens() {
     try {
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Starting token refresh');
+      }
+      
       // First check if we have a refresh token available
       const refreshToken = document.cookie
         .split('; ')
@@ -97,6 +122,9 @@ const TokenManager = {
         ?.split('=')[1] || this.refreshToken;
 
       if (!refreshToken) {
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Refresh token missing');
+        }
         console.error('Refresh token missing - cannot refresh');
         this.clearTokens();
         window.dispatchEvent(new CustomEvent('authStateChanged', {
@@ -105,16 +133,43 @@ const TokenManager = {
         throw new Error('Session expired. Please login again.');
       }
 
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Attempting refresh with token:',
+          refreshToken ? '***' + refreshToken.slice(-6) : null);
+      }
+
       const response = await window.apiRequest('/api/auth/refresh', 'POST', null, {
         skipAuthCheck: true,
         skipRetry: true
       });
       
       if (response?.access_token) {
-        window.location.reload(); // Full refresh to get new cookies
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Token refresh successful');
+        }
+        // Update tokens directly without page reload
+        this.setTokens(response.access_token, response.refresh_token);
+        
+        // Update cookies to match new tokens
+        document.cookie = `access_token=${response.access_token}; path=/; ${
+          window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
+        }`;
+        
+        if (response.refresh_token) {
+          document.cookie = `refresh_token=${response.refresh_token}; path=/; ${
+            window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
+          }`;
+        }
+        
         return true;
       }
     } catch (error) {
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Token refresh failed:', {
+          status: error.status,
+          message: error.message
+        });
+      }
       console.error('Token refresh failed:', error);
       if (error.status === 401) {
         // Full re-authentication required
@@ -138,55 +193,61 @@ window.TokenManager = TokenManager;
 // ---------------------------------------------------------------------
 window.auth = {
   init: async function () {
-    // Prevent double initialization
-    if (this.isInitialized) {
-      console.log("Auth module already initialized, skipping");
-      return true;
+  // Prevent double initialization
+  if (this.isInitialized) {
+    if (AUTH_DEBUG) {
+      console.debug("[Auth] Already initialized, skipping");
+    }
+    return true;
+  }
+
+  if (window.API_CONFIG) {
+    window.API_CONFIG.authCheckInProgress = true;
+  }
+
+  try {
+    if (AUTH_DEBUG) {
+      console.debug("[Auth] Starting initialization");
     }
 
-    if (window.API_CONFIG) {
-      window.API_CONFIG.authCheckInProgress = true;
-    }
-
-    try {
-      console.log("Initializing auth module");
-
-      // If we have saved tokens in session, rehydrate them
-      const authState = JSON.parse(sessionStorage.getItem('auth_state'));
-      if (authState?.accessToken) {
-        TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-        console.log("TokenManager initialized from session storage");
-
-        // Get user info if available
-        const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
-        const username = userInfo?.username;
-
-        broadcastAuth(true, username);
-
-        // Optionally verify from server
-        await verifyAuthState();
-      } else {
-        // No tokens found, mark logged out
-        clearSession();
-        broadcastAuth(false);
+    // If we have saved tokens in session, rehydrate them
+    const authState = JSON.parse(sessionStorage.getItem('auth_state'));
+    if (authState?.accessToken) {
+      if (AUTH_DEBUG) {
+        console.debug("[Auth] Found stored tokens, rehydrating");
       }
+      TokenManager.setTokens(authState.accessToken, authState.refreshToken);
 
-      setupUIListeners();
+      // Get user info if available
+      const userInfo = JSON.parse(sessionStorage.getItem('userInfo'));
+      const username = userInfo?.username;
 
-      this.isInitialized = true;
-      console.log("Auth module initialized successfully");
-      return true;
-    } catch (error) {
-      console.error("Auth initialization failed:", error);
+      broadcastAuth(true, username);
+
+      // Verify from server but bypass cache during initialization
+      await verifyAuthState(true);
+    } else {
+      // No tokens found, mark logged out
       clearSession();
       broadcastAuth(false);
-      return false;
-    } finally {
-      if (window.API_CONFIG) {
-        window.API_CONFIG.authCheckInProgress = false;
-      }
     }
-  },
+
+    setupUIListeners();
+
+    this.isInitialized = true;
+    console.log("Auth module initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("Auth initialization failed:", error);
+    clearSession();
+    broadcastAuth(false);
+    return false;
+  } finally {
+    if (window.API_CONFIG) {
+      window.API_CONFIG.authCheckInProgress = false;
+    }
+  }
+},
   verify: verifyAuthState,
   updateStatus: updateAuthStatus,
   login: loginUser,
@@ -371,6 +432,10 @@ async function handleRegister(formData) {
 
 async function loginUser(username, password) {
   try {
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Starting login for user:', username);
+    }
+    
     if (!window.apiRequest) {
       throw new Error('Cannot login - apiRequest not available');
     }
@@ -379,8 +444,12 @@ async function loginUser(username, password) {
       password
     });
     
-    // Debug logging
-    console.log('Login response data:', data);
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Login response:', {
+        hasToken: !!data?.access_token,
+        username: data?.username || username
+      });
+    }
     
     if (!data.access_token) {
       throw new Error("Invalid response from server");
@@ -427,6 +496,10 @@ async function loginUser(username, password) {
 async function logout(e) {
   e?.preventDefault();
   try {
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Starting logout');
+    }
+    
     if (TokenManager.accessToken) {
       try {
         // Attempt to inform the server
@@ -434,8 +507,15 @@ async function logout(e) {
           await window.apiRequest('/api/auth/logout', 'POST');
         }
       } catch (apiErr) {
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Logout API error:', apiErr.message);
+        }
         console.warn("Logout API error:", apiErr);
       }
+    }
+    
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Clearing tokens and session');
     }
     TokenManager.clearTokens();
     sessionStorage.clear();
@@ -449,6 +529,9 @@ async function logout(e) {
       window.location.href = '/index.html';
     }
   } catch (error) {
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Logout failed:', error.message);
+    }
     console.error("Logout error:", error);
     TokenManager.clearTokens();
     sessionStorage.clear();
@@ -505,22 +588,32 @@ const authVerificationCache = {
   }
 };
 
-async function verifyAuthState() {
+async function verifyAuthState(bypassCache = false) {
   if (isDevelopment) {
     console.log('[DEV MODE] Skipping auth check');
     return true;
   }
 
   try {
-    if (authVerificationCache.isValid()) {
+    // Skip cache check if bypassing (e.g. during initialization)
+    if (!bypassCache && authVerificationCache.isValid()) {
       return authVerificationCache.result;
     }
+
+    // First rehydrate from sessionStorage if needed
+    const authState = JSON.parse(sessionStorage.getItem('auth_state'));
+    if (authState?.accessToken && !TokenManager.accessToken) {
+      console.debug('[Auth] Rehydrating tokens from sessionStorage');
+      TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+    }
+
     // If we have no tokens, not authenticated
     const hasTokens = TokenManager.accessToken || sessionStorage.getItem('auth_state');
     if (!hasTokens) {
       authVerificationCache.set(false);
       return false;
     }
+
     // Handle expired tokens
     if (TokenManager.isExpired()) {
       console.log('verifyAuthState: Token expired -> refreshing');
@@ -534,13 +627,15 @@ async function verifyAuthState() {
         throw new Error('Session expired. Please login again.');
       }
     }
+
     // Check with server
     if (!window.apiRequest) {
       return !!TokenManager.accessToken;
     }
+
     try {
       const response = await window.apiRequest('/api/auth/verify');
-      // If server says we’re authenticated
+      // If server says we're authenticated
       authVerificationCache.set(response.authenticated);
       return response.authenticated;
     } catch (verifyError) {
