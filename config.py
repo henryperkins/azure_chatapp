@@ -16,7 +16,8 @@ class Settings:
     Values are loaded from environment or .env.
     """
 
-    # Environment
+    # Debug/Environment
+    DEBUG = os.getenv("DEBUG", "False").lower() == "true"  # True if DEBUG= true/TRUE/True
     ENV = os.getenv("ENV", "development")
 
     # Session
