@@ -753,24 +753,21 @@
    * @returns {Promise<boolean>} Whether user is authenticated
    */
   async function checkAuthState() {
-    let authState = false;
     try {
-      const authValid = await window.ChatUtils?.isAuthenticated?.();
-      if (!authValid) {
-        emitEvent("authCheckFailed", {});
+      if (!window.auth?.isAuthenticated) {
+        console.warn("[projectManager] Auth module not available");
         return false;
       }
 
-      if (window.TokenManager?.accessToken || sessionStorage.getItem("auth_state")) {
-        authState = await window.auth.verify().catch(e => {
-          console.warn("[projectManager] Auth verification failed:", e);
-          return false;
-        });
+      const authState = await window.auth.isAuthenticated();
+      if (!authState) {
+        emitEvent("authCheckFailed", {});
       }
+      return authState;
     } catch (e) {
       console.error("[projectManager] Auth check error:", e);
+      return false;
     }
-    return authState;
   }
 
   /**

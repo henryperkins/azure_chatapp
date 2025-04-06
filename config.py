@@ -77,6 +77,7 @@ class Settings:
 
     # Azure-specific vision configuration
     AZURE_MAX_IMAGE_TOKENS = int(os.getenv("AZURE_MAX_IMAGE_TOKENS", "2000"))
+    AZURE_MAX_VISION_DETAIL_TOKENS = int(os.getenv("AZURE_MAX_VISION_DETAIL_TOKENS", "1000"))
     AZURE_VISION_DETAIL_LEVELS = {
         "low": 65,
         "high": 1295,

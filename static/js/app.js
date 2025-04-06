@@ -76,44 +76,21 @@ const ELEMENTS = {};
  * @returns {Promise<boolean>} Whether user is authenticated
  */
 async function ensureAuthenticated() {
-  // First check memory/storage for quick response
-  const hasLocalAuth = window.TokenManager?.accessToken || 
-                      (sessionStorage.getItem('userInfo') !== null && 
-                       sessionStorage.getItem('auth_state') !== null);
-                       
-  if (!hasLocalAuth) {
-    console.log("No local auth found");
-    return false;
+  if (!window.auth?.isAuthenticated) {
+    console.warn("Auth module not available - falling back to local checks");
+    const hasLocalAuth = window.TokenManager?.accessToken ||
+                        (sessionStorage.getItem('userInfo') !== null &&
+                         sessionStorage.getItem('auth_state') !== null);
+    API_CONFIG.isAuthenticated = hasLocalAuth;
+    return hasLocalAuth;
   }
-  
-  // Check if token is expired and needs refresh
-  if (window.TokenManager?.isExpired && window.TokenManager.isExpired()) {
-    console.log("Token expired, attempting refresh");
-    try {
-      const refreshed = await window.TokenManager.refreshTokens();
-      if (!refreshed) {
-        console.log("Token refresh failed");
-        return false;
-      }
-    } catch (error) {
-      console.error("Token refresh error:", error);
-      return false;
-    }
-  }
-  
-  // For low-friction UX, assume auth is valid after memory check and refresh
-  API_CONFIG.isAuthenticated = true;
-  
-  // Optionally verify with backend
+
   try {
-    const response = await apiRequest(API_ENDPOINTS.AUTH_VERIFY, 'GET', null, 0, 3000, 
-      { skipAuthCheck: true, skipRetry: true });
-    
-    const isAuthenticated = response?.authenticated === true;
+    const isAuthenticated = await window.auth.isAuthenticated();
     API_CONFIG.isAuthenticated = isAuthenticated;
     
     if (!isAuthenticated) {
-      console.log("Backend verification failed");
+      console.log("Authentication check failed");
       clearAuthState();
     }
     
@@ -125,7 +102,9 @@ async function ensureAuthenticated() {
       clearAuthState();
       return false;
     }
-    // For network errors, assume auth is valid if we have tokens
+    // For network errors, fall back to local token presence
+    const hasLocalAuth = !!window.TokenManager?.accessToken;
+    API_CONFIG.isAuthenticated = hasLocalAuth;
     return hasLocalAuth;
   }
 }
