@@ -371,7 +371,7 @@ async def logout_user(
 
 def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int] = None):
     secure_cookie = settings.ENV == "production"
-    samesite_mode = "lax"
+    samesite_mode = "none" if settings.ENV == "development" else "lax"
 
     response.set_cookie(
         key=key,
