@@ -164,7 +164,7 @@ async def azure_chat(
     url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
     headers = {"Content-Type": "application/json", "api-key": AZURE_OPENAI_API_KEY}
 
-    payload = {"messages": messages, "max_completion_tokens": max_completion_tokens}
+    payload = {"messages": messages, "max_tokens": max_tokens}
 
     logger.info("API Request | Model: %s", model_name)
 
