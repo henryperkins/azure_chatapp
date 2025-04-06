@@ -664,8 +664,25 @@ function getModelOptions() {
       id: 'gpt-3.5-turbo',
       name: 'GPT-3.5 Turbo',
 <<<<<<< HEAD
-      description: 'Fast GPT model for simpler queries',
-      maxTokens: 4096
+      description: 'Fast GPT model for simpler queries'
+    },
+    {
+      id: 'o1',
+      name: 'o1 (Vision)',
+      description: 'Azure OpenAI model with image understanding',
+      supportsVision: true
+    },
+    {
+      id: 'o3-mini',
+      name: 'o3-mini',
+      description: 'Azure OpenAI advanced reasoning model (large context, no vision support)',
+      supportsVision: false
+    },
+    {
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      description: 'Versatile GPT model optimized for chat + vision',
+      supportsVision: true
 =======
       description: 'Fast GPT model for simpler queries'
     },
