@@ -232,14 +232,6 @@ const TokenManager = {
         }
         // Update tokens in memory
         this.setTokens(response.access_token, response.refresh_token);
-
-        // Update cookies
-        document.cookie = `access_token=${response.access_token}; path=/; ${window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
-          }`;
-        if (response.refresh_token) {
-          document.cookie = `refresh_token=${response.refresh_token}; path=/; ${window.location.protocol === 'https:' ? 'Secure; SameSite=None' : 'SameSite=Lax'
-            }`;
-        }
         return true;
       }
     } catch (error) {
@@ -672,8 +664,7 @@ async function loginUser(username, password) {
     // Store tokens in TokenManager
     TokenManager.setTokens(data.access_token, data.refresh_token);
 
-    // Force cookie refresh
-    // Removed client-side cookie settings so server can manage cookies
+    // Cookies are now managed by the backend
 
     // Store user info
     if (data.username) {
