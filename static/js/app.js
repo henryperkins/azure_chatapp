@@ -958,14 +958,34 @@ window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
 window.loadProjects = loadProjects;
 
-// Initialize on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    console.log("DOMContentLoaded: Starting full app init");
-    await initializeAllModules();
-    console.log("Application fully initialized");
-  } catch (error) {
-    console.error("Application initialization failed:", error);
-    alert("Failed to initialize. Please refresh the page and try again.");
+// Central Initialization Controller
+window.appInitializer = {
+  status: 'pending',
+  queue: [],
+  
+  register: (component) => {
+    if(this.status === 'ready') component.init();
+    else this.queue.push(component);
+  },
+  
+  initialize: async () => {
+    try {
+      console.log("Starting centralized initialization");
+      await initializeAllModules();
+      this.status = 'ready';
+      this.queue.forEach(c => c.init());
+      console.log("Application fully initialized");
+    } catch (error) {
+      console.error("Initialization failed:", error);
+      throw error;
+    }
   }
+};
+
+// Single DOMContentLoaded handler
+document.addEventListener('DOMContentLoaded', () => {
+  window.appInitializer.initialize().catch(error => {
+    console.error("App initialization error:", error);
+    alert("Failed to initialize. Please refresh the page.");
+  });
 });

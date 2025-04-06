@@ -63,8 +63,10 @@ function ensureModulesLoaded() {
   }, Promise.resolve());
 }
 
-// Initialize the chat functionality
-window.initializeChat = async function () {
+// Register chat system with central initializer
+window.initializeChat = function() {
+  window.appInitializer.register({
+    init: async () => {
   console.log('Initializing chat system...');
   console.log('Checking dependencies...');
   
