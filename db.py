@@ -147,7 +147,7 @@ async def validate_db_schema():
     return has_mismatches  # Return whether mismatches were found
 
 
-async def init_db():
+async def init_db() -> None:
     """
     Initialize database and handle schema alignment using SQLAlchemy metadata.
     This function ensures the database schema is fully aligned with ORM models,
