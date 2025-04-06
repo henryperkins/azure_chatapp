@@ -309,6 +309,11 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         if (!endpoint.includes('/auth/')) {
           await ensureAuthenticated();
         }
+      } else if (response.status === 404) {
+        // Handle 404 Not Found - don't affect auth state
+        const error = new Error(`Resource not found (404): ${finalUrl}`);
+        error.status = 404;
+        throw error;
       }
 
       if (response.status === 422) {
