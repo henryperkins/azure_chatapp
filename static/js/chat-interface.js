@@ -432,8 +432,12 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     console.log('Creating new conversation...');
     
     // First verify auth state
-    const authState = await window.ChatUtils?.isAuthenticated?.() ||
-                     (window.auth?.verify ? await window.auth.verify() : false);
+    let authState = false;
+    try {
+      authState = await window.auth.isAuthenticated();
+    } catch (e) {
+      console.warn("[chat-interface] Auth verification failed:", e);
+    }
     
     if (!authState) {
       this.notificationFunction("Please log in to create conversations", "error");

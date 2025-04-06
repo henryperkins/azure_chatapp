@@ -48,8 +48,12 @@ window.ConversationService = class ConversationService {
       return false;
     }
 
-    const authState = await window.ChatUtils?.isAuthenticated?.() || 
-                     (window.auth?.verify ? await window.auth.verify() : false);
+    let authState = false;
+    try {
+      authState = await window.auth.isAuthenticated();
+    } catch (e) {
+      console.warn("[chat-conversations] Auth verification failed:", e);
+    }
     
     if (!authState) {
       this.showNotification("Please log in to access conversations", "error");
@@ -93,8 +97,12 @@ return true;
 
   async createNewConversation(maxRetries = 2) {
     // First verify auth state
-    const authState = await window.ChatUtils?.isAuthenticated?.() ||
-                     (window.auth?.verify ? await window.auth.verify() : false);
+    let authState = false;
+    try {
+      authState = await window.auth.isAuthenticated();
+    } catch (e) {
+      console.warn("[chat-conversations] Auth verification failed:", e);
+    }
     
     if (!authState) {
       this.showNotification("Please log in to create conversations", "error");
@@ -161,8 +169,12 @@ return true;
     return false;
   }
 
-  const authState = await window.ChatUtils?.isAuthenticated?.() ||
-    (window.auth?.verify ? await window.auth.verify() : false);
+  let authState = false;
+  try {
+    authState = await window.auth.isAuthenticated();
+  } catch (e) {
+    console.warn("[chat-conversations] Auth verification failed:", e);
+  }
 
   if (!authState) {
     this.showNotification("Please log in to delete conversations", "error");

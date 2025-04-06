@@ -82,7 +82,7 @@
 
       this.authCheckInProgress = true;
       try {
-        // Check for existing valid token
+        // First try to use existing valid token
         if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
           // Verify token version matches
           if (window.TokenManager.version) {
@@ -96,11 +96,11 @@
           return window.TokenManager.accessToken;
         }
 
-        // Attempt token refresh if available
-        if (window.TokenManager?.refresh) {
-          await window.TokenManager.refresh();
-          if (window.TokenManager.accessToken) {
-            // Store version after refresh
+        // Use new unified auth verification
+        if (window.auth?.isAuthenticated) {
+          const isAuthenticated = await window.auth.isAuthenticated();
+          if (isAuthenticated && window.TokenManager?.accessToken) {
+            // Store version after verification
             if (window.TokenManager.version) {
               sessionStorage.setItem('tokenVersion', window.TokenManager.version);
             }
@@ -108,11 +108,11 @@
           }
         }
 
-        // Final fallback to auth verification
-        if (window.auth?.verify) {
-          const verified = await window.auth.verify();
-          if (verified && window.TokenManager?.accessToken) {
-            // Store version after verification
+        // Fallback to direct token refresh if available
+        if (window.TokenManager?.refresh) {
+          await window.TokenManager.refresh();
+          if (window.TokenManager.accessToken) {
+            // Store version after refresh
             if (window.TokenManager.version) {
               sessionStorage.setItem('tokenVersion', window.TokenManager.version);
             }

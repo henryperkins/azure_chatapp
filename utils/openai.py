@@ -1,18 +1,19 @@
 """
 openai.py
 ---------
-Provides all Azure OpenAI HTTP requests for the Azure OpenAI Chat Application.
+Provides Azure and Claude OpenAI HTTP requests for the Azure OpenAI Chat Application.
 
 Includes:
-  1. openai_chat(...) - Submits a chat completion request to Azure OpenAI.
+  1. openai_chat(...) - Submits a chat completion request, routing to either Azure or Claude.
      - Supports model_name, max_completion_tokens, optional reasoning_effort, vision data (if needed).
-  2. Additional helper methods for token usage logging or partial requests.
-
-This version has been trimmed to remove the general API request function that moved to response_utils.py.
+  2. azure_chat(...) - Dedicated function for Azure chat completion, with parameter validation.
+  3. claude_chat(...) - Dedicated function for Claude completion, including vision data support.
+  4. Additional helper methods: token usage logging, partial requests, and moderation checks.
 """
 
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal, AsyncGenerator
+from typing_extensions import TypedDict
 
 import httpx
 from fastapi import HTTPException
@@ -20,7 +21,9 @@ from fastapi import HTTPException
 from config import settings
 from utils.response_utils import azure_api_request
 
-# Supported Claude models
+logger = logging.getLogger(__name__)
+
+# Claude-specific model settings
 CLAUDE_MODELS = {
     "claude-3-7-sonnet-20250219": {
         "max_tokens": 128000,
@@ -45,216 +48,137 @@ CLAUDE_MODELS = {
     },
 }
 
-logger = logging.getLogger(__name__)
-
-# Azure OpenAI Configuration
-AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
-AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
-API_VERSION = "2025-02-01-preview"
-
+# Azure-specific model settings
 AZURE_MODELS = {
     "o1": {
         "max_tokens": 128000,
         "supports_vision": True,
         "supports_reasoning_effort": True,
         "vision_detail_levels": ["low", "high"],
-        "max_images": int(settings.AZURE_O1_MAX_IMAGES)
+        "max_images": int(settings.AZURE_O1_MAX_IMAGES),
     },
-    "o3-mini": {
-        "max_tokens": 16385,
-        "supports_reasoning_effort": True
-    },
-    "o3": {
-        "max_tokens": 128000,
-        "supports_reasoning_effort": False  # o3 uses different parameter
-    },
+    "o3-mini": {"max_tokens": 16385, "supports_reasoning_effort": True},
+    "o3": {"max_tokens": 128000, "supports_reasoning_effort": False},
     "gpt-4o": {
         "max_tokens": 128000,
         "supports_vision": True,
         "vision_detail_levels": ["auto", "low", "high"],
-        "supports_streaming": True
-    }
+        "supports_streaming": True,
+        "max_images": 10,
+    },
 }
 
+# Config settings for Azure
+AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
+AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
+API_VERSION = "2025-03-01-preview"  # Recommended version for reasoning models
 
+
+#
+# Unified top-level function
+#
+async def openai_chat(
+    messages: List[Dict[str, str]], model_name: str, **kwargs
+) -> dict:
+    """
+    Route to the appropriate provider handler based on the model_name.
+    """
+    if model_name in CLAUDE_MODELS:
+        return await claude_chat(messages, model_name=model_name, **kwargs)
+    elif model_name in AZURE_MODELS:
+        return await azure_chat(messages, model_name=model_name, **kwargs)
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"Unsupported model: {model_name}. "
+            f"Valid models: {list(CLAUDE_MODELS.keys()) + list(AZURE_MODELS.keys())}"
+        ),
+    )
+
+
+#
+# Azure Chat Handler
+#
 async def validate_azure_params(model_name: str, kwargs: dict) -> None:
-    """Validate Azure-specific parameters against model capabilities."""
+    """
+    Validate Azure-specific parameters against model capabilities.
+    """
     model_config = AZURE_MODELS.get(model_name)
     if not model_config:
         raise ValueError(f"Unsupported Azure model: {model_name}")
 
     # Vision parameters
-    if kwargs.get('image_data'):
-        if not model_config.get('supports_vision'):
+    if kwargs.get("image_data"):
+        if not model_config.get("supports_vision", False):
             raise ValueError(f"{model_name} doesn't support vision")
-        
-        vision_detail = kwargs.get('vision_detail', 'auto')
-        if vision_detail not in model_config.get('vision_detail_levels', []):
-            raise ValueError(f"Invalid vision_detail: {vision_detail}")
+
+        vision_detail = kwargs.get("vision_detail", "auto")
+        valid_details = model_config.get("vision_detail_levels", [])
+        if vision_detail not in valid_details:
+            raise ValueError(
+                f"Invalid vision_detail: {vision_detail}. Must be one of {valid_details}"
+            )
 
     # Reasoning effort
-    if kwargs.get('reasoning_effort'):
-        if not model_config.get('supports_reasoning_effort'):
+    if kwargs.get("reasoning_effort"):
+        if not model_config.get("supports_reasoning_effort", False):
             raise ValueError(f"{model_name} doesn't support reasoning_effort")
 
-async def openai_chat(
-    messages: List[Dict[str, str]],
+
+async def azure_chat(
+    messages: List[Dict[str, Any]],
     model_name: str,
-    **kwargs
-) -> dict:
-    """Route to appropriate provider handler based on model"""
-    if model_name in settings.CLAUDE_MODELS:
-        return await claude_chat(messages, model_name=model_name, **kwargs)
-    elif model_name in settings.AZURE_OPENAI_MODELS:
-        return await azure_chat(messages, model_name=model_name, **kwargs)
-    raise HTTPException(
-        status_code=400,
-        detail=f"Unsupported model: {model_name}. Valid models: {list(settings.CLAUDE_MODELS) + list(settings.AZURE_OPENAI_MODELS.keys())}"
+    max_tokens: int = 4000,
+    temperature: float = 0.7,
+    reasoning_effort: Optional[Literal["low", "medium", "high"]] = None,
+    image_data: Optional[str] = None,
+    vision_detail: Literal["auto", "low", "high"] = "auto",
+    stream: bool = False,
+) -> Dict[str, Any]:
+    """
+    Handle Azure OpenAI chat completions with proper validation.
+    """
+    await validate_azure_params(
+        model_name,
+        {
+            "reasoning_effort": reasoning_effort,
+            "image_data": image_data,
+            "vision_detail": vision_detail,
+        },
     )
 
-async def azure_chat_request(
-    model_id: str,
-    messages: List[Dict[str, str]], 
-    params: dict
-) -> dict:
-    """Handle Azure OpenAI requests with model-specific processing"""
-    model_config = settings.AZURE_OPENAI_MODELS[model_id]
-    
-    # Vision processing
-    if "vision" in model_config["capabilities"] and "image_data" in params:
-        messages = process_vision_messages(
-            messages,
-            params["image_data"],
-            params.get("vision_detail", "auto")
-        )
-    
-    payload = {
+    model_config = AZURE_MODELS[model_name]
+    payload: Dict[str, Any] = {
         "messages": messages,
-        "max_tokens": min(
-            params.get("max_tokens", 4000),
-            model_config["max_tokens"]
-        ),
-        "temperature": params.get("temperature", 0.7)
+        "max_tokens": min(max_tokens, model_config["max_tokens"]),
+        "temperature": temperature,
     }
-    
-    # Model-specific parameters
-    if "reasoning_effort" in model_config["capabilities"]:
-        payload["reasoning_effort"] = params.get("reasoning_effort", "medium")
-    
-    # Special GPT-4o parameters
-    if model_id == "gpt-4o":
-        payload["vision_strategy"] = "enhanced"
-        if "stream" in params:
-            payload["stream"] = params["stream"]
-    
-    return await _send_azure_request(
-        model_id,
-        model_config.get("api_version", "2024-02-01"),
-        payload
-    )
-    model_config = settings.AZURE_OPENAI_MODELS.get(model_name)
-    if not model_config:
-        raise HTTPException(400, f"Unsupported Azure model: {model_name}")
-    
-    # Model-specific validation
-    if model_config.get("requires"):
-        for param in model_config["requires"]:
-            if param == "vision_detail" and not vision_detail:
-                raise HTTPException(400, "vision_detail is required for this model")
-            if param == "reasoning_effort" and not reasoning_effort:
-                raise HTTPException(400, "reasoning_effort is required")
-    """
-    Calls Azure OpenAI's chat completion API.
-    Allows optional 'reasoning_effort' if using "o3-mini" or "o1".
-    Includes optional image_data for the "o1" model's vision capabilities.
 
-    :param messages: List of dicts with 'role': 'user'|'assistant'|'system', 'content': str
-    :param model_name: The name of the Azure deployment to target (e.g. "o3-mini", "o1")
-    :param max_completion_tokens: How many tokens the model can produce at most.
-    :param reasoning_effort: 'low', 'medium', or 'high' for "o3-mini"/"o1" if relevant.
-    :param image_data: If using "o1" vision support, pass raw image bytes here.
-    :param vision_detail: Detail level for vision - "auto", "low", or "high"
-    :return: The JSON response from Azure if successful, or raises an exception otherwise.
-    """
-    valid_detail_values = ["auto", "low", "high"]
-    if vision_detail not in valid_detail_values:
-        raise ValueError(
-            f"Invalid vision_detail: {vision_detail}. Must be one of {valid_detail_values}."
+    # Process vision data if applicable
+    if image_data and model_config.get("supports_vision"):
+        payload["messages"] = process_vision_messages(
+            messages, image_data, vision_detail
         )
 
-    logger.debug(
-        "Loaded Azure OpenAI endpoint: '%s', key length: %d",
-        AZURE_OPENAI_ENDPOINT,
-        len(AZURE_OPENAI_API_KEY),
-    )
-    if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_API_KEY:
-        logger.error("Azure OpenAI endpoint or key is empty or missing.")
-        raise ValueError("Azure OpenAI credentials not configured")
-
-    url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
-    headers = {"Content-Type": "application/json", "api-key": AZURE_OPENAI_API_KEY}
-
-    payload = {"messages": messages, "max_tokens": max_tokens}
-
-    logger.info("API Request | Model: %s", model_name)
-
-    if reasoning_effort and model_name in ["o3-mini", "o1"]:
+    if reasoning_effort and model_config.get("supports_reasoning_effort"):
         payload["reasoning_effort"] = reasoning_effort
 
-    if model_name == "o1" and image_data:
-        # Check if multiple images exceed limit
-        if image_data.count("base64,") > 1:
-            if image_data.count("base64,") > 10:
-                raise ValueError("Exceeded maximum of 10 images for vision API.")
-            # If multiple images are present, we are not fully handling them, but let's proceed with the first
-            logger.warning(
-                "Multiple images detected, using only the first one for now."
-            )
-            base64_str = image_data.split("base64,")[1]
-        else:
-            if "base64," in image_data:
-                base64_str = image_data.split("base64,")[1]
-            else:
-                base64_str = image_data
+    if stream and model_config.get("supports_streaming"):
+        return await _stream_azure_response(payload, model_name)
 
-        vision_message = {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": messages[-1]["content"]},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_str}",
-                        "detail": vision_detail,
-                    },
-                },
-            ],
-        }
-        payload["messages"] = messages[:-1] + [vision_message]
-        payload["max_completion_tokens"] = 1500
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, headers=headers, timeout=60)
-            response.raise_for_status()
-            return response.json()
-    except httpx.RequestError as e:
-        logger.error("Error calling Azure OpenAI: %s", e)
-        raise RuntimeError("Unable to reach Azure OpenAI endpoint") from e
-    except httpx.HTTPStatusError as e:
-        logger.error("Azure OpenAI error: %s", e)
-        raise RuntimeError(
-            f"Azure OpenAI request failed: {e.response.status_code} => {e.response.text}"
-        ) from e
+    return await _send_azure_request(payload, model_name)
 
 
-def process_vision_content(messages, image_data, vision_detail, model_config):
-    """Process messages to include vision content with proper formatting."""
-    valid_details = model_config.get("vision_details", [])
-    if vision_detail not in valid_details:
-        vision_detail = valid_details[0]
-
+def process_vision_messages(
+    messages: List[Dict[str, str]], image_data: str, vision_detail: str = "auto"
+) -> List[Dict[str, Any]]:
+    """
+    Process messages to include vision content with proper formatting.
+    """
     last_message = messages[-1]
+    base64_str = extract_base64_data(image_data)
+
     vision_message = {
         "role": "user",
         "content": [
@@ -262,84 +186,35 @@ def process_vision_content(messages, image_data, vision_detail, model_config):
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/jpeg;base64,{image_data}",
-                    "detail": vision_detail
-                }
-            }
-        ]
+                    "url": f"data:image/jpeg;base64,{base64_str}",
+                    "detail": vision_detail,
+                },
+            },
+        ],
     }
     return messages[:-1] + [vision_message]
+
 
 def extract_base64_data(image_data: str) -> str:
     """
     Extract base64 data from image URL or raw base64 string.
-
-    Args:
-        image_data: Base64 image data, possibly with data URL prefix
-
-    Returns:
-        Raw base64 string without prefix
     """
     if "base64," in image_data:
         return image_data.split("base64,")[1]
     return image_data
 
 
-async def _handle_azure_vision_request(
-    messages: List[Dict[str, str]],
-    model_name: str,
-    image_data: str,
-    vision_detail: str,
-    model_config: dict,
-    max_tokens: int,
-    temperature: float,
-    stream: bool
-) -> dict:
-    """Specialized handler for vision-enabled models"""
-    # Validate detail level
-    if vision_detail not in model_config["vision_detail_levels"]:
-        raise ValueError(f"Invalid detail level for {model_name}: {vision_detail}")
-
-    # Image processing
-    base64_str = extract_base64_data(image_data)
-    vision_message = {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": messages[-1]["content"]},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_str}",
-                    "detail": vision_detail
-                }
-            }
-        ]
-    }
-
-    payload = {
-        "messages": messages[:-1] + [vision_message],
-        "max_tokens": min(
-            max_tokens,
-            model_config["max_tokens"] - settings.AZURE_MAX_VISION_DETAIL_TOKENS
-        ),
-        "temperature": temperature
-    }
-
-    # GPT-4o special parameters
-    if model_name == "gpt-4o":
-        payload["vision_strategy"] = "enhanced"  # Example new parameter
-
-    if stream:
-        payload["stream"] = True
-        return await _stream_azure_response(payload, model_name)
-
-    return await _send_azure_request(payload, model_name)
-
-
-async def _send_azure_request(payload: dict, model_name: str) -> dict:
-    """Send standard Azure OpenAI request"""
+async def _send_azure_request(
+    payload: Dict[str, Any], model_name: str
+) -> Dict[str, Any]:
+    """
+    Send a standard (non-streaming) Azure OpenAI request.
+    """
     url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
-    headers = {"Content-Type": "application/json", "api-key": AZURE_OPENAI_API_KEY}
+    headers: Dict[str, str] = {
+        "Content-Type": "application/json",
+        "api-key": AZURE_OPENAI_API_KEY,
+    }
 
     try:
         async with httpx.AsyncClient() as client:
@@ -356,14 +231,20 @@ async def _send_azure_request(payload: dict, model_name: str) -> dict:
         ) from e
 
 
-async def _stream_azure_response(payload: dict, model_name: str):
-    """Handle streaming responses from Azure OpenAI"""
+async def _stream_azure_response(
+    payload: Dict[str, Any], model_name: str
+) -> AsyncGenerator[bytes, None]:
+    """
+    Handle streaming responses from Azure OpenAI.
+    """
     url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}/chat/completions?api-version={API_VERSION}"
     headers = {"Content-Type": "application/json", "api-key": AZURE_OPENAI_API_KEY}
 
     try:
         async with httpx.AsyncClient() as client:
-            async with client.stream("POST", url, json=payload, headers=headers, timeout=60) as response:
+            async with client.stream(
+                "POST", url, json=payload, headers=headers, timeout=60
+            ) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes():
                     yield chunk
@@ -372,32 +253,9 @@ async def _stream_azure_response(payload: dict, model_name: str):
         raise RuntimeError("Unable to stream from Azure OpenAI") from e
 
 
-async def get_completion(
-    prompt: str, model_name: str = "o3-mini", max_tokens: int = 500
-) -> str:
-    """
-    Simple wrapper for text completion to reduce duplication of chat message formatting.
-
-    Args:
-        prompt: Text prompt to complete
-        model_name: Azure OpenAI model to use
-        max_tokens: Maximum tokens to generate
-
-    Returns:
-        Generated text content
-    """
-    messages = [{"role": "user", "content": prompt}]
-
-    try:
-        response = await openai_chat(
-            messages=messages, model_name=model_name, max_completion_tokens=max_tokens
-        )
-        return response["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.error("Error during text completion: %s", e)
-        raise RuntimeError(f"Text completion failed: {str(e)}") from e
-
-
+#
+# Claude Chat Handler
+#
 async def claude_chat(
     messages: list,
     model_name: str,
@@ -410,142 +268,42 @@ async def claude_chat(
     """
     Handle Claude API requests with proper validation and error handling.
     """
-    # Validate model
     if model_name not in CLAUDE_MODELS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported Claude model: {model_name}. "
-            f"Supported models: {list(CLAUDE_MODELS.keys())}",
+            detail=(
+                f"Unsupported Claude model: {model_name}. "
+                f"Supported models: {list(CLAUDE_MODELS.keys())}"
+            ),
         )
 
     model_config = CLAUDE_MODELS[model_name]
 
-    # Handle vision data if provided and model supports it
+    # Vision data, if supported
     if image_data and model_config.get("supports_vision"):
-        # Support both single image string and array of images
-        image_list = [image_data] if isinstance(image_data, str) else image_data
-
-        # Validate number of images
-        if len(image_list) > 100:
-            raise HTTPException(
-                status_code=400, detail="Maximum 100 images per request"
-            )
-
-        # Process each image
-        image_messages = []
-        for img in image_list:
-            if not isinstance(img, str):
-                raise HTTPException(
-                    status_code=400, detail="Image data must be base64 string or URL"
-                )
-
-            # Handle URL-based images
-            if img.startswith(("http://", "https://")):
-                image_messages.append(
-                    {"type": "image", "source": {"type": "url", "url": img}}
-                )
-            # Handle base64 encoded images
-            else:
-                # Extract media type and data
-                if ";base64," in img:
-                    media_type, data = img.split(";base64,")
-                    media_type = media_type.replace("data:", "")
-                else:
-                    media_type = "image/jpeg"  # default if not specified
-                    data = img
-
-                # Validate media type
-                if not any(
-                    media_type.startswith(f"image/{fmt}")
-                    for fmt in ["jpeg", "png", "gif", "webp"]
-                ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Unsupported image format: {media_type}. Must be JPEG, PNG, GIF or WebP",
-                    )
-
-                image_messages.append(
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": data,
-                        },
-                    }
-                )
-
-        # Get last user text message if exists
-        last_user_text = next(
-            (
-                msg["content"]
-                for msg in reversed(messages)
-                if msg["role"] == "user" and isinstance(msg["content"], str)
-            ),
-            "",
-        )
-
-        # Format messages with images
-        messages = [
-            msg
-            for msg in messages
-            if not (msg["role"] == "user" and isinstance(msg["content"], str))
-        ] + [
-            {
-                "role": "user",
-                "content": (
-                    image_messages + [{"type": "text", "text": last_user_text}]
-                    if last_user_text
-                    else image_messages
-                ),
-            }
-        ]
+        messages = _handle_claude_vision_data(messages, image_data)
 
     # Enforce streaming for large responses
-    if max_tokens > 21333 and not stream:
+    if max_tokens > model_config["requires_streaming"] and not stream:
         raise HTTPException(
-            status_code=400, detail="Streaming is required for max_tokens > 21,333"
+            400,
+            f"Streaming is required for max_tokens > {model_config['requires_streaming']}",
         )
 
     # Validate thinking parameters
     if enable_thinking:
         thinking_budget = thinking_budget or model_config["default_thinking"]
-        thinking_budget = max(thinking_budget, 1024)  # Absolute minimum
-
-        # Ensure thinking budget is valid
-        if thinking_budget is not None:
-            if thinking_budget >= max_tokens - 100:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Thinking budget ({thinking_budget}) must be "
-                    f"at least 100 tokens less than max_tokens ({max_tokens})",
-                )
-            if thinking_budget >= max_tokens:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Thinking budget ({thinking_budget}) must be "
-                    f"less than max_tokens ({max_tokens})",
-                )
-        if max_tokens > model_config["requires_streaming"] and not stream:
+        thinking_budget = max(thinking_budget, model_config["min_thinking"])
+        if thinking_budget >= max_tokens:
             raise HTTPException(
-                status_code=400,
-                detail=f"Streaming is required for max_tokens > {model_config['requires_streaming']}",
+                400,
+                f"Thinking budget ({thinking_budget}) must be less than max_tokens ({max_tokens})",
             )
 
-    # Debug info - log API key presence and model
     api_key = settings.CLAUDE_API_KEY
     if not api_key:
         logger.error("CLAUDE_API_KEY is not set in environment or .env file")
-        raise HTTPException(
-            status_code=500,
-            detail="Missing Claude API key configuration. "
-            "Please add your Claude API key to the .env file as CLAUDE_API_KEY=your_key_here",
-        )
-    else:
-        logger.info(f"Claude API key is configured (length: {len(api_key)})")
-
-    logger.info(f"Using Claude API version: {settings.CLAUDE_API_VERSION}")
-    logger.info(f"Using Claude model: {model_name}")
+        raise HTTPException(500, "Missing Claude API key configuration in environment")
 
     headers = {
         "x-api-key": api_key,
@@ -553,7 +311,7 @@ async def claude_chat(
         "content-type": "application/json",
     }
 
-    # Add beta headers for extended features and 128K context
+    # Potential handling for special extended-thinking or extended contexts
     if model_name == "claude-3-7-sonnet-20250219":
         headers.update(
             {
@@ -561,165 +319,154 @@ async def claude_chat(
                 "anthropic-features": "extended-thinking-2025-02-19,long-context-2025-02-19",
             }
         )
-        max_tokens = min(max_tokens, 120000 if enable_thinking else 128000)
-
-    # Fix any message formatting
-    formatted_messages = []
-    for msg in messages:
-        if not msg.get("role") or not msg.get("content"):
-            continue
-        if msg["role"] not in ["user", "assistant", "system"]:
-            continue
-        formatted_messages.append({"role": msg["role"], "content": msg["content"]})
-
-    if not formatted_messages:
-        logger.error("No valid messages to send to Claude API")
-        raise HTTPException(
-            status_code=400, detail="No valid messages to send to Claude"
-        )
-
-    # Extract system messages & KB context
-    system_messages = []
-    clean_messages = []
-    for msg in formatted_messages:
-        if msg["role"] == "system":
-            system_messages.append(msg["content"])
-        elif msg.get("metadata", {}).get("kb_context"):
-            system_messages.append(msg["metadata"]["kb_context"])
-        else:
-            clean_messages.append(msg)
-
-    kb_context = next(
-        (
-            m.get("metadata", {}).get("kb_context")
-            for m in formatted_messages
-            if m.get("metadata", {}).get("kb_context")
-        ),
-        None,
-    )
-    if kb_context:
-        system_messages.append(kb_context)
+        max_tokens = min(max_tokens, model_config["max_tokens"])
 
     payload = {
         "model": model_name,
         "max_tokens": max_tokens,
-        "messages": clean_messages,
-        "temperature": 0.7,  # Default
+        "messages": _filter_claude_messages(messages),
     }
 
-    # Extended thinking
-    if enable_thinking is None:
-        enable_thinking = settings.CLAUDE_EXTENDED_THINKING_ENABLED
-
-    if enable_thinking and model_name in [
-        "claude-3-7-sonnet-20250219",
-        "claude-3-opus-20240229",
-    ]:
-        default_budget = settings.CLAUDE_EXTENDED_THINKING_BUDGET
-        min_budget = 1024  # Minimum
-        if model_name == "claude-3-7-sonnet-20250219":
-            default_budget = 16000
-            min_budget = 2048
-
-        budget = thinking_budget or default_budget
-        budget = max(min_budget, min(budget, max_tokens - min_budget))
-
-        max_tokens = max(max_tokens, min_budget * 2)
-
+    # Extended thinking config
+    if enable_thinking:
+        budget = thinking_budget or model_config["default_thinking"]
         payload["thinking"] = {"type": "enabled", "budget_tokens": budget}
-        payload.pop("temperature", None)
-
-    system_message = "\n".join(system_messages) if system_messages else ""
-    if system_message:
-        payload["system"] = system_message
-    else:
-        payload["system"] = "You're a helpful AI assistant"
-
-    logger.info(f"Sending request to Claude API: {settings.CLAUDE_BASE_URL}")
+        # Some Claude features turn off temperature
+        if "temperature" in payload:
+            payload.pop("temperature")
 
     try:
         async with httpx.AsyncClient() as client:
-            logger.debug(f"Claude API payload: {payload}")
-            logger.debug(f"Claude API headers: {headers}")
-
             response = await client.post(
                 settings.CLAUDE_BASE_URL, json=payload, headers=headers, timeout=30
             )
             response.raise_for_status()
-            response_data = response.json()
-            logger.info(f"Claude API response received, status: {response.status_code}")
-
-            # Process response content
-            if response_data.get("content") and isinstance(
-                response_data["content"], list
-            ):
-                content_parts = []
-                thinking_parts = []
-                redacted_thinking_parts = []
-
-                for block in response_data["content"]:
-                    block_type = block.get("type")
-                    if block_type == "text" and "text" in block:
-                        content_parts.append(block["text"])
-                    elif block_type == "thinking" and "thinking" in block:
-                        thinking_parts.append(block["thinking"])
-                    elif (
-                        block_type == "redacted_thinking"
-                        and "redacted_thinking" in block
-                    ):
-                        redacted_thinking_parts.append(block["redacted_thinking"])
-
-                content = "".join(content_parts)
-                thinking = "\n".join(thinking_parts)
-                redacted_thinking = "\n".join(redacted_thinking_parts)
-
-                resp_obj = {
-                    "choices": [{"message": {"content": content, "role": "assistant"}}],
-                    "has_thinking": bool(thinking_parts or redacted_thinking_parts),
-                }
-                if thinking_parts:
-                    resp_obj["thinking"] = thinking
-                if redacted_thinking_parts:
-                    resp_obj["redacted_thinking"] = redacted_thinking
-                return resp_obj
-            else:
-                logger.warning(
-                    f"Unexpected Claude response structure: {list(response_data.keys())}"
-                )
-                return {
-                    "choices": [
-                        {
-                            "message": {
-                                "content": "Error: Invalid response format",
-                                "role": "assistant",
-                            }
-                        }
-                    ]
-                }
-
+            return _parse_claude_response(response.json())
     except httpx.RequestError as e:
         logger.error(f"Claude API Request Error: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Unable to reach Claude API service"
-        ) from e
+        raise HTTPException(500, "Unable to reach Claude API service") from e
     except httpx.HTTPStatusError as e:
         logger.error(
             f"Claude API HTTP Error: {e.response.status_code} => {e.response.text}"
         )
         raise HTTPException(
-            status_code=e.response.status_code,
-            detail=f"Claude API Error: {e.response.text}",
+            e.response.status_code, f"Claude API Error: {e.response.text}"
         ) from e
     except Exception as e:
         logger.error(f"Claude API Unexpected Error: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Claude service unavailable: {str(e)}"
-        ) from e
+        raise HTTPException(500, f"Claude service unavailable: {str(e)}") from e
 
 
+def _handle_claude_vision_data(messages: list, image_data: str) -> list:
+    """
+    Insert vision data into the final user message for Claude.
+    """
+    # For simplicity, only handle a single or multiple images as a list:
+    if isinstance(image_data, str):
+        images = [image_data]
+    else:
+        images = image_data
+
+    if len(images) > 100:
+        raise HTTPException(400, "Maximum 100 images per request with Claude")
+
+    image_blocks = []
+    for img in images:
+        if img.startswith(("http://", "https://")):
+            # URL-based
+            image_blocks.append(
+                {"type": "image", "source": {"type": "url", "url": img}}
+            )
+        else:
+            # Base64-based
+            image_blocks.append(
+                {"type": "image", "source": {"type": "base64", "data": img}}
+            )
+
+    # Extract any user text from the last user message if present
+    last_user_text = ""
+    for msg in reversed(messages):
+        if msg["role"] == "user" and isinstance(msg["content"], str):
+            last_user_text = msg["content"]
+            break
+
+    # Remove the last user text-based message
+    filtered_messages = [
+        m
+        for m in messages
+        if not (m["role"] == "user" and isinstance(m["content"], str))
+    ]
+
+    # Reinsert combined text+image in a single message
+    combined_content = []
+    if last_user_text:
+        combined_content += [{"type": "text", "text": last_user_text}]
+    combined_content += image_blocks
+
+    filtered_messages.append({"role": "user", "content": combined_content})
+    return filtered_messages
+
+
+def _filter_claude_messages(messages: list) -> list:
+    """
+    Convert any 'system' or 'assistant' roles if needed, remove invalid messages, etc.
+    """
+    filtered = []
+    for msg in messages:
+        if msg["role"] in ["system", "user", "assistant"] and msg.get("content"):
+            filtered.append({"role": msg["role"], "content": msg["content"]})
+    return filtered
+
+
+def _parse_claude_response(response_data: dict) -> dict:
+    """
+    Parse Claude's extended response structure into a standard format with `choices`.
+    """
+    if "content" in response_data and isinstance(response_data["content"], list):
+        content_parts = []
+        thinking_parts = []
+        redacted_thinking_parts = []
+
+        for block in response_data["content"]:
+            block_type = block.get("type")
+            if block_type == "text" and "text" in block:
+                content_parts.append(block["text"])
+            elif block_type == "thinking" and "thinking" in block:
+                thinking_parts.append(block["thinking"])
+            elif block_type == "redacted_thinking" and "redacted_thinking" in block:
+                redacted_thinking_parts.append(block["redacted_thinking"])
+
+        final_content = "".join(content_parts)
+        resp_obj = {
+            "choices": [{"message": {"content": final_content, "role": "assistant"}}],
+            "has_thinking": bool(thinking_parts or redacted_thinking_parts),
+        }
+        if thinking_parts:
+            resp_obj["thinking"] = "\n".join(thinking_parts)
+        if redacted_thinking_parts:
+            resp_obj["redacted_thinking"] = "\n".join(redacted_thinking_parts)
+        return resp_obj
+
+    # Unexpected structure
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": "Error: Invalid response format.",
+                    "role": "assistant",
+                }
+            }
+        ]
+    }
+
+
+#
+# Additional Utilities
+#
 async def count_claude_tokens(messages: List[Dict[str, str]], model_name: str) -> int:
     """
-    Count tokens using Claude's token counting API
+    Count tokens using Claude's token counting endpoint.
+    Fallback to rough estimation if the endpoint fails.
     """
     if model_name not in CLAUDE_MODELS:
         raise ValueError(f"Unsupported model: {model_name}")
@@ -729,7 +476,6 @@ async def count_claude_tokens(messages: List[Dict[str, str]], model_name: str) -
         "anthropic-version": settings.CLAUDE_API_VERSION,
         "content-type": "application/json",
     }
-
     payload = {"model": model_name, "messages": messages}
 
     try:
@@ -744,20 +490,13 @@ async def count_claude_tokens(messages: List[Dict[str, str]], model_name: str) -
             return response.json()["input_tokens"]
     except Exception as e:
         logger.error(f"Token counting failed: {str(e)}")
-        # Fallback to rough estimate (4 chars per token)
         total_chars = sum(len(msg.get("content", "")) for msg in messages)
-        return total_chars // 4
+        return total_chars // 4  # Rough fallback: ~4 chars per token
 
 
 async def get_moderation(text: str) -> Dict[str, Any]:
     """
     Call the Azure OpenAI moderation endpoint.
-
-    Args:
-        text: Text to moderate
-
-    Returns:
-        Moderation results
     """
     try:
         return await azure_api_request(
@@ -766,3 +505,23 @@ async def get_moderation(text: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error("Error during content moderation: %s", e)
         return {"error": str(e), "flagged": False}
+
+
+#
+# Example Helper for Simple Completion
+#
+async def get_completion(
+    prompt: str, model_name: str = "o3-mini", max_tokens: int = 500
+) -> str:
+    """
+    Simple wrapper for text completion to reduce duplication of chat message formatting.
+    """
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        response = await openai_chat(
+            messages=messages, model_name=model_name, max_tokens=max_tokens
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error("Error during text completion: %s", e)
+        raise RuntimeError(f"Text completion failed: {str(e)}") from e
