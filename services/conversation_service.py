@@ -388,7 +388,6 @@ class ConversationService:
 
         model_config = settings.AZURE_OPENAI_MODELS.get(conversation.model_id) if conversation.model_id in settings.AZURE_OPENAI_MODELS else None
         
-        params = {
         # Initialize empty dictionary
         params = {}
         
