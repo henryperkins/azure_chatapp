@@ -377,10 +377,9 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: int = N
       - samesite='lax'
       - path='/'
     """
-    # Switch between dev (not secure) and production (secure):
-    is_production = not settings.DEBUG  # or use your own condition
-    secure_cookie = is_production
-    samesite_mode = "none" if is_production else "lax"
+    # Standard secure cookie settings
+    secure_cookie = True  # Always require HTTPS
+    samesite_mode = "lax"  # Balanced security
 
     cookie_params = {
         "key": key,

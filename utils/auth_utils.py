@@ -151,7 +151,7 @@ async def verify_token(
         )
         return decoded
 
-    except ExpiredSignatureError:
+    except ExpiredSignatureError as exc:
         now = datetime.utcnow().timestamp()
         exp_time = decoded.get("exp") if decoded else None
         diff = now - exp_time if exp_time else None
@@ -162,14 +162,14 @@ async def verify_token(
             if diff is not None
             else "diff: N/A"
         )
-        raise HTTPException(status_code=401, detail="Token has expired")
+        raise HTTPException(status_code=401, detail="Token has expired") from exc
     except InvalidTokenError as e:
         logger.warning(
             f"Invalid token - jti: {token_id}, error: {str(e)}, "
             f"headers: {decoded.get('headers') if decoded else 'N/A'}, "
             f"payload: {decoded.get('payload') if decoded else 'N/A'}"
         )
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token") from e
 
 
 def revoke_token_id(token_id: str) -> None:
@@ -185,7 +185,7 @@ def revoke_token_id(token_id: str) -> None:
 
 async def clean_expired_tokens(db: AsyncSession) -> int:
     """Clean up expired tokens from the database and in-memory cache."""
-    global REVOCATION_LIST
+    # Update in-memory revocation list
     now = datetime.utcnow()
 
     # Delete expired tokens from database
@@ -200,7 +200,7 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     valid_jtis = {row[0] for row in result.fetchall()}
 
     # Update in-memory list to match database (removes expired entries)
-    REVOCATION_LIST = valid_jtis
+    REVOCATION_LIST = valid_jtis  # noqa: F841
 
     if deleted_count > 0:
         logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
@@ -212,21 +212,26 @@ async def validate_project_membership(
     user: User, project_id: UUID, db: AsyncSession
 ) -> Project:
     """Full-stack validation for project access including membership check"""
-    # First verify basic project existence/ownership
-    project = await validate_project_access(project_id, user, db)
+    # Verify project exists
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalars().first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    # Then check explicit membership
-    if project.is_public:
+    # Skip further checks if user is owner
+    if project.owner_id == user.id:
         return project
 
-    result = await db.execute(
-        select(ProjectUserAssociation)
-        .where(ProjectUserAssociation.user_id == user.id)
-        .where(ProjectUserAssociation.project_id == project_id)
-    )
-    if not result.scalar():
-        logger.warning(f"User {user.id} lacks membership in project {project_id}")
-        raise HTTPException(status_code=403, detail="Not a project member")
+    # For non-owners, check project visibility and membership
+    if not project.is_public:
+        result = await db.execute(
+            select(ProjectUserAssociation)
+            .where(ProjectUserAssociation.user_id == user.id)
+            .where(ProjectUserAssociation.project_id == project_id)
+        )
+        if not result.scalar():
+            logger.warning(f"User {user.id} lacks access to private project {project_id}")
+            raise HTTPException(status_code=403, detail="Project access denied")
 
     return project
 
