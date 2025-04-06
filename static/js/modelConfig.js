@@ -69,7 +69,7 @@ const modelConfigState = {
     this.maxTokens = Math.max(100, Math.min(100000, this.maxTokens));
     this.thinkingBudget = Math.max(2048, Math.min(32000, this.thinkingBudget));
 
-   return this;
+    return this;
   },
 
   // Save state to localStorage
@@ -90,6 +90,7 @@ const modelConfigState = {
 
     return this;
   },
+
   loadAzureSettings() {
     try {
       const azureSettings = JSON.parse(localStorage.getItem("azureSettings") || "{}");
@@ -100,6 +101,7 @@ const modelConfigState = {
       console.warn("Failed to load azure settings", e);
     }
   },
+
   saveAzureSettings() {
     try {
       const azureSettings = {
@@ -112,7 +114,6 @@ const modelConfigState = {
     } catch (e) {
       console.warn("Failed to save azure settings", e);
     }
-
   },
 
   // Update the global MODEL_CONFIG object
@@ -151,7 +152,6 @@ const modelConfigState = {
 
     return this;
   }
-
 };
 
 /**
@@ -192,17 +192,21 @@ function initModelConfig() {
 }
 
 /**
- * Get available models for the dropdown (with new Azure OpenAI models)
- * @returns {Array} List of available models
+ * Get the current model configuration object
+ * @returns {Object} The matching model object from getModelOptions()
  */
 function getCurrentModelConfig() {
   const models = getModelOptions();
   return models.find(m => m.id === modelConfigState.modelName) || models[0];
 }
 
+/**
+ * Return a list of all available model configurations
+ * (Duplicates removed and providers set explicitly)
+ */
 function getModelOptions() {
   return [
-    // Claude models (existing, unchanged)
+    // Claude models
     {
       id: 'claude-3-opus-20240229',
       name: 'Claude 3 Opus',
@@ -215,18 +219,21 @@ function getModelOptions() {
       id: 'claude-3-sonnet-20240229',
       name: 'Claude 3 Sonnet',
       description: 'Balanced model - good mix of capability and speed',
+      provider: 'anthropic',
       maxTokens: 200000
     },
     {
       id: 'claude-3-haiku-20240307',
       name: 'Claude 3 Haiku',
       description: 'Fastest Claude model - great for simple tasks',
+      provider: 'anthropic',
       maxTokens: 200000
     },
     {
       id: 'claude-3-7-sonnet-20250219',
       name: 'Claude 3.7 Sonnet',
       description: 'Latest Claude model with enhanced capabilities (128K context, vision support)',
+      provider: 'anthropic',
       supportsExtendedThinking: true,
       supportsVision: true,
       maxTokens: 128000,
@@ -255,7 +262,7 @@ function getModelOptions() {
         reasoning_effort: ['low', 'medium', 'high']
       },
       maxTokens: 128000,
-      requires: ['vision_detail']
+      requires: ['vision_detail'] // can also require 'reasoning_effort' if needed
     },
     {
       id: 'o3-mini',
@@ -281,51 +288,20 @@ function getModelOptions() {
       maxTokens: 128000
     },
 
-    // Legacy OpenAI models (existing, unchanged)
+    // Legacy OpenAI models
     {
       id: 'gpt-4',
       name: 'GPT-4',
+      provider: 'openai',
       description: 'Highly capable GPT model',
       maxTokens: 8192
     },
     {
-      id: 'gpt-3.5-turbo', 
+      id: 'gpt-3.5-turbo',
       name: 'GPT-3.5 Turbo',
-      description: 'Fast GPT model for simpler queries'
-    },
-    {
-      id: 'o1',
-      name: 'Azure o1 (Vision)',
-      provider: 'azure',
-      description: 'Deep analysis with image understanding',
-      supportsVision: true,
-      parameters: {
-        vision_detail: ['low', 'high'],
-        reasoning_effort: ['low', 'medium', 'high']
-      },
-      maxTokens: 128000
-    },
-    {
-      id: 'o3-mini', 
-      name: 'Azure o3-mini',
-      provider: 'azure',
-      description: 'Advanced text reasoning',
-      parameters: {
-        reasoning_effort: ['low', 'medium', 'high']
-      },
-      maxTokens: 16385
-    },
-    {
-      id: 'gpt-4o',
-      name: 'GPT-4o',
-      provider: 'azure',
-      description: 'Auto-optimized multimodal',
-      supportsVision: true,
-      supportsStreaming: true,
-      parameters: {
-        vision_detail: ['auto', 'low', 'high']
-      },
-      maxTokens: 128000
+      provider: 'openai',
+      description: 'Fast GPT model for simpler queries',
+      maxTokens: 4096
     }
   ];
 }
@@ -449,10 +425,11 @@ function setupReasoningUI() {
   const reasoningPanel = document.getElementById("reasoningPanel");
   if (!reasoningPanel) return;
 
-  // Hide panel if model doesn't support reasoning effort
-  reasoningPanel.classList.toggle('hidden', !model.supportsReasoningEffort);
-  
-  if (model.supportsReasoningEffort) {
+  // For models that allow adjustable 'reasoning_effort' in their parameters
+  const supportsReasoning = model.parameters?.reasoning_effort?.length > 0;
+  reasoningPanel.classList.toggle('hidden', !supportsReasoning);
+
+  if (supportsReasoning) {
     // Clear existing content
     reasoningPanel.innerHTML = '';
 
@@ -468,14 +445,14 @@ function setupReasoningUI() {
     slider.id = "reasoningEffortRange";
     slider.min = "1";
     slider.max = "3";
-    slider.value =
-      modelConfigState.reasoningEffort === "low"
-        ? "1"
-        : modelConfigState.reasoningEffort === "medium"
-        ? "2"
-        : "3";
     slider.step = "1";
     slider.className = "mt-2 w-full";
+
+    // Convert current state to a numeric scale
+    let currentNumeric = 2; // default "medium"
+    if (modelConfigState.reasoningEffort === "low") currentNumeric = 1;
+    if (modelConfigState.reasoningEffort === "high") currentNumeric = 3;
+    slider.value = currentNumeric.toString();
     reasoningPanel.appendChild(slider);
 
     // Create output display
@@ -518,7 +495,7 @@ function setupVisionUI() {
 
   // Reset UI elements
   visionPanel.innerHTML = '';
-  
+
   if (model.supportsVision) {
     // Add vision detail selector
     const detailLabel = document.createElement('label');
@@ -528,20 +505,17 @@ function setupVisionUI() {
 
     const detailSelector = document.createElement('select');
     detailSelector.className = 'w-full px-2 py-1 mt-1 border rounded dark:bg-gray-700 dark:border-gray-600';
-    
+
     // Add available detail levels
     const detailLevels = model.parameters?.vision_detail || ['auto', 'low', 'high'];
     detailLevels.forEach(level => {
       const option = document.createElement('option');
       option.value = level;
       option.textContent = level.charAt(0).toUpperCase() + level.slice(1);
-      if (level === 'auto' && model.id === 'gpt-4o') {
-        option.selected = true;
-      }
       detailSelector.appendChild(option);
     });
-    
-    // Connect to state
+
+    // Set the default from state
     detailSelector.value = modelConfigState.visionDetail;
     trackListener(detailSelector, 'change', () => {
       modelConfigState.visionDetail = detailSelector.value;
@@ -636,7 +610,7 @@ function setupVisionFileInput() {
       return;
     }
 
-    // Validate file size
+    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       if (statusEl) statusEl.textContent = 'File must be <5MB';
       e.target.value = '';
@@ -734,6 +708,3 @@ window.initializeModelDropdown = function () {
   return true;
 };
 window.persistSettings = persistSettings;
-      description: 'Fast GPT model for simpler queries'
-    },
-    {
