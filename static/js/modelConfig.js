@@ -375,39 +375,42 @@ function setupReasoningUI() {
  * Set up vision UI elements
  */
 function setupVisionUI() {
+  const model = getCurrentModelConfig();
   const visionPanel = document.getElementById('visionPanel');
   if (!visionPanel) return;
+  
+  visionPanel.innerHTML = ''; // Clear existing content
 
-  // Add vision detail selector if it doesn't exist
-  if (!document.getElementById('visionDetail')) {
-    const visionDetailLabel = document.createElement('div');
-    visionDetailLabel.className = 'mt-2';
-    visionDetailLabel.innerHTML = '<label class="block text-sm font-medium dark:text-gray-200">Image Detail:</label>';
-    visionPanel.appendChild(visionDetailLabel);
-
-    const visionDetailSelect = document.createElement('select');
-    visionDetailSelect.id = 'visionDetail';
-    visionDetailSelect.className = 'w-full px-2 py-1 mt-1 border rounded dark:bg-gray-700 dark:border-gray-600';
-    visionDetailSelect.innerHTML = `
-      <option value="auto">Auto</option>
-      <option value="low">Low Detail</option>
-      <option value="high">High Detail</option>
+  if (model.provider === 'azure' && model.supportsVision) {
+    visionPanel.innerHTML = `
+      <div class="mt-4">
+        <label class="block text-sm font-medium dark:text-gray-200">Image Detail</label>
+        <select id="visionDetail" class="mt-1 block w-full px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600">
+          ${model.parameters.vision_detail.map(level => `
+            <option value="${level}" ${level === 'auto' && model.id === 'gpt-4o' ? 'selected' : ''}>
+              ${level.charAt(0).toUpperCase() + level.slice(1)}
+            </option>
+          `).join('')}
+        </select>
+      </div>
     `;
-    visionDetailSelect.value = modelConfigState.visionDetail;
-    visionDetailLabel.appendChild(visionDetailSelect);
 
-    // Add change handler
-    trackListener(visionDetailSelect, 'change', () => {
-      modelConfigState.visionDetail = visionDetailSelect.value;
-      persistSettings();
-    });
+    // Set initial value from state
+    const select = document.getElementById('visionDetail');
+    if (select) {
+      select.value = modelConfigState.visionDetail;
+      trackListener(select, 'change', () => {
+        modelConfigState.visionDetail = select.value;
+        persistSettings();
+      });
+    }
   }
 
   // Set up file input handler
   setupVisionFileInput();
 
-  // Set initial visibility
-  visionPanel.classList.toggle('hidden', modelConfigState.modelName !== 'o1');
+  // Toggle visibility based on model support
+  visionPanel.classList.toggle('hidden', !model.supportsVision);
 }
 
 /**
@@ -671,21 +674,37 @@ function getModelOptions() {
     },
     {
       id: 'o1',
-      name: 'o1 (Vision)',
-      description: 'Azure OpenAI model with image understanding',
-      supportsVision: true
+      name: 'Azure o1 (Vision)',
+      provider: 'azure',
+      description: 'Deep analysis with image understanding',
+      supportsVision: true,
+      parameters: {
+        vision_detail: ['low', 'high'],
+        reasoning_effort: ['low', 'medium', 'high']
+      },
+      maxTokens: 128000
     },
     {
-      id: 'o3-mini',
-      name: 'o3-mini',
-      description: 'Azure OpenAI advanced reasoning model (large context, no vision support)',
-      supportsVision: false
+      id: 'o3-mini', 
+      name: 'Azure o3-mini',
+      provider: 'azure',
+      description: 'Advanced text reasoning',
+      parameters: {
+        reasoning_effort: ['low', 'medium', 'high']
+      },
+      maxTokens: 16385
     },
     {
       id: 'gpt-4o',
       name: 'GPT-4o',
-      description: 'Versatile GPT model optimized for chat + vision',
-      supportsVision: true
+      provider: 'azure',
+      description: 'Auto-optimized multimodal',
+      supportsVision: true,
+      supportsStreaming: true,
+      parameters: {
+        vision_detail: ['auto', 'low', 'high']
+      },
+      maxTokens: 128000
     }
   ];
 }

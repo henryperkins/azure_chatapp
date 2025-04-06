@@ -122,11 +122,17 @@ async def azure_chat(
     temperature: float = 0.7,
     stream: bool = False
 ) -> dict:
-    await validate_azure_params(model_name, {
-        'image_data': image_data,
-        'vision_detail': vision_detail,
-        'reasoning_effort': reasoning_effort
-    })
+    model_config = settings.AZURE_OPENAI_MODELS.get(model_name)
+    if not model_config:
+        raise HTTPException(400, f"Unsupported Azure model: {model_name}")
+    
+    # Model-specific validation
+    if model_config.get("requires"):
+        for param in model_config["requires"]:
+            if param == "vision_detail" and not vision_detail:
+                raise HTTPException(400, "vision_detail is required for this model")
+            if param == "reasoning_effort" and not reasoning_effort:
+                raise HTTPException(400, "reasoning_effort is required")
     """
     Calls Azure OpenAI's chat completion API.
     Allows optional 'reasoning_effort' if using "o3-mini" or "o1".
@@ -211,6 +217,28 @@ async def azure_chat(
             f"Azure OpenAI request failed: {e.response.status_code} => {e.response.text}"
         ) from e
 
+
+def process_vision_content(messages, image_data, vision_detail, model_config):
+    """Process messages to include vision content with proper formatting."""
+    valid_details = model_config.get("vision_details", [])
+    if vision_detail not in valid_details:
+        vision_detail = valid_details[0]
+
+    last_message = messages[-1]
+    vision_message = {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": last_message["content"]},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_data}",
+                    "detail": vision_detail
+                }
+            }
+        ]
+    }
+    return messages[:-1] + [vision_message]
 
 def extract_base64_data(image_data: str) -> str:
     """
