@@ -1113,3 +1113,6 @@ window.initializeModelDropdown = function () {
   return true;
 };
 window.persistSettings = persistSettings;
+      description: 'Fast GPT model for simpler queries'
+    },
+    {

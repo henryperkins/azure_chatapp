@@ -36,8 +36,13 @@ class ConversationError(Exception):
         super().__init__(message)
 
 
-def validate_model(model_id: str) -> bool:
-    """Validate model against allowed configurations with capability checks."""
+def validate_model(model_id: str, image_data: Optional[str] = None) -> bool:
+    """Validate model against allowed configurations with capability checks.
+    
+    Args:
+        model_id: The model ID to validate
+        image_data: Optional image data to check vision capability requirements
+    """
     if model_id in settings.CLAUDE_MODELS:
         return True
     
