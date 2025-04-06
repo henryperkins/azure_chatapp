@@ -9,13 +9,19 @@ WARNING: This will delete all existing data in the database.
 import asyncio
 import sys
 import os
-from db import validate_db_schema
 
 # Add the parent directory to the path so we can import from the root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from alembic import command
-from alembic.config import Config
+try:
+    from db import validate_db_schema, init_db, get_async_session_context, async_engine
+    from alembic import command
+    from alembic.config import Config
+except ImportError as e:
+    print(f"Error importing modules: {e}")
+    print("Current Python path:")
+    print(sys.path)
+    sys.exit(1)
 
 async def reset_database():
     """Reset the database using the latest migration."""
@@ -38,7 +44,6 @@ async def reset_database():
         print("All tables have been recreated with the correct structure.")
         
         # Validate the schema after reset
-        from db import validate_db_schema
         print("\nValidating database schema...")
         try:
             await validate_db_schema()
