@@ -677,33 +677,14 @@ async function initProjectDashboard() {
   throw new Error("ProjectDashboard failed to initialize");
 }
 
-// Optional: auto-init on DOM load
-if (typeof window !== "undefined") {
-  let autoInitAttempts = 0;
-  const maxAutoInitAttempts = 3;
-
-  const startInitialization = async () => {
-    if (autoInitAttempts >= maxAutoInitAttempts) {
-      console.error("[ProjectDashboard] Auto-initialization reached max attempts.");
-      return;
+// Register dashboard with central initializer
+window.initProjectDashboard = function() {
+  window.appInitializer.register({
+    init: async () => {
+      const dashboard = new ProjectDashboard();
+      await dashboard.init();
+      window.projectDashboard = dashboard;
+      return dashboard;
     }
-    try {
-      if (!document.body) {
-        // Wait a bit if DOM not ready
-        autoInitAttempts++;
-        return setTimeout(startInitialization, 300);
-      }
-      await initProjectDashboard();
-    } catch (error) {
-      console.error("[ProjectDashboard] Auto-init failed:", error);
-      autoInitAttempts++;
-      setTimeout(startInitialization, 300);
-    }
-  };
-
-  if (document.readyState === "complete" || document.readyState === "interactive") {
-    startInitialization();
-  } else {
-    document.addEventListener("DOMContentLoaded", startInitialization);
-  }
-}
+  });
+};
