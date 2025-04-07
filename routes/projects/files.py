@@ -11,7 +11,7 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,6 +133,7 @@ async def upload_project_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """Upload a file to a project and process it for the knowledge base."""
     try:
