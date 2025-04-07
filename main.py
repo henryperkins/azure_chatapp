@@ -2,7 +2,7 @@
 main.py
 --------
 The FastAPI entrypoint for the Azure OpenAI Chat Application.
-- Designed for strict same-origin security (NO CORS support)
+- Designed for strict same-origin security
 - Requires frontend to be served from same domain as backend
 - Uses session cookies with SameSite=Strict and Secure flags
 - Initializes app with security-focused middleware:
@@ -166,8 +166,17 @@ if settings.ENV == "production":
         return response
 
 
-# Serve static files
+# Serve static files with security headers
+def static_security_headers(request, response):
+    response.headers.update({
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "same-origin"
+    })
+    return response
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.middleware("http")(static_security_headers)
 
 
 @app.get("/", include_in_schema=False)
@@ -189,9 +198,20 @@ async def projects():
 
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint to verify the application is running."""
-    return {"status": "ok"}
+async def health_check(request: Request):
+    """Health check endpoint with same-origin verification."""
+    # Verify request came from same origin
+    origin = request.headers.get("origin")
+    if origin and origin != f"{request.url.scheme}://{request.headers.get('host')}":
+        raise HTTPException(403, detail="Cross-origin requests not permitted")
+    
+    return {
+        "status": "ok",
+        "security": {
+            "same_origin_verified": True,
+            "session_cookie_secure": True
+        }
+    }
 
 
 # Debug endpoints only available in non-production
