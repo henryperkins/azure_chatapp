@@ -119,19 +119,6 @@ const TokenManager = {
    */
   async getAuthHeader() {
     try {
-      // Use the more robust cookie parsing method
-      let cookieToken = null;
-      
-      if (document.cookie) {
-        const cookies = document.cookie.split(/;\s*/);
-        for (const cookie of cookies) {
-          if (cookie.startsWith('access_token=')) {
-            cookieToken = cookie.substring('access_token='.length);
-            break;
-          }
-        }
-      }
-
       // Get token from localStorage
       let authState = null;
       try {
@@ -169,7 +156,7 @@ const TokenManager = {
       }
 
       // Use token from any available source
-      const accessToken = this.accessToken || cookieToken || storageToken;
+      const accessToken = this.accessToken || storageToken;
       
       // Log the token being used
       if (AUTH_DEBUG && accessToken) {
@@ -1009,33 +996,21 @@ window.auth = window.auth || {
         console.debug("[Auth] Starting initialization");
       }
 
-      // 1) Try to rehydrate from cookies first
-      const cookiesRehydrated = TokenManager.rehydrateFromCookies();
-      if (cookiesRehydrated) {
+      // 1) Check localStorage for tokens
+      const authState = JSON.parse(localStorage.getItem('auth_state'));
+      if (authState?.accessToken) {
         if (AUTH_DEBUG) {
-          console.debug("[Auth] Rehydrated from cookies");
+          console.debug("[Auth] Found stored tokens in localStorage, rehydrating");
         }
-        // Read user info if available
+        TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+
         const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
         broadcastAuth(true, userInfo.username);
-        await verifyAuthState(true); // server verification
+        await verifyAuthState(true);
       } else {
-        // 2) Fallback to localStorage if no cookies
-        const authState = JSON.parse(localStorage.getItem('auth_state'));
-        if (authState?.accessToken) {
-          if (AUTH_DEBUG) {
-            console.debug("[Auth] Found stored tokens in localStorage, rehydrating");
-          }
-          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-
-          const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
-          broadcastAuth(true, userInfo.username);
-          await verifyAuthState(true);
-        } else {
-          // Nothing found; mark as logged out
-          clearSession();
-          broadcastAuth(false);
-        }
+        // Nothing found; mark as logged out
+        clearSession();
+        broadcastAuth(false);
       }
 
       setupUIListeners();
@@ -1155,15 +1130,13 @@ window.auth = window.auth || {
       }
       return isAuthenticated;
     } catch (error) {
-      // For network errors, assume token might still be valid
-      if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
-        const result = !!TokenManager.accessToken;
-        if (window.API_CONFIG) {
-          window.API_CONFIG.isAuthenticated = result;
-        }
-        authVerificationCache.set(result);
-        return result;
+      // Default fallback
+      const result = !!TokenManager.accessToken;
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = result;
       }
+      authVerificationCache.set(result);
+      return result;
       // If explicitly 401, definitely logout
       if (error.status === 401) {
         TokenManager.clearTokens();
