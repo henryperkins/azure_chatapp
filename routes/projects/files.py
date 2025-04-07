@@ -134,10 +134,21 @@ async def upload_project_file(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Temporarily disabled file upload endpoint."""
-    raise HTTPException(
-        status_code=501, detail="File upload functionality is currently unavailable."
-    )
+    """Upload a file to a project and process it for the knowledge base."""
+    try:
+        return await knowledgebase_service.upload_file_to_project(
+            project_id=project_id,
+            file=file,
+            db=db,
+            user_id=current_user.id,
+            background_tasks=background_tasks
+        )
+    except Exception as e:
+        logger.error(f"File upload failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"File upload failed: {str(e)}"
+        )
 
 
 @router.get("/{file_id}", response_model=dict)
