@@ -420,10 +420,12 @@
       }
 
       try {
+        const token = await window.auth.getAuthToken();
         await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases/toggle`,
           "POST",
-          { enable: enabled }
+          { enable: enabled },
+          token
         );
 
         // Update localStorage for potential cross-component use (e.g., chat)
@@ -517,6 +519,7 @@
       }, 5000); // Notify after 5 seconds
 
       try {
+        const token = await window.auth.getAuthToken();
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases/search`,
           "POST",
@@ -524,6 +527,7 @@
             query: trimmedQuery,
             top_k: topK
           },
+          token,
           0, // retryCount
           requestTimeoutMs // timeoutMs
         );
@@ -595,10 +599,12 @@
         // Option to force reindex if needed (e.g., add a checkbox later)
         const requestBody = { force_reindex: true }; // Or false depending on UI choice
 
+        const token = await window.auth.getAuthToken();
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-base/reindex`, // Use the correct reindex endpoint
           "POST",
-          requestBody
+          requestBody,
+          token
         );
 
         const data = response.data || {};
@@ -895,10 +901,12 @@
 
         // Determine if creating new or updating existing (though API might handle this via POST/PUT logic)
         // Using POST to a project-specific endpoint often implies creation or idempotent update
+        const token = await window.auth.getAuthToken();
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases`, // Endpoint for creating/setting KB for a project
           "POST",
-          payload
+          payload,
+          token
         );
 
         console.log('[DEBUG] Knowledge base setup/update response:', response);
@@ -981,7 +989,8 @@
       }
 
       try {
-        const response = await window.apiRequest(`/api/knowledge-bases/${kbId}/health`, "GET");
+        const token = await window.auth.getAuthToken();
+        const response = await window.apiRequest(`/api/knowledge-bases/${kbId}/health`, "GET", null, token);
         const health = response.data || {};
 
         console.log("[DEBUG] KB Health:", health);

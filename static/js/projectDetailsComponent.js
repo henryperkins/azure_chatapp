@@ -205,6 +205,13 @@
      */
     async uploadFiles(projectId, files) {
       try {
+        // Verify authentication first using auth.js
+        const isAuthenticated = await window.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          window.showNotification('Please log in to upload files', 'warning');
+          return;
+        }
+        
         // 1. Get current project and verify prerequisites
         const project = window.projectManager?.currentProject;
         if (!project) {
@@ -588,6 +595,17 @@
      * @returns {string} Formatted error message
      */
     _formatUploadErrorMessage(error, fileName) {
+      // Check for authentication errors first
+      if (error?.status === 401 ||
+          error?.response?.status === 401 ||
+          error.message?.includes('auth') ||
+          error.message?.includes('token') ||
+          error.message?.includes('unauthorized')) {
+        // Use auth.js to handle authentication errors
+        window.auth.handleAuthError(error, 'file upload');
+        return "Authentication error - please log in again";
+      }
+      
       let errorMessage = "Upload failed";
 
       // Extract error message from various response formats
@@ -1080,45 +1098,64 @@
       e.preventDefault();
       e.stopPropagation();
 
-      const projectId = this.state.currentProject?.id;
-      if (!projectId) {
-        window.showNotification('No project selected', 'warning');
-        return;
-      }
-
+      // Verify authentication first using auth.js
       try {
-        // Verify required DOM elements
-        this._verifyRequiredChatElements();
-
-        // Show chat container
-        const chatContainer = document.getElementById('projectChatContainer');
-        chatContainer.classList.remove('hidden');
-
-        // Initialize chat interface if needed
-        if (!window.projectChatInterface) {
-          await this._initializeProjectChatInterface();
+        const isAuthenticated = await window.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          window.showNotification('Please log in to create a conversation', 'warning');
+          return;
+        }
+        
+        const projectId = this.state.currentProject?.id;
+        if (!projectId) {
+          window.showNotification('No project selected', 'warning');
+          return;
         }
 
-        // Create new conversation
-        const conversation = await window.projectChatInterface.createNewConversation();
+        try {
+          // Verify required DOM elements
+          this._verifyRequiredChatElements();
 
-        // Set target container and load conversation
-        window.projectChatInterface.setTargetContainer('#projectChatMessages');
-        window.projectChatInterface.loadConversation(conversation.id);
+          // Show chat container
+          const chatContainer = document.getElementById('projectChatContainer');
+          chatContainer.classList.remove('hidden');
 
-        // Update URL without reloading
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('chatId', conversation.id);
-        window.history.pushState({}, '', newUrl);
+          // Initialize chat interface if needed
+          if (!window.projectChatInterface) {
+            await this._initializeProjectChatInterface();
+          }
 
-        // Store project ID in localStorage for chat context
-        // Project context is maintained via URL params and in-memory state
+          // Create new conversation
+          const conversation = await window.projectChatInterface.createNewConversation();
+
+          // Set target container and load conversation
+          window.projectChatInterface.setTargetContainer('#projectChatMessages');
+          window.projectChatInterface.loadConversation(conversation.id);
+
+          // Update URL without reloading
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('chatId', conversation.id);
+          window.history.pushState({}, '', newUrl);
+
+          // Store project ID in localStorage for chat context
+          // Project context is maintained via URL params and in-memory state
+        } catch (error) {
+          console.error('Error creating conversation:', error);
+          
+          // Use auth.js error handler for authentication-related errors
+          if (error.status === 401 || error.status === 403 ||
+              error.message?.includes('auth') || error.message?.includes('token')) {
+            window.auth.handleAuthError(error, 'conversation creation');
+          } else {
+            window.showNotification(
+              `Failed to create conversation: ${error.message || 'Unknown error'}`,
+              'error'
+            );
+          }
+        }
       } catch (error) {
-        console.error('Error creating conversation:', error);
-        window.showNotification(
-          `Failed to create conversation: ${error.message || 'Unknown error'}`,
-          'error'
-        );
+        console.error('Authentication check failed:', error);
+        window.showNotification('Authentication error', 'error');
       }
     }
 
@@ -1264,6 +1301,13 @@
      */
     async _confirmDeleteConversation(conversation) {
       try {
+        // Verify authentication first using auth.js
+        const isAuthenticated = await window.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          window.showNotification('Please log in to delete conversations', 'warning');
+          return;
+        }
+        
         // Use static confirmAction method for consistency
         const confirmed = await window.ModalManager.confirmAction({
           title: "Delete Conversation",
@@ -1355,6 +1399,17 @@
      * @param {Error} error - Error object
      */
     _handleDeleteConversationError(error) {
+      // Use auth.js error handler for all authentication-related errors
+      if (error?.response?.status === 401 ||
+          error?.status === 401 ||
+          error.message?.includes('auth') ||
+          error.message?.includes('token') ||
+          error.message?.includes('unauthorized')) {
+        window.auth.handleAuthError(error, 'conversation deletion');
+        return;
+      }
+      
+      // Handle other specific errors
       let errorMsg = "Failed to delete conversation";
       if (error?.response?.status === 403) {
         errorMsg = "You don't have permission to delete this";
@@ -1419,7 +1474,7 @@
      * Set up WebSocket connection for processing updates
      * @param {string} projectId - Project ID to monitor
      */
-    _setupProcessingWS(projectId) {
+    async _setupProcessingWS(projectId) {
       if (!projectId) return;
 
       // Clean up any existing connection
@@ -1428,36 +1483,74 @@
         this.processingWS = null;
       }
 
-      // Create new connection
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(
-        `${protocol}//${window.location.host}/api/ws/processing/${projectId}`
-      );
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'processing_update' && this.state.currentProject) {
-            this._updateFileStatus(data.file_id, data.status, data.error);
-          }
-        } catch (e) {
-          console.error('Error processing websocket message:', e);
+      try {
+        // Verify authentication before setting up WebSocket
+        const isAuthenticated = await window.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          console.warn('User not authenticated, cannot set up processing WebSocket');
+          return;
         }
-      };
 
-      ws.onerror = (error) => {
-        console.error('Processing WebSocket error:', error);
-        setTimeout(() => this._setupProcessingWS(projectId), 5000);
-      };
+        // Get WebSocket auth token using auth.js
+        const wsAuth = await window.auth.getWSAuthToken();
+        
+        // Create new connection with auth token
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(
+          `${protocol}//${window.location.host}/api/ws/processing/${projectId}?token=${wsAuth.token}`
+        );
 
-      ws.onclose = () => {
-        console.log('Processing WebSocket closed');
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'processing_update' && this.state.currentProject) {
+              this._updateFileStatus(data.file_id, data.status, data.error);
+            }
+          } catch (e) {
+            console.error('Error processing websocket message:', e);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('Processing WebSocket error:', error);
+          
+          // Use auth error handler if it might be an auth issue
+          if (error.message?.includes('401') ||
+              error.message?.includes('auth') ||
+              error.message?.includes('token') ||
+              error.message?.includes('unauthorized')) {
+            window.auth.handleAuthError(error, 'WebSocket connection');
+          }
+          
+          setTimeout(() => this._setupProcessingWS(projectId), 5000);
+        };
+      ws.onclose = (event) => {
+        console.log('Processing WebSocket closed', event.code);
+        
+        // Handle authentication-related close codes
+        if (event.code === 1008 || event.code === 4001) {
+          // Auth error codes
+          window.auth.verify(true).catch(() => {
+            console.warn('Authentication verification failed after WebSocket close');
+          });
+        }
+        
         if (window.projectManager?.currentProject?.id === projectId) {
           setTimeout(() => this._setupProcessingWS(projectId), 5000);
         }
       };
 
       this.processingWS = ws;
+      } catch (error) {
+        console.error('Failed to set up processing WebSocket:', error);
+        if (error.message?.includes('auth') ||
+            error.message?.includes('token') ||
+            error.message?.includes('unauthorized') ||
+            error?.status === 401 ||
+            error?.response?.status === 401) {
+          window.auth.handleAuthError(error, 'WebSocket setup');
+        }
+      }
     }
 
     /**
