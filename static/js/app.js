@@ -114,16 +114,11 @@ async function ensureAuthenticated() {
 function clearAuthState() {
   API_CONFIG.isAuthenticated = false;
 
-  // Remove local references
-  localStorage.removeItem('userInfo');
-  localStorage.removeItem('auth_state');
-
-  // Let TokenManager handle cookies, etc.
+  // No localStorage removal
   if (window.TokenManager?.clearTokens) {
     window.TokenManager.clearTokens();
   }
 
-  // Dispatch global authStateChanged event
   document.dispatchEvent(new CustomEvent('authStateChanged', {
     detail: { authenticated: false }
   }));

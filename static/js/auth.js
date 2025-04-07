@@ -286,22 +286,15 @@ window.auth = {
         console.debug("[Auth] Starting initialization");
       }
 
-      // 1) Check localStorage for tokens
-        const authState = JSON.parse(localStorage.getItem('auth_state'));
-        if (authState?.accessToken) {
-          if (AUTH_DEBUG) {
-            console.debug("[Auth] Found stored tokens in localStorage, rehydrating");
-          }
-          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-
-          const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
-          broadcastAuth(true, userInfo.username);
-          await verifyAuthState(true);
-        } else {
-          // Nothing found; mark as logged out
-          clearSession();
-          broadcastAuth(false);
-        }
+      // 1) Check cookies for tokens
+      if (TokenManager.rehydrateFromCookies()) {
+        const decoded = decodeJwt(TokenManager.accessToken);
+        broadcastAuth(true, decoded?.sub);
+        await verifyAuthState(true);
+      } else {
+        clearSession();
+        broadcastAuth(false);
+      }
       }
 
       setupUIListeners();
@@ -378,15 +371,8 @@ window.auth = {
       // Rehydrate from cookies
       const cookiesRehydrated = TokenManager.rehydrateFromCookies();
       if (!cookiesRehydrated) {
-        // Then from localStorage
-        const authState = JSON.parse(localStorage.getItem('auth_state'));
-        if (authState?.accessToken) {
-          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-        } else {
-          // No tokens found
-          authVerificationCache.set(false);
-          return false;
-        }
+        authVerificationCache.set(false);
+        return false;
       }
     }
 
@@ -658,15 +644,6 @@ async function loginUser(username, password) {
 
     // Cookies are now managed by the backend
 
-    // Store user info
-    if (data.username) {
-      localStorage.setItem('userInfo', JSON.stringify({
-        username: data.username,
-        roles: data.roles || [],
-        lastLogin: Date.now()
-      }));
-    }
-
     broadcastAuth(true, data.username || username);
     setupTokenRefresh();
     return data;
@@ -799,13 +776,9 @@ async function verifyAuthState(bypassCache = false) {
       return authVerificationCache.result;
     }
 
-    // Rehydrate from localStorage if needed
-    const authState = JSON.parse(localStorage.getItem('auth_state'));
-    if (authState?.accessToken && !TokenManager.accessToken) {
-      if (AUTH_DEBUG) {
-        console.debug('[Auth] Rehydrating tokens from localStorage');
-      }
-      TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+    // Rehydrate from cookies if needed
+    if (!TokenManager.accessToken) {
+      TokenManager.rehydrateFromCookies();
     }
 
     if (!TokenManager.accessToken) {
@@ -900,11 +873,10 @@ function broadcastAuth(authenticated, username = null) {
 }
 
 function clearSession() {
-  // Selectively remove relevant keys
-  localStorage.removeItem('auth_state');
-  localStorage.removeItem('userInfo');
-  localStorage.removeItem('tokenVersion');
-  localStorage.removeItem('refreshMutex');
+  // Remove all TokenManager state
+  TokenManager.clearTokens();
+  
+  // No localStorage clearing anymore
   clearTokenTimers();
 }
 
