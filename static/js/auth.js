@@ -154,7 +154,7 @@ try {
   console.debug('[Auth] Refreshing tokens...');
 
   // Validate we have a token to refresh
-  const currentToken = getCurrentToken();
+  const currentToken = getCookie('refresh_token');
   if (!currentToken) {
     throw new Error('No token available for refresh');
   }
@@ -405,7 +405,7 @@ async function init() {
   if (window.__authInitializing) {
     return new Promise(resolve => {
       const check = () => {
-        if (this.isInitialized) resolve(true);
+        if (window.auth.isInitialized) resolve(true);
         else setTimeout(check, 50);
       };
       check();
@@ -413,7 +413,7 @@ async function init() {
   }
 
   window.__authInitializing = true;
-  if (this.isInitialized) {
+  if (window.auth.isInitialized) {
     if (AUTH_DEBUG) console.debug("[Auth] Already initialized");
     window.__authInitializing = false;
     return true;
@@ -435,7 +435,7 @@ async function init() {
 
     setupUIListeners();
     setupAuthStateMonitoring();
-    this.isInitialized = true;
+    window.auth.isInitialized = true;
 
     console.log("[Auth] Module initialized successfully");
     return true;
