@@ -210,9 +210,7 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
     }
     
     // Make the HTTP request
-    const response = await window.apiRequest(apiUrl, 'POST', messagePayload, {
-      credentials: 'same-origin'
-    });
+    const response = await window.apiRequest(apiUrl, 'POST', messagePayload);
     
     // Parse and handle the response
     if (response.data?.assistant_message) {
