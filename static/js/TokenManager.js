@@ -13,7 +13,8 @@
 
   // Constants
   const TOKEN_CHECK_INTERVAL = 30000; // 30 seconds
-  const DEFAULT_TOKEN_BUFFER = 60000; // 1 minute buffer before expiration
+  const DEFAULT_TOKEN_BUFFER = 300000; // 5 minute buffer before expiration
+  const PROACTIVE_REFRESH_THRESHOLD = 900000; // 15 minutes before expiration
 
   class TokenManager {
     constructor() {
@@ -128,9 +129,17 @@
       }
       
       this.checkInterval = setInterval(() => {
-        if (this.isExpired(2 * DEFAULT_TOKEN_BUFFER)) {
+        // Proactively refresh if token will expire soon
+        if (this.expiresAt && (this.expiresAt - Date.now() < PROACTIVE_REFRESH_THRESHOLD)) {
+          console.debug('[TokenManager] Proactively refreshing token before expiration');
           this.refresh().catch(err => {
-            console.warn('[TokenManager] Auto-refresh failed:', err);
+            console.warn('[TokenManager] Proactive refresh failed:', err);
+          });
+        }
+        // Emergency refresh if token is expired or about to expire
+        else if (this.isExpired(2 * DEFAULT_TOKEN_BUFFER)) {
+          this.refresh().catch(err => {
+            console.warn('[TokenManager] Emergency refresh failed:', err);
           });
         }
       }, TOKEN_CHECK_INTERVAL);
@@ -172,8 +181,11 @@
       // Check for too many consecutive failed refresh attempts
       const now = Date.now();
       if (this.lastRefreshAttempt && (now - this.lastRefreshAttempt < 5000) && this.refreshFailCount >= this.maxRefreshRetries) {
-        console.error('[TokenManager] Too many failed refresh attempts, cooling down');
-        return Promise.reject(new Error('Too many refresh attempts failed'));
+        console.error('[TokenManager] Too many failed refresh attempts, forcing logout');
+        if (window.auth && typeof window.auth.logout === 'function') {
+          window.auth.logout();
+        }
+        return Promise.reject(new Error('Too many refresh attempts failed - logged out'));
       }
  
       this.refreshInProgress = true;
@@ -246,18 +258,37 @@
         // Provide more specific error message based on error type
         let errorMessage = 'Token refresh failed';
         
+        // Enhanced error classification
         if (error.message?.includes('timeout')) {
           errorMessage = 'Token refresh timed out - network may be slow';
+          console.warn('[TokenManager] Network timeout during refresh');
         } else if (error.message?.includes('fetch')) {
           errorMessage = 'Network error during token refresh - please check connection';
-        } else if (error.status === 401 || error.status === 403) {
-          errorMessage = 'Session expired or unauthorized - please login again';
-          // Force a logout on auth failures
+          console.warn('[TokenManager] Network error during refresh');
+        } else if (error.status === 401) {
+          if (error.message?.includes('expired')) {
+            errorMessage = 'Token expired - please login again';
+            console.warn('[TokenManager] Token expired during refresh');
+          } else if (error.message?.includes('version')) {
+            errorMessage = 'Token version mismatch - please login again';
+            console.warn('[TokenManager] Token version mismatch during refresh');
+          } else {
+            errorMessage = 'Session expired or unauthorized - please login again';
+            console.warn('[TokenManager] Unauthorized during refresh (401)');
+          }
+          // Force immediate logout on auth failures
           if (window.auth && typeof window.auth.logout === 'function') {
-            setTimeout(() => window.auth.logout(), 1000);
+            window.auth.logout();
+          }
+        } else if (error.status === 403) {
+          errorMessage = 'Access forbidden - please login again';
+          console.warn('[TokenManager] Forbidden during refresh (403)');
+          if (window.auth && typeof window.auth.logout === 'function') {
+            window.auth.logout();
           }
         } else if (error.message) {
           errorMessage = error.message;
+          console.warn('[TokenManager] Refresh error:', error.message);
         }
         
         // Notify about token refresh failure with enhanced details

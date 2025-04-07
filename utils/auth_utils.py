@@ -100,10 +100,12 @@ async def verify_token(
             logger.warning("Token missing required jti claim")
             raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-        # Check token version if user can be found
+        # Check token version if user can be found (skip for refresh tokens)
         username = decoded.get("sub")
         token_version = decoded.get("version")
-        if db and username:
+        token_type = decoded.get("type")
+        
+        if db and username and token_type != "refresh":
             query = select(User).where(User.username == username)
             result = await db.execute(query)
             user = result.scalar_one_or_none()
@@ -125,7 +127,11 @@ async def verify_token(
 
     except ExpiredSignatureError as exc:
         logger.warning("Token expired: jti=%s", token_id)
-        raise HTTPException(status_code=401, detail="Token has expired") from exc
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired - please refresh your session",
+            headers={"WWW-Authenticate": "Bearer"}
+        ) from exc
     except InvalidTokenError as e:
         logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
         raise HTTPException(status_code=401, detail="Invalid token") from e
@@ -245,7 +251,25 @@ async def get_user_from_token(
             f"token={token_version}, user={user.token_version}"
         )
         revoke_token_id(decoded["jti"])
-        raise HTTPException(403, detail="Session invalidated - please reauthenticate")
+        raise HTTPException(
+            status_code=403,
+            detail="Session invalidated - token version mismatch",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Check last activity for sliding sessions
+    if hasattr(user, 'last_activity') and user.last_activity:
+        inactive_duration = (datetime.utcnow() - user.last_activity).total_seconds()
+        if inactive_duration > 86400:  # 1 day in seconds
+            logger.warning(
+                f"Session expired due to inactivity for {username}: "
+                f"{inactive_duration} seconds since last activity"
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Session expired due to inactivity",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
 
     user.jti = decoded.get("jti")
     user.exp = decoded.get("exp")
