@@ -104,7 +104,7 @@ async def verify_token(
         username = decoded.get("sub")
         token_version = decoded.get("version")
         token_type = decoded.get("type")
-        
+
         if db and username and token_type != "refresh":
             query = select(User).where(User.username == username)
             result = await db.execute(query)
@@ -130,7 +130,7 @@ async def verify_token(
         raise HTTPException(
             status_code=401,
             detail="Token has expired - please refresh your session",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except InvalidTokenError as e:
         logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
@@ -168,35 +168,6 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     if deleted_count > 0:
         logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
     return deleted_count
-
-
-async def validate_project_membership(
-    user: User, project_id: UUID, db: AsyncSession
-) -> Project:
-    """
-    Ensures user has valid membership for the specified project.
-    """
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    if project.owner_id == user.id:
-        return project
-
-    if not project.is_public:
-        result = await db.execute(
-            select(ProjectUserAssociation)
-            .where(ProjectUserAssociation.user_id == user.id)
-            .where(ProjectUserAssociation.project_id == project_id)
-        )
-        if not result.scalar():
-            logger.warning(
-                f"User {user.id} lacks access to private project {project_id}"
-            )
-            raise HTTPException(status_code=403, detail="Project access denied")
-
-    return project
 
 
 async def load_revocation_list(db: AsyncSession) -> None:
@@ -254,11 +225,11 @@ async def get_user_from_token(
         raise HTTPException(
             status_code=403,
             detail="Session invalidated - token version mismatch",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # Check last activity for sliding sessions
-    if hasattr(user, 'last_activity') and user.last_activity:
+    if hasattr(user, "last_activity") and user.last_activity:
         inactive_duration = (datetime.utcnow() - user.last_activity).total_seconds()
         if inactive_duration > 86400:  # 1 day in seconds
             logger.warning(
@@ -268,7 +239,7 @@ async def get_user_from_token(
             raise HTTPException(
                 status_code=401,
                 detail="Session expired due to inactivity",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
     user.jti = decoded.get("jti")
