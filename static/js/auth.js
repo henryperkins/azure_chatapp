@@ -109,8 +109,8 @@ const TokenManager = {
     localStorage.removeItem('userInfo');
     localStorage.removeItem('refreshMutex'); // concurrency guard
 
-    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=None; Secure";
-    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=None; Secure";
+    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict";
+    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict";
   },
 
   /**
@@ -987,22 +987,6 @@ function waitForApiRequest() {
   });
 }
 
-// Initialize WebSocket token refresh handler
-TokenManager.onTokenRefresh = (newToken) => {
-  const wsServices = [
-    window.chatInterface?.wsService,
-    window.projectChatInterface?.wsService
-  ].filter(Boolean);
-
-  wsServices.forEach(ws => {
-    if (ws?.socket?.readyState === WebSocket.OPEN) {
-      ws.socket.send(JSON.stringify({
-        type: 'token_refresh',
-        token: newToken
-      }));
-    }
-  });
-};
 
 /**
  * Export auth object to window for external usage
