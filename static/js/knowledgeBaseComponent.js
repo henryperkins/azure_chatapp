@@ -462,8 +462,9 @@
      */
     async searchKnowledgeBase(query) {
       const projectId = this._getCurrentProjectId();
-      if (!projectId) {
-        console.error('KB Search failed: No valid project selected');
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!projectId || !uuidRegex.test(projectId)) {
+        console.error('KB Search failed: Invalid project ID', projectId);
         if (window.showNotification) {
           window.showNotification("Please select a project first", "error");
         }
@@ -472,12 +473,16 @@
       }
 
       const trimmedQuery = query ? query.trim() : '';
-      if (trimmedQuery.length < 2) {
+      // Special handling for CJK characters which can be meaningful single characters
+      const cjkRegex = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/;
+      const isCJK = cjkRegex.test(trimmedQuery);
+      
+      if (!isCJK && trimmedQuery.length < 2) {
         if (window.showNotification) {
-          window.showNotification("Search query must be at least 2 characters", "warning");
+          window.showNotification("Search query must be at least 2 characters (1 for Chinese/Japanese)", "warning");
         }
-        this._hideSearchLoading(); // Clear loading if query is too short
-        this._showNoResults(); // Show no results state
+        this._hideSearchLoading();
+        this._showNoResults();
         return;
       }
 
