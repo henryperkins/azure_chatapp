@@ -782,9 +782,41 @@ async function loadStarredConversations() {
   const container = document.getElementById('starredConversations');
   if (!container) return;
 
-  // Get starred conversations from backend
-  const response = await window.apiRequest('/api/preferences/starred');
-  const starredIds = response.data || [];
+  try {
+    // Get starred conversations from backend
+    const response = await window.apiRequest('/api/preferences/starred');
+    const starredIds = response.data || [];
+
+    if (starredIds.length === 0) {
+      // Show empty state
+      container.innerHTML = `
+        <li class="text-center text-gray-500 py-4">
+          No starred conversations yet. Click the star icon on any conversation to add it here.
+        </li>
+      `;
+      return;
+    }
+  } catch (error) {
+    console.error('Failed to load starred conversations:', error);
+    
+    // Handle 404 specifically
+    if (error.status === 404 || error.isPermanent) {
+      container.innerHTML = `
+        <li class="text-center text-gray-500 py-4">
+          Starred conversations feature is currently unavailable
+        </li>
+      `;
+      return;
+    }
+
+    // Show generic error for other cases
+    container.innerHTML = `
+      <li class="text-center text-red-500 py-4">
+        Failed to load starred conversations. Please try again later.
+      </li>
+    `;
+    return;
+  }
 
   if (starredIds.length === 0) {
     // Show empty state

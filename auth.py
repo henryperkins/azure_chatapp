@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+REFRESH_TOKEN_EXPIRE_DAYS = 1  # Reduced from 7 to 1 day for better security
 
 
 class UserCredentials(BaseModel):
@@ -243,12 +243,22 @@ async def get_refresh_token_user(
         raise HTTPException(status_code=401, detail="Refresh token missing")
     try:
         return await get_user_from_token(token, session, "refresh")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    except Exception as e:
+        error_detail = "Invalid refresh token"
+        if "expired" in str(e):
+            error_detail = "Refresh token expired - please login again"
+        elif "version" in str(e):
+            error_detail = "Token version mismatch - session invalidated"
+        elif "revoked" in str(e):
+            error_detail = "Token revoked - please login again"
+        raise HTTPException(
+            status_code=401, detail=error_detail, headers={"WWW-Authenticate": "Bearer"}
+        )
 
 
 @router.post("/refresh", response_model=LoginResponse)
 async def refresh_token(
+    request: Request,
     response: Response,
     user: User = Depends(get_refresh_token_user),
     session: AsyncSession = Depends(get_async_session),
@@ -258,41 +268,118 @@ async def refresh_token(
     rotating the user's token_version to invalidate old tokens.
     """
     username = user.username
+    try:
+        async with session.begin_nested():
+            locked_user = await session.get(User, user.id, with_for_update=True)
+            if not locked_user:
+                raise HTTPException(
+                    status_code=500,
+                    detail="User lock failed during refresh",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
-    async with session.begin_nested():
-        locked_user = await session.get(User, user.id, with_for_update=True)
-        if not locked_user:
-            raise HTTPException(
-                status_code=500, detail="User lock failed during refresh"
+            # Update last activity for sliding session
+            locked_user.last_login = datetime.utcnow()
+            locked_user.last_activity = datetime.utcnow()
+
+            # Only bump token version if token is older than 12 hours
+            current_ts = int(datetime.utcnow().timestamp())
+            token_age = current_ts - (locked_user.token_version or current_ts)
+            if token_age > 43200:  # 12 hours in seconds
+                locked_user.token_version = (
+                    locked_user.token_version + 1
+                    if locked_user.token_version
+                    else current_ts
+                )
+
+            token_id = str(uuid.uuid4())
+            expire_at = datetime.utcnow() + timedelta(
+                minutes=ACCESS_TOKEN_EXPIRE_MINUTES
             )
+            payload = {
+                "sub": username,
+                "exp": expire_at,
+                "iat": datetime.utcnow(),
+                "jti": token_id,
+                "type": "access",
+                "version": locked_user.token_version,
+                "user_id": locked_user.id,
+            }
+            new_token = create_access_token(payload)
+            await session.commit()
 
-        locked_user.last_login = datetime.utcnow()
-        current_ts = int(datetime.utcnow().timestamp())
-        locked_user.token_version = (
-            locked_user.token_version + 1 if locked_user.token_version else current_ts
+            # Check if the refresh token is nearing expiration and renew if necessary
+            refresh_token = request.cookies.get("refresh_token")
+            if refresh_token:
+                try:
+                    decoded = await verify_token(refresh_token, "refresh", session)
+                    if decoded and "exp" in decoded:
+                        # Calculate time until expiration
+                        expires_at = datetime.fromtimestamp(decoded["exp"])
+                        time_remaining = expires_at - datetime.utcnow()
+                        # Renew refresh token if it expires in less than 6 hours
+                        if time_remaining < timedelta(hours=6):
+                            new_refresh_token_id = str(uuid.uuid4())
+                            new_refresh_expire = datetime.utcnow() + timedelta(
+                                days=REFRESH_TOKEN_EXPIRE_DAYS
+                            )
+                            new_refresh_payload = {
+                                "sub": username,
+                                "exp": new_refresh_expire,
+                                "iat": datetime.utcnow(),
+                                "jti": new_refresh_token_id,
+                                "type": "refresh",
+                                "version": locked_user.token_version,
+                                "user_id": locked_user.id,
+                            }
+                            new_refresh_token = create_access_token(new_refresh_payload)
+                            set_secure_cookie(
+                                response,
+                                "refresh_token",
+                                new_refresh_token,
+                                max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+                            )
+                            # Invalidate the old refresh token
+                            revoke_token_id(decoded["jti"])
+                            blacklisted = TokenBlacklist(
+                                jti=decoded["jti"],
+                                expires=decoded["exp"],
+                                user_id=user.id,
+                            )
+                            session.add(blacklisted)
+                            await session.commit()
+                except Exception as e:
+                    logger.error("Error during refresh token renewal: %s", e)
+
+        logger.info("Refreshed token for user '%s', token_id '%s'.", username, token_id)
+
+        set_secure_cookie(
+            response,
+            "access_token",
+            new_token,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
-        token_id = str(uuid.uuid4())
-        expire_at = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        payload = {
-            "sub": username,
-            "exp": expire_at,
-            "iat": datetime.utcnow(),
-            "jti": token_id,
-            "type": "access",
-            "version": locked_user.token_version,
-            "user_id": locked_user.id,
-        }
-        new_token = create_access_token(payload)
-        await session.commit()
+        return LoginResponse(access_token=new_token, token_type="bearer")
+    except Exception as e:
+        logger.error("Error during token refresh: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-    logger.info("Refreshed token for user '%s', token_id '%s'.", username, token_id)
 
-    set_secure_cookie(
-        response, "access_token", new_token, max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
-
-    return LoginResponse(access_token=new_token, token_type="bearer")
+@router.get("/token-info")
+async def get_token_info(
+    current_user: User = Depends(get_current_user_and_token),
+) -> dict:
+    """Returns token metadata including expiry time."""
+    return {
+        "authenticated": True,
+        "username": current_user.username,
+        "user_id": current_user.id,
+        "expires_at": (
+            datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        ).isoformat(),
+        "version": current_user.token_version,
+    }
 
 
 @router.get("/verify")
@@ -304,6 +391,36 @@ async def verify_auth_status(
         "authenticated": True,
         "username": current_user.username,
         "user_id": current_user.id,
+    }
+
+
+@router.get("/ws-token")
+async def get_websocket_token(
+    current_user: User = Depends(get_current_user_and_token),
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """
+    Generates a short-lived token specifically for WebSocket authentication.
+    """
+    token_id = str(uuid.uuid4())
+    expire_at = datetime.utcnow() + timedelta(minutes=5)  # Short-lived token
+
+    payload = {
+        "sub": current_user.username,
+        "exp": expire_at,
+        "iat": datetime.utcnow(),
+        "jti": token_id,
+        "type": "ws",
+        "version": current_user.token_version,
+        "user_id": current_user.id,
+    }
+
+    ws_token = create_access_token(payload)
+
+    return {
+        "token": ws_token,
+        "expires_at": expire_at.isoformat(),
+        "version": current_user.token_version,
     }
 
 
