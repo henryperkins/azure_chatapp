@@ -14,6 +14,7 @@ import json
 import os
 import uuid
 from typing import List, Dict, Any, Optional
+from uuid import UUID
 
 import numpy as np
 import httpx
