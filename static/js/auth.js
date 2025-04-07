@@ -131,14 +131,6 @@ const TokenManager = {
       return { "Authorization": `Bearer ${this.accessToken}` };
     }
     return {};
-    } catch (error) {
-      console.error('[Auth] Failed to get auth header:', error);
-      // Don't clear tokens for non-critical errors to prevent unnecessary logouts
-      if (error.message?.includes('Failed to refresh token')) {
-        this.clearTokens();
-      }
-      throw error;
-    }
   },
 
   /**
@@ -192,19 +184,6 @@ const TokenManager = {
         ?.split('=')[1];
 
       const refreshToken = cookieRefresh;
-      if (!refreshToken) {
-        const errorMsg = 'No refresh token available - session expired';
-        console.error('[Auth]', errorMsg);
-        this.clearTokens();
-        window.dispatchEvent(new CustomEvent('authStateChanged', {
-          detail: {
-            authenticated: false,
-            error: errorMsg
-          }
-        }));
-        throw new Error(errorMsg);
-      }
-      
       if (!refreshToken) {
         const errorMsg = 'No refresh token available - session expired';
         console.error('[Auth]', errorMsg);
@@ -384,6 +363,10 @@ window.auth = {
         console.debug('[Auth] Using cached auth verification');
       }
       return authVerificationCache.result;
+    }
+
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Performing fresh auth verification');
     }
 
     if (AUTH_DEBUG) {
