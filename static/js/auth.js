@@ -147,27 +147,70 @@ async function refreshTokens() {
     await logout();
     return Promise.reject(new Error('Too many refresh attempts failed - logged out'));
   }
+tokenRefreshInProgress = true;
+lastRefreshAttempt = now;
 
-  tokenRefreshInProgress = true;
-  lastRefreshAttempt = now;
+try {
+  console.debug('[Auth] Refreshing tokens...');
 
-  try {
-    console.debug('[Auth] Refreshing tokens...');
+  // Validate we have a token to refresh
+  const currentToken = getCurrentToken();
+  if (!currentToken) {
+    throw new Error('No token available for refresh');
+  }
 
-    const fetchPromise = apiRequest('/api/auth/refresh', 'POST');
+  // Check token expiry
+  const expiry = getTokenExpiry(currentToken);
+  if (expiry && expiry < Date.now()) {
+    throw new Error('Token already expired');
+  }
 
-    // Create a timeout promise
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Token refresh timeout')), AUTH_CONSTANTS.REFRESH_TIMEOUT);
-    });
+  // Implement retry with exponential backoff
+  let lastError;
+  let response;
+  
+  for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt++) {
+    try {
+      const fetchPromise = apiRequest('/api/auth/refresh', 'POST');
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Token refresh timeout')),
+          AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt-1));
+      });
 
-    // Race the fetch against the timeout
-    const response = await Promise.race([fetchPromise, timeoutPromise]);
+      // Race the fetch against the timeout
+      response = await Promise.race([fetchPromise, timeoutPromise]);
 
-    // Store tokenVersion in auth state
-    if (response.token_version) {
-      authState.tokenVersion = response.token_version;
+      // Validate response
+      if (!response?.access_token) {
+        throw new Error('Invalid refresh response');
+      }
+
+      // Store tokenVersion in auth state
+      if (response.token_version) {
+        authState.tokenVersion = response.token_version;
+      }
+      
+      break; // Success - exit retry loop
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_REFRESH_RETRIES) {
+        const delay = 300 * Math.pow(2, attempt-1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  // Reset failed attempt counter on success
+  refreshFailCount = 0;
+
+  // Refresh verification timestamp
+  authState.lastVerified = Date.now();
+
+  console.debug('[Auth] Token refreshed successfully');
 
     // Reset failed attempt counter on success
     refreshFailCount = 0;
@@ -182,7 +225,15 @@ async function refreshTokens() {
       detail: { success: true }
     }));
 
-    return { success: true, version: authState.tokenVersion };
+    if (lastError) {
+      throw lastError;
+    }
+
+    return {
+      success: true,
+      version: authState.tokenVersion,
+      token: response.access_token
+    };
   } catch (error) {
     // Increment failed attempt counter
     refreshFailCount++;
@@ -1041,6 +1092,7 @@ window.auth = window.auth || {
   verify: verifyAuthState,
   updateStatus: verifyAuthState, // for backward compatibility
   clear: clearTokenState,
+  broadcastAuth,
   isInitialized: false
 };
 
