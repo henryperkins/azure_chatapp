@@ -7,6 +7,9 @@
 // Debug flag for verbose auth logging
 const AUTH_DEBUG = true;  // You can disable or toggle manually
 
+// Track if session has expired to prevent repeated verification calls
+let sessionExpiredFlag = false;
+
 // ---------------------------------------------------------------------
 // Auth Request Helper
 // ---------------------------------------------------------------------
@@ -365,6 +368,12 @@ function isTokenExpired(token) {
 
 async function verifyAuthState(bypassCache = false) {
   try {
+    // Skip verification if we know session is expired
+    if (sessionExpiredFlag) {
+      if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - session already expired');
+      return false;
+    }
+
     // Check cache first if not bypassing
     if (!bypassCache && authVerificationCache.isValid()) {
       if (AUTH_DEBUG) console.debug('[Auth] Using cached verification result:', authVerificationCache.result);
@@ -476,13 +485,23 @@ async function verifyAuthState(bypassCache = false) {
         console.warn(`[Auth] Verification attempt ${attempt} failed:`, verifyError);
         
         // If it's a 401, no need to retry
-        if (verifyError.status === 401) {
-          if (typeof clearAuthState === 'function') {
-            clearAuthState();
-          }
-          broadcastAuth(false);
-          throw new Error('Session expired. Please login again.');
+      if (verifyError.status === 401) {
+        sessionExpiredFlag = true;
+        if (typeof clearAuthState === 'function') {
+          clearAuthState();
         }
+        broadcastAuth(false);
+        
+        // Show modal and redirect to login
+        if (window.showSessionExpiredModal) {
+          window.showSessionExpiredModal();
+        } else {
+          setTimeout(() => {
+            window.location.href = '/?session_expired=true';
+          }, 1000);
+        }
+        throw new Error('Session expired. Please login again.');
+      }
         
         // Wait before retrying - exponential backoff
         if (attempt < MAX_VERIFY_ATTEMPTS) {
@@ -539,6 +558,26 @@ function clearAuthState() {
   // Clear TokenManager state if available
   if (window.TokenManager && typeof window.TokenManager.clear === 'function') {
     window.TokenManager.clear();
+  }
+
+  // Clear any sensitive data from localStorage
+  try {
+    localStorage.removeItem('authState');
+    localStorage.removeItem('lastAuthCheck');
+  } catch (e) {
+    console.warn('[Auth] Failed to clear localStorage:', e);
+  }
+  
+  // Clear sessionStorage
+  try {
+    sessionStorage.clear();
+  } catch (e) {
+    console.warn('[Auth] Failed to clear sessionStorage:', e);
+  }
+
+  // Clear any pending API requests
+  if (window.API_REQUEST_QUEUE) {
+    window.API_REQUEST_QUEUE.clear();
   }
   
   console.debug('[Auth] Auth state cleared');
