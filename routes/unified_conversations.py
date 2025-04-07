@@ -664,12 +664,8 @@ async def websocket_chat_endpoint(
                 return
 
             # Accept WebSocket connection
-                await websocket.accept()
-                logger.info(f"WebSocket connection accepted for {conversation_id}")
-            except Exception as e:
-                logger.error(f"WebSocket setup failed: {str(e)}")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
+            await websocket.accept()
+            logger.info(f"WebSocket connection accepted for {conversation_id}")
 
             # Project validation (if project_id provided) - skip token check since user already validated
             if project_id:

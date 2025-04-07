@@ -234,17 +234,31 @@ async function loginUser(username, password) {
     const apiCall = window.apiRequest || 
       ((url, method, data) => authRequest(url, method, data));
 
-    const data = await apiCall('/api/auth/login', 'POST', {
+    const response = await apiCall('/api/auth/login', 'POST', {
       username: username.trim(),
-      password
+      password,
+      ws_auth: true // Request WebSocket auth token
     });
 
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Login response received');
+      console.debug('[Auth] Login response received', response);
     }
 
-    broadcastAuth(true, data.username || username);
-    return data;
+    if (!response.access_token) {
+      throw new Error('No access token received');
+    }
+
+    // Store token version if available
+    if (response.token_version && window.TokenManager) {
+      window.TokenManager.version = response.token_version;
+    }
+
+    broadcastAuth(true, response.username || username);
+    return {
+      ...response,
+      // Include WebSocket connection details
+      ws_url: response.ws_url || `/api/chat/ws?token=${response.access_token}`
+    };
   } catch (error) {
     console.error("[Auth] loginUser error details:", error);
     let message = "Login failed";
@@ -338,13 +352,22 @@ async function verifyAuthState(bypassCache = false) {
       try {
         const apiCall = window.apiRequest || ((url, method) => authRequest(url, method));
         
-        // First attempt refresh
-        await apiCall('/api/auth/refresh', 'POST', null, {
+        // First attempt refresh with timeout
+        const REFRESH_TIMEOUT = 8000; // 8 seconds timeout
+        const refreshPromise = apiCall('/api/auth/refresh', 'POST', null, {
           credentials: 'include',
           headers: {
             'Cache-Control': 'no-cache'
           }
         });
+        
+        // Add timeout to refresh request
+        const refreshResult = await Promise.race([
+          refreshPromise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auth refresh timeout')), REFRESH_TIMEOUT)
+          )
+        ]);
 
         // Verify and wait for new token
         let retries = 3;
@@ -359,19 +382,32 @@ async function verifyAuthState(bypassCache = false) {
           throw new Error('No access token received from refresh');
         }
 
-        // Add the new token explicitly to verify request
-        return await apiCall('/api/auth/verify', 'GET', null, {
+        // Add the new token explicitly to verify request with timeout
+        const VERIFY_TIMEOUT = 5000; // 5 seconds timeout
+        const verifyPromise = apiCall('/api/auth/verify', 'GET', null, {
           credentials: 'include',
           headers: {
             'Authorization': `Bearer ${newAccessToken}`,
             'Cache-Control': 'no-cache'
           }
         });
+        
+        return await Promise.race([
+          verifyPromise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
+          )
+        ]);
       } catch (refreshError) {
         console.error('Auth refresh failed:', refreshError);
-        clearAuthState();
+        if (typeof clearAuthState === 'function') {
+          clearAuthState();
+        }
         broadcastAuth(false);
-        throw new Error('Session expired. Please login again.');
+        
+        const errorMessage = refreshError.message || 'Session expired. Please login again.';
+        const isTimeout = errorMessage.includes('timeout');
+        throw new Error(isTimeout ? 'Authentication timed out. Please try again.' : 'Session expired. Please login again.');
       }
     }
 
@@ -380,9 +416,19 @@ async function verifyAuthState(bypassCache = false) {
       ((url, method) => authRequest(url, method));
     
     try {
-      const response = await apiCall('/api/auth/verify', 'GET', null, {
+      const VERIFY_TIMEOUT = 5000; // 5 seconds timeout
+      const verifyPromise = apiCall('/api/auth/verify', 'GET', null, {
         credentials: 'include' // Ensure cookies are sent
       });
+      
+      // Add timeout to verify request
+      const response = await Promise.race([
+        verifyPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
+        )
+      ]);
+      
       authVerificationCache.set(response.authenticated);
       if (response.authenticated) {
         broadcastAuth(true, response.username);
@@ -391,10 +437,18 @@ async function verifyAuthState(bypassCache = false) {
     } catch (verifyError) {
       console.error('Auth verification failed:', verifyError);
       if (verifyError.status === 401) {
-        clearAuthState();
+        if (typeof clearAuthState === 'function') {
+          clearAuthState();
+        }
         broadcastAuth(false);
         throw new Error('Session expired. Please login again.');
       }
+      
+      // Handle timeout specifically
+      if (verifyError.message && verifyError.message.includes('timeout')) {
+        throw new Error('Authentication check timed out - please try again');
+      }
+      
       throw verifyError;
     }
   } catch (error) {
@@ -413,6 +467,22 @@ async function updateAuthStatus() {
     broadcastAuth(false);
     return false;
   }
+}
+
+// Clear authentication state
+function clearAuthState() {
+  // Clear verification cache
+  authVerificationCache.set(false);
+  
+  // Reset any UI that depends on auth state
+  broadcastAuth(false);
+  
+  // Clear TokenManager state if available
+  if (window.TokenManager && typeof window.TokenManager.clear === 'function') {
+    window.TokenManager.clear();
+  }
+  
+  console.debug('[Auth] Auth state cleared');
 }
 
 // ---------------------------------------------------------------------
