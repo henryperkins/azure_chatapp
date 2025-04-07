@@ -8,6 +8,8 @@
  * - Mobile sidebar toggle and backdrop
  * - Custom instructions saving
  * - Starred conversations management
+ * 
+ * Uses auth.js exclusively for authentication
  */
 
 // Core state variables
@@ -378,12 +380,17 @@ function setupSidebarTabs() {
     });
 
     // Check auth status before loading data
-    const isAuthenticated = window.API_CONFIG?.isAuthenticated;
-
-    // Only load data if authenticated and tab has a loader
-    if (isAuthenticated && tabs[tabName].loader) {
-      setTimeout(() => tabs[tabName].loader(), 300);
-    }
+    // Use auth.js to check authentication
+    window.auth.isAuthenticated()
+      .then(isAuthenticated => {
+        // Only load data if authenticated and tab has a loader
+        if (isAuthenticated && tabs[tabName].loader) {
+          setTimeout(() => tabs[tabName].loader(), 300);
+        }
+      })
+      .catch(err => {
+        console.warn("[sidebar] Auth verification failed:", err);
+      });
   }
 
   // Activate the initial tab
@@ -503,7 +510,7 @@ function setupPinningSidebar() {
       console.debug('Pin button element not found in DOM - pinning functionality disabled');
       return;
     }
-    
+
     if (!sidebar) {
       console.warn('Sidebar element not initialized - pinning functionality disabled');
       return;
@@ -634,6 +641,29 @@ async function newChatClickHandler() {
   // If on projects page, navigate to index.html
   if (window.location.pathname.includes('/projects')) {
     window.location.href = '/index.html';
+    return;
+  }
+
+  // Check authentication using auth.js
+  let isAuthenticated = false;
+  try {
+    isAuthenticated = await window.auth.isAuthenticated();
+  } catch (e) {
+    console.warn("[sidebar] Auth verification failed:", e);
+  }
+
+  if (!isAuthenticated) {
+    if (window.showNotification) {
+      window.showNotification("Please log in to create new chats", "error");
+    }
+
+    // Let auth.js handle this error
+    if (window.auth?.handleAuthError) {
+      window.auth.handleAuthError(
+        { message: "Not authenticated" },
+        "Creating new chat"
+      );
+    }
     return;
   }
 
@@ -782,6 +812,24 @@ async function loadStarredConversations() {
   const container = document.getElementById('starredConversations');
   if (!container) return;
 
+  // Check authentication using auth.js
+  let isAuthenticated = false;
+  try {
+    isAuthenticated = await window.auth.isAuthenticated();
+  } catch (e) {
+    console.warn("[sidebar] Auth verification failed:", e);
+  }
+
+  if (!isAuthenticated) {
+    // Show login message
+    container.innerHTML = `
+      <li class="text-center text-gray-500 py-4">
+        Please log in to view starred conversations
+      </li>
+    `;
+    return;
+  }
+
   try {
     // Get starred conversations from backend
     const response = await window.apiRequest('/api/preferences/starred');
@@ -798,7 +846,12 @@ async function loadStarredConversations() {
     }
   } catch (error) {
     console.error('Failed to load starred conversations:', error);
-    
+
+    // Use auth.js for auth errors if needed
+    if (error.status === 401 && window.auth?.handleAuthError) {
+      window.auth.handleAuthError(error, 'Loading starred conversations');
+    }
+
     // Handle 404 specifically
     if (error.status === 404 || error.isPermanent) {
       container.innerHTML = `
@@ -911,11 +964,22 @@ async function toggleStarConversation(conversationId) {
     starredIds.splice(index, 1);
   }
 
-  // Save back to local storage
-  // Starred conversations now managed via API
-  await window.apiRequest('/api/user/preferences', 'PATCH', {
-    starred_conversations: starredIds 
-  });
+  // Save back to local storage and via API
+  localStorage.setItem('starredConversations', JSON.stringify(starredIds));
+
+  // Update server with new starred list
+  try {
+    await window.apiRequest('/api/user/preferences', 'PATCH', {
+      starred_conversations: starredIds
+    });
+  } catch (error) {
+    console.error('Failed to update starred conversations on server:', error);
+
+    // Use auth.js for auth errors if needed
+    if (error.status === 401 && window.auth?.handleAuthError) {
+      window.auth.handleAuthError(error, 'Updating starred conversations');
+    }
+  }
 
   return index === -1; // Return true if now starred, false if now unstarred
 }
@@ -1011,15 +1075,17 @@ window.sidebar = {
 // Initialize on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', initializeSidebar);
 
-// Centralized auth state management
-let authState = {
-  isAuthenticated: false,
-  isLoading: false,
-  username: null
-};
+// Listen for auth state changes from auth.js
+document.addEventListener('authStateChanged', (e) => {
+  updateAuthDependentUI(e.detail?.authenticated, e.detail?.username);
+});
 
-// Update auth-dependent UI elements
-function updateAuthDependentUI() {
+/**
+ * Update UI elements based on auth state
+ * @param {boolean} authenticated - Whether the user is authenticated
+ * @param {string} username - Username if authenticated
+ */
+function updateAuthDependentUI(authenticated, username = null) {
   const authDependentElements = [
     'sidebarNewChatBtn',
     'sidebarNewProjectBtn',
@@ -1028,10 +1094,12 @@ function updateAuthDependentUI() {
     'recentChatsTab'
   ];
 
+  const isLoading = window.auth && window.auth.isAuthCheckInProgress;
+
   authDependentElements.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
-      if (authState.isLoading) {
+      if (isLoading) {
         // Add loading state
         el.classList.add('opacity-50', 'pointer-events-none');
         const spinner = document.createElement('div');
@@ -1047,26 +1115,22 @@ function updateAuthDependentUI() {
         el.classList.remove('opacity-50', 'pointer-events-none');
         const spinner = el.querySelector('.animate-spin');
         if (spinner) spinner.remove();
-        el.classList.toggle('hidden', !authState.isAuthenticated);
+        el.classList.toggle('hidden', !authenticated);
       }
     }
   });
 
   // Update username display if available
-  if (authState.username) {
+  if (authenticated && username) {
     const usernameEl = document.getElementById('sidebarUsername');
     if (usernameEl) {
-      usernameEl.textContent = authState.username;
+      usernameEl.textContent = username;
       usernameEl.classList.remove('hidden');
     }
   }
 
-  // Update loading indicator
-  const loadingEl = document.getElementById('sidebarAuthLoading') || ensureLoadingIndicator();
-  loadingEl.classList.toggle('hidden', !authState.isLoading);
-
   // Refresh content if authenticated
-  if (authState.isAuthenticated) {
+  if (authenticated) {
     const activeTab = localStorage.getItem('sidebarActiveTab');
     if (activeTab === 'starred' && document.getElementById('starredChatsSection')?.classList.contains('hidden') === false) {
       loadStarredConversations();
@@ -1077,27 +1141,3 @@ function updateAuthDependentUI() {
     }
   }
 }
-
-// Add loading indicator element if missing
-function ensureLoadingIndicator() {
-  if (!document.getElementById('sidebarAuthLoading')) {
-    const loadingEl = document.createElement('div');
-    loadingEl.id = 'sidebarAuthLoading';
-    loadingEl.className = 'hidden fixed top-0 left-0 right-0 h-1 bg-blue-500 z-50';
-    document.body.appendChild(loadingEl);
-  }
-  return document.getElementById('sidebarAuthLoading');
-}
-
-// Single auth state change listener
-document.addEventListener('authStateChanged', (e) => {
-  authState = {
-    isAuthenticated: e.detail?.authenticated ?? false,
-    isLoading: e.detail?.loading ?? false,
-    username: e.detail?.username ?? null
-  };
-  updateAuthDependentUI();
-});
-
-// Initialize auth state
-updateAuthDependentUI();
