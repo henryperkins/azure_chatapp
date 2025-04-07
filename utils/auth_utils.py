@@ -258,7 +258,7 @@ async def load_revocation_list(db: AsyncSession) -> None:
 
 
 def extract_token(request_or_websocket):
-    # Only allow cookies - no header/query param fallbacks
+    """Strict same-origin cookie token extraction"""
     return request_or_websocket.cookies.get("access_token")
 
 
@@ -375,7 +375,7 @@ async def authenticate_websocket(
         logger.warning("WebSocket connection rejected: No token provided")
         try:
             if not websocket.client_state == websocket.client_state.DISCONNECTED:
-                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)  # Normal closure instead of policy violation
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
         except Exception as e:
             logger.error(f"Error closing websocket: {e}")
         logger.debug(
