@@ -232,9 +232,17 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
   console.log('Constructing API request for endpoint:', finalUrl);
 
-  // Make sure TokenManager is available
-  const authHeaders = window.TokenManager?.getAuthHeader() || {};
-  console.log('Using auth headers:', authHeaders);
+  // Make sure TokenManager is available and get auth headers
+  let authHeaders = {};
+  try {
+    authHeaders = window.TokenManager ? await window.TokenManager.getAuthHeader() : {};
+    if (API_CONFIG.debug) {
+      console.log('Using auth headers:', authHeaders);
+    }
+  } catch (error) {
+    console.error('Failed to get auth headers:', error);
+    throw error;
+  }
 
   const requestOptions = {
     method,
