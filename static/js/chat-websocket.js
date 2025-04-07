@@ -83,14 +83,6 @@
       try {
         // First try to use existing valid token
         if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
-          if (window.TokenManager.version) {
-            const storedVersion = localStorage.getItem('tokenVersion');
-            if (storedVersion && storedVersion !== window.TokenManager.version) {
-              console.warn('Token version mismatch - refreshing token');
-              await window.TokenManager.refresh();
-              return window.TokenManager.accessToken;
-            }
-          }
           return window.TokenManager.accessToken;
         }
 
@@ -135,13 +127,12 @@
     }
     activeInstances.set(this, this);
     
-    // Track project context
-    this.activeProjectId = localStorage.getItem('selectedProjectId') || null;
+    // Track project context in memory only
+    this.activeProjectId = null;
     
     // Update on project selection events
     document.addEventListener('projectSelected', (event) => {
       this.activeProjectId = event.detail?.projectId || null;
-      localStorage.setItem('selectedProjectId', this.activeProjectId);
     });
 
     // Configuration
