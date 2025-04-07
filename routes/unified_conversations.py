@@ -646,29 +646,19 @@ async def websocket_chat_endpoint(
 
     async with AsyncSessionLocal() as db:
         try:
-            # Validate same-origin cookie
-            user = await get_user_from_token(websocket.cookies.get("session"), db)
-            if not user:
-                logger.warning("No valid session cookie found")
-                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
-                return
-                except HTTPException as e:
-                    if "expired" in str(e.detail).lower():
-                        logger.warning("Token validation error: %s", str(e))
-                        await websocket.close(
-                            code=status.WS_1008_POLICY_VIOLATION,
-                            reason="Token has expired - please refresh",
-                        )
-                    else:
-                        logger.error("Token validation error: %s", str(e))
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-                except Exception as e:
-                    logger.error("Token validation error: %s", str(e))
+            # Validate session cookie (same-origin only)
+            try:
+                user = await get_user_from_token(websocket.cookies.get("session"), db)
+                if not user:
+                    logger.warning("No valid session cookie found")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
+            except Exception as e:
+                logger.error(f"WebSocket auth error: {str(e)}")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
-                # Now accept WebSocket connection
+            # Accept WebSocket connection
                 await websocket.accept()
                 logger.info(f"WebSocket connection accepted for {conversation_id}")
             except Exception as e:
