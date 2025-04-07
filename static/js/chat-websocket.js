@@ -284,10 +284,7 @@
         throw new Error('Empty WebSocket host');
       }
 
-      // Strict same-origin WebSocket enforcement
-      if (window.location.host !== host) {
-        throw new Error(`WebSocket connections blocked - must use same origin (${host} vs ${window.location.host})`);
-      }
+      // Allow WebSocket connections from any origin (CORS handled by backend)
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
       
       // Determine correct WebSocket URL path
