@@ -420,43 +420,13 @@ window.MessageService.prototype._handleWsMessage = function (event) {
   }
 };
 
-/**
- * Check if knowledge base is enabled for a project
- * @private
- * @param {string} projectId - Project ID
- * @returns {Promise<Object>} Knowledge base status
- */
-window.MessageService.prototype._checkKnowledgeBaseStatus = async function (projectId) {
-  try {
-    // First check local cache
-    const localSetting = localStorage.getItem(`kb_enabled_${projectId}`);
-    if (localSetting !== null) {
-      return { enabled: localSetting === "true", source: "localStorage" };
-    }
-
-    // If window.knowledgeBaseState is available, use it
-    if (window.knowledgeBaseState?.verifyKB) {
-      const kbState = await window.knowledgeBaseState.verifyKB(projectId);
-      if (kbState) {
-        // Cache the result
-        localStorage.setItem(`kb_enabled_${projectId}`, String(kbState.isActive));
-        return { enabled: kbState.isActive, exists: kbState.exists, source: "api" };
-      }
-    }
-
-    // Fall back to API request if above fails
+  _checkKnowledgeBaseStatus: async function (projectId) {
     try {
       const response = await window.apiRequest(
         `/api/projects/${projectId}/knowledge-base-status`,
         "GET"
       );
-      const data = response.data || {};
-      localStorage.setItem(`kb_enabled_${projectId}`, String(data.isActive));
-      return { enabled: data.isActive, exists: data.exists, source: "api" };
-    } catch (apiError) {
-      console.warn("Knowledge base status API error:", apiError);
-      return { enabled: false, exists: false, source: "api_error" };
-    }
+      return { enabled: response.data?.isActive || false };
   } catch (error) {
     console.warn("Error checking knowledge base status:", error);
     return { enabled: false, error: true };
