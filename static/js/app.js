@@ -82,12 +82,12 @@ const ELEMENTS = {};
  * @returns {Promise<boolean>} Whether user is authenticated
  */
 async function ensureAuthenticated(options = {}) {
-  const { 
-    forceVerify = false, 
-    maxRetries = 2, 
-    timeoutMs = 10000 
+  const {
+    forceVerify = false,
+    maxRetries = 2,
+    timeoutMs = 10000
   } = options;
-  
+
   if (!window.auth?.isAuthenticated) {
     console.warn('Authentication module not available');
     API_CONFIG.isAuthenticated = false;
@@ -101,31 +101,31 @@ async function ensureAuthenticated(options = {}) {
 
   try {
     let lastError = null;
-    
+
     // Implement progressive retry with exponential backoff
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         // Calculate timeout with a small increase per attempt
         const attemptTimeout = timeoutMs + (attempt * 1000);
-        
+
         if (attempt > 1) {
           console.debug(`[Auth] Verification retry ${attempt}/${maxRetries} with timeout ${attemptTimeout}ms`);
         }
-        
+
         // Add timeout to auth check
         const isAuthenticated = await Promise.race([
-          window.auth.isAuthenticated({ 
+          window.auth.isAuthenticated({
             forceVerify: forceVerify || attempt > 1,
-            skipCache: forceVerify || attempt > 1 
+            skipCache: forceVerify || attempt > 1
           }),
-          new Promise((_, reject) => 
-            setTimeout(() => 
-              reject(new Error(`Authentication check timeout (attempt ${attempt})`)), 
+          new Promise((_, reject) =>
+            setTimeout(() =>
+              reject(new Error(`Authentication check timeout (attempt ${attempt})`)),
               attemptTimeout
             )
           )
         ]);
-        
+
         API_CONFIG.isAuthenticated = isAuthenticated;
 
         if (!isAuthenticated) {
@@ -136,33 +136,33 @@ async function ensureAuthenticated(options = {}) {
         } else {
           console.debug("[Auth] Authentication verified successfully");
         }
-        
+
         return isAuthenticated;
       } catch (error) {
         lastError = error;
         console.warn(`[Auth] Verification attempt ${attempt} failed:`, error);
-        
+
         // If it's a 401, no need to retry
-        if (error.status === 401 || 
-            (error.message && error.message.includes('expired'))) {
+        if (error.status === 401 ||
+          (error.message && error.message.includes('expired'))) {
           if (typeof clearAuthState === 'function') {
             clearAuthState();
           }
           break;
         }
-        
+
         // For network errors or timeouts, retry with backoff
-        if (attempt < maxRetries && 
-            (error.message?.includes('timeout') || 
-             error.message?.includes('network') ||
-             error.message?.includes('fetch'))) {
+        if (attempt < maxRetries &&
+          (error.message?.includes('timeout') ||
+            error.message?.includes('network') ||
+            error.message?.includes('fetch'))) {
           const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
           console.debug(`[Auth] Backing off for ${backoffMs}ms before retry`);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
         }
       }
     }
-    
+
     // Enhanced error logging with more details
     const errorDetails = {
       message: lastError?.message,
@@ -171,15 +171,15 @@ async function ensureAuthenticated(options = {}) {
       time: new Date().toISOString()
     };
     console.debug('[Auth] Auth check error details:', errorDetails);
-    
+
     // Only clear auth state for 401 errors, not for timeouts or network issues
-    if (lastError?.status === 401 || 
-        (lastError?.message && lastError.message.includes('expired'))) {
+    if (lastError?.status === 401 ||
+      (lastError?.message && lastError.message.includes('expired'))) {
       if (typeof clearAuthState === 'function') {
         clearAuthState();
       }
     }
-    
+
     API_CONFIG.isAuthenticated = false;
     return false;
   } catch (error) {
@@ -258,10 +258,10 @@ const pendingRequests = new Map();
  */
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
   const maxRetries = 2;
-  
+
   // Create request key for deduplication
   const requestKey = `${method}:${endpoint}:${JSON.stringify(data)}`;
-  
+
   // Return existing promise if same request is pending
   if (pendingRequests.has(requestKey)) {
     return pendingRequests.get(requestKey);
@@ -269,21 +269,22 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  
+
   // Create the request promise and store it
   const requestPromise = makeApiRequest();
   pendingRequests.set(requestKey, requestPromise);
-  
+
   // Clean up when done
   requestPromise.finally(() => {
     pendingRequests.delete(requestKey);
   });
-  
+
   return requestPromise;
 
   async function makeApiRequest() {
-    // Original apiRequest implementation goes here
     endpoint = sanitizeUrl(endpoint);
+
+    // If authentication is in progress, we won't block here; we just proceed.
 
     // Normalize endpoint if full URL was passed
     if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
@@ -355,9 +356,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         if (response.status === 401) {
           // 401 Unauthorized. We are not doing token refresh—using cookies only.
           console.log(`401 response received for ${endpoint} (retry: ${retryCount}/${maxRetries})`);
-          // Possibly attempt re-auth flow or just clear auth state
           if (retryCount < maxRetries && !options.skipRetry) {
-            // Optionally try re-checking the session or waiting for cookies, but here we just go straight to clearAuthState
             console.warn('Exhausting retry approach or skipping token refresh, clearing auth state');
             clearAuthState();
             throw new Error('Session expired. Please login again.');
@@ -368,6 +367,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         } else if (response.status === 404) {
           const error = new Error(`Resource not found (404): ${finalUrl}`);
           error.status = 404;
+          error.isPermanent = true; // Mark 404 as permanent
           throw error;
         } else if (response.status === 422) {
           try {
@@ -393,7 +393,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         }
       }
 
-      // If the server sets any auth cookies, the browser will handle them automatically.
       return jsonData;
     } catch (error) {
       clearTimeout(timeoutId);
@@ -406,136 +405,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       console.error('API request failed:', error);
       throw error;
     }
-  }
-
-  endpoint = sanitizeUrl(endpoint);
-
-  // If authentication is in progress, we can wait before proceeding (if desired).
-  // But for simplicity, we won't block on authCheckInProgress now.
-
-  // Normalize endpoint if full URL was passed
-  if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
-    console.warn('Full URL detected in endpoint, normalizing:', endpoint);
-    const urlObj = new URL(endpoint);
-    endpoint = urlObj.pathname + urlObj.search;
-  }
-
-  // Clean up double slashes
-  const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
-  const baseUrl = getBaseUrl();
-  method = method.toUpperCase();
-
-  // Handle GET/HEAD query parameters
-  let finalUrl;
-  if (data && ['GET', 'HEAD'].includes(method)) {
-    const queryParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(data)) {
-      if (Array.isArray(value)) {
-        value.forEach(v => queryParams.append(key, v));
-      } else {
-        queryParams.append(key, value);
-      }
-    }
-    const queryString = queryParams.toString();
-    finalUrl = cleanEndpoint.startsWith('/')
-      ? `${baseUrl}${cleanEndpoint}${cleanEndpoint.includes('?') ? '&' : '?'}${queryString}`
-      : `${baseUrl}/${cleanEndpoint}${cleanEndpoint.includes('?') ? '&' : '?'}${queryString}`;
-  } else {
-    finalUrl = cleanEndpoint.startsWith('/')
-      ? `${baseUrl}${cleanEndpoint}`
-      : `${baseUrl}/${cleanEndpoint}`;
-  }
-
-  console.log('Constructing API request for endpoint:', finalUrl);
-
-  // Since we're using cookies, we omit manual auth headers
-  const requestOptions = {
-    method,
-    headers: {
-      Accept: 'application/json',
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache'
-    },
-    cache: 'no-store',
-    redirect: 'follow',
-    signal: controller.signal,
-    credentials: 'include'  // Important for including cookies
-  };
-
-  // Body for POST/PUT
-  if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
-    if (data instanceof FormData) {
-      requestOptions.body = data;
-    } else {
-      requestOptions.headers['Content-Type'] = 'application/json';
-      requestOptions.body = JSON.stringify(data);
-    }
-  }
-
-      try {
-        console.log(`Making ${method} request to: ${finalUrl} (timeout: ${timeoutMs}ms)`);
-        const response = await fetch(finalUrl, requestOptions);
-        clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      API_CONFIG.lastErrorStatus = response.status;
-      console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
-
-      if (response.status === 401) {
-        // 401 Unauthorized. We are not doing token refresh—using cookies only.
-        console.log(`401 response received for ${endpoint} (retry: ${retryCount}/${maxRetries})`);
-        // Possibly attempt re-auth flow or just clear auth state
-        if (retryCount < maxRetries && !options.skipRetry) {
-          // Optionally try re-checking the session or waiting for cookies, but here we just go straight to clearAuthState
-          console.warn('Exhausting retry approach or skipping token refresh, clearing auth state');
-          clearAuthState();
-          throw new Error('Session expired. Please login again.');
-        } else {
-          clearAuthState();
-          throw new Error('Session expired. Please login again.');
-        }
-      } else if (response.status === 404) {
-        const error = new Error(`Resource not found (404): ${finalUrl}`);
-        error.status = 404;
-        error.isPermanent = true; // Mark 404 as permanent
-        throw error;
-      } else if (response.status === 422) {
-        try {
-          const errorData = await response.json();
-          console.error('Validation error details:', errorData);
-        } catch (parseErr) {
-          console.error('Could not parse validation error', parseErr);
-        }
-      }
-
-      const errorBody = await response.text();
-      const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
-      error.status = response.status;
-      throw error;
-    }
-
-    let jsonData = null;
-    if (response.status !== 204) {
-      try {
-        jsonData = await response.json();
-      } catch (err) {
-        jsonData = null;
-      }
-    }
-
-    // If the server sets any auth cookies, the browser will handle them automatically.
-
-    return jsonData;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      const timeoutError = new Error(`Request timed out after ${timeoutMs}ms`);
-      timeoutError.name = 'TimeoutError';
-      timeoutError.code = 'ETIMEDOUT';
-      throw timeoutError;
-    }
-    console.error('API request failed:', error);
-    throw error;
   }
 }
 
@@ -710,9 +579,6 @@ async function loadConversationList() {
     console.log("Auth check in progress, deferring conversation list load");
     return [];
   }
-
-  // We do NOT store or read a 'selectedProjectId' from localStorage anymore.
-  // If you need a project, handle it at the server or some other method.
 
   return apiRequest(API_ENDPOINTS.CONVERSATIONS)
     .then(data => {
@@ -963,8 +829,6 @@ async function handleNewConversationClick() {
   }
 
   // For demonstration, this uses a function in window.projectManager
-  // If your workflow requires a project ID, handle it server-side or in cookies,
-  // since we're no longer storing it in localStorage.
   if (window.projectManager?.createConversation) {
     window.projectManager.createConversation(null)
       .then(newConversation => {
