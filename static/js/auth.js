@@ -41,7 +41,7 @@ const TokenManager = {
    * with improved error handling and cookie parsing
    */
   rehydrateFromCookies() {
-    return false; // Session cookie only, no explicit rehydration
+    return false;
   },
 
   /**
@@ -109,8 +109,8 @@ const TokenManager = {
     localStorage.removeItem('userInfo');
     localStorage.removeItem('refreshMutex'); // concurrency guard
 
-    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=None";
-    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=None";
+    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
+    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
   },
 
   /**

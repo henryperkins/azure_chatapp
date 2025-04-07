@@ -177,7 +177,6 @@ function sanitizeUrl(url) {
 }
 
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
-  // Allow all origins (CORS handled by backend)
   const maxRetries = 2;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -251,7 +250,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       'Pragma': 'no-cache',
       ...authHeaders
     },
-    credentials: 'include',
     cache: 'no-store',
     redirect: 'follow',
     signal: controller.signal
