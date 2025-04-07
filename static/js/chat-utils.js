@@ -143,7 +143,11 @@ window.ChatUtils = {
    * @param {boolean} authenticated - Current authentication state
    */
   broadcastAuth(authenticated) {
-    window.auth.broadcastAuth(authenticated);
+    // Don't call window.auth.broadcastAuth to avoid circular reference
+    // Instead, dispatch event directly for any chat-specific listeners
+    window.dispatchEvent(new CustomEvent('chatAuthStateChanged', {
+      detail: { authenticated }
+    }));
   }
 };
 

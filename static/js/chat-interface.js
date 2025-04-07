@@ -253,20 +253,22 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
       if (!isAuthenticated) {
         const loginMsg = document.getElementById("loginRequiredMessage");
         if (loginMsg) loginMsg.classList.remove("hidden");
-        return;
+        return Promise.reject(new Error('Not authenticated'));
       }
 
       // Wait for auth to fully initialize
-      // Wait for auth to be ready
-      return window.auth.init().then(() => resolve());
+      return window.auth.init();
     }).then(() => {
       // Create conversation if still no chatId
       if (!this.currentChatId) {
-        this.createNewConversation().catch((error) => {
+        return this.createNewConversation().catch((error) => {
           window.ChatUtils?.handleError?.('Creating new conversation', error, this.notificationFunction);
+          throw error;
         });
       }
+      return Promise.resolve();
     }).catch(error => {
+      console.warn('[ChatInterface] Error in initial conversation setup:', error);
       window.ChatUtils?.handleError?.('Authentication check', error, this.notificationFunction);
       const loginMsg = document.getElementById("loginRequiredMessage");
       if (loginMsg) loginMsg.classList.remove("hidden");
@@ -495,141 +497,6 @@ window.ChatInterface.prototype.createNewConversation = async function () {
         }
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * Math.pow(2, attempt - 1)));
       }
-    }
-
-    if (!authVerified) {
-      let errorMsg = "Authentication failed";
-      let redirectToLogin = true;
-
-      if (lastError?.message?.includes('timeout')) {
-        errorMsg = "Authentication check timed out - please try again";
-      } else if (lastError?.message?.includes('refresh') || lastError?.message?.includes('token')) {
-        errorMsg = "Session expired - please log in again";
-      } else if (lastError?.status === 401) {
-        errorMsg = "Session expired - please log in again";
-      } else if (lastError?.message) {
-        errorMsg = lastError.message;
-      }
-
-      if (lastError?.message?.includes('NetworkError') ||
-        lastError?.message?.includes('Failed to fetch')) {
-        redirectToLogin = false;
-        errorMsg = "Network error - please check your connection";
-      }
-
-      window.dispatchEvent(new CustomEvent('authStateChanged', {
-        detail: {
-          authenticated: false,
-          redirectToLogin: true,
-          error: errorMsg
-        }
-      }));
-
-      if (this.notificationFunction) {
-        this.notificationFunction(errorMsg, 'error');
-      }
-      throw new Error(`Auth verification failed: ${errorMsg}`);
-    }
-
-    // Dispatch auth success
-    window.dispatchEvent(new CustomEvent('authStateChanged', {
-      detail: {
-        authenticated: true,
-        username: window.auth?.username || null
-      }
-    }));
-
-    // We removed localStorage usage for modelName, so:
-    const currentModel = window.MODEL_CONFIG?.modelName || "claude-3-sonnet-20240229";
-    console.log(`Using model: ${currentModel} for new conversation`);
-
-    // Attempt conversation creation
-    let conversation;
-    try {
-      // We no longer store selectedProjectId in localStorage, so rely on this.projectId if present
-      if (this.projectId && window.projectManager && typeof window.projectManager.createConversation === 'function') {
-        conversation = await window.projectManager.createConversation(this.projectId);
-      } else {
-        // Ensure conversation service is available
-        if (!this.conversationService || typeof this.conversationService.createNewConversation !== 'function') {
-          throw new Error('Conversation service not properly initialized');
-        }
-        conversation = await this.conversationService.createNewConversation();
-      }
-
-      if (!conversation?.id) {
-        throw new Error('Invalid conversation response from server');
-      }
-      console.log(`New conversation created successfully with ID: ${conversation.id}`);
-      this.currentChatId = conversation.id;
-
-      window.history.pushState({}, '', `/?chatId=${conversation.id}`);
-
-      if (this.messageService) {
-        if (window.MODEL_CONFIG) {
-          this.messageService.updateModelConfig(window.MODEL_CONFIG);
-        }
-        this.messageService.initialize(conversation.id, null);
-        console.log('Message service initialized with HTTP mode');
-
-        // Use the improved WebSocket connection function
-        await this.establishWebSocketConnection(conversation.id);
-      } else {
-        console.error('Message service not available');
-        window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
-        return;
-      }
-
-      if (this.container) {
-        this.container.classList.remove('hidden');
-      }
-      const noChatMsg = document.getElementById("noChatSelectedMessage");
-      if (noChatMsg) {
-        noChatMsg.classList.add('hidden');
-      }
-      return conversation;
-    } catch (error) {
-      console.error('Conversation creation failed:', error);
-      let message = 'Failed to create conversation';
-      let showLogin = false;
-
-      // Null check before accessing error properties
-      if (error && typeof error === 'object') {
-        if (error.message) {
-          if (error.message.includes('Not authenticated')) {
-            message = 'Session expired - please log in again';
-            showLogin = true;
-          } else if (error.message.includes('knowledge base')) {
-            message = 'Created chat but knowledge integration failed';
-          } else if (error.message.includes('timeout')) {
-            message = 'Request timed out - please try again';
-          } else if (error.message.includes('NetworkError') || error.message.includes('network')) {
-            message = 'Network error - please check your connection';
-          } else {
-            // Use the actual error message when available
-            message = `Failed to create conversation: ${error.message}`;
-          }
-        }
-
-        if (error.status === 401 || error.code === 401) {
-          message = 'Session expired - please log in again';
-          showLogin = true;
-        }
-      }
-
-      if (showLogin) {
-        window.dispatchEvent(new CustomEvent('authStateChanged', {
-          detail: {
-            authenticated: false,
-            redirectToLogin: true,
-            error: message
-          }
-        }));
-      }
-      if (this.notificationFunction) {
-        this.notificationFunction(message, 'error');
-      }
-      throw error;
     }
   } catch (error) {
     console.error('Failed to create conversation:', error);

@@ -485,6 +485,12 @@ class ProjectDashboard {
       document.querySelector("#projectListView")?.appendChild(container);
     }
 
+    // Ensure project details view is hidden by default
+    const projectDetailsView = document.getElementById("projectDetailsView");
+    if (projectDetailsView) {
+      projectDetailsView.classList.add("hidden");
+    }
+
     this.showInitializationProgress("Loading components...");
 
     // Ensure fallback components if the real ones aren't there

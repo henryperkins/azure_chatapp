@@ -88,29 +88,34 @@ function setupChatTitleEditing() {
       }
       
       // Save the new title
-      const chatId = window.CHAT_CONFIG?.chatId;
-      if (!chatId) {
-        window.showNotification?.('No active conversation', 'error');
-        chatTitleEl.textContent = originalTitle;
-        return;
-      }
-      
       try {
-        const projectId = localStorage.getItem('selectedProjectId');
-        const endpoint = projectId
-          ? `/api/projects/${projectId}/conversations/${chatId}`
+        const isAuthenticated = await window.auth.isAuthenticated();
+        if (!isAuthenticated || !window.CHAT_CONFIG?.chatId) {
+          window.showNotification?.('No active conversation', 'error');
+          chatTitleEl.textContent = originalTitle;
+          return;
+        }
+        
+        const token = await window.auth.getAuthToken();
+        const chatId = window.CHAT_CONFIG.chatId;
+        const endpoint = window.CHAT_CONFIG?.projectId
+          ? `/api/projects/${window.CHAT_CONFIG.projectId}/conversations/${chatId}`
           : `/api/chat/conversations/${chatId}`;
         
-        await window.apiRequest(endpoint, 'PATCH', { title: newTitle });
+        await window.apiRequest(endpoint, 'PATCH', { title: newTitle }, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         window.showNotification?.('Conversation title updated', 'success');
         
         // Update sidebar if conversation list exists
         if (typeof window.loadConversationList === 'function') {
           setTimeout(() => window.loadConversationList(), 500);
         }
-      } catch (err) {
-        console.error('Failed to update conversation title:', err);
-        window.showNotification?.('Failed to update title', 'error');
+      } catch (error) {
+        console.error('Failed to update conversation title:', error);
+        window.auth.handleAuthError(error, 'Updating conversation title');
         chatTitleEl.textContent = originalTitle;
       }
     };

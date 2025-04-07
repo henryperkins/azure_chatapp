@@ -757,26 +757,30 @@ window.bus = new AppEventBus();
       return;
     }
     
-    // Handle session expiration specifically
-    if (errorMessage.includes('Session expired')) {
-      event.preventDefault();
-      console.warn('[Dashboard] Handling session expiration gracefully');
-      
-      // Show loading state
-      const loadingEl = document.getElementById('dashboardLoading');
-      if (loadingEl) {
-        loadingEl.textContent = 'Session expired - redirecting to login...';
-        loadingEl.classList.remove('hidden');
+      // Handle session expiration specifically
+      if (errorMessage.includes('Session expired')) {
+        event.preventDefault();
+        console.warn('[Dashboard] Handling session expiration gracefully');
+        
+        // Show loading state
+        const loadingEl = document.getElementById('dashboardLoading');
+        if (loadingEl) {
+          loadingEl.textContent = 'Session expired - redirecting to login...';
+          loadingEl.classList.remove('hidden');
+        }
+        
+        // Clear any sensitive dashboard data
+        if (window.dashboardState) {
+          window.dashboardState.clearSensitiveData();
+        }
+        
+        // Trigger authentication state change directly without circular references
+        document.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: { authenticated: false }
+        }));
+        
+        return;
       }
-      
-      // Clear any sensitive dashboard data
-      if (window.dashboardState) {
-        window.dashboardState.clearSensitiveData();
-      }
-      
-      // Let auth.js handle the redirect
-      return;
-    }
     
     // Log details for debugging
     console.error('Unhandled promise rejection:', errorMessage);
