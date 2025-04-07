@@ -258,23 +258,8 @@ async def load_revocation_list(db: AsyncSession) -> None:
 
 
 def extract_token(request_or_websocket):
-    """Extract token from HTTP request or WebSocket connection with proper priority"""
-    # First check cookies for ALL requests
-    if hasattr(request_or_websocket, "cookies"):
-        token = request_or_websocket.cookies.get("access_token")
-        if token:
-            return token
-
-    # Then check Authorization header
-    auth_header = request_or_websocket.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        return auth_header[7:]  # Remove "Bearer " prefix
-
-    # Finally check query params for WebSockets
-    if isinstance(request_or_websocket, WebSocket):
-        return request_or_websocket.query_params.get("token")
-
-    return None
+    # Only allow cookies - no header/query param fallbacks
+    return request_or_websocket.cookies.get("access_token")
 
 
 async def get_user_from_token(

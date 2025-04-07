@@ -25,13 +25,6 @@ class Settings:
         "SESSION_SECRET", "default-secret-key-change-in-production"
     )
 
-    # Allowed hosts
-    ALLOWED_HOSTS: list = os.getenv(
-        "ALLOWED_HOSTS", "put.photo,www.put.photo,localhost,127.0.0.1,*"
-    ).split(",")
-
-    # CORS Origins (handled by middleware)
-    CORS_ORIGINS = []
 
     # Database
     DATABASE_URL = os.getenv(

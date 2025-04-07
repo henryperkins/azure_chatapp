@@ -80,9 +80,7 @@ async function ensureAuthenticated() {
   if (!window.auth?.isAuthenticated) {
     console.warn("Auth module not available - falling back to local checks");
     // Fallback: simply see if we have any local token data
-    const hasLocalAuth = window.TokenManager?.accessToken ||
-      (localStorage.getItem('userInfo') !== null &&
-        localStorage.getItem('auth_state') !== null);
+    const hasLocalAuth = false; // Sessions only
     API_CONFIG.isAuthenticated = hasLocalAuth;
     return hasLocalAuth;
   }
