@@ -83,38 +83,17 @@ allowed_hosts = (
 
 # Create FastAPI app instance
 # Configure CORS settings
-cors_origins = settings.CORS_ORIGINS
-if not cors_origins and settings.ENV == "development":
-    # Default development CORS settings if none specified
-    cors_origins = [
-        "http://localhost:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:8000",
-        "http://127.0.0.1:3000",
-        "http://localhost",
-        "http://127.0.0.1"
-    ]
-    logger.warning(f"No CORS_ORIGINS specified, using default development origins: {cors_origins}")
-elif not cors_origins:
-    # Fallback to allow current origin only
-    cors_origins = ["*"]
-    logger.warning("No CORS_ORIGINS specified, allowing all origins (not recommended for production)")
-
-logger.info(f"Configuring CORS with origins: {cors_origins}")
-
-# CORS and middleware settings configured below
-
 middleware = [
-    Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts, www_redirect=False),
+    # Disable host checking
+    Middleware(TrustedHostMiddleware, allowed_hosts=["*"], www_redirect=False),
+    # Most permissive CORS settings
     Middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_origin_regex=None,
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*", "Authorization", "Cookie", "Content-Type", "X-CSRF-Token"],
-        expose_headers=["*", "Set-Cookie"],
-        max_age=600,  # 10 minutes cache for preflight requests
+        allow_headers=["*"],
+        expose_headers=["*"],
     ),
     Middleware(
         SessionMiddleware,
