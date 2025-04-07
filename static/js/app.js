@@ -102,10 +102,9 @@ async function ensureAuthenticated() {
       clearAuthState();
       return false;
     }
-    // For network errors, fall back to local token presence
-    const hasLocalAuth = !!window.TokenManager?.accessToken;
-    API_CONFIG.isAuthenticated = hasLocalAuth;
-    return hasLocalAuth;
+    // Clear auth state and propagate error
+    clearAuthState();
+    throw error;
   }
 }
 

@@ -332,18 +332,7 @@ window.auth = {
         console.debug("[Auth] Starting initialization");
       }
 
-      // 1) Try to rehydrate from cookies first
-      const cookiesRehydrated = TokenManager.rehydrateFromCookies();
-      if (cookiesRehydrated) {
-        if (AUTH_DEBUG) {
-          console.debug("[Auth] Rehydrated from cookies");
-        }
-        // Read user info if available
-        const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
-        broadcastAuth(true, userInfo.username);
-        await verifyAuthState(true); // server verification
-      } else {
-        // 2) Fallback to localStorage if no cookies
+      // 1) Check localStorage for tokens
         const authState = JSON.parse(localStorage.getItem('auth_state'));
         if (authState?.accessToken) {
           if (AUTH_DEBUG) {
