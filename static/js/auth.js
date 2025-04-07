@@ -161,20 +161,21 @@ const TokenManager = {
    * Uses a concurrency guard to prevent parallel refresh calls.
    */
   async refreshTokens() {
-    const mutexKey = 'refreshMutex';
-    if (localStorage.getItem(mutexKey)) {
-      // Wait until the mutex is removed
+    // Simple in-memory mutex to prevent parallel refreshes
+    if (this._refreshInProgress) {
       return new Promise((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (!localStorage.getItem(mutexKey)) {
-            clearInterval(checkInterval);
+        const check = () => {
+          if (!this._refreshInProgress) {
             resolve(!!this.accessToken);
+          } else {
+            setTimeout(check, 100);
           }
-        }, 100);
+        };
+        check();
       });
     }
 
-    localStorage.setItem(mutexKey, 'true'); // lock
+    this._refreshInProgress = true;
     try {
       if (AUTH_DEBUG) {
         console.debug('[Auth] Starting token refresh');
@@ -186,7 +187,19 @@ const TokenManager = {
         .find(row => row.startsWith('refresh_token='))
         ?.split('=')[1];
 
-      const refreshToken = cookieRefresh || this.refreshToken;
+      const refreshToken = cookieRefresh;
+      if (!refreshToken) {
+        const errorMsg = 'No refresh token available - session expired';
+        console.error('[Auth]', errorMsg);
+        this.clearTokens();
+        window.dispatchEvent(new CustomEvent('authStateChanged', {
+          detail: {
+            authenticated: false,
+            error: errorMsg
+          }
+        }));
+        throw new Error(errorMsg);
+      }
       
       if (!refreshToken) {
         const errorMsg = 'No refresh token available - session expired';
@@ -213,6 +226,7 @@ const TokenManager = {
       }, 5000); // 5 second timeout
 
       if (!response?.access_token) {
+        console.error('[Auth] Invalid refresh response:', response);
         throw new Error('Invalid refresh response from server');
       }
 
@@ -226,9 +240,10 @@ const TokenManager = {
     } catch (error) {
       console.error('[Auth] Token refresh failed:', error);
       
-      // Clear tokens for any error except network issues
+      // Clear tokens for any error except network/timeout issues
       if (!error.message?.includes('NetworkError') &&
-          !error.message?.includes('Failed to fetch')) {
+          !error.message?.includes('Failed to fetch') &&
+          !error.message?.includes('timeout')) {
         this.clearTokens();
         window.dispatchEvent(new CustomEvent('authStateChanged', {
           detail: {
@@ -247,7 +262,7 @@ const TokenManager = {
         throw new Error('Unable to refresh session - please login again');
       }
     } finally {
-      localStorage.removeItem(mutexKey); // unlock
+      this._refreshInProgress = false;
     }
   }
 };
