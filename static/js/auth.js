@@ -35,6 +35,7 @@ const TokenManager = {
   isInitialized: false,
   tokenExpiry: null,   // Unix timestamp in ms
   version: '1',
+  _refreshInProgress: false, // Mutex flag for refresh operations
 
   /**
    * Attempts to read tokens from cookies and rehydrate in memory
@@ -163,6 +164,9 @@ const TokenManager = {
   async refreshTokens() {
     // Simple in-memory mutex to prevent parallel refreshes
     if (this._refreshInProgress) {
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Refresh already in progress - waiting');
+      }
       return new Promise((resolve) => {
         const check = () => {
           if (!this._refreshInProgress) {
@@ -238,9 +242,12 @@ const TokenManager = {
       this.setTokens(response.access_token, response.refresh_token);
       return true;
     } catch (error) {
-      console.error('[Auth] Token refresh failed:', error);
+      if (AUTH_DEBUG) {
+        console.error('[Auth] Token refresh failed:', error);
+      }
       
       // Clear tokens for any error except network/timeout issues
+      // Also preserve existing tokens if this was a timeout
       if (!error.message?.includes('NetworkError') &&
           !error.message?.includes('Failed to fetch') &&
           !error.message?.includes('timeout')) {
@@ -373,7 +380,14 @@ window.auth = {
 
     // Fast path: check memory state if cache is valid
     if (!skipCache && authVerificationCache.isValid()) {
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Using cached auth verification');
+      }
       return authVerificationCache.result;
+    }
+
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Performing fresh auth verification');
     }
 
     // Check for token in memory
