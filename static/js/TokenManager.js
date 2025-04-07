@@ -23,6 +23,9 @@
       this.version = null;
       this.isInitialized = false;
       this.refreshInProgress = false;
+      this.lastRefreshAttempt = null;
+      this.refreshFailCount = 0;
+      this.maxRefreshRetries = 3;
 
       // Periodic token check
       this.checkInterval = null;
@@ -165,8 +168,17 @@
           setTimeout(checkComplete, 100);
         });
       }
+
+      // Check for too many consecutive failed refresh attempts
+      const now = Date.now();
+      if (this.lastRefreshAttempt && (now - this.lastRefreshAttempt < 5000) && this.refreshFailCount >= this.maxRefreshRetries) {
+        console.error('[TokenManager] Too many failed refresh attempts, cooling down');
+        return Promise.reject(new Error('Too many refresh attempts failed'));
+      }
  
       this.refreshInProgress = true;
+      this.lastRefreshAttempt = now;
+      
       try {
         console.debug('[TokenManager] Refreshing token...');
         
@@ -211,6 +223,9 @@
           this.version = refreshData.version;
         }
         
+        // Reset failed attempt counter on success
+        this.refreshFailCount = 0;
+        
         console.debug('[TokenManager] Token refreshed successfully');
         
         // Notify about token refresh
@@ -223,7 +238,10 @@
           version: this.version
         };
       } catch (error) {
-        console.error('[TokenManager] Token refresh failed:', error);
+        // Increment failed attempt counter
+        this.refreshFailCount++;
+        
+        console.error(`[TokenManager] Token refresh failed (attempt ${this.refreshFailCount}/${this.maxRefreshRetries}):`, error);
         
         // Provide more specific error message based on error type
         let errorMessage = 'Token refresh failed';
@@ -232,6 +250,12 @@
           errorMessage = 'Token refresh timed out - network may be slow';
         } else if (error.message?.includes('fetch')) {
           errorMessage = 'Network error during token refresh - please check connection';
+        } else if (error.status === 401 || error.status === 403) {
+          errorMessage = 'Session expired or unauthorized - please login again';
+          // Force a logout on auth failures
+          if (window.auth && typeof window.auth.logout === 'function') {
+            setTimeout(() => window.auth.logout(), 1000);
+          }
         } else if (error.message) {
           errorMessage = error.message;
         }
@@ -241,13 +265,15 @@
           detail: {
             success: false,
             error,
-            message: errorMessage
+            message: errorMessage,
+            attempts: this.refreshFailCount
           }
         }));
         
         // Create a more informative error for upstream handlers
         const enhancedError = new Error(errorMessage);
         enhancedError.originalError = error;
+        enhancedError.attempts = this.refreshFailCount;
         throw enhancedError;
       } finally {
         this.refreshInProgress = false;
