@@ -797,184 +797,46 @@ window.ChatInterface.prototype.isValidUUID = function(uuid) {
 };
 
 // Delete the current conversation
-window.ChatInterface.prototype.deleteConversation = async function(chatId) {
+window.ChatInterface.prototype.deleteConversation = async function (chatId) {
   if (!chatId && this.currentChatId) {
     chatId = this.currentChatId;
   }
-  
+
   if (!this.isValidUUID(chatId)) {
     this.notificationFunction("Invalid conversation ID", "error");
     return false;
   }
-  
+
   try {
     const projectId = localStorage.getItem("selectedProjectId");
     const success = await this.conversationService.deleteConversation(chatId, projectId);
-    
+
     if (success) {
-      // If we deleted the current conversation, clear the UI
+      // If we deleted the current conversation, clear out the UI and reset state
       if (chatId === this.currentChatId) {
         this.currentChatId = null;
         this.ui.messageList.clear();
-        if (this.titleEl) this.titleEl.textContent = "";
-        
-        // Update URL to remove chatId
-        window.history.pushState({}, '', '/');
-        
-        // Show "no chat selected" message if it exists
-        const noChatMsg = document.getElementById("noChatSelectedMessage");
-        if (noChatMsg) {
-          noChatMsg.classList.remove('hidden');
+
+        if (this.titleEl) {
+          this.titleEl.textContent = "No conversation selected";
         }
-        
-        // Hide chat UI if applicable
-        if (this.container) {
-          this.container.classList.add('hidden');
+
+        if (this.conversationService) {
+          this.conversationService.currentConversation = null;
         }
+
+        // Remove chatId from the URL (so reloading the page won’t reload a deleted chat)
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete("chatId");
+        window.history.pushState({}, "", `${window.location.pathname}${urlParams.toString() ? `?${urlParams}` : ""}`);
       }
-      
-      // Trigger event so sidebar can update
-      document.dispatchEvent(new CustomEvent('conversationDeleted', {
-        detail: { id: chatId }
-      }));
-      
       return true;
-    }
-    return false;
-  } catch (error) {
-    window.ChatUtils?.handleError?.('Deleting conversation', error, this.notificationFunction);
-    return false;
-  }
-};
-
-// Send a message
-window.ChatInterface.prototype._handleSendMessage = async function(userMsg) {
-  console.log('Preparing to send message');
-  
-  if (!userMsg && !this.currentImage) {
-    this.notificationFunction("Cannot send empty message", "error");
-    return;
-  }
-
-  // Ensure we have a valid chat ID
-  if (!this.isValidUUID(this.currentChatId)) {
-    console.log('No valid conversation ID, creating new conversation');
-    try {
-      const conversation = await this.createNewConversation();
-      this.currentChatId = conversation.id;
-      console.log(`Using new conversation ID: ${this.currentChatId}`);
-
-      // Always initialize with HTTP first for reliability
-      if (this.messageService) {
-        console.log('Initializing message service with HTTP fallback');
-        this.messageService.initialize(this.currentChatId, null);
-        
-        // Try WebSocket in background
-        try {
-          const wsConnected = await this.wsService.connect(this.currentChatId);
-          if (wsConnected) {
-            console.log('WebSocket connected successfully, switching from HTTP to WebSocket mode');
-            this.messageService.initialize(this.currentChatId, this.wsService);
-          }
-        } catch (wsError) {
-          console.warn('WebSocket connection attempted but failed, using HTTP fallback:', wsError);
-          // Already initialized with HTTP fallback, so we can continue
-        }
-      } else {
-        console.error('Message service not available');
-        window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
-        return;
-      }
-    } catch (err) {
-      console.error('Failed to create conversation:', err);
-      window.ChatUtils?.handleError?.('Creating conversation', err, this.notificationFunction);
-      return;
-    }
-  }
-
-  // Double-check that we have a valid conversation ID
-  if (!this.isValidUUID(this.currentChatId)) {
-    console.error('Still no valid conversation ID after creation attempt');
-    this.notificationFunction("Failed to create conversation", "error");
-    return;
-  }
-
-  // Verify UI is initialized before proceeding
-  if (!this.ui || !this.ui.messageList) {
-    console.error('UI components not initialized');
-    this.notificationFunction("UI not properly initialized", "error");
-    return;
-  }
-
-  // Ensure message service is initialized with at least HTTP fallback
-  if (!this.messageService.chatId) {
-    console.log('Message service not initialized with current conversation, initializing with HTTP');
-    this.messageService.initialize(this.currentChatId, null);
-  }
-
-  // Append user's message to UI
-  try {
-    const displayMsg = userMsg || "Analyze this image";
-    console.log(`Appending user message: "${displayMsg.substring(0, 30)}${displayMsg.length > 30 ? '...' : ''}"`);
-    
-    const msgEl = this.ui.messageList.appendMessage("user", displayMsg);
-    
-    // Add user message to conversation history
-    if (this.conversationService.currentConversation) {
-      this.conversationService.currentConversation.messages = 
-        this.conversationService.currentConversation.messages || [];
-      this.conversationService.currentConversation.messages.push({
-        role: 'user',
-        content: displayMsg
-      });
+    } else {
+      return false;
     }
   } catch (error) {
-    console.error('Error displaying message:', error);
-    window.ChatUtils?.handleError?.('Displaying message', error, this.notificationFunction);
-    // Continue anyway to try sending message
-  }
-
-  // Verify message service is initialized
-  if (!this.messageService) {
-    console.error('Message service still not available');
-    this.notificationFunction("Message service not properly initialized", "error");
-    return;
-  }
-
-  // Send message
-  try {
-    console.log('Sending message to backend...');
-    await this.messageService.sendMessage(userMsg || "Analyze this image");
-    console.log('Message sent successfully');
-  } catch (sendError) {
-    console.error('Error sending message:', sendError);
-    
-    // Check for AI-specific errors
-    if (sendError.code?.startsWith('AI_') || 
-        sendError.message?.includes('AI') || 
-        sendError.message?.includes('generate')) {
-      
-      // Show a more helpful error in the chat UI
-      this.ui.messageList.showAIErrorMessage(
-        sendError.message,
-        sendError.userAction || "Try rephrasing your message"
-      );
-      
-      // Only show notification for non-AI errors
-      return;
-    }
-    
-    window.ChatUtils?.handleError?.('Sending message', sendError, this.notificationFunction);
-    
-    // If the error is specifically about invalid conversation ID despite our checks
-    if (sendError.message?.includes('Invalid conversation ID')) {
-      this.notificationFunction("There was a problem with the conversation. Please try again.", "error");
-    }
-  }
-
-  // If there's an image, show indicator
-  if (this.currentImage) {
-    this.ui.messageList.addImageIndicator(this.currentImage);
-    this.currentImage = null;
+    console.error("[deleteConversation] Error deleting conversation:", error);
+    this.notificationFunction("Failed to delete conversation", "error");
+    throw error;
   }
 };

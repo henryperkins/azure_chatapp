@@ -135,35 +135,43 @@ const TokenManager = {
   /**
    * Returns Authorization header with token if available
    */
-  getAuthHeader() {
-    const cookieToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('access_token='))
-      ?.split('=')[1];
+  async getAuthHeader() {
+    try {
+      const cookieToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('access_token='))
+        ?.split('=')[1];
 
-    const authState = JSON.parse(localStorage.getItem('auth_state'));
-    const storageToken = this.accessToken || authState?.accessToken;
+      const authState = JSON.parse(localStorage.getItem('auth_state'));
+      const storageToken = this.accessToken || authState?.accessToken;
 
-    if (AUTH_DEBUG) {
-      console.debug('[Auth] Token sources:', {
-        cookieToken: cookieToken ? '***' + cookieToken.slice(-6) : null,
-        storageToken: storageToken ? '***' + storageToken.slice(-6) : null,
-        version: this.version
-      });
-    }
-
-    if (cookieToken && storageToken && this.version) {
-      const storedVersion = localStorage.getItem('tokenVersion');
-      if (storedVersion && storedVersion !== this.version) {
-        console.warn('[Auth] Token version mismatch - refreshing');
-        this.refreshTokens().catch(err => {
-          console.error('[Auth] Token refresh failed:', err);
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Token sources:', {
+          cookieToken: cookieToken ? '***' + cookieToken.slice(-6) : null,
+          storageToken: storageToken ? '***' + storageToken.slice(-6) : null,
+          version: this.version
         });
       }
-    }
 
-    const accessToken = cookieToken || storageToken;
-    return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
+      if (cookieToken && storageToken && this.version) {
+        const storedVersion = localStorage.getItem('tokenVersion');
+        if (storedVersion && storedVersion !== this.version) {
+          console.warn('[Auth] Token version mismatch - forcing refresh');
+          const refreshed = await this.refreshTokens();
+          if (!refreshed) {
+            throw new Error('Failed to refresh token');
+          }
+          return { "Authorization": `Bearer ${this.accessToken}` };
+        }
+      }
+
+      const accessToken = cookieToken || storageToken;
+      return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
+    } catch (error) {
+      console.error('[Auth] Failed to get auth header:', error);
+      this.clearTokens();
+      throw error;
+    }
   },
 
   /**
@@ -173,6 +181,13 @@ const TokenManager = {
     if (!this.accessToken) return true;
     if (!this.tokenExpiry) return false;
     return Date.now() >= this.tokenExpiry;
+  },
+
+  /**
+   * Checks if any valid tokens exist
+   */
+  hasTokens() {
+    return !!this.accessToken;
   },
 
   /**
@@ -986,6 +1001,212 @@ TokenManager.onTokenRefresh = (newToken) => {
 };
 
 /**
- * NOTE: This file intentionally does NOT call auth.init() automatically.
- * Let your main script (app.js) call `window.auth.init()` after window.apiRequest is defined.
+ * Export auth object to window for external usage
+ * This ensures the auth object is immediately available on the window object
  */
+window.auth = window.auth || {
+  init: async function () {
+    if (window.__authInitializing) {
+      return new Promise(resolve => {
+        const check = () => {
+          if (this.isInitialized) resolve(true);
+          else setTimeout(check, 50);
+        };
+        check();
+      });
+    }
+    
+    window.__authInitializing = true;
+    if (this.isInitialized) {
+      if (AUTH_DEBUG) console.debug("[Auth] Already initialized");
+      window.__authInitializing = false;
+      return true;
+    }
+
+    if (window.API_CONFIG) {
+      window.API_CONFIG.authCheckInProgress = true;
+    }
+
+    try {
+      if (AUTH_DEBUG) {
+        console.debug("[Auth] Starting initialization");
+      }
+
+      // 1) Try to rehydrate from cookies first
+      const cookiesRehydrated = TokenManager.rehydrateFromCookies();
+      if (cookiesRehydrated) {
+        if (AUTH_DEBUG) {
+          console.debug("[Auth] Rehydrated from cookies");
+        }
+        // Read user info if available
+        const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
+        broadcastAuth(true, userInfo.username);
+        await verifyAuthState(true); // server verification
+      } else {
+        // 2) Fallback to localStorage if no cookies
+        const authState = JSON.parse(localStorage.getItem('auth_state'));
+        if (authState?.accessToken) {
+          if (AUTH_DEBUG) {
+            console.debug("[Auth] Found stored tokens in localStorage, rehydrating");
+          }
+          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+
+          const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
+          broadcastAuth(true, userInfo.username);
+          await verifyAuthState(true);
+        } else {
+          // Nothing found; mark as logged out
+          clearSession();
+          broadcastAuth(false);
+        }
+      }
+
+      setupUIListeners();
+      this.isInitialized = true;
+
+      console.log("[Auth] Module initialized successfully");
+      return true;
+    } catch (error) {
+      console.error("[Auth] Initialization failed:", error);
+      clearSession();
+      broadcastAuth(false);
+      return false;
+    } finally {
+      if (window.API_CONFIG) {
+        window.API_CONFIG.authCheckInProgress = false;
+      }
+    }
+  },
+
+  /**
+   * @deprecated - use isAuthenticated instead
+   */
+  verify: verifyAuthState,
+
+  /**
+   * Forces an update from the server
+   */
+  updateStatus: updateAuthStatus,
+
+  /**
+   * Called upon user action to login
+   */
+  login: loginUser,
+
+  /**
+   * Called upon user action to logout
+   */
+  logout: logout,
+
+  /**
+   * Reference to TokenManager
+   */
+  manager: TokenManager,
+
+  /**
+   * Indicates whether `init()` has completed
+   */
+  isInitialized: false,
+
+  /**
+   * Checks local tokens or server for authentication status.
+   */
+  isAuthenticated: async function (options = {}) {
+    const { skipCache = false, forceVerify = false } = options;
+
+    // Fast path: check memory state if cache is valid
+    if (!skipCache && authVerificationCache.isValid()) {
+      return authVerificationCache.result;
+    }
+
+    // Check for token in memory
+    if (!TokenManager.accessToken) {
+      // Rehydrate from cookies
+      const cookiesRehydrated = TokenManager.rehydrateFromCookies();
+      if (!cookiesRehydrated) {
+        // Then from localStorage
+        const authState = JSON.parse(localStorage.getItem('auth_state'));
+        if (authState?.accessToken) {
+          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
+        } else {
+          // No tokens found
+          authVerificationCache.set(false);
+          return false;
+        }
+      }
+    }
+
+    // Refresh if expired
+    if (TokenManager.isExpired()) {
+      try {
+        const refreshed = await TokenManager.refreshTokens();
+        if (!refreshed) {
+          authVerificationCache.set(false);
+          return false;
+        }
+      } catch (error) {
+        console.error("[Auth] Token refresh failed:", error);
+        authVerificationCache.set(false);
+        return false;
+      }
+    }
+
+    // If not forced, skip server verify
+    if (!forceVerify && TokenManager.accessToken) {
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = true;
+      }
+      authVerificationCache.set(true);
+      return true;
+    }
+
+    // Otherwise, attempt server verification
+    try {
+      const response = await window.apiRequest('/api/auth/verify', 'GET', null, 0, 3000, {
+        skipAuthCheck: true,
+        skipRetry: true
+      });
+      const isAuthenticated = response?.authenticated === true;
+
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = isAuthenticated;
+      }
+      authVerificationCache.set(isAuthenticated);
+
+      if (!isAuthenticated) {
+        TokenManager.clearTokens();
+      }
+      return isAuthenticated;
+    } catch (error) {
+      // For network errors, assume token might still be valid
+      if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
+        const result = !!TokenManager.accessToken;
+        if (window.API_CONFIG) {
+          window.API_CONFIG.isAuthenticated = result;
+        }
+        authVerificationCache.set(result);
+        return result;
+      }
+      // If explicitly 401, definitely logout
+      if (error.status === 401) {
+        TokenManager.clearTokens();
+        if (window.API_CONFIG) {
+          window.API_CONFIG.isAuthenticated = false;
+        }
+        authVerificationCache.set(false);
+        return false;
+      }
+      // Default fallback
+      const result = !!TokenManager.accessToken;
+      if (window.API_CONFIG) {
+        window.API_CONFIG.isAuthenticated = result;
+      }
+      authVerificationCache.set(result);
+      return result;
+    }
+  }
+};
+
+// NOTE: Do not call auth.init() automatically.
+// Let main script (app.js) call `window.auth.init()` after window.apiRequest is defined.
+console.log("[Auth] Module loaded and exposed to window.auth");
