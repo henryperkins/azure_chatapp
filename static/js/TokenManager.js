@@ -389,10 +389,11 @@
             error.message.includes('401') ||
             error.message.includes('token version mismatch') ||
             error.message.includes('token revoked'))) {
-          console.warn('[TokenManager] WebSocket token request failed due to token invalidation');
-          
+          // Specific handling for failures during WS token acquisition
+          console.warn('[TokenManager] WebSocket token request failed due to invalid access token:', error.message);
+
           // Show notification and force logout
-          let errorMessage = 'Session expired - please login again';
+          let errorMessage = 'Session expired or invalid - please login again'; // More general message
           if (error.message.includes('token version mismatch')) {
             errorMessage = 'Session invalidated due to token version mismatch - please login again';
           } else if (error.message.includes('token revoked')) {
@@ -453,6 +454,6 @@
   }
 
   // Expose singleton instance to window
-  window.TokenManager = new TokenManager();
-  console.debug('[TokenManager] Module initialized');
+  // window.TokenManager = new TokenManager(); // Defer initialization
+  console.debug('[TokenManager] Module definition loaded');
 })();

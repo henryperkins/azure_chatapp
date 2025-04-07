@@ -88,8 +88,8 @@ function isTokenExpired(token) {
  */
 async function verifyAuthState(bypassCache = false) {
   try {
-    // Skip verification if we know session is expired
-    if (sessionExpiredFlag) {
+    // Skip verification if we know session is expired (but allow retry after 1 minute)
+    if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag < 60000)) {
       if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - session already expired');
       return false;
     }
@@ -201,7 +201,7 @@ async function verifyAuthState(bypassCache = false) {
 
         // If it's a 401, no need to retry
         if (verifyError.status === 401) {
-          sessionExpiredFlag = true;
+          sessionExpiredFlag = Date.now(); // Store timestamp instead of boolean
           if (typeof clearAuthState === 'function') {
             clearAuthState();
           }

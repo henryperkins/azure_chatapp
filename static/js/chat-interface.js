@@ -67,11 +67,28 @@ window.ChatInterface = function (options = {}) {
   this.initialized = false;
 };
 
-// Handle sending messages from UI
-window.ChatInterface.prototype._handleSendMessage = function (message) {
-  // Implement message sending logic
-  console.log("Sending message:", message);
-  // e.g., this.sendMessageToServer(message);
+  // Handle sending messages from UI
+window.ChatInterface.prototype._handleSendMessage = function (messageText) {
+  // Ensure TokenManager is initialized before sending
+  if (!window.TokenManager) {
+    console.log('[chat-interface] Initializing TokenManager before sending message');
+    window.TokenManager = new window.TokenManager();
+  }
+
+  // Wait for initialization to complete
+  return new Promise((resolve, reject) => {
+    const checkInitialized = () => {
+      if (window.TokenManager?.isInitialized) {
+        console.log('[chat-interface] TokenManager initialized, sending message');
+        // Implement message sending logic
+        console.log("Sending message:", messageText);
+        resolve();
+      } else {
+        setTimeout(checkInitialized, 50);
+      }
+    };
+    checkInitialized();
+  });
 };
 
 window.ChatInterface.prototype.initialize = async function () {
@@ -420,27 +437,48 @@ window.ChatInterface.prototype.createNewConversation = async function () {
     console.log('Creating new conversation...');
 
     const MAX_RETRIES = 3;
-    const INIT_TIMEOUT = 2000;  // 2s
-    const VERIFY_TIMEOUT = 5000; // 5s
+    const INIT_TIMEOUT = 10000;  // Increased to 10s
+    const VERIFY_TIMEOUT = 10000; // Increased to 10s
 
     let authVerified = false;
     let lastError = null;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        // Wait for TokenManager
-        await Promise.race([
-          new Promise((resolve) => {
-            const checkInitialized = () => {
-              if (window.TokenManager?.isInitialized) resolve(true);
-              else setTimeout(checkInitialized, 50);
-            };
-            checkInitialized();
-          }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('TokenManager initialization timeout')), INIT_TIMEOUT)
-          )
-        ]);
+    // Initialize TokenManager if not present
+    if (!window.TokenManager) {
+      console.log('[chat-interface] Initializing TokenManager for new conversation');
+      window.TokenManager = new window.TokenManager();
+      
+      // Start initialization immediately rather than waiting
+      if (typeof window.TokenManager.initializeFromCookies === 'function') {
+        window.TokenManager.initializeFromCookies();
+      }
+    }
+
+    // Wait for TokenManager initialization with better error handling
+    try {
+      await Promise.race([
+        new Promise((resolve) => {
+          const checkInitialized = () => {
+            if (window.TokenManager?.isInitialized) {
+              resolve(true);
+            } else if (!window.TokenManager) {
+              reject(new Error('TokenManager not available'));
+            } else {
+              setTimeout(checkInitialized, 50);
+            }
+          };
+          checkInitialized();
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('TokenManager initialization timeout')), INIT_TIMEOUT)
+        )
+      ]);
+    } catch (err) {
+      console.error('[chat-interface] TokenManager initialization failed:', err);
+      throw new Error(`Authentication initialization failed: ${err.message}`);
+    }
 
         // If not inited, init
         if (!window.auth?.isInitialized) {
@@ -520,7 +558,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       window.dispatchEvent(new CustomEvent('authStateChanged', {
         detail: {
           authenticated: false,
-          redirectToLogin,
+          redirectToLogin: true,
           error: errorMsg
         }
       }));
@@ -572,35 +610,8 @@ window.ChatInterface.prototype.createNewConversation = async function () {
         this.messageService.initialize(conversation.id, null);
         console.log('Message service initialized with HTTP mode');
 
-        const MAX_WS_RETRIES = 2;
-        let wsConnected = false;
-
-        for (let attempt = 1; attempt <= MAX_WS_RETRIES; attempt++) {
-          try {
-            console.log(`Attempting WebSocket connection (attempt ${attempt})...`);
-            await this.wsService.connect(conversation.id);
-            wsConnected = true;
-            console.log('WebSocket connected successfully, switching to WebSocket mode');
-            this.messageService.initialize(conversation.id, this.wsService);
-            break;
-          } catch (error) {
-            console.warn(`WebSocket connection attempt ${attempt} failed:`, error);
-            if (attempt === MAX_WS_RETRIES) {
-              const msg = error.message.includes('auth')
-                ? 'WebSocket authentication failed - using HTTP mode'
-                : 'WebSocket connection failed - using HTTP mode';
-              this.notificationFunction(msg, 'warning');
-            }
-            if (attempt < MAX_WS_RETRIES) {
-              await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-            }
-          }
-        }
-
-        if (!wsConnected) {
-          console.log("Using HTTP fallback for messaging");
-          this.messageService.initialize(conversation.id, null);
-        }
+        // Use the improved WebSocket connection function
+        await this.establishWebSocketConnection(conversation.id);
       } else {
         console.error('Message service not available');
         window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
@@ -822,7 +833,7 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
  * @param {string} conversationId - The ID of the conversation to connect to
  * @returns {Promise<boolean>} Whether connection was successful
  */
-window.ChatInterface.prototype.establishWebSocketConnection = async function(conversationId) {
+window.ChatInterface.prototype.establishWebSocketConnection = async function (conversationId) {
   if (!this.wsService) {
     console.error('WebSocket service not initialized');
     return false;
@@ -838,13 +849,13 @@ window.ChatInterface.prototype.establishWebSocketConnection = async function(con
       wsConnected = true;
       console.log('[ChatInterface] WebSocket connected successfully');
       this.notificationFunction('Real-time connection established', 'success');
-      
+
       // Initialize message service with WebSocket
       this.messageService.initialize(conversationId, this.wsService);
       return true;
     } catch (error) {
       console.warn(`[ChatInterface] WebSocket connection attempt ${attempt} failed:`, error);
-      
+
       // Provide feedback on final attempt
       if (attempt === MAX_WS_RETRIES) {
         const msg = error.message?.includes('auth')
@@ -852,7 +863,7 @@ window.ChatInterface.prototype.establishWebSocketConnection = async function(con
           : 'WebSocket connection failed - using HTTP mode';
         this.notificationFunction(msg, 'warning');
       }
-      
+
       // Exponential backoff between attempts
       if (attempt < MAX_WS_RETRIES) {
         const backoffMs = 500 * Math.pow(2, attempt - 1);
@@ -860,95 +871,9 @@ window.ChatInterface.prototype.establishWebSocketConnection = async function(con
       }
     }
   }
-  
+
   // If WebSocket connection failed, initialize with HTTP
   console.log('[ChatInterface] Using HTTP fallback for messaging');
   this.messageService.initialize(conversationId, null);
   return false;
 };
-
-// Enhance the createNewConversation method to use our new WebSocket connection function
-window.ChatInterface.prototype.createNewConversation = async function() {
-  // ...existing code until WebSocket connection attempt...
-
-  try {
-    // Authentication verification with standardized handling
-    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
-    if (!isAuthenticated) {
-      const errorMsg = "Authentication required";
-      this.notificationFunction(errorMsg, 'error');
-      throw new Error(errorMsg);
-    }
-
-    // ...existing code for conversation creation...
-    
-    // After successful conversation creation, use the improved WebSocket connection function
-    if (conversation?.id) {
-      this.currentChatId = conversation.id;
-      window.history.pushState({}, '', `/?chatId=${conversation.id}`);
-      
-      // Initialize message service with HTTP first
-      if (this.messageService) {
-        if (window.MODEL_CONFIG) {
-          this.messageService.updateModelConfig(window.MODEL_CONFIG);
-        }
-        this.messageService.initialize(conversation.id, null);
-        
-        // Then try to establish WebSocket connection
-        await this.establishWebSocketConnection(conversation.id);
-      } else {
-        console.error('Message service not available');
-        window.ChatUtils?.handleError?.('Message service not initialized', 
-          new Error('Message service not available'), this.notificationFunction);
-      }
-      
-      // Update UI
-      if (this.container) {
-        this.container.classList.remove('hidden');
-      }
-      const noChatMsg = document.getElementById("noChatSelectedMessage");
-      if (noChatMsg) {
-        noChatMsg.classList.add('hidden');
-      }
-      
-      return conversation;
-    }
-    
-    // ...existing error handling...
-  } catch (error) {
-    // ...existing error handling...
-  }
-};
-
-// Enhance loadConversation to use our new WebSocket connection function
-window.ChatInterface.prototype.loadConversation = function(chatId) {
-  // ...existing code...
-  
-  return this.conversationService.loadConversation(chatId)
-    .then(success => {
-      this._isLoadingConversation = false;
-      if (success) {
-        console.log(`Successfully loaded conversation: ${chatId}`, 
-          this.conversationService.currentConversation);
-
-        // Initialize message service with HTTP initially
-        this.messageService.initialize(chatId, null);
-        
-        // Use our improved WebSocket connection function
-        this.establishWebSocketConnection(chatId)
-          .catch(error => {
-            console.warn("WebSocket connection failed completely:", error);
-          });
-
-        // ...rest of existing code...
-      } else {
-        console.warn(`Failed to load conversation: ${chatId}`);
-      }
-      return success;
-    })
-    .catch(error => {
-      // ...existing error handling...
-    });
-};
-
-// ...existing code...
