@@ -37,7 +37,7 @@ window.ChatUtils = {
    */
   isAuthenticated: async function() {
     try {
-      return await window.auth?.isAuthenticated?.() || false;
+      return await window.auth?.isAuthenticated?.({ forceVerify: true }) || false;
     } catch (error) {
       console.error('Authentication check failed:', error);
       return false;
@@ -69,11 +69,13 @@ window.ChatUtils = {
     let message;
     let isAIError = false;
     let isAuthError = false;
+    let isNetworkError = false;
     
     if (typeof error === 'string') {
       message = error;
       isAIError = message.includes('generate response') || message.includes('AI ');
       isAuthError = message.includes('Not authenticated') || message.includes('Session expired');
+      isNetworkError = message.includes('network') || message.includes('connection') || message.includes('timeout');
     } else if (error instanceof Error) {
       message = error.message || error.toString();
       isAIError = (
@@ -84,7 +86,14 @@ window.ChatUtils = {
       isAuthError = (
         message.includes('Not authenticated') ||
         message.includes('Session expired') ||
+        message.includes('authentication failed') ||
         error.status === 401
+      );
+      isNetworkError = (
+        message.includes('network') ||
+        message.includes('connection') ||
+        message.includes('timeout') ||
+        message.includes('Failed to fetch')
       );
 
       // Special case for connection errors - don't show these to user as they're handled internally
@@ -96,11 +105,28 @@ window.ChatUtils = {
       message = 'Unknown error occurred';
     }
 
-    // Handle auth errors
+    // Format authentication error messages in a user-friendly way
     if (isAuthError) {
+      if (message.includes('timeout')) {
+        message = 'Authentication check timed out. The server may be busy. Please try again in a moment.';
+      } else if (message.includes('expired')) {
+        message = 'Your session has expired. Please login again.';
+      } else {
+        message = 'Authentication error. Please login again.';
+      }
+      
       window.dispatchEvent(new CustomEvent('authStateChanged', {
         detail: { authenticated: false }
       }));
+    }
+    
+    // Format network error messages
+    if (isNetworkError) {
+      if (message.includes('timeout')) {
+        message = 'The server is taking too long to respond. Please check your connection and try again.';
+      } else {
+        message = 'Network connection issue. Please check your internet connection.';
+      }
     }
 
     // Format notification based on context and message
@@ -127,6 +153,16 @@ window.ChatUtils = {
     // For AI errors, also display UI hint if possible
     if (isAIError && typeof window.UIUtils?.showAIErrorHint === 'function') {
       window.UIUtils.showAIErrorHint(userMessage, error.userAction);
+    }
+    
+    // Log analytics for errors if possible
+    if (window.analytics?.logEvent) {
+      window.analytics.logEvent('error_occurred', {
+        context,
+        error_type: isAuthError ? 'auth' : (isNetworkError ? 'network' : (isAIError ? 'ai' : 'general')),
+        message: userMessage.substring(0, 100), // Truncate for analytics
+        timestamp: new Date().toISOString()
+      });
     }
   },
 

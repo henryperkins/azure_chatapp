@@ -374,19 +374,10 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
         // Initialize message service w/ HTTP initially
         this.messageService.initialize(chatId, null);
 
-        // Then try WebSocket
-        this.wsService.connect(chatId)
-          .then(() => {
-            console.log('WebSocket connected successfully, switching to WebSocket mode');
-            this.messageService.initialize(chatId, this.wsService);
-          })
-          .catch((error) => {
-            if (error && error.message === 'Using HTTP fallback') {
-              console.log("Using HTTP fallback for messaging as expected");
-            } else {
-              console.warn("WebSocket connection failed, continuing HTTP fallback:", error);
-            }
-            this.messageService.initialize(chatId, null);
+        // Use our improved WebSocket connection function
+        this.establishWebSocketConnection(chatId)
+          .catch(error => {
+            console.warn("WebSocket connection failed completely:", error);
           });
 
         // Update URL if mismatch
@@ -825,3 +816,139 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
     throw error;
   }
 };
+
+/**
+ * Establish WebSocket connection with proper retry logic
+ * @param {string} conversationId - The ID of the conversation to connect to
+ * @returns {Promise<boolean>} Whether connection was successful
+ */
+window.ChatInterface.prototype.establishWebSocketConnection = async function(conversationId) {
+  if (!this.wsService) {
+    console.error('WebSocket service not initialized');
+    return false;
+  }
+
+  const MAX_WS_RETRIES = 2;
+  let wsConnected = false;
+
+  for (let attempt = 1; attempt <= MAX_WS_RETRIES; attempt++) {
+    try {
+      console.log(`[ChatInterface] Attempting WebSocket connection (attempt ${attempt})...`);
+      await this.wsService.connect(conversationId);
+      wsConnected = true;
+      console.log('[ChatInterface] WebSocket connected successfully');
+      this.notificationFunction('Real-time connection established', 'success');
+      
+      // Initialize message service with WebSocket
+      this.messageService.initialize(conversationId, this.wsService);
+      return true;
+    } catch (error) {
+      console.warn(`[ChatInterface] WebSocket connection attempt ${attempt} failed:`, error);
+      
+      // Provide feedback on final attempt
+      if (attempt === MAX_WS_RETRIES) {
+        const msg = error.message?.includes('auth')
+          ? 'WebSocket authentication failed - using HTTP mode'
+          : 'WebSocket connection failed - using HTTP mode';
+        this.notificationFunction(msg, 'warning');
+      }
+      
+      // Exponential backoff between attempts
+      if (attempt < MAX_WS_RETRIES) {
+        const backoffMs = 500 * Math.pow(2, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  
+  // If WebSocket connection failed, initialize with HTTP
+  console.log('[ChatInterface] Using HTTP fallback for messaging');
+  this.messageService.initialize(conversationId, null);
+  return false;
+};
+
+// Enhance the createNewConversation method to use our new WebSocket connection function
+window.ChatInterface.prototype.createNewConversation = async function() {
+  // ...existing code until WebSocket connection attempt...
+
+  try {
+    // Authentication verification with standardized handling
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+    if (!isAuthenticated) {
+      const errorMsg = "Authentication required";
+      this.notificationFunction(errorMsg, 'error');
+      throw new Error(errorMsg);
+    }
+
+    // ...existing code for conversation creation...
+    
+    // After successful conversation creation, use the improved WebSocket connection function
+    if (conversation?.id) {
+      this.currentChatId = conversation.id;
+      window.history.pushState({}, '', `/?chatId=${conversation.id}`);
+      
+      // Initialize message service with HTTP first
+      if (this.messageService) {
+        if (window.MODEL_CONFIG) {
+          this.messageService.updateModelConfig(window.MODEL_CONFIG);
+        }
+        this.messageService.initialize(conversation.id, null);
+        
+        // Then try to establish WebSocket connection
+        await this.establishWebSocketConnection(conversation.id);
+      } else {
+        console.error('Message service not available');
+        window.ChatUtils?.handleError?.('Message service not initialized', 
+          new Error('Message service not available'), this.notificationFunction);
+      }
+      
+      // Update UI
+      if (this.container) {
+        this.container.classList.remove('hidden');
+      }
+      const noChatMsg = document.getElementById("noChatSelectedMessage");
+      if (noChatMsg) {
+        noChatMsg.classList.add('hidden');
+      }
+      
+      return conversation;
+    }
+    
+    // ...existing error handling...
+  } catch (error) {
+    // ...existing error handling...
+  }
+};
+
+// Enhance loadConversation to use our new WebSocket connection function
+window.ChatInterface.prototype.loadConversation = function(chatId) {
+  // ...existing code...
+  
+  return this.conversationService.loadConversation(chatId)
+    .then(success => {
+      this._isLoadingConversation = false;
+      if (success) {
+        console.log(`Successfully loaded conversation: ${chatId}`, 
+          this.conversationService.currentConversation);
+
+        // Initialize message service with HTTP initially
+        this.messageService.initialize(chatId, null);
+        
+        // Use our improved WebSocket connection function
+        this.establishWebSocketConnection(chatId)
+          .catch(error => {
+            console.warn("WebSocket connection failed completely:", error);
+          });
+
+        // ...rest of existing code...
+      } else {
+        console.warn(`Failed to load conversation: ${chatId}`);
+      }
+      return success;
+    })
+    .catch(error => {
+      // ...existing error handling...
+    });
+};
+
+// ...existing code...
