@@ -247,13 +247,166 @@ function sanitizeUrl(url) {
   return url.replace(/\s+/g, '').replace(/\/+/g, '/');
 }
 
+// Track pending requests to prevent duplicates
+const pendingRequests = new Map();
+
 /**
- * Single fetch wrapper. No manual token insertion, purely cookie-based.
+ * Enhanced fetch wrapper with:
+ * - Request deduplication
+ * - Permanent error marking
+ * - Better error handling
  */
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
   const maxRetries = 2;
+  
+  // Create request key for deduplication
+  const requestKey = `${method}:${endpoint}:${JSON.stringify(data)}`;
+  
+  // Return existing promise if same request is pending
+  if (pendingRequests.has(requestKey)) {
+    return pendingRequests.get(requestKey);
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  // Create the request promise and store it
+  const requestPromise = makeApiRequest();
+  pendingRequests.set(requestKey, requestPromise);
+  
+  // Clean up when done
+  requestPromise.finally(() => {
+    pendingRequests.delete(requestKey);
+  });
+  
+  return requestPromise;
+
+  async function makeApiRequest() {
+    // Original apiRequest implementation goes here
+    endpoint = sanitizeUrl(endpoint);
+
+    // Normalize endpoint if full URL was passed
+    if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
+      console.warn('Full URL detected in endpoint, normalizing:', endpoint);
+      const urlObj = new URL(endpoint);
+      endpoint = urlObj.pathname + urlObj.search;
+    }
+
+    // Clean up double slashes
+    const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
+    const baseUrl = getBaseUrl();
+    method = method.toUpperCase();
+
+    // Handle GET/HEAD query parameters
+    let finalUrl;
+    if (data && ['GET', 'HEAD'].includes(method)) {
+      const queryParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(data)) {
+        if (Array.isArray(value)) {
+          value.forEach(v => queryParams.append(key, v));
+        } else {
+          queryParams.append(key, value);
+        }
+      }
+      const queryString = queryParams.toString();
+      finalUrl = cleanEndpoint.startsWith('/')
+        ? `${baseUrl}${cleanEndpoint}${cleanEndpoint.includes('?') ? '&' : '?'}${queryString}`
+        : `${baseUrl}/${cleanEndpoint}${cleanEndpoint.includes('?') ? '&' : '?'}${queryString}`;
+    } else {
+      finalUrl = cleanEndpoint.startsWith('/')
+        ? `${baseUrl}${cleanEndpoint}`
+        : `${baseUrl}/${cleanEndpoint}`;
+    }
+
+    console.log('Constructing API request for endpoint:', finalUrl);
+
+    const requestOptions = {
+      method,
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache'
+      },
+      cache: 'no-store',
+      redirect: 'follow',
+      signal: controller.signal,
+      credentials: 'include'  // Important for including cookies
+    };
+
+    // Body for POST/PUT
+    if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
+      if (data instanceof FormData) {
+        requestOptions.body = data;
+      } else {
+        requestOptions.headers['Content-Type'] = 'application/json';
+        requestOptions.body = JSON.stringify(data);
+      }
+    }
+
+    try {
+      console.log(`Making ${method} request to: ${finalUrl} (timeout: ${timeoutMs}ms)`);
+      const response = await fetch(finalUrl, requestOptions);
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        API_CONFIG.lastErrorStatus = response.status;
+        console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
+
+        if (response.status === 401) {
+          // 401 Unauthorized. We are not doing token refresh—using cookies only.
+          console.log(`401 response received for ${endpoint} (retry: ${retryCount}/${maxRetries})`);
+          // Possibly attempt re-auth flow or just clear auth state
+          if (retryCount < maxRetries && !options.skipRetry) {
+            // Optionally try re-checking the session or waiting for cookies, but here we just go straight to clearAuthState
+            console.warn('Exhausting retry approach or skipping token refresh, clearing auth state');
+            clearAuthState();
+            throw new Error('Session expired. Please login again.');
+          } else {
+            clearAuthState();
+            throw new Error('Session expired. Please login again.');
+          }
+        } else if (response.status === 404) {
+          const error = new Error(`Resource not found (404): ${finalUrl}`);
+          error.status = 404;
+          throw error;
+        } else if (response.status === 422) {
+          try {
+            const errorData = await response.json();
+            console.error('Validation error details:', errorData);
+          } catch (parseErr) {
+            console.error('Could not parse validation error', parseErr);
+          }
+        }
+
+        const errorBody = await response.text();
+        const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
+        error.status = response.status;
+        throw error;
+      }
+
+      let jsonData = null;
+      if (response.status !== 204) {
+        try {
+          jsonData = await response.json();
+        } catch (err) {
+          jsonData = null;
+        }
+      }
+
+      // If the server sets any auth cookies, the browser will handle them automatically.
+      return jsonData;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        const timeoutError = new Error(`Request timed out after ${timeoutMs}ms`);
+        timeoutError.name = 'TimeoutError';
+        timeoutError.code = 'ETIMEDOUT';
+        throw timeoutError;
+      }
+      console.error('API request failed:', error);
+      throw error;
+    }
+  }
 
   endpoint = sanitizeUrl(endpoint);
 
@@ -319,10 +472,10 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
     }
   }
 
-  try {
-    console.log(`Making ${method} request to: ${finalUrl} (timeout: ${timeoutMs}ms)`);
-    const response = await fetch(finalUrl, requestOptions);
-    clearTimeout(timeoutId);
+      try {
+        console.log(`Making ${method} request to: ${finalUrl} (timeout: ${timeoutMs}ms)`);
+        const response = await fetch(finalUrl, requestOptions);
+        clearTimeout(timeoutId);
 
     if (!response.ok) {
       API_CONFIG.lastErrorStatus = response.status;
@@ -344,6 +497,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       } else if (response.status === 404) {
         const error = new Error(`Resource not found (404): ${finalUrl}`);
         error.status = 404;
+        error.isPermanent = true; // Mark 404 as permanent
         throw error;
       } else if (response.status === 422) {
         try {

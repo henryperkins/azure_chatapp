@@ -50,6 +50,7 @@ from routes.projects.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
 from routes.projects.artifacts import router as project_artifacts_router
+from routes.user_preferences import router as user_preferences_router
 
 # -------------------------
 # Import DB & Config
@@ -282,6 +283,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
+app.include_router(user_preferences_router, prefix="/api", tags=["user-preferences"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(
