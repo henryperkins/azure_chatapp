@@ -452,8 +452,13 @@ async def upload_file_to_project(
 
 @handle_service_errors("File reindexing failed")
 async def process_single_file_for_search(
-    file_id: UUID, project_id: UUID, knowledge_base_id: UUID, db: AsyncSession
+    file_id: UUID, project_id: UUID, knowledge_base_id: UUID, db: Optional[AsyncSession] = None
 ):
+    from db import get_async_session
+    
+    # Create new session if none provided
+    if db is None:
+        db = await get_async_session()
     """
     This is called in a background task to:
       1) Load the file from DB
