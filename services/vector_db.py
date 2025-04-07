@@ -83,6 +83,12 @@ class VectorDB:
         use_faiss: bool = True,
         storage_path: Optional[str] = None,
     ):
+        # Warm up embedding model
+        if self.embedding_model and hasattr(self.embedding_model, "encode"):
+            try:
+                self.embedding_model.encode([""])  # Warmup call
+            except Exception as e:
+                logger.warning(f"Model warmup failed: {str(e)}")
         """Initialize vector database with the specified embedding model."""
         self.embedding_model_name = embedding_model
         self.storage_path = storage_path
@@ -166,16 +172,19 @@ class VectorDB:
         if self.embedding_model and hasattr(
             self.embedding_model, "get_sentence_embedding_dimension"
         ):
-            dim = self.embedding_model.get_sentence_embedding_dimension()
-            if dim is not None:
-                return dim
+            try:
+                dim = self.embedding_model.get_sentence_embedding_dimension()
+                if dim is not None:
+                    return dim
+            except Exception as e:
+                logger.warning(f"Failed to get embedding dimension: {str(e)}")
 
-        # Default fallback dimension for known or unknown models
-        if self.embedding_model_name == "text-embedding-3-small":
+        # Fallback for API-based models
+        if "text-embedding-3-small" in self.embedding_model_name:
             return 1536
-        elif self.embedding_model_name == "text-embedding-3-large":
+        elif "text-embedding-3-large" in self.embedding_model_name:
             return 3072
-        elif self.embedding_model_name == "embed-english-v3.0":
+        elif "embed-english" in self.embedding_model_name:
             return 1024
         return 384  # Default for all-MiniLM-L6-v2
 
@@ -556,16 +565,29 @@ class VectorDB:
         if not (self.use_faiss and FAISS_AVAILABLE):
             return
 
-        remaining_ids = list(self.vectors.keys())
-        remaining_vectors = [self.vectors[d_id] for d_id in remaining_ids]
-        if remaining_vectors:
+        try:
+            remaining_ids = list(self.vectors.keys())
+            if not remaining_ids:
+                self.index = None
+                self.id_map = []
+                return
+
+            # Get vectors in correct order
+            remaining_vectors = [self.vectors[d_id] for d_id in remaining_ids]
             vectors_np = np.array(remaining_vectors, dtype=np.float32)
-            dimension = vectors_np.shape[1]
+            
+            # Create new index with proper dimensions
+            dimension = self.get_embedding_dimension()
             self.index = faiss.IndexFlatL2(dimension)  # type: ignore
+            
+            # Add vectors and update mapping
             if vectors_np.size > 0:
                 self.index.add(vectors_np)  # type: ignore
             self.id_map = remaining_ids
-        else:
+            
+            logger.info(f"Rebuilt FAISS index with {len(remaining_ids)} vectors")
+        except Exception as e:
+            logger.error(f"Failed to rebuild FAISS index: {str(e)}")
             self.index = None
             self.id_map = []
 
