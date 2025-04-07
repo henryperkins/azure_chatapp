@@ -82,25 +82,50 @@ allowed_hosts = (
 )
 
 # Create FastAPI app instance
+# Configure CORS settings
+cors_origins = settings.CORS_ORIGINS
+if not cors_origins and settings.ENV == "development":
+    # Default development CORS settings if none specified
+    cors_origins = [
+        "http://localhost:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:3000",
+        "http://localhost",
+        "http://127.0.0.1"
+    ]
+    logger.warning(f"No CORS_ORIGINS specified, using default development origins: {cors_origins}")
+elif not cors_origins:
+    # Fallback to allow current origin only
+    cors_origins = ["*"]
+    logger.warning("No CORS_ORIGINS specified, allowing all origins (not recommended for production)")
+
+logger.info(f"Configuring CORS with origins: {cors_origins}")
+
+# CORS and middleware settings configured below
+
 middleware = [
     Middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts, www_redirect=False),
     Middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Lock this down in production
+        allow_origins=cors_origins,
+        allow_origin_regex=None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],
+        max_age=600,  # 10 minutes cache for preflight requests
     ),
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
         session_cookie="session",
-        same_site="none" if settings.ENV == "development" else "lax",
+        same_site="lax",  # Changed to lax for all environments for better compatibility
         https_only=settings.ENV == "production",
     ),
 ]
 
+# Create FastAPI app with configured middleware
 app = FastAPI(
     middleware=middleware,
     title="Azure OpenAI Chat Application",
@@ -140,6 +165,17 @@ app = FastAPI(
     docs_url="/docs" if settings.ENV != "production" else None,
     redoc_url=None,
 )
+
+# Add Cache-Control headers to auth-related responses
+@app.middleware("http")
+async def add_cache_control(request: Request, call_next):
+    """Add Cache-Control headers to auth-related responses to prevent browser caching"""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/auth/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # Enforce HTTPS in production
 if settings.ENV == "production":
