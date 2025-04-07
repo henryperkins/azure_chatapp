@@ -284,6 +284,10 @@
         throw new Error('Empty WebSocket host');
       }
 
+      // Enforce same-origin WebSocket connections
+      if (window.location.host !== host) {
+        throw new Error(`WebSocket host mismatch (${host} vs ${window.location.host})`);
+      }
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
       
       // Determine correct WebSocket URL path

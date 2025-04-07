@@ -12,8 +12,16 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 class Settings:
     """
-    Central configuration class for environment variables used across the codebase.
-    Values are loaded from environment or .env.
+    Central configuration class with strict security defaults.
+    
+    Security Principles:
+    1. Same-origin enforcement - no CORS support
+    2. Cookie security:
+       - SameSite=Strict
+       - Secure flag (HTTPS required)
+       - HttpOnly to prevent JS access
+    3. No token/JWT support for cross-domain use
+    4. All API access requires session cookies from same domain
     """
 
     # Debug/Environment
