@@ -2,9 +2,19 @@
 main.py
 --------
 The FastAPI entrypoint for the Azure OpenAI Chat Application.
-- Initializes the app with middleware (CORS, security, logging)
+- Designed for strict same-origin security (NO CORS support)
+- Requires frontend to be served from same domain as backend
+- Uses session cookies with SameSite=Strict and Secure flags
+- Initializes app with security-focused middleware:
+  - TrustedHostMiddleware (allows any host since we rely on same-origin)
+  - SessionMiddleware with strict cookie policies
 - Includes routers (auth, conversations, projects, etc.)
 - Runs database init or migrations on startup
+
+SECURITY NOTE: This application explicitly does NOT support:
+- Cross-origin requests (CORS headers are omitted)
+- Token/JWT authentication from external domains
+- Cookie sharing across domains/subdomains
 """
 
 import logging
