@@ -284,25 +284,22 @@ async function logout(e) {
     }
     
     // Use window.apiRequest if available, otherwise fall back to direct fetch
-    const apiCall = window.apiRequest || 
+    const apiCall = window.apiRequest ||
       ((url, method) => authRequest(url, method));
-    
-    // Clear token manager state first
-    if (window.TokenManager && typeof window.TokenManager.clear === 'function') {
-      window.TokenManager.clear();
+
+    // First disconnect any WebSocket connections to prevent new messages
+    if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
+      window.WebSocketService.disconnectAll();
     }
     
-    // Clear local auth state
-    authVerificationCache.set(false);
-    
-    // Call server-side logout
+    // Then attempt server-side logout
     try {
       const LOGOUT_TIMEOUT = 5000; // 5 seconds
       const logoutPromise = apiCall('/api/auth/logout', 'POST');
       
       await Promise.race([
         logoutPromise,
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Logout request timed out')), LOGOUT_TIMEOUT)
         )
       ]);
@@ -313,10 +310,13 @@ async function logout(e) {
       // Continue with client-side logout even if API call fails
     }
 
-    // Clear any WebSocket connections
-    if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
-      window.WebSocketService.disconnectAll();
+    // Clear token manager state
+    if (window.TokenManager && typeof window.TokenManager.clear === 'function') {
+      window.TokenManager.clear();
     }
+    
+    // Clear local auth state
+    authVerificationCache.set(false);
     
     // Broadcast auth state change
     broadcastAuth(false);
