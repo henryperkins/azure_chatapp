@@ -461,13 +461,13 @@ async def process_single_file_for_search(
         db = await get_async_session()
         
     async with db.begin():
-    """
-    This is called in a background task to:
-      1) Load the file from DB
-      2) Fetch the bytes from storage
-      3) Pass them to vector_db.process_file_for_search(...) to chunk + embed
-      4) Update the ProjectFile record's search_processing status
-    """
+        """
+        This is called in a background task to:
+          1) Load the file from DB
+          2) Fetch the bytes from storage
+          3) Pass them to vector_db.process_file_for_search(...) to chunk + embed
+          4) Update the ProjectFile record's search_processing status
+        """
     try:
         # 1) Load ProjectFile
         file_record = await get_by_id(db, ProjectFile, file_id)
