@@ -109,8 +109,8 @@ const TokenManager = {
     localStorage.removeItem('userInfo');
     localStorage.removeItem('refreshMutex'); // concurrency guard
 
-    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict";
-    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict";
+    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=None";
+    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=None";
   },
 
   /**
