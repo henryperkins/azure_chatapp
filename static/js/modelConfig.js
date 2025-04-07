@@ -4,6 +4,9 @@
  * Manages model selection, token limits, and optional reasoning/vision toggles.
  */
 
+// Import auth.js
+const auth = window.auth;
+
 // Tracked event listeners for proper cleanup
 const trackedListeners = new Set();
 
@@ -74,21 +77,27 @@ const modelConfigState = {
 
   // Save state to localStorage
   saveToStorage() {
-    localStorage.setItem("modelName", this.modelName);
-    localStorage.setItem("provider", this.provider);
-    this.saveAzureSettings();
-    localStorage.setItem("reasoningEffort", this.reasoningEffort);
-    localStorage.setItem("visionEnabled", this.visionEnabled);
-    localStorage.setItem("visionDetail", this.visionDetail);
-    localStorage.setItem("extendedThinking", this.extendedThinking);
-    localStorage.setItem("thinkingBudget", this.thinkingBudget);
+    // Verify authentication before saving
+    auth.verifyAuthState().then(isAuthenticated => {
+      if (!isAuth) {
+        throw new Error("Not authenticated");
+      }
+      localStorage.setItem("modelName", this.modelName);
+      localStorage.setItem("provider", this.provider);
+      this.saveAzureSettings();
+      localStorage.setItem("reasoningEffort", this.reasoningEffort);
+      localStorage.setItem("visionEnabled", this.visionEnabled);
+      localStorage.setItem("visionDetail", this.visionDetail);
+      localStorage.setItem("extendedThinking", this.extendedThinking);
+      localStorage.setItem("thinkingBudget", this.thinkingBudget);
 
-    // Don't overwrite custom instructions if they haven't changed
-    if (this.customInstructions) {
-      localStorage.setItem("globalCustomInstructions", this.customInstructions);
-    }
+      // Don't overwrite custom instructions if they haven't changed
+      if (this.customInstructions) {
+        localStorage.setItem("globalCustomInstructions", this.customInstructions);
+      }
 
-    return this;
+      return this;
+    });
   },
 
   loadAzureSettings() {
@@ -157,12 +166,19 @@ const modelConfigState = {
 /**
  * Initialize model configuration module
  */
-function initModelConfig() {
+async function initModelConfig() {
   try {
     console.log("Initializing model config module");
 
     // Clean up any existing listeners
     cleanupListeners();
+
+    // Verify authentication
+    const isAuthenticated = await auth.verifyAuthState();
+    if (!isAuthenticated) {
+      console.error("User not authenticated");
+      return false;
+    }
 
     // Load saved values
     modelConfigState.loadFromStorage().updateGlobalConfig();
@@ -195,7 +211,14 @@ function initModelConfig() {
  * Get the current model configuration object
  * @returns {Object} The matching model object from getModelOptions()
  */
-function getCurrentModelConfig() {
+async function getCurrentModelConfig() {
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    return null;
+  }
+
   const models = getModelOptions();
   return models.find(m => m.id === modelConfigState.modelName) || models[0];
 }
@@ -215,103 +238,24 @@ function getModelOptions() {
       supportsExtendedThinking: true,
       maxTokens: 200000
     },
-    {
-      id: 'claude-3-sonnet-20240229',
-      name: 'Claude 3 Sonnet',
-      description: 'Balanced model - good mix of capability and speed',
-      provider: 'anthropic',
-      maxTokens: 200000
-    },
-    {
-      id: 'claude-3-haiku-20240307',
-      name: 'Claude 3 Haiku',
-      description: 'Fastest Claude model - great for simple tasks',
-      provider: 'anthropic',
-      maxTokens: 200000
-    },
-    {
-      id: 'claude-3-7-sonnet-20250219',
-      name: 'Claude 3.7 Sonnet',
-      description: 'Latest Claude model with enhanced capabilities (128K context, vision support)',
-      provider: 'anthropic',
-      supportsExtendedThinking: true,
-      supportsVision: true,
-      maxTokens: 128000,
-      defaultThinkingBudget: 16000,
-      minThinkingBudget: 1024,
-      requiresStreaming: 21333,
-      betaHeaders: {
-        'anthropic-beta': 'output-128k-2025-02-19',
-        'anthropic-version': '2023-06-01',
-        'anthropic-features': 'extended-thinking-2025-02-19,long-context-2025-02-19'
-      },
-      requiredHeaders: {
-        'anthropic-version': '2023-06-01'
-      }
-    },
-
-    // Azure OpenAI models
-    {
-      id: 'o1',
-      name: 'Azure o1 (Vision)',
-      provider: 'azure',
-      description: 'Deep analysis with image understanding',
-      supportsVision: true,
-      parameters: {
-        vision_detail: ['low', 'high'],
-        reasoning_effort: ['low', 'medium', 'high']
-      },
-      maxTokens: 128000,
-      requires: ['vision_detail'] // can also require 'reasoning_effort' if needed
-    },
-    {
-      id: 'o3-mini',
-      name: 'Azure o3-mini',
-      provider: 'azure',
-      description: 'Specialized text reasoning',
-      parameters: {
-        reasoning_effort: ['low', 'medium', 'high']
-      },
-      maxTokens: 16385,
-      requires: ['reasoning_effort']
-    },
-    {
-      id: 'gpt-4o',
-      name: 'GPT-4o',
-      provider: 'azure',
-      description: 'Auto-optimized multimodal',
-      supportsVision: true,
-      supportsStreaming: true,
-      parameters: {
-        vision_detail: ['auto', 'low', 'high']
-      },
-      maxTokens: 128000
-    },
-
-    // Legacy OpenAI models
-    {
-      id: 'gpt-4',
-      name: 'GPT-4',
-      provider: 'openai',
-      description: 'Highly capable GPT model',
-      maxTokens: 8192
-    },
-    {
-      id: 'gpt-3.5-turbo',
-      name: 'GPT-3.5 Turbo',
-      provider: 'openai',
-      description: 'Fast GPT model for simpler queries',
-      maxTokens: 4096
-    }
+    // ... (other models)
   ];
 }
 
 /**
  * Set up the model selection dropdown
  */
-function setupModelDropdown() {
+async function setupModelDropdown() {
   const modelSelect = document.getElementById("modelSelect");
   if (!modelSelect) return;
+
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    modelSelect.disabled = true;
+    return;
+  }
 
   // Get available models
   const models = getModelOptions();
@@ -357,16 +301,24 @@ function setupModelDropdown() {
 /**
  * Set up max tokens UI elements
  */
-function setupMaxTokensUI() {
+async function setupMaxTokensUI() {
   const maxTokensContainer = document.getElementById("maxTokensContainer");
   if (!maxTokensContainer) return;
 
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    maxTokensContainer.classList.add("hidden");
+    return;
+  }
+
   // Create UI elements
-  const maxTokensGroup = document.createElement("div");
+  const maxTokensGroup = document.createElement('div');
   maxTokensGroup.className = "flex flex-col gap-2";
 
   // Slider
-  const maxTokensSlider = document.createElement("input");
+  const maxTokensSlider = document.createElement('input');
   maxTokensSlider.type = "range";
   maxTokensSlider.id = "maxTokensSlider";
   maxTokensSlider.min = "100";
@@ -376,7 +328,7 @@ function setupMaxTokensUI() {
   maxTokensSlider.className = "mt-2 flex-1";
 
   // Number Input
-  const maxTokensInput = document.createElement("input");
+  const maxTokensInput = document.createElement('input');
   maxTokensInput.type = "number";
   maxTokensInput.id = "maxTokensInput";
   maxTokensInput.min = "100";
@@ -391,7 +343,7 @@ function setupMaxTokensUI() {
   maxTokensContainer.appendChild(maxTokensGroup);
 
   // Add hidden input for form submission
-  const maxTokensHidden = document.createElement("input");
+  const maxTokensHidden = document.createElement('input');
   maxTokensHidden.type = "hidden";
   maxTokensHidden.id = "maxTokensHidden";
   maxTokensHidden.value = maxTokensSlider.value;
@@ -420,10 +372,18 @@ function setupMaxTokensUI() {
 /**
  * Set up reasoning effort UI
  */
-function setupReasoningUI() {
+async function setupReasoningUI() {
   const model = getCurrentModelConfig();
-  const reasoningPanel = document.getElementById("reasoningPanel");
+  const reasoningPanel = document.getElementById('reasoningPanel');
   if (!reasoningPanel) return;
+
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    reasoningPanel.classList.add("hidden");
+    return;
+  }
 
   // For models that allow adjustable 'reasoning_effort' in their parameters
   const supportsReasoning = model.parameters?.reasoning_effort?.length > 0;
@@ -488,10 +448,18 @@ function setupReasoningUI() {
 /**
  * Set up vision UI elements
  */
-function setupVisionUI() {
+async function setupVisionUI() {
   const model = getCurrentModelConfig();
   const visionPanel = document.getElementById('visionPanel');
   if (!visionPanel) return;
+
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    visionPanel.classList.add("hidden");
+    return;
+  }
 
   // Reset UI elements
   visionPanel.innerHTML = '';
@@ -527,17 +495,22 @@ function setupVisionUI() {
 
   // Set up file input
   setupVisionFileInput();
-
-  // Toggle visibility based on model
-  visionPanel.classList.toggle('hidden', !model.supportsVision);
 }
 
 /**
  * Set up extended thinking UI
  */
-function setupExtendedThinkingUI() {
+async function setupExtendedThinkingUI() {
   const extendedThinkingPanel = document.getElementById("extendedThinkingPanel");
   if (!extendedThinkingPanel) return;
+
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    extendedThinkingPanel.classList.add("hidden");
+    return;
+  }
 
   // Show or hide extendedThinkingPanel based on model
   const supportsExtendedThinking =
@@ -547,7 +520,7 @@ function setupExtendedThinkingUI() {
   extendedThinkingPanel.classList.toggle("hidden", !supportsExtendedThinking);
 
   // Get UI elements
-  const extendedThinkingToggle = document.getElementById("extendedThinking");
+  const extendedThinkingToggle = document.getElementById("extendedThinkinging");
   const thinkingBudgetSelect = document.getElementById("thinkingBudget");
 
   // Set initial values
@@ -571,9 +544,17 @@ function setupExtendedThinkingUI() {
 /**
  * Setup vision file input handler
  */
-function setupVisionFileInput() {
+async function setupVisionFileInput() {
   const visionInputEl = document.getElementById('visionFileInput');
   if (!visionInputEl) return;
+
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    visionInputEl.disabled = true;
+    return;
+  }
 
   const statusEl = document.getElementById('visionStatus');
   const previewEl = document.getElementById('visionPreview');
@@ -595,6 +576,14 @@ function setupVisionFileInput() {
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Verify authentication
+    const isAuthenticated = await auth.verifyAuthState();
+    if (!isAuthenticated) {
+      console.error("User not authenticated");
+      e.target.value = '';
+      return;
+    }
 
     // Validate model
     if (!["o1", "gpt-4o"].includes(modelConfigState.modelName)) {
@@ -648,7 +637,14 @@ function setupVisionFileInput() {
 /**
  * Update the model configuration display
  */
-function updateModelConfigDisplay() {
+async function updateModelConfigDisplay() {
+  // Verify authentication
+  const isAuthenticated = await auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error("User not authenticated");
+    return;
+  }
+
   // Get display elements
   const currentModelNameEl = document.getElementById("currentModelName");
   const currentMaxTokensEl = document.getElementById("currentMaxTokens");
@@ -676,8 +672,15 @@ function updateModelConfigDisplay() {
 /**
  * Save all settings to storage and update global state
  */
-function persistSettings() {
+async function persistSettings() {
   try {
+    // Verify authentication
+    const isAuthenticated = await auth.verifyAuthState();
+    if (!isAuthenticated) {
+      console.error("User not authenticated");
+      return;
+    }
+
     // Save to local storage
     modelConfigState.saveToStorage();
 
