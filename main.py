@@ -78,24 +78,17 @@ os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 
 # Create FastAPI app instance with fully permissive CORS
 middleware = [
-    # Disable all host checking
+    # Security first - but don't limit hosts
     Middleware(TrustedHostMiddleware, allowed_hosts=["*"], www_redirect=False),
-    # Fully permissive CORS
-    Middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    ),
+    
+    # Sessions still needed but reconfigured
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
         session_cookie="session",
-        same_site="lax",  # "lax" is more compatible across browsers
-        https_only=settings.ENV == "production",
-        max_age=60 * 60 * 24 * 7,  # 7 days session lifetime
+        same_site="strict",  # No cross-site cookie sending
+        https_only=True,     # Require HTTPS always
+        max_age=60 * 60 * 24 * 7,
     ),
 ]
 

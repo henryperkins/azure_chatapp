@@ -39,49 +39,7 @@ const TokenManager = {
    * with improved error handling and cookie parsing
    */
   rehydrateFromCookies() {
-    try {
-      if (!document.cookie) {
-        if (AUTH_DEBUG) {
-          console.debug('[Auth] No cookies found');
-        }
-        return false;
-      }
-      
-      let cookieToken = null;
-      let cookieRefresh = null;
-      
-      // More robust cookie parsing
-      const cookies = document.cookie.split(/;\s*/);
-      for (const cookie of cookies) {
-        if (cookie.startsWith('access_token=')) {
-          cookieToken = cookie.substring('access_token='.length);
-          if (AUTH_DEBUG) {
-            console.debug('[Auth] Found access token in cookies');
-          }
-        } else if (cookie.startsWith('refresh_token=')) {
-          cookieRefresh = cookie.substring('refresh_token='.length);
-          if (AUTH_DEBUG) {
-            console.debug('[Auth] Found refresh token in cookies');
-          }
-        }
-      }
-
-      if (cookieToken) {
-        if (AUTH_DEBUG) {
-          console.debug('[Auth] Rehydrating tokens from cookies');
-        }
-        this.setTokens(cookieToken, cookieRefresh);
-        return true;
-      }
-      
-      if (AUTH_DEBUG) {
-        console.debug('[Auth] No access token found in cookies');
-      }
-      return false;
-    } catch (err) {
-      console.error('[Auth] Failed to rehydrate from cookies:', err);
-      return false;
-    }
+    return false; // Session cookie only, no explicit rehydration
   },
 
   /**
