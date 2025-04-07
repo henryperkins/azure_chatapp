@@ -198,34 +198,39 @@ if settings.ENV != "production":
                 "knowledge_bases_columns": inspector.get_columns("knowledge_bases"),
             }
     
-    @app.get("/debug/auth-state")
-    async def debug_auth_state(request: Request):
-        """Debug endpoint to check auth cookies and token state"""
-        from utils.auth_utils import verify_token, revoked_tokens
-        
-        cookies = {k: v for k, v in request.cookies.items()}
-        access_token = cookies.get('access_token')
-        refresh_token = cookies.get('refresh_token')
-        
-        token_info = None
-        if access_token:
-            try:
-                async with get_async_session_context() as session:
-                    token_info = await verify_token(access_token, token_type="access", session=session)
-            except Exception as e:
-                token_info = {"error": str(e)}
-        
+    @app.get("/debug/security-headers")
+    async def debug_security_headers(request: Request):
+        """Verify all security headers and same-origin policies"""
         return {
-            "cookies": cookies,
-            "token_info": token_info,
-            "revoked_tokens_count": len(revoked_tokens),
-            "headers": {k: v for k, v in request.headers.items()},
-            "secure_connection": request.url.scheme == "https",
-            "same_site_compatibility": {
-                "strict": "Most secure but may break third-party functionality",
-                "lax": "Currently used - balances security and usability",
-                "none": "Allows cross-site requests but requires secure connection"
-            }
+            "security_headers": {
+                "strict_transport_security": request.headers.get("strict-transport-security"),
+                "x_frame_options": request.headers.get("x-frame-options"),
+                "x_content_type_options": request.headers.get("x-content-type-options"),
+                "content_security_policy": request.headers.get("content-security-policy"),
+                "referrer_policy": request.headers.get("referrer-policy"),
+                "permissions_policy": request.headers.get("permissions-policy"),
+            },
+            "same_origin_verified": {
+                "origin": request.headers.get("origin"),
+                "host": request.headers.get("host"),
+                "scheme": request.url.scheme,
+                "is_same_origin": (
+                    not request.headers.get("origin") or 
+                    request.headers.get("origin") == f"{request.url.scheme}://{request.headers.get('host')}"
+                ),
+            },
+            "cookie_policies": {
+                "secure_cookies": all(
+                    "secure" in cookie.lower() 
+                    for cookie in request.headers.get("cookie", "").split("; ")
+                    if cookie
+                ),
+                "samesite_strict": all(
+                    "samesite=strict" in cookie.lower() 
+                    for cookie in request.headers.get("cookie", "").split("; ") 
+                    if cookie
+                ),
+            },
         }
 
 
