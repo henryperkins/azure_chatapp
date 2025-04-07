@@ -370,23 +370,13 @@ async def logout_user(
 
 
 def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int] = None):
-    # Development settings
-    if settings.ENV == "development":
-        secure_cookie = False
-        samesite_mode = "lax"
-        cookie_domain = None  # Omit domain for localhost
-    else:
-        secure_cookie = True
-        samesite_mode = "lax"
-        cookie_domain = None if settings.COOKIE_DOMAIN == "localhost" else settings.COOKIE_DOMAIN
-    
     response.set_cookie(
         key=key,
         value=value,
         httponly=True,
-        secure=secure_cookie,
-        samesite=samesite_mode,
+        secure=False,  # Disable secure for CORS testing
+        samesite="none",  # Allow cross-site cookies
         path="/",
-        domain=cookie_domain,
+        domain=None,  # Allow all domains
         max_age=max_age
     )
