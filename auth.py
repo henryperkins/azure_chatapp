@@ -1,7 +1,7 @@
 """
 auth.py
 -------
-Handles user login and registration using JWT-based authentication,
+Handles user login and registration using purely cookie-based authentication,
 secure password hashing (bcrypt), session expiry logic, and token versioning.
 """
 
@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +33,6 @@ from utils.auth_utils import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -76,11 +74,9 @@ def validate_password(password: str):
         elif char in special_chars:
             has_special = True
 
-        # Early exit if all criteria met
         if has_upper and has_lower and has_digit and has_special:
             return
 
-    # Determine which requirement failed
     if not has_upper:
         raise ValueError("Password must contain uppercase letters")
     if not has_lower:
@@ -133,8 +129,8 @@ async def login_user(
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
     """
-    Authenticates user, returns both access and refresh tokens.
-    Sets both tokens in secure cookies with appropriate expiration.
+    Authenticates user, returns access and refresh tokens,
+    and sets them in secure HTTP-only cookies.
     """
     lower_username = creds.username.lower()
     result = await session.execute(select(User).where(User.username == lower_username))
@@ -149,7 +145,7 @@ async def login_user(
             status_code=403, detail="Account disabled. Contact support."
         )
 
-    # Check password validity using bcrypt in a thread pool
+    # Check password with bcrypt in executor
     try:
         valid_password = await asyncio.get_event_loop().run_in_executor(
             None,
@@ -168,14 +164,14 @@ async def login_user(
         logger.warning("Failed login attempt for user: %s", lower_username)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Start transaction to safely update user & token version
+    # Start transaction to safely update user & token_version
     async with session.begin_nested():
         locked_user = await session.get(User, user.id, with_for_update=True)
         if not locked_user:
             raise HTTPException(status_code=500, detail="User lock failed")
 
         locked_user.last_login = datetime.utcnow()
-        # Increment token_version or initialize it
+        # Bump token_version
         current_ts = int(datetime.utcnow().timestamp())
         locked_user.token_version = (
             locked_user.token_version + 1 if locked_user.token_version else current_ts
@@ -226,7 +222,7 @@ async def login_user(
     )
 
     logger.info(
-        "User '%s' logged in successfully. Token IDs: %s (access), %s (refresh)",
+        "User '%s' logged in. Token IDs: %s (access), %s (refresh)",
         lower_username,
         token_id,
         refresh_token_id,
@@ -271,7 +267,6 @@ async def refresh_token(
             )
 
         locked_user.last_login = datetime.utcnow()
-        # Increment token_version
         current_ts = int(datetime.utcnow().timestamp())
         locked_user.token_version = (
             locked_user.token_version + 1 if locked_user.token_version else current_ts
@@ -291,7 +286,7 @@ async def refresh_token(
         new_token = create_access_token(payload)
         await session.commit()
 
-    logger.info("Refreshed token for user '%s' with token_id '%s'.", username, token_id)
+    logger.info("Refreshed token for user '%s', token_id '%s'.", username, token_id)
 
     set_secure_cookie(
         response, "access_token", new_token, max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
@@ -327,7 +322,6 @@ async def logout_user(
     if not token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
 
-    # Verify token and extract jti
     decoded = await verify_token(token, "refresh", session)
     token_id = decoded.get("jti")
     if not token_id:
@@ -338,7 +332,7 @@ async def logout_user(
     blacklisted_token = TokenBlacklist(jti=token_id, expires=expires, user_id=user.id)
     session.add(blacklisted_token)
 
-    # Invalidate all user tokens by incrementing token_version
+    # Invalidate all user tokens
     try:
         async with session.begin_nested():
             current_timestamp = int(datetime.utcnow().timestamp())
@@ -353,7 +347,6 @@ async def logout_user(
         logger.error("Failed to update token version during logout: %s", e)
         raise HTTPException(status_code=500, detail="Failed to invalidate session")
 
-    # Revoke the refresh token from in-memory map
     revoke_token_id(token_id)
 
     logger.info(
@@ -369,14 +362,18 @@ async def logout_user(
     return {"status": "logged out"}
 
 
-def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int] = None):
+def set_secure_cookie(
+    response: Response, key: str, value: str, max_age: Optional[int] = None
+):
+    """
+    Sets a secure HTTP-only cookie. Removed domain to avoid cross-domain logic.
+    """
     response.set_cookie(
         key=key,
         value=value,
         httponly=True,
-        secure=True,        # REQUIRES HTTPS 
+        secure=True,  # Only sent over HTTPS
         samesite="strict",  # No cross-site usage
         path="/",
-        domain=settings.COOKIE_DOMAIN,  # Lock to our domain
-        max_age=max_age
+        max_age=max_age,
     )

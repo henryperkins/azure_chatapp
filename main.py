@@ -166,17 +166,8 @@ if settings.ENV == "production":
         return response
 
 
-# Serve static files with security headers
-def static_security_headers(request, response):
-    response.headers.update({
-        "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-store",
-        "Referrer-Policy": "same-origin"
-    })
-    return response
-
+# Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.middleware("http")(static_security_headers)
 
 
 @app.get("/", include_in_schema=False)

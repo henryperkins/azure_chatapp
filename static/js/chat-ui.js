@@ -576,8 +576,8 @@ window.UIComponents = function(options = {}) {
       if (!this.button || !this.input || !this.preview || !this.remove) return;
 
       this.button.addEventListener("click", () => {
-        const model = localStorage.getItem("modelName");
-        if (model !== "o1") {
+        const model = window.MODEL_CONFIG?.modelName;
+        if (model !== "o1" && model !== "gpt-4o") {
           this.showNotification("Vision only works with the o1 model", "warning");
           return;
         }

@@ -1,7 +1,7 @@
-(function() {
+(function () {
   // Singleton instance tracking
   const debugPrefix = '[WebSocketService]';
-  
+
   // Prevent duplicate loading with debug logging
   if (window.__webSocketServiceLoaded) {
     console.debug(`${debugPrefix} Script already loaded - skipping reinitialization`);
@@ -16,36 +16,17 @@
    * chat-websocket.js
    * Robust WebSocket service for real-time chat communication with:
    * - Automatic reconnection
-   * - Authentication handling
+   * - Authentication handling (cookie-based)
    * - HTTP fallback
    * - State management
    */
 
-  /// <reference types="@types/node" />
-
-  /**
-   * @typedef {{
-   *  WebSocketService: typeof WebSocketService,
-   *  ChatUtils: typeof import('./chat-utils'),
-   *  API_CONFIG: { WS_ENDPOINT?: string },
-   *  TokenManager: {
-   *    accessToken?: string,
-   *    isExpired: () => boolean,
-   *    refresh: () => Promise<void>
-   *  },
-   *  auth: { verify?: () => Promise<boolean> },
-   *  BACKEND_HOST?: string,
-   *  MessageService: { httpSend: (payload: any) => Promise<any> }
-   * }} AugmentedWindow
-   */
-
-  // Singleton pattern implementation
+  // If a WebSocketService is already defined, skip re-definition
   if (window.WebSocketService) {
     console.debug(`${debugPrefix} Service already exists - using existing instance`);
     return;
   }
 
-  // Track active instances
   const activeInstances = new WeakMap();
 
   // Connection state constants
@@ -59,17 +40,18 @@
 
   /**
    * Authentication Manager
-   * Centralizes all authentication logic
+   * Manages retrieval of a valid token (purely in memory/cookies).
    */
   class AuthManager {
     constructor() {
       this.authCheckInProgress = false;
-      
-      // Listen for project selection events
+
+      // If you still want to track project selection in memory, remove localStorage usage:
       document.addEventListener('projectSelected', (event) => {
         if (event.detail && event.detail.projectId) {
           console.log('Auth manager: Project selected:', event.detail.projectId);
-          localStorage.setItem('selectedProjectId', event.detail.projectId);
+          // Previously: localStorage.setItem('selectedProjectId', event.detail.projectId);
+          // Now removed. If needed, store in memory on a property, or do nothing.
         }
       });
     }
@@ -81,29 +63,25 @@
 
       this.authCheckInProgress = true;
       try {
-        // First try to use existing valid token
+        // Use any existing valid token
         if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
           return window.TokenManager.accessToken;
         }
 
-        // Use new unified auth verification
+        // Check authenticated via cookie-based logic
         if (window.auth?.isAuthenticated) {
           const isAuthenticated = await window.auth.isAuthenticated();
           if (isAuthenticated && window.TokenManager?.accessToken) {
-            if (window.TokenManager.version) {
-              localStorage.setItem('tokenVersion', window.TokenManager.version);
-            }
+            // If you had a token version, you could store it in memory.
+            // localStorage usage removed.
             return window.TokenManager.accessToken;
           }
         }
 
-        // Fallback to direct token refresh if available
+        // Optionally refresh tokens if the TokenManager supports it
         if (window.TokenManager?.refresh) {
           await window.TokenManager.refresh();
           if (window.TokenManager.accessToken) {
-            if (window.TokenManager.version) {
-              localStorage.setItem('tokenVersion', window.TokenManager.version);
-            }
             return window.TokenManager.accessToken;
           }
         }
@@ -117,20 +95,18 @@
 
   /**
    * WebSocket Service
-   * Handles real-time communication with automatic reconnection
+   * Handles real-time chat with optional reconnection & fallback
    */
   window.WebSocketService = function (options = {}) {
-    // Singleton enforcement
+    // Enforce a singleton for each new instance
     if (activeInstances.has(this)) {
       console.debug(`${debugPrefix} Returning existing instance`);
       return activeInstances.get(this);
     }
     activeInstances.set(this, this);
-    
-    // Track project context in memory only
+
+    // Keep project ID purely in memory
     this.activeProjectId = null;
-    
-    // Update on project selection events
     document.addEventListener('projectSelected', (event) => {
       this.activeProjectId = event.detail?.projectId || null;
     });
@@ -150,7 +126,7 @@
     this.useHttpFallback = false;
     this.wsUrl = null;
     this.pendingMessages = new Map();
-    
+
     // Dependencies
     this.authManager = new AuthManager();
 
@@ -162,34 +138,27 @@
   };
 
   /**
-   * Utility function to validate WebSocket URL
-   * @param {string} url - URL to validate
-   * @returns {boolean} - Whether the URL is a valid WebSocket URL
+   * Validate a WebSocket URL
    */
   function validateWebSocketUrl(url) {
     if (!url || typeof url !== 'string') {
       console.error('Invalid WebSocket URL: URL is empty or not a string');
       return false;
     }
-
     try {
       const parsed = new URL(url);
-      
       if (!parsed.protocol) {
         console.error('Missing protocol in WebSocket URL');
         return false;
       }
-
       if (!parsed.hostname) {
         console.error('Missing hostname in WebSocket URL');
         return false;
       }
-
       if (!parsed.pathname.startsWith('/')) {
         console.error('WebSocket path must start with /:', parsed.pathname);
         return false;
       }
-
       return true;
     } catch (error) {
       console.error('Invalid WebSocket URL:', {
@@ -201,10 +170,8 @@
     }
   }
 
-  // State management
   window.WebSocketService.prototype.setState = function (newState) {
     if (this.state === newState) return;
-
     console.debug(`Connection state: ${this.state} → ${newState}`);
     this.state = newState;
 
@@ -221,19 +188,18 @@
     }
   };
 
-  // Connection management
   window.WebSocketService.prototype.connect = async function (chatId) {
     if (!chatId) throw new Error('Invalid chatId');
 
-    // Return existing connection if already connected to same chat
+    // If already connected to this chat, just return
     if (this.state === CONNECTION_STATES.CONNECTED && this.chatId === chatId) {
       console.debug(`${debugPrefix} Already connected to chat ${chatId}`);
       return true;
     }
 
-    // Queue connection requests if one is already in progress
+    // If connecting/reconnecting is in progress, queue requests
     if (this.state === CONNECTION_STATES.CONNECTING ||
-        this.state === CONNECTION_STATES.RECONNECTING) {
+      this.state === CONNECTION_STATES.RECONNECTING) {
       console.debug(`${debugPrefix} Connection in progress - queuing request for chat ${chatId}`);
       return new Promise((resolve) => {
         const checkConnection = () => {
@@ -254,30 +220,31 @@
     this.useHttpFallback = false;
 
     try {
-      // Verify authentication state
+      // Check cookie-based auth
       const isAuthenticated = await window.auth?.isAuthenticated?.() ?? false;
-      this.projectId = localStorage.getItem("selectedProjectId");
 
-      // Get authentication token
+      // Remove localStorage usage for project ID. Use in-memory from `this.activeProjectId` if needed
+      this.projectId = this.activeProjectId;
+
+      // Retrieve a valid token from AuthManager
       const token = await this.authManager.getValidToken();
       const params = new URLSearchParams({ token });
 
-      // Construct WebSocket URL
+      // Build WS host from config or fallback
       let host = window.API_CONFIG?.WS_ENDPOINT || window.location.host;
       host = host.replace(/^(wss?:\/\/|https?:\/\/)/, '');
-      
       if (!host) {
         throw new Error('Empty WebSocket host');
       }
-
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-      
-      // Determine correct WebSocket URL path
+
+      // See if this is a project-based conversation
       const currentConversation = window.chatInterface?.conversationService?.currentConversation;
       const selectedProjectId = this.projectId;
-      const isProjectConversation = currentConversation?.project_id && 
-                                  selectedProjectId && 
-                                  currentConversation.project_id === selectedProjectId;
+      const isProjectConversation =
+        currentConversation?.project_id &&
+        selectedProjectId &&
+        currentConversation.project_id === selectedProjectId;
 
       let basePath;
       if (isProjectConversation) {
@@ -296,8 +263,8 @@
         throw new Error(`Invalid WebSocket URL: ${this.wsUrl}`);
       }
 
-      // Verify project selection for authenticated users
-      if (isAuthenticated && !this.projectId) {
+      // If user is authenticated but no project ID is selected (when needed), handle it
+      if (isAuthenticated && !this.projectId && isProjectConversation) {
         const errorMsg = 'Please select a project before starting a conversation';
         if (window.UIUtils?.showNotification) {
           window.UIUtils.showNotification(errorMsg, 'warning');
@@ -309,7 +276,7 @@
         return false;
       }
 
-      // Check if another instance is already connecting
+      // Avoid multiple simultaneous connections
       if (window.__wsConnecting === this.wsUrl) {
         return new Promise(resolve => {
           const check = () => {
@@ -319,8 +286,8 @@
           check();
         });
       }
-
       window.__wsConnecting = this.wsUrl;
+
       try {
         await this.establishConnection();
       } finally {
@@ -338,17 +305,15 @@
         projectId: this.projectId,
         wsUrl: this.wsUrl
       };
-
       console.error('WebSocket connection failed:', enhancedError);
       this.setState(CONNECTION_STATES.ERROR);
       this.useHttpFallback = true;
 
-      // Special handling for auth errors
+      // If error is auth-related, attempt refresh once
       if (error.message.includes('403') || error.message.includes('token')) {
         try {
           console.log('Attempting token refresh due to auth error');
           await this.handleTokenRefresh();
-          // If refresh succeeds, try reconnecting once
           if (this.reconnectAttempts < this.maxRetries) {
             return this.connect(chatId);
           }
@@ -356,32 +321,26 @@
           console.error('Token refresh failed:', refreshError);
         }
       }
-
       throw enhancedError;
     }
   };
 
-  window.WebSocketService.prototype.startHeartbeat = function() {
+  window.WebSocketService.prototype.startHeartbeat = function () {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-    
     this.pendingPongs = 0;
     this.lastPongTime = Date.now();
-    
+
     this.heartbeatInterval = setInterval(() => {
       if (!this.isConnected()) return;
-      
+
       const timeSinceLastPong = Date.now() - this.lastPongTime;
       if (timeSinceLastPong > 90000) {
         console.warn('Heartbeat timeout - no pong received in', timeSinceLastPong, 'ms');
         this.handleConnectionError(new Error(`Heartbeat timeout (${timeSinceLastPong}ms since last pong)`));
         return;
       }
-      
       try {
-        this.socket.send(JSON.stringify({
-          type: 'ping',
-          timestamp: Date.now()
-        }));
+        this.socket.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
         this.pendingPongs++;
         console.debug('Sent ping, pending pongs:', this.pendingPongs);
       } catch (err) {
@@ -394,8 +353,8 @@
   window.WebSocketService.prototype.establishConnection = function () {
     return new Promise((resolve, reject) => {
       this.pendingPongs = 0;
-
       const socket = new WebSocket(this.wsUrl);
+
       const timeout = setTimeout(() => {
         const err = new Error(`Connection timeout after ${this.connectionTimeout}ms`);
         err.code = 'CONNECTION_TIMEOUT';
@@ -418,7 +377,7 @@
       socket.onmessage = (event) => {
         try {
           const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-          
+
           if (data.type === 'token_refresh_success') {
             if (window.TokenManager) {
               window.TokenManager.tokenVersion = data.new_version;
@@ -426,14 +385,12 @@
             }
             return;
           }
-
           if (data.type === 'pong') {
             this.pendingPongs = Math.max(0, this.pendingPongs - 1);
             this.lastPongTime = Date.now();
             console.debug('Received pong, pending pongs:', this.pendingPongs);
             return;
           }
-          
           if (data.type === 'token_refresh_required') {
             this.handleTokenRefresh().catch(err => {
               console.error('Token refresh failed:', err);
@@ -441,7 +398,6 @@
             });
             return;
           }
-
           if (data.messageId && this.pendingMessages.has(data.messageId)) {
             const { resolve, reject, timeout } = this.pendingMessages.get(data.messageId);
             clearTimeout(timeout);
@@ -475,42 +431,36 @@
 
       socket.onclose = (event) => {
         clearTimeout(timeout);
-        
         if (![1000, 1001, 1005].includes(event.code)) {
           this.handleConnectionError(new Error(`Connection closed: ${event.code}`));
         }
-        
         this.socket = null;
         this.setState(CONNECTION_STATES.DISCONNECTED);
       };
     });
   };
 
-  window.WebSocketService.prototype.handleTokenRefresh = async function() {
+  window.WebSocketService.prototype.handleTokenRefresh = async function () {
     try {
       await window.TokenManager.refresh();
-      
-      if (window.TokenManager.version) {
-        localStorage.setItem('tokenVersion', window.TokenManager.version);
-      }
-      
+      // localStorage usage removed; token version remains in memory
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({
           type: 'token_refresh',
           token: window.TokenManager.accessToken,
           version: window.TokenManager.version
         }));
-        
         this.reconnectAttempts = 0;
         await this.attemptReconnection();
       }
-      
+
+      // Reject any pending messages
       this.pendingMessages.forEach(({ resolve, reject, timeout }) => {
         clearTimeout(timeout);
         reject(new Error('Token refreshed - please resend message'));
       });
       this.pendingMessages.clear();
-      
+
     } catch (error) {
       console.error('Token refresh failed:', error);
       this.useHttpFallback = true;
@@ -536,7 +486,6 @@
       return;
     }
 
-
     if (errorDetails.code !== 1005) {
       console.error('WebSocket connection error:', {
         error: errorDetails,
@@ -551,11 +500,11 @@
 
     this.socket = null;
     this.setState(CONNECTION_STATES.ERROR);
-    
+
     const MAX_RETRIES = 4;
-    const isAuthError = (error?.message || '').includes('403') || 
-                        (error?.message || '').includes('401') || 
-                        (error?.message || '').includes('version mismatch');
+    const isAuthError = (error?.message || '').includes('403') ||
+      (error?.message || '').includes('401') ||
+      (error?.message || '').includes('version mismatch');
 
     if (isAuthError) {
       try {
@@ -569,15 +518,15 @@
       }
     }
 
-    if (this.state !== CONNECTION_STATES.RECONNECTING && 
-        this.reconnectAttempts < MAX_RETRIES) {
+    if (this.state !== CONNECTION_STATES.RECONNECTING &&
+      this.reconnectAttempts < MAX_RETRIES) {
       return this.attemptReconnection();
-    } 
-    
+    }
+
     console.warn('Switching to HTTP fallback after maximum reconnection attempts');
     this.useHttpFallback = true;
     this.setState(CONNECTION_STATES.DISCONNECTED);
-    
+
     if (this.onError) {
       this.onError(new Error('Real-time connection unavailable. Using reliable HTTP fallback.'));
     }
@@ -596,7 +545,7 @@
       console.warn('Max reconnection attempts reached', errorInfo);
       this.useHttpFallback = true;
       this.setState(CONNECTION_STATES.DISCONNECTED);
-      
+
       if (this.onError) {
         const error = new Error('Failed to reconnect - using HTTP fallback');
         error.details = errorInfo;
@@ -660,7 +609,7 @@
     return new Promise((resolve, reject) => {
       const messageId = crypto.randomUUID?.() || `msg-${Date.now()}`;
       const timeoutMs = payload.timeoutMs || this.messageTimeout;
-      
+
       const messageTmout = setTimeout(() => {
         if (this.pendingMessages.has(messageId)) {
           this.pendingMessages.delete(messageId);
@@ -669,10 +618,10 @@
         }
       }, timeoutMs);
 
-      this.pendingMessages.set(messageId, { 
-        resolve, 
+      this.pendingMessages.set(messageId, {
+        resolve,
         reject,
-        timeout: messageTmout 
+        timeout: messageTmout
       });
 
       try {
@@ -717,8 +666,8 @@
 
     if (this.socket) {
       try {
-        if (this.socket.readyState !== WebSocket.CLOSED && 
-            this.socket.readyState !== WebSocket.CLOSING) {
+        if (this.socket.readyState !== WebSocket.CLOSED &&
+          this.socket.readyState !== WebSocket.CLOSING) {
           console.debug('Closing WebSocket connection');
           this.socket.onclose = null;
           this.socket.close();
@@ -732,7 +681,7 @@
     if (this.state !== CONNECTION_STATES.DISCONNECTED) {
       this.setState(CONNECTION_STATES.DISCONNECTED);
     }
-    
+
     console.debug('WebSocket disconnected and cleaned up');
   };
 
@@ -750,11 +699,7 @@
     console.debug('WebSocketService instance destroyed');
   };
 
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = WebSocketService;
-  }
-  
-  // Export version and constants for debugging
+  // Expose version info
   window.WebSocketService.version = '1.1.0';
   window.WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
 
@@ -765,10 +710,10 @@
    *   - Added specific handling for code 1008 (Policy Violation)
    *   - Strengthened URL validation with security checks
    *   - Improved reconnection logic with better backoff and jitter
-   *   - Added detailed logging for connection states and errors
-   *   - Better cleanup of resources on disconnect/destroy
+   *   - Removed all localStorage usage for tokens or project IDs
    */
 
+  // Clean up all instances on page unload
   window.addEventListener('beforeunload', () => {
     console.debug(`${debugPrefix} Cleaning up before page unload`);
     if (window.WebSocketService) {

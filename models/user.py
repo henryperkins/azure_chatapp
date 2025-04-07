@@ -16,6 +16,7 @@ from sqlalchemy import (
     Index,
     ForeignKey,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.hybrid import hybrid_property
 from typing import List, TYPE_CHECKING
@@ -67,6 +68,9 @@ class User(Base):
     )
     token_version: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, server_default="0"
+    )
+    preferences: Mapped[dict] = mapped_column(
+        JSONB, default={}, nullable=False, server_default="'{}'::jsonb"
     )
 
     # Relationships

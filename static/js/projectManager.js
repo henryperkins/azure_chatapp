@@ -142,7 +142,6 @@
       }
 
       currentProject = projectData;
-      localStorage.setItem("selectedProjectId", currentProject.id);
 
       // Clean any 'null' string for knowledge_base_id
       if (currentProject.knowledge_base_id === "null") {
@@ -754,21 +753,40 @@
    */
   async function checkAuthState() {
     try {
-      if (!window.auth?.isAuthenticated) {
+      if (!window.auth?.verify) {
         console.warn("[projectManager] Auth module not available");
         return false;
       }
 
-      const authState = await window.auth.isAuthenticated();
+      // Use verifyAuthState which checks cookies and handles refresh
+      const authState = await window.auth.verify(true); // bypass cache
       if (!authState) {
         emitEvent("authCheckFailed", {});
+        // Clear any potential local storage tokens
+        if (window.localStorage) {
+          window.localStorage.removeItem('access_token');
+          window.localStorage.removeItem('refresh_token');
+        }
       }
       return authState;
     } catch (e) {
       console.error("[projectManager] Auth check error:", e);
+      // Standardized error format matching auth.js
+      emitEvent("authError", {
+        error: new Error(e.message || "Authentication failed"),
+        code: e.code || "AUTH_ERROR"
+      });
       return false;
     }
   }
+
+  // Add token refresh awareness
+  document.addEventListener("authStateChanged", (e) => {
+    if (e.detail.authenticated === false) {
+      // Handle token refresh failure
+      emitEvent("authExpired", {});
+    }
+  });
 
   /**
    * Checks API endpoint compatibility for a project with timeout and retries.

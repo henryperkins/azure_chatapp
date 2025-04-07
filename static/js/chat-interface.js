@@ -1,6 +1,7 @@
 /**
  * chat-interface.js
- * Chat interface that coordinates all components
+ * Chat interface that coordinates all components,
+ * now with no localStorage usage or cross-origin references.
  */
 
 // Converted from ES modules to global references
@@ -10,20 +11,23 @@ const MessageService = window.MessageService;
 const UIComponents = window.UIComponents;
 
 // Initialize the interface
-window.ChatInterface = function(options = {}) {
-  this._setupProjectContext = function() {
+window.ChatInterface = function (options = {}) {
+  // Removed localStorage usage: now simply stores projectId in memory
+  this._setupProjectContext = function () {
     this.isProjectsPage = window.location.pathname.includes('/projects');
     if (this.isProjectsPage) {
       const pathSegments = window.location.pathname.split('/');
-      this.projectId = pathSegments[pathSegments.indexOf('projects') + 1];
-      if (this.projectId) {
-        localStorage.setItem('selectedProjectId', this.projectId);
+      // Attempt to retrieve the projectId from URL segments
+      const projIndex = pathSegments.indexOf('projects');
+      if (projIndex >= 0 && pathSegments[projIndex + 1]) {
+        this.projectId = pathSegments[projIndex + 1];
       }
     }
   };
+
   this.notificationFunction = (message, type) => {
     if (window.Notifications) {
-      switch(type) {
+      switch (type) {
         case 'error': return window.Notifications.apiError(message);
         case 'success': return window.Notifications.apiSuccess?.(message);
         default: return console.log(`[${type.toUpperCase()}] ${message}`);
@@ -31,22 +35,22 @@ window.ChatInterface = function(options = {}) {
     }
     return (options.showNotification || window.showNotification || console.log)(message, type);
   };
-  
+
   this.container = document.querySelector(options.containerSelector || '#chatUI');
   this.titleEl = document.querySelector(options.titleSelector || '#chatTitle');
-  
+
   // Set up container selectors
   this._setupProjectContext();
-  
+
   // Determine correct selectors based on context
   this.containerSelector = options.containerSelector || (this.isProjectsPage ? '#projectChatUI' : '#chatUI');
   this.messageContainerSelector = options.messageContainerSelector || (this.isProjectsPage ? '#projectChatMessages' : '#conversationArea');
   this.inputSelector = options.inputSelector || (this.isProjectsPage ? '#projectChatInput' : '#chatInput');
   this.sendButtonSelector = options.sendButtonSelector || (this.isProjectsPage ? '#projectChatSendBtn' : '#sendBtn');
-  
+
   console.log('ChatInterface selectors:', {
     container: this.containerSelector,
-    messages: this.messageContainerSelector, 
+    messages: this.messageContainerSelector,
     input: this.inputSelector,
     sendButton: this.sendButtonSelector
   });
@@ -58,13 +62,19 @@ window.ChatInterface = function(options = {}) {
 
   this.currentChatId = null;
   this.currentImage = null;
-  
+
   // Track if we're initialized
   this.initialized = false;
 };
 
-// Initialize the interface
-window.ChatInterface.prototype.initialize = async function() {
+// Handle sending messages from UI
+window.ChatInterface.prototype._handleSendMessage = function (message) {
+  // Implement message sending logic
+  console.log("Sending message:", message);
+  // e.g., this.sendMessageToServer(message);
+};
+
+window.ChatInterface.prototype.initialize = async function () {
   // Check dependencies
   if (!window.WebSocketService) {
     console.warn('WebSocketService dependency not loaded - attempting dynamic load');
@@ -74,7 +84,7 @@ window.ChatInterface.prototype.initialize = async function() {
       script.onload = resolve;
       document.head.appendChild(script);
     });
-    
+
     if (!window.WebSocketService) {
       throw new Error('WebSocketService dependency not loaded after dynamic load');
     }
@@ -85,10 +95,10 @@ window.ChatInterface.prototype.initialize = async function() {
     console.warn("Chat interface already initialized");
     return;
   }
-  
+
   // Initialize project context
   this._setupProjectContext();
-  
+
   // Update selectors based on page context
   if (this.isProjectsPage) {
     this.containerSelector = '#projectChatUI';
@@ -96,7 +106,6 @@ window.ChatInterface.prototype.initialize = async function() {
     this.inputSelector = '#projectChatInput';
     this.sendButtonSelector = '#projectChatSendBtn';
   } else {
-    // Default selectors for index.html/main chat
     this.containerSelector = '#chatUI';
     this.messageContainerSelector = '#conversationArea';
     this.inputSelector = '#chatInput';
@@ -135,7 +144,7 @@ window.ChatInterface.prototype.initialize = async function() {
     this.messageService.updateModelConfig(window.MODEL_CONFIG);
   }
 
-  // Create UI components, passing the message container selector
+  // Create UI components
   this.ui = new window.UIComponents({
     messageContainerSelector: this.messageContainerSelector,
     inputSelector: this.inputSelector,
@@ -171,8 +180,6 @@ window.ChatInterface.prototype.initialize = async function() {
         this.notificationFunction("No conversation selected", "error");
         return;
       }
-      
-      // Confirm before deleting
       if (confirm("Are you sure you want to delete this conversation? This cannot be undone.")) {
         this.deleteConversation(this.currentChatId)
           .then(success => {
@@ -190,14 +197,14 @@ window.ChatInterface.prototype.initialize = async function() {
   // Check dependencies
   const requiredServices = ['ConversationService', 'MessageService', 'WebSocketService', 'UIComponents'];
   const missingServices = requiredServices.filter(service => !window[service]);
-  
+
   if (missingServices.length > 0) {
     const errorMsg = `Required services not loaded: ${missingServices.join(', ')}`;
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  // Create new instance of ConversationService with required callbacks
+  // Create new instance of ConversationService
   this.conversationService = new window.ConversationService({
     onConversationLoaded: (conversation) => {
       this.currentConversation = conversation;
@@ -211,24 +218,20 @@ window.ChatInterface.prototype.initialize = async function() {
 
   // Initial load or creation
   this._handleInitialConversation();
-  
-  // Mark as initialized
+
   this.initialized = true;
-  
-  // Optional: broadcast initialization complete
   document.dispatchEvent(new CustomEvent('chatInterfaceInitialized'));
 };
 
 // Handle initial conversation loading or creation
-window.ChatInterface.prototype._handleInitialConversation = function() {
+window.ChatInterface.prototype._handleInitialConversation = function () {
   if (this.currentChatId) {
     // Load existing conversation if ID is in URL
     this.loadConversation(this.currentChatId);
   } else {
-    // Verify auth state before proceeding
+    // Verify auth state
     window.auth?.verify?.().then(isAuthenticated => {
       if (!isAuthenticated) {
-        // Show login required message
         const loginMsg = document.getElementById("loginRequiredMessage");
         if (loginMsg) loginMsg.classList.remove("hidden");
         return;
@@ -246,7 +249,7 @@ window.ChatInterface.prototype._handleInitialConversation = function() {
         checkAuthReady();
       });
     }).then(() => {
-      // Only create conversation if still no chatId
+      // Create conversation if still no chatId
       if (!this.currentChatId) {
         this.createNewConversation().catch((error) => {
           window.ChatUtils?.handleError?.('Creating new conversation', error, this.notificationFunction);
@@ -261,11 +264,9 @@ window.ChatInterface.prototype._handleInitialConversation = function() {
 };
 
 // Set up event listeners for custom events
-window.ChatInterface.prototype._setupEventListeners = function() {
-  // Handle regenerateChat event
+window.ChatInterface.prototype._setupEventListeners = function () {
   document.addEventListener('regenerateChat', () => {
     if (!this.currentChatId) return;
-    
     const lastUserMessage = this._findLastUserMessage();
     if (lastUserMessage) {
       this.ui.messageList.removeLastAssistantMessage();
@@ -274,8 +275,7 @@ window.ChatInterface.prototype._setupEventListeners = function() {
       this.notificationFunction('No message to regenerate', 'warning');
     }
   });
-  
-  // Handle copyMessage event
+
   document.addEventListener('copyMessage', () => {
     const lastAssistantMessage = this._findLastAssistantMessage();
     if (lastAssistantMessage) {
@@ -284,18 +284,18 @@ window.ChatInterface.prototype._setupEventListeners = function() {
         .catch(err => window.ChatUtils?.handleError?.('Copying message', err, this.notificationFunction));
     }
   });
-  
-  // Listen for URL changes
+
+  // Listen for URL changes (browser nav)
   window.addEventListener('popstate', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const chatId = urlParams.get('chatId');
-    
+
     if (chatId && chatId !== this.currentChatId) {
       this.loadConversation(chatId);
     }
   });
 
-  // Set up model config change listener
+  // Listen for model config changes
   document.addEventListener('modelConfigChanged', (e) => {
     if (this.messageService && e.detail) {
       console.log("ChatInterface: Updating message service with new model config");
@@ -304,63 +304,62 @@ window.ChatInterface.prototype._setupEventListeners = function() {
   });
 };
 
-// Find the last user message for regeneration
-window.ChatInterface.prototype._findLastUserMessage = function() {
-  if (!this.conversationService.currentConversation?.messages) return null;
-  
-  const messages = this.conversationService.currentConversation.messages;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'user') {
-      return messages[i].content;
+// Helper: find the last user message for regeneration
+window.ChatInterface.prototype._findLastUserMessage = function () {
+  const conv = this.conversationService.currentConversation;
+  if (!conv?.messages) return null;
+
+  const msgs = conv.messages;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'user') {
+      return msgs[i].content;
     }
   }
   return null;
 };
 
-// Find the last assistant message for copying
-window.ChatInterface.prototype._findLastAssistantMessage = function() {
-  if (!this.conversationService.currentConversation?.messages) return null;
-  
-  const messages = this.conversationService.currentConversation.messages;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'assistant') {
-      return messages[i].content;
+// Helper: find the last assistant message for copying
+window.ChatInterface.prototype._findLastAssistantMessage = function () {
+  const conv = this.conversationService.currentConversation;
+  if (!conv?.messages) return null;
+
+  const msgs = conv.messages;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant') {
+      return msgs[i].content;
     }
   }
   return null;
 };
 
 // Load a conversation
-window.ChatInterface.prototype.loadConversation = function(chatId) {
+window.ChatInterface.prototype.loadConversation = function (chatId) {
   if (!chatId || !window.ChatUtils?.isValidUUID(chatId)) {
     return Promise.reject(new Error('No conversation ID provided'));
   }
 
-  // Skip if already loading this conversation
+  // Skip if already loading
   if (this.currentChatId === chatId && this._isLoadingConversation) {
     return Promise.resolve(false);
   }
 
   console.log(`Loading conversation with ID: ${chatId}`);
   this._isLoadingConversation = true;
-  
-  // Store previous chat ID for proper cleanup
+
   const previousChatId = this.currentChatId;
-  
-  // Update current ID first to avoid race conditions
   this.currentChatId = chatId;
-  
-  // Gracefully disconnect from previous WebSocket and clear messageService
+
+  // Disconnect from previous WebSocket
   if (this.wsService && this.wsService.chatId !== chatId && this.wsService.isConnected()) {
     console.log('Disconnecting from previous WebSocket before connecting to new conversation');
     this.wsService.disconnect();
   }
-  
+
   // Clear message service state
   if (this.messageService) {
     this.messageService.clear();
   }
-  
+
   // Clear UI if available
   if (this.ui?.messageList) {
     this.ui.messageList.clear();
@@ -371,41 +370,35 @@ window.ChatInterface.prototype.loadConversation = function(chatId) {
       this._isLoadingConversation = false;
       if (success) {
         console.log(`Successfully loaded conversation: ${chatId}`, this.conversationService.currentConversation);
-        
-        // Initialize message service with HTTP initially
-        // This ensures we have a working message service even if WebSocket fails
+
+        // Initialize message service w/ HTTP initially
         this.messageService.initialize(chatId, null);
-        
-        // Then attempt to connect the websocket
-        // Attempt WebSocket connection with better error handling
+
+        // Then try WebSocket
         this.wsService.connect(chatId)
           .then(() => {
-            console.log('WebSocket connected successfully, switching from HTTP to WebSocket mode');
-            // Re-initialize with WebSocket if connection succeeds
+            console.log('WebSocket connected successfully, switching to WebSocket mode');
             this.messageService.initialize(chatId, this.wsService);
           })
           .catch((error) => {
-            // Only show error if it's not the expected HTTP fallback error
             if (error && error.message === 'Using HTTP fallback') {
               console.log("Using HTTP fallback for messaging as expected");
             } else {
-              console.warn("WebSocket connection failed, continuing with HTTP fallback:", error);
+              console.warn("WebSocket connection failed, continuing HTTP fallback:", error);
             }
-            // Either way, ensure we're using HTTP mode
             this.messageService.initialize(chatId, null);
           });
-          
-        // Update URL if it doesn't match
+
+        // Update URL if mismatch
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('chatId') !== chatId) {
           window.history.pushState({}, '', `/?chatId=${chatId}`);
         }
-        
+
         // Show chat UI
         if (this.container) {
           this.container.classList.remove('hidden');
         }
-        
         const noChatMsg = document.getElementById("noChatSelectedMessage");
         if (noChatMsg) {
           noChatMsg.classList.add('hidden');
@@ -414,64 +407,59 @@ window.ChatInterface.prototype.loadConversation = function(chatId) {
         console.warn(`Failed to load conversation: ${chatId}`);
       }
       return success;
-    }).catch(error => {
+    })
+    .catch(error => {
       this._isLoadingConversation = false;
       console.error(`Error loading conversation ${chatId}:`, error);
-      // Ensure the error is propagated
       throw error;
     });
 };
 
 // Create a new conversation
-window.ChatInterface.prototype.createNewConversation = async function() {
+window.ChatInterface.prototype.createNewConversation = async function () {
   if (!this.conversationService) {
     throw new Error("Conversation service not initialized");
   }
-  
+
   try {
     console.log('Creating new conversation...');
-    
-    // Enhanced auth verification with proper timeouts and retries
+
     const MAX_RETRIES = 3;
-    const INIT_TIMEOUT = 2000; // 2s timeout for TokenManager init
-    const VERIFY_TIMEOUT = 5000; // 5s timeout for auth verification
-    
+    const INIT_TIMEOUT = 2000;  // 2s
+    const VERIFY_TIMEOUT = 5000; // 5s
+
     let authVerified = false;
     let lastError = null;
-    
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        // First ensure TokenManager is initialized with timeout
+        // Wait for TokenManager
         await Promise.race([
           new Promise((resolve) => {
             const checkInitialized = () => {
-              if (window.TokenManager?.isInitialized) {
-                resolve(true);
-              } else {
-                setTimeout(checkInitialized, 50);
-              }
+              if (window.TokenManager?.isInitialized) resolve(true);
+              else setTimeout(checkInitialized, 50);
             };
             checkInitialized();
           }),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('TokenManager initialization timeout')), INIT_TIMEOUT)
           )
         ]);
 
-        // Initialize auth if needed
+        // If not inited, init
         if (!window.auth?.isInitialized) {
           await window.auth.init();
         }
 
-        // Verify auth state with timeout
+        // Verify auth with timeout
         authVerified = await Promise.race([
           window.auth.isAuthenticated({ forceVerify: true }),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
           )
         ]);
-        
-        // If we have tokens but verification failed, try refresh
+
         if (!authVerified && window.TokenManager?.hasTokens?.()) {
           try {
             await window.TokenManager.refreshTokens();
@@ -481,18 +469,17 @@ window.ChatInterface.prototype.createNewConversation = async function() {
             lastError = refreshError;
           }
         }
-        
+
         if (authVerified) break;
-        
-        // Exponential backoff between retries
+
         if (attempt < MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt-1)));
+          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt - 1)));
         }
       } catch (error) {
         console.warn(`[chat-interface] Auth verification attempt ${attempt} failed:`, error);
         lastError = error;
         if (attempt < MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt-1)));
+          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt - 1)));
         }
       }
     }
@@ -500,8 +487,7 @@ window.ChatInterface.prototype.createNewConversation = async function() {
     if (!authVerified) {
       let errorMsg = "Authentication failed";
       let redirectToLogin = true;
-      
-      // More specific error messages
+
       if (lastError?.message?.includes('timeout')) {
         errorMsg = "Authentication check timed out - please try again";
       } else if (lastError?.message?.includes('TokenManager')) {
@@ -512,9 +498,8 @@ window.ChatInterface.prototype.createNewConversation = async function() {
         errorMsg = lastError.message;
       }
 
-      // Don't redirect for network errors
       if (lastError?.message?.includes('NetworkError') ||
-          lastError?.message?.includes('Failed to fetch')) {
+        lastError?.message?.includes('Failed to fetch')) {
         redirectToLogin = false;
         errorMsg = "Network error - please check your connection";
       }
@@ -526,16 +511,14 @@ window.ChatInterface.prototype.createNewConversation = async function() {
           error: errorMsg
         }
       }));
-      
-      // Show notification if UI is available
+
       if (this.notificationFunction) {
         this.notificationFunction(errorMsg, 'error');
       }
-      
       throw new Error(`Auth verification failed: ${errorMsg}`);
     }
-    
-    // Dispatch auth success event
+
+    // Dispatch auth success
     window.dispatchEvent(new CustomEvent('authStateChanged', {
       detail: {
         authenticated: true,
@@ -543,40 +526,83 @@ window.ChatInterface.prototype.createNewConversation = async function() {
       }
     }));
 
-    // Get current model from localStorage or MODEL_CONFIG
-    const currentModel = window.MODEL_CONFIG?.modelName ||
-                         localStorage.getItem("modelName") ||
-                         "claude-3-sonnet-20240229";
-                         
+    // We removed localStorage usage for modelName, so:
+    const currentModel = window.MODEL_CONFIG?.modelName || "claude-3-sonnet-20240229";
     console.log(`Using model: ${currentModel} for new conversation`);
-    
-    // Pass the model to createNewConversation in conversationService
+
+    // Attempt conversation creation
     let conversation;
     try {
-      const projectId = localStorage.getItem('selectedProjectId');
-      let conversation;
-      
-      if (projectId && window.projectManager?.createConversation) {
-        // Use project-specific creation if in project context
-        conversation = await window.projectManager.createConversation(projectId);
+      // We no longer store selectedProjectId in localStorage, so rely on this.projectId if present
+      if (this.projectId && window.projectManager?.createConversation) {
+        conversation = await window.projectManager.createConversation(this.projectId);
       } else {
-        // Fall back to standard conversation creation
         conversation = await this.conversationService.createNewConversation();
       }
 
-      // Verify the conversation was properly created
       if (!conversation?.id) {
         throw new Error('Invalid conversation response from server');
       }
+      console.log(`New conversation created successfully with ID: ${conversation.id}`);
+      this.currentChatId = conversation.id;
 
+      window.history.pushState({}, '', `/?chatId=${conversation.id}`);
+
+      if (this.messageService) {
+        if (window.MODEL_CONFIG) {
+          this.messageService.updateModelConfig(window.MODEL_CONFIG);
+        }
+        this.messageService.initialize(conversation.id, null);
+        console.log('Message service initialized with HTTP mode');
+
+        const MAX_WS_RETRIES = 2;
+        let wsConnected = false;
+
+        for (let attempt = 1; attempt <= MAX_WS_RETRIES; attempt++) {
+          try {
+            console.log(`Attempting WebSocket connection (attempt ${attempt})...`);
+            await this.wsService.connect(conversation.id);
+            wsConnected = true;
+            console.log('WebSocket connected successfully, switching to WebSocket mode');
+            this.messageService.initialize(conversation.id, this.wsService);
+            break;
+          } catch (error) {
+            console.warn(`WebSocket connection attempt ${attempt} failed:`, error);
+            if (attempt === MAX_WS_RETRIES) {
+              const msg = error.message.includes('auth')
+                ? 'WebSocket authentication failed - using HTTP mode'
+                : 'WebSocket connection failed - using HTTP mode';
+              this.notificationFunction(msg, 'warning');
+            }
+            if (attempt < MAX_WS_RETRIES) {
+              await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+            }
+          }
+        }
+
+        if (!wsConnected) {
+          console.log("Using HTTP fallback for messaging");
+          this.messageService.initialize(conversation.id, null);
+        }
+      } else {
+        console.error('Message service not available');
+        window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
+        return;
+      }
+
+      if (this.container) {
+        this.container.classList.remove('hidden');
+      }
+      const noChatMsg = document.getElementById("noChatSelectedMessage");
+      if (noChatMsg) {
+        noChatMsg.classList.add('hidden');
+      }
       return conversation;
     } catch (error) {
       console.error('Conversation creation failed:', error);
-      
       let message = 'Failed to create conversation';
       let showLogin = false;
-      
-      // More specific error handling
+
       if (error.message.includes('Not authenticated')) {
         message = 'Session expired - please log in again';
         showLogin = true;
@@ -588,7 +614,6 @@ window.ChatInterface.prototype.createNewConversation = async function() {
         message = 'Network error - please check your connection';
       }
 
-      // Update auth state if needed
       if (showLogin) {
         window.dispatchEvent(new CustomEvent('authStateChanged', {
           detail: {
@@ -598,94 +623,19 @@ window.ChatInterface.prototype.createNewConversation = async function() {
           }
         }));
       }
-
-      // Show notification
       if (this.notificationFunction) {
         this.notificationFunction(message, 'error');
       }
-
       throw error;
     }
-    console.log(`New conversation created successfully with ID: ${conversation.id}`);
-    this.currentChatId = conversation.id;
-    
-    // Update URL
-    window.history.pushState({}, '', `/?chatId=${conversation.id}`);
-    
-    // Initialize message service with latest config
-    if (this.messageService) {
-      // Ensure the message service has the latest config
-      if (window.MODEL_CONFIG) {
-        this.messageService.updateModelConfig(window.MODEL_CONFIG);
-      }
-      
-      this.messageService.initialize(conversation.id, null);
-      console.log('Message service initialized with HTTP mode');
-      
-      // Enhanced WebSocket connection with retries and better error handling
-      const MAX_WS_RETRIES = 2;
-      let wsConnected = false;
-      
-      for (let attempt = 1; attempt <= MAX_WS_RETRIES; attempt++) {
-        try {
-          console.log(`Attempting WebSocket connection (attempt ${attempt})...`);
-          await this.wsService.connect(conversation.id);
-          wsConnected = true;
-          console.log('WebSocket connected successfully, switching from HTTP to WebSocket mode');
-          
-          // Re-initialize with WebSocket
-          this.messageService.initialize(conversation.id, this.wsService);
-          break;
-        } catch (error) {
-          console.warn(`WebSocket connection attempt ${attempt} failed:`, error);
-          
-          // Only show error notification on final attempt
-          if (attempt === MAX_WS_RETRIES) {
-            const msg = error.message.includes('auth')
-              ? 'WebSocket authentication failed - using HTTP mode'
-              : 'WebSocket connection failed - using HTTP mode';
-            this.notificationFunction(msg, 'warning');
-          }
-          
-          // Exponential backoff between retries (500ms, 1000ms)
-          if (attempt < MAX_WS_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-          }
-        }
-      }
-      
-      // Fall back to HTTP if WebSocket failed
-      if (!wsConnected) {
-        console.log("Using HTTP fallback for messaging");
-        this.messageService.initialize(conversation.id, null);
-      }
-    } else {
-      console.error('Message service not available');
-      window.ChatUtils?.handleError?.('Message service not initialized', new Error('Message service not available'), this.notificationFunction);
-      return;
-    }
-    
-    // Show chat UI
-    if (this.container) {
-      this.container.classList.remove('hidden');
-    }
-    
-    const noChatMsg = document.getElementById("noChatSelectedMessage");
-    if (noChatMsg) {
-      noChatMsg.classList.add('hidden');
-    }
-    
-    return conversation;
   } catch (error) {
     console.error('Failed to create conversation:', error);
-    
-    // Categorize errors and provide appropriate feedback
     let userMessage = 'Failed to create conversation';
     let isAuthError = false;
-    
+
     if (error.message.includes('Not authenticated') ||
-        error.message.includes('401') ||
-        error.message.includes('token')) {
+      error.message.includes('401') ||
+      error.message.includes('token')) {
       userMessage = 'Session expired - please log in again';
       isAuthError = true;
     } else if (error.message.includes('timeout')) {
@@ -694,7 +644,6 @@ window.ChatInterface.prototype.createNewConversation = async function() {
       userMessage = 'Network error - please check your connection';
     }
 
-    // Update auth state if needed
     if (isAuthError) {
       window.dispatchEvent(new CustomEvent('authStateChanged', {
         detail: {
@@ -704,25 +653,20 @@ window.ChatInterface.prototype.createNewConversation = async function() {
         }
       }));
     }
-
-    // Show notification to user
     if (this.notificationFunction) {
       this.notificationFunction(userMessage, 'error');
     }
 
-    // Clean up any partial state
     this.currentChatId = null;
     if (this.wsService?.isConnected()) {
       this.wsService.disconnect();
     }
-
-    // Re-throw the error for upstream handling
     throw error;
   }
 };
 
 // Change the target container for message rendering
-window.ChatInterface.prototype.setTargetContainer = function(selector) {
+window.ChatInterface.prototype.setTargetContainer = function (selector) {
   if (!this.ui || !this.ui.messageList) {
     console.error("UI components not initialized yet.");
     return;
@@ -739,9 +683,9 @@ window.ChatInterface.prototype.setTargetContainer = function(selector) {
 };
 
 // Handle conversation loaded event
-window.ChatInterface.prototype._handleConversationLoaded = function(conversation) {
+window.ChatInterface.prototype._handleConversationLoaded = function (conversation) {
   console.log('Handling conversation loaded:', conversation);
-  
+
   if (!conversation) {
     console.error('No conversation data received');
     return;
@@ -758,15 +702,14 @@ window.ChatInterface.prototype._handleConversationLoaded = function(conversation
     console.warn('No messages in conversation');
     this.ui.messageList.renderMessages([]);
   }
-  
-  // Dispatch event for other components
+
   document.dispatchEvent(new CustomEvent('conversationLoaded', {
     detail: { conversation }
   }));
 };
 
 // Handle message received event
-window.ChatInterface.prototype._handleMessageReceived = function(message) {
+window.ChatInterface.prototype._handleMessageReceived = function (message) {
   this.ui.messageList.removeThinking();
   this.ui.messageList.appendMessage(
     message.role,
@@ -776,22 +719,20 @@ window.ChatInterface.prototype._handleMessageReceived = function(message) {
     message.redacted_thinking,
     message.metadata
   );
-  
-  // Dispatch event for other components
+
   document.dispatchEvent(new CustomEvent('messageReceived', {
     detail: { message }
   }));
-  
-  // Add to conversation message history
+
   if (this.conversationService.currentConversation) {
-    this.conversationService.currentConversation.messages =
-      this.conversationService.currentConversation.messages || [];
-    this.conversationService.currentConversation.messages.push(message);
+    const msgs = this.conversationService.currentConversation.messages || [];
+    msgs.push(message);
+    this.conversationService.currentConversation.messages = msgs;
   }
 };
 
-// UUID validation
-window.ChatInterface.prototype.isValidUUID = function(uuid) {
+// UUID validation helper
+window.ChatInterface.prototype.isValidUUID = function (uuid) {
   if (!uuid) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
 };
@@ -808,11 +749,12 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
   }
 
   try {
-    const projectId = localStorage.getItem("selectedProjectId");
+    // Rely on in-memory projectId if needed
+    const projectId = this.projectId;
     const success = await this.conversationService.deleteConversation(chatId, projectId);
 
     if (success) {
-      // If we deleted the current conversation, clear out the UI and reset state
+      // If we deleted the current conversation, clear out UI and reset state
       if (chatId === this.currentChatId) {
         this.currentChatId = null;
         this.ui.messageList.clear();
@@ -825,7 +767,7 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
           this.conversationService.currentConversation = null;
         }
 
-        // Remove chatId from the URL (so reloading the page won’t reload a deleted chat)
+        // Remove chatId from the URL so reloading won't reload a deleted chat
         const urlParams = new URLSearchParams(window.location.search);
         urlParams.delete("chatId");
         window.history.pushState({}, "", `${window.location.pathname}${urlParams.toString() ? `?${urlParams}` : ""}`);

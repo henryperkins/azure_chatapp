@@ -4,38 +4,108 @@
  * Component for managing knowledge base functionality
  */
 
-(function() {
+(function () {
+  'use strict';
+
   /**
    * Knowledge Base Component - Handles knowledge base functionality
+   * @typedef {Object} KnowledgeBaseOptions
+   * @property {string} [name] - Optional name for the knowledge base
+   *
+   * @class KnowledgeBaseComponent
    */
   class KnowledgeBaseComponent {
     /**
+     * @param {KnowledgeBaseOptions} [options] - Configuration options
+     */
+    /**
      * Initialize the knowledge base component
-     * @param {Object} options - Configuration options
+     * @param {Object} options - Configuration options (optional)
      */
     constructor(options = {}) {
       console.log('[DEBUG] Initializing KnowledgeBaseComponent');
-      
+
       // Verify required elements exist
       const requiredElements = [
-        'kbVersionDisplay', 'kbLastUsedDisplay', 
-        'knowledgeBaseEnabled', 'knowledgeBaseName'
+        'kbVersionDisplay', 'kbLastUsedDisplay',
+        'knowledgeBaseEnabled', 'knowledgeBaseName',
+        'knowledgeTab', 'knowledgeSearchInput', 'runKnowledgeSearchBtn',
+        'knowledgeResultsList', 'knowledgeSearchResults', 'knowledgeNoResults',
+        'kbStatusIndicator', 'knowledgeBaseActive', 'knowledgeBaseInactive',
+        'setupKnowledgeBaseBtn', 'reprocessFilesBtn', 'knowledgeBaseSettingsModal',
+        'knowledgeBaseForm', 'cancelKnowledgeBaseFormBtn', 'knowledgeBaseModelSelect',
+        'knowledgeFileCount', 'knowledgeFileSize', 'kbStatusText', 'kbStatusBadge',
+        'knowledgeResultModal', 'knowledgeResultTitle', 'knowledgeResultSource',
+        'knowledgeResultScore', 'knowledgeResultContent', 'useInChatBtn',
+        'knowledgeTopK' // Added element for top_k selection
       ];
+      let allElementsFound = true;
       requiredElements.forEach(id => {
         if (!document.getElementById(id)) {
-          console.error(`KB Component: Required element #${id} missing in DOM`);
+          console.warn(`KB Component: Optional element #${id} missing in DOM. Some features might be limited.`);
+          // Mark as false only if critical elements are missing, decide based on functionality
+          if (['knowledgeTab', 'knowledgeBaseActive', 'knowledgeBaseInactive'].includes(id)) {
+            allElementsFound = false;
+            console.error(`KB Component: CRITICAL element #${id} missing in DOM. Component cannot initialize properly.`);
+          }
         }
       });
-      
+
+      if (!allElementsFound) {
+        console.error("KB Component: Cannot initialize due to missing critical DOM elements.");
+        return; // Stop initialization if critical elements are missing
+      }
+
       // Add style for disabled model options
+      // Get access to UIUtils for styling if available, otherwise create directly
+      const utils = window.uiUtilsInstance;
       const style = document.createElement('style');
       style.textContent = `
         .disabled-option {
           opacity: 0.5;
           cursor: not-allowed;
+          color: #999; /* Optional: gray out text */
         }
         .disabled-option:hover {
-          background-color: inherit !important;
+          background-color: inherit !important; /* Prevent hover background */
+        }
+        /* Basic spinner style */
+        .spinner {
+          border: 2px solid rgba(0, 0, 0, 0.1);
+          border-left-color: #2563eb; /* Blue */
+          border-radius: 50%;
+          width: 1rem;
+          height: 1rem;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        /* Line clamp utility */
+        .line-clamp-3 {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        /* Notification styles (basic example) */
+        .notification {
+          padding: 0.75rem 1rem;
+          margin-bottom: 1rem;
+          border-radius: 0.375rem;
+          border: 1px solid transparent;
+        }
+        .notification.info {
+          color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb;
+        }
+        .notification.warning {
+          color: #856404; background-color: #fff3cd; border-color: #ffeeba;
+        }
+        .notification.error {
+          color: #721c24; background-color: #f8d7da; border-color: #f5c6cb;
+        }
+        .notification.success {
+          color: #155724; background-color: #d4edda; border-color: #c3e6cb;
         }
       `;
       document.head.appendChild(style);
@@ -43,11 +113,11 @@
       /* ===========================
          STATE MANAGEMENT
          =========================== */
-      this.state = { 
+      this.state = {
         knowledgeBase: null,
         isSearching: false
       };
-      
+
       /* ===========================
          ELEMENT REFERENCES
          =========================== */
@@ -58,38 +128,104 @@
         resultsContainer: document.getElementById("knowledgeResultsList"),
         resultsSection: document.getElementById("knowledgeSearchResults"),
         noResultsSection: document.getElementById("knowledgeNoResults"),
-        statusIndicator: document.getElementById("kbStatusIndicator"),
+        statusIndicator: document.getElementById("kbStatusIndicator"), // Main status area
+        statusText: document.getElementById("kbStatusText"), // Specific text for Active/Inactive
+        statusBadge: document.getElementById("kbStatusBadge"), // Optional badge
         activeSection: document.getElementById("knowledgeBaseActive"),
         inactiveSection: document.getElementById("knowledgeBaseInactive"),
         setupButton: document.getElementById("setupKnowledgeBaseBtn"),
         kbToggle: document.getElementById("knowledgeBaseEnabled"),
-        reprocessButton: document.getElementById("reprocessFilesBtn")
+        reprocessButton: document.getElementById("reprocessFilesBtn"),
+        settingsModal: document.getElementById('knowledgeBaseSettingsModal'),
+        settingsForm: document.getElementById('knowledgeBaseForm'),
+        cancelSettingsBtn: document.getElementById('cancelKnowledgeBaseFormBtn'),
+        modelSelect: document.getElementById('knowledgeBaseModelSelect'),
+        fileCountDisplay: document.getElementById("knowledgeFileCount"),
+        fileSizeDisplay: document.getElementById("knowledgeFileSize"),
+        kbNameDisplay: document.getElementById("knowledgeBaseName"),
+        kbVersionDisplay: document.getElementById("kbVersionDisplay"),
+        kbLastUsedDisplay: document.getElementById("kbLastUsedDisplay"),
+        resultModal: document.getElementById('knowledgeResultModal'),
+        resultTitle: document.getElementById('knowledgeResultTitle'),
+        resultSource: document.getElementById('knowledgeResultSource'),
+        resultScore: document.getElementById('knowledgeResultScore'),
+        resultContent: document.getElementById('knowledgeResultContent'),
+        useInChatBtn: document.getElementById('useInChatBtn'),
+        topKSelect: document.getElementById('knowledgeTopK') // Element for Top K
       };
 
-      // Add missing styles to search button if it exists
+      // Add missing focus styles to search button if it exists
       if (this.elements.searchButton) {
         this.elements.searchButton.classList.add(
-          'focus:outline-none', 
-          'focus:ring-2', 
-          'focus:ring-blue-500', 
+          'focus:outline-none',
+          'focus:ring-2',
+          'focus:ring-blue-500',
           'focus:ring-opacity-50'
         );
       }
-      
+
+      // Setup debounced search
       this.debouncedSearch = this._debounce(this.searchKnowledgeBase.bind(this), 300); // 300ms delay
+
+      // Bind all events
       this._bindEvents();
     }
 
+    /**
+     * Display a status alert message in the KB status indicator area.
+     * @param {string} message - The message to display.
+     * @param {'info' | 'warning' | 'error' | 'success'} type - The alert type.
+     * @private
+     */
     _showStatusAlert(message, type) {
-      const alert = this.elements.statusIndicator;
-      alert.innerHTML = `
-        <div class="notification ${type}">
-          ${message}
-          ${type === 'info' ? '<button class="ml-2" onclick="this.parentElement.remove()">×</button>' : ''}
-        </div>
-      `;
+      if (!this.elements.statusIndicator) return;
+
+      const utils = window.uiUtilsInstance;
+
+      // Use UIUtils if available, otherwise create directly
+      if (utils && utils.createElement) {
+        const alertDiv = utils.createElement('div', {
+          className: `notification ${type}`,
+          innerHTML: message
+        });
+
+        // Optional close button for info/warning
+        if (['info', 'warning'].includes(type)) {
+          const closeButton = utils.createElement('button', {
+            className: 'ml-2 text-lg leading-none font-semibold',
+            innerHTML: '&times;',
+            onclick: () => alertDiv.remove()
+          });
+          alertDiv.appendChild(closeButton);
+        }
+
+        this.elements.statusIndicator.appendChild(alertDiv);
+      } else {
+        // Fallback to direct DOM creation
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `notification ${type}`;
+        alertDiv.innerHTML = `${message}`;
+
+        // Optional close button for info/warning
+        if (['info', 'warning'].includes(type)) {
+          const closeButton = document.createElement('button');
+          closeButton.className = 'ml-2 text-lg leading-none font-semibold';
+          closeButton.innerHTML = '&times;'; // Close symbol
+          closeButton.onclick = () => alertDiv.remove();
+          alertDiv.appendChild(closeButton);
+        }
+
+        this.elements.statusIndicator.appendChild(alertDiv);
+      }
     }
 
+    /**
+     * Update text content and title of an element by ID.
+     * @param {string} elementId - The ID of the DOM element.
+     * @param {string} text - The text content to set.
+     * @param {string} fallbackLabel - Label for the title attribute.
+     * @private
+     */
     _updateElementText(elementId, text, fallbackLabel) {
       const el = document.getElementById(elementId);
       if (el) {
@@ -100,140 +236,10 @@
       }
     }
 
-    /* ===========================
-       PUBLIC METHODS
-       =========================== */
-    
     /**
-     * Render knowledge base information in the UI
-     * @param {Object|null} kb - Knowledge base data
-     */
-    renderKnowledgeBaseInfo(kb) {
-      const { activeSection, inactiveSection, statusIndicator, kbToggle } = this.elements;
-      
-      if (!activeSection || !inactiveSection) return;
-      
-      if (kb) {
-        console.log('[DEBUG] Rendering knowledge base info:', kb);
-        this.state.knowledgeBase = kb;
-
-        // Version display
-        const versionValue = kb.version ? `v${kb.version}` : 'v1 (default)';
-        this._updateElementText('kbVersionDisplay', versionValue, 'Schema Version');
-        
-        // Last used display with proper timezone handling
-        const lastUsed = kb.last_used ? 
-          new Date(kb.last_used).toLocaleString([], { 
-            year: 'numeric', month: 'short', day: 'numeric', 
-            hour: '2-digit', minute: '2-digit', timeZoneName: 'short' 
-          }) : 'Never used';
-        this._updateElementText('kbLastUsedDisplay', lastUsed, 'Last used');
-
-        // Add status alerts based on backend conditions
-        if (kb.is_active) {
-          if (kb.stats?.file_count === 0) {
-            this._showStatusAlert(
-              "Knowledge Base is empty - upload files to use with conversations",
-              "warning"
-            );
-          } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0) {
-            this._showStatusAlert(
-              "Files need processing - click 'Reprocess Files' to make them searchable",
-              "warning"
-            );
-          }
-          if (kb.stats?.unprocessed_files > 0) {
-            this._showStatusAlert(
-              `${kb.stats.unprocessed_files} files need processing`,
-              "info"
-            );
-          }
-        } else {
-          this._showStatusAlert(
-            "Knowledge Base is disabled - toggle to enable for conversations",
-            "warning"
-          );
-        }
-        
-        // Store the project_id in a data attribute for future reference
-        if (kb.project_id && activeSection) {
-          activeSection.dataset.projectId = kb.project_id;
-          console.log(`[DEBUG] Set KB project_id=${kb.project_id} in data attribute`);
-        } else if (window.projectManager?.currentProject?.id) {
-          // If KB doesn't have project_id, use the current project's ID
-          activeSection.dataset.projectId = window.projectManager.currentProject.id;
-          console.log(`[DEBUG] Using current project ID for KB: ${activeSection.dataset.projectId}`);
-        }
-        
-        // Store the knowledge base ID
-        if (kb.id && activeSection) {
-          activeSection.dataset.kbId = kb.id;
-        }
-        
-        // Update name and version elements
-        const nameElement = document.getElementById("knowledgeBaseName");
-        if (nameElement) {
-          nameElement.textContent = kb.name || "Project Knowledge Base";
-        }
-
-        const versionElement = document.getElementById("kbVersionDisplay");
-        if (versionElement) {
-          versionElement.textContent = `v${kb.version || 1}`;
-          versionElement.title = `Knowledge Base Schema Version ${kb.version || 1}`;
-        }
-
-        const lastUsedElement = document.getElementById("kbLastUsedDisplay");
-        if (lastUsedElement) {
-          lastUsedElement.textContent = kb.last_used 
-            ? window.uiUtilsInstance.formatDate(kb.last_used)
-            : "Never used";
-          lastUsedElement.title = kb.last_used 
-            ? `Last used at ${new Date(kb.last_used).toLocaleString()}`
-            : "This knowledge base has never been queried";
-        }
-        
-        // Update toggle state
-        if (kbToggle) {
-          kbToggle.checked = kb.is_active !== false; // True unless explicitly false
-        }
-        
-        // Update model selection
-        this._updateModelSelection(kb.embedding_model);
-        
-        // Update stats
-        this._updateKnowledgeBaseStats(kb.stats);
-        
-        // Update status text
-        this._updateStatusIndicator(kb.is_active !== false);
-        
-        // Show active section, hide inactive
-        activeSection.classList.remove("hidden");
-        inactiveSection.classList.add("hidden");
-        
-        // Update upload buttons state
-        this._updateUploadButtonsState(true, kb.is_active !== false);
-      } else {
-        // No knowledge base
-        if (activeSection) activeSection.classList.add("hidden");
-        if (inactiveSection) inactiveSection.classList.remove("hidden");
-        
-        // Update status indicator
-        if (statusIndicator) {
-          statusIndicator.textContent = "✗ Knowledge Base Required";
-          statusIndicator.className = "text-red-600 text-sm";
-        }
-        
-        // Update upload buttons state
-        this._updateUploadButtonsState(false, false);
-      }
-    }
-
-    /**
-     * Toggle knowledge base active state
-     * @param {boolean} enabled - Whether to enable the knowledge base
-     */
-    /**
-     * Get current project ID from multiple sources
+     * Get current project ID from multiple sources.
+     * Prioritizes active section data attribute, then localStorage, then projectManager.
+     * @returns {string|null} The current project ID or null if not found.
      * @private
      */
     _getCurrentProjectId() {
@@ -241,982 +247,1316 @@
       if (this.elements.activeSection?.dataset?.projectId) {
         return this.elements.activeSection.dataset.projectId;
       }
-      
       // 2. Check localStorage
       const storedId = localStorage.getItem('selectedProjectId');
       if (storedId) return storedId;
-      
-      // 3. Check projectManager
-      if (window.projectManager?.currentProject?.id) {
+      // 3. Check projectManager global (ensure it exists)
+      if (typeof window.projectManager !== 'undefined' && window.projectManager?.currentProject?.id) {
         return window.projectManager.currentProject.id;
       }
-      
+      console.warn('Could not determine current project ID.');
       return null;
     }
 
+    /**
+     * Formats a filename for display, truncating if necessary.
+     * @param {string} filename - The original filename.
+     * @returns {string} The formatted filename.
+     * @private
+     */
+    _formatSourceName(filename) {
+      if (!filename) return "Unknown source";
+      const maxLength = 25;
+      return filename.length > maxLength ? `${filename.substring(0, maxLength - 3)}...` : filename;
+    }
+
+    /* ===========================
+       PUBLIC METHODS
+       =========================== */
+
+    /**
+     * Render knowledge base information in the UI based on provided data.
+     * @param {Object|null} kb - Knowledge base data object, or null if none exists.
+     */
+    renderKnowledgeBaseInfo(kb) {
+      const { activeSection, inactiveSection, kbToggle, statusIndicator, kbNameDisplay, kbVersionDisplay, kbLastUsedDisplay } = this.elements;
+
+      // Clear previous status alerts
+      if (statusIndicator) statusIndicator.innerHTML = '';
+
+      if (!activeSection || !inactiveSection) {
+        console.error("KB Component: Active/Inactive sections not found in DOM.");
+        return;
+      }
+
+      if (kb) {
+        console.log('[DEBUG] Rendering knowledge base info:', kb);
+        this.state.knowledgeBase = kb;
+
+        // Store project and KB IDs in data attributes for reference
+        const projectId = this._getCurrentProjectId() || kb.project_id;
+        if (projectId && activeSection) {
+          activeSection.dataset.projectId = projectId;
+        }
+        if (kb.id && activeSection) {
+          activeSection.dataset.kbId = kb.id;
+        }
+
+        // Update KB Name
+        if (kbNameDisplay) {
+          kbNameDisplay.textContent = kb.name || "Project Knowledge Base";
+          kbNameDisplay.title = `Knowledge Base Name: ${kb.name || 'Default'}`;
+        }
+
+        // Update Version
+        const versionValue = kb.version ? `v${kb.version}` : 'v1';
+        if (kbVersionDisplay) {
+          kbVersionDisplay.textContent = versionValue;
+          kbVersionDisplay.title = `Schema Version: ${versionValue}`;
+        }
+
+        // Update Last Used
+        const lastUsedText = kb.last_used && typeof window.uiUtilsInstance?.formatDate === 'function'
+          ? window.uiUtilsInstance.formatDate(kb.last_used)
+          : kb.last_used
+            ? new Date(kb.last_used).toLocaleString()
+            : "Never used";
+        if (kbLastUsedDisplay) {
+          kbLastUsedDisplay.textContent = lastUsedText;
+          kbLastUsedDisplay.title = kb.last_used ? `Last used: ${new Date(kb.last_used).toLocaleString()}` : "Not used yet";
+        }
+
+        // Update Toggle State (handle undefined/null as active)
+        const isActive = kb.is_active !== false;
+        if (kbToggle) {
+          kbToggle.checked = isActive;
+        }
+
+        // Update Embedding Model Selection
+        this._updateModelSelection(kb.embedding_model);
+
+        // Update Stats Display
+        this._updateKnowledgeBaseStats(kb.stats);
+
+        // Update Status Indicator (Text and Badge)
+        this._updateStatusIndicator(isActive);
+
+        // Show relevant status alerts based on KB state
+        if (isActive) {
+          if (kb.stats?.file_count === 0) {
+            this._showStatusAlert("Knowledge Base is empty - upload files to use.", "warning");
+          } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0 && kb.stats?.unprocessed_files > 0) {
+            // If files exist but none are processed, prompt reprocessing
+            this._showStatusAlert("Files need processing. Click 'Reprocess Files'.", "warning");
+          } else if (kb.stats?.unprocessed_files > 0) {
+            // If some files are unprocessed
+            this._showStatusAlert(`${kb.stats.unprocessed_files} file(s) need processing.`, "info");
+          }
+        } else {
+          this._showStatusAlert("Knowledge Base is disabled. Toggle on to use.", "warning");
+        }
+
+        // Show active section, hide inactive
+        activeSection.classList.remove("hidden");
+        inactiveSection.classList.add("hidden");
+
+        // Update upload/reprocess button states
+        this._updateUploadButtonsState(true, isActive);
+
+        // Load health status asynchronously
+        if (kb.id) {
+          this._loadKnowledgeBaseHealth(kb.id);
+        }
+
+      } else {
+        // No knowledge base exists for the project
+        this.state.knowledgeBase = null;
+        if (activeSection) activeSection.classList.add("hidden");
+        if (inactiveSection) inactiveSection.classList.remove("hidden");
+
+        // Update status indicator for inactive state
+        this._updateStatusIndicator(false); // Show as inactive/required
+        if (this.elements.statusText) this.elements.statusText.textContent = "Setup Required";
+        this._showStatusAlert("Knowledge Base needed. Click 'Setup' to begin.", "info");
+
+
+        // Disable upload/reprocess buttons
+        this._updateUploadButtonsState(false, false);
+      }
+    }
+
+    /**
+     * Toggle the knowledge base active state via API call.
+     * @param {boolean} enabled - The desired state (true for enabled, false for disabled).
+     */
     async toggleKnowledgeBase(enabled) {
       const projectId = this._getCurrentProjectId();
       if (!projectId) {
-        console.warn('No active project selected');
-        window.showNotification("Please select a project first", "error");
+        console.warn('Toggle KB failed: No active project selected');
+        if (window.showNotification) {
+          window.showNotification("Please select a project first", "error");
+        }
+        // Revert UI if toggle element exists
+        if (this.elements.kbToggle) this.elements.kbToggle.checked = !enabled;
         return;
       }
-      
-      const toggle = this.elements.kbToggle || document.getElementById('knowledgeBaseEnabled');
-      if (!toggle) {
-        console.error('Cannot find knowledge base toggle element');
-        return;
-      }
-      const originalState = toggle.checked;
-      
+
+      const toggle = this.elements.kbToggle;
+      const originalState = toggle ? toggle.checked : !enabled; // Store original state before optimistic update
+
       // Optimistic UI update
-      toggle.checked = enabled;
-      window.showNotification(
-        `${enabled ? "Enabling" : "Disabling"} knowledge base...`,
-        "info"
-      );
-      
+      if (toggle) toggle.disabled = true; // Disable during request
+      this._updateStatusIndicator(enabled); // Update text/badge immediately
+      if (window.showNotification) {
+        window.showNotification(`${enabled ? "Enabling" : "Disabling"} knowledge base...`, "info");
+      }
+
       try {
-        // Use the correct toggle endpoint with the proper project ID
         await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases/toggle`,
           "POST",
           { enable: enabled }
         );
-        
-        // Store KB status in localStorage for the chat to access
+
+        // Update localStorage for potential cross-component use (e.g., chat)
         localStorage.setItem(`kb_enabled_${projectId}`, String(enabled));
-        
-        // Also update cache in knowledgeBaseState if available
+
+        // Invalidate cache if a state manager is available
         if (window.knowledgeBaseState?.invalidateCache) {
           window.knowledgeBaseState.invalidateCache(projectId);
         }
-        
-        window.showNotification(
-          `Knowledge base ${enabled ? "enabled" : "disabled"}`,
-          "success"
-        );
-        
-        // Refresh stats and KB info
-        if (window.projectManager) {
-          await Promise.all([
-            window.projectManager.loadProjectStats(projectId),
-            window.projectManager.loadProjectDetails(projectId) // Reload the full project
-          ]);
-          
-          // If we can get the KB ID, load its health
-          const currentProject = window.projectManager.currentProject();
-          if (currentProject?.knowledge_base_id) {
-            await this._loadKnowledgeBaseHealth(currentProject.knowledge_base_id);
-          }
+
+        if (window.showNotification) {
+          window.showNotification(`Knowledge base ${enabled ? "enabled" : "disabled"}`, "success");
         }
+
+        // Refresh project details and stats after toggle
+        if (window.projectManager?.loadProjectDetails) {
+          const project = await window.projectManager.loadProjectDetails(projectId);
+          // Re-render KB info with updated data from the project
+          this.renderKnowledgeBaseInfo(project?.knowledge_base);
+        } else {
+          // Fallback if projectManager isn't available: update internal state and re-render partially
+          if (this.state.knowledgeBase) this.state.knowledgeBase.is_active = enabled;
+          this.renderKnowledgeBaseInfo(this.state.knowledgeBase); // Re-render with potentially stale data but correct active state
+        }
+
+
       } catch (err) {
         console.error("Error toggling knowledge base:", err);
         // Revert UI on error
         if (toggle) toggle.checked = originalState;
-        window.showNotification(
-          `Failed to toggle knowledge base: ${err.message || "Unknown error"}`,
-          "error"
-        );
+        this._updateStatusIndicator(originalState);
+        if (window.showNotification) {
+          window.showNotification(`Failed to toggle knowledge base: ${err.message || "Unknown error"}`, "error");
+        }
+      } finally {
+        if (toggle) toggle.disabled = false; // Re-enable toggle
       }
     }
 
     /**
-     * Search the knowledge base with the given query
-     * @param {string} query - Search query
+     * Search the knowledge base with the given query.
+     * Uses debouncing via `this.debouncedSearch`.
+     * @param {string} query - The search query string.
      */
     async searchKnowledgeBase(query) {
       const projectId = this._getCurrentProjectId();
       if (!projectId) {
-        console.error('KB Search failed - no valid project selected');
-        window.showNotification("Please select a project first", "error");
-        this.state.isSearching = false;
-        if (typeof this._hideSearchLoading === 'function') {
-            this._hideSearchLoading();
+        console.error('KB Search failed: No valid project selected');
+        if (window.showNotification) {
+          window.showNotification("Please select a project first", "error");
         }
-        return Promise.reject('No project selected');
+        this._hideSearchLoading();
+        return; // Don't proceed
       }
 
-      if (!query || query.trim().length < 2) {
-        window.showNotification("Search query must be at least 2 characters", "warning");
+      const trimmedQuery = query ? query.trim() : '';
+      if (trimmedQuery.length < 2) {
+        if (window.showNotification) {
+          window.showNotification("Search query must be at least 2 characters", "warning");
+        }
+        this._hideSearchLoading(); // Clear loading if query is too short
+        this._showNoResults(); // Show no results state
         return;
       }
 
-      // Set loading state timeout (5s)
-      const loadingTimeout = setTimeout(() => {
+      // Prevent multiple simultaneous searches
+      if (this.state.isSearching) {
+        console.log("Search already in progress, skipping.");
+        return;
+      }
+
+      this.state.isSearching = true;
+      this._showSearchLoading();
+
+      // Get top_k value from UI or use default
+      const topK = this.elements.topKSelect ? parseInt(this.elements.topKSelect.value, 10) : 5;
+
+      // Set a reasonable timeout for the API request (e.g., 10 seconds)
+      const requestTimeoutMs = 10000;
+      let loadingTimeoutId = setTimeout(() => {
         if (this.state.isSearching) {
-          this.state.isSearching = false;
-          window.showNotification("Search taking longer than expected - please wait", "info");
+          if (window.showNotification) {
+            window.showNotification("Search is taking longer than expected...", "info");
+          }
         }
-      }, 5000);
+      }, 5000); // Notify after 5 seconds
 
       try {
-        if (typeof this._showSearchLoading === 'function') {
-          this._showSearchLoading();
-        }
-        this.state.isSearching = true;
-        
-        // Get top_k value from UI or use default
-        const topK = document.getElementById('knowledgeTopK')?.value || 5;
-        
-        // Use explicit 5s timeout for the search request
         const response = await window.apiRequest(
           `/api/projects/${projectId}/knowledge-bases/search`,
           "POST",
           {
-            query: query.trim(),
-            top_k: parseInt(topK, 10)
+            query: trimmedQuery,
+            top_k: topK
           },
           0, // retryCount
-          5000 // timeoutMs
+          requestTimeoutMs // timeoutMs
         );
 
-        clearTimeout(loadingTimeout);
-        this.state.isSearching = false;
-        
-        // Ensure results is always an array
+        // Ensure results is always an array, even if API returns null/undefined
         const results = Array.isArray(response.data?.results) ? response.data.results : [];
+
         if (results.length === 0) {
-          window.showNotification("No matching results found", "info");
-        }
-        
-        if (typeof this._renderSearchResults === 'function') {
+          if (window.showNotification) {
+            window.showNotification("No matching results found", "info");
+          }
+          this._showNoResults();
+        } else {
           this._renderSearchResults(results);
         }
+
       } catch (err) {
-        clearTimeout(loadingTimeout);
-        this.state.isSearching = false;
-        
+        console.error("Knowledge base search error:", err);
         let errorMsg = "Search failed";
-        if (err.code === 'ETIMEDOUT') {
-          errorMsg = "Search timed out - try again or check knowledge base status";
+        if (err.message?.toLowerCase().includes('timeout')) {
+          errorMsg = "Search timed out. Please try again or check KB status.";
         } else if (err.response?.status === 404) {
-          errorMsg = "Project or knowledge base not found";
-        } else if (err.message?.includes("No project selected")) {
-          errorMsg = "Please select a project first";
+          errorMsg = "Knowledge base not found or not set up for this project.";
+        } else if (err.response?.data?.detail) {
+          errorMsg = `Search failed: ${err.response.data.detail}`;
         }
 
-        window.showNotification(errorMsg, "error");
-        if (typeof this._showNoResults === 'function') {
-          this._showNoResults();
+        if (window.showNotification) {
+          window.showNotification(errorMsg, "error");
         }
-        console.error("Knowledge base search error:", err);
+        this._showNoResults(); // Show no results on error
+      } finally {
+        clearTimeout(loadingTimeoutId); // Clear the notification timeout
+        this.state.isSearching = false;
+        this._hideSearchLoading(); // Ensure loading indicator is hidden
       }
     }
 
     /**
-     * Reprocess files in the knowledge base with enhanced status reporting
+     * Trigger the reprocessing of files in the knowledge base.
+     * Uses the dedicated reindexing endpoint.
      */
     async reprocessFiles() {
       const projectId = this._getCurrentProjectId();
       if (!projectId) {
-        window.showNotification("Please select a project first", "error");
+        if (window.showNotification) {
+          window.showNotification("Please select a project first", "error");
+        }
         return;
       }
 
       const reprocessBtn = this.elements.reprocessButton;
+      let originalButtonContent = '';
       if (reprocessBtn) {
-        // Set button to a "loading" state
-        const originalText = reprocessBtn.innerHTML;
+        originalButtonContent = reprocessBtn.innerHTML;
+        reprocessBtn.disabled = true;
         reprocessBtn.innerHTML = `
           <div class="inline-flex items-center">
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        Processing...
-      </div>
-    `;
-        reprocessBtn.disabled = true;
+            <div class="spinner mr-2"></div>
+            Processing...
+          </div>`;
       }
 
       try {
-        // Optional: let user force a complete rebuild of the vector store
-        // by passing { force_reindex: true } if desired:
-        const requestBody = {
-          force_reindex: true
-        };
+        if (window.showNotification) {
+          window.showNotification("Requesting file reprocessing...", "info");
+        }
 
-        window.showNotification("Reprocessing files for search...", "info");
+        // Option to force reindex if needed (e.g., add a checkbox later)
+        const requestBody = { force_reindex: true }; // Or false depending on UI choice
 
-        // *** 1) Use the new route for reindexing ***
         const response = await window.apiRequest(
-          `/api/projects/${projectId}/knowledge-base/reindex`,
+          `/api/projects/${projectId}/knowledge-base/reindex`, // Use the correct reindex endpoint
           "POST",
           requestBody
         );
 
-        // The new route typically returns something like:
-        // {
-        //   "success": true,
-        //   "message": "Queued X files for reindexing",
-        //   "queued_files": <number>,
-        //   "total_files": <number>
-        // }
+        const data = response.data || {};
+        const message = data.message || "File reprocessing queued successfully.";
+        const queuedCount = data.queued_files ?? -1; // Use nullish coalescing
 
-        // *** 2) Parse the new response fields ***
-        const queuedCount = response.data?.queued_files || 0;
-        const totalCount = response.data?.total_files || 0;
-        const successMsg = response.data?.message || "Files reindexed";
-
-        // Provide user feedback
-        if (queuedCount === 0 && totalCount === 0) {
-          window.showNotification("No files found to reprocess. Please upload files first.", "info");
-        } else {
-          // If the route includes a detailed 'message', we can show that:
-          window.showNotification(successMsg, "success");
+        if (window.showNotification) {
+          window.showNotification(message, "success");
         }
 
-        // *** 3) Refresh the file list, stats, etc. after reindex ***
-        if (window.projectManager) {
-          await Promise.all([
-            window.projectManager.loadProjectFiles(projectId),
-            window.projectManager.loadProjectStats(projectId),
-            window.projectManager.loadProjectDetails(projectId)
-          ]);
-
-          // Optionally check KB health again if you want to update the UI further
-          const currentProject = window.projectManager.currentProject();
-          if (currentProject?.knowledge_base_id) {
-            await this._loadKnowledgeBaseHealth(currentProject.knowledge_base_id);
+        if (queuedCount === 0 && data.total_files === 0) {
+          if (window.showNotification) {
+            window.showNotification("No files found to reprocess. Upload files first.", "info");
           }
         }
 
-      } catch (error) {
-        console.error("Reprocessing error:", error);
-
-        let errorMessage = "Failed to reprocess files";
-        const status = error?.response?.status;
-
-        // Return a more specific error for certain statuses
-        if (status === 422) {
-          errorMessage = "Cannot process files: validation failed";
-        } else if (status === 404) {
-          errorMessage = "Project or knowledge base not found";
-        } else if (status === 400) {
-          errorMessage = "Knowledge base setup required before processing files";
-        } else if (error?.response?.data?.detail) {
-          errorMessage = error.response.data.detail;
+        // Refresh project details, stats, and potentially file list after reindexing is requested
+        if (window.projectManager) {
+          await Promise.all([
+            window.projectManager.loadProjectDetails(projectId),
+            window.projectManager.loadProjectStats(projectId),
+            // Optionally reload files if a file list component exists
+            // window.projectManager.loadProjectFiles(projectId)
+          ]).then(([project]) => {
+            // Re-render KB info with potentially updated stats/status
+            this.renderKnowledgeBaseInfo(project?.knowledge_base);
+          });
+        } else {
+          // Fallback: attempt to reload KB health if possible
+          if (this.state.knowledgeBase?.id) {
+            await this._loadKnowledgeBaseHealth(this.state.knowledgeBase.id);
+          }
         }
 
-        window.showNotification(errorMessage, "error");
+
+      } catch (error) {
+        console.error("Reprocessing error:", error);
+        let errorMessage = "Failed to reprocess files";
+        if (error.response?.status === 404) {
+          errorMessage = "Project or knowledge base not found.";
+        } else if (error.response?.status === 400) {
+          errorMessage = "Cannot reprocess: Invalid request or KB not ready.";
+        } else if (error.response?.data?.detail) {
+          errorMessage = `Reprocessing failed: ${error.response.data.detail}`;
+        }
+        if (window.showNotification) {
+          window.showNotification(errorMessage, "error");
+        }
       } finally {
-        // *** 4) Restore button state ***
+        // Restore button state
         if (reprocessBtn) {
-          reprocessBtn.innerHTML = originalText;
-          reprocessBtn.disabled = false;
+          reprocessBtn.innerHTML = originalButtonContent;
+          reprocessBtn.disabled = false; // Re-enable button
+          // Re-evaluate disabled state based on current KB status after potential refresh
+          this._updateUploadButtonsState(!!this.state.knowledgeBase, this.state.knowledgeBase?.is_active !== false);
         }
       }
     }
+
 
     /* ===========================
        PRIVATE METHODS
        =========================== */
-    
+
     /**
-     * Bind event listeners
+     * Bind event listeners to DOM elements.
      * @private
      */
     _bindEvents() {
-      // Search button with error handling
-      if (this.elements.searchButton) {
+      // Search Button Click
+      if (this.elements.searchButton && this.elements.searchInput) {
         this.elements.searchButton.addEventListener("click", () => {
-          const query = this.elements.searchInput?.value?.trim();
-          if (query) this.searchKnowledgeBase(query);
+          const query = this.elements.searchInput.value;
+          this.searchKnowledgeBase(query); // Use non-debounced for explicit click
         });
-      } else {
-        console.warn('Knowledge search button not found in DOM');
       }
-      
-      // Search input (Enter key)
-      this.elements.searchInput?.addEventListener("keyup", (e) => {
-        if (e.key === "Enter") {
-          const query = e.target.value.trim();
-          if (query) this.debouncedSearch(query); // Call debounced search
-        }
-      });
-  
-      // Reprocess files button
+
+      // Search Input Keyup (for Enter key, using debounced search)
+      if (this.elements.searchInput) {
+        this.elements.searchInput.addEventListener("keyup", (e) => {
+          if (e.key === "Enter") {
+            const query = e.target.value;
+            this.searchKnowledgeBase(query); // Trigger search immediately on Enter
+            // Alternatively, use debounced: this.debouncedSearch(query);
+          }
+          // Optional: Trigger debounced search on input change after delay
+          // const query = e.target.value;
+          // if (query.trim().length >= 2) {
+          //     this.debouncedSearch(query);
+          // } else {
+          //      // Clear results if query is too short
+          //      if(this.elements.resultsContainer) this.elements.resultsContainer.innerHTML = '';
+          //      this._showNoResults();
+          // }
+        });
+      }
+
+      // Reprocess Files Button Click
       if (this.elements.reprocessButton) {
+        // Add focus styles dynamically
         this.elements.reprocessButton.classList.add(
-          'focus:outline-none',
-          'focus:ring-2',
-          'focus:ring-gray-500',
-          'focus:ring-opacity-50',
-          'transition-colors'
+          'focus:outline-none', 'focus:ring-2', 'focus:ring-indigo-500', 'focus:ring-opacity-50',
+          'transition-colors', 'duration-150'
         );
         this.elements.reprocessButton.addEventListener("click", () => this.reprocessFiles());
       }
-      
-      // KB settings button
+
+      // KB Settings Button (if one exists separately from setup)
       const kbSettingsBtn = document.getElementById("knowledgeBaseSettingsBtn");
       if (kbSettingsBtn) {
         kbSettingsBtn.addEventListener("click", () => this._showKnowledgeBaseModal());
       }
-      
-      // KB toggle
-      this.elements.kbToggle?.addEventListener("change", (e) => {
-        this.toggleKnowledgeBase(e.target.checked);
-      });
 
-      // Setup KB button
+      // KB Enable/Disable Toggle Change
+      if (this.elements.kbToggle) {
+        this.elements.kbToggle.addEventListener("change", (e) => {
+          this.toggleKnowledgeBase(e.target.checked);
+        });
+      }
+
+      // Setup KB Button Click (in inactive section)
       if (this.elements.setupButton) {
+        // Apply consistent styling
         this.elements.setupButton.className =
-          'px-4 py-2.5 bg-green-600 text-white rounded-lg ' +
+          'px-4 py-2 bg-green-600 text-white rounded-md ' +
           'hover:bg-green-700 transition-colors duration-200 ' +
           'focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 ' +
-          'text-sm font-medium';
+          'text-sm font-medium shadow-sm';
         this.elements.setupButton.addEventListener("click", () => this._showKnowledgeBaseModal());
       }
 
-      // KB form submit and cancel
-      const kbForm = document.getElementById("knowledgeBaseForm");
-      if (kbForm) {
-        kbForm.addEventListener("submit", (e) => this._handleKnowledgeBaseFormSubmit(e));
-        
-        // Bind cancel button
-        const cancelBtn = document.getElementById("cancelKnowledgeBaseFormBtn");
-        if (cancelBtn) {
-          cancelBtn.addEventListener("click", () => {
-            window.modalManager?.hide("knowledge");
-          });
-        }
+      // KB Settings Form Submission
+      if (this.elements.settingsForm) {
+        this.elements.settingsForm.addEventListener("submit", (e) => this._handleKnowledgeBaseFormSubmit(e));
+      }
+
+      // KB Settings Form Cancel Button
+      if (this.elements.cancelSettingsBtn) {
+        this.elements.cancelSettingsBtn.addEventListener("click", () => this._hideKnowledgeBaseModal());
+      }
+
+      // Close modal if clicking outside the modal content (optional)
+      if (this.elements.settingsModal) {
+        this.elements.settingsModal.addEventListener('click', (event) => {
+          // Check if the click is directly on the modal background (not its children)
+          if (event.target === this.elements.settingsModal) {
+            this._hideKnowledgeBaseModal();
+          }
+        });
+      }
+      if (this.elements.resultModal) {
+        this.elements.resultModal.addEventListener('click', (event) => {
+          if (event.target === this.elements.resultModal) {
+            this._hideResultDetailModal();
+          }
+        });
+        // Add listener for close button inside result modal if it exists
+        const closeResultBtn = this.elements.resultModal.querySelector('.close-modal-btn'); // Example selector
+        if (closeResultBtn) closeResultBtn.addEventListener('click', () => this._hideResultDetailModal());
       }
     }
-    
+
+    /**
+     * Debounce function execution.
+     * @param {Function} func - The function to debounce.
+     * @param {number} delay - The debounce delay in milliseconds.
+     * @returns {Function} The debounced function.
+     * @private
+     */
     _debounce(func, delay) {
       let timeout;
-      return function(...args) {
+      return function (...args) {
         const context = this;
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(context, args), delay);
       };
     }
-    
+
     /**
-     * Show the knowledge base settings modal
+     * Show the knowledge base settings modal.
+     * Pre-populates form if editing existing KB.
      * @private
      */
     _showKnowledgeBaseModal() {
-      console.log('[DEBUG] Opening knowledge base modal');
-      
-      // Create a unified modal access helper
-      const showModal = (id, fallbackId) => {
-        // Try all methods in sequence with proper error handling
-        try {
-          // Try window.modalManager.show first
-          if (window.modalManager?.show) {
-            window.modalManager.show(id);
-            return true;
-          }
-          
-          // Try window.ModalManager.show next
-          if (window.ModalManager?.show) {
-            window.ModalManager.show(id);
-            return true;
-          }
-          
-          // Direct DOM as last resort
-          const modal = document.getElementById(fallbackId);
-          if (modal) {
-            modal.classList.remove('hidden');
-            modal.classList.add('confirm-modal');
-            return true;
-          }
-          
-          return false;
-        } catch (e) {
-          console.error(`Modal error (${id}):`, e);
-          return false;
+      console.log('[DEBUG] Opening knowledge base settings modal');
+      if (!this.elements.settingsForm) {
+        console.error('KB Settings Form element not found.');
+        if (window.showNotification) {
+          window.showNotification('Could not open settings modal.', 'error');
         }
-      };
-      
-      // Try with both known modal IDs
-      if (!showModal('knowledge', 'knowledgeBaseSettingsModal')) {
-        console.error('Failed to show knowledge base modal');
-        window.showNotification?.('Could not open settings', 'error');
-      }
-      
-      // Try to get and store project ID if available
-      const projectId = window.projectManager?.currentProject?.id;
-      const form = document.getElementById("knowledgeBaseForm");
-      if (form && projectId) {
-        form.dataset.projectId = projectId;
-        console.log(`[DEBUG] Set project ID ${projectId} on KB form`);
-      }
-    }
-    
-    /**
-     * Handle knowledge base form submission
-     * @private
-     * @param {Event} e - Form submit event
-     */
-    /**
-     * Handle knowledge base form submission
-     * @private
-     * @param {Event} e - Form submit event
-     */
-    async _handleKnowledgeBaseFormSubmit(e) {
-      e.preventDefault();
-      
-      const form = e.target;
-      const formData = new FormData(form);
-      
-      // Get project ID from multiple possible sources
-      const projectId = localStorage.getItem('selectedProjectId') ||
-                       window.projectManager?.currentProject?.id;
-      
-      if (!projectId) {
-        window.showNotification("Please select a project first", "error");
-        window.modalManager?.hide("knowledge");
         return;
       }
 
-      try {
-        window.showNotification("Setting up knowledge base...", "info");
-        
-        // Convert form data to object
-        const kbData = Object.fromEntries(formData);
-        
-        // **ENSURE DATA MATCHES Pydantic MODEL**
-        const payload = {
-          name: kbData.name,
-          description: kbData.description || null, // ensure null if empty
-          embedding_model: kbData.embedding_model
-        };
-        
-        // UPDATED: Use the project-specific KB creation endpoint
-        const response = await window.apiRequest(
-          `/api/projects/${projectId}/knowledge-bases`,
-          "POST",
-          payload  // Use the properly formatted payload
-        );
-        
-        console.log('[DEBUG] Knowledge base creation response:', response);
-        
-        if (response.data?.id) {
-          console.log(`[DEBUG] Knowledge base created with ID: ${response.data.id}`);
-          
-          // Reload the full project to ensure knowledge_base_id is updated
-          if (window.projectManager) {
-            await window.projectManager.loadProjectDetails(projectId);
+      // Reset form fields before showing
+      this.elements.settingsForm.reset();
+      this._updateModelSelection(null); // Reset model selection dropdown
+
+      // Pre-populate if editing existing KB
+      if (this.state.knowledgeBase) {
+        const kb = this.state.knowledgeBase;
+        const nameInput = this.elements.settingsForm.elements['name'];
+        const descInput = this.elements.settingsForm.elements['description'];
+
+        if (nameInput) nameInput.value = kb.name || '';
+        if (descInput) descInput.value = kb.description || '';
+        this._updateModelSelection(kb.embedding_model); // Set current model
+      }
+
+      // Use ModalManager if available, otherwise fallback to direct DOM manipulation
+      if (window.modalManager && typeof window.modalManager.show === 'function') {
+        window.modalManager.show('knowledge', {
+          updateContent: (modalElement) => {
+            // Ensure project ID is associated with the form if possible
+            const projectId = this._getCurrentProjectId();
+            if (projectId) {
+              this.elements.settingsForm.dataset.projectId = projectId;
+              console.log(`[DEBUG] Set project ID ${projectId} on KB form`);
+            } else {
+              console.warn("Project ID not available when opening KB modal.");
+            }
           }
-          
-          window.showNotification("Knowledge base setup complete", "success");
-          window.modalManager?.hide("knowledge");
-        } else {
-          console.error('[ERROR] Knowledge base response missing data.id:', response);
-          throw new Error('Invalid response format from knowledge base creation');
-        }
-      } catch (error) {
-        console.error("Knowledge base setup failed:", error);
-        
-        // Check for the specific "already has a knowledge base" error
-        if (error.message && error.message.includes("Project already has a knowledge base")) {
-          window.showNotification(
-            "This project already has a knowledge base. Please use the existing one.",
-            "warning"
-          );
-          
-          // Try to refresh the project details to ensure KB info is loaded
-          if (window.projectManager?.loadProjectDetails && projectId) {
-            window.projectManager.loadProjectDetails(projectId);
+        });
+      } else {
+        console.warn('ModalManager not available, using direct DOM manipulation');
+        if (this.elements.settingsModal) {
+          this.elements.settingsModal.classList.remove('hidden');
+
+          // Ensure project ID is set
+          const projectId = this._getCurrentProjectId();
+          if (projectId && this.elements.settingsForm) {
+            this.elements.settingsForm.dataset.projectId = projectId;
           }
-        } else {
-          // Handle other errors
-          window.showNotification(
-            `Failed to setup knowledge base: ${error.message || 'Unknown error'}`,
-            "error"
-          );
         }
       }
     }
 
     /**
-     * Load knowledge base health information
+     * Handle the submission of the knowledge base settings form.
+     * Creates or updates the knowledge base via API.
+     * @param {Event} e - The form submit event.
      * @private
-     * @param {string} kbId - Knowledge base ID
      */
+    async _handleKnowledgeBaseFormSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
+      if (!form) return;
+
+      const formData = new FormData(form);
+      const projectId = this._getCurrentProjectId(); // Use helper to get ID
+
+      if (!projectId) {
+        if (window.showNotification) {
+          window.showNotification("Please select a project first to save settings.", "error");
+        }
+        return; // Stop if no project context
+      }
+
+      // Construct payload matching backend Pydantic model
+      const payload = {
+        name: formData.get('name'),
+        description: formData.get('description') || null, // Ensure null if empty
+        embedding_model: formData.get('embedding_model')
+      };
+
+      // Add validation (e.g., name is required)
+      if (!payload.name || payload.name.trim() === '') {
+        if (window.showNotification) {
+          window.showNotification("Knowledge base name is required.", "warning");
+        }
+        const nameInput = form.elements['name'];
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      if (!payload.embedding_model) {
+        if (window.showNotification) {
+          window.showNotification("Please select an embedding model.", "warning");
+        }
+        if (this.elements.modelSelect) this.elements.modelSelect.focus();
+        return;
+      }
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      let originalButtonText = '';
+      if (submitButton) {
+        originalButtonText = submitButton.innerHTML;
+        submitButton.disabled = true;
+        submitButton.innerHTML = `<span class="spinner mr-2"></span> Saving...`;
+      }
+
+      try {
+        if (window.showNotification) {
+          window.showNotification("Saving knowledge base settings...", "info");
+        }
+
+        // Determine if creating new or updating existing (though API might handle this via POST/PUT logic)
+        // Using POST to a project-specific endpoint often implies creation or idempotent update
+        const response = await window.apiRequest(
+          `/api/projects/${projectId}/knowledge-bases`, // Endpoint for creating/setting KB for a project
+          "POST",
+          payload
+        );
+
+        console.log('[DEBUG] Knowledge base setup/update response:', response);
+
+        if (response.data?.id) {
+          if (window.showNotification) {
+            window.showNotification("Knowledge base settings saved successfully", "success");
+          }
+          this._hideKnowledgeBaseModal(); // Close modal on success
+
+          // IMPORTANT: Refresh the project details to get the latest KB info
+          if (window.projectManager?.loadProjectDetails) {
+            const updatedProject = await window.projectManager.loadProjectDetails(projectId);
+            this.renderKnowledgeBaseInfo(updatedProject?.knowledge_base); // Re-render with fresh data
+          } else {
+            // Fallback: update internal state and re-render partially
+            this.renderKnowledgeBaseInfo(response.data); // Use response data if project manager missing
+          }
+        } else {
+          // Handle cases where response might be successful (2xx) but missing expected data
+          console.error('[ERROR] Knowledge base response missing expected data (e.g., id):', response);
+          throw new Error('Invalid response format from server.');
+        }
+
+      } catch (error) {
+        console.error("Knowledge base setup/update failed:", error);
+        let errorMessage = "Failed to save knowledge base settings";
+
+        // Provide more specific error messages based on status code or content
+        if (error.response?.status === 409) { // Conflict - e.g., KB already exists if endpoint doesn't support update
+          errorMessage = "This project already has a knowledge base configured.";
+          // Optionally, refresh to show the existing one
+          if (window.projectManager?.loadProjectDetails) window.projectManager.loadProjectDetails(projectId);
+        } else if (error.response?.status === 422) { // Validation error
+          errorMessage = `Validation Error: ${error.response?.data?.detail?.[0]?.msg || 'Invalid data'}`;
+        } else if (error.response?.data?.detail) { // Use detail from backend if available
+          errorMessage = `Error: ${error.response.data.detail}`;
+        } else if (error.message) {
+          errorMessage = `Error: ${error.message}`;
+        }
+
+        if (window.showNotification) {
+          window.showNotification(errorMessage, "error");
+        }
+      } finally {
+        // Restore submit button
+        if (submitButton) {
+          submitButton.innerHTML = originalButtonText;
+          submitButton.disabled = false;
+        }
+      }
+    }
+
+
     /**
-     * Load knowledge base health information
+     * Hide the knowledge base settings modal.
      * @private
-     * @param {string} kbId - Knowledge base ID
+     */
+    _hideKnowledgeBaseModal() {
+      // First try using the ModalManager
+      if (window.modalManager && typeof window.modalManager.hide === 'function') {
+        window.modalManager.hide('knowledge');
+      }
+      // Fallback to direct DOM manipulation
+      else if (this.elements.settingsModal) {
+        this.elements.settingsModal.classList.add('hidden');
+      }
+    }
+
+    /**
+     * Load and potentially display knowledge base health information.
+     * @param {string} kbId - The ID of the knowledge base.
+     * @returns {Promise<Object|null>} The health data or null on error.
+     * @private
      */
     async _loadKnowledgeBaseHealth(kbId) {
-      if (!kbId) return null;
-      
+      if (!kbId) {
+        console.warn("KB Health check skipped: No KB ID provided.");
+        return null;
+      }
+
       try {
-        // UPDATED: Use the proper health endpoint
-        const response = await window.apiRequest(
-          `/api/knowledge-bases/${kbId}/health`,
-          "GET"
-        );
-        
+        const response = await window.apiRequest(`/api/knowledge-bases/${kbId}/health`, "GET");
         const health = response.data || {};
-        
-        // Update status indicator
-        this._updateStatusIndicator(health.status === "active");
-        
-        // Update metadata display
-        if (health.processed_files !== undefined) {
-          const fileCountEl = document.getElementById("knowledgeFileCount");
-          if (fileCountEl) fileCountEl.textContent = health.processed_files;
+
+        console.log("[DEBUG] KB Health:", health);
+
+        // Optionally update UI elements based on health status (e.g., a specific health indicator)
+        // Example: Update a dedicated status badge
+        const healthStatusEl = document.getElementById('kbHealthStatus'); // Assume element exists
+        if (healthStatusEl) {
+          healthStatusEl.textContent = `Status: ${health.status || 'Unknown'}`;
+          healthStatusEl.className = health.status === 'active' ? 'text-green-600' : 'text-yellow-600';
         }
-        
+
+        // Update main status indicator based on health if needed (might conflict with is_active)
+        // Decide if 'is_active' toggle or 'health.status' should drive the main indicator
+        // this._updateStatusIndicator(health.status === "active");
+
+        // You might want to display specific health metrics like vector count
+        const vectorCountEl = document.getElementById('kbVectorCount');
+        if (vectorCountEl && health.vector_count !== undefined) {
+          vectorCountEl.textContent = `Vectors: ${health.vector_count}`;
+        }
+
+
         return health;
       } catch (err) {
         console.error("Failed to load KB health:", err);
+        // Optionally show a warning to the user about health check failure
+        this._showStatusAlert("Could not verify knowledge base health.", "warning");
         return null;
       }
     }
-    
+
     /**
-     * Show loading state for search
+     * Show loading state UI for knowledge base search.
      * @private
      */
     _showSearchLoading() {
       const { resultsSection, noResultsSection, resultsContainer } = this.elements;
-      
+
+      if (resultsSection) resultsSection.classList.remove("hidden");
       if (noResultsSection) noResultsSection.classList.add("hidden");
-      
+
       if (resultsContainer) {
         resultsContainer.innerHTML = `
-          <div class="flex justify-center items-center p-4">
-            <div class="spinner mr-2 w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <span>Searching...</span>
+          <div class="flex justify-center items-center p-4 text-gray-500">
+            <div class="spinner mr-2"></div>
+            <span>Searching knowledge base...</span>
           </div>
         `;
       }
-      
-      if (resultsSection) resultsSection.classList.remove("hidden");
     }
-    
+
     /**
-     * Show no results message
+     * Show the 'no results found' message in the search results area.
      * @private
      */
     _showNoResults() {
-      const { resultsSection, noResultsSection } = this.elements;
-      
+      const { resultsSection, noResultsSection, resultsContainer } = this.elements;
+
+      if (resultsContainer) resultsContainer.innerHTML = ""; // Clear any previous results/loading
       if (resultsSection) resultsSection.classList.add("hidden");
       if (noResultsSection) noResultsSection.classList.remove("hidden");
     }
-    
+
     /**
-     * Hide search loading state
+     * Hide the search loading state UI.
+     * Called when search completes or fails.
      * @private
      */
     _hideSearchLoading() {
-      if (this.state.isSearching) return;
-      
-      // Clear any loading indicators
+      // Check if still searching before removing (might have already been replaced by results/no results)
+      if (this.state.isSearching) return; // Should be set to false before calling this
+
       const { resultsContainer } = this.elements;
       if (resultsContainer) {
         const loadingEl = resultsContainer.querySelector('.flex.justify-center.items-center');
-        if (loadingEl) {
-          loadingEl.remove();
+        if (loadingEl && loadingEl.textContent.includes('Searching')) {
+          // Only remove if it's the loading indicator
+          // resultsContainer.innerHTML = ''; // Or remove just the element: loadingEl.remove();
         }
       }
+      // Note: _renderSearchResults or _showNoResults usually handles clearing the container
     }
-    
+
+
     /**
-     * Update model selection dropdown
+     * Update the embedding model selection dropdown.
+     * Disables options that don't match existing vector dimensions if a KB exists.
+     * @param {string|null} selectedModel - The model currently selected or null.
      * @private
-     * @param {string} selectedModel - Currently selected model
      */
     _updateModelSelection(selectedModel) {
-      const modelSelect = document.getElementById("knowledgeBaseModelSelect");
+      const modelSelect = this.elements.modelSelect;
       if (!modelSelect) return;
-      
-      // Remove any existing error states FIRST
-      const existingErrors = modelSelect.parentElement.querySelectorAll('.model-error');
-      existingErrors.forEach(e => e.remove());
 
-      modelSelect.innerHTML = `
-        <option value="all-MiniLM-L6-v2" ${selectedModel === 'all-MiniLM-L6-v2' ? 'selected' : ''}>
-          Local: All-MiniLM-L6-v2 (384d • Fast • Default)
-        </option>
-        <option value="text-embedding-3-small" ${
-          selectedModel === 'text-embedding-3-small' ? 'selected' : ''
-        } ${this._validateDimension(1536, selectedModel)}>
-          OpenAI: text-embedding-3-small (1536d • Recommended)
-        </option>
-        <option value="text-embedding-3-large" ${
-          selectedModel === 'text-embedding-3-large' ? 'selected' : ''
-        } ${this._validateDimension(3072, selectedModel)}>
-          OpenAI: text-embedding-3-large (3072d • Largest)
-        </option>
-        <option value="embed-english-v3.0" ${
-          selectedModel === 'embed-english-v3.0' ? 'selected' : ''
-        } ${this._validateDimension(1024, selectedModel)}>
-          Cohere: embed-english-v3.0 (1024d • English Only)
-        </option>
-      `;
+      // Clear existing options and error messages
+      modelSelect.innerHTML = '';
+      const parent = modelSelect.parentElement;
+      const existingError = parent ? parent.querySelector('.model-error') : null;
+      if (existingError) existingError.remove();
 
-      // Add dimension validation helpers
-      this._validateSelectedModelDimensions();
-    }
 
-    // New helper method
-    _validateDimension(requiredDim, selectedModel) {
-      const currentProject = window.projectManager?.currentProject;
-      const existingDim = currentProject?.knowledge_base?.embedding_dimension;
-      
-      if (existingDim && existingDim !== requiredDim) {
-        return 'disabled class="disabled-option" title="Existing vectors use different dimensions"';
-      }
-      
-      return selectedModel ? '' : '';
-    }
+      // Define available models and their properties
+      const models = [
+        { value: "all-MiniLM-L6-v2", text: "Local: all-MiniLM-L6-v2 (384d, Fast, Default)", dim: 384 },
+        { value: "text-embedding-3-small", text: "OpenAI: text-embedding-3-small (1536d, Recommended)", dim: 1536 },
+        { value: "text-embedding-3-large", text: "OpenAI: text-embedding-3-large (3072d, Largest)", dim: 3072 },
+        { value: "embed-english-v3.0", text: "Cohere: embed-english-v3.0 (1024d, English)", dim: 1024 }
+        // Add other models as needed
+      ];
 
-    // New validation check
-    _validateSelectedModelDimensions() {
-      const modelSelect = document.getElementById("knowledgeBaseModelSelect");
-      const warning = document.createElement('div');
-      warning.className = 'model-error text-red-600 text-sm mt-2';
-      
-      Array.from(modelSelect.options).forEach(opt => {
-        if (opt.disabled && opt.selected) {
-          warning.textContent = "Warning: Changing dimensions requires re-processing all files!";
-          modelSelect.parentElement.appendChild(warning);
+      const existingDim = this.state.knowledgeBase?.embedding_dimension;
+      const hasExistingVectors = this.state.knowledgeBase?.stats?.chunk_count > 0;
+
+
+      models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.text;
+        option.selected = (model.value === selectedModel);
+
+        // Disable if dimensions mismatch AND vectors already exist
+        if (hasExistingVectors && existingDim && existingDim !== model.dim) {
+          option.disabled = true;
+          option.classList.add('disabled-option');
+          option.title = `Dimension mismatch: Existing vectors are ${existingDim}d. Requires reprocessing all files.`;
         }
+
+        modelSelect.appendChild(option);
       });
+
+      // Add validation message if a disabled option is selected (e.g., upon loading existing KB)
+      this._validateSelectedModelDimensions();
+
+      // Add change listener to re-validate on selection change
+      modelSelect.removeEventListener('change', this._validateSelectedModelDimensions.bind(this)); // Prevent duplicates
+      modelSelect.addEventListener('change', this._validateSelectedModelDimensions.bind(this));
     }
-    
+
+
     /**
-     * Update KB stats display
+     * Check if the currently selected model in the dropdown is disabled due to dimension mismatch
+     * and display a warning if necessary.
      * @private
-     * @param {Object} stats - Knowledge base stats
+     */
+    _validateSelectedModelDimensions() {
+      const modelSelect = this.elements.modelSelect;
+      if (!modelSelect || !modelSelect.parentElement) return;
+
+      const parent = modelSelect.parentElement;
+      let warningDiv = parent.querySelector('.model-error');
+
+      const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+
+      if (selectedOption && selectedOption.disabled) {
+        if (!warningDiv) {
+          warningDiv = document.createElement('div');
+          warningDiv.className = 'model-error text-red-600 text-xs mt-1'; // Adjusted style
+          parent.appendChild(warningDiv); // Append warning message div
+        }
+        warningDiv.textContent = "Changing dimensions requires reprocessing all files!";
+        warningDiv.classList.remove('hidden');
+      } else {
+        // Hide or remove warning if the selected option is valid
+        if (warningDiv) {
+          warningDiv.classList.add('hidden');
+          // Optionally remove it: warningDiv.remove();
+        }
+      }
+    }
+
+
+    /**
+     * Update the knowledge base statistics display in the UI.
+     * @param {Object} stats - The statistics object (e.g., { file_count, total_size, chunk_count }).
+     * @private
      */
     _updateKnowledgeBaseStats(stats) {
-      const kb = this.state.knowledgeBase;
-      if (!kb || !stats) return;
+      const { fileCountDisplay, fileSizeDisplay } = this.elements;
+      const utils = window.uiUtilsInstance; // Assuming utils instance is available globally
 
-      const fileCountEl = document.getElementById("knowledgeFileCount");
-      if (fileCountEl) fileCountEl.textContent = stats.file_count || 0;
-      
-      const totalSizeEl = document.getElementById("knowledgeFileSize");
-      const utils = window.uiUtilsInstance;
-      if (totalSizeEl && utils) {
-        totalSizeEl.textContent = utils.formatBytes(stats.total_size || 0);
+      if (!stats) {
+        // Reset stats if no data provided
+        if (fileCountDisplay) fileCountDisplay.textContent = '0';
+        if (fileSizeDisplay) fileSizeDisplay.textContent = '0 Bytes';
+        return;
       }
 
-      const formattedVersion = kb.version ? `Schema v${kb.version}` : 'Schema v1';
-      const versionElement = document.getElementById('kbVersionDisplay');
-      if (versionElement) {
-        versionElement.textContent = formattedVersion;
-        versionElement.title = `Knowledge Base Schema Version ${kb.version || 1}`;
+
+      if (fileCountDisplay) {
+        fileCountDisplay.textContent = stats.file_count ?? 0; // Use nullish coalescing for default
+        fileCountDisplay.title = `Total files associated with the knowledge base: ${stats.file_count ?? 0}`;
       }
 
-      const lastUsed = kb.last_used ?
-        window.uiUtilsInstance.formatDate(kb.last_used) : 'Never';
-      const lastUsedElement = document.getElementById('kbLastUsedDisplay'); 
-      if (lastUsedElement) {
-        lastUsedElement.textContent = lastUsed;
-        lastUsedElement.title = kb.last_used ? 
-          `Last queried at ${new Date(kb.last_used).toLocaleString()}` :
-          'This knowledge base has never been queried';
+      if (fileSizeDisplay && utils?.formatBytes) {
+        fileSizeDisplay.textContent = utils.formatBytes(stats.total_size || 0);
+        fileSizeDisplay.title = `Total size of all files: ${stats.total_size || 0} bytes`;
+      } else if (fileSizeDisplay) {
+        fileSizeDisplay.textContent = `${stats.total_size || 0} Bytes`; // Fallback if formatter missing
       }
+
+      // Optionally display chunk count or other stats if elements exist
+      const chunkCountEl = document.getElementById('knowledgeChunkCount'); // Example element
+      if (chunkCountEl && stats.chunk_count !== undefined) {
+        chunkCountEl.textContent = stats.chunk_count;
+        chunkCountEl.title = `Total processed text chunks (vectors): ${stats.chunk_count}`;
+      }
+
     }
-    
+
     /**
-     * Update status indicator text
+     * Update the status indicator text and optionally a badge.
+     * @param {boolean} isActive - Whether the knowledge base is currently active.
      * @private
-     * @param {boolean} isActive - Whether KB is active
      */
     _updateStatusIndicator(isActive) {
-      const statusElement = document.getElementById("kbStatusText");
-      if (statusElement) {
-        statusElement.textContent = isActive ? "Active" : "Inactive";
-        statusElement.className = isActive
+      const { statusText, statusBadge } = this.elements;
+
+      if (statusText) {
+        statusText.textContent = isActive ? "Active" : "Inactive";
+        statusText.className = isActive
           ? "text-green-600 font-medium"
           : "text-red-600 font-medium";
-
-        // Make it clearer to the user what the state means
-        statusElement.title = isActive
-          ? "Knowledge base is enabled and will be used for search and conversation context"
-          : "Knowledge base is disabled and will not be used until activated";
+        statusText.title = isActive
+          ? "Knowledge base is enabled and available for use."
+          : "Knowledge base is disabled and will not be used.";
       }
-      
-      // Update additional status indicators if they exist
-      const statusBadge = document.getElementById("kbStatusBadge");
+
       if (statusBadge) {
         statusBadge.className = isActive
           ? "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
           : "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800";
         statusBadge.innerHTML = isActive
-          ? '<span class="h-2 w-2 rounded-full bg-green-400 mr-1.5"></span>Active'
-          : '<span class="h-2 w-2 rounded-full bg-red-400 mr-1.5"></span>Inactive';
+          ? '<span class="h-2 w-2 rounded-full bg-green-400 mr-1.5 flex-shrink-0"></span>Active'
+          : '<span class="h-2 w-2 rounded-full bg-red-400 mr-1.5 flex-shrink-0"></span>Inactive';
+        statusBadge.title = statusText.title; // Sync titles
       }
     }
-    
+
     /**
-     * Update upload buttons state based on KB status
-     * @private
-     * @param {boolean} hasKnowledgeBase - Whether project has a KB
-     * @param {boolean} isActive - Whether KB is active
-     */
-    /**
-     * Format source filename for display
-     * @private
-     */
-    _formatSourceName(filename) {
-      if (!filename) return "Unknown source";
-      // Truncate long filenames
-      return filename.length > 25 ? filename.substring(0, 22) + '...' : filename;
-    }
-    
-    /**
-     * Update upload buttons state based on KB status
+     * Enable or disable upload and reprocess buttons based on KB state.
+     * @param {boolean} hasKnowledgeBase - Whether a KB exists for the project.
+     * @param {boolean} isActive - Whether the existing KB is active.
      * @private
      */
     _updateUploadButtonsState(hasKnowledgeBase, isActive) {
+      // Select all buttons that require an active KB
       const uploadButtons = document.querySelectorAll('[data-requires-kb="true"]');
-      const fileCountEl = document.getElementById("knowledgeFileCount");
-      const fileCount = fileCountEl ? parseInt(fileCountEl.textContent, 10) || 0 : 0;
-      
+      const fileCount = parseInt(this.elements.fileCountDisplay?.textContent || '0', 10);
+
+      // Update Upload Buttons
       uploadButtons.forEach(button => {
         const isDisabled = !hasKnowledgeBase || !isActive;
         button.disabled = isDisabled;
-        
+        button.classList.toggle('opacity-50', isDisabled);
+        button.classList.toggle('cursor-not-allowed', isDisabled);
+
         if (isDisabled) {
-          button.classList.add('opacity-50', 'cursor-not-allowed');
           button.title = !hasKnowledgeBase
-            ? "Knowledge Base required to upload files - click 'Setup Knowledge Base' first"
-            : "Knowledge Base is inactive - toggle it on to enable uploads";
+            ? "Setup Knowledge Base first to enable uploads."
+            : "Knowledge Base must be active to upload files.";
         } else {
-          button.classList.remove('opacity-50', 'cursor-not-allowed');
-          button.title = fileCount > 0
-            ? "Upload more files to Knowledge Base"
-            : "Upload your first file to Knowledge Base";
+          button.title = fileCount > 0 ? "Upload more files" : "Upload first file"; // Dynamic title
         }
       });
-      
-      // Update reprocess button state based on file count
-      if (this.elements.reprocessButton) {
-        if (fileCount === 0) {
-          this.elements.reprocessButton.disabled = true;
-          this.elements.reprocessButton.classList.add('opacity-50', 'cursor-not-allowed');
-          this.elements.reprocessButton.title = "No files to process - upload files first";
+
+      // Update Reprocess Button state
+      const reprocessBtn = this.elements.reprocessButton;
+      if (reprocessBtn) {
+        // Disable if no KB, inactive KB, or no files to process
+        const isReprocessDisabled = !hasKnowledgeBase || !isActive || fileCount === 0;
+        reprocessBtn.disabled = isReprocessDisabled;
+        reprocessBtn.classList.toggle('opacity-50', isReprocessDisabled);
+        reprocessBtn.classList.toggle('cursor-not-allowed', isReprocessDisabled);
+
+        if (!hasKnowledgeBase) {
+          reprocessBtn.title = "Setup Knowledge Base first.";
+        } else if (!isActive) {
+          reprocessBtn.title = "Knowledge Base must be active to reprocess files.";
+        } else if (fileCount === 0) {
+          reprocessBtn.title = "No files to reprocess. Upload files first.";
         } else {
-          this.elements.reprocessButton.disabled = !hasKnowledgeBase || !isActive;
-          if (!hasKnowledgeBase || !isActive) {
-            this.elements.reprocessButton.classList.add('opacity-50', 'cursor-not-allowed');
-            this.elements.reprocessButton.title = "Knowledge Base must be active to process files";
-          } else {
-            this.elements.reprocessButton.classList.remove('opacity-50', 'cursor-not-allowed');
-            this.elements.reprocessButton.title = "Process files for search and context";
-          }
+          reprocessBtn.title = "Reprocess all files for search index updates.";
         }
       }
     }
-    
+
     /**
-     * Render search results
+     * Render the search results in the results container.
+     * @param {Array<Object>} results - Array of search result objects from the API.
+     * Each object should have { text, score, metadata, file_info (optional) }.
      * @private
-     * @param {Array} results - Search results
-     */
-    /**
-     * Render search results with proper error handling and metadata display
-     */
-    /**
-     * Render search results with proper error handling and metadata display
      */
     _renderSearchResults(results) {
-        // Validate results is an array before processing
-        if (!Array.isArray(results)) results = [];
-        const { resultsContainer, resultsSection, noResultsSection } = this.elements;
+      const { resultsContainer, resultsSection, noResultsSection } = this.elements;
       if (!resultsContainer) return;
 
-      // Clear previous results
-      resultsContainer.innerHTML = "";
-      
-      if (!results || results.length === 0) {
+      // Validate results is an array before processing
+      if (!Array.isArray(results)) {
+        console.warn("RenderSearchResults called with non-array:", results);
+        results = []; // Treat as empty if not an array
+      }
+
+      resultsContainer.innerHTML = ""; // Clear previous results or loading
+
+      if (results.length === 0) {
         this._showNoResults();
         return;
       }
 
-      resultsSection.classList.remove("hidden");
-      noResultsSection.classList.add("hidden");
+      // Show results section, hide 'no results' message
+      if (resultsSection) resultsSection.classList.remove("hidden");
+      if (noResultsSection) noResultsSection.classList.add("hidden");
 
-      results.forEach(result => {
-        // Get metadata correctly from the backend response structure
+      results.forEach((result, index) => {
+        // Basic validation of result structure
+        if (!result || typeof result.text !== 'string' || typeof result.score !== 'number') {
+          console.warn(`Skipping invalid search result at index ${index}:`, result);
+          return;
+        }
+
         const metadata = result.metadata || {};
-        const score = Math.round((result.score || 0) * 100);
-        
-        const item = this._createSearchResultItem(
-          result.text,
-          score,
-          metadata,
-          result.file_info
-        );
-        
-        item.addEventListener('click', () => this._showResultDetail(result));
-        resultsContainer.appendChild(item);
+        const fileInfo = result.file_info || {}; // Optional file info from backend
+        const score = Math.round((result.score || 0) * 100); // Score as percentage
+
+        try {
+          const item = this._createSearchResultItem(result.text, score, metadata, fileInfo);
+          // Add click listener to show details in modal
+          item.addEventListener('click', (e) => {
+            // Prevent triggering if a link/button inside the item was clicked
+            if (e.target.closest('a, button')) return;
+            this._showResultDetail(result);
+          });
+          resultsContainer.appendChild(item);
+        } catch (error) {
+          console.error(`Error creating search result item for result ${index}:`, error, result);
+          // Optionally append an error placeholder item
+          const errorItem = document.createElement('div');
+          errorItem.className = 'p-4 mb-3 text-red-600 border border-red-300 rounded';
+          errorItem.textContent = 'Error displaying this result.';
+          resultsContainer.appendChild(errorItem);
+        }
+
       });
     }
 
     /**
-     * Show detailed view of a search result
+     * Create a DOM element for a single search result item.
+     * @param {string} content - The text content/snippet of the result.
+     * @param {number} score - The relevance score (0-100).
+     * @param {Object} metadata - Metadata associated with the chunk (e.g., file_name, chunk_index).
+     * @param {Object} fileInfo - Optional additional file info (e.g., file_type, created_at).
+     * @returns {HTMLElement} The created DOM element for the result item.
      * @private
-     */
-    _showResultDetail(result) {
-      // Get modal elements
-      const modal = document.getElementById('knowledgeResultModal');
-      const title = document.getElementById('knowledgeResultTitle');
-      const source = document.getElementById('knowledgeResultSource');
-      const score = document.getElementById('knowledgeResultScore');
-      const content = document.getElementById('knowledgeResultContent');
-      
-      if (!modal || !title || !source || !score || !content) {
-        console.error('Knowledge result modal elements not found');
-        return;
-      }
-      
-      // Format score as percentage
-      const scorePercentage = Math.round((result.score || 0) * 100);
-      
-      // Populate modal content
-      title.textContent = result.metadata?.file_name || 'Knowledge Result';
-      source.textContent = result.metadata?.file_name || 'Unknown source';
-      score.textContent = `${scorePercentage}% match`;
-      content.textContent = result.text || 'No content available';
-      
-      // Show modal
-      if (window.modalManager?.show) {
-        window.modalManager.show('knowledgeResult');
-      } else {
-        modal.classList.remove('hidden');
-      }
-      
-      // Handle "Use in Chat" button
-      const useInChatBtn = document.getElementById('useInChatBtn');
-      if (useInChatBtn) {
-        useInChatBtn.onclick = () => {
-          this._useInConversation(result);
-          // Hide modal
-          if (window.modalManager?.hide) {
-            window.modalManager.hide('knowledgeResult');
-          } else {
-            modal.classList.add('hidden');
-          }
-        };
-      }
-    }
-    
-    /**
-     * Use search result in conversation
-     * @private
-     */
-    _useInConversation(result) {
-      const chatInput = document.getElementById('projectChatInput') || document.getElementById('chatInput');
-      if (!chatInput) {
-        window.showNotification("Chat input not found", "error");
-        return;
-      }
-      
-      // Format the content for the input
-      const content = `Reference from "${result.metadata?.file_name || 'knowledge base'}":\n\n${result.text}\n\nPlease analyze this content.`;
-      
-      // Set the input value
-      chatInput.value = content;
-      
-      // Focus the input
-      chatInput.focus();
-      
-      // Show notification
-      window.showNotification("Knowledge content added to chat input", "success");
-    }
-
-    /**
-     * Create individual search result item with proper metadata
-     */
-    /**
-     * Create individual search result item with proper metadata
      */
     _createSearchResultItem(content, score, metadata, fileInfo) {
-      const utils = window.uiUtilsInstance;
-      
-      // Standardize metadata handling with defaults
-      const filename = fileInfo?.filename || metadata.file_name || "Unknown source";
-      const fileType = fileInfo?.file_type || metadata.file_type || "txt";
-      const createdAt = metadata.processed_at || fileInfo?.created_at || new Date().toISOString();
-      const chunkIndex = metadata.chunk_index || 0;
-      const tokenCount = metadata.token_count || fileInfo?.token_count || 'N/A';
-      
+      const utils = window.uiUtilsInstance; // Get utils instance
+      if (!utils?.createElement || !utils?.fileIcon || !utils?.formatDate) {
+        console.error("uiUtilsInstance or required methods not found. Cannot create result item.");
+        // Fallback: return a simple div with text
+        const fallbackItem = document.createElement('div');
+        fallbackItem.textContent = `${this._formatSourceName(metadata.file_name)} (${score}%): ${content.substring(0, 100)}...`;
+        fallbackItem.className = 'p-4 border rounded mb-2';
+        return fallbackItem;
+      }
+
+
+      const filename = fileInfo?.filename || metadata?.file_name || "Unknown Source";
+      const fileType = fileInfo?.file_type || metadata?.file_type || "unknown";
+      const createdAt = metadata?.processed_at || fileInfo?.created_at; // Prefer processed_at if available
+      const chunkIndex = metadata?.chunk_index ?? 'N/A'; // Chunk index if available
+      const tokenCount = metadata?.token_count ?? fileInfo?.token_count ?? 'N/A';
+
       const item = utils.createElement("div", {
-        className: "content-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-3 " +
-                   "cursor-pointer hover:shadow-md transition-shadow"
+        className: "content-item bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm mb-3 " +
+          "border border-gray-200 dark:border-gray-700 cursor-pointer " +
+          "hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-150",
+        role: "button", // Accessibility
+        tabIndex: "0"  // Make it focusable
       });
 
-      // Header with file info and score
+      // Header: File Icon, Name, Date/Chunk, Score Badge
       const header = utils.createElement("div", {
-        className: "flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-2 mb-2"
+        className: "flex justify-between items-start gap-2 mb-2" // Use gap for spacing
       });
 
-      // Source info section
-      const sourceDiv = utils.createElement("div", { className: "flex items-center truncate" });
-      sourceDiv.appendChild(utils.createElement("span", {
-        className: "text-lg mr-2",
-        textContent: utils.fileIcon(fileType)
-      }));
-        
-      const sourceDetails = utils.createElement("div", { className: "truncate" });
-      sourceDetails.appendChild(utils.createElement("div", {
-        className: "font-medium truncate",
-        textContent: filename,
-        title: filename
-      }));
-      sourceDetails.appendChild(utils.createElement("div", {
-        className: "text-xs text-gray-500 truncate",
-        textContent: `Chunk ${chunkIndex} • ${utils.formatDate(createdAt)}`
-      }));
-      
-      sourceDiv.appendChild(sourceDetails);
-      header.appendChild(sourceDiv);
+      // Left side of header: Icon and Text details
+      const sourceInfo = utils.createElement("div", { className: "flex items-center gap-2 min-w-0" }); // min-w-0 for truncation
 
-      // Score badge
-      header.appendChild(utils.createElement("div", {
-        className: `text-xs px-2 py-1 rounded ${
-          score > 75 ? "bg-green-100 text-green-800" :
-          score > 50 ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-600"
-        }`,
-        textContent: `${score}% match`
+      sourceInfo.appendChild(utils.createElement("span", {
+        className: "text-xl text-gray-500 dark:text-gray-400 flex-shrink-0", // Icon size
+        innerHTML: utils.fileIcon(fileType) // Use innerHTML if icon is SVG
       }));
+
+      const sourceDetails = utils.createElement("div", { className: "flex flex-col min-w-0" }); // min-w-0 for truncation
+      sourceDetails.appendChild(utils.createElement("div", {
+        className: "font-medium text-sm text-gray-800 dark:text-gray-100 truncate",
+        textContent: this._formatSourceName(filename), // Use formatted name
+        title: filename // Full name on hover
+      }));
+      sourceDetails.appendChild(utils.createElement("div", {
+        className: "text-xs text-gray-500 dark:text-gray-400 truncate",
+        textContent: `Chunk ${chunkIndex}${createdAt ? ' • ' + utils.formatDate(createdAt) : ''}`
+      }));
+
+      sourceInfo.appendChild(sourceDetails);
+      header.appendChild(sourceInfo);
+
+      // Right side of header: Score Badge
+      const scoreBadge = utils.createElement("div", {
+        className: `text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${score >= 80 ? "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100" :
+          score >= 60 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100" :
+            "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+          }`,
+        textContent: `${score}%` // Just the percentage for brevity
+      });
+      scoreBadge.title = `Relevance score: ${score}%`;
+      header.appendChild(scoreBadge);
 
       item.appendChild(header);
 
-      // Content snippet (limited to 3 lines)
-      const contentDiv = utils.createElement("div", {
-        className: "text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-2",
-        textContent: content?.substring(0, 300) || "No content available"
+      // Content Snippet
+      const contentDiv = utils.createElement("p", { // Use <p> for semantics
+        className: "text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-2", // line-clamp for truncation
+        textContent: content || "No content preview available."
       });
       item.appendChild(contentDiv);
 
-      // Metadata row
-      const metaData = [
-        `Tokens: ${metadata.token_count || fileInfo?.token_count || 'N/A'}`,
-        `Chunk Size: ${metadata.chunk_size || 'N/A'}`,
-        `From: ${this._formatSourceName(fileInfo?.filename || metadata.file_name || 'Unknown')}`
-      ];
-      
-      item.appendChild(this._createMetaRow(...metaData));
+      // Footer Metadata (Optional - keep it concise)
+      const footer = this._createMetaRow(
+        `Tokens: ${tokenCount}`,
+        // Add other relevant concise metadata if needed, e.g., file size
+        // `Size: ${fileInfo?.size ? utils.formatBytes(fileInfo.size) : 'N/A'}`
+      );
+      if (footer.children.length > 0) { // Only add footer if there's content
+        item.appendChild(footer);
+      }
+
+      // Add ARIA label for accessibility
+      item.setAttribute('aria-label', `Result from ${filename}, ${score}% match. Content snippet: ${content.substring(0, 100)}...`);
+
+
       return item;
     }
 
-    _createMetaRow(...items) {
-      const row = window.uiUtilsInstance.createElement("div", {
-        className: "flex justify-between text-xs text-gray-500 mt-2"
-      });
-      
-      items.forEach(text => {
-        row.appendChild(window.uiUtilsInstance.createElement("span", {textContent: text}));
-      });
-      
-      return row;
-    }
-  }
 
-  // IMPORTANT: Export to window
+    /**
+     * Create a metadata row element for search results or other displays.
+     * @param {...string} items - Text items to display in the row.
+     * @returns {HTMLElement} The created metadata row div.
+     * @private
+     */
+    _createMetaRow(...items) {
+      const utils = window.uiUtilsInstance;
+      if (!utils?.createElement) return document.createElement('div'); // Fallback
+
+
+      const row = utils.createElement("div", {
+        className: "flex justify-start items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700" // Subtle separator
+      });
+
+      items.forEach(text => {
+        if (text) { // Only add if text is not empty/null
+          row.appendChild(utils.createElement("span", { textContent: text }));
+        }
+      });
+
+      return row; // Return even if empty, parent function decides whether to append it
+    }
+
+
+    /**
+     * Show the modal displaying details of a selected search result.
+     * @param {Object} result - The full search result object.
+     * @private
+     */
+    _showResultDetail(result) {
+      const { resultTitle, resultSource, resultScore, resultContent, useInChatBtn } = this.elements;
+
+      if (!resultTitle || !resultSource || !resultScore || !resultContent) {
+        console.error('Knowledge result modal elements not found!');
+        if (window.showNotification) {
+          window.showNotification("Could not display result details.", "error");
+        }
+        return;
+      }
+
+      const metadata = result.metadata || {};
+      const fileInfo = result.file_info || {};
+      const scorePercentage = Math.round((result.score || 0) * 100);
+      const filename = fileInfo.filename || metadata.file_name || "Unknown Source";
+
+      // Populate modal content
+      resultTitle.textContent = `Detail: ${this._formatSourceName(filename)}`;
+      resultTitle.title = filename; // Full name in title
+      resultSource.textContent = `Source: ${filename}`;
+      resultScore.textContent = `Match Score: ${scorePercentage}%`;
+      // Use pre-wrap to preserve formatting/line breaks in the text content
+      resultContent.textContent = result.text || 'No content available.';
+      resultContent.style.whiteSpace = 'pre-wrap';
+
+      // Handle "Use in Chat" button
+      if (useInChatBtn) {
+        // Remove previous listener to avoid duplicates
+        const newBtn = useInChatBtn.cloneNode(true); // Clone to remove listeners
+        useInChatBtn.parentNode.replaceChild(newBtn, useInChatBtn);
+        this.elements.useInChatBtn = newBtn; // Update element reference
+
+        newBtn.onclick = () => {
+          this._useInConversation(result);
+          this._hideResultDetailModal(); // Hide modal after clicking
+        };
+      }
+
+      // Show the modal using ModalManager if available
+      if (window.modalManager && typeof window.modalManager.show === 'function') {
+        window.modalManager.show('knowledgeResult', {
+          onShow: (modal) => {
+            // Focus the modal for accessibility
+            modal.focus();
+          }
+        });
+      } else {
+        // Fallback to direct DOM manipulation
+        if (this.elements.resultModal) {
+          this.elements.resultModal.classList.remove('hidden');
+        }
+      }
+    }
+
+    /**
+    * Hide the knowledge result detail modal.
+    * @private
+    */
+    _hideResultDetailModal() {
+      if (window.modalManager && typeof window.modalManager.hide === 'function') {
+        window.modalManager.hide('knowledgeResult');
+      } else if (this.elements.resultModal) {
+        // Fallback to direct DOM manipulation
+        this.elements.resultModal.classList.add('hidden');
+      }
+    }
+
+
+    /**
+     * Insert the content of a search result into the main chat input.
+     * @param {Object} result - The search result object.
+     * @private
+     */
+    _useInConversation(result) {
+      // Try multiple common IDs for the chat input
+      const chatInput = document.getElementById('projectChatInput') || document.getElementById('chatInput') || document.querySelector('textarea[placeholder*="Send a message"]');
+
+      if (!chatInput) {
+        if (window.showNotification) {
+          window.showNotification("Chat input area not found.", "error");
+        }
+        console.error("Could not find chat input element.");
+        return;
+      }
+
+      const filename = result.metadata?.file_name || 'the knowledge base';
+      // Construct a formatted reference string
+      const referenceText = `Referring to content from "${this._formatSourceName(filename)}":\n\n> ${result.text.trim()}\n\nBased on this, `; // Added prompt start
+
+
+      // Append or replace existing content (choose one)
+      // Option 1: Replace existing content
+      // chatInput.value = referenceText;
+
+      // Option 2: Append to existing content (add a newline if needed)
+      const currentContent = chatInput.value.trim();
+      chatInput.value = currentContent ? `${currentContent}\n\n${referenceText}` : referenceText;
+
+
+      // Focus the input and potentially trigger an input event for frameworks like React/Vue
+      chatInput.focus();
+      chatInput.dispatchEvent(new Event('input', { bubbles: true })); // Trigger input event
+
+      if (window.showNotification) {
+        window.showNotification("Result content added to chat input.", "success");
+      }
+    }
+
+  } // End of KnowledgeBaseComponent class
+  // End of IIFE
+
+  // Make the class available globally
   window.KnowledgeBaseComponent = KnowledgeBaseComponent;
-})();
+
+})(); // End of IIFE
