@@ -76,17 +76,11 @@ for logger_name in sqla_loggers:
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 
-# Configure allowed hosts
-allowed_hosts = (
-    ["*"] if settings.ENV != "production" else ["put.photo", "www.put.photo"]
-)
-
-# Create FastAPI app instance
-# Configure CORS settings
+# Create FastAPI app instance with fully permissive CORS
 middleware = [
-    # Disable host checking
+    # Disable all host checking
     Middleware(TrustedHostMiddleware, allowed_hosts=["*"], www_redirect=False),
-    # Most permissive CORS settings
+    # Fully permissive CORS
     Middleware(
         CORSMiddleware,
         allow_origins=["*"],
