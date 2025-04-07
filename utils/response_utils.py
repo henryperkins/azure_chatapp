@@ -26,9 +26,9 @@ async def create_standard_response(
         "request_id": str(uuid4()),  # Add unique ID for tracking
     }
     return JSONResponse(
-        content=response_data, 
-        status_code=status_code, 
-        headers=headers or {}  # No CORS headers injected
+        content=response_data,
+        status_code=status_code,
+        headers={}  # Explicit empty headers
     )
 
 
