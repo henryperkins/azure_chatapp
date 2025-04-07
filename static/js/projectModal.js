@@ -12,49 +12,71 @@
 if (typeof window.ProjectModal === 'undefined') {
   window.ProjectModal = class ProjectModal {
   constructor() {
-    this.modal = document.getElementById('projectFormModal');
-    if (!this.modal) {
+    // Get modal elements
+    this.modalId = 'project';
+    this.modalElement = document.getElementById('projectFormModal');
+    if (!this.modalElement) {
       console.error('Project form modal element not found');
       return;
     }
 
     this.form = document.getElementById('projectForm');
-    this.nameInput = document.getElementById('projectForm-nameInput');
-    this.nameError = document.getElementById('projectForm-nameError');
-    this.closeBtn = document.getElementById('closeProjectFormBtn');
-    this.cancelBtn = document.getElementById('cancelProjectFormBtn');
+    this.nameInput = document.getElementById('projectForm-nameInput') || document.getElementById('projectNameInput');
+    this.nameError = document.getElementById('projectForm-nameError') || document.getElementById('projectNameError');
     this.submitBtn = document.getElementById('submitProjectFormBtn');
 
-    if (!this.form || !this.nameInput || !this.closeBtn || !this.cancelBtn || !this.submitBtn) {
-      console.error('Required modal elements not found');
+    if (!this.form || !this.nameInput || !this.submitBtn) {
+      console.error('Required modal form elements not found');
       return;
     }
 
+    // Register with the unified ModalManager if available
+    this._registerWithModalManager();
+    
+    // Initialize event listeners, load draft values
     this.initEventListeners();
     this.loadDraft();
     this.initialized = true;
+  }
+
+  /**
+   * Register this modal with the unified ModalManager
+   * @private
+   */
+  _registerWithModalManager() {
+    if (window.ModalManager && window.modalManager) {
+      // Register this modal
+      window.modalManager.registerModal(this.modalId, this.modalElement);
+      
+      // Add a special handler for cleanup when hiding
+      const originalHide = window.modalManager.hide;
+      window.modalManager.hide = (modalId, ...args) => {
+        if (modalId === this.modalId) {
+          document.body.style.overflow = ''; // Reset body overflow
+        }
+        return originalHide.call(window.modalManager, modalId, ...args);
+      };
+    } else {
+      console.warn('ModalManager not available for ProjectModal registration');
+    }
   }
 
   initEventListeners() {
     // Form submission
     this.form.addEventListener('submit', (e) => this.handleSubmit(e));
     
-    // Close modal triggers
-    this.closeBtn.addEventListener('click', () => this.closeModal());
-    this.cancelBtn.addEventListener('click', () => this.closeModal());
-    this.modal.addEventListener('click', (e) => {
-      if (e.target === this.modal) this.closeModal();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.closeModal();
-    });
-
     // Auto-save on input changes
     this.nameInput.addEventListener('input', () => this.saveDraft());
-    document.getElementById('projectDescInput')
-      .addEventListener('input', () => this.saveDraft());
-    document.getElementById('projectGoalsInput')
-      .addEventListener('input', () => this.saveDraft());
+    
+    const descInput = document.getElementById('projectDescInput');
+    if (descInput) {
+      descInput.addEventListener('input', () => this.saveDraft());
+    }
+    
+    const goalsInput = document.getElementById('projectGoalsInput');
+    if (goalsInput) {
+      goalsInput.addEventListener('input', () => this.saveDraft());
+    }
   }
 
   async handleSubmit(e) {
@@ -75,18 +97,16 @@ if (typeof window.ProjectModal === 'undefined') {
     try {
       const formData = {
         name: this.nameInput.value.trim(),
-        description: document.getElementById('projectDescInput').value.trim(),
-        goals: document.getElementById('projectGoalsInput').value.trim(),
-        max_tokens: parseInt(document.getElementById('projectMaxTokensInput').value, 10)
+        description: document.getElementById('projectDescInput')?.value.trim() || '',
+        goals: document.getElementById('projectGoalsInput')?.value.trim() || '',
+        max_tokens: parseInt(document.getElementById('projectMaxTokensInput')?.value || '0', 10)
       };
 
-      const response = await window.projectManager.createOrUpdateProject(
-        document.getElementById('projectIdInput').value || null,
-        formData
-      );
+      const projectId = document.getElementById('projectIdInput')?.value || null;
+      const response = await window.projectManager.createOrUpdateProject(projectId, formData);
 
       this.showNotification(
-        document.getElementById('projectIdInput').value ? 'Project updated' : 'Project created',
+        projectId ? 'Project updated' : 'Project created',
         'success'
       );
       
@@ -109,6 +129,11 @@ if (typeof window.ProjectModal === 'undefined') {
     }
   }
 
+  /**
+   * Show a notification using the unified notification system
+   * @param {string} message - Message to show
+   * @param {string} type - Notification type (success, error, warning, info)
+   */
   showNotification(message, type) {
     if (window.showNotification) {
       window.showNotification(message, type);
@@ -117,61 +142,112 @@ if (typeof window.ProjectModal === 'undefined') {
     }
   }
 
+  /**
+   * Validate form fields
+   * @returns {boolean} Whether the form is valid
+   */
   validateForm() {
     let isValid = true;
     
     if (!this.nameInput.value.trim()) {
-      this.nameError.classList.remove('hidden');
+      if (this.nameError) {
+        this.nameError.classList.remove('hidden');
+      }
       this.nameInput.focus();
       isValid = false;
-    } else {
+    } else if (this.nameError) {
       this.nameError.classList.add('hidden');
     }
 
     return isValid;
   }
 
+  /**
+   * Save draft form values to localStorage
+   */
   saveDraft() {
     const draft = {
       name: this.nameInput.value,
-      description: document.getElementById('projectDescInput').value,
-      goals: document.getElementById('projectGoalsInput').value
+      description: document.getElementById('projectDescInput')?.value || '',
+      goals: document.getElementById('projectGoalsInput')?.value || ''
     };
     localStorage.setItem('projectDraft', JSON.stringify(draft));
   }
 
+  /**
+   * Load draft form values from localStorage
+   */
   loadDraft() {
-    const draft = JSON.parse(localStorage.getItem('projectDraft'));
-    if (draft) {
-      this.nameInput.value = draft.name || '';
-      document.getElementById('projectDescInput').value = draft.description || '';
-      document.getElementById('projectGoalsInput').value = draft.goals || '';
+    try {
+      const draft = JSON.parse(localStorage.getItem('projectDraft'));
+      if (draft) {
+        this.nameInput.value = draft.name || '';
+        
+        const descInput = document.getElementById('projectDescInput');
+        if (descInput) {
+          descInput.value = draft.description || '';
+        }
+        
+        const goalsInput = document.getElementById('projectGoalsInput');
+        if (goalsInput) {
+          goalsInput.value = draft.goals || '';
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load project form draft', e);
     }
   }
 
+  /**
+   * Clear saved draft values
+   */
   clearDraft() {
     localStorage.removeItem('projectDraft');
   }
 
+  /**
+   * Open the project modal using the unified ModalManager
+   */
   openModal() {
-    // Reset all inline styles first
-    this.modal.removeAttribute('style');
-    
-    // Apply base modal classes
-    this.modal.classList.remove('hidden');
-    this.modal.classList.add('project-modal-container');
+    const modalEl = document.getElementById('projectFormModal');
+    if (!modalEl) {
+      console.error('Modal element not found');
+      return;
+    }
 
-    // Focus the name input
-    this.nameInput.focus();
-
-    // Prevent background scrolling
-    document.body.style.overflow = 'hidden';
+    try {
+      if (window.ModalManager && window.modalManager) {
+        window.modalManager.show(this.modalId);
+      } else {
+        // Robust fallback
+        modalEl.classList.remove('hidden');
+        modalEl.style.display = 'flex';
+      }
+      
+      // Additional UI setup
+      document.body.style.overflow = 'hidden';
+      this.nameInput?.focus();
+      
+    } catch (error) {
+      console.error('Error opening modal:', error);
+      // Emergency fallback
+      modalEl.classList.remove('hidden');
+      modalEl.style.display = 'flex';
+    }
   }
 
+  /**
+   * Close the project modal using the unified ModalManager
+   */
   closeModal() {
-    this.modal.classList.add('hidden');
-    this.modal.style.display = 'none'; // Explicitly reset the display style
-    document.body.style.overflow = '';
+    if (window.ModalManager && window.modalManager) {
+      window.modalManager.hide(this.modalId);
+    } else {
+      // Fallback to direct manipulation
+      this.modalElement.classList.add('hidden');
+      this.modalElement.style.display = 'none';
+      document.body.style.overflow = '';
+    }
   }
 }
 

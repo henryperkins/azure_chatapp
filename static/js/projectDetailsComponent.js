@@ -1112,7 +1112,7 @@
         window.history.pushState({}, '', newUrl);
 
         // Store project ID in localStorage for chat context
-        localStorage.setItem('selectedProjectId', projectId);
+        // Project context is maintained via URL params and in-memory state
       } catch (error) {
         console.error('Error creating conversation:', error);
         window.showNotification(
@@ -1229,12 +1229,8 @@
      * @param {Object} file - File data
      */
     _confirmDeleteFile(file) {
-      if (!window.modalManager) {
-        console.error('modalManager not available');
-        return;
-      }
-
-      window.modalManager.show('delete', {
+      // Use static method for consistency across components
+      window.ModalManager.confirmAction({
         title: "Delete File",
         message: `Delete "${file.filename}"?`,
         confirmText: "Delete",
@@ -1268,9 +1264,7 @@
      */
     async _confirmDeleteConversation(conversation) {
       try {
-        if (!window.ModalManager) {
-          throw new Error("Modal manager not available");
-        }
+        // Use static confirmAction method for consistency
         const confirmed = await window.ModalManager.confirmAction({
           title: "Delete Conversation",
           message: `Delete "${conversation.title || 'this conversation'}" and all its messages?`,
@@ -1341,8 +1335,11 @@
      */
     _closeDeleteModal() {
       try {
+        // Try all available modal close methods in sequence
         if (window.modalManager?.hide) {
           window.modalManager.hide('delete');
+        } else if (window.ModalManager?.closeActiveModal) {
+          window.ModalManager.closeActiveModal();
         } else {
           const modal = document.getElementById('deleteConfirmModal');
           if (modal) modal.classList.add('hidden');
@@ -1385,12 +1382,8 @@
      * @param {Object} artifact - Artifact data
      */
     _confirmDeleteArtifact(artifact) {
-      if (!window.modalManager) {
-        console.error('modalManager not available');
-        return;
-      }
-
-      window.modalManager.show('delete', {
+      // Use static confirmAction method for consistency
+      window.ModalManager.confirmAction({
         title: "Delete Artifact",
         message: `Delete "${artifact.title || 'this artifact'}"?`,
         confirmText: "Delete",

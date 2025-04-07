@@ -420,13 +420,18 @@ window.MessageService.prototype._handleWsMessage = function (event) {
   }
 };
 
-  _checkKnowledgeBaseStatus: async function (projectId) {
-    try {
-      const response = await window.apiRequest(
-        `/api/projects/${projectId}/knowledge-base-status`,
-        "GET"
-      );
-      return { enabled: response.data?.isActive || false };
+/**
+ * Check if knowledge base is enabled for a project
+ * @param {string} projectId - The project ID to check
+ * @returns {Promise<{enabled: boolean, error?: boolean}>}
+ */
+window.MessageService.prototype._checkKnowledgeBaseStatus = async function(projectId) {
+  try {
+    const response = await window.apiRequest(
+      `/api/projects/${projectId}/knowledge-base-status`,
+      "GET"
+    );
+    return { enabled: response.data?.isActive || false };
   } catch (error) {
     console.warn("Error checking knowledge base status:", error);
     return { enabled: false, error: true };
