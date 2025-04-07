@@ -646,33 +646,12 @@ async def websocket_chat_endpoint(
 
     async with AsyncSessionLocal() as db:
         try:
-            # Validate token BEFORE accepting WebSocket connection
-            try:
-                user_token = (
-                    token
-                    or websocket.headers.get("Authorization", "").replace("Bearer ", "")
-                    or websocket.cookies.get("session")
-                )
-                if not user_token:
-                    logger.warning("No token found in WebSocket handshake")
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-
-                logger.info(
-                    "WebSocket token received (first 10 chars): %s...", user_token[:10]
-                )
-                logger.debug(
-                    "Full token: %s",
-                    user_token if settings.ENV != "production" else "[REDACTED]",
-                )
-
-                # Validate token
-                try:
-                    user = await get_user_from_token(user_token, db)
-                    if not user:
-                        logger.error("Token validation failed - no user found")
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                        return
+            # Validate same-origin cookie
+            user = await get_user_from_token(websocket.cookies.get("session"), db)
+            if not user:
+                logger.warning("No valid session cookie found")
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                return
                 except HTTPException as e:
                     if "expired" in str(e.detail).lower():
                         logger.warning("Token validation error: %s", str(e))

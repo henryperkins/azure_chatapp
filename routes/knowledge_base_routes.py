@@ -564,7 +564,6 @@ async def delete_knowledge_base(
 
 
 @router.post("/projects/{project_id}/knowledge-bases/search", response_model=dict)
-@limiter.limit("10/minute")
 async def search_project_knowledge(
     request: Request,
     project_id: UUID,
