@@ -112,16 +112,17 @@ middleware = [
         allow_origin_regex=None,
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
+        allow_headers=["*", "Authorization", "Cookie", "Content-Type", "X-CSRF-Token"],
+        expose_headers=["*", "Set-Cookie"],
         max_age=600,  # 10 minutes cache for preflight requests
     ),
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
         session_cookie="session",
-        same_site="lax",  # Changed to lax for all environments for better compatibility
+        same_site="lax",  # "lax" is more compatible across browsers
         https_only=settings.ENV == "production",
+        max_age=60 * 60 * 24 * 7,  # 7 days session lifetime
     ),
 ]
 
@@ -230,6 +231,36 @@ if settings.ENV != "production":
                 "project_files_columns": inspector.get_columns("project_files"),
                 "knowledge_bases_columns": inspector.get_columns("knowledge_bases"),
             }
+    
+    @app.get("/debug/auth-state")
+    async def debug_auth_state(request: Request):
+        """Debug endpoint to check auth cookies and token state"""
+        from utils.auth_utils import verify_token, revoked_tokens
+        
+        cookies = {k: v for k, v in request.cookies.items()}
+        access_token = cookies.get('access_token')
+        refresh_token = cookies.get('refresh_token')
+        
+        token_info = None
+        if access_token:
+            try:
+                async with get_async_session_context() as session:
+                    token_info = await verify_token(access_token, token_type="access", session=session)
+            except Exception as e:
+                token_info = {"error": str(e)}
+        
+        return {
+            "cookies": cookies,
+            "token_info": token_info,
+            "revoked_tokens_count": len(revoked_tokens),
+            "headers": {k: v for k, v in request.headers.items()},
+            "secure_connection": request.url.scheme == "https",
+            "same_site_compatibility": {
+                "strict": "Most secure but may break third-party functionality",
+                "lax": "Currently used - balances security and usability",
+                "none": "Allows cross-site requests but requires secure connection"
+            }
+        }
 
 
 @app.get("/favicon.ico", include_in_schema=False)

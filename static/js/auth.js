@@ -36,18 +36,35 @@ const TokenManager = {
 
   /**
    * Attempts to read tokens from cookies and rehydrate in memory
+   * with improved error handling and cookie parsing
    */
   rehydrateFromCookies() {
     try {
-      const cookieToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('access_token='))
-        ?.split('=')[1];
-
-      const cookieRefresh = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('refresh_token='))
-        ?.split('=')[1];
+      if (!document.cookie) {
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] No cookies found');
+        }
+        return false;
+      }
+      
+      let cookieToken = null;
+      let cookieRefresh = null;
+      
+      // More robust cookie parsing
+      const cookies = document.cookie.split(/;\s*/);
+      for (const cookie of cookies) {
+        if (cookie.startsWith('access_token=')) {
+          cookieToken = cookie.substring('access_token='.length);
+          if (AUTH_DEBUG) {
+            console.debug('[Auth] Found access token in cookies');
+          }
+        } else if (cookie.startsWith('refresh_token=')) {
+          cookieRefresh = cookie.substring('refresh_token='.length);
+          if (AUTH_DEBUG) {
+            console.debug('[Auth] Found refresh token in cookies');
+          }
+        }
+      }
 
       if (cookieToken) {
         if (AUTH_DEBUG) {
@@ -55,6 +72,10 @@ const TokenManager = {
         }
         this.setTokens(cookieToken, cookieRefresh);
         return true;
+      }
+      
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] No access token found in cookies');
       }
       return false;
     } catch (err) {
@@ -134,25 +155,47 @@ const TokenManager = {
 
   /**
    * Returns Authorization header with token if available
+   * With improved cookie parsing and error handling
    */
   async getAuthHeader() {
     try {
-      const cookieToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('access_token='))
-        ?.split('=')[1];
+      // Use the more robust cookie parsing method
+      let cookieToken = null;
+      
+      if (document.cookie) {
+        const cookies = document.cookie.split(/;\s*/);
+        for (const cookie of cookies) {
+          if (cookie.startsWith('access_token=')) {
+            cookieToken = cookie.substring('access_token='.length);
+            break;
+          }
+        }
+      }
 
-      const authState = JSON.parse(localStorage.getItem('auth_state'));
+      // Get token from localStorage
+      let authState = null;
+      try {
+        const rawAuthState = localStorage.getItem('auth_state');
+        if (rawAuthState) {
+          authState = JSON.parse(rawAuthState);
+        }
+      } catch (parseError) {
+        console.warn('[Auth] Failed to parse auth_state from localStorage:', parseError);
+        // Continue with null authState
+      }
+      
       const storageToken = this.accessToken || authState?.accessToken;
 
       if (AUTH_DEBUG) {
         console.debug('[Auth] Token sources:', {
           cookieToken: cookieToken ? '***' + cookieToken.slice(-6) : null,
           storageToken: storageToken ? '***' + storageToken.slice(-6) : null,
+          memoryToken: this.accessToken ? '***' + this.accessToken.slice(-6) : null,
           version: this.version
         });
       }
 
+      // Check for token version mismatch
       if (cookieToken && storageToken && this.version) {
         const storedVersion = localStorage.getItem('tokenVersion');
         if (storedVersion && storedVersion !== this.version) {
@@ -165,11 +208,21 @@ const TokenManager = {
         }
       }
 
-      const accessToken = cookieToken || storageToken;
+      // Use token from any available source
+      const accessToken = this.accessToken || cookieToken || storageToken;
+      
+      // Log the token being used
+      if (AUTH_DEBUG && accessToken) {
+        console.debug('[Auth] Using token ending with:', accessToken.slice(-6));
+      }
+      
       return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
     } catch (error) {
       console.error('[Auth] Failed to get auth header:', error);
-      this.clearTokens();
+      // Don't clear tokens for non-critical errors to prevent unnecessary logouts
+      if (error.message?.includes('Failed to refresh token')) {
+        this.clearTokens();
+      }
       throw error;
     }
   },
