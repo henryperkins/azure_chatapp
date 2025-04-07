@@ -666,12 +666,6 @@ async function updateAuthStatus() {
     if (data.access_token) {
       TokenManager.setTokens(data.access_token, data.refresh_token);
     }
-    localStorage.setItem('userInfo', JSON.stringify({
-      username: data.username,
-      roles: data.roles || [],
-      lastVerified: Date.now()
-    }));
-
     setupTokenRefresh();
     broadcastAuth(true, data.username);
     return true;
@@ -767,16 +761,11 @@ window.auth = window.auth || {
         console.debug("[Auth] Starting initialization");
       }
 
-      // 1) Check localStorage for tokens
-      const authState = JSON.parse(localStorage.getItem('auth_state'));
-      if (authState?.accessToken) {
-        if (AUTH_DEBUG) {
-          console.debug("[Auth] Found stored tokens in localStorage, rehydrating");
-        }
-        TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-
-        const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
-        broadcastAuth(true, userInfo.username);
+      // 1) Check cookies for tokens
+      if (TokenManager.rehydrateFromCookies()) {
+        const decoded = decodeJwt(TokenManager.accessToken);
+        const username = decoded?.sub || 'Authenticated User';
+        broadcastAuth(true, username);
         await verifyAuthState(true);
       } else {
         // Nothing found; mark as logged out
@@ -847,15 +836,9 @@ window.auth = window.auth || {
       // Rehydrate from cookies
       const cookiesRehydrated = TokenManager.rehydrateFromCookies();
       if (!cookiesRehydrated) {
-        // Then from localStorage
-        const authState = JSON.parse(localStorage.getItem('auth_state'));
-        if (authState?.accessToken) {
-          TokenManager.setTokens(authState.accessToken, authState.refreshToken);
-        } else {
-          // No tokens found
-          authVerificationCache.set(false);
-          return false;
-        }
+        // No tokens found
+        authVerificationCache.set(false);
+        return false;
       }
     }
 
