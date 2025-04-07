@@ -374,9 +374,9 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: Optiona
         key=key,
         value=value,
         httponly=True,
-        secure=False,  # Disable secure for CORS testing
-        samesite="none",  # Allow cross-site cookies
+        secure=True,        # REQUIRES HTTPS 
+        samesite="strict",  # No cross-site usage
         path="/",
-        domain=None,  # Allow all domains
+        domain=settings.COOKIE_DOMAIN,  # Lock to our domain
         max_age=max_age
     )
