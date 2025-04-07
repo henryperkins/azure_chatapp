@@ -78,11 +78,8 @@ const ELEMENTS = {};
  */
 async function ensureAuthenticated() {
   if (!window.auth?.isAuthenticated) {
-    console.warn("Auth module not available - falling back to local checks");
-    // Fallback: simply see if we have any local token data
-    const hasLocalAuth = false;
-    API_CONFIG.isAuthenticated = hasLocalAuth;
-    return hasLocalAuth;
+    API_CONFIG.isAuthenticated = false;
+    return false;
   }
 
   try {
