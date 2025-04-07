@@ -69,17 +69,19 @@ window.ChatInterface = function (options = {}) {
 
   // Handle sending messages from UI
 window.ChatInterface.prototype._handleSendMessage = function (messageText) {
-  // Ensure TokenManager is initialized before sending
-  if (!window.TokenManager) {
-    console.log('[chat-interface] Initializing TokenManager before sending message');
-    window.TokenManager = new window.TokenManager();
+  // Ensure auth is initialized before sending
+  if (!window.auth?.isInitialized) {
+    console.log('[chat-interface] Initializing auth before sending message');
+    window.auth.init().catch(err => {
+      console.error('[chat-interface] Auth initialization failed:', err);
+    });
   }
 
-  // Wait for initialization to complete
+  // Wait for auth initialization to complete
   return new Promise((resolve, reject) => {
     const checkInitialized = () => {
-      if (window.TokenManager?.isInitialized) {
-        console.log('[chat-interface] TokenManager initialized, sending message');
+      if (window.auth?.isInitialized) {
+        console.log('[chat-interface] Auth initialized, sending message');
         // Implement message sending logic
         console.log("Sending message:", messageText);
         resolve();
@@ -255,16 +257,8 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
       }
 
       // Wait for auth to fully initialize
-      return new Promise(resolve => {
-        const checkAuthReady = () => {
-          if (window.TokenManager?.isInitialized) {
-            resolve();
-          } else {
-            setTimeout(checkAuthReady, 50);
-          }
-        };
-        checkAuthReady();
-      });
+      // Wait for auth to be ready
+      return window.auth.init().then(() => resolve());
     }).then(() => {
       // Create conversation if still no chatId
       if (!this.currentChatId) {
@@ -436,102 +430,70 @@ window.ChatInterface.prototype.createNewConversation = async function () {
   try {
     console.log('Creating new conversation...');
 
+    // Initialize and verify auth in one consolidated block
+    try {
+      if (!window.auth?.isInitialized) {
+        await window.auth.init();
+      }
+      await window.auth.getAuthToken();
+    } catch (authError) {
+      console.warn("[chat-interface] Authentication failed:", authError);
+      
+      // Notify UI and fail immediately for auth errors
+      window.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: {
+          authenticated: false,
+          requiresLogin: true,
+          error: authError.message.includes('no valid tokens')
+            ? 'Session expired - please log in again'
+            : 'Authentication failed'
+        }
+      }));
+      throw new Error('Authentication required - please log in');
+    }
+
+    // Only proceed with chat operations if auth succeeded
     const MAX_RETRIES = 3;
-    const INIT_TIMEOUT = 10000;  // Increased to 10s
-    const VERIFY_TIMEOUT = 10000; // Increased to 10s
-
-    let authVerified = false;
-    let lastError = null;
-
+    const RETRY_DELAY = 300;
+    
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-    // Initialize TokenManager if not present
-    if (!window.TokenManager) {
-      console.log('[chat-interface] Initializing TokenManager for new conversation');
-      window.TokenManager = new window.TokenManager();
-      
-      // Start initialization immediately rather than waiting
-      if (typeof window.TokenManager.initializeFromCookies === 'function') {
-        window.TokenManager.initializeFromCookies();
-      }
-    }
+        // Chat operation logic
+        let conversation;
+        if (this.projectId && window.projectManager?.createConversation) {
+          conversation = await window.projectManager.createConversation(this.projectId);
+        } else {
+          conversation = await this.conversationService.createNewConversation();
+        }
 
-    // Wait for TokenManager initialization with better error handling
-    try {
-      await Promise.race([
-        new Promise((resolve) => {
-          const checkInitialized = () => {
-            if (window.TokenManager?.isInitialized) {
-              resolve(true);
-            } else if (!window.TokenManager) {
-              reject(new Error('TokenManager not available'));
-            } else {
-              setTimeout(checkInitialized, 50);
-            }
-          };
-          checkInitialized();
-        }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('TokenManager initialization timeout')), INIT_TIMEOUT)
-        )
-      ]);
-    } catch (err) {
-      console.error('[chat-interface] TokenManager initialization failed:', err);
-      throw new Error(`Authentication initialization failed: ${err.message}`);
-    }
+        if (!conversation?.id) {
+          throw new Error('Invalid conversation response from server');
+        }
 
-        // If not inited, init
-        if (!window.auth?.isInitialized) {
-          try {
-            await window.auth.init();
-          } catch (authInitError) {
-            console.warn("[chat-interface] Auth initialization failed:", authInitError);
-            // Continue with authentication check anyway
+        console.log(`New conversation created successfully with ID: ${conversation.id}`);
+        this.currentChatId = conversation.id;
+        window.history.pushState({}, '', `/?chatId=${conversation.id}`);
+
+        // Initialize message service
+        if (this.messageService) {
+          if (window.MODEL_CONFIG) {
+            this.messageService.updateModelConfig(window.MODEL_CONFIG);
           }
+          this.messageService.initialize(conversation.id, null);
+          await this.establishWebSocketConnection(conversation.id);
         }
 
-        // Verify auth with timeout
-        try {
-          authVerified = await Promise.race([
-            typeof window.auth.isAuthenticated === 'function'
-              ? window.auth.isAuthenticated({ forceVerify: true })
-              : Promise.reject(new Error('Auth not available')),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
-            )
-          ]);
-        } catch (authVerifyError) {
-          console.warn("[chat-interface] Auth verification failed:", authVerifyError);
-          authVerified = false;
-          lastError = authVerifyError;
-        }
-
-        if (!authVerified && window.TokenManager && typeof window.TokenManager.hasTokens === 'function' && window.TokenManager.hasTokens()) {
-          try {
-            // Check if refreshTokens exists
-            if (typeof window.TokenManager.refresh === 'function') {
-              await window.TokenManager.refresh();
-              authVerified = await window.auth.isAuthenticated({ forceVerify: true });
-            } else {
-              throw new Error('Token refresh method not available');
-            }
-          } catch (refreshError) {
-            console.warn("[chat-interface] Token refresh failed:", refreshError);
-            lastError = refreshError;
-          }
-        }
-
-        if (authVerified) break;
-
-        if (attempt < MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt - 1)));
-        }
+        // Update UI
+        if (this.container) this.container.classList.remove('hidden');
+        document.getElementById("noChatSelectedMessage")?.classList.add('hidden');
+        
+        return conversation;
       } catch (error) {
-        console.warn(`[chat-interface] Auth verification attempt ${attempt} failed:`, error);
-        lastError = error;
-        if (attempt < MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, 300 * Math.pow(2, attempt - 1)));
+        console.warn(`[chat-interface] Conversation creation attempt ${attempt} failed:`, error);
+        if (attempt === MAX_RETRIES) {
+          throw error;
         }
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * Math.pow(2, attempt - 1)));
       }
     }
 
@@ -541,8 +503,8 @@ window.ChatInterface.prototype.createNewConversation = async function () {
 
       if (lastError?.message?.includes('timeout')) {
         errorMsg = "Authentication check timed out - please try again";
-      } else if (lastError?.message?.includes('TokenManager')) {
-        errorMsg = "Session initialization failed - please refresh the page";
+      } else if (lastError?.message?.includes('refresh') || lastError?.message?.includes('token')) {
+        errorMsg = "Session expired - please log in again";
       } else if (lastError?.status === 401) {
         errorMsg = "Session expired - please log in again";
       } else if (lastError?.message) {
@@ -573,7 +535,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
     window.dispatchEvent(new CustomEvent('authStateChanged', {
       detail: {
         authenticated: true,
-        username: window.TokenManager?.username || null
+        username: window.auth?.username || null
       }
     }));
 
@@ -873,7 +835,7 @@ window.ChatInterface.prototype.establishWebSocketConnection = async function (co
   }
 
   // If WebSocket connection failed, initialize with HTTP
-  console.log('[ChatInterface] Using HTTP fallback for messaging');
+  console.log('[ChatInterface] Using HTTP fallback for messaging');  
   this.messageService.initialize(conversationId, null);
   return false;
 };
