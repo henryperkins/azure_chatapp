@@ -370,15 +370,15 @@ async def logout_user(
 
 
 def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int] = None):
-    # In development mode:
-    # - We can't use SameSite="None" without Secure=True (browser restriction)
-    # - But we may be on HTTP not HTTPS in development
-    # Solution: Use SameSite="Lax" for all environments
-    secure_cookie = settings.ENV == "production"
-    samesite_mode = "lax"  # Using "lax" for all environments is more compatible
-    
-    # Handle localhost domain special case - omit domain for localhost
-    cookie_domain = None if settings.COOKIE_DOMAIN == "localhost" else settings.COOKIE_DOMAIN
+    # Development settings
+    if settings.ENV == "development":
+        secure_cookie = False
+        samesite_mode = "lax"
+        cookie_domain = None  # Omit domain for localhost
+    else:
+        secure_cookie = True
+        samesite_mode = "lax"
+        cookie_domain = None if settings.COOKIE_DOMAIN == "localhost" else settings.COOKIE_DOMAIN
     
     response.set_cookie(
         key=key,
