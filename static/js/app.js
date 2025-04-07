@@ -399,7 +399,7 @@ function createProjectListItem(project) {
     }
 
     li.addEventListener('click', () => {
-      localStorage.setItem('selectedProjectId', projectData.id);
+      // Project selection now managed via session context
 
       // Switch UI to project details
       const projectListView = document.getElementById('projectListView');

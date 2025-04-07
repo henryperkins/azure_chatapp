@@ -780,7 +780,8 @@ function loadStarredConversations() {
   if (!container) return;
 
   // Get starred conversations from local storage
-  const starredIds = JSON.parse(localStorage.getItem('starredConversations') || '[]');
+  const response = await window.apiRequest('/api/user/preferences');
+  const starredIds = response.data?.starred_conversations || [];
 
   if (starredIds.length === 0) {
     // Show empty state
@@ -876,7 +877,10 @@ function toggleStarConversation(conversationId) {
   }
 
   // Save back to local storage
-  localStorage.setItem('starredConversations', JSON.stringify(starredIds));
+  // Starred conversations now managed via API
+  await window.apiRequest('/api/user/preferences', 'PATCH', {
+    starred_conversations: starredIds 
+  });
 
   return index === -1; // Return true if now starred, false if now unstarred
 }
