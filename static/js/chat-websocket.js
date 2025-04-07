@@ -184,8 +184,8 @@
     try {
       const parsed = new URL(url);
       
-      if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
-        console.error('Invalid WebSocket protocol:', parsed.protocol);
+      if (!parsed.protocol) {
+        console.error('Missing protocol in WebSocket URL');
         return false;
       }
 
@@ -196,11 +196,6 @@
 
       if (!parsed.pathname.startsWith('/')) {
         console.error('WebSocket path must start with /:', parsed.pathname);
-        return false;
-      }
-
-      if (parsed.username || parsed.password) {
-        console.error('WebSocket URL should not contain credentials');
         return false;
       }
 
@@ -284,7 +279,6 @@
         throw new Error('Empty WebSocket host');
       }
 
-      // Allow WebSocket connections from any origin (CORS handled by backend)
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
       
       // Determine correct WebSocket URL path
@@ -551,47 +545,6 @@
       return;
     }
 
-    if (errorCode === 1008) {
-      const errorInfo = {
-        state: this.state,
-        chatId: this.chatId,
-        projectId: this.projectId,
-        reconnectAttempt: this.reconnectAttempts,
-        wsUrl: this.wsUrl,
-        timestamp: new Date().toISOString()
-      };
-      console.error('WebSocket policy violation - authentication failure', errorDetails, errorInfo);
-
-      this.useHttpFallback = true;
-      this.setState(CONNECTION_STATES.DISCONNECTED);
-      
-      if (this.reconnectTimeout) {
-        clearTimeout(this.reconnectTimeout);
-        this.reconnectTimeout = null;
-      }
-
-      try {
-        if (window.TokenManager?.refreshTokens) {
-          await window.TokenManager.refreshTokens();
-          
-          if (this.onError) {
-            this.onError({
-              name: 'AuthenticationRefreshed',
-              message: 'Session refreshed. Using reliable HTTP messaging.',
-              statusText: 'Session refreshed. Using reliable HTTP messaging.'
-            });
-          }
-        }
-      } catch (refreshError) {
-        console.error('Token refresh failed after policy violation:', refreshError);
-        if (this.onError) {
-          const error = new Error('Session expired - please log in again');
-          error.details = errorInfo;
-          this.onError(error);
-        }
-      }
-      return;
-    }
 
     if (errorDetails.code !== 1005) {
       console.error('WebSocket connection error:', {
