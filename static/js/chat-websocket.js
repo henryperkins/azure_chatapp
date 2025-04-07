@@ -222,13 +222,25 @@
     try {
       // Check cookie-based auth
       const isAuthenticated = await window.auth?.isAuthenticated?.() ?? false;
+      if (!isAuthenticated) {
+        throw new Error('User not authenticated');
+      }
 
-      // Remove localStorage usage for project ID. Use in-memory from `this.activeProjectId` if needed
+      // Get project ID from memory
       this.projectId = this.activeProjectId;
 
-      // Retrieve a valid token from AuthManager
-      const token = await this.authManager.getValidToken();
-      const params = new URLSearchParams({ token });
+      // Get WebSocket token from TokenManager - ONLY for WebSocket connection
+      // This token is never stored in memory longer than needed for the connection
+      const tokenData = await window.TokenManager.getWSAuthToken();
+      if (!tokenData?.token) {
+        throw new Error('WebSocket auth token not available');
+      }
+
+      // The token is only used to build the WebSocket URL and then discarded
+      const params = new URLSearchParams({ token: tokenData.token });
+      if (tokenData.version) {
+        params.append("version", tokenData.version);
+      }
 
       // Build WS host from config or fallback
       let host = window.API_CONFIG?.WS_ENDPOINT || window.location.host;
@@ -292,7 +304,13 @@
         await this.establishConnection();
       } finally {
         window.__wsConnecting = null;
+        
+        // After the connection is established, explicitly delete the token variables 
+        // to ensure they're not kept in memory
+        tokenData.token = null;
+        delete tokenData.token;
       }
+      
       this.setState(CONNECTION_STATES.CONNECTED);
       return true;
 
@@ -310,10 +328,10 @@
       this.useHttpFallback = true;
 
       // If error is auth-related, attempt refresh once
-      if (error.message.includes('403') || error.message.includes('token')) {
+      if (error.message.includes('403') || error.message.includes('token') || error.message.includes('auth')) {
         try {
           console.log('Attempting token refresh due to auth error');
-          await this.handleTokenRefresh();
+          await window.TokenManager.refresh();
           if (this.reconnectAttempts < this.maxRetries) {
             return this.connect(chatId);
           }
@@ -350,11 +368,16 @@
     }, 30000);
   };
 
+  /**
+   * Establish a WebSocket connection
+   * This method sets up WebSocket handlers for real-time messages
+   */
   window.WebSocketService.prototype.establishConnection = function () {
     return new Promise((resolve, reject) => {
       this.pendingPongs = 0;
       const socket = new WebSocket(this.wsUrl);
-
+      this.socket = socket;
+      
       const timeout = setTimeout(() => {
         const err = new Error(`Connection timeout after ${this.connectionTimeout}ms`);
         err.code = 'CONNECTION_TIMEOUT';
@@ -364,33 +387,30 @@
 
       socket.onopen = () => {
         clearTimeout(timeout);
-        this.socket = socket;
         this.reconnectAttempts = 0;
-        console.debug('WebSocket connection established', {
-          url: this.wsUrl,
-          chatId: this.chatId,
-          projectId: this.projectId
-        });
+        console.log('WebSocket connection established');
+        
+        // Start heartbeat mechanism
+        this.startHeartbeat();
+        
+        // Resolve the connection promise
         resolve();
       };
 
       socket.onmessage = (event) => {
         try {
-          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-
-          if (data.type === 'token_refresh_success') {
-            if (window.TokenManager) {
-              window.TokenManager.tokenVersion = data.new_version;
-              console.log('Token version updated to:', data.new_version);
-            }
-            return;
-          }
+          // Parse the message data
+          const data = JSON.parse(event.data);
+          
+          // Handle ping/pong for connection keepalive
           if (data.type === 'pong') {
             this.pendingPongs = Math.max(0, this.pendingPongs - 1);
             this.lastPongTime = Date.now();
             console.debug('Received pong, pending pongs:', this.pendingPongs);
             return;
           }
+          
+          // Handle token refresh requests from server
           if (data.type === 'token_refresh_required') {
             this.handleTokenRefresh().catch(err => {
               console.error('Token refresh failed:', err);
@@ -398,6 +418,8 @@
             });
             return;
           }
+          
+          // Handle message responses
           if (data.messageId && this.pendingMessages.has(data.messageId)) {
             const { resolve, reject, timeout } = this.pendingMessages.get(data.messageId);
             clearTimeout(timeout);
@@ -408,6 +430,7 @@
               : resolve(data);
           }
 
+          // Forward to the message handler
           this.onMessage(event);
         } catch (err) {
           console.error('Message parsing error:', err);
@@ -416,7 +439,7 @@
 
       socket.onerror = (error) => {
         clearTimeout(timeout);
-        const enhancedError = new Error(`WebSocket connection error: ${error.message || 'Unknown error'}`);
+        const enhancedError = new Error('WebSocket connection error');
         enhancedError.code = 'WS_CONNECTION_ERROR';
         enhancedError.details = {
           url: this.wsUrl,
@@ -431,9 +454,14 @@
 
       socket.onclose = (event) => {
         clearTimeout(timeout);
+        console.log(`WebSocket closed with code ${event.code}`);
+        
+        // Don't treat normal close events as errors
         if (![1000, 1001, 1005].includes(event.code)) {
           this.handleConnectionError(new Error(`Connection closed: ${event.code}`));
         }
+        
+        // Clean up
         this.socket = null;
         this.setState(CONNECTION_STATES.DISCONNECTED);
       };
