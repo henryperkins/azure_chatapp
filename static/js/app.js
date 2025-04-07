@@ -280,7 +280,8 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
       // Handle 401 Unauthorized
       if (response.status === 401) {
-        // Skip token refresh for auth-related endpoints
+        console.log(`401 response received for ${endpoint} (retry: ${retryCount}/${maxRetries})`);
+        // Skip token refresh for auth-related endpoints except verify
         const isAuthEndpoint = endpoint.includes('/auth/') &&
           !endpoint.includes('/auth/verify');
         
@@ -289,8 +290,10 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
             if (window.TokenManager?.refreshTokens) {
               console.log('Attempting token refresh due to 401 response');
               const refreshed = await window.TokenManager.refreshTokens();
+              console.log('Token refresh result:', refreshed ? 'success' : 'failed');
               if (refreshed) {
                 // Try request again with new token
+                console.log('Retrying request with new token');
                 return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
               }
             }
@@ -303,15 +306,18 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         } else if (isAuthEndpoint) {
           // For auth endpoints, just propagate the error
           const errorBody = await response.text();
+          console.warn('Auth endpoint returned 401:', errorBody);
           throw new Error(errorBody || 'Authentication failed');
         } else {
           // Exhausted retries - clear auth state
+          console.warn('Exhausted retries or skip retry enabled, clearing auth state');
           clearAuthState();
           throw new Error('Session expired. Please login again.');
         }
       } else if (response.status === 401 && (retryCount >= maxRetries || options.skipRetry)) {
         // Clear auth state after exhausting retries
         if (!endpoint.includes('/auth/')) {
+          console.log('Verifying authentication state after failed retries');
           await ensureAuthenticated();
         }
       } else if (response.status === 404) {
