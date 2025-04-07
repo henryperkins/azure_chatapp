@@ -16,7 +16,7 @@
    * chat-websocket.js
    * Robust WebSocket service for real-time chat communication with:
    * - Automatic reconnection
-   * - Authentication handling (cookie-based)
+   * - Authentication via centralized auth.js
    * - HTTP fallback
    * - State management
    */
@@ -37,61 +37,6 @@
     RECONNECTING: 'reconnecting',
     ERROR: 'error'
   };
-
-  /**
-   * Authentication Manager
-   * Manages retrieval of a valid token (purely in memory/cookies).
-   */
-  class AuthManager {
-    constructor() {
-      this.authCheckInProgress = false;
-
-      // If you still want to track project selection in memory, remove localStorage usage:
-      document.addEventListener('projectSelected', (event) => {
-        if (event.detail && event.detail.projectId) {
-          console.log('Auth manager: Project selected:', event.detail.projectId);
-          // Previously: localStorage.setItem('selectedProjectId', event.detail.projectId);
-          // Now removed. If needed, store in memory on a property, or do nothing.
-        }
-      });
-    }
-
-    async getValidToken() {
-      if (this.authCheckInProgress) {
-        throw new Error('Auth check already in progress');
-      }
-
-      this.authCheckInProgress = true;
-      try {
-        // Use any existing valid token
-        if (window.TokenManager?.accessToken && !window.TokenManager.isExpired()) {
-          return window.TokenManager.accessToken;
-        }
-
-        // Check authenticated via cookie-based logic
-        if (window.auth?.isAuthenticated) {
-          const isAuthenticated = await window.auth.isAuthenticated();
-          if (isAuthenticated && window.TokenManager?.accessToken) {
-            // If you had a token version, you could store it in memory.
-            // localStorage usage removed.
-            return window.TokenManager.accessToken;
-          }
-        }
-
-        // Optionally refresh tokens if the TokenManager supports it
-        if (window.TokenManager?.refresh) {
-          await window.TokenManager.refresh();
-          if (window.TokenManager.accessToken) {
-            return window.TokenManager.accessToken;
-          }
-        }
-
-        throw new Error('Unable to obtain valid token');
-      } finally {
-        this.authCheckInProgress = false;
-      }
-    }
-  }
 
   /**
    * WebSocket Service
@@ -126,9 +71,6 @@
     this.useHttpFallback = false;
     this.wsUrl = null;
     this.pendingMessages = new Map();
-
-    // Dependencies
-    this.authManager = new AuthManager();
 
     // Event handlers
     this.onMessage = options.onMessage || (() => { });
@@ -220,20 +162,21 @@
     this.useHttpFallback = false;
 
     try {
-      // Check auth using the standardized function from app.js
-      // Use ensureAuthenticated for consistent checks including retries/timeouts
-      const isAuthenticated = await window.ensureAuthenticated?.({ forceVerify: false });
+      // Check auth using the centralized auth.js module
+      if (!window.auth) {
+        throw new Error('Auth module not available');
+      }
+
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
-        // ensureAuthenticated handles logging/state clearing, just throw
         throw new Error('User not authenticated');
       }
 
       // Get project ID from memory
       this.projectId = this.activeProjectId;
 
-      // Get WebSocket token from TokenManager - ONLY for WebSocket connection
-      // This token is never stored in memory longer than needed for the connection
-      const tokenData = await window.TokenManager.getWSAuthToken();
+      // Get WebSocket token from centralized auth module
+      const tokenData = await window.auth.getWSAuthToken();
       if (!tokenData?.token) {
         throw new Error('WebSocket auth token not available');
       }
@@ -306,13 +249,13 @@
         await this.establishConnection();
       } finally {
         window.__wsConnecting = null;
-        
+
         // After the connection is established, explicitly delete the token variables 
         // to ensure they're not kept in memory
         tokenData.token = null;
         delete tokenData.token;
       }
-      
+
       this.setState(CONNECTION_STATES.CONNECTED);
       return true;
 
@@ -329,16 +272,19 @@
       this.setState(CONNECTION_STATES.ERROR);
       this.useHttpFallback = true;
 
-      // If error is auth-related, attempt refresh once
-      if (error.message.includes('403') || error.message.includes('token') || error.message.includes('auth')) {
+      // If error is auth-related, attempt refresh once using auth.js
+      if (error.message.includes('403') || error.message.includes('401') ||
+        error.message.includes('token') || error.message.includes('auth')) {
         try {
           console.log('Attempting token refresh due to auth error');
-          await window.TokenManager.refresh();
+          await window.auth.refreshTokens();
           if (this.reconnectAttempts < this.maxRetries) {
             return this.connect(chatId);
           }
         } catch (refreshError) {
           console.error('Token refresh failed:', refreshError);
+          // Let auth.js handle auth errors
+          window.auth.handleAuthError(refreshError, 'WebSocket connection');
         }
       }
       throw enhancedError;
@@ -379,7 +325,7 @@
       this.pendingPongs = 0;
       const socket = new WebSocket(this.wsUrl);
       this.socket = socket;
-      
+
       const timeout = setTimeout(() => {
         const err = new Error(`Connection timeout after ${this.connectionTimeout}ms`);
         err.code = 'CONNECTION_TIMEOUT';
@@ -391,10 +337,10 @@
         clearTimeout(timeout);
         this.reconnectAttempts = 0;
         console.log('WebSocket connection established');
-        
+
         // Start heartbeat mechanism
         this.startHeartbeat();
-        
+
         // Resolve the connection promise
         resolve();
       };
@@ -403,7 +349,7 @@
         try {
           // Parse the message data
           const data = JSON.parse(event.data);
-          
+
           // Handle ping/pong for connection keepalive
           if (data.type === 'pong') {
             this.pendingPongs = Math.max(0, this.pendingPongs - 1);
@@ -411,7 +357,7 @@
             console.debug('Received pong, pending pongs:', this.pendingPongs);
             return;
           }
-          
+
           // Handle token refresh requests from server
           if (data.type === 'token_refresh_required') {
             this.handleTokenRefresh().catch(err => {
@@ -420,7 +366,7 @@
             });
             return;
           }
-          
+
           // Handle message responses
           if (data.messageId && this.pendingMessages.has(data.messageId)) {
             const { resolve, reject, timeout } = this.pendingMessages.get(data.messageId);
@@ -457,12 +403,12 @@
       socket.onclose = (event) => {
         clearTimeout(timeout);
         console.log(`WebSocket closed with code ${event.code}`);
-        
+
         // Don't treat normal close events as errors
         if (![1000, 1001, 1005].includes(event.code)) {
           this.handleConnectionError(new Error(`Connection closed: ${event.code}`));
         }
-        
+
         // Clean up
         this.socket = null;
         this.setState(CONNECTION_STATES.DISCONNECTED);
@@ -472,21 +418,16 @@
 
   window.WebSocketService.prototype.handleTokenRefresh = async function () {
     try {
-      console.debug(`${debugPrefix} Token refresh required, attempting refresh`);
-      
+      console.debug(`${debugPrefix} Token refresh required, using auth.js`);
+
       // Track refresh attempts
       const refreshStartTime = Date.now();
-      
-      // Attempt token refresh with timeout
-      await Promise.race([
-        window.TokenManager.refresh(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Token refresh timeout')), 8000)
-        )
-      ]);
-      
+
+      // Use auth.js for token refresh
+      await window.auth.refreshTokens();
+
       console.debug(`${debugPrefix} Token refresh successful in ${Date.now() - refreshStartTime}ms`);
-      
+
       // Process any pending messages that should be rejected due to token refresh
       if (this.pendingMessages.size > 0) {
         console.debug(`${debugPrefix} Rejecting ${this.pendingMessages.size} pending messages due to token refresh`);
@@ -496,15 +437,14 @@
         });
         this.pendingMessages.clear();
       }
-      
+
       // If we're connected, send the refreshed token to the server
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({
           type: 'token_refresh',
-          version: window.TokenManager.version,
           timestamp: new Date().toISOString()
         }));
-        
+
         this.reconnectAttempts = 0;
         return true;
       } else {
@@ -515,92 +455,15 @@
 
     } catch (error) {
       console.error(`${debugPrefix} Token refresh failed:`, error);
-      
-      // Parse error response text if available
-      let errorDetails = '';
-      try {
-        if (typeof error.message === 'string' && error.message.includes('{')) {
-          const jsonStartIndex = error.message.indexOf('{');
-          const jsonStr = error.message.substring(jsonStartIndex);
-          const errorObj = JSON.parse(jsonStr);
-          errorDetails = errorObj.detail || '';
-        }
-      } catch (e) {
-        // If parsing fails, continue with normal error handling
-        console.debug(`${debugPrefix} Could not parse error JSON:`, e);
-      }
-      
-      // Check specific error types
-      let enhancedError;
-      
-      // Handle specific token invalidation scenarios
-      if (error.message?.includes('token version mismatch') ||
-          error.message?.includes('Token version mismatch') ||
-          errorDetails.includes('token version mismatch') ||
-          errorDetails.includes('Token version mismatch')) {
-        enhancedError = new Error('Session invalidated due to token version mismatch - please login again');
-        enhancedError.code = 'TOKEN_VERSION_MISMATCH';
-        console.warn(`${debugPrefix} Token version mismatch detected - session invalidated`);
-        
-        // Show user-friendly notification if available
-        if (window.TokenManager && typeof window.TokenManager.showSessionExpiredNotification === 'function') {
-          window.TokenManager.showSessionExpiredNotification('Your session was invalidated because you logged in elsewhere. Please login again.');
-        }
-        
-        // Force immediate logout for token version mismatch
-        if (window.auth && typeof window.auth.logout === 'function') {
-          setTimeout(() => {
-            console.debug(`${debugPrefix} Triggering logout due to token version mismatch`);
-            window.auth.logout();
-          }, 500);
-        }
-      } else if (error.message?.includes('token revoked') ||
-                 error.message?.includes('Token revoked') ||
-                 errorDetails.includes('token revoked') ||
-                 errorDetails.includes('Token revoked')) {
-        enhancedError = new Error('Your session has been revoked - please login again');
-        enhancedError.code = 'TOKEN_REVOKED';
-        console.warn(`${debugPrefix} Token revocation detected - session invalidated`);
-        
-        // Show user-friendly notification if available
-        if (window.TokenManager && typeof window.TokenManager.showSessionExpiredNotification === 'function') {
-          window.TokenManager.showSessionExpiredNotification('Your session has been revoked. Please login again.');
-        }
-        
-        // Force immediate logout for token revocation
-        if (window.auth && typeof window.auth.logout === 'function') {
-          setTimeout(() => {
-            console.debug(`${debugPrefix} Triggering logout due to token revocation`);
-            window.auth.logout();
-          }, 500);
-        }
-      } else if (error.message?.includes('timeout')) {
-        enhancedError = new Error('Authentication timeout - please try again later');
-        enhancedError.code = 'TOKEN_REFRESH_TIMEOUT';
-      } else if (error.status === 401 || error.status === 403 ||
-                 error.message?.includes('expired') ||
-                 error.message?.includes('unauthorized')) {
-        enhancedError = new Error('Session expired - please login again');
-        enhancedError.code = 'SESSION_EXPIRED';
-        
-        // Trigger logout on severe auth errors
-        if (window.auth && typeof window.auth.logout === 'function') {
-          setTimeout(() => {
-            console.debug(`${debugPrefix} Triggering logout due to auth failure`);
-            window.auth.logout();
-          }, 1000);
-        }
-      } else {
-        enhancedError = new Error('Authentication error - using HTTP fallback');
-        enhancedError.code = 'TOKEN_REFRESH_FAILED';
-        enhancedError.originalError = error;
-      }
-      
+
+      // Let auth.js handle the error
+      window.auth.handleAuthError(error, 'WebSocket token refresh');
+
       this.useHttpFallback = true;
       if (this.onError) {
-        this.onError(enhancedError);
+        this.onError(error);
       }
-      
+
       return false;
     }
   };
@@ -635,83 +498,25 @@
     this.setState(CONNECTION_STATES.ERROR);
 
     const MAX_RETRIES = 4;
-    // Parse error response text if available
-    let parsedErrorDetails = '';
-    try {
-      if (typeof error.message === 'string' && error.message.includes('{')) {
-        const jsonStartIndex = error.message.indexOf('{');
-        const jsonStr = error.message.substring(jsonStartIndex);
-        const errorObj = JSON.parse(jsonStr);
-        parsedErrorDetails = errorObj.detail || '';
-      }
-    } catch (e) {
-      // If parsing fails, continue with normal error handling
-      console.debug(`${debugPrefix} Could not parse error JSON in connection error:`, e);
-    }
-    
+
+    // Check for auth-related errors and let auth.js handle them
     const isAuthError = (error?.message || '').includes('403') ||
       (error?.message || '').includes('401') ||
-      (error?.message || '').includes('version mismatch');
-      
-    // Check for token invalidation errors that should prevent reconnection attempts
-    const isTokenInvalidated =
-      (error?.message || '').includes('token version mismatch') ||
-      (error?.message || '').includes('Token version mismatch') ||
-      (error?.message || '').includes('token revoked') ||
-      (error?.message || '').includes('Token revoked') ||
-      parsedErrorDetails.includes('token version mismatch') ||
-      parsedErrorDetails.includes('Token version mismatch') ||
-      parsedErrorDetails.includes('token revoked') ||
-      parsedErrorDetails.includes('Token revoked');
-    
-    if (isTokenInvalidated) {
-      console.warn(`${debugPrefix} Token invalidation detected - preventing reconnection attempts`);
-      
-      // Show user-friendly notification if available
-      let message = 'Your session has expired. Please login again.';
-      if ((error?.message || '').includes('version mismatch') || parsedErrorDetails.includes('version mismatch')) {
-        message = 'Your session was invalidated because you logged in elsewhere. Please login again.';
-      } else if ((error?.message || '').includes('revoked') || parsedErrorDetails.includes('revoked')) {
-        message = 'Your session has been revoked. Please login again.';
-      }
-      
-      if (window.TokenManager && typeof window.TokenManager.showSessionExpiredNotification === 'function') {
-        window.TokenManager.showSessionExpiredNotification(message);
-      }
-      
-      // Force logout and prevent further reconnection attempts
-      this.reconnectAttempts = MAX_RETRIES;
-      if (window.auth && typeof window.auth.logout === 'function') {
-        setTimeout(() => {
-          console.debug(`${debugPrefix} Triggering logout due to token invalidation`);
-          window.auth.logout();
-        }, 500);
-      }
-      
-      this.useHttpFallback = true;
-      this.setState(CONNECTION_STATES.DISCONNECTED);
-      return;
-    }
-    else if (isAuthError) {
+      (error?.message || '').includes('token') ||
+      (error?.message || '').includes('auth');
+
+    if (isAuthError) {
       try {
-        console.log('Auth-related error - triggering token refresh');
-        // Fix: Corrected method name from refreshTokens to refresh
-        await window.TokenManager.refresh();
+        console.log('Auth-related error - letting auth.js handle token refresh');
+        // Delegate to auth.js for token issues
+        await window.auth.refreshTokens();
         if (this.reconnectAttempts < MAX_RETRIES) {
           return await this.attemptReconnection();
         }
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
-        
-        // Check if the refresh failure was due to token invalidation
-        if ((refreshError?.message || '').includes('token version mismatch') ||
-            (refreshError?.message || '').includes('token revoked')) {
-          console.warn(`${debugPrefix} Token invalidation detected during refresh - preventing reconnection`);
-          this.reconnectAttempts = MAX_RETRIES;
-          this.useHttpFallback = true;
-          this.setState(CONNECTION_STATES.DISCONNECTED);
-          return;
-        }
+        // Let auth.js handle auth errors
+        window.auth.handleAuthError(refreshError, 'WebSocket reconnection');
       }
     }
 
@@ -901,7 +706,7 @@
    * Disconnect all active WebSocket connections
    * Added for better auth state management
    */
-  window.WebSocketService.disconnectAll = function() {
+  window.WebSocketService.disconnectAll = function () {
     console.debug(`${debugPrefix} Disconnecting all WebSocket connections`);
     Array.from(activeInstances.values()).forEach(instance => {
       try {
@@ -914,24 +719,16 @@
   };
 
   // Expose version info
-  window.WebSocketService.version = '1.2.0';
+  window.WebSocketService.version = '2.0.0';
   window.WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
 
   /**
    * Changelog:
-   * v1.2.0 - Enhanced authentication and reliability
-   *   - Improved token refresh handling and auth error detection
-   *   - Implemented Azure-recommended exponential backoff with jitter
-   *   - Fixed refreshTokens method name to refresh
-   *   - Added detailed logging for connection failures
-   *   - Improved HTTP fallback mechanism
-   * 
-   * v1.1.0 - Improved WebSocket reliability
-   *   - Enhanced heartbeat mechanism with ping/pong tracking
-   *   - Added specific handling for code 1008 (Policy Violation)
-   *   - Strengthened URL validation with security checks
-   *   - Improved reconnection logic with better backoff and jitter
-   *   - Removed all localStorage usage for tokens or project IDs
+   * v2.0.0 - Integration with centralized auth.js
+   *   - Removed AuthManager class 
+   *   - Uses auth.js for all authentication operations
+   *   - Improved token refresh handling via auth.js
+   *   - Enhanced error handling with auth.js integration
    */
 
   // Clean up all instances on page unload
