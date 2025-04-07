@@ -63,7 +63,8 @@ class ProjectDashboard {
     };
 
     // Use centralized modal manager from Utils
-    this.modalManager = window.modalManager;
+    // Use the unified modal manager
+    this.modalManager = window.modalManager || window.ModalManager?.isAvailable() ? window.modalManager : null;
   }
 
   /**
@@ -519,13 +520,7 @@ class ProjectDashboard {
     // Process URL
     this.processUrlParams();
 
-    // Check localStorage for stored project
-    const storedProjectId = localStorage.getItem("selectedProjectId");
-    if (storedProjectId) {
-      document.dispatchEvent(new CustomEvent("projectSelected", {
-        detail: { projectId: storedProjectId }
-      }));
-    }
+    // Project context is maintained via URL params and in-memory state
 
     // Initial project load
     setTimeout(() => {

@@ -282,23 +282,34 @@ window.bus = new AppEventBus();
   }
 
   /* ===========================
-     MODAL MANAGER CLASS
+     UNIFIED MODAL MANAGER CLASS
      =========================== */
 
   /**
-   * Modal Manager Class
+   * Unified Modal Manager Class
    * @class ModalManager
-   * @description Handles modal registration and management
+   * @description Provides centralized modal management for the entire application
    * @property {Object} modals - Registered modals collection
    */
 
-  // Define ModalManager safely
+  // Define ModalManager safely to avoid duplicate creation
   if (typeof window.ModalManager === 'undefined') {
-    console.log('Creating ModalManager class');
+    console.log('Creating Unified ModalManager class');
     window.ModalManager = class ModalManager {
       constructor() {
         // Initialize modal collection
         this.modals = {};
+        this.eventHandlers = new Map();
+        
+        // Standard modal mappings (semantic name -> possible DOM IDs)
+        this.modalMappings = {
+          'project': ['projectFormModal'],
+          'instructions': ['instructionsModal'],
+          'delete': ['deleteConfirmModal'],
+          'knowledge': ['knowledgeBaseSettingsModal', 'knowledgeSettingsModal'],
+          'knowledgeResult': ['knowledgeResultModal'],
+          'confirm': ['confirmActionModal', 'deleteConfirmModal']
+        };
         
         // Wait for DOM to be ready before first registration
         if (document.readyState === 'loading') {
@@ -313,19 +324,15 @@ window.bus = new AppEventBus();
         console.log('ModalManager initialized with modals:', Object.keys(this.modals));
       }
       
+      /**
+       * Register all known modals from DOM
+       * @public
+       */
       registerAllModals() {
-        // Register all known modals with resilient error handling
-        const modalMappings = {
-          'project': ['projectFormModal'],
-          'instructions': ['instructionsModal'],
-          'delete': ['deleteConfirmModal'],
-          'knowledge': ['knowledgeBaseSettingsModal', 'knowledgeSettingsModal'] // Multiple possible IDs
-        };
-        
         // Register each modal with flexible matching
-        for (const [key, ids] of Object.entries(modalMappings)) {
-          // Skip if already registered
-          if (this.modals[key]) continue;
+        for (const [key, ids] of Object.entries(this.modalMappings)) {
+          // Skip if already registered and valid
+          if (this.modals[key] && document.body.contains(this.modals[key])) continue;
           
           // Try all possible IDs for this modal
           for (const id of ids) {
@@ -336,157 +343,344 @@ window.bus = new AppEventBus();
               break;
             }
           }
-          
-          // Don't warn if not found - may be conditionally rendered
-          if (!this.modals[key]) {
-            console.debug(`Modal not currently available: ${key}`);
-          }
-        }
-      }
-      
-      show(modalId) {
-        console.log(`[ModalManager] Attempting to show modal: ${modalId}`);
-        const modal = this.modals[modalId];
-        
-        if (!modal) {
-          console.error(`Modal with ID "${modalId}" not found in registered modals`);
-          // Try to find it directly in the DOM as fallback
-          const fallbackModal = document.getElementById(`${modalId}Modal`) ||
-                               document.getElementById(`${modalId}SettingsModal`);
-          
-          if (fallbackModal) {
-            console.log(`Found fallback modal for "${modalId}" via direct DOM query`);
-            fallbackModal.classList.remove('hidden');
-            this._setupModalEvents(fallbackModal);
-            return;
-          }
-          
-          console.error(`Could not find a fallback modal for "${modalId}"`);
-          return;
-        }
-        
-        // Add modal overlay classes
-        modal.classList.add('confirm-modal');
-        modal.classList.remove('hidden');
-        this._setupModalEvents(modal);
-        console.log(`Modal "${modalId}" shown successfully`);
-      }
-      
-      hide(modalId) {
-        console.log(`[ModalManager] Hiding modal: ${modalId}`);
-        const modal = this.modals[modalId];
-        
-        if (!modal) {
-          console.warn(`Modal with ID "${modalId}" not found for hiding`);
-          // Try to find it directly
-          const fallbackModal = document.getElementById(`${modalId}Modal`) ||
-                               document.getElementById(`${modalId}SettingsModal`);
-          
-          if (fallbackModal) {
-            fallbackModal.classList.add('hidden');
-            this._cleanupModalEvents(fallbackModal);
-            return;
-          }
-          return;
-        }
-        
-        // Remove modal overlay classes
-        modal.classList.remove('confirm-modal');
-        modal.classList.add('hidden');
-        this._cleanupModalEvents(modal);
-      }
-      
-      static closeActiveModal() {
-        const modal = document.querySelector('.confirm-modal:not(.hidden)');
-        if (modal) {
-          modal.classList.remove('confirm-modal');
-          modal.classList.add('hidden');
         }
       }
 
-      _setupModalEvents(modal) {
+      /**
+       * Register a custom modal
+       * @public
+       * @param {string} name - Semantic name for the modal
+       * @param {string|HTMLElement} modal - Modal element or its ID
+       */
+      registerModal(name, modal) {
+        if (typeof modal === 'string') {
+          const element = document.getElementById(modal);
+          if (!element) {
+            console.error(`Cannot register modal "${name}": Element with ID "${modal}" not found`);
+            return false;
+          }
+          this.modals[name] = element;
+        } else if (modal instanceof HTMLElement) {
+          this.modals[name] = modal;
+        } else {
+          console.error(`Cannot register modal "${name}": Invalid modal type`);
+          return false;
+        }
+        
+        console.log(`Custom modal registered: ${name}`);
+        return true;
+      }
+      
+      /**
+       * Show a modal by its semantic name
+       * @public
+       * @param {string} modalId - Semantic name of the modal to show
+       * @param {Object} [options] - Optional configuration for the modal
+       * @returns {boolean} Whether the modal was successfully shown
+       */
+      show(modalId, options = {}) {
+        console.log(`[ModalManager] Attempting to show modal: ${modalId}`);
+        
+        // Try to find the modal element
+        let modalElement = this.modals[modalId];
+        
+        if (!modalElement) {
+          console.warn(`Modal "${modalId}" not found in registered modals, trying fallbacks...`);
+          
+          // Try direct ID match first
+          modalElement = document.getElementById(modalId);
+          
+          // Try standard naming patterns if direct match fails
+          if (!modalElement) {
+            modalElement = document.getElementById(`${modalId}Modal`) ||
+                         document.getElementById(`${modalId}SettingsModal`);
+          }
+          
+          // Register this modal for future use if found
+          if (modalElement) {
+            this.modals[modalId] = modalElement;
+            console.log(`Auto-registered modal: ${modalId}`);
+          } else {
+            console.error(`Could not find a modal for "${modalId}"`);
+            return false;
+          }
+        }
+        
+        // If modal content update function is provided in options, call it
+        if (options.updateContent && typeof options.updateContent === 'function') {
+          options.updateContent(modalElement);
+        }
+        
+        // Add modal overlay classes and show
+        modalElement.classList.add('confirm-modal');
+        modalElement.classList.remove('hidden');
+        
+        // Set up event handlers (ESC key, close buttons)
+        this._setupModalEvents(modalElement, modalId);
+        
+        console.log(`Modal "${modalId}" shown successfully`);
+        return true;
+      }
+      
+      /**
+       * Hide a modal by its semantic name
+       * @public
+       * @param {string} modalId - Semantic name of the modal to hide
+       * @returns {boolean} Whether the modal was successfully hidden
+       */
+      hide(modalId) {
+        console.log(`[ModalManager] Hiding modal: ${modalId}`);
+        
+        // Try to find the modal element
+        let modalElement = this.modals[modalId];
+        
+        if (!modalElement) {
+          console.warn(`Modal "${modalId}" not registered, trying fallbacks...`);
+          
+          // Try direct ID match first
+          modalElement = document.getElementById(modalId);
+          
+          // Try standard naming patterns if direct match fails
+          if (!modalElement) {
+            modalElement = document.getElementById(`${modalId}Modal`) ||
+                         document.getElementById(`${modalId}SettingsModal`);
+          }
+          
+          if (!modalElement) {
+            console.warn(`Could not find a modal for "${modalId}" to hide`);
+            return false;
+          }
+        }
+        
+        // Remove modal overlay classes and hide
+        modalElement.classList.remove('confirm-modal');
+        modalElement.classList.add('hidden');
+        
+        // Clean up event handlers
+        this._cleanupModalEvents(modalElement, modalId);
+        
+        return true;
+      }
+      
+      /**
+       * Close any currently active modals
+       * @public
+       * @static
+       * @returns {boolean} Whether a modal was closed
+       */
+      static closeActiveModal() {
+        const modalElements = document.querySelectorAll('.confirm-modal:not(.hidden)');
+        if (modalElements.length === 0) return false;
+        
+        modalElements.forEach(modal => {
+          modal.classList.remove('confirm-modal');
+          modal.classList.add('hidden');
+        });
+        
+        return true;
+      }
+
+      /**
+       * Show a confirmation dialog with customizable options
+       * @public
+       * @static
+       * @param {Object} config - Configuration for the confirmation dialog
+       * @returns {Promise<boolean>} Promise resolving to true if confirmed, false otherwise
+       */
+      static confirmAction(config) {
+        return new Promise((resolve) => {
+          const modalManager = window.modalManager;
+          let modal;
+          
+          // Try to get the modal element
+          if (modalManager && modalManager.modals.confirm) {
+            modal = modalManager.modals.confirm;
+          } else {
+            modal = document.getElementById('deleteConfirmModal') ||
+                   document.getElementById('confirmActionModal');
+          }
+          
+          if (!modal) {
+            console.error('Confirmation modal not found');
+            resolve(false);
+            return;
+          }
+
+          // Update modal structure
+          modal.innerHTML = `
+            <div class="confirm-modal-content">
+              <h3 class="confirm-modal-header">${config.title || 'Confirm Action'}</h3>
+              <div class="confirm-modal-body">
+                ${config.message || 'Are you sure you want to perform this action?'}
+              </div>
+              <div class="confirm-modal-footer">
+                <button id="cancelActionBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
+                  ${config.cancelText || 'Cancel'}
+                </button>
+                <button id="confirmActionBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ${config.confirmClass || ''}">
+                  ${config.confirmText || 'Confirm'}
+                </button>
+              </div>
+            </div>
+          `;
+
+          // Set up event handlers
+          const confirmBtn = modal.querySelector('#confirmActionBtn');
+          const cancelBtn = modal.querySelector('#cancelActionBtn');
+          
+          const handleConfirm = () => {
+            if (typeof config.onConfirm === 'function') config.onConfirm();
+            
+            if (modalManager) {
+              modalManager.hide('confirm');
+            } else {
+              modal.classList.add('hidden');
+            }
+            
+            // Clean up handlers
+            confirmBtn.removeEventListener('click', handleConfirm);
+            cancelBtn.removeEventListener('click', handleCancel);
+            
+            resolve(true);
+          };
+          
+          const handleCancel = () => {
+            if (typeof config.onCancel === 'function') config.onCancel();
+            
+            if (modalManager) {
+              modalManager.hide('confirm');
+            } else {
+              modal.classList.add('hidden');
+            }
+            
+            // Clean up handlers
+            confirmBtn.removeEventListener('click', handleConfirm);
+            cancelBtn.removeEventListener('click', handleCancel);
+            
+            resolve(false);
+          };
+          
+          confirmBtn.addEventListener('click', handleConfirm);
+          cancelBtn.addEventListener('click', handleCancel);
+          
+          // Show modal
+          if (modalManager) {
+            modalManager.show('confirm');
+          } else {
+            modal.classList.add('confirm-modal');
+            modal.classList.remove('hidden');
+          }
+        });
+      }
+
+      /**
+       * Set up event handlers for a modal
+       * @private
+       * @param {HTMLElement} modal - Modal element to set up
+       * @param {string} modalId - Semantic name of the modal
+       */
+      _setupModalEvents(modal, modalId) {
         // Handle ESC key
         const handleKeyDown = (e) => {
           if (e.key === 'Escape') {
-            this.hide(modal.id.replace('Modal', ''));
+            this.hide(modalId);
           }
         };
-        modal._handleKeyDown = handleKeyDown;
+        
+        // Store reference to handler for cleanup
+        this.eventHandlers.set(`${modalId}_keydown`, handleKeyDown);
         document.addEventListener('keydown', handleKeyDown);
 
         // Handle close button click with proper listener management
-        const closeBtn = modal.querySelector('[id^="close"]');
-        if (closeBtn) {
+        const closeButtons = modal.querySelectorAll('[id^="close"], .modal-close, .close-btn');
+        closeButtons.forEach(closeBtn => {
+          const clickHandler = () => this.hide(modalId);
+          
+          // Remove existing handler if present
           if (closeBtn._clickHandler) {
             closeBtn.removeEventListener('click', closeBtn._clickHandler);
           }
-          closeBtn._clickHandler = () => this.hide(modal.id.replace('Modal', ''));
-          closeBtn.addEventListener('click', closeBtn._clickHandler);
+          
+          // Save and attach new handler
+          closeBtn._clickHandler = clickHandler;
+          closeBtn.addEventListener('click', clickHandler);
+        });
+        
+        // Handle backdrop click if modal has backdrop class
+        if (modal.classList.contains('modal-with-backdrop')) {
+          const backdropClickHandler = (e) => {
+            if (e.target === modal) {
+              this.hide(modalId);
+            }
+          };
+          modal.addEventListener('click', backdropClickHandler);
+          this.eventHandlers.set(`${modalId}_backdrop`, backdropClickHandler);
         }
       }
 
-      _cleanupModalEvents(modal) {
-        if (modal._handleKeyDown) {
-          document.removeEventListener('keydown', modal._handleKeyDown);
-          delete modal._handleKeyDown;
+      /**
+       * Clean up event handlers for a modal
+       * @private
+       * @param {HTMLElement} modal - Modal element to clean up
+       * @param {string} modalId - Semantic name of the modal
+       */
+      _cleanupModalEvents(modal, modalId) {
+        // Clean up keydown handler
+        const keydownHandler = this.eventHandlers.get(`${modalId}_keydown`);
+        if (keydownHandler) {
+          document.removeEventListener('keydown', keydownHandler);
+          this.eventHandlers.delete(`${modalId}_keydown`);
         }
+        
+        // Clean up backdrop click handler
+        const backdropHandler = this.eventHandlers.get(`${modalId}_backdrop`);
+        if (backdropHandler) {
+          modal.removeEventListener('click', backdropHandler);
+          this.eventHandlers.delete(`${modalId}_backdrop`);
+        }
+        
+        // Clean up close button handlers
+        const closeButtons = modal.querySelectorAll('[id^="close"], .modal-close, .close-btn');
+        closeButtons.forEach(closeBtn => {
+          if (closeBtn._clickHandler) {
+            closeBtn.removeEventListener('click', closeBtn._clickHandler);
+            delete closeBtn._clickHandler;
+          }
+        });
       }
       
-      // Add static isAvailable method
+      /**
+       * Check if the ModalManager is available
+       * @public
+       * @static
+       * @returns {boolean} Whether the ModalManager is available
+       */
       static isAvailable() {
-        return typeof window.ModalManager !== 'undefined';
+        return typeof window.ModalManager !== 'undefined' && window.modalManager instanceof window.ModalManager;
       }
-    };
-
-    // Add the static confirmAction method
-    window.ModalManager.confirmAction = function(config) {
-      return new Promise((resolve) => {
-        const modal = document.getElementById('deleteConfirmModal');
-        if (!modal) {
-          console.error('Confirmation modal not found');
-          resolve(false);
-          return;
-        }
-
-        // Update modal structure
-        modal.innerHTML = `
-          <div class="confirm-modal-content">
-            <h3 class="confirm-modal-header">${config.title || 'Confirm Action'}</h3>
-            <div class="confirm-modal-body">
-              ${config.message || 'Are you sure you want to perform this action?'}
-            </div>
-            <div class="confirm-modal-footer">
-              <button id="cancelDeleteBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
-                ${config.cancelText || 'Cancel'}
-              </button>
-              <button id="confirmDeleteBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ${config.confirmClass || ''}">
-                ${config.confirmText || 'Confirm'}
-              </button>
-            </div>
-          </div>
-        `;
-
-        // Set up event handlers
-        modal.querySelector('#confirmDeleteBtn').addEventListener('click', () => {
-          modal.classList.add('hidden');
-          if (typeof config.onConfirm === 'function') config.onConfirm();
-          resolve(true);
-        });
-        
-        modal.querySelector('#cancelDeleteBtn').addEventListener('click', () => {
-          modal.classList.add('hidden');
-          if (typeof config.onCancel === 'function') config.onCancel();
-          resolve(false);
-        });
-        
-        // Show modal
-        modal.classList.add('confirm-modal');
-        modal.classList.remove('hidden');
-      });
     };
     
     // Create global instance
     window.modalManager = new window.ModalManager();
+    
+    // For backwards compatibility
+    if (!window.showModal) {
+      window.showModal = function(id, options) {
+        if (window.modalManager) {
+          return window.modalManager.show(id, options);
+        }
+        return false;
+      };
+    }
+    
+    if (!window.hideModal) {
+      window.hideModal = function(id) {
+        if (window.modalManager) {
+          return window.modalManager.hide(id);
+        }
+        return false;
+      };
+    }
   } else {
     console.log('ModalManager already exists, using existing definition');
     if (!window.modalManager) {

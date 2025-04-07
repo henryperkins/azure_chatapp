@@ -607,12 +607,15 @@ function setupNewChatButton() {
   const newProjectBtn = document.getElementById('sidebarNewProjectBtn');
   if (newProjectBtn) {
     trackListener(newProjectBtn, 'click', () => {
-      if (window.projectDashboard?.modalManager?.show) {
+      // Use the unified ModalManager for project modal
+      if (window.modalManager) {
+        window.modalManager.show('project');
+      } else if (window.projectModal?.openModal) {
+        window.projectModal.openModal();
+      } else if (window.projectDashboard?.modalManager?.show) {
         window.projectDashboard.modalManager.show('project');
-      } else if (window.ModalManager?.show) {
-        window.ModalManager.show('project');
       } else {
-        console.error('ModalManager not available');
+        console.error('Modal system not available');
         if (typeof window.showNotification === 'function') {
           window.showNotification('Failed to open project form', 'error');
         }
@@ -645,7 +648,7 @@ async function newChatClickHandler() {
   if (typeof window.createNewChat === 'function') {
     try {
       console.log("Calling createNewChat function");
-      const storedModel = localStorage.getItem("modelName") || "claude-3-7-sonnet-20250219";
+      const storedModel = window.MODEL_CONFIG?.modelName || "claude-3-7-sonnet-20250219";
 
       const newChat = await window.createNewChat();
       console.log("New chat created:", newChat);
@@ -775,13 +778,13 @@ function searchSidebarProjects(query) {
 /**
  * Load starred conversations from local storage or server
  */
-function loadStarredConversations() {
+async function loadStarredConversations() {
   const container = document.getElementById('starredConversations');
   if (!container) return;
 
-  // Get starred conversations from local storage
-  const response = await window.apiRequest('/api/user/preferences');
-  const starredIds = response.data?.starred_conversations || [];
+  // Get starred conversations from backend
+  const response = await window.apiRequest('/api/preferences/starred');
+  const starredIds = response.data || [];
 
   if (starredIds.length === 0) {
     // Show empty state
@@ -861,7 +864,7 @@ function loadStarredConversations() {
  * @param {string} conversationId - The ID of the conversation to toggle
  * @returns {boolean} Whether the conversation is now starred
  */
-function toggleStarConversation(conversationId) {
+async function toggleStarConversation(conversationId) {
   // Get current starred conversations
   const starredIds = JSON.parse(localStorage.getItem('starredConversations') || '[]');
 
@@ -975,3 +978,94 @@ window.sidebar = {
 
 // Initialize on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', initializeSidebar);
+
+// Centralized auth state management
+let authState = {
+  isAuthenticated: false,
+  isLoading: false,
+  username: null
+};
+
+// Update auth-dependent UI elements
+function updateAuthDependentUI() {
+  const authDependentElements = [
+    'sidebarNewChatBtn',
+    'sidebarNewProjectBtn',
+    'starredChatsTab',
+    'projectsTab',
+    'recentChatsTab'
+  ];
+
+  authDependentElements.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (authState.isLoading) {
+        // Add loading state
+        el.classList.add('opacity-50', 'pointer-events-none');
+        const spinner = document.createElement('div');
+        spinner.className = 'inline-block ml-2 animate-spin';
+        spinner.innerHTML = `
+          <svg class="h-4 w-4" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>`;
+        el.appendChild(spinner);
+      } else {
+        // Remove loading state and update visibility
+        el.classList.remove('opacity-50', 'pointer-events-none');
+        const spinner = el.querySelector('.animate-spin');
+        if (spinner) spinner.remove();
+        el.classList.toggle('hidden', !authState.isAuthenticated);
+      }
+    }
+  });
+
+  // Update username display if available
+  if (authState.username) {
+    const usernameEl = document.getElementById('sidebarUsername');
+    if (usernameEl) {
+      usernameEl.textContent = authState.username;
+      usernameEl.classList.remove('hidden');
+    }
+  }
+
+  // Update loading indicator
+  const loadingEl = document.getElementById('sidebarAuthLoading') || ensureLoadingIndicator();
+  loadingEl.classList.toggle('hidden', !authState.isLoading);
+
+  // Refresh content if authenticated
+  if (authState.isAuthenticated) {
+    const activeTab = localStorage.getItem('sidebarActiveTab');
+    if (activeTab === 'starred' && document.getElementById('starredChatsSection')?.classList.contains('hidden') === false) {
+      loadStarredConversations();
+    } else if (activeTab === 'projects' && document.getElementById('projectsSection')?.classList.contains('hidden') === false) {
+      window.loadSidebarProjects?.();
+    } else if (activeTab === 'recent' && document.getElementById('recentChatsSection')?.classList.contains('hidden') === false) {
+      window.loadConversationList?.();
+    }
+  }
+}
+
+// Add loading indicator element if missing
+function ensureLoadingIndicator() {
+  if (!document.getElementById('sidebarAuthLoading')) {
+    const loadingEl = document.createElement('div');
+    loadingEl.id = 'sidebarAuthLoading';
+    loadingEl.className = 'hidden fixed top-0 left-0 right-0 h-1 bg-blue-500 z-50';
+    document.body.appendChild(loadingEl);
+  }
+  return document.getElementById('sidebarAuthLoading');
+}
+
+// Single auth state change listener
+document.addEventListener('authStateChanged', (e) => {
+  authState = {
+    isAuthenticated: e.detail?.authenticated ?? false,
+    isLoading: e.detail?.loading ?? false,
+    username: e.detail?.username ?? null
+  };
+  updateAuthDependentUI();
+});
+
+// Initialize auth state
+updateAuthDependentUI();

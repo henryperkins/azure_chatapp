@@ -1,9 +1,10 @@
 /**
  * ---------------------------------------------------------------------
- * app.js - Maintains a single API_CONFIG global object.
+ * app.js - Cookie-based auth only, no CORS/origin or localStorage usage.
+ * Maintains a single API_CONFIG global object.
  * Uses one fetch wrapper (apiRequest).
  * Listens for authStateChanged to manage the authenticated vs. logged-out UI.
- * Relies on auth.js for all token logic and dispatching relevant events.
+ * Relies on auth.js (or similar) for server-side session cookies.
  * ---------------------------------------------------------------------
  */
 
@@ -12,8 +13,8 @@
 // ---------------------------------------------------------------------
 
 const API_CONFIG = {
-  baseUrl: '',
-  WS_ENDPOINT: window.location.origin.replace(/^http/, 'ws'),
+  baseUrl: '',  // <--- We'll rely on the server to set cookies; override if needed.
+  WS_ENDPOINT: '',  // Removed window.location.origin usage
   isAuthenticated: false,
   authCheckInProgress: false,
   lastErrorStatus: null
@@ -73,7 +74,7 @@ const ELEMENTS = {};
 // ---------------------------------------------------------------------
 
 /**
- * Ensures user is authenticated, handling token refresh if needed
+ * Ensures user is authenticated (cookie-based).
  * @returns {Promise<boolean>} Whether user is authenticated
  */
 async function ensureAuthenticated() {
@@ -90,16 +91,14 @@ async function ensureAuthenticated() {
       console.log("Authentication check failed");
       clearAuthState();
     }
-
     return isAuthenticated;
   } catch (error) {
     console.error("Auth verification error:", error);
-    // Only clear state if it's a 401
+    // If it's a 401, we clear state
     if (error.status === 401) {
       clearAuthState();
       return false;
     }
-    // Clear auth state and propagate error
     clearAuthState();
     throw error;
   }
@@ -111,11 +110,7 @@ async function ensureAuthenticated() {
 function clearAuthState() {
   API_CONFIG.isAuthenticated = false;
 
-  // No localStorage removal
-  if (window.TokenManager?.clearTokens) {
-    window.TokenManager.clearTokens();
-  }
-
+  // We no longer remove localStorage tokens or rely on TokenManager
   document.dispatchEvent(new CustomEvent('authStateChanged', {
     detail: { authenticated: false }
   }));
@@ -167,24 +162,18 @@ function sanitizeUrl(url) {
   return url.replace(/\s+/g, '').replace(/\/+/g, '/');
 }
 
+/**
+ * Single fetch wrapper. No manual token insertion, purely cookie-based.
+ */
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
   const maxRetries = 2;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Sanitize URL first
   endpoint = sanitizeUrl(endpoint);
 
-  // Skip auth check if explicitly requested
-  if (!options.skipAuthCheck && API_CONFIG.authCheckInProgress && !endpoint.includes('/auth/')) {
-    if (retryCount > 5) {
-      console.warn('Too many auth check delays, proceeding with request anyway');
-    } else {
-      console.log(`Delaying API call to ${endpoint} until auth check completes (attempt ${retryCount + 1})`);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
-    }
-  }
+  // If authentication is in progress, we can wait before proceeding (if desired).
+  // But for simplicity, we won't block on authCheckInProgress now.
 
   // Normalize endpoint if full URL was passed
   if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
@@ -198,7 +187,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
   const baseUrl = getBaseUrl();
   method = method.toUpperCase();
 
-  // Handle data for GET/HEAD
+  // Handle GET/HEAD query parameters
   let finalUrl;
   if (data && ['GET', 'HEAD'].includes(method)) {
     const queryParams = new URLSearchParams();
@@ -221,35 +210,23 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
   console.log('Constructing API request for endpoint:', finalUrl);
 
-  // Make sure TokenManager is available and get auth headers
-  let authHeaders = {};
-  try {
-    authHeaders = window.TokenManager ? await window.TokenManager.getAuthHeader() : {};
-    if (API_CONFIG.debug) {
-      console.log('Using auth headers:', authHeaders);
-    }
-  } catch (error) {
-    console.error('Failed to get auth headers:', error);
-    throw error;
-  }
-
+  // Since we're using cookies, we omit manual auth headers
   const requestOptions = {
     method,
     headers: {
-      'Accept': 'application/json',
+      Accept: 'application/json',
       'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
-      ...authHeaders
+      Pragma: 'no-cache'
     },
     cache: 'no-store',
     redirect: 'follow',
-    signal: controller.signal
+    signal: controller.signal,
+    credentials: 'include'  // Important for including cookies
   };
 
   // Body for POST/PUT
   if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
     if (data instanceof FormData) {
-      // Let the browser set Content-Type for FormData
       requestOptions.body = data;
     } else {
       requestOptions.headers['Content-Type'] = 'application/json';
@@ -266,56 +243,24 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       API_CONFIG.lastErrorStatus = response.status;
       console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
-      // Handle 401 Unauthorized
       if (response.status === 401) {
+        // 401 Unauthorized. We are not doing token refresh—using cookies only.
         console.log(`401 response received for ${endpoint} (retry: ${retryCount}/${maxRetries})`);
-        // Skip token refresh for auth-related endpoints except verify
-        const isAuthEndpoint = endpoint.includes('/auth/') &&
-          !endpoint.includes('/auth/verify');
-        
-        if (retryCount < maxRetries && !options.skipRetry && !isAuthEndpoint) {
-          try {
-            if (window.TokenManager?.refreshTokens) {
-              console.log('Attempting token refresh due to 401 response');
-              const refreshed = await window.TokenManager.refreshTokens();
-              console.log('Token refresh result:', refreshed ? 'success' : 'failed');
-              if (refreshed) {
-                // Try request again with new token
-                console.log('Retrying request with new token');
-                return apiRequest(endpoint, method, data, retryCount + 1, timeoutMs, options);
-              }
-            }
-          } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
-            // Clear auth state and propagate error
-            clearAuthState();
-            throw new Error('Session expired. Please login again.');
-          }
-        } else if (isAuthEndpoint) {
-          // For auth endpoints, just propagate the error
-          const errorBody = await response.text();
-          console.warn('Auth endpoint returned 401:', errorBody);
-          throw new Error(errorBody || 'Authentication failed');
+        // Possibly attempt re-auth flow or just clear auth state
+        if (retryCount < maxRetries && !options.skipRetry) {
+          // Optionally try re-checking the session or waiting for cookies, but here we just go straight to clearAuthState
+          console.warn('Exhausting retry approach or skipping token refresh, clearing auth state');
+          clearAuthState();
+          throw new Error('Session expired. Please login again.');
         } else {
-          // Exhausted retries - clear auth state
-          console.warn('Exhausted retries or skip retry enabled, clearing auth state');
           clearAuthState();
           throw new Error('Session expired. Please login again.');
         }
-      } else if (response.status === 401 && (retryCount >= maxRetries || options.skipRetry)) {
-        // Clear auth state after exhausting retries
-        if (!endpoint.includes('/auth/')) {
-          console.log('Verifying authentication state after failed retries');
-          await ensureAuthenticated();
-        }
       } else if (response.status === 404) {
-        // 404 Not Found
         const error = new Error(`Resource not found (404): ${finalUrl}`);
         error.status = 404;
         throw error;
-      }
-
-      if (response.status === 422) {
+      } else if (response.status === 422) {
         try {
           const errorData = await response.json();
           console.error('Validation error details:', errorData);
@@ -339,10 +284,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       }
     }
 
-    // If server returns new tokens in the response
-    if (jsonData?.access_token && window.TokenManager?.setTokens) {
-      window.TokenManager.setTokens(jsonData.access_token, jsonData.refresh_token);
-    }
+    // If the server sets any auth cookies, the browser will handle them automatically.
 
     return jsonData;
   } catch (error) {
@@ -359,13 +301,11 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 }
 
 function getBaseUrl() {
+  // We do not rely on window.location.origin or local storage.
+  // If needed, set API_CONFIG.baseUrl explicitly or leave empty for relative paths.
   if (!API_CONFIG.baseUrl) {
-    // Default to window.location.origin
-    API_CONFIG.baseUrl = window.location.origin;
-    if (API_CONFIG.backendHost) {
-      API_CONFIG.baseUrl = `http://${API_CONFIG.backendHost}`;
-    }
-    console.log('Set API base URL:', API_CONFIG.baseUrl);
+    // Default to relative root
+    API_CONFIG.baseUrl = '';
   }
   return API_CONFIG.baseUrl;
 }
@@ -399,8 +339,6 @@ function createProjectListItem(project) {
     }
 
     li.addEventListener('click', () => {
-      // Project selection now managed via session context
-
       // Switch UI to project details
       const projectListView = document.getElementById('projectListView');
       const projectDetailsView = document.getElementById('projectDetailsView');
@@ -534,36 +472,17 @@ async function loadConversationList() {
     return [];
   }
 
-  const selectedProjectId = localStorage.getItem('selectedProjectId');
-  if (!selectedProjectId) {
-    return apiRequest(API_ENDPOINTS.CONVERSATIONS)
-      .then(data => {
-        renderConversationList(data);
-        return data;
-      })
-      .catch(err => {
-        handleAPIError('loading conversation list', err);
-        return [];
-      });
-  }
+  // We do NOT store or read a 'selectedProjectId' from localStorage anymore.
+  // If you need a project, handle it at the server or some other method.
 
-  const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', selectedProjectId);
-  return apiRequest(endpoint)
+  return apiRequest(API_ENDPOINTS.CONVERSATIONS)
     .then(data => {
-      if (!data) return [];
       renderConversationList(data);
       return data;
     })
     .catch(err => {
-      if (err.message.includes('404')) {
-        localStorage.removeItem('selectedProjectId');
-        Notifications.projectNotFound();
-        loadSidebarProjects().catch(e => console.warn("Failed to load sidebar projects:", e));
-        return loadConversationList();
-      } else {
-        handleAPIError('loading project conversations', err);
-        return [];
-      }
+      handleAPIError('loading conversation list', err);
+      return [];
     });
 }
 
@@ -689,8 +608,8 @@ async function loadSidebarProjects() {
     return apiRequest(API_ENDPOINTS.PROJECTS)
       .then(projects => {
         const container = ELEMENTS.SIDEBAR_PROJECTS || getElement(SELECTORS.SIDEBAR_PROJECTS);
-
         if (!container) return;
+
         container.innerHTML = '';
 
         if (projects?.length > 0) {
@@ -760,10 +679,8 @@ function handleAuthStateChange(e) {
   // Update UI based on auth state
   updateAuthUI(authenticated, username);
 
-  // Update stored authentication state
   API_CONFIG.isAuthenticated = authenticated;
 
-  // Load data if authenticated
   if (authenticated) {
     loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
     loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
@@ -806,9 +723,11 @@ async function handleNewConversationClick() {
     return;
   }
 
-  const projectId = localStorage.getItem('selectedProjectId');
-  if (projectId && window.projectManager?.createConversation) {
-    window.projectManager.createConversation(projectId)
+  // For demonstration, this uses a function in window.projectManager
+  // If your workflow requires a project ID, handle it server-side or in cookies,
+  // since we're no longer storing it in localStorage.
+  if (window.projectManager?.createConversation) {
+    window.projectManager.createConversation(null)
       .then(newConversation => {
         window.location.href = `/?chatId=${newConversation.id}`;
       })
@@ -816,7 +735,7 @@ async function handleNewConversationClick() {
         handleAPIError('creating conversation', err);
       });
   } else {
-    Notifications.apiError('no project selected');
+    Notifications.apiError('No project manager or conversation creation method found');
   }
 }
 
@@ -842,9 +761,9 @@ function updateAuthUI(authenticated, username = null) {
     }
     authDropdown?.classList.add('hidden');
     authDropdown?.classList.remove('slide-in');
-    loginForm?.reset();
+    loginForm?.reset?.();
     loginForm?.classList.add('hidden');
-    registerForm?.reset();
+    registerForm?.reset?.();
     registerForm?.classList.add('hidden');
     projectPanel?.classList.remove('hidden');
     loginMsg?.classList.add('hidden');
@@ -878,7 +797,7 @@ async function initializeApplication() {
     getBaseUrl();
     safeInitialize();
 
-    // Initialize auth - must happen AFTER apiRequest is available
+    // Initialize auth if needed
     if (window.auth?.init) {
       console.log("Initializing auth module");
       await window.auth.init();
@@ -918,9 +837,11 @@ async function initializeAllModules() {
     }
 
     // Initialize other modules
-    for (const module of InitUtils.featureModules) {
-      if (module.init) {
-        await InitUtils.initModule(module.name, module.init);
+    if (typeof InitUtils !== 'undefined' && InitUtils.featureModules) {
+      for (const module of InitUtils.featureModules) {
+        if (module.init) {
+          await InitUtils.initModule(module.name, module.init);
+        }
       }
     }
 
@@ -978,12 +899,12 @@ window.loadProjects = loadProjects;
 window.appInitializer = {
   status: 'pending',
   queue: [],
-  
+
   register: (component) => {
-    if(this.status === 'ready') component.init();
-    else this.queue.push(component);
+    if (window.appInitializer.status === 'ready') component.init();
+    else window.appInitializer.queue.push(component);
   },
-  
+
   initialize: async () => {
     try {
       console.log("Starting centralized initialization");
@@ -992,8 +913,8 @@ window.appInitializer = {
       window.appInitializer.queue.forEach(c => c.init());
       console.log("Application fully initialized");
     } catch (error) {
-      console.error("Initialization failed:", error);
-      throw error;
+      console.error("App initialization error:", error);
+      alert("Failed to initialize. Please refresh the page.");
     }
   }
 };
