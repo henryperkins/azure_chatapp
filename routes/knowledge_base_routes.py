@@ -27,8 +27,6 @@ from fastapi import (
     File,
     BackgroundTasks,
 )
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
@@ -56,8 +54,6 @@ from utils.db_utils import validate_resource_access, get_all_by_condition
 from utils.response_utils import create_standard_response
 
 logger = logging.getLogger(__name__)
-
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
 # ----------------------------------------------------------------------
