@@ -238,7 +238,7 @@ async def estimate_tokens_from_file(
                 collected.extend(chunk)
             content = bytes(collected)
 
-        chunks, metadata = text_extractor.extract_text(content, filename)
+        chunks, metadata = await text_extractor.extract_text(content, filename)
         token_count = metadata.get("token_count", 0)
         if token_count == 0 and chunks:
             joined = " ".join(chunks)
@@ -425,9 +425,9 @@ async def upload_file_to_project(
     if background_tasks:
         background_tasks.add_task(
             process_single_file_for_search,
-            file_id=project_file.id,
-            project_id=project_id,
-            knowledge_base_id=project.knowledge_base_id,
+            file_id=UUID(str(project_file.id)),
+            project_id=UUID(str(project_id)),
+            knowledge_base_id=UUID(str(project.knowledge_base_id)),
             db=db,
         )
 
@@ -461,64 +461,110 @@ async def process_single_file_for_search(
       3) Pass them to vector_db.process_file_for_search(...) to chunk + embed
       4) Update the ProjectFile record's search_processing status
     """
-    from db import get_async_session
+    from db import get_async_session, get_async_session_context
         
     # Create new session if none provided
     if db is None:
-        db = await get_async_session()
-        
-    try:
-        async with db.begin():
-            # 1) Load ProjectFile
-            file_record = await get_by_id(db, ProjectFile, file_id)
-            if not file_record:
-                logger.error(f"File record {file_id} not found.")
-                return
+        async with get_async_session_context() as session:
+            try:
+                async with session.begin():
+                    # 1) Load ProjectFile
+                    file_record = await get_by_id(session, ProjectFile, file_id)
+                    if not file_record:
+                        logger.error(f"File record {file_id} not found.")
+                        return
 
-            # 2) Read the file from storage
-            storage_config = {
-                "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-                "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-            }
-            storage = get_file_storage(storage_config)
-            file_content = await storage.get_file(file_record.file_path)
+                    # 2) Read the file from storage
+                    storage_config = {
+                        "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+                        "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
+                    }
+                    storage = get_file_storage(storage_config)
+                    file_content = await storage.get_file(file_record.file_path)
 
-            # 3) Initialize vector DB
-            kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
-            model_name = kb.embedding_model if kb else DEFAULT_EMBEDDING_MODEL
-            vector_db = await get_vector_db(
-                model_name=model_name,
-                storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
-                load_existing=True,
-            )
+                    # 3) Initialize vector DB
+                    kb = await get_by_id(session, KnowledgeBase, knowledge_base_id)
+                    model_name = kb.embedding_model if kb else DEFAULT_EMBEDDING_MODEL
+                    vector_db = await get_vector_db(
+                        model_name=str(model_name) if model_name else DEFAULT_EMBEDDING_MODEL,
+                        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+                        load_existing=True,
+                    )
 
-            # 4) Process (chunk + embed) via vector_db.process_file_for_search
-            result = await process_file_for_search(
-                project_file=file_record,
-                vector_db=vector_db,
-                file_content=file_content,
-                chunk_size=DEFAULT_CHUNK_SIZE,
-                chunk_overlap=DEFAULT_CHUNK_OVERLAP,
-                knowledge_base_id=knowledge_base_id  # Pass knowledge_base_id explicitly
-            )
+                    # 4) Process (chunk + embed) via vector_db.process_file_for_search
+                    result = await process_file_for_search(
+                        project_file=file_record,
+                        vector_db=vector_db,
+                        file_content=file_content,
+                        chunk_size=DEFAULT_CHUNK_SIZE,
+                        chunk_overlap=DEFAULT_CHUNK_OVERLAP,
+                        knowledge_base_id=knowledge_base_id  # Pass knowledge_base_id explicitly
+                    )
 
-            # 5) Update the file record's status
-            search_proc = {
-                "status": "success" if result.get("success") else "error",
-                "chunk_count": result.get("chunk_count", 0),
-                "error": result.get("error"),
-                "processed_at": datetime.now().isoformat(),
-            }
-            file_config = file_record.config or {}
-            file_config["search_processing"] = search_proc
-            file_record.config = file_config
+                    # 5) Update the file record's status
+                    search_proc = {
+                        "status": "success" if result.get("success") else "error",
+                        "chunk_count": result.get("chunk_count", 0),
+                        "error": result.get("error"),
+                        "processed_at": datetime.now().isoformat(),
+                    }
+                    file_config = file_record.config or {}
+                    file_config["search_processing"] = search_proc
+                    file_record.config = file_config
 
-            await save_model(db, file_record)
+                    await save_model(session, file_record)
+            except Exception as e:
+                logger.exception(f"Error processing file {file_id} for reindex: {e}")
+    else:
+        try:
+            async with db.begin():
+                # 1) Load ProjectFile
+                file_record = await get_by_id(db, ProjectFile, file_id)
+                if not file_record:
+                    logger.error(f"File record {file_id} not found.")
+                    return
 
-    except Exception as e:
-        logger.exception(f"Error processing file {file_id} for reindex: {e}")
-        # Error handling remains outside transaction since we need a new session
+                # 2) Read the file from storage
+                storage_config = {
+                    "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+                    "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
+                }
+                storage = get_file_storage(storage_config)
+                file_content = await storage.get_file(file_record.file_path)
 
+                # 3) Initialize vector DB
+                kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+                model_name = kb.embedding_model if kb else DEFAULT_EMBEDDING_MODEL
+                vector_db = await get_vector_db(
+                    model_name=str(model_name) if model_name else DEFAULT_EMBEDDING_MODEL,
+                    storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id)),
+                    load_existing=True,
+                )
+
+                # 4) Process (chunk + embed) via vector_db.process_file_for_search
+                result = await process_file_for_search(
+                    project_file=file_record,
+                    vector_db=vector_db,
+                    file_content=file_content,
+                    chunk_size=DEFAULT_CHUNK_SIZE,
+                    chunk_overlap=DEFAULT_CHUNK_OVERLAP,
+                    knowledge_base_id=knowledge_base_id  # Pass knowledge_base_id explicitly
+                )
+
+                # 5) Update the file record's status
+                search_proc = {
+                    "status": "success" if result.get("success") else "error",
+                    "chunk_count": result.get("chunk_count", 0),
+                    "error": result.get("error"),
+                    "processed_at": datetime.now().isoformat(),
+                }
+                file_config = file_record.config or {}
+                file_config["search_processing"] = search_proc
+                file_record.config = file_config
+
+                await save_model(db, file_record)
+        except Exception as e:
+            logger.exception(f"Error processing file {file_id} for reindex: {e}")
 
 # ---------------------------------------------------------------------
 # File Deletion
