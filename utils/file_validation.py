@@ -149,9 +149,8 @@ class FileValidator:
                 b"<?php",
                 b"<script",
                 b"eval(",
-                b"document.cookie",
                 # System commands
-                b"powershell",
+                b"powershell", 
                 b"cmd.exe",
                 b"/bin/bash",
                 b"wget",
@@ -160,7 +159,7 @@ class FileValidator:
                 b"exec(",
                 b"system(",
                 b"passthru(",
-                # Dangerous file operations
+                # Dangerous file operations  
                 b"file_put_contents",
                 b"fopen(",
                 b"unlink(",
