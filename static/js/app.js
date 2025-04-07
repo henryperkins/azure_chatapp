@@ -177,10 +177,7 @@ function sanitizeUrl(url) {
 }
 
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
-  // Block all cross-origin requests
-  if (endpoint.startsWith('http') && !endpoint.startsWith(window.location.origin)) {
-    throw new Error(`Cross-origin requests are disabled (attempted: ${endpoint})`);
-  }
+  // Allow all origins (CORS handled by backend)
   const maxRetries = 2;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
