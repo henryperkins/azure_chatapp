@@ -646,15 +646,20 @@ async def websocket_chat_endpoint(
 
     async with AsyncSessionLocal() as db:
         try:
-            # Validate session cookie (same-origin only)
+            # Strict same-origin WebSocket auth
+            if not websocket.cookies.get("session"):
+                logger.warning("WebSocket connection attempt without session cookie")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+                
             try:
                 user = await get_user_from_token(websocket.cookies.get("session"), db)
                 if not user:
-                    logger.warning("No valid session cookie found")
+                    logger.warning("Invalid session cookie in WebSocket handshake")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
             except Exception as e:
-                logger.error(f"WebSocket auth error: {str(e)}")
+                logger.error(f"WebSocket auth failed: {str(e)}")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
