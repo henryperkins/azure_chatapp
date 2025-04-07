@@ -277,28 +277,58 @@ async function logout(e) {
   e?.preventDefault();
   try {
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Starting logout');
+      console.debug('[Auth] Starting logout process');
     }
     
     // Use window.apiRequest if available, otherwise fall back to direct fetch
     const apiCall = window.apiRequest || 
       ((url, method) => authRequest(url, method));
     
+    // Clear token manager state first
+    if (window.TokenManager && typeof window.TokenManager.clear === 'function') {
+      window.TokenManager.clear();
+    }
+    
+    // Clear local auth state
+    authVerificationCache.set(false);
+    
+    // Call server-side logout
     try {
-      await apiCall('/api/auth/logout', 'POST');
+      const LOGOUT_TIMEOUT = 5000; // 5 seconds
+      const logoutPromise = apiCall('/api/auth/logout', 'POST');
+      
+      await Promise.race([
+        logoutPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Logout request timed out')), LOGOUT_TIMEOUT)
+        )
+      ]);
+      
+      console.debug('[Auth] Server-side logout successful');
     } catch (apiErr) {
       console.warn("[Auth] Logout API error:", apiErr);
+      // Continue with client-side logout even if API call fails
     }
 
+    // Clear any WebSocket connections
+    if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
+      window.WebSocketService.disconnectAll();
+    }
+    
+    // Broadcast auth state change
     broadcastAuth(false);
-    notify("Logged out", "success");
+    
+    // Notify user
+    notify("Logged out successfully", "success");
+    
+    // For security, always reload after logout to ensure all states are reset
     window.location.href = '/index.html';
   } catch (error) {
     console.error("[Auth] Logout error:", error);
+    // Force logout state even on error
     broadcastAuth(false);
-    if (e) {
-      window.location.href = '/';
-    }
+    if (window.TokenManager) window.TokenManager.clear();
+    window.location.href = '/';
   }
 }
 
@@ -335,22 +365,23 @@ function isTokenExpired(token) {
 
 async function verifyAuthState(bypassCache = false) {
   try {
+    // Check cache first if not bypassing
     if (!bypassCache && authVerificationCache.isValid()) {
       return authVerificationCache.result;
     }
 
-    // First check if we have an expired access token
+    // Check for expired access token
     const accessToken = getCookie('access_token');
     const refreshToken = getCookie('refresh_token');
     
-    if (accessToken && isTokenExpired(accessToken)) {
-      if (!refreshToken) {
-        broadcastAuth(false);
-        throw new Error('Session expired. Please login again.');
-      }
-      
+    // If access token is expired but refresh token exists
+    if (accessToken && isTokenExpired(accessToken) && refreshToken) {
       try {
-        const apiCall = window.apiRequest || ((url, method) => authRequest(url, method));
+        // Add more detailed logging
+        console.debug('[Auth] Access token expired, attempting refresh');
+        
+        const apiCall = window.apiRequest || 
+          ((url, method) => authRequest(url, method));
         
         // First attempt refresh with timeout
         const REFRESH_TIMEOUT = 8000; // 8 seconds timeout
@@ -369,7 +400,9 @@ async function verifyAuthState(bypassCache = false) {
           )
         ]);
 
-        // Verify and wait for new token
+        console.debug('[Auth] Token refresh successful');
+        
+        // Verify the new token is set in cookies
         let retries = 3;
         let newAccessToken;
         while (retries-- > 0) {
@@ -379,27 +412,11 @@ async function verifyAuthState(bypassCache = false) {
         }
 
         if (!newAccessToken) {
-          throw new Error('No access token received from refresh');
+          throw new Error('No access token received after refresh');
         }
-
-        // Add the new token explicitly to verify request with timeout
-        const VERIFY_TIMEOUT = 5000; // 5 seconds timeout
-        const verifyPromise = apiCall('/api/auth/verify', 'GET', null, {
-          credentials: 'include',
-          headers: {
-            'Authorization': `Bearer ${newAccessToken}`,
-            'Cache-Control': 'no-cache'
-          }
-        });
-        
-        return await Promise.race([
-          verifyPromise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
-          )
-        ]);
       } catch (refreshError) {
-        console.error('Auth refresh failed:', refreshError);
+        console.error('[Auth] Token refresh failed:', refreshError);
+        
         if (typeof clearAuthState === 'function') {
           clearAuthState();
         }
@@ -409,6 +426,10 @@ async function verifyAuthState(bypassCache = false) {
         const isTimeout = errorMessage.includes('timeout');
         throw new Error(isTimeout ? 'Authentication timed out. Please try again.' : 'Session expired. Please login again.');
       }
+    } else if (!accessToken) {
+      // No access token at all
+      broadcastAuth(false);
+      return false;
     }
 
     // Check with the server for auth status
@@ -429,13 +450,22 @@ async function verifyAuthState(bypassCache = false) {
         )
       ]);
       
+      // Log successful verification
+      console.debug('[Auth] Verification successful:', response);
+      
       authVerificationCache.set(response.authenticated);
       if (response.authenticated) {
         broadcastAuth(true, response.username);
       }
       return response.authenticated;
     } catch (verifyError) {
-      console.error('Auth verification failed:', verifyError);
+      // Enhanced error logging
+      console.error('[Auth] Verification error details:', {
+        status: verifyError.status,
+        message: verifyError.message,
+        stack: verifyError.stack
+      });
+      
       if (verifyError.status === 401) {
         if (typeof clearAuthState === 'function') {
           clearAuthState();

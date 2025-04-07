@@ -79,28 +79,58 @@ const ELEMENTS = {};
  */
 async function ensureAuthenticated() {
   if (!window.auth?.isAuthenticated) {
+    console.warn('Authentication module not available');
     API_CONFIG.isAuthenticated = false;
     return false;
   }
 
   try {
-    const isAuthenticated = await window.auth.isAuthenticated();
+    // Add timeout to prevent hanging
+    const AUTH_CHECK_TIMEOUT = 8000;
+    const authPromise = window.auth.isAuthenticated({ forceVerify: true });
+    
+    const isAuthenticated = await Promise.race([
+      authPromise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Authentication check timeout')), AUTH_CHECK_TIMEOUT)
+      )
+    ]);
+    
     API_CONFIG.isAuthenticated = isAuthenticated;
 
     if (!isAuthenticated) {
-      console.log("Authentication check failed");
+      console.log("Authentication check failed - user not authenticated");
       clearAuthState();
+    } else {
+      console.debug("Authentication check successful");
     }
     return isAuthenticated;
   } catch (error) {
     console.error("Auth verification error:", error);
+    
+    // Enhanced error logging
+    const errorDetails = {
+      message: error.message,
+      status: error.status,
+      stack: error.stack?.split('\n').slice(0, 3).join('\n')
+    };
+    console.debug('Auth check error details:', errorDetails);
+    
     // If it's a 401, we clear state
-    if (error.status === 401) {
+    if (error.status === 401 || error.message?.includes('expired')) {
+      console.warn('Clearing auth state due to 401/expired session');
       clearAuthState();
       return false;
     }
+    
+    // For timeout errors, don't clear auth state, just return false
+    if (error.message?.includes('timeout')) {
+      console.warn('Auth check timed out - not clearing state');
+      return false;
+    }
+    
     clearAuthState();
-    throw error;
+    return false;
   }
 }
 
