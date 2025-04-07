@@ -77,114 +77,32 @@ const ELEMENTS = {};
  * Ensures user is authenticated (cookie-based).
  * @param {Object} options - Configuration options
  * @param {boolean} options.forceVerify - Force server verification bypassing cache
- * @param {number} options.maxRetries - Max retry attempts
- * @param {number} options.timeoutMs - Timeout in milliseconds
+ * @param {number} options.maxRetries - Max retry attempts (deprecated, handled by auth.js)
+ * @param {number} options.timeoutMs - Timeout in milliseconds (deprecated, handled by auth.js)
  * @returns {Promise<boolean>} Whether user is authenticated
  */
 async function ensureAuthenticated(options = {}) {
-  const {
-    forceVerify = false,
-    maxRetries = 2,
-    timeoutMs = 10000
-  } = options;
-
-  if (!window.auth?.isAuthenticated) {
+  if (!window.auth) {
     console.warn('Authentication module not available');
     API_CONFIG.isAuthenticated = false;
     return false;
   }
 
-  // Fast path: use cached result if not forcing verification and we have a cached result
-  if (!forceVerify && API_CONFIG.isAuthenticated) {
-    return true;
-  }
-
   try {
-    let lastError = null;
+    const isAuthenticated = await window.auth.isAuthenticated({
+      forceVerify: options.forceVerify || false
+    });
 
-    // Implement progressive retry with exponential backoff
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        // Calculate timeout with a small increase per attempt
-        const attemptTimeout = timeoutMs + (attempt * 1000);
+    // Keep global API_CONFIG in sync with auth state
+    API_CONFIG.isAuthenticated = isAuthenticated;
+    API_CONFIG.authCheckInProgress = false;
+    API_CONFIG.lastErrorStatus = null;
 
-        if (attempt > 1) {
-          console.debug(`[Auth] Verification retry ${attempt}/${maxRetries} with timeout ${attemptTimeout}ms`);
-        }
-
-        // Add timeout to auth check
-        const isAuthenticated = await Promise.race([
-          window.auth.isAuthenticated({
-            forceVerify: forceVerify || attempt > 1,
-            skipCache: forceVerify || attempt > 1
-          }),
-          new Promise((_, reject) =>
-            setTimeout(() =>
-              reject(new Error(`Authentication check timeout (attempt ${attempt})`)),
-              attemptTimeout
-            )
-          )
-        ]);
-
-        API_CONFIG.isAuthenticated = isAuthenticated;
-
-        if (!isAuthenticated) {
-          console.debug("[Auth] User not authenticated");
-          if (typeof clearAuthState === 'function') {
-            clearAuthState();
-          }
-        } else {
-          console.debug("[Auth] Authentication verified successfully");
-        }
-
-        return isAuthenticated;
-      } catch (error) {
-        lastError = error;
-        console.warn(`[Auth] Verification attempt ${attempt} failed:`, error);
-
-        // If it's a 401, no need to retry
-        if (error.status === 401 ||
-          (error.message && error.message.includes('expired'))) {
-          if (typeof clearAuthState === 'function') {
-            clearAuthState();
-          }
-          break;
-        }
-
-        // For network errors or timeouts, retry with backoff
-        if (attempt < maxRetries &&
-          (error.message?.includes('timeout') ||
-            error.message?.includes('network') ||
-            error.message?.includes('fetch'))) {
-          const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-          console.debug(`[Auth] Backing off for ${backoffMs}ms before retry`);
-          await new Promise(resolve => setTimeout(resolve, backoffMs));
-        }
-      }
-    }
-
-    // Enhanced error logging with more details
-    const errorDetails = {
-      message: lastError?.message,
-      status: lastError?.status,
-      stack: lastError?.stack?.split('\n').slice(0, 3).join('\n'),
-      time: new Date().toISOString()
-    };
-    console.debug('[Auth] Auth check error details:', errorDetails);
-
-    // Only clear auth state for 401 errors, not for timeouts or network issues
-    if (lastError?.status === 401 ||
-      (lastError?.message && lastError.message.includes('expired'))) {
-      if (typeof clearAuthState === 'function') {
-        clearAuthState();
-      }
-    }
-
-    API_CONFIG.isAuthenticated = false;
-    return false;
+    return isAuthenticated;
   } catch (error) {
-    console.error("Auth verification error:", error);
+    console.error("Authentication check failed:", error);
     API_CONFIG.isAuthenticated = false;
+    API_CONFIG.lastErrorStatus = error.status || null;
     return false;
   }
 }
@@ -193,13 +111,18 @@ async function ensureAuthenticated(options = {}) {
  * Consistently clears authentication state across the app
  */
 function clearAuthState() {
-  API_CONFIG.isAuthenticated = false;
-
-  // We no longer remove localStorage tokens or rely on TokenManager
-  document.dispatchEvent(new CustomEvent('authStateChanged', {
-    detail: { authenticated: false }
-  }));
+  // Delegate to auth.js
+  if (window.auth?.clear) {
+    window.auth.clear();
+  } else {
+    // Fallback for backward compatibility
+    API_CONFIG.isAuthenticated = false;
+    document.dispatchEvent(new CustomEvent('authStateChanged', {
+      detail: { authenticated: false }
+    }));
+  }
 }
+
 
 // ---------------------------------------------------------------------
 // UTILITY FUNCTIONS
@@ -284,8 +207,6 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
   async function makeApiRequest() {
     endpoint = sanitizeUrl(endpoint);
 
-    // If authentication is in progress, we won't block here; we just proceed.
-
     // Normalize endpoint if full URL was passed
     if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
       console.warn('Full URL detected in endpoint, normalizing:', endpoint);
@@ -353,18 +274,18 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         API_CONFIG.lastErrorStatus = response.status;
         console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
+        // Handle auth errors using auth.js
         if (response.status === 401) {
           // Check if this is the login endpoint specifically
           if (cleanEndpoint === '/api/auth/login') {
             console.warn(`Login failed for ${finalUrl}: Invalid credentials (401)`);
-            // Don't clear auth state here as login failed due to credentials
             throw new Error('Invalid username or password');
           } else {
-            // For other endpoints 401 means session expired or invalid token
-            console.log(`401 response received for ${finalUrl} (retry: ${retryCount}/${maxRetries}) - Session likely expired`);
-            // Existing logic assumes session expiry clear state and throw
-            // Note: The retry logic here seems bypassed might need review later
-            clearAuthState();
+            // For other endpoints 401, delegate to auth.js
+            window.auth?.handleAuthError?.(
+              { status: 401, message: 'Session expired' },
+              `API request to ${cleanEndpoint}`
+            );
             throw new Error('Session expired. Please login again.');
           }
         } else if (response.status === 404) {
@@ -410,6 +331,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
     }
   }
 }
+
 
 function getBaseUrl() {
   // We do not rely on window.location.origin or local storage.
