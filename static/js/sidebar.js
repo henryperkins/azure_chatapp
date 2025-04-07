@@ -378,9 +378,7 @@ function setupSidebarTabs() {
     });
 
     // Check auth status before loading data
-    const isAuthenticated = window.API_CONFIG?.isAuthenticated ||
-      (localStorage.getItem('userInfo') !== null &&
-        localStorage.getItem('auth_state') !== null);
+    const isAuthenticated = window.API_CONFIG?.isAuthenticated;
 
     // Only load data if authenticated and tab has a loader
     if (isAuthenticated && tabs[tabName].loader) {
