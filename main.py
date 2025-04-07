@@ -11,6 +11,14 @@ The FastAPI entrypoint for the Azure OpenAI Chat Application.
 - Includes routers (auth, conversations, projects, etc.)
 - Runs database init or migrations on startup
 
+SECURITY CONFIRMATIONS:
+1. No CORS headers implemented (Access-Control-Allow-Origin omitted)
+2. Strict SameSite cookie policy enforced (SameSite=Strict)
+3. No CORS middleware present in application
+4. WebSocket connections validate same-site cookies only
+5. Full HTTPS enforcement with HSTS headers
+6. No cross-domain credential headers or token sharing
+
 SECURITY NOTE: This application explicitly does NOT support:
 - Cross-origin requests (CORS headers are omitted)
 - Token/JWT authentication from external domains
