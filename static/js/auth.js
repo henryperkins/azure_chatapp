@@ -1,5 +1,11 @@
 /***************************************
- * auth.js - Updated Authentication Module
+ * auth.js - Strict Same-Origin Auth Module
+ * 
+ * Security Design:
+ * - Only works when frontend/backend share same origin
+ * - Uses secure session cookies (SameSite=Strict)
+ * - No token/JWT fallbacks for cross-origin use
+ * - All auth state managed via secure cookies
  ***************************************/
 
 // Development mode flag
