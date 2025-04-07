@@ -470,33 +470,80 @@
 
   window.WebSocketService.prototype.handleTokenRefresh = async function () {
     try {
-      await window.TokenManager.refresh();
-      // localStorage usage removed; token version remains in memory
+      console.debug(`${debugPrefix} Token refresh required, attempting refresh`);
+      
+      // Track refresh attempts
+      const refreshStartTime = Date.now();
+      
+      // Attempt token refresh with timeout
+      await Promise.race([
+        window.TokenManager.refresh(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Token refresh timeout')), 8000)
+        )
+      ]);
+      
+      console.debug(`${debugPrefix} Token refresh successful in ${Date.now() - refreshStartTime}ms`);
+      
+      // Process any pending messages that should be rejected due to token refresh
+      if (this.pendingMessages.size > 0) {
+        console.debug(`${debugPrefix} Rejecting ${this.pendingMessages.size} pending messages due to token refresh`);
+        this.pendingMessages.forEach(({ resolve, reject, timeout }) => {
+          clearTimeout(timeout);
+          reject(new Error('Token refreshed - please resend message'));
+        });
+        this.pendingMessages.clear();
+      }
+      
+      // If we're connected, send the refreshed token to the server
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({
           type: 'token_refresh',
-          token: window.TokenManager.accessToken,
-          version: window.TokenManager.version
+          version: window.TokenManager.version,
+          timestamp: new Date().toISOString()
         }));
+        
         this.reconnectAttempts = 0;
+        return true;
+      } else {
+        // If socket is closed, we need to reconnect
         await this.attemptReconnection();
+        return true;
       }
-
-      // Reject any pending messages
-      this.pendingMessages.forEach(({ resolve, reject, timeout }) => {
-        clearTimeout(timeout);
-        reject(new Error('Token refreshed - please resend message'));
-      });
-      this.pendingMessages.clear();
 
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      console.error(`${debugPrefix} Token refresh failed:`, error);
+      
+      // Check specific error types
+      let enhancedError;
+      if (error.message?.includes('timeout')) {
+        enhancedError = new Error('Authentication timeout - please try again later');
+        enhancedError.code = 'TOKEN_REFRESH_TIMEOUT';
+      } else if (error.status === 401 || error.status === 403 || 
+                 error.message?.includes('expired') || 
+                 error.message?.includes('unauthorized')) {
+        enhancedError = new Error('Session expired - please login again');
+        enhancedError.code = 'SESSION_EXPIRED';
+        
+        // Trigger logout on severe auth errors
+        if (window.auth && typeof window.auth.logout === 'function') {
+          setTimeout(() => {
+            console.debug(`${debugPrefix} Triggering logout due to auth failure`);
+            window.auth.logout();
+          }, 1000);
+        }
+      } else {
+        enhancedError = new Error('Authentication error - using HTTP fallback');
+        enhancedError.code = 'TOKEN_REFRESH_FAILED';
+        enhancedError.originalError = error;
+      }
+      
       this.useHttpFallback = true;
       if (this.onError) {
-        const enhancedError = new Error('Session expired - please reload');
-        enhancedError.code = 'TOKEN_REFRESH_FAILED';
         this.onError(enhancedError);
       }
+      
+      return false;
     }
   };
 
@@ -725,6 +772,22 @@
     this.chatId = null;
     this.projectId = null;
     console.debug('WebSocketService instance destroyed');
+  };
+
+  /**
+   * Disconnect all active WebSocket connections
+   * Added for better auth state management
+   */
+  window.WebSocketService.disconnectAll = function() {
+    console.debug(`${debugPrefix} Disconnecting all WebSocket connections`);
+    Array.from(activeInstances.values()).forEach(instance => {
+      try {
+        instance.disconnect();
+      } catch (err) {
+        console.debug(`${debugPrefix} Error during disconnect:`, err);
+      }
+    });
+    activeInstances.clear();
   };
 
   // Expose version info
