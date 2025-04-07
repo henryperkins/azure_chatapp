@@ -220,9 +220,11 @@
     this.useHttpFallback = false;
 
     try {
-      // Check cookie-based auth
-      const isAuthenticated = await window.auth?.isAuthenticated?.() ?? false;
+      // Check auth using the standardized function from app.js
+      // Use ensureAuthenticated for consistent checks including retries/timeouts
+      const isAuthenticated = await window.ensureAuthenticated?.({ forceVerify: false });
       if (!isAuthenticated) {
+        // ensureAuthenticated handles logging/state clearing, just throw
         throw new Error('User not authenticated');
       }
 
