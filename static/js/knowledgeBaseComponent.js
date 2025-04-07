@@ -42,9 +42,17 @@
       let allElementsFound = true;
       requiredElements.forEach(id => {
         if (!document.getElementById(id)) {
-          console.warn(`KB Component: Optional element #${id} missing in DOM. Some features might be limited.`);
+          console.log(`KB Component: Optional element #${id} not found - this is expected if feature is unused.`);
           // Mark as false only if critical elements are missing, decide based on functionality
-          if (['knowledgeTab', 'knowledgeBaseActive', 'knowledgeBaseInactive'].includes(id)) {
+          if ([
+            'knowledgeTab',
+            'knowledgeBaseActive',
+            'knowledgeBaseInactive',
+            'knowledgeBaseModelSelect',
+            'knowledgeFileSize',
+            'kbStatusText',
+            'kbStatusBadge'
+          ].includes(id)) {
             allElementsFound = false;
             console.error(`KB Component: CRITICAL element #${id} missing in DOM. Component cannot initialize properly.`);
           }

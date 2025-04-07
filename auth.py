@@ -282,15 +282,13 @@ async def refresh_token(
             locked_user.last_login = datetime.utcnow()
             locked_user.last_activity = datetime.utcnow()
 
-            # Only bump token version if token is older than 12 hours
+            # Always bump token version on refresh
             current_ts = int(datetime.utcnow().timestamp())
-            token_age = current_ts - (locked_user.token_version or current_ts)
-            if token_age > 43200:  # 12 hours in seconds
-                locked_user.token_version = (
-                    locked_user.token_version + 1
-                    if locked_user.token_version
-                    else current_ts
-                )
+            locked_user.token_version = (
+                locked_user.token_version + 1
+                if locked_user.token_version
+                else current_ts
+            )
 
             token_id = str(uuid.uuid4())
             expire_at = datetime.utcnow() + timedelta(

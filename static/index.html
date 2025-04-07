@@ -749,7 +749,13 @@
                       </div>
                       <div>
                         <h4 class="font-medium text-lg"><span id="knowledgeBaseName">Project Knowledge Base</span></h4>
-                        <p class="text-sm text-gray-500"><span id="knowledgeBaseModel">Default Embedding Model</span> • <span id="knowledgeBaseUpdated">Last updated: today</span></p>
+                        <p class="text-sm text-gray-500">
+                          <span id="kbStatusText">Active</span>
+                          <span id="kbStatusBadge" class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="h-2 w-2 rounded-full bg-green-400 mr-1.5 flex-shrink-0"></span>
+                            Enabled
+                          </span>
+                        </p>
                       </div>
                       <div class="ml-auto">
                         <span id="knowledgeBaseToggle" class="relative inline-block w-12 mr-2 align-middle select-none">
@@ -770,7 +776,7 @@
                         <div class="text-xs text-gray-500">Text Chunks</div>
                       </div>
                       <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
-                        <div class="text-2xl font-semibold mb-1" 
+                        <div class="text-2xl font-semibold mb-1"
                              id="kbVersionDisplay"
                              aria-label="Knowledge Base Schema Version">
                           Schema v1
@@ -779,7 +785,7 @@
                       </div>
                       
                       <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
-                        <div class="text-2xl font-semibold mb-1" 
+                        <div class="text-2xl font-semibold mb-1"
                              id="kbLastUsedDisplay"
                              aria-label="Last Used Timestamp">
                           Never
@@ -788,8 +794,22 @@
                       </div>
 
                       <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
+                        <div class="text-2xl font-semibold mb-1" id="knowledgeFileSize">0 MB</div>
+                        <div class="text-xs text-gray-500">Total Size</div>
+                      </div>
+
+                      <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
                         <div class="text-2xl font-semibold mb-1" id="knowledgeSearchCount">0</div>
                         <div class="text-xs text-gray-500">Searches</div>
+                      </div>
+
+                      <div class="bg-white dark:bg-gray-800 p-3 rounded shadow-sm">
+                        <select id="knowledgeBaseModelSelect" class="w-full text-sm border rounded">
+                          <option value="all-MiniLM-L6-v2" selected>Default Model</option>
+                          <option value="text-embedding-3-small">OpenAI Small</option>
+                          <option value="text-embedding-3-large">OpenAI Large</option>
+                        </select>
+                        <div class="text-xs text-gray-500 mt-1">Embedding Model</div>
                       </div>
                     </div>
                     
@@ -1238,16 +1258,23 @@
   <!-- Simplified Script Loading -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Wait for dashboard utilities to be ready
-      if (window.isProjectDashboardUtilsReady && window.isProjectDashboardUtilsReady()) {
-        loadProjectComponents();
-      } else {
-        document.addEventListener('dashboardUtilsReady', loadProjectComponents);
-      }
-      
+      // Wait for app.js to be ready before loading dependent components
+      document.addEventListener('appJsReady', function() {
+        console.log('[index.html] appJsReady event received, proceeding with component loading.');
+        
+        // Now wait for dashboard utilities (if needed, or load directly)
+        if (window.isProjectDashboardUtilsReady && window.isProjectDashboardUtilsReady()) {
+          loadProjectComponents();
+        } else {
+          // Assuming dashboardUtils might also depend on app.js, listen here
+          document.addEventListener('dashboardUtilsReady', loadProjectComponents);
+        }
+      });
+
       function loadProjectComponents() {
+        console.log('[index.html] Loading project components...');
         const scripts = [
-          '/static/js/knowledgeBaseComponent.js',
+          '/static/js/knowledgeBaseComponent.js', // Ensure these don't also need app.js early
           '/static/js/projectDetailsComponent.js',
           '/static/js/projectListComponent.js',
           '/static/js/projectManager.js'

@@ -40,8 +40,9 @@
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
     try {
-      const authState = await checkAuthState({ forceVerify: false });
-      if (!authState) {
+      // Use ensureAuthenticated from app.js for consistency
+      const isAuthenticated = await window.ensureAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
         // Not authenticated, dispatch an empty list
         emitEvent("projectsLoaded", {
           data: {
@@ -117,9 +118,9 @@
     const projectEndpoint = `/api/projects/${projectId}/`;
     
     try {
-      // Check auth state first
-      const authState = await checkAuthState();
-      if (!authState) {
+      // Check auth state first using ensureAuthenticated
+      const isAuthenticated = await window.ensureAuthenticated();
+      if (!isAuthenticated) {
         emitEvent("projectDetailsError", {
           error: new Error("Not authenticated - please login first")
         });
@@ -187,8 +188,9 @@
    * @returns {Promise<Object>}
    */
   async function loadProjectStats(projectId) {
-    const authState = await checkAuthState();
-    if (!authState) {
+    // Use ensureAuthenticated
+    const isAuthenticated = await window.ensureAuthenticated();
+    if (!isAuthenticated) {
       emitEvent("projectStatsError", {
         error: new Error("Not authenticated - please login first")
       });
@@ -234,8 +236,9 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectFiles(projectId) {
-    const authState = await checkAuthState();
-    if (!authState) {
+    // Use ensureAuthenticated
+    const isAuthenticated = await window.ensureAuthenticated();
+    if (!isAuthenticated) {
       emitEvent("projectFilesError", {
         error: new Error("Not authenticated - please login first")
       });
@@ -262,8 +265,9 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectConversations(projectId) {
-    const authState = await checkAuthState();
-    if (!authState) {
+    // Use ensureAuthenticated
+    const isAuthenticated = await window.ensureAuthenticated();
+    if (!isAuthenticated) {
       emitEvent("projectConversationsError", {
         error: new Error("Not authenticated - please login first")
       });
@@ -302,8 +306,9 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectArtifacts(projectId) {
-    const authState = await checkAuthState();
-    if (!authState) {
+    // Use ensureAuthenticated
+    const isAuthenticated = await window.ensureAuthenticated();
+    if (!isAuthenticated) {
       emitEvent("projectArtifactsError", {
         error: new Error("Not authenticated - please login first")
       });
@@ -330,8 +335,9 @@
    * @returns {Promise<Object>}
    */
   async function createOrUpdateProject(projectId, formData) {
-    const authState = await checkAuthState();
-    if (!authState) {
+    // Use ensureAuthenticated
+    const isAuthenticated = await window.ensureAuthenticated();
+    if (!isAuthenticated) {
       throw new Error("Not authenticated - please login first");
     }
 
@@ -348,8 +354,9 @@
    * @returns {Promise<Object>}
    */
   async function deleteProject(projectId) {
-    const authState = await checkAuthState();
-    if (!authState) {
+    // Use ensureAuthenticated
+    const isAuthenticated = await window.ensureAuthenticated();
+    if (!isAuthenticated) {
       throw new Error("Not authenticated - please login first");
     }
     return window.apiRequest(`/api/projects/${projectId}`, "DELETE");
@@ -610,9 +617,9 @@
     console.debug('[ProjectManager] Creating conversation for project:', projectId);
     
     try {
-      // Check auth state first
-      const authState = await checkAuthState();
-      if (!authState) {
+      // Check auth state first using ensureAuthenticated
+      const isAuthenticated = await window.ensureAuthenticated();
+      if (!isAuthenticated) {
         emitEvent("conversationError", {
           error: new Error("Not authenticated - please login first")
         });
@@ -747,48 +754,8 @@
     return currentProject;
   }
 
-  /**
-   * Check authentication state
-   * @param {Object} options - Options for auth check
-   * @returns {Promise<boolean>} Whether user is authenticated
-   */
-  async function checkAuthState(options = {}) {
-    const { forceVerify = false, maxRetries = 2 } = options;
-    
-    try {
-      if (!window.auth?.verify) {
-        console.warn("[projectManager] Auth module not available");
-        return false;
-      }
-
-      // If app.js has the enhanced ensureAuthenticated, use that
-      if (typeof window.ensureAuthenticated === 'function') {
-        return window.ensureAuthenticated({ forceVerify, maxRetries });
-      }
-      
-      // Otherwise, use verifyAuthState directly
-      const authState = await window.auth.verify(forceVerify);
-      if (!authState) {
-        emitEvent("authCheckFailed", {});
-        // Clear any potential local storage tokens
-        if (window.localStorage) {
-          window.localStorage.removeItem('access_token');
-          window.localStorage.removeItem('refresh_token');
-        }
-      }
-      return authState;
-    } catch (e) {
-      console.error("[projectManager] Auth check error:", e);
-      // Standardized error format matching auth.js
-      emitEvent("authError", {
-        error: new Error(e.message || "Authentication failed"),
-        code: e.code || "AUTH_ERROR"
-      });
-      return false;
-    }
-  }
-
   // Add a method to handle auth errors consistently
+  // Note: checkAuthState function removed; use window.ensureAuthenticated directly
   function handleAuthError(error, context) {
     // If auth.js provides handleAuthError, use that
     if (window.auth?.handleAuthError) {

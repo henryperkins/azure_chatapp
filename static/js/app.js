@@ -354,13 +354,16 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         console.error(`API Error (${response.status}): ${method} ${finalUrl}`);
 
         if (response.status === 401) {
-          // 401 Unauthorized. We are not doing token refresh—using cookies only.
-          console.log(`401 response received for ${endpoint} (retry: ${retryCount}/${maxRetries})`);
-          if (retryCount < maxRetries && !options.skipRetry) {
-            console.warn('Exhausting retry approach or skipping token refresh, clearing auth state');
-            clearAuthState();
-            throw new Error('Session expired. Please login again.');
+          // Check if this is the login endpoint specifically
+          if (cleanEndpoint === '/api/auth/login') {
+            console.warn(`Login failed for ${finalUrl}: Invalid credentials (401)`);
+            // Don't clear auth state here as login failed due to credentials
+            throw new Error('Invalid username or password');
           } else {
+            // For other endpoints 401 means session expired or invalid token
+            console.log(`401 response received for ${finalUrl} (retry: ${retryCount}/${maxRetries}) - Session likely expired`);
+            // Existing logic assumes session expiry clear state and throw
+            // Note: The retry logic here seems bypassed might need review later
             clearAuthState();
             throw new Error('Session expired. Please login again.');
           }
@@ -994,6 +997,7 @@ window.API_CONFIG = API_CONFIG;
 window.SELECTORS = SELECTORS;
 window.apiRequest = apiRequest;
 window.getBaseUrl = getBaseUrl;
+window.ensureAuthenticated = ensureAuthenticated; // <-- Add this line
 window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
 window.loadProjects = loadProjects;
@@ -1028,4 +1032,8 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error("App initialization error:", error);
     alert("Failed to initialize. Please refresh the page.");
   });
+
+  // Signal that app.js is loaded and initialized
+  console.log('[app.js] Dispatching appJsReady event');
+  document.dispatchEvent(new CustomEvent('appJsReady'));
 });
