@@ -63,7 +63,9 @@ window.ConversationService = class ConversationService {
     this.onLoadingStart();
 
     try {
-      const projectId = localStorage.getItem("selectedProjectId")?.trim();
+      const projectId = window.location.pathname.includes('/projects/') 
+        ? window.location.pathname.split('/')[2] 
+        : null;
       
       let convUrl, msgUrl;
 
