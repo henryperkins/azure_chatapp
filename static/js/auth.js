@@ -41,6 +41,24 @@ const TokenManager = {
    * with improved error handling and cookie parsing
    */
   rehydrateFromCookies() {
+    const cookieToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('access_token='))
+      ?.split('=')[1];
+
+    if (cookieToken) {
+      try {
+        const decoded = decodeJwt(cookieToken);
+        if (decoded?.exp) {
+          this.tokenExpiry = decoded.exp * 1000;
+        }
+        this.accessToken = cookieToken;
+        return true;
+      } catch (e) {
+        console.warn('[Auth] Invalid access token cookie:', e);
+        this.clearTokens();
+      }
+    }
     return false;
   },
 
@@ -53,7 +71,7 @@ const TokenManager = {
       return;
     }
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Setting tokens:', {
+      console.debug('[Auth] Setting cookie tokens only:', {
         accessToken: '***' + access.slice(-6),
         refreshToken: refresh ? '***' + refresh.slice(-6) : null
       });
@@ -78,13 +96,6 @@ const TokenManager = {
       this.onTokenRefresh(access);
     }
 
-    // Store tokens in localStorage
-    localStorage.setItem('auth_state', JSON.stringify({
-      accessToken: access,
-      refreshToken: refresh,
-      timestamp: Date.now()
-    }));
-
     // Optionally mark global config as authenticated
     if (window.API_CONFIG) {
       window.API_CONFIG.isAuthenticated = true;
@@ -98,19 +109,13 @@ const TokenManager = {
    */
   clearTokens() {
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Clearing tokens');
+      console.debug('[Auth] Clearing cookie tokens only');
     }
     this.accessToken = null;
     this.refreshToken = null;
     this.tokenExpiry = null;
 
-    localStorage.removeItem('auth_state');
-    localStorage.removeItem('tokenVersion');
-    localStorage.removeItem('userInfo');
-    localStorage.removeItem('refreshMutex'); // concurrency guard
-
-    document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
-    document.cookie = "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
+    // Cookie clearing handled by backend
   },
 
   /**
@@ -118,52 +123,13 @@ const TokenManager = {
    * With improved cookie parsing and error handling
    */
   async getAuthHeader() {
-    try {
-      // Get token from localStorage
-      let authState = null;
-      try {
-        const rawAuthState = localStorage.getItem('auth_state');
-        if (rawAuthState) {
-          authState = JSON.parse(rawAuthState);
-        }
-      } catch (parseError) {
-        console.warn('[Auth] Failed to parse auth_state from localStorage:', parseError);
-        // Continue with null authState
-      }
-      
-      const storageToken = this.accessToken || authState?.accessToken;
-
+    if (this.accessToken) {
       if (AUTH_DEBUG) {
-        console.debug('[Auth] Token sources:', {
-          cookieToken: cookieToken ? '***' + cookieToken.slice(-6) : null,
-          storageToken: storageToken ? '***' + storageToken.slice(-6) : null,
-          memoryToken: this.accessToken ? '***' + this.accessToken.slice(-6) : null,
-          version: this.version
-        });
+        console.debug('[Auth] Using token ending with:', this.accessToken.slice(-6));
       }
-
-      // Check for token version mismatch
-      if (cookieToken && storageToken && this.version) {
-        const storedVersion = localStorage.getItem('tokenVersion');
-        if (storedVersion && storedVersion !== this.version) {
-          console.warn('[Auth] Token version mismatch - forcing refresh');
-          const refreshed = await this.refreshTokens();
-          if (!refreshed) {
-            throw new Error('Failed to refresh token');
-          }
-          return { "Authorization": `Bearer ${this.accessToken}` };
-        }
-      }
-
-      // Use token from any available source
-      const accessToken = this.accessToken || storageToken;
-      
-      // Log the token being used
-      if (AUTH_DEBUG && accessToken) {
-        console.debug('[Auth] Using token ending with:', accessToken.slice(-6));
-      }
-      
-      return accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
+      return { "Authorization": `Bearer ${this.accessToken}` };
+    }
+    return {};
     } catch (error) {
       console.error('[Auth] Failed to get auth header:', error);
       // Don't clear tokens for non-critical errors to prevent unnecessary logouts
