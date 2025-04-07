@@ -4,6 +4,7 @@
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
  * Dispatches custom DOM events to inform the UI about loaded or updated data.
  * Contains NO direct DOM manipulation or direct form/modals references.
+ * Uses auth.js exclusively for authentication.
  */
 
 (function () {
@@ -40,8 +41,8 @@
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
     try {
-      // Use ensureAuthenticated from app.js for consistency
-      const isAuthenticated = await window.ensureAuthenticated({ forceVerify: false });
+      // Use auth.js to check authentication
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
         // Not authenticated, dispatch an empty list
         emitEvent("projectsLoaded", {
@@ -91,8 +92,11 @@
       return projects;
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
-      handleAuthError(error, "loading projects");
-      
+      // Use auth.js for handling auth errors
+      if (window.auth?.handleAuthError) {
+        window.auth.handleAuthError(error, "loading projects");
+      }
+
       // Dispatch empty projects to clear UI
       emitEvent("projectsLoaded", {
         data: {
@@ -116,10 +120,10 @@
    */
   async function loadProjectDetails(projectId) {
     const projectEndpoint = `/api/projects/${projectId}/`;
-    
+
     try {
-      // Check auth state first using ensureAuthenticated
-      const isAuthenticated = await window.ensureAuthenticated();
+      // Check auth state using auth.js
+      const isAuthenticated = await window.auth.isAuthenticated();
       if (!isAuthenticated) {
         emitEvent("projectDetailsError", {
           error: new Error("Not authenticated - please login first")
@@ -188,8 +192,8 @@
    * @returns {Promise<Object>}
    */
   async function loadProjectStats(projectId) {
-    // Use ensureAuthenticated
-    const isAuthenticated = await window.ensureAuthenticated();
+    // Use auth.js for authentication
+    const isAuthenticated = await window.auth.isAuthenticated();
     if (!isAuthenticated) {
       emitEvent("projectStatsError", {
         error: new Error("Not authenticated - please login first")
@@ -236,8 +240,8 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectFiles(projectId) {
-    // Use ensureAuthenticated
-    const isAuthenticated = await window.ensureAuthenticated();
+    // Use auth.js for authentication
+    const isAuthenticated = await window.auth.isAuthenticated();
     if (!isAuthenticated) {
       emitEvent("projectFilesError", {
         error: new Error("Not authenticated - please login first")
@@ -265,8 +269,8 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectConversations(projectId) {
-    // Use ensureAuthenticated
-    const isAuthenticated = await window.ensureAuthenticated();
+    // Use auth.js for authentication
+    const isAuthenticated = await window.auth.isAuthenticated();
     if (!isAuthenticated) {
       emitEvent("projectConversationsError", {
         error: new Error("Not authenticated - please login first")
@@ -306,8 +310,8 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectArtifacts(projectId) {
-    // Use ensureAuthenticated
-    const isAuthenticated = await window.ensureAuthenticated();
+    // Use auth.js for authentication
+    const isAuthenticated = await window.auth.isAuthenticated();
     if (!isAuthenticated) {
       emitEvent("projectArtifactsError", {
         error: new Error("Not authenticated - please login first")
@@ -335,8 +339,8 @@
    * @returns {Promise<Object>}
    */
   async function createOrUpdateProject(projectId, formData) {
-    // Use ensureAuthenticated
-    const isAuthenticated = await window.ensureAuthenticated();
+    // Use auth.js for authentication
+    const isAuthenticated = await window.auth.isAuthenticated();
     if (!isAuthenticated) {
       throw new Error("Not authenticated - please login first");
     }
@@ -354,8 +358,8 @@
    * @returns {Promise<Object>}
    */
   async function deleteProject(projectId) {
-    // Use ensureAuthenticated
-    const isAuthenticated = await window.ensureAuthenticated();
+    // Use auth.js for authentication
+    const isAuthenticated = await window.auth.isAuthenticated();
     if (!isAuthenticated) {
       throw new Error("Not authenticated - please login first");
     }
@@ -549,7 +553,7 @@
   function parseFileUploadError(err) {
     const status = err?.response?.status;
     const detail = err?.response?.data?.detail || err.message;
-    
+
     if (status === 422) {
       return new Error("File validation failed (unsupported/corrupted format)");
     } else if (status === 413) {
@@ -615,10 +619,10 @@
    */
   async function createConversation(projectId) {
     console.debug('[ProjectManager] Creating conversation for project:', projectId);
-    
+
     try {
-      // Check auth state first using ensureAuthenticated
-      const isAuthenticated = await window.ensureAuthenticated();
+      // Check auth state first using auth.js
+      const isAuthenticated = await window.auth.isAuthenticated();
       if (!isAuthenticated) {
         emitEvent("conversationError", {
           error: new Error("Not authenticated - please login first")
@@ -628,16 +632,16 @@
 
       // Validate project existence
       if (!this.currentProject || this.currentProject.id !== projectId) {
-        await this.loadProjectDetails(projectId); 
+        await this.loadProjectDetails(projectId);
         if (!this.currentProject) {
           throw new Error("Project not loaded after refresh");
         }
       }
 
-      const payload = { 
+      const payload = {
         title: "New Conversation",
         model: window.MODEL_CONFIG?.modelName || "claude-3-sonnet-20240229",
-        system_prompt: window.MODEL_CONFIG?.customInstructions || "" 
+        system_prompt: window.MODEL_CONFIG?.customInstructions || ""
       };
 
       console.debug('[ProjectManager] Conversation payload:', payload);
@@ -655,7 +659,7 @@
       }
 
       console.debug('[ProjectManager] Created conversation:', response.data.id);
-      
+
       // Link conversation to knowledge base if available
       if (this.currentProject.knowledge_base_id) {
         await this.linkConversationToKnowledgeBase(response.data.id);
@@ -669,7 +673,7 @@
         model: window.MODEL_CONFIG?.modelName,
         knowledgeBase: !!this.currentProject?.knowledge_base_id
       });
-      
+
       throw new Error(`Failed to create conversation: ${formatProjectError(error)}`);
     }
   }
@@ -685,13 +689,13 @@
 
     try {
       console.debug(`[ProjectManager] Linking conversation ${conversationId} to KB ${kbId}`);
-      
+
       await window.apiRequest(
         `/api/knowledge-bases/${kbId}/conversations/${conversationId}`,
         "PUT",
         { association_type: "primary" }
       );
-      
+
       console.debug('[ProjectManager] Knowledge base link successful');
     } catch (linkError) {
       console.error('[ProjectManager] KB linking failed:', {
@@ -700,7 +704,7 @@
         error: linkError.message,
         response: linkError?.response?.data
       });
-      
+
       throw new Error("Created conversation but failed to connect knowledge base");
     }
   }
@@ -714,10 +718,10 @@
     // Enhanced error mapping
     const status = error?.response?.status;
     const serverMessage = error?.response?.data?.error;
-    
+
     return status === 403 ? "You don't have permissions to create conversations in this project" :
-           status === 404 ? "Project not found or unavailable" :
-           serverMessage || error.message || "Unknown project error";
+      status === 404 ? "Project not found or unavailable" :
+        serverMessage || error.message || "Unknown project error";
   }
 
   /**
@@ -754,31 +758,6 @@
     return currentProject;
   }
 
-  // Add a method to handle auth errors consistently
-  // Note: checkAuthState function removed; use window.ensureAuthenticated directly
-  function handleAuthError(error, context) {
-    // If auth.js provides handleAuthError, use that
-    if (window.auth?.handleAuthError) {
-      return window.auth.handleAuthError(error, context);
-    }
-    
-    // Otherwise, provide a local implementation
-    console.error(`[projectManager] ${context} auth error:`, error);
-    let message = "Authentication failed";
-    
-    if (error.status === 401) {
-      message = "Your session has expired. Please log in again.";
-      emitEvent("authExpired", {});
-    } else if (error.message?.includes('timeout')) {
-      message = "Authentication check timed out. Please try again.";
-    } else if (error.message) {
-      message = error.message;
-    }
-    
-    emitEvent("authError", { error, message });
-    return { message };
-  }
-
   // Add token refresh awareness with better error handling
   document.addEventListener("authStateChanged", (e) => {
     if (e.detail.authenticated === false) {
@@ -788,7 +767,7 @@
       } else {
         console.log("[projectManager] Auth state changed: not authenticated");
       }
-      
+
       // Emit event to inform components
       emitEvent("authExpired", { message: e.detail.error || "Authentication expired" });
     } else if (e.detail.authenticated === true) {
@@ -862,8 +841,6 @@
     // Knowledge Base
     isKnowledgeBaseReady,
     loadKnowledgeBaseDetails,
-    // Error formatting
-    formatProjectError,
     // Error formatting
     formatProjectError,
     // API utils

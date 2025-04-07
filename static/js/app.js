@@ -84,27 +84,12 @@ const ELEMENTS = {};
 async function ensureAuthenticated(options = {}) {
   if (!window.auth) {
     console.warn('Authentication module not available');
-    API_CONFIG.isAuthenticated = false;
     return false;
   }
 
-  try {
-    const isAuthenticated = await window.auth.isAuthenticated({
-      forceVerify: options.forceVerify || false
-    });
-
-    // Keep global API_CONFIG in sync with auth state
-    API_CONFIG.isAuthenticated = isAuthenticated;
-    API_CONFIG.authCheckInProgress = false;
-    API_CONFIG.lastErrorStatus = null;
-
-    return isAuthenticated;
-  } catch (error) {
-    console.error("Authentication check failed:", error);
-    API_CONFIG.isAuthenticated = false;
-    API_CONFIG.lastErrorStatus = error.status || null;
-    return false;
-  }
+  return window.auth.isAuthenticated({
+    forceVerify: options.forceVerify || false
+  });
 }
 
 /**
