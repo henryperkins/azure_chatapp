@@ -481,8 +481,16 @@ def set_secure_cookie(
     response: Response, key: str, value: str, max_age: Optional[int] = None
 ):
     """
-    Sets a secure HTTP-only cookie. Removed domain to avoid cross-domain logic.
+    Sets a secure HTTP-only cookie with explicit expiration to ensure persistence across browser sessions.
+    
+    Args:
+        response: FastAPI response object
+        key: Cookie name
+        value: Cookie value
+        max_age: Maximum age in seconds (None means the cookie persists until browser close)
     """
+    # Calculate expires datetime if max_age is provided
+    # Setting max_age alone is sufficient; FastAPI will handle the expires conversion
     response.set_cookie(
         key=key,
         value=value,

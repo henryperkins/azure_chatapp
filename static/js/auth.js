@@ -56,14 +56,16 @@ async function getAuthToken(options = {}) {
     return accessToken;
   }
 
-  // If token is expired but refresh token exists, refresh tokens
+  // Check for refresh token even if access token is missing or expired
   const refreshToken = getCookie('refresh_token');
-  if (accessToken && refreshToken) {
+  if (refreshToken) {
     try {
+      if (AUTH_DEBUG) console.debug('[Auth] Found refresh token, attempting refresh');
       await refreshTokens();
       // Get the new access token after refresh
       const newAccessToken = getCookie('access_token');
       if (newAccessToken) {
+        if (AUTH_DEBUG) console.debug('[Auth] Successfully refreshed token');
         return newAccessToken;
       }
       throw new Error('No access token after refresh');
@@ -212,28 +214,16 @@ try {
 
   console.debug('[Auth] Token refreshed successfully');
 
-    // Reset failed attempt counter on success
-    refreshFailCount = 0;
+  // Notify about token refresh
+  document.dispatchEvent(new CustomEvent('tokenRefreshed', {
+    detail: { success: true }
+  }));
 
-    // Refresh verification timestamp
-    authState.lastVerified = Date.now();
-
-    console.debug('[Auth] Token refreshed successfully');
-
-    // Notify about token refresh
-    document.dispatchEvent(new CustomEvent('tokenRefreshed', {
-      detail: { success: true }
-    }));
-
-    if (lastError) {
-      throw lastError;
-    }
-
-    return {
-      success: true,
-      version: authState.tokenVersion,
-      token: response.access_token
-    };
+  return {
+    success: true,
+    version: authState.tokenVersion,
+    token: response.access_token
+  };
   } catch (error) {
     // Increment failed attempt counter
     refreshFailCount++;
@@ -1090,6 +1080,7 @@ window.auth = window.auth || {
   refreshTokens,
   handleAuthError,
   verify: verifyAuthState,
+  verifyAuthState: verifyAuthState, // Added for compatibility with existing code
   updateStatus: verifyAuthState, // for backward compatibility
   clear: clearTokenState,
   broadcastAuth,
