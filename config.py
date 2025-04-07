@@ -30,10 +30,8 @@ class Settings:
         "ALLOWED_HOSTS", "put.photo,www.put.photo,localhost,127.0.0.1,*"
     ).split(",")
 
-    # CORS Origins
-    CORS_ORIGINS = (
-        os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
-    )
+    # CORS Origins (handled by middleware)
+    CORS_ORIGINS = []
 
     # Database
     DATABASE_URL = os.getenv(
@@ -49,8 +47,8 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
-    # Cookie domain
-    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")
+    # Cookie domain (disabled for CORS testing)
+    COOKIE_DOMAIN: str = ""
 
     # --- Unified Model Configurations ---
 
