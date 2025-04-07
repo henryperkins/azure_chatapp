@@ -625,7 +625,7 @@ async def get_knowledge_base_health(
         .select_from(ProjectFile)
         .where(
             ProjectFile.project_id == kb.project_id,
-            ProjectFile.metadata["search_processing"]["status"].astext == "success",
+            ProjectFile.config["search_processing"]["status"].astext == "success",
         )
     )
 

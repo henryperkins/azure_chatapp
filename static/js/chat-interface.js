@@ -418,6 +418,10 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
 // Create a new conversation
 window.ChatInterface.prototype.createNewConversation = async function () {
   if (!this.conversationService) {
+    console.error("Conversation service not initialized");
+    if (this.notificationFunction) {
+      this.notificationFunction("Chat service not initialized. Please refresh the page.", "error");
+    }
     throw new Error("Conversation service not initialized");
   }
 
@@ -449,21 +453,39 @@ window.ChatInterface.prototype.createNewConversation = async function () {
 
         // If not inited, init
         if (!window.auth?.isInitialized) {
-          await window.auth.init();
+          try {
+            await window.auth.init();
+          } catch (authInitError) {
+            console.warn("[chat-interface] Auth initialization failed:", authInitError);
+            // Continue with authentication check anyway
+          }
         }
 
         // Verify auth with timeout
-        authVerified = await Promise.race([
-          window.auth.isAuthenticated({ forceVerify: true }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
-          )
-        ]);
+        try {
+          authVerified = await Promise.race([
+            typeof window.auth.isAuthenticated === 'function'
+              ? window.auth.isAuthenticated({ forceVerify: true })
+              : Promise.reject(new Error('Auth not available')),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Auth verification timeout')), VERIFY_TIMEOUT)
+            )
+          ]);
+        } catch (authVerifyError) {
+          console.warn("[chat-interface] Auth verification failed:", authVerifyError);
+          authVerified = false;
+          lastError = authVerifyError;
+        }
 
-        if (!authVerified && window.TokenManager?.hasTokens?.()) {
+        if (!authVerified && window.TokenManager && typeof window.TokenManager.hasTokens === 'function' && window.TokenManager.hasTokens()) {
           try {
-            await window.TokenManager.refreshTokens();
-            authVerified = await window.auth.isAuthenticated({ forceVerify: true });
+            // Check if refreshTokens exists
+            if (typeof window.TokenManager.refresh === 'function') {
+              await window.TokenManager.refresh();
+              authVerified = await window.auth.isAuthenticated({ forceVerify: true });
+            } else {
+              throw new Error('Token refresh method not available');
+            }
           } catch (refreshError) {
             console.warn("[chat-interface] Token refresh failed:", refreshError);
             lastError = refreshError;
@@ -534,9 +556,13 @@ window.ChatInterface.prototype.createNewConversation = async function () {
     let conversation;
     try {
       // We no longer store selectedProjectId in localStorage, so rely on this.projectId if present
-      if (this.projectId && window.projectManager?.createConversation) {
+      if (this.projectId && window.projectManager && typeof window.projectManager.createConversation === 'function') {
         conversation = await window.projectManager.createConversation(this.projectId);
       } else {
+        // Ensure conversation service is available
+        if (!this.conversationService || typeof this.conversationService.createNewConversation !== 'function') {
+          throw new Error('Conversation service not properly initialized');
+        }
         conversation = await this.conversationService.createNewConversation();
       }
 
@@ -603,15 +629,28 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       let message = 'Failed to create conversation';
       let showLogin = false;
 
-      if (error.message.includes('Not authenticated')) {
-        message = 'Session expired - please log in again';
-        showLogin = true;
-      } else if (error.message.includes('knowledge base')) {
-        message = 'Created chat but knowledge integration failed';
-      } else if (error.message.includes('timeout')) {
-        message = 'Request timed out - please try again';
-      } else if (error.message.includes('NetworkError')) {
-        message = 'Network error - please check your connection';
+      // Null check before accessing error properties
+      if (error && typeof error === 'object') {
+        if (error.message) {
+          if (error.message.includes('Not authenticated')) {
+            message = 'Session expired - please log in again';
+            showLogin = true;
+          } else if (error.message.includes('knowledge base')) {
+            message = 'Created chat but knowledge integration failed';
+          } else if (error.message.includes('timeout')) {
+            message = 'Request timed out - please try again';
+          } else if (error.message.includes('NetworkError') || error.message.includes('network')) {
+            message = 'Network error - please check your connection';
+          } else {
+            // Use the actual error message when available
+            message = `Failed to create conversation: ${error.message}`;
+          }
+        }
+
+        if (error.status === 401 || error.code === 401) {
+          message = 'Session expired - please log in again';
+          showLogin = true;
+        }
       }
 
       if (showLogin) {
@@ -633,15 +672,19 @@ window.ChatInterface.prototype.createNewConversation = async function () {
     let userMessage = 'Failed to create conversation';
     let isAuthError = false;
 
-    if (error.message.includes('Not authenticated') ||
-      error.message.includes('401') ||
-      error.message.includes('token')) {
-      userMessage = 'Session expired - please log in again';
-      isAuthError = true;
-    } else if (error.message.includes('timeout')) {
-      userMessage = 'Request timed out - please try again';
-    } else if (error.message.includes('NetworkError')) {
-      userMessage = 'Network error - please check your connection';
+    if (error && typeof error === 'object' && error.message) {
+      if (error.message.includes('Not authenticated') ||
+        error.message.includes('401') ||
+        error.message.includes('token')) {
+        userMessage = 'Session expired - please log in again';
+        isAuthError = true;
+      } else if (error.message.includes('timeout')) {
+        userMessage = 'Request timed out - please try again';
+      } else if (error.message.includes('NetworkError') || error.message.includes('network')) {
+        userMessage = 'Network error - please check your connection';
+      } else {
+        userMessage = `Error: ${error.message}`;
+      }
     }
 
     if (isAuthError) {

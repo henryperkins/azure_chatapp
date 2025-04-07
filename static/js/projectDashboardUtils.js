@@ -701,10 +701,43 @@ window.bus = new AppEventBus();
     }
   };
 
+  // Enhanced error handling utilities
+  window.ErrorUtils = {
+    // Safe error extraction from any type
+    getErrorMessage: function(error) {
+      if (typeof error === 'string') return error;
+      if (!error) return 'Unknown error';
+      
+      // Handle Error objects or objects with message property
+      if (error.message) return error.message;
+      
+      // Handle response objects
+      if (error.statusText) return `${error.status || ''} ${error.statusText}`;
+      
+      // Last resort - stringify if possible
+      try {
+        return JSON.stringify(error);
+      } catch (e) {
+        return 'Unspecified error';
+      }
+    },
+    
+    // Safe stack extraction
+    getErrorStack: function(error) {
+      return (error && error.stack) ? error.stack : '';
+    }
+  };
+
   // Centralized global error handler
   window.addEventListener('error', function(event) {
-    const errorMessage = event.error && event.error.message ? event.error.message : event.message;
+    // Safely extract error information
+    const errorMessage = event.error ? window.ErrorUtils.getErrorMessage(event.error) : event.message;
+    const stack = event.error ? window.ErrorUtils.getErrorStack(event.error) : '';
+    
     console.error('Global error:', errorMessage);
+    console.debug('Error details:', event.error || event);
+    if (stack) console.debug('Stack trace:', stack);
+    
     if (window.showNotification) {
       window.showNotification('An error occurred: ' + errorMessage, 'error');
     }
@@ -712,9 +745,10 @@ window.bus = new AppEventBus();
   
   // Handle promise rejections with better error details
   window.addEventListener('unhandledrejection', function(event) {
+    // Safely extract information from the rejection
     const reason = event.reason;
-    const errorMessage = typeof reason === 'string' ? reason : reason?.message || 'Unknown error';
-    const errorStack = reason?.stack || '';
+    const errorMessage = window.ErrorUtils.getErrorMessage(reason);
+    const errorStack = window.ErrorUtils.getErrorStack(reason);
     
     // Handle specific error types
     if (errorMessage.includes('No project selected')) {
@@ -729,26 +763,40 @@ window.bus = new AppEventBus();
     if (errorStack) console.debug('Stack trace:', errorStack);
     
     // Add source information when available
-    const sourceInfo = event.promise?._source || '';
+    const sourceInfo = event.promise && event.promise._source ? event.promise._source : '';
     if (sourceInfo) console.debug('Promise source:', sourceInfo);
     
-    // Provide more helpful notification with context if available
-    if (window.showNotification) {
-      // Check for known error patterns
-      if (errorMessage.includes('Knowledge base not configured')) {
-        window.showNotification(
-          'Please setup a knowledge base before performing this operation',
-          'warning',
-          { action: "Setup KB", onAction: () => window.modalManager?.show("knowledge") }
-        );
-      } else if (errorMessage.includes('Network Error')) {
-        window.showNotification('Network connection issue. Please check your connection.', 'error');
-      } else if (errorMessage.includes('No project selected')) {
-        // Silently ignore "No project selected" errors as they're handled elsewhere
-        event.preventDefault(); // Prevent default error handling
-      } else {
-        window.showNotification('Operation failed: ' + errorMessage, 'error');
+    // Guard against undefined properties to prevent "Cannot read property of undefined" errors
+    try {
+      // Provide more helpful notification with context if available
+      if (window.showNotification) {
+        // Check for known error patterns
+        if (errorMessage.includes('Knowledge base not configured')) {
+          window.showNotification(
+            'Please setup a knowledge base before performing this operation',
+            'warning',
+            { action: "Setup KB", onAction: () => {
+              if (window.modalManager && typeof window.modalManager.show === 'function') {
+                window.modalManager.show("knowledge");
+              }
+            }}
+          );
+        } else if (errorMessage.includes('Network Error') || errorMessage.includes('Failed to fetch')) {
+          window.showNotification('Network connection issue. Please check your connection.', 'error');
+        } else if (errorMessage.includes('No project selected')) {
+          // Silently ignore "No project selected" errors as they're handled elsewhere
+          event.preventDefault(); // Prevent default error handling
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+          window.showNotification('Operation timed out. Please try again.', 'error');
+        } else if (errorMessage.includes('Authentication') || errorMessage.includes('auth')) {
+          window.showNotification('Authentication error: ' + errorMessage, 'error');
+        } else {
+          window.showNotification('Operation failed: ' + errorMessage, 'error');
+        }
       }
+    } catch (handlerError) {
+      // If error handler itself has an error, log it but don't crash
+      console.error('Error while handling rejection:', handlerError);
     }
     
     // Mark event as handled to prevent double-logging in console

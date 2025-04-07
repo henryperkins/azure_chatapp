@@ -17,175 +17,127 @@ logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     """Manages WebSocket connections with state tracking and conversation context."""
-
     _instance = None
 
     def __new__(cls):
-        if not cls._instance:
-            cls._instance = super().__new__(cls)
-            cls._instance.__init__()
+        if cls._instance is None:
+            cls._instance = super(ConnectionManager, cls).__new__(cls)
+            cls._instance.active_connections = {}
+            cls._instance.connection_state = {}
+            cls._instance.conversation_participants = defaultdict(set)
+            cls._instance.user_connections = defaultdict(set)
         return cls._instance
 
     def __init__(self):
-        if hasattr(self, "_connections"):
-            return
-
-        # Track all active connections with metadata
-        self._connections: Dict[str, dict] = (
-            {}
-        )  # connection_id -> {websocket, conversation_id, user_id, state}
-
-        # Indexes for faster lookups
-        self._by_conversation: Dict[str, Set[str]] = defaultdict(set)
-        self._by_user: Dict[str, Set[str]] = defaultdict(set)
-
-        # Connection states
-        self.CONNECTING = "connecting"
-        self.CONNECTED = "connected"
-        self.DISCONNECTED = "disconnected"
+        # Initialize only once - singleton pattern
+        if not hasattr(self, 'active_connections'):
+            self.active_connections = {}  # WebSocket instances by ID
+            self.connection_state = {}  # State tracking for each connection
+            self.conversation_participants = defaultdict(set)  # Conversation ID -> set of WebSocket IDs
+            self.user_connections = defaultdict(set)  # User ID -> set of WebSocket IDs
 
     @property
-    def connection_count(self) -> int:
-        """Return number of active connections."""
-        return len(self._connections)
+    def connected_count(self) -> int:
+        """Return the number of active connections"""
+        return len(self.active_connections)
 
     async def connect_with_state(
-        self,
-        websocket: WebSocket,
-        conversation_id: str,
-        db: AsyncSession,
-        user_id: Optional[str] = None,
-        state: Optional[str] = None,
-    ) -> str:
+        self, websocket: WebSocket, conversation_id: str, db: AsyncSession, user_id: str = None
+    ):
         """
-        Connect WebSocket with state tracking (authentication is handled by endpoint).
-
-        Args:
-            websocket: The WebSocket connection (already authenticated)
-            conversation_id: The conversation ID
-            db: Database session
-            user_id: Pre-validated user ID
-            state: Initial connection state
-
-        Returns:
-            connection_id: The unique connection ID
+        Register a new WebSocket connection with associated conversation and user IDs.
+        Handles authentication state and session validation.
         """
-        connection_id = str(id(websocket))
-
-        self._connections[connection_id] = {
-            "websocket": websocket,
-            "conversation_id": conversation_id,
+        # Generate a unique connection ID
+        connection_id = f"{user_id}_{conversation_id}_{id(websocket)}"
+        
+        # Store connection and its metadata
+        self.active_connections[connection_id] = websocket
+        self.connection_state[connection_id] = {
             "user_id": user_id,
-            "state": state or self.CONNECTED,
+            "conversation_id": conversation_id,
+            "connected_at": None,  # Will be set after successful connect
+            "db_session": db,
+            "authenticated": user_id is not None
         }
-
-        self._by_conversation[conversation_id].add(connection_id)
+        
+        # Add to conversation and user mappings
+        self.conversation_participants[conversation_id].add(connection_id)
         if user_id:
-            self._by_user[str(user_id)].add(connection_id)
-
+            self.user_connections[user_id].add(connection_id)
+        
         logger.info(
-            f"WebSocket connected for user {user_id}, conversation {conversation_id}"
+            f"WebSocket connected: user={user_id}, conversation={conversation_id}, "
+            f"total_connections={self.connected_count}"
         )
         return connection_id
 
-    async def update_connection_state(self, connection_id: str, new_state: str) -> None:
-        """
-        Update the state of an existing connection.
-
-        Args:
-            connection_id: The connection ID to update
-            new_state: The new state to set
-        """
-        if connection_id in self._connections:
-            self._connections[connection_id]["state"] = new_state
-            logger.debug(f"Updated connection {connection_id} to state {new_state}")
-
-    async def disconnect(self, websocket: WebSocket) -> None:
-        """
-        Disconnect and clean up WebSocket connection.
-
-        Args:
-            websocket: The WebSocket to disconnect
-        """
-        connection_id = str(id(websocket))
-        if connection_id not in self._connections:
+    async def disconnect(self, websocket: WebSocket):
+        """Remove a disconnected WebSocket and clean up all references"""
+        # Find connection ID for this websocket
+        connection_id = None
+        for conn_id, ws in self.active_connections.items():
+            if ws == websocket:
+                connection_id = conn_id
+                break
+        
+        if not connection_id:
+            logger.warning("Attempted to disconnect unknown WebSocket")
             return
-
-        connection = self._connections[connection_id]
-        conversation_id = connection["conversation_id"]
-        user_id = connection["user_id"]
-
-        try:
-            # Clean up indexes
-            self._by_conversation[conversation_id].discard(connection_id)
-            self._by_user[user_id].discard(connection_id)
-
-            # Remove connection
-            del self._connections[connection_id]
-
-            # Close WebSocket if still connected
-            if not self._is_connection_closed(websocket):
-                try:
-                    await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
-                except RuntimeError as e:
-                    if "Unexpected ASGI message" not in str(e):
-                        logger.warning(f"WebSocket close error: {str(e)}")
-                except Exception as e:
-                    logger.debug(f"Non-critical close error: {str(e)}")
-
-            logger.info(
-                f"WebSocket cleanup completed for conversation {conversation_id}, "
-                f"user {user_id or 'unknown'}. Remaining connections: {self.connection_count}"
-            )
-        except Exception as e:
-            logger.warning(f"Error during WebSocket disconnect: {str(e)}")
-
-    def _is_connection_closed(self, websocket: WebSocket) -> bool:
-        """Check if connection is in a closed/closing state"""
-        return (
-            websocket.client_state == websocket.client_state.DISCONNECTED
-            or websocket.application_state == websocket.application_state.DISCONNECTED
+        
+        # Get state before removal
+        state = self.connection_state.get(connection_id, {})
+        conversation_id = state.get("conversation_id")
+        user_id = state.get("user_id")
+        
+        # Remove from all collections
+        self.active_connections.pop(connection_id, None)
+        self.connection_state.pop(connection_id, None)
+        
+        if conversation_id:
+            self.conversation_participants[conversation_id].discard(connection_id)
+            # Clean up empty conversation mappings
+            if not self.conversation_participants[conversation_id]:
+                self.conversation_participants.pop(conversation_id, None)
+        
+        if user_id:
+            self.user_connections[user_id].discard(connection_id)
+            # Clean up empty user mappings
+            if not self.user_connections[user_id]:
+                self.user_connections.pop(user_id, None)
+        
+        logger.info(
+            f"WebSocket disconnected: user={user_id}, conversation={conversation_id}, "
+            f"remaining={self.connected_count}"
         )
 
-    async def broadcast(self, message: Any, conversation_id: str) -> None:
-        """
-        Send message to all connected clients for a specific conversation.
+    async def send_personal_message(self, message: Any, websocket: WebSocket):
+        """Send a message to a specific WebSocket connection"""
+        if not isinstance(message, str):
+            message = json.dumps(message)
+        await websocket.send_text(message)
 
-        Args:
-            message: The message to send (will be JSON-encoded)
-            conversation_id: The conversation ID to broadcast to
-        """
-        if conversation_id not in self._by_conversation:
-            return
-
+    async def broadcast_to_conversation(self, conversation_id: str, message: Any):
+        """Broadcast a message to all connections in a specific conversation"""
+        if not isinstance(message, str):
+            message = json.dumps(message)
+        
+        # Get all connection IDs for this conversation
+        connection_ids = self.conversation_participants.get(conversation_id, set())
+        
+        # Send message to each participant
         disconnected = []
-        message_json = json.dumps(message) if not isinstance(message, str) else message
-
-        for connection_id in self._by_conversation[conversation_id]:
-            connection = self._connections[connection_id]
-            try:
-                await connection["websocket"].send_text(message_json)
-            except Exception as e:
-                logger.warning(f"Error sending message to WebSocket: {str(e)}")
-                disconnected.append(connection["websocket"])
-
-        # Clean up any disconnected WebSockets
-        for websocket in disconnected:
-            await self.disconnect(websocket)
-
-    async def send_personal_message(self, message: Any, websocket: WebSocket) -> None:
-        """
-        Send message to a specific connection.
-
-        Args:
-            message: The message to send (will be JSON-encoded if not a string)
-            websocket: The WebSocket to send to
-        """
-        try:
-            message_json = (
-                json.dumps(message) if not isinstance(message, str) else message
-            )
-            await websocket.send_text(message_json)
-        except Exception as e:
-            logger.warning(f"Error sending personal message: {str(e)}")
-            await self.disconnect(websocket)
+        for conn_id in connection_ids:
+            websocket = self.active_connections.get(conn_id)
+            if websocket:
+                try:
+                    await websocket.send_text(message)
+                except Exception as e:
+                    logger.error(f"Error broadcasting to {conn_id}: {str(e)}")
+                    disconnected.append(conn_id)
+        
+        # Clean up any connections that failed during broadcast
+        for conn_id in disconnected:
+            websocket = self.active_connections.get(conn_id)
+            if websocket:
+                await self.disconnect(websocket)
