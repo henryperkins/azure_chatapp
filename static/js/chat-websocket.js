@@ -514,13 +514,69 @@
     } catch (error) {
       console.error(`${debugPrefix} Token refresh failed:`, error);
       
+      // Parse error response text if available
+      let errorDetails = '';
+      try {
+        if (typeof error.message === 'string' && error.message.includes('{')) {
+          const jsonStartIndex = error.message.indexOf('{');
+          const jsonStr = error.message.substring(jsonStartIndex);
+          const errorObj = JSON.parse(jsonStr);
+          errorDetails = errorObj.detail || '';
+        }
+      } catch (e) {
+        // If parsing fails, continue with normal error handling
+        console.debug(`${debugPrefix} Could not parse error JSON:`, e);
+      }
+      
       // Check specific error types
       let enhancedError;
-      if (error.message?.includes('timeout')) {
+      
+      // Handle specific token invalidation scenarios
+      if (error.message?.includes('token version mismatch') ||
+          error.message?.includes('Token version mismatch') ||
+          errorDetails.includes('token version mismatch') ||
+          errorDetails.includes('Token version mismatch')) {
+        enhancedError = new Error('Session invalidated due to token version mismatch - please login again');
+        enhancedError.code = 'TOKEN_VERSION_MISMATCH';
+        console.warn(`${debugPrefix} Token version mismatch detected - session invalidated`);
+        
+        // Show user-friendly notification if available
+        if (window.TokenManager && typeof window.TokenManager.showSessionExpiredNotification === 'function') {
+          window.TokenManager.showSessionExpiredNotification('Your session was invalidated because you logged in elsewhere. Please login again.');
+        }
+        
+        // Force immediate logout for token version mismatch
+        if (window.auth && typeof window.auth.logout === 'function') {
+          setTimeout(() => {
+            console.debug(`${debugPrefix} Triggering logout due to token version mismatch`);
+            window.auth.logout();
+          }, 500);
+        }
+      } else if (error.message?.includes('token revoked') ||
+                 error.message?.includes('Token revoked') ||
+                 errorDetails.includes('token revoked') ||
+                 errorDetails.includes('Token revoked')) {
+        enhancedError = new Error('Your session has been revoked - please login again');
+        enhancedError.code = 'TOKEN_REVOKED';
+        console.warn(`${debugPrefix} Token revocation detected - session invalidated`);
+        
+        // Show user-friendly notification if available
+        if (window.TokenManager && typeof window.TokenManager.showSessionExpiredNotification === 'function') {
+          window.TokenManager.showSessionExpiredNotification('Your session has been revoked. Please login again.');
+        }
+        
+        // Force immediate logout for token revocation
+        if (window.auth && typeof window.auth.logout === 'function') {
+          setTimeout(() => {
+            console.debug(`${debugPrefix} Triggering logout due to token revocation`);
+            window.auth.logout();
+          }, 500);
+        }
+      } else if (error.message?.includes('timeout')) {
         enhancedError = new Error('Authentication timeout - please try again later');
         enhancedError.code = 'TOKEN_REFRESH_TIMEOUT';
-      } else if (error.status === 401 || error.status === 403 || 
-                 error.message?.includes('expired') || 
+      } else if (error.status === 401 || error.status === 403 ||
+                 error.message?.includes('expired') ||
                  error.message?.includes('unauthorized')) {
         enhancedError = new Error('Session expired - please login again');
         enhancedError.code = 'SESSION_EXPIRED';
@@ -549,7 +605,7 @@
 
   window.WebSocketService.prototype.handleConnectionError = async function (error) {
     const errorCode = Number(error.code) || 0;
-    const errorDetails = {
+    const wsErrorDetails = {
       code: errorCode,
       reason: error.reason || error.message || 'unknown',
       wasClean: error.wasClean || false
@@ -561,9 +617,9 @@
       return;
     }
 
-    if (errorDetails.code !== 1005) {
+    if (wsErrorDetails.code !== 1005) {
       console.error('WebSocket connection error:', {
-        error: errorDetails,
+        error: wsErrorDetails,
         state: this.state,
         chatId: this.chatId,
         projectId: this.projectId,
@@ -577,11 +633,64 @@
     this.setState(CONNECTION_STATES.ERROR);
 
     const MAX_RETRIES = 4;
+    // Parse error response text if available
+    let parsedErrorDetails = '';
+    try {
+      if (typeof error.message === 'string' && error.message.includes('{')) {
+        const jsonStartIndex = error.message.indexOf('{');
+        const jsonStr = error.message.substring(jsonStartIndex);
+        const errorObj = JSON.parse(jsonStr);
+        parsedErrorDetails = errorObj.detail || '';
+      }
+    } catch (e) {
+      // If parsing fails, continue with normal error handling
+      console.debug(`${debugPrefix} Could not parse error JSON in connection error:`, e);
+    }
+    
     const isAuthError = (error?.message || '').includes('403') ||
       (error?.message || '').includes('401') ||
       (error?.message || '').includes('version mismatch');
-
-    if (isAuthError) {
+      
+    // Check for token invalidation errors that should prevent reconnection attempts
+    const isTokenInvalidated =
+      (error?.message || '').includes('token version mismatch') ||
+      (error?.message || '').includes('Token version mismatch') ||
+      (error?.message || '').includes('token revoked') ||
+      (error?.message || '').includes('Token revoked') ||
+      parsedErrorDetails.includes('token version mismatch') ||
+      parsedErrorDetails.includes('Token version mismatch') ||
+      parsedErrorDetails.includes('token revoked') ||
+      parsedErrorDetails.includes('Token revoked');
+    
+    if (isTokenInvalidated) {
+      console.warn(`${debugPrefix} Token invalidation detected - preventing reconnection attempts`);
+      
+      // Show user-friendly notification if available
+      let message = 'Your session has expired. Please login again.';
+      if ((error?.message || '').includes('version mismatch') || parsedErrorDetails.includes('version mismatch')) {
+        message = 'Your session was invalidated because you logged in elsewhere. Please login again.';
+      } else if ((error?.message || '').includes('revoked') || parsedErrorDetails.includes('revoked')) {
+        message = 'Your session has been revoked. Please login again.';
+      }
+      
+      if (window.TokenManager && typeof window.TokenManager.showSessionExpiredNotification === 'function') {
+        window.TokenManager.showSessionExpiredNotification(message);
+      }
+      
+      // Force logout and prevent further reconnection attempts
+      this.reconnectAttempts = MAX_RETRIES;
+      if (window.auth && typeof window.auth.logout === 'function') {
+        setTimeout(() => {
+          console.debug(`${debugPrefix} Triggering logout due to token invalidation`);
+          window.auth.logout();
+        }, 500);
+      }
+      
+      this.useHttpFallback = true;
+      this.setState(CONNECTION_STATES.DISCONNECTED);
+      return;
+    }
+    else if (isAuthError) {
       try {
         console.log('Auth-related error - triggering token refresh');
         // Fix: Corrected method name from refreshTokens to refresh
@@ -591,6 +700,16 @@
         }
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
+        
+        // Check if the refresh failure was due to token invalidation
+        if ((refreshError?.message || '').includes('token version mismatch') ||
+            (refreshError?.message || '').includes('token revoked')) {
+          console.warn(`${debugPrefix} Token invalidation detected during refresh - preventing reconnection`);
+          this.reconnectAttempts = MAX_RETRIES;
+          this.useHttpFallback = true;
+          this.setState(CONNECTION_STATES.DISCONNECTED);
+          return;
+        }
       }
     }
 
