@@ -681,6 +681,7 @@ async def process_file_for_search(
     file_content: bytes,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    knowledge_base_id: Optional[UUID] = None,  # Add new parameter
 ) -> Dict[str, Any]:
     """Process a file for similarity search by extracting chunks and storing them in the vector DB."""
     from services.text_extraction import get_text_extractor
@@ -701,30 +702,26 @@ async def process_file_for_search(
             chunk_overlap=chunk_overlap,
         )
 
-        # Attempt to resolve knowledge_base_id from the project
-        knowledge_base_id = None
-        if hasattr(project_file, "project") and project_file.project:
-            if hasattr(project_file.project, "knowledge_base_id"):
-                knowledge_base_id = project_file.project.knowledge_base_id
+        # Use provided knowledge_base_id or fallback to project relationship
+        resolved_kb_id = knowledge_base_id
+        if not resolved_kb_id and hasattr(project_file, "project") and project_file.project:
+            resolved_kb_id = project_file.project.knowledge_base_id
 
         chunk_metadatas = []
         for i in range(len(text_chunks)):
             meta = {
                 "file_id": str(project_file.id),
                 "project_id": str(project_file.project_id),
-                "knowledge_base_id": (
-                    str(knowledge_base_id) if knowledge_base_id else None
-                ),
+                "knowledge_base_id": str(resolved_kb_id) if resolved_kb_id else None,
                 "chunk_index": i,
                 "total_chunks": len(text_chunks),
                 "file_name": project_file.filename,
                 "file_type": project_file.file_type,
                 "source": "project_file",
             }
-            # knowledge_base_id is required
             if not meta["knowledge_base_id"]:
                 raise ValueError(
-                    "Project must have an associated knowledge base for vector storage"
+                    "Knowledge base ID is required for vector storage"
                 )
 
             chunk_metadatas.append(meta)
