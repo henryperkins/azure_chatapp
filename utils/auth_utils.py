@@ -375,7 +375,7 @@ async def authenticate_websocket(
         logger.warning("WebSocket connection rejected: No token provided")
         try:
             if not websocket.client_state == websocket.client_state.DISCONNECTED:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)  # Normal closure instead of policy violation
         except Exception as e:
             logger.error(f"Error closing websocket: {e}")
         logger.debug(
