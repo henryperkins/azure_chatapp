@@ -2,6 +2,7 @@
  * improved-chat-core.js
  * A refactored version of your chat-core functionality.
  * Creates a single ChatManager object with streamlined code.
+ * Uses auth.js exclusively for authentication.
  */
 (function () {
   // ---------------------------
@@ -34,7 +35,7 @@
     mainMessages: 'conversationArea',
     mainInput: 'chatInput',
     mainSendBtn: 'sendBtn',
-    
+
     projectChatContainerId: 'projectChatContainer',
     projectChatUI: 'projectChatUI',
     projectMessages: 'projectChatMessages',
@@ -301,16 +302,16 @@
         // Merge event detail with localStorage fallback
         this.MODEL_CONFIG.modelName = detail?.modelName || local.getItem('modelName') || "claude-3-sonnet-20240229";
         this.MODEL_CONFIG.maxTokens = Number(detail?.maxTokens) ||
-                                      Number(local.getItem('maxTokens')) || 500;
+          Number(local.getItem('maxTokens')) || 500;
         this.MODEL_CONFIG.thinkingBudget = Number(detail?.thinkingBudget) ||
-                                          Number(local.getItem('thinkingBudget')) || 16000;
+          Number(local.getItem('thinkingBudget')) || 16000;
         const storedExtendedThinking = local.getItem('extendedThinking') === "true";
         this.MODEL_CONFIG.extendedThinking = detail?.extendedThinking === "true" || storedExtendedThinking;
 
         const storedVisionEnabled = local.getItem('visionEnabled') === "true";
         this.MODEL_CONFIG.visionEnabled = detail?.visionEnabled === "true" || storedVisionEnabled;
         this.MODEL_CONFIG.visionDetail = detail?.visionDetail ||
-                                         local.getItem('visionDetail') || "auto";
+          local.getItem('visionDetail') || "auto";
 
         const storedReasoning = local.getItem('reasoningEffort') || "medium";
         this.MODEL_CONFIG.reasoningEffort = detail?.reasoningEffort || storedReasoning;
@@ -322,8 +323,8 @@
           this.chatInterface.messageService.updateModelConfig(this.MODEL_CONFIG);
         }
         if (this.projectChatInterface &&
-            this.projectChatInterface !== this.chatInterface &&
-            this.projectChatInterface.messageService) {
+          this.projectChatInterface !== this.chatInterface &&
+          this.projectChatInterface.messageService) {
           this.projectChatInterface.messageService.updateModelConfig(this.MODEL_CONFIG);
         }
 
@@ -406,11 +407,14 @@
       try {
         await this.ensureModulesLoaded();
 
-        // Check authentication if you have an auth module
+        // Check authentication using auth.js
         let isAuthenticated = false;
-        if (window.auth?.isAuthenticated) {
+        try {
           isAuthenticated = await window.auth.isAuthenticated();
+        } catch (e) {
+          console.warn("Auth verification failed:", e);
         }
+
         if (!isAuthenticated) {
           return { success: false, authenticated: false, message: "Authentication required" };
         }
