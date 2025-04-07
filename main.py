@@ -86,18 +86,14 @@ for logger_name in sqla_loggers:
 # Suppress conda warnings
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 
-# Create FastAPI app instance with fully permissive CORS
 middleware = [
-    # Security first - but don't limit hosts
     Middleware(TrustedHostMiddleware, allowed_hosts=["*"], www_redirect=False),
-    
-    # Sessions still needed but reconfigured
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
-        session_cookie="session",
-        same_site="strict",  # No cross-site cookie sending
-        https_only=True,     # Require HTTPS always
+        session_cookie="session", 
+        same_site="strict",
+        https_only=True,
         max_age=60 * 60 * 24 * 7,
     ),
 ]
