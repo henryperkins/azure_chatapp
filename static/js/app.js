@@ -177,9 +177,9 @@ function sanitizeUrl(url) {
 }
 
 async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0, timeoutMs = 10000, options = {}) {
-  // Enforce same-origin security
+  // Block all cross-origin requests
   if (endpoint.startsWith('http') && !endpoint.startsWith(window.location.origin)) {
-    throw new Error(`Cross-origin requests blocked (attempted: ${endpoint})`);
+    throw new Error(`Cross-origin requests are disabled (attempted: ${endpoint})`);
   }
   const maxRetries = 2;
   const controller = new AbortController();

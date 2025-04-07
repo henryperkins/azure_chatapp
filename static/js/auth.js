@@ -482,16 +482,7 @@ window.auth = {
       }
       return isAuthenticated;
     } catch (error) {
-      // For network errors, assume token might still be valid
-      if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
-        const result = !!TokenManager.accessToken;
-        if (window.API_CONFIG) {
-          window.API_CONFIG.isAuthenticated = result;
-        }
-        authVerificationCache.set(result);
-        return result;
-      }
-      // If explicitly 401, definitely logout
+      // Network errors are treated as failures
       if (error.status === 401) {
         TokenManager.clearTokens();
         if (window.API_CONFIG) {
