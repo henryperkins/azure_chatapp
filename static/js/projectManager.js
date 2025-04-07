@@ -1,4 +1,4 @@
- /**
+/**
  * projectManager.js
  * ------------------
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
@@ -40,7 +40,7 @@
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
     try {
-      const authState = await checkAuthState();
+      const authState = await checkAuthState({ forceVerify: false });
       if (!authState) {
         // Not authenticated, dispatch an empty list
         emitEvent("projectsLoaded", {
@@ -90,8 +90,8 @@
       return projects;
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
-      emitEvent("projectsError", { error });
-
+      handleAuthError(error, "loading projects");
+      
       // Dispatch empty projects to clear UI
       emitEvent("projectsLoaded", {
         data: {
@@ -749,17 +749,25 @@
 
   /**
    * Check authentication state
+   * @param {Object} options - Options for auth check
    * @returns {Promise<boolean>} Whether user is authenticated
    */
-  async function checkAuthState() {
+  async function checkAuthState(options = {}) {
+    const { forceVerify = false, maxRetries = 2 } = options;
+    
     try {
       if (!window.auth?.verify) {
         console.warn("[projectManager] Auth module not available");
         return false;
       }
 
-      // Use verifyAuthState which checks cookies and handles refresh
-      const authState = await window.auth.verify(true); // bypass cache
+      // If app.js has the enhanced ensureAuthenticated, use that
+      if (typeof window.ensureAuthenticated === 'function') {
+        return window.ensureAuthenticated({ forceVerify, maxRetries });
+      }
+      
+      // Otherwise, use verifyAuthState directly
+      const authState = await window.auth.verify(forceVerify);
       if (!authState) {
         emitEvent("authCheckFailed", {});
         // Clear any potential local storage tokens
@@ -780,11 +788,44 @@
     }
   }
 
-  // Add token refresh awareness
+  // Add a method to handle auth errors consistently
+  function handleAuthError(error, context) {
+    // If auth.js provides handleAuthError, use that
+    if (window.auth?.handleAuthError) {
+      return window.auth.handleAuthError(error, context);
+    }
+    
+    // Otherwise, provide a local implementation
+    console.error(`[projectManager] ${context} auth error:`, error);
+    let message = "Authentication failed";
+    
+    if (error.status === 401) {
+      message = "Your session has expired. Please log in again.";
+      emitEvent("authExpired", {});
+    } else if (error.message?.includes('timeout')) {
+      message = "Authentication check timed out. Please try again.";
+    } else if (error.message) {
+      message = error.message;
+    }
+    
+    emitEvent("authError", { error, message });
+    return { message };
+  }
+
+  // Add token refresh awareness with better error handling
   document.addEventListener("authStateChanged", (e) => {
     if (e.detail.authenticated === false) {
-      // Handle token refresh failure
-      emitEvent("authExpired", {});
+      // Handle auth state change with additional context
+      if (e.detail.error) {
+        console.warn("[projectManager] Auth state changed: not authenticated -", e.detail.error);
+      } else {
+        console.log("[projectManager] Auth state changed: not authenticated");
+      }
+      
+      // Emit event to inform components
+      emitEvent("authExpired", { message: e.detail.error || "Authentication expired" });
+    } else if (e.detail.authenticated === true) {
+      console.log("[projectManager] Auth state changed: authenticated");
     }
   });
 

@@ -584,7 +584,8 @@
     if (isAuthError) {
       try {
         console.log('Auth-related error - triggering token refresh');
-        await window.TokenManager.refreshTokens();
+        // Fix: Corrected method name from refreshTokens to refresh
+        await window.TokenManager.refresh();
         if (this.reconnectAttempts < MAX_RETRIES) {
           return await this.attemptReconnection();
         }
@@ -633,9 +634,10 @@
     this.reconnectAttempts++;
     this.lastError = null;
 
+    // Implement Azure recommended exponential backoff with jitter
     const baseDelay = this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
     const jitter = baseDelay * 0.5 * Math.random();
-    const delay = Math.min(30000, baseDelay + jitter);
+    const delay = Math.min(30000, baseDelay + jitter); // Cap at 30 seconds
 
     const attemptInfo = {
       attempt: this.reconnectAttempts,
@@ -791,11 +793,18 @@
   };
 
   // Expose version info
-  window.WebSocketService.version = '1.1.0';
+  window.WebSocketService.version = '1.2.0';
   window.WebSocketService.CONNECTION_STATES = CONNECTION_STATES;
 
   /**
    * Changelog:
+   * v1.2.0 - Enhanced authentication and reliability
+   *   - Improved token refresh handling and auth error detection
+   *   - Implemented Azure-recommended exponential backoff with jitter
+   *   - Fixed refreshTokens method name to refresh
+   *   - Added detailed logging for connection failures
+   *   - Improved HTTP fallback mechanism
+   * 
    * v1.1.0 - Improved WebSocket reliability
    *   - Enhanced heartbeat mechanism with ping/pong tracking
    *   - Added specific handling for code 1008 (Policy Violation)
