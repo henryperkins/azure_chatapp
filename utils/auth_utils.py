@@ -14,7 +14,7 @@ from uuid import UUID
 from jwt import encode, decode
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, WebSocket, status, Depends
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
