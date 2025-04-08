@@ -280,10 +280,10 @@ async def get_current_user_and_token(
     request: Request
 ) -> User:
     async with get_async_session_context() as db:
-    """
-    FastAPI dependency that extracts and validates a token from cookies, returning the user.
-    """
-    token = extract_token(request)
+        """
+        FastAPI dependency that extracts and validates a token from cookies, returning the user.
+        """
+        token = extract_token(request)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
