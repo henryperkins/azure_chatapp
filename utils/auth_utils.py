@@ -18,7 +18,7 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from db import get_async_session
+from db import get_async_session_context
 from models.user import User, TokenBlacklist
 from models.project import Project, ProjectUserAssociation
 
@@ -62,7 +62,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 async def verify_token(
     token: str,
     expected_type: Optional[str] = None,
-    db: Optional[AsyncSession] = None,
     request: Optional[Request] = None,
 ) -> Dict[str, Any]:
     """
@@ -278,8 +277,9 @@ async def get_user_from_token(
 
 
 async def get_current_user_and_token(
-    request: Request, db: AsyncSession = Depends(get_async_session)
+    request: Request
 ) -> User:
+    async with get_async_session_context() as db:
     """
     FastAPI dependency that extracts and validates a token from cookies, returning the user.
     """
