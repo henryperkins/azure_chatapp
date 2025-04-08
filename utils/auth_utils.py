@@ -119,9 +119,12 @@ async def verify_token(
             token_type = decoded.get("type")
 
             if db and username and token_type != "refresh":
-                query = select(User).where(User.username == username)
-                result = await db.execute(query)
-                user = result.scalar_one_or_none()
+                async with db.begin_nested():
+                    user = (await db.execute(
+                        select(User)
+                        .where(User.username == username)
+                        .with_for_update()
+                    )).scalar_one_or_none()
                 if user:
                     current_version = user.token_version or 0
                     if token_version is None or token_version < current_version:
