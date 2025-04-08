@@ -87,27 +87,30 @@ async def validate_db_schema():
         
         # Get ORM metadata with type normalization
         orm_schema = {}
-        type_map = {
-            'VARCHAR': 'character varying',
-            'TEXT': 'text',  # Add TEXT mapping
-            'TIMESTAMP': 'timestamp without time zone',
-            'UUID': 'uuid',
-            'JSONB': 'jsonb',
-            'INTEGER': 'integer',
-            'BIGINT': 'bigint',
-            'BOOLEAN': 'boolean'
+        type_equivalents = {
+            'VARCHAR': ['character varying'],
+            'TEXT': ['text'],
+            'TIMESTAMP': ['timestamp without time zone'],
+            'UUID': ['uuid'],
+            'JSONB': ['jsonb'],
+            'INTEGER': ['integer', 'int4'],  # Handle PostgreSQL aliases
+            'BIGINT': ['bigint', 'int8'],
+            'BOOLEAN': ['boolean', 'bool'],
         }
         
         for table in Base.metadata.tables.values():
             for column in table.columns:
                 # Normalize ORM type
-                orm_type = str(column.type).split('(')[0]
-                orm_type = type_map.get(orm_type, orm_type.lower())
+                orm_base_type = str(column.type).split('(')[0].upper()
+                orm_type = orm_base_type
                 
                 # Check for length-specified types
                 length = getattr(column.type, 'length', None)
-                if length and orm_type == 'character varying':
-                    orm_type += f'({length})'
+                if length and orm_base_type == 'VARCHAR':
+                    orm_type = f'character varying({length})'
+                else:
+                    # Use first equivalent as the canonical type
+                    orm_type = type_equivalents.get(orm_base_type, [orm_base_type.lower()])[0]
                 
                 orm_schema[(table.name, column.name)] = orm_type
 
@@ -122,9 +125,13 @@ async def validate_db_schema():
             udt_name = db_info['udt_name']
             db_max_length = db_info['max_length']
             
-            # Handle type equivalencies
+            # Get type equivalents for comparison
+            orm_base_type = str(column.type).split('(')[0].upper()
+            equivalents = type_equivalents.get(orm_base_type, [orm_base_type.lower()])
+            
+            # Handle special cases first
             type_matches = False
-            if orm_type.startswith('character varying'):
+            if orm_base_type == 'VARCHAR' and orm_type.startswith('character varying'):
                 # Handle VARCHAR length checks
                 if db_type == 'character varying':
                     orm_length = None
@@ -145,8 +152,13 @@ async def validate_db_schema():
             elif orm_type.startswith('text'):
                 # Handle TEXT equality differently
                 type_matches = db_type == 'text'
-            elif orm_type in ['uuid', 'jsonb', 'integer', 'bigint', 'boolean']:
-                type_matches = udt_name == orm_type
+            elif orm_base_type in ['UUID', 'JSONB', 'INTEGER', 'BIGINT', 'BOOLEAN']:
+                # Case-insensitive UDT check against all equivalents
+                type_matches = udt_name.lower() in [e.lower() for e in equivalents]
+                
+                # Special handling for boolean alias 'bool'
+                if orm_base_type == 'BOOLEAN' and udt_name.lower() == 'bool':
+                    type_matches = True
             
             elif orm_type == 'timestamp without time zone':
                 type_matches = db_type == 'timestamp without time zone'
@@ -365,15 +377,20 @@ async def fix_db_schema():
                             )
                         except Exception as e:
                             logger.error(f"Failed to convert to TEXT: {e}")
-                    elif "INTEGER" in db_type and "BIGINT" in orm_type:
-                        sync_conn.execute(
-                            text(
-                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE BIGINT"
-                            )
-                        )
-                        logger.info(
-                            f"Converted {table_name}.{orm_col.name} from INTEGER to BIGINT"
-                        )
+                    elif orm_base_type in ['INTEGER', 'BIGINT', 'BOOLEAN']:
+                        # Check if existing type is compatible
+                        if db_type.lower() not in [e.lower() for e in type_equivalents.get(orm_base_type, [])]:
+                            try:
+                                sync_conn.execute(
+                                    text(
+                                        f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE {orm_col.type.compile(sync_engine.dialect)}"
+                                    )
+                                )
+                                logger.info(f"Converted {table_name}.{orm_col.name} from {db_type} to {orm_col.type}")
+                            except Exception as e:
+                                logger.error(f"Failed to convert type for {table_name}.{orm_col.name}: {e}")
+                        else:
+                            logger.debug(f"Skipping compatible type: {table_name}.{orm_col.name} ({db_type} == {orm_col.type})")
                     elif "CHAR" in db_type and "UUID" in orm_type:
                         try:
                             sync_conn.execute(
