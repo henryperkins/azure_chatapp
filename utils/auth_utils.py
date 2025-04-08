@@ -157,6 +157,21 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     await db.commit()
     deleted_count = result.rowcount
 
+    # Log token counts by type before cleanup
+    token_count_query = select(
+        TokenBlacklist.token_type, 
+        func.count(TokenBlacklist.id)
+    ).where(
+        TokenBlacklist.expires >= now
+    ).group_by(
+        TokenBlacklist.token_type
+    )
+    token_counts = await db.execute(token_count_query)
+    
+    for token_type, count in token_counts:
+        logger.info(f"Active blacklisted tokens of type '{token_type}': {count}")
+
+    # Get active JTIs for the revocation list
     query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
     result = await db.execute(query)
     valid_jtis = {row[0] for row in result.fetchall()}
