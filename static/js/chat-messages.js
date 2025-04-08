@@ -198,6 +198,17 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
     throw new Error('Invalid conversation ID');
   }
 
+  // Add authentication check
+  try {
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
+  } catch (authError) {
+    window.auth.handleAuthError(authError, "sending message");
+    throw authError;
+  }
+
   try {
     // Construct the API endpoint URL
     const projectId = localStorage.getItem('selectedProjectId')?.trim();
