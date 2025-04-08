@@ -284,10 +284,9 @@ async def refresh_token(
 
             # Always bump token version on refresh
             current_ts = int(datetime.utcnow().timestamp())
-            locked_user.token_version = (
-                locked_user.token_version + 1
-                if locked_user.token_version
-                else current_ts
+            locked_user.token_version = max(
+                current_ts,
+                locked_user.token_version + 1 if locked_user.token_version else current_ts
             )
 
             token_id = str(uuid.uuid4())
@@ -424,6 +423,10 @@ async def get_websocket_token(
     }
 
 
+@router.get("/timestamp")
+async def get_server_time():
+    return {"serverTimestamp": datetime.utcnow().timestamp()}
+
 @router.post("/logout")
 async def logout_user(
     request: Request,
@@ -503,8 +506,9 @@ def set_secure_cookie(
         key=key,
         value=value,
         httponly=True,
-        secure=True,  # Only sent over HTTPS
-        samesite="lax",  # Allow cookies on same-site navigations like page refresh
+        secure=True,
+        samesite="lax" if settings.ENV == "development" else "strict",
+        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
         path="/",
         max_age=max_age,
     )

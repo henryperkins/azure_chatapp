@@ -219,9 +219,13 @@ try {
     detail: { success: true }
   }));
 
+  // Store token version in session storage
+  if (response.token_version) {
+    sessionStorage.setItem('token_version', response.token_version);
+  }
   return {
     success: true,
-    version: authState.tokenVersion,
+    version: response.token_version || authState.tokenVersion,
     token: response.access_token
   };
   } catch (error) {
@@ -294,11 +298,20 @@ function getTokenExpiry(token) {
  * @param {string} token - JWT token
  * @returns {boolean} True if expired
  */
-function isTokenExpired(token) {
+async function isTokenExpired(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    // Add a small buffer to account for clock skew
-    return payload.exp * 1000 < (Date.now() - 10000);
+    // Get server time reference
+    let serverTime;
+    try {
+      const { serverTimestamp } = await apiRequest('/api/auth/timestamp');
+      serverTime = serverTimestamp * 1000;
+    } catch {
+      // Fallback to client time if server unavailable
+      serverTime = Date.now();
+    }
+    // 10-second buffer for network delays
+    return payload.exp * 1000 < (serverTime - 10000);
   } catch (e) {
     console.warn('[Auth] Error parsing token for expiration check:', e);
     return true; // Assume expired if we can't parse it
