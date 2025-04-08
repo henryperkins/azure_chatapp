@@ -43,40 +43,25 @@ const AUTH_CONSTANTS = {
 
 /**
  * Get a valid authentication token for API requests
- * @param {Object} options - Options for token retrieval
+ * @param {Object} options - Options for token retrieval 
  * @returns {Promise<string>} Valid token
  */
 async function getAuthToken(options = {}) {
-  if (AUTH_DEBUG) console.debug('[Auth] Getting auth token');
-
-  // Check for valid access token in cookies
   const accessToken = getCookie('access_token');
-  if (accessToken && !isTokenExpired(accessToken)) {
-    if (AUTH_DEBUG) console.debug('[Auth] Using existing valid token');
+  const refreshToken = getCookie('refresh_token');
+  
+  if (checkTokenValidity(accessToken)) {
     return accessToken;
   }
 
-  // Check for refresh token even if access token is missing or expired
-  const refreshToken = getCookie('refresh_token');
-  if (refreshToken) {
-    try {
-      if (AUTH_DEBUG) console.debug('[Auth] Found refresh token, attempting refresh');
-      await refreshTokens();
-      // Get the new access token after refresh
-      const newAccessToken = getCookie('access_token');
-      if (newAccessToken) {
-        if (AUTH_DEBUG) console.debug('[Auth] Successfully refreshed token');
-        return newAccessToken;
-      }
-      throw new Error('No access token after refresh');
-    } catch (error) {
-      console.error('[Auth] Token refresh failed:', error);
-      throw error;
+  if (refreshToken && checkTokenValidity(refreshToken, { allowRefresh: true })) {
+    const { success } = await refreshTokens();
+    if (success) {
+      return getCookie('access_token');
     }
   }
-
-  // At this point, we have no valid tokens
-  throw new Error('Not authenticated - no valid tokens');
+  
+  throw new Error('Not authenticated');
 }
 
 /**
@@ -219,9 +204,11 @@ try {
     detail: { success: true }
   }));
 
-  // Store token version in session storage
+  // Store token version in cookie
   if (response.token_version) {
-    sessionStorage.setItem('token_version', response.token_version);
+    document.cookie = `token_version=${response.token_version}; path=/; ${
+      location.protocol === 'https:' ? 'Secure; ' : ''
+    }SameSite=Strict`;
   }
   return {
     success: true,
@@ -328,6 +315,27 @@ function getCookie(name) {
   const parts = value.split(`; ${name}=`);
   if (parts.length === 2) return parts.pop().split(';').shift();
   return null;
+}
+
+/**
+ * Checks if token is still valid based on issue time and max age
+ * @param {string} token - JWT token
+ * @param {Object} options - { allowRefresh: boolean }
+ * @returns {boolean} True if valid
+ */
+function checkTokenValidity(token, { allowRefresh = false } = {}) {
+  if (!token) return false;
+  
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const maxAge = allowRefresh ? 
+      settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400 : 
+      settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60;
+      
+    return (Date.now() / 1000 - payload.iat) < maxAge;
+  } catch {
+    return false;
+  }
 }
 
 /**

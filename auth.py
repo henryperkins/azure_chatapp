@@ -504,7 +504,7 @@ def set_secure_cookie(
         httponly=True,
         secure=settings.ENV == "production",
         samesite="lax",
-        domain="localhost" if settings.ENV == "development" else settings.COOKIE_DOMAIN,
+        domain=window.location.hostname,  # Get from browser context
         path="/",
         max_age=max_age,
     )
