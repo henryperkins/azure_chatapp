@@ -20,7 +20,7 @@ from models.project import Project
 
 # Use generate_ai_response from ai_response module directly
 from utils.ai_response import generate_ai_response, get_model_config
-from services.context_integration import augment_with_knowledge
+from utils.ai_helper import augment_with_knowledge
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
 from utils.message_handlers import update_project_token_usage  # Import needed function
