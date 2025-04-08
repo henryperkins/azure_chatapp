@@ -382,6 +382,7 @@ async def fix_db_schema():
                         logger.info(
                             f"Converted {table_name}.{orm_col.name} to UUID type"
                         )
+                        
         # 5. Handle foreign key constraints with proper cascade rules
         for table_name, table in Base.metadata.tables.items():
             db_fks = inspector.get_foreign_keys(table_name)
