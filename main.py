@@ -285,7 +285,6 @@ app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(user_preferences_router, prefix="/api", tags=["user-preferences"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
-app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(
     project_files_router,
     prefix="/api/projects/{project_id}/files",
