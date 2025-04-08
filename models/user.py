@@ -5,7 +5,7 @@ Defines the User model responsible for authentication identity, roles,
 and ownership of conversations/projects in the Azure Chat Application.
 """
 
-from typing import List
+from typing import List, Optional
 from sqlalchemy import (
     Integer,
     String,
