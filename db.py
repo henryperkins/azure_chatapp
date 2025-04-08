@@ -89,6 +89,7 @@ async def validate_db_schema():
         orm_schema = {}
         type_map = {
             'VARCHAR': 'character varying',
+            'TEXT': 'text',  # Add TEXT mapping
             'TIMESTAMP': 'timestamp without time zone',
             'UUID': 'uuid',
             'JSONB': 'jsonb',
@@ -141,6 +142,9 @@ async def validate_db_schema():
                 else:
                     type_matches = False
             
+            elif orm_type.startswith('text'):
+                # Handle TEXT equality differently
+                type_matches = db_type == 'text'
             elif orm_type in ['uuid', 'jsonb', 'integer', 'bigint', 'boolean']:
                 type_matches = udt_name == orm_type
             
@@ -349,6 +353,18 @@ async def fix_db_schema():
                         logger.info(
                             f"Converted {table_name}.{orm_col.name} from VARCHAR to TEXT"
                         )
+                    elif orm_type == 'text' and db_type != 'text':
+                        try:
+                            sync_conn.execute(
+                                text(
+                                    f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
+                                )
+                            )
+                            logger.info(
+                                f"Converted {table_name}.{orm_col.name} to TEXT type"
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to convert to TEXT: {e}")
                     elif "INTEGER" in db_type and "BIGINT" in orm_type:
                         sync_conn.execute(
                             text(
