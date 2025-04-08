@@ -249,7 +249,7 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
     this.loadConversation(this.currentChatId);
   } else {
     // Verify auth state
-    window.auth?.verify?.().then(isAuthenticated => {
+    window.auth.isAuthenticated({ forceVerify: true }).then(isAuthenticated => {
       if (!isAuthenticated) {
         const loginMsg = document.getElementById("loginRequiredMessage");
         if (loginMsg) loginMsg.classList.remove("hidden");
