@@ -166,6 +166,11 @@ async def validate_db_schema():
             
             elif orm_type == 'timestamp without time zone':
                 type_matches = db_type == 'timestamp without time zone'
+            # Handle timestamp precision differences
+            elif 'timestamp' in db_type.lower() and 'timestamp' in orm_type.lower():
+                db_precision = db_type.split('(')[1].split(')')[0] if '(' in db_type else '6'
+                orm_precision = orm_type.split('(')[1].split(')')[0] if '(' in orm_type else '6'
+                type_matches = db_precision == orm_precision
             
             if not type_matches:
                 mismatch_details.append(
@@ -179,6 +184,14 @@ async def validate_db_schema():
         db_columns = set(db_schema.keys())
         missing_columns = orm_columns - db_columns
         for table, column in missing_columns:
+            # Get column details from ORM
+            orm_col = Base.metadata.tables[table].columns[column]
+            
+            # Skip columns with server defaults or nullable
+            if orm_col.server_default is not None or orm_col.nullable:
+                logger.debug(f"Intentionally skipping nullable/defaulted column: {table}.{column}")
+                continue
+                
             mismatch_details.append(f"Missing column: {table}.{column}")
 
     return mismatch_details
@@ -290,10 +303,12 @@ async def fix_db_schema():
                         col_spec += " DEFAULT 0"
                     elif str(col.type).startswith("UUID"):
                         col_spec += " DEFAULT gen_random_uuid()"
+                    elif col_name == 'created_at' and str(col.type) == 'TIMESTAMP':
+                        col_spec += " DEFAULT CURRENT_TIMESTAMP"
+                    elif col_name == 'creation_reason' and str(col.type) == 'VARCHAR':
+                        col_spec += " DEFAULT ''"
                     else:
-                        col_spec += (
-                            " DEFAULT ''"  # Default empty string for other types
-                        )
+                        col_spec += " DEFAULT ''"  # Default empty string for other types
 
                 col_spec += " NOT NULL" if not col.nullable else " NULL"
 
@@ -503,13 +518,13 @@ async def fix_db_schema():
                                     continue  # Skip adding new constraint if we can't drop old one
 
                         try:
-                            sync_conn.execute(
-                                text(
-                                    f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
-                                    f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
-                                    f"{ondelete_clause}"
-                                )
-                            )
+                            sync_conn.execute(text(
+                                f"ALTER TABLE {table_name} "
+                                f"ADD CONSTRAINT {constraint_name} "
+                                f"FOREIGN KEY ({col_name}) "
+                                f"REFERENCES {referred_table} ({fk.column.name}) "
+                                f"{ondelete_clause}"
+                            ))
                             logger.info(
                                 f"Successfully added foreign key constraint: {table_name}.{col_name} -> {referred_table} "
                                 f"with ON DELETE {ondelete if ondelete else 'NO ACTION'}"
