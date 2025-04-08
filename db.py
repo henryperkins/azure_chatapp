@@ -351,6 +351,19 @@ async def fix_db_schema():
                 orm_type = str(orm_col.type).split("(")[0]
 
                 # Handle type conversion
+                # Get base type for comparison
+                orm_base_type = str(orm_col.type).split('(')[0].upper()
+                type_equivalents = {
+                    'VARCHAR': ['character varying'],
+                    'TEXT': ['text'],
+                    'TIMESTAMP': ['timestamp without time zone'],
+                    'UUID': ['uuid'],
+                    'JSONB': ['jsonb'],
+                    'INTEGER': ['integer', 'int4'],
+                    'BIGINT': ['bigint', 'int8'],
+                    'BOOLEAN': ['boolean', 'bool'],
+                }
+
                 if db_type != orm_type:
                     logger.warning(
                         f"Type mismatch: {table_name}.{orm_col.name} (DB: {db_type} vs ORM: {orm_type})"
