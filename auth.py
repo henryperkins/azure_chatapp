@@ -171,17 +171,13 @@ async def login_user(
             raise HTTPException(status_code=500, detail="User lock failed")
 
         locked_user.last_login = datetime.utcnow()
-        # Bump token_version
-        from sqlalchemy import update
-        await session.execute(
-            update(User)
-            .where(User.id == locked_user.id)
-            .values(token_version=User.token_version + 1)
-            .execution_options(synchronize_session="fetch")
-        )
-        await session.refresh(locked_user)
+        # Update token version using current timestamp
+        current_ts = int(datetime.utcnow().timestamp())
+        locked_user.token_version = current_ts
 
-        # Access token
+        await session.commit()
+
+        # Generate tokens after successful commit
         token_id = str(uuid.uuid4())
         expire_at = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_payload = {
@@ -195,7 +191,6 @@ async def login_user(
         }
         access_token = create_access_token(access_payload)
 
-        # Refresh token
         refresh_token_id = str(uuid.uuid4())
         refresh_expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         refresh_payload = {
@@ -208,8 +203,6 @@ async def login_user(
             "user_id": locked_user.id,
         }
         refresh_token = create_access_token(refresh_payload)
-
-        await session.commit()
 
     # Clean up expired tokens in background
     await clean_expired_tokens(session)
@@ -470,13 +463,9 @@ async def logout_user(
     # Invalidate all user tokens
     try:
         async with session.begin_nested():
-            current_timestamp = int(datetime.utcnow().timestamp())
-            await session.execute(
-                text(
-                    "UPDATE users SET token_version = COALESCE(token_version, :ts) + 1 WHERE id = :uid"
-                ),
-                {"uid": user.id, "ts": current_timestamp},
-            )
+            current_ts = int(datetime.utcnow().timestamp())
+            locked_user = await session.get(User, user.id, with_for_update=True)
+            locked_user.token_version = current_ts
             await session.commit()
     except Exception as e:
         logger.error("Failed to update token version during logout: %s", e)
@@ -509,15 +498,13 @@ def set_secure_cookie(
         value: Cookie value
         max_age: Maximum age in seconds (None means the cookie persists until browser close)
     """
-    # FastAPI requires max_age only, as it handles the expires conversion internally
-    # We don't need to manually set expires as it causes timezone issues
     response.set_cookie(
         key=key,
         value=value,
         httponly=True,
         secure=settings.ENV == "production",
-        samesite="lax" if settings.ENV == "development" else "strict",
-        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
+        samesite="lax",
+        domain="localhost" if settings.ENV == "development" else settings.COOKIE_DOMAIN,
         path="/",
         max_age=max_age,
     )
