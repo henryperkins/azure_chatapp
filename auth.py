@@ -283,13 +283,6 @@ async def refresh_token(
             locked_user.last_login = datetime.utcnow()
             locked_user.last_activity = datetime.utcnow()
 
-            # Always bump token version on refresh
-            current_ts = int(datetime.utcnow().timestamp())
-            locked_user.token_version = max(
-                current_ts,
-                locked_user.token_version + 1 if locked_user.token_version else current_ts
-            )
-
             token_id = str(uuid.uuid4())
             expire_at = datetime.utcnow() + timedelta(
                 minutes=ACCESS_TOKEN_EXPIRE_MINUTES
@@ -300,7 +293,7 @@ async def refresh_token(
                 "iat": datetime.utcnow(),
                 "jti": token_id,
                 "type": "access",
-                "version": locked_user.token_version,
+                "version": locked_user.token_version,  # Use existing version
                 "user_id": locked_user.id,
             }
             new_token = create_access_token(payload)
@@ -321,13 +314,22 @@ async def refresh_token(
                             new_refresh_expire = datetime.utcnow() + timedelta(
                                 days=REFRESH_TOKEN_EXPIRE_DAYS
                             )
+                            # Only increment version when rotating refresh tokens
+                            current_ts = int(datetime.utcnow().timestamp())
+                            locked_user.token_version = max(
+                                current_ts,
+                                (locked_user.token_version + 1) if locked_user.token_version else current_ts
+                            )
+                            await session.flush()
+                            await session.commit()  # Ensure new version is saved
+
                             new_refresh_payload = {
                                 "sub": username,
                                 "exp": new_refresh_expire,
                                 "iat": datetime.utcnow(),
                                 "jti": new_refresh_token_id,
                                 "type": "refresh",
-                                "version": locked_user.token_version,
+                                "version": locked_user.token_version,  # Use new version
                                 "user_id": locked_user.id,
                             }
                             new_refresh_token = create_access_token(new_refresh_payload)
