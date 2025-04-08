@@ -489,14 +489,14 @@ def set_secure_cookie(
         value: Cookie value
         max_age: Maximum age in seconds (None means the cookie persists until browser close)
     """
-    # Calculate expires datetime if max_age is provided
-    # Setting max_age alone is sufficient; FastAPI will handle the expires conversion
+    # FastAPI requires max_age only, as it handles the expires conversion internally
+    # We don't need to manually set expires as it causes timezone issues
     response.set_cookie(
         key=key,
         value=value,
         httponly=True,
         secure=True,  # Only sent over HTTPS
-        samesite="strict",  # No cross-site usage
+        samesite="lax",  # Allow cookies on same-site navigations like page refresh
         path="/",
         max_age=max_age,
     )
