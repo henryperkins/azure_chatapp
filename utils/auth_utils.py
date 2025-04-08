@@ -138,16 +138,16 @@ async def verify_token(
                 )
                 return decoded
 
-            except ExpiredSignatureError as exc:
-                logger.warning("Token expired: jti=%s", token_id)
-                raise HTTPException(
-                    status_code=401,
-                    detail="Token has expired - please refresh your session",
-                    headers={"WWW-Authenticate": "Bearer"},
-                ) from exc
-            except InvalidTokenError as e:
-                logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
-                raise HTTPException(status_code=401, detail="Invalid token") from e
+        except ExpiredSignatureError as exc:
+            logger.warning("Token expired: jti=%s", token_id)
+            raise HTTPException(
+                status_code=401,
+                detail="Token has expired - please refresh your session", 
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        except InvalidTokenError as e:
+            logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
+            raise HTTPException(status_code=401, detail="Invalid token") from e
 
 
 def revoke_token_id(token_id: str) -> None:
@@ -285,14 +285,15 @@ async def get_current_user_and_token(
         FastAPI dependency that extracts and validates a token from cookies, returning the user.
         """
         token = extract_token(request)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        if not token:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-    user = await get_user_from_token(token, db)
+        user = await get_user_from_token(token, db)
     return user
 
 
