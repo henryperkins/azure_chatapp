@@ -103,7 +103,7 @@ window.ChatUtils = {
 
     // For authentication errors, trigger auth state change
     if (isAuthError) {
-      window.auth.clearTokenState();
+      window.auth.clear();
       window.dispatchEvent(new CustomEvent('authStateChanged', {
         detail: { authenticated: false }
       }));

@@ -47,6 +47,25 @@ const AUTH_CONSTANTS = {
  * @returns {Promise<string>} Valid token
  */
 async function getAuthToken(options = {}) {
+  // CRITICAL: If we have a direct access token from a recent login, use it
+  // This prevents the race condition by skipping the cookie check
+  if (window.__directAccessToken && window.__recentLoginTimestamp) {
+    // Use direct token for the first 5 seconds after login
+    const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
+    if (timeSinceLogin < 5000) {
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth] Using direct access token from login (${timeSinceLogin}ms since login)`);
+      }
+      return window.__directAccessToken;
+    } else {
+      // Clear the cached token after the grace period
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth] Direct token grace period expired (${timeSinceLogin}ms since login)`);
+      }
+      window.__directAccessToken = null;
+    }
+  }
+  
   const accessToken = getCookie('access_token');
   const refreshToken = getCookie('refresh_token');
   
@@ -335,16 +354,33 @@ function getCookie(name) {
  * @returns {boolean} True if valid
  */
 function checkTokenValidity(token, { allowRefresh = false } = {}) {
-  if (!token) return false;
+  if (!token) {
+    console.debug('[Auth] Token validity check failed: No token provided');
+    return false;
+  }
   
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
+    
+    // Enhanced logging to debug token version issues
+    if (AUTH_DEBUG) {
+      console.debug(`[Auth] Token debug: type=${payload.type}, version=${payload.version}, issued_at=${new Date(payload.iat * 1000).toISOString()}`);
+    }
+    
     const maxAge = allowRefresh ? 
       settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400 : 
       settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60;
+    
+    const tokenAge = Date.now() / 1000 - payload.iat;
+    const isValid = tokenAge < maxAge;
+    
+    if (!isValid && AUTH_DEBUG) {
+      console.debug(`[Auth] Token expired by age check: age=${tokenAge}s, max=${maxAge}s`);
+    }
       
-    return (Date.now() / 1000 - payload.iat) < maxAge;
-  } catch {
+    return isValid;
+  } catch (err) {
+    console.warn('[Auth] Token validity check error:', err);
     return false;
   }
 }
@@ -786,8 +822,20 @@ async function loginUser(username, password) {
     // Clear any expired session flag
     sessionExpiredFlag = false;
 
+    // CRITICAL: Set a flag to prevent token refresh immediately after login
+    // This prevents the race condition by ensuring the access token from login is used first
+    window.__recentLoginTimestamp = Date.now();
+    
+    // Store the access token we received from the login response
+    // so we can use it directly without needing an immediate refresh
+    window.__directAccessToken = response.access_token;
+    
     // Broadcast auth success
     broadcastAuth(true, response.username || username);
+
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Login successful, marking timestamp to prevent immediate refresh:', window.__recentLoginTimestamp);
+    }
 
     return {
       ...response,

@@ -298,11 +298,27 @@ async def fix_db_schema():
                 ADD COLUMN IF NOT EXISTS creation_reason VARCHAR(50) NOT NULL DEFAULT ''
             """))
             
-            # Add created_at with timestamp defaulting to current time
+            # Add created_at with timestamp defaulting to current time (WITHOUT time zone to match ORM)
             sync_conn.execute(text("""
                 ALTER TABLE token_blacklist
-                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE 
+                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP 
                 NOT NULL DEFAULT CURRENT_TIMESTAMP
+            """))
+            
+            # Check if created_at exists and has TIME ZONE, if so alter it to remove timezone
+            sync_conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'token_blacklist' 
+                        AND column_name = 'created_at'
+                        AND data_type = 'timestamp with time zone'
+                    ) THEN
+                        ALTER TABLE token_blacklist
+                        ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE;
+                    END IF;
+                END $$;
             """))
             logger.info("Ensured token_blacklist schema compliance")
 

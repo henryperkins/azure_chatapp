@@ -1,5 +1,6 @@
 {
     "codium.codeCompletion.enable": true,
     "python-envs.defaultEnvManager": "ms-python.python:venv",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "typescript.tsserver.nodePath": "/home/azureuser/.nvm/versions/node/v22.14.0/bin/node"
 }

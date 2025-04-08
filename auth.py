@@ -10,7 +10,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Literal, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -268,6 +268,18 @@ async def refresh_token(
     Exchanges a valid refresh token for a new access token,
     rotating the user's token_version to invalidate old tokens.
     """
+    # Log detailed token version info at start of refresh
+    try:
+        refresh_token = request.cookies.get("refresh_token")
+        if refresh_token:
+            decoded = await verify_token(refresh_token, "refresh", request)
+            logger.info(
+                f"Token refresh requested for user '{user.username}', "
+                f"refresh token version: {decoded.get('version')}, "
+                f"current DB token version: {user.token_version}"
+            )
+    except Exception as e:
+        logger.warning(f"Error logging refresh token details: {e}")
     username = user.username
     try:
         async with session.begin_nested():
@@ -303,7 +315,7 @@ async def refresh_token(
             refresh_token = request.cookies.get("refresh_token")
             if refresh_token:
                 try:
-                    decoded = await verify_token(refresh_token, "refresh", session)
+                    decoded = await verify_token(refresh_token, "refresh", request)
                     if decoded and "exp" in decoded:
                         # Calculate time until expiration
                         expires_at = datetime.fromtimestamp(decoded["exp"])
@@ -314,12 +326,28 @@ async def refresh_token(
                             new_refresh_expire = datetime.utcnow() + timedelta(
                                 days=REFRESH_TOKEN_EXPIRE_DAYS
                             )
-                            # Only increment version when rotating refresh tokens
-                            current_ts = int(datetime.utcnow().timestamp())
-                            locked_user.token_version = max(
-                                current_ts,
-                                (locked_user.token_version + 1) if locked_user.token_version else current_ts
-                            )
+                            
+                            # Determine time since last login
+                            time_since_login = None
+                            if locked_user.last_login:
+                                time_since_login = datetime.utcnow() - locked_user.last_login
+                                
+                            # Only increment version when it's been at least 30 seconds since login
+                            # This prevents token invalidation immediately after login
+                            if not time_since_login or time_since_login > timedelta(seconds=30):
+                                current_ts = int(datetime.utcnow().timestamp())
+                                old_version = locked_user.token_version
+                                locked_user.token_version = max(
+                                    current_ts,
+                                    (locked_user.token_version + 1) if locked_user.token_version else current_ts
+                                )
+                                logger.info(
+                                    f"User '{username}' token_version updated from {old_version} to {locked_user.token_version}"
+                                )
+                            else:
+                                logger.info(
+                                    f"User '{username}' token_version NOT updated due to recent login ({time_since_login.total_seconds():.1f}s ago)"
+                                )
                             await session.flush()
                             await session.commit()  # Ensure new version is saved
 
@@ -450,7 +478,7 @@ async def logout_user(
     if not token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
 
-    decoded = await verify_token(token, "refresh", session)
+    decoded = await verify_token(token, "refresh", request)
     token_id = decoded.get("jti")
     if not token_id:
         raise HTTPException(status_code=401, detail="Invalid token format")
@@ -471,7 +499,8 @@ async def logout_user(
         async with session.begin_nested():
             current_ts = int(datetime.utcnow().timestamp())
             locked_user = await session.get(User, user.id, with_for_update=True)
-            locked_user.token_version = current_ts
+            if locked_user:
+                locked_user.token_version = current_ts
             await session.commit()
     except Exception as e:
         logger.error("Failed to update token version during logout: %s", e)
@@ -486,7 +515,7 @@ async def logout_user(
     )
 
     # Expire cookies
-    set_secure_cookie(response, "access_token", "", max_age=0)
+    set_secure_cookie(response, "access_token", "", max_age=0, request=request)
     set_secure_cookie(response, "refresh_token", "", max_age=0)
 
     return {"status": "logged out"}
@@ -522,4 +551,44 @@ def set_secure_cookie(
         if host and not host.startswith("localhost"):
             cookie_kwargs["domain"] = host
 
-    response.set_cookie(**cookie_kwargs)
+    # Convert and validate cookie parameters with strict typing
+    key = str(cookie_kwargs["key"])
+    value = str(cookie_kwargs["value"])
+    httponly = True if cookie_kwargs.get("httponly", True) else False
+    secure = True if cookie_kwargs.get("secure", settings.ENV == "production") else False
+    
+    # Handle samesite with type casting
+    samesite_val = cookie_kwargs.get("samesite", "lax")
+    samesite: Literal['lax', 'strict', 'none'] = cast(
+        Literal['lax', 'strict', 'none'],
+        samesite_val.lower() if isinstance(samesite_val, str) and samesite_val.lower() in ['lax', 'strict', 'none']
+        else 'lax'
+    )
+    
+    # Handle path and max_age with proper types
+    path = str(cookie_kwargs["path"]) if cookie_kwargs.get("path") else None
+    
+    # Handle max_age with explicit None check and safe conversion
+    max_age = None
+    if "max_age" in cookie_kwargs and cookie_kwargs["max_age"] is not None:
+        try:
+            max_age = int(cookie_kwargs["max_age"])
+        except (ValueError, TypeError):
+            max_age = None
+    
+    # Prepare domain if present
+    domain = None
+    if "domain" in cookie_kwargs and cookie_kwargs["domain"] is not None:
+        domain = str(cookie_kwargs["domain"])
+    
+    # Call set_cookie with validated parameters
+    response.set_cookie(
+        key=key,
+        value=value,
+        max_age=max_age,
+        path=path,
+        domain=domain,
+        secure=secure,
+        httponly=httponly,
+        samesite=samesite
+    )
