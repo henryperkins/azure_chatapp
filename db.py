@@ -7,6 +7,7 @@ Defines the async init_db process for migrations or table creation.
 
 import logging
 import time
+from datetime import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import create_engine, text
