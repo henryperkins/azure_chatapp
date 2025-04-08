@@ -950,6 +950,13 @@ async function loadStarredConversations() {
  * @returns {boolean} Whether the conversation is now starred
  */
 async function toggleStarConversation(conversationId) {
+  // Perform authentication check using the unified auth module
+  const isAuthenticated = await window.auth.verifyAuthState();
+  if (!isAuthenticated) {
+    console.error('[Auth] User is not authenticated');
+    return;
+  }
+
   // Get current starred conversations
   const starredIds = JSON.parse(localStorage.getItem('starredConversations') || '[]');
 

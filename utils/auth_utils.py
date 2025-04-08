@@ -227,7 +227,7 @@ async def get_user_from_token(
     """
     Retrieve a user object by validating a JWT token from cookies.
     """
-    decoded = await verify_token(token, expected_type, db)
+    decoded = await verify_token(token, expected_type, None)
 
     username = decoded.get("sub")
     if not username:
@@ -248,7 +248,9 @@ async def get_user_from_token(
         raise HTTPException(status_code=403, detail="Account disabled")
 
     token_version = decoded.get("version")
-    if user.token_version != token_version:
+    # Only invalidate tokens if their version is LESS THAN the user's current version
+    # This matches the behavior in verify_token and fixes the race condition
+    if token_version is None or token_version < user.token_version:
         logger.critical(
             f"Token version mismatch for {username}: "
             f"token={token_version}, user={user.token_version}"

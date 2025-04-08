@@ -42,7 +42,7 @@ class ConnectionManager:
         return len(self.active_connections)
 
     async def connect_with_state(
-        self, websocket: WebSocket, conversation_id: str, db: AsyncSession, user_id: str = None
+        self, websocket: WebSocket, conversation_id: str, db: AsyncSession, user_id: Optional[str] = None
     ):
         """
         Register a new WebSocket connection with associated conversation and user IDs.

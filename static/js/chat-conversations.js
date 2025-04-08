@@ -108,6 +108,76 @@ window.ConversationService = class ConversationService {
     }
   }
 
+  async createNewConversationWithToken(token, maxRetries = 2) {
+    if (!token) {
+      throw new Error("Token is required for direct token conversation creation");
+    }
+    
+    console.log(`Creating new conversation with direct token (first ${token.substring(0, 10)}...)`);
+    const defaultTitle = `New Chat ${new Date().toLocaleString()}`;
+    const model = window.MODEL_CONFIG?.modelName ||
+      localStorage.getItem("modelName") ||
+      "claude-3-7-sonnet-20250219";
+
+    // Validate model against supported Claude models
+    const CLAUDE_MODELS = [
+      "claude-3-7-sonnet-20250219",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229"
+    ];
+
+    if (!CLAUDE_MODELS.includes(model)) {
+      throw new Error(`Unsupported model: ${model}`);
+    }
+
+    const projectId = localStorage.getItem("selectedProjectId");
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const url = projectId
+          ? `/api/projects/${projectId}/conversations`
+          : `/api/chat/conversations`;
+          
+        // Custom fetch implementation that uses the provided token directly
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            title: defaultTitle,
+            model_id: model
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Server error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const conversation = data.data?.id
+          ? data.data
+          : (data.id ? data : { id: null });
+
+        if (!conversation.id) throw new Error("Invalid response format");
+
+        this.currentConversation = conversation;
+        console.log(`Successfully created conversation with direct token: ${conversation.id}`);
+        return conversation;
+      } catch (error) {
+        if (attempt === maxRetries) {
+          console.error('Failed to create conversation with direct token:', error);
+          throw error;
+        }
+
+        console.warn(`Direct token conversation creation attempt ${attempt + 1} failed:`, error);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
   async createNewConversation(maxRetries = 2) {
     // First verify auth state using auth.js
     let authState = false;

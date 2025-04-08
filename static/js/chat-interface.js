@@ -4,6 +4,9 @@
  * now with no localStorage usage or cross-origin references.
  */
 
+// Debug flag for verbose auth logging
+const AUTH_DEBUG = true;  // Toggle as needed
+
 // Converted from ES modules to global references
 const ConversationService = window.ConversationService;
 const WebSocketService = window.WebSocketService;
@@ -248,31 +251,70 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
     // Load existing conversation if ID is in URL
     this.loadConversation(this.currentChatId);
   } else {
-    // Verify auth state
-    window.auth.isAuthenticated({ forceVerify: true }).then(isAuthenticated => {
-      if (!isAuthenticated) {
-        const loginMsg = document.getElementById("loginRequiredMessage");
-        if (loginMsg) loginMsg.classList.remove("hidden");
-        return Promise.reject(new Error('Not authenticated'));
-      }
+    // Check if auth is still initializing
+    if (window.__authInitializing) {
+      console.log('[ChatInterface] Auth is initializing, waiting before creating conversation');
+      setTimeout(() => {
+        this._handleInitialConversation();
+      }, 300);
+      return;
+    }
+    
+    // Safe auth check with proper error handling
+    const checkAuth = async () => {
+      try {
+        // First make sure auth is initialized
+        if (!window.auth?.isInitialized) {
+          await window.auth.init();
+        }
+        
+        // Wait a small amount to let auth state settle
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        let isAuthenticated = false;
+        try {
+          // Try to verify auth state with error handling
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        } catch (verifyError) {
+          console.warn('Auth verification error:', verifyError);
+          if (window.auth.authState?.isAuthenticated) {
+            isAuthenticated = true;
+          }
+        }
 
-      // Wait for auth to fully initialize
-      return window.auth.init();
-    }).then(() => {
-      // Create conversation if still no chatId
-      if (!this.currentChatId) {
-        return this.createNewConversation().catch((error) => {
-          window.ChatUtils?.handleError?.('Creating new conversation', error, this.notificationFunction);
-          throw error;
-        });
+        if (!isAuthenticated) {
+          // Show login required message
+          const loginMsg = document.getElementById("loginRequiredMessage");
+          if (loginMsg) loginMsg.classList.remove("hidden");
+          return Promise.reject(new Error('Not authenticated'));
+        }
+        
+        // If we got here, we should be authenticated, create new conversation
+        if (!this.currentChatId) {
+          return this.createNewConversation()
+            .catch(error => {
+              // Use ChatUtils error handler if available
+              if (window.ChatUtils?.handleError) {
+                window.ChatUtils.handleError('Creating new conversation', error, this.notificationFunction);
+              } else {
+                console.error('Error creating conversation:', error);
+                this.notificationFunction?.('Failed to create conversation: ' + error.message, 'error');
+              }
+              throw error;
+            });
+        }
+      } catch (error) {
+        console.warn('[ChatInterface] Error in initial conversation setup:', error);
+        // Show login required message for auth errors
+        if (error.message?.includes('auth') || error.message?.includes('Not authenticated')) {
+          const loginMsg = document.getElementById("loginRequiredMessage");
+          if (loginMsg) loginMsg.classList.remove("hidden");
+        }
       }
-      return Promise.resolve();
-    }).catch(error => {
-      console.warn('[ChatInterface] Error in initial conversation setup:', error);
-      window.ChatUtils?.handleError?.('Authentication check', error, this.notificationFunction);
-      const loginMsg = document.getElementById("loginRequiredMessage");
-      if (loginMsg) loginMsg.classList.remove("hidden");
-    });
+    };
+    
+    // Start auth check process
+    checkAuth();
   }
 };
 
@@ -437,16 +479,60 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       if (!window.auth?.isInitialized) {
         await window.auth.init();
       }
-      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
-      if (!isAuthenticated) {
+      
+      // Wait a moment for auth state to stabilize after login/init
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Check if the auth module thinks we're authenticated
+      if (window.auth.isInitialized && window.auth.authState?.isAuthenticated === false) {
         throw new Error('Not authenticated - please login first');
       }
-      await window.auth.getAuthToken();
-    } catch (authError) {
-      console.warn("[chat-interface] Authentication failed:", authError);
       
-      // Let auth.js handle the error
-      window.auth.handleAuthError(authError, "creating conversation");
+      // Check for direct token first to avoid premature verification/refresh
+      let isAuthenticatedViaDirectToken = false;
+      if (window.__directAccessToken && window.__recentLoginTimestamp) {
+        const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
+        if (timeSinceLogin < 5000) {
+          if (AUTH_DEBUG) {
+            console.debug(`[ChatInterface] Using direct token for initial auth check (${timeSinceLogin}ms since login)`);
+          }
+          isAuthenticatedViaDirectToken = true;
+        } else {
+           // Clear the cached token after the grace period
+           if (AUTH_DEBUG) {
+             console.debug(`[ChatInterface] Direct token grace period expired (${timeSinceLogin}ms since login)`);
+           }
+           window.__directAccessToken = null; // Clear expired direct token
+        }
+      }
+
+      // If not authenticated via direct token, proceed with standard check
+      if (!isAuthenticatedViaDirectToken) {
+        if (AUTH_DEBUG) {
+           console.debug('[ChatInterface] Direct token not available or expired, proceeding with getAuthToken check.');
+        }
+        // Get token with less aggressive checking
+        try {
+          await window.auth.getAuthToken();
+        } catch (tokenError) {
+          console.warn("[chat-interface] Token retrieval failed:", tokenError);
+          // Only throw if this isn't just a verification error
+          if (!tokenError.message?.includes('verification')) {
+            throw tokenError;
+          }
+          // If it's just a verification error, we might still be okay if authState says so
+          if (!window.auth.authState?.isAuthenticated) {
+             throw new Error('Authentication failed after token check');
+          }
+        }
+      }
+    } catch (authError) {
+      console.warn("[chat-interface] Authentication failed during createNewConversation:", authError);
+      
+      // Let auth.js handle the error if available
+      if (window.auth && typeof window.auth.handleAuthError === 'function') {
+        window.auth.handleAuthError(authError, "creating conversation");
+      }
       
       // Notify UI and fail immediately for auth errors
       window.dispatchEvent(new CustomEvent('authStateChanged', {
@@ -472,7 +558,18 @@ window.ChatInterface.prototype.createNewConversation = async function () {
         if (this.projectId && window.projectManager?.createConversation) {
           conversation = await window.projectManager.createConversation(this.projectId);
         } else {
-          conversation = await this.conversationService.createNewConversation();
+          // If we have a direct token from login, pass it explicitly to avoid refresh issues
+          if (window.__directAccessToken && window.__recentLoginTimestamp) {
+            const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
+            if (timeSinceLogin < 5000) {
+              console.debug('[ChatInterface] Explicitly using direct access token for conversation creation');
+              conversation = await this.conversationService.createNewConversationWithToken(window.__directAccessToken);
+            } else {
+              conversation = await this.conversationService.createNewConversation();
+            }
+          } else {
+            conversation = await this.conversationService.createNewConversation();
+          }
         }
 
         if (!conversation?.id) {
