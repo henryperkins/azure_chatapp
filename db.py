@@ -63,40 +63,105 @@ async def get_async_session_context():
 
 
 async def validate_db_schema():
-    """Validate schema async-friendly"""
+    """Validate schema and return (has_mismatches, details) tuple"""
     from sqlalchemy import MetaData, inspect
+    from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
     
     logger.info("Validating database schema...")
-    has_mismatches = False
+    mismatch_details = []
 
     async with async_engine.connect() as conn:
-        # Use database-specific functions for checks
+        # Get database schema with type mapping
         result = await conn.execute(text("""
-            SELECT table_name, column_name, data_type 
+            SELECT table_name, column_name, data_type, udt_name, character_maximum_length
             FROM information_schema.columns 
             WHERE table_schema = 'public'
         """))
-        db_schema = {(row.table_name, row.column_name): row.data_type for row in result}
-        
-        # Get ORM metadata
-        orm_schema = {
-            (table.name, column.name): str(column.type)
-            for table in Base.metadata.tables.values() 
-            for column in table.columns.values()
+        db_schema = {
+            (row.table_name, row.column_name): {
+                'data_type': row.data_type,
+                'udt_name': row.udt_name,
+                'max_length': row.character_maximum_length
+            } for row in result
         }
+        
+        # Get ORM metadata with type normalization
+        orm_schema = {}
+        type_map = {
+            'VARCHAR': 'character varying',
+            'TIMESTAMP': 'timestamp without time zone',
+            'UUID': 'uuid',
+            'JSONB': 'jsonb',
+            'INTEGER': 'integer',
+            'BIGINT': 'bigint',
+            'BOOLEAN': 'boolean'
+        }
+        
+        for table in Base.metadata.tables.values():
+            for column in table.columns:
+                # Normalize ORM type
+                orm_type = str(column.type).split('(')[0]
+                orm_type = type_map.get(orm_type, orm_type.lower())
+                
+                # Check for length-specified types
+                length = getattr(column.type, 'length', None)
+                if length and orm_type == 'character varying':
+                    orm_type += f'({length})'
+                
+                orm_schema[(table.name, column.name)] = orm_type
 
-        # Compare schemas
-        mismatches = []
+        # Compare schemas with type normalization
         for (table, column), orm_type in orm_schema.items():
-            db_type = db_schema.get((table, column))
-            if not db_type:
-                logger.warning(f"Missing column: {table}.{column}")
-                has_mismatches = True
-            elif db_type != orm_type.split('(')[0].lower():
-                logger.warning(f"Type mismatch: {table}.{column} - DB: {db_type}, ORM: {orm_type}")
-                has_mismatches = True
+            db_info = db_schema.get((table, column))
+            if not db_info:
+                mismatch_details.append(f"Missing column: {table}.{column}")
+                continue
+                
+            db_type = db_info['data_type']
+            udt_name = db_info['udt_name']
+            db_max_length = db_info['max_length']
+            
+            # Handle type equivalencies
+            type_matches = False
+            if orm_type.startswith('character varying'):
+                # Handle VARCHAR length checks
+                if db_type == 'character varying':
+                    orm_length = None
+                    if '(' in orm_type:
+                        orm_length = int(orm_type.split('(')[1].split(')')[0])
+                    if orm_length and db_max_length and db_max_length != orm_length:
+                        mismatch_details.append(
+                            f"Length mismatch: {table}.{column} "
+                            f"DB: varchar({db_max_length}) vs ORM: varchar({orm_length})"
+                        )
+                    elif orm_length is None and db_max_length:
+                        pass  # ORM doesn't specify length
+                    else:
+                        type_matches = True
+                else:
+                    type_matches = False
+            
+            elif orm_type in ['uuid', 'jsonb', 'integer', 'bigint', 'boolean']:
+                type_matches = udt_name == orm_type
+            
+            elif orm_type == 'timestamp without time zone':
+                type_matches = db_type == 'timestamp without time zone'
+            
+            if not type_matches:
+                mismatch_details.append(
+                    f"Type mismatch: {table}.{column} - "
+                    f"DB: {db_type}{f'({db_max_length})' if db_max_length else ''} "
+                    f"vs ORM: {orm_type}"
+                )
 
-        return has_mismatches
+        # Check for missing columns that are nullable with default values
+        orm_columns = set(orm_schema.keys())
+        db_columns = set(db_schema.keys())
+        missing_columns = orm_columns - db_columns
+        for table, column in missing_columns:
+            mismatch_details.append(f"Missing column: {table}.{column}")
+
+    return mismatch_details
 
 
 async def _get_existing_tables():
@@ -136,10 +201,13 @@ async def init_db() -> None:
         
         # Step 3: Final validation
         logger.info("Validating final schema...")
-        if await validate_db_schema():
-            logger.warning("Schema validation completed with warnings")
+        mismatch_details = await validate_db_schema()
+        if mismatch_details:
+            logger.warning(f"Schema validation completed with {len(mismatch_details)} issues")
+            for issue in mismatch_details[:5]:  # Log first 5 issues
+                logger.warning(issue)
         else:
-            logger.info("Schema validation successful")
+            logger.info("Schema validation successful - all ORM definitions match database")
 
     except Exception as e:
         logger.error(f"❌ DB initialization failed: {str(e)}")
