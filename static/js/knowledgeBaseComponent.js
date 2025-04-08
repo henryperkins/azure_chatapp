@@ -290,6 +290,50 @@
       return filename.length > maxLength ? `${filename.substring(0, maxLength - 3)}...` : filename;
     }
 
+    /**
+     * Disable interactive elements when user is not authenticated
+     * @private
+     */
+    _disableInteractiveElements() {
+      const interactiveElements = [
+        this.elements.searchButton,
+        this.elements.reprocessButton,
+        this.elements.setupButton,
+        this.elements.kbToggle
+      ];
+      
+      interactiveElements.forEach(el => {
+        if (el) {
+          el.disabled = true;
+          el.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+      });
+      
+      // Show authentication required message
+      this._showStatusAlert("Authentication required to use knowledge base features.", "warning");
+    }
+
+    /**
+     * Enable interactive elements when user is authenticated
+     * @private
+     */
+    _enableInteractiveElements() {
+      const interactiveElements = [
+        this.elements.searchButton,
+        this.elements.setupButton
+      ];
+      
+      interactiveElements.forEach(el => {
+        if (el) {
+          el.disabled = false;
+          el.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      });
+      
+      // Re-enable toggle and reprocess based on KB state
+      this._updateUploadButtonsState(!!this.state.knowledgeBase, this.state.knowledgeBase?.is_active !== false);
+    }
+
     /* ===========================
        PUBLIC METHODS
        =========================== */
@@ -1066,6 +1110,7 @@
       }
 
       try {
+        // Use auth.getAuthToken() for consistent authentication
         const token = await window.auth.getAuthToken();
         const response = await window.apiRequest(`/api/knowledge-bases/${kbId}/health`, "GET", null, token);
         const health = response.data || {};
