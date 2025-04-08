@@ -219,6 +219,9 @@ async def init_db() -> None:
     try:
         logger.info("Initialization started")
         
+        # Load revocation list before any auth checks
+        await load_revocation_list(async_engine)
+        
         # Step 1: Create missing tables
         logger.info("Checking for missing tables...")
         existing_tables = await _get_existing_tables()
@@ -270,6 +273,22 @@ async def fix_db_schema():
                 table.create(sync_conn)
             else:
                 logger.debug(f"({idx}/{total_tables}) Table exists: {table_name}")
+
+        # Special handling for token_blacklist additions
+        if inspector.has_table('token_blacklist'):
+            # Add creation_reason with VARCHAR(50) defaulting to empty string
+            sync_conn.execute(text("""
+                ALTER TABLE token_blacklist
+                ADD COLUMN IF NOT EXISTS creation_reason VARCHAR(50) NOT NULL DEFAULT ''
+            """))
+            
+            # Add created_at with timestamp defaulting to current time
+            sync_conn.execute(text("""
+                ALTER TABLE token_blacklist
+                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE 
+                NOT NULL DEFAULT CURRENT_TIMESTAMP
+            """))
+            logger.info("Ensured token_blacklist schema compliance")
 
         # 2. Add missing columns
         for table_name in Base.metadata.tables.keys():

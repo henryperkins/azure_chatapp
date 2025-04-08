@@ -88,9 +88,22 @@ async def verify_token(
             raise HTTPException(status_code=401, detail="Token is revoked")
 
         if db and token_id:
-            query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
-            result = await db.execute(query)
-            blacklisted = result.scalar_one_or_none()
+            try:
+                query = select(
+                    TokenBlacklist.jti,
+                    TokenBlacklist.expires,
+                    TokenBlacklist.token_type
+                ).where(TokenBlacklist.jti == token_id)
+                result = await db.execute(query)
+                blacklisted = result.scalar_one_or_none()
+            except Exception as oe:
+                if "creation_reason" in str(oe):
+                    query = select(TokenBlacklist.jti, TokenBlacklist.expires)
+                    result = await db.execute(query)
+                    blacklisted = result.scalar_one_or_none()
+                else:
+                    raise
+                    
             if blacklisted:
                 REVOCATION_LIST.add(token_id)
                 logger.warning(f"Token ID '{token_id}' is revoked (database)")
