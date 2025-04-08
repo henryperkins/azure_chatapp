@@ -65,89 +65,89 @@ async def verify_token(
     request: Optional[Request] = None,
 ) -> Dict[str, Any]:
     async with get_async_session_context() as db:
-    """
-    Verify and decode a JWT token from cookies.
-    Enforces optional token type and checks if token is revoked.
-    """
-    decoded = None
-    token_id = None
+        """
+        Verify and decode a JWT token from cookies.
+        Enforces optional token type and checks if token is revoked.
+        """
+        decoded = None
+        token_id = None
 
         try:
             decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
-        # If a specific token type is expected, confirm
-        if expected_type and decoded.get("type") != expected_type:
-            logger.warning(
-                f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}"
-            )
-            raise HTTPException(status_code=401, detail="Invalid token type")
+            # If a specific token type is expected, confirm
+            if expected_type and decoded.get("type") != expected_type:
+                logger.warning(
+                    f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}"
+                )
+                raise HTTPException(status_code=401, detail="Invalid token type")
 
-        token_id = decoded.get("jti")
-        if token_id in REVOCATION_LIST:
-            logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
-            raise HTTPException(status_code=401, detail="Token is revoked")
-
-        if db and token_id:
-            try:
-                query = select(
-                    TokenBlacklist.jti,
-                    TokenBlacklist.expires,
-                    TokenBlacklist.token_type
-                ).where(TokenBlacklist.jti == token_id)
-                result = await db.execute(query)
-                blacklisted = result.scalar_one_or_none()
-            except Exception as oe:
-                if "creation_reason" in str(oe):
-                    query = select(TokenBlacklist.jti, TokenBlacklist.expires)
-                    result = await db.execute(query)
-                    blacklisted = result.scalar_one_or_none()
-                else:
-                    raise
-                    
-            if blacklisted:
-                REVOCATION_LIST.add(token_id)
-                logger.warning(f"Token ID '{token_id}' is revoked (database)")
+            token_id = decoded.get("jti")
+            if token_id in REVOCATION_LIST:
+                logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
                 raise HTTPException(status_code=401, detail="Token is revoked")
 
-        if not decoded.get("jti"):
-            logger.warning("Token missing required jti claim")
-            raise HTTPException(status_code=401, detail="Invalid token: missing jti")
+            if db and token_id:
+                try:
+                    query = select(
+                        TokenBlacklist.jti,
+                        TokenBlacklist.expires,
+                        TokenBlacklist.token_type
+                    ).where(TokenBlacklist.jti == token_id)
+                    result = await db.execute(query)
+                    blacklisted = result.scalar_one_or_none()
+                except Exception as oe:
+                    if "creation_reason" in str(oe):
+                        query = select(TokenBlacklist.jti, TokenBlacklist.expires)
+                        result = await db.execute(query)
+                        blacklisted = result.scalar_one_or_none()
+                    else:
+                        raise
+                    
+                if blacklisted:
+                    REVOCATION_LIST.add(token_id)
+                    logger.warning(f"Token ID '{token_id}' is revoked (database)")
+                    raise HTTPException(status_code=401, detail="Token is revoked")
 
-        # Check token version if user can be found (skip for refresh tokens)
-        username = decoded.get("sub")
-        token_version = decoded.get("version")
-        token_type = decoded.get("type")
+            if not decoded.get("jti"):
+                logger.warning("Token missing required jti claim")
+                raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-        if db and username and token_type != "refresh":
-            query = select(User).where(User.username == username)
-            result = await db.execute(query)
-            user = result.scalar_one_or_none()
-            if user:
-                current_version = user.token_version or 0
-                if token_version is None or token_version < current_version:
-                    logger.warning(
-                        f"Token version mismatch for {username}: "
-                        f"Token version {token_version} < User version {current_version}"
-                    )
-                    raise HTTPException(
-                        status_code=401, detail="Token has been invalidated"
-                    )
+            # Check token version if user can be found (skip for refresh tokens)
+            username = decoded.get("sub")
+            token_version = decoded.get("version")
+            token_type = decoded.get("type")
 
-            logger.debug(
-                f"Token verification successful for jti: {token_id}, user: {username}"
-            )
-            return decoded
+            if db and username and token_type != "refresh":
+                query = select(User).where(User.username == username)
+                result = await db.execute(query)
+                user = result.scalar_one_or_none()
+                if user:
+                    current_version = user.token_version or 0
+                    if token_version is None or token_version < current_version:
+                        logger.warning(
+                            f"Token version mismatch for {username}: "
+                            f"Token version {token_version} < User version {current_version}"
+                        )
+                        raise HTTPException(
+                            status_code=401, detail="Token has been invalidated"
+                        )
 
-        except ExpiredSignatureError as exc:
-            logger.warning("Token expired: jti=%s", token_id)
-            raise HTTPException(
-                status_code=401,
-                detail="Token has expired - please refresh your session",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from exc
-        except InvalidTokenError as e:
-            logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
-            raise HTTPException(status_code=401, detail="Invalid token") from e
+                logger.debug(
+                    f"Token verification successful for jti: {token_id}, user: {username}"
+                )
+                return decoded
+
+            except ExpiredSignatureError as exc:
+                logger.warning("Token expired: jti=%s", token_id)
+                raise HTTPException(
+                    status_code=401,
+                    detail="Token has expired - please refresh your session",
+                    headers={"WWW-Authenticate": "Bearer"},
+                ) from exc
+            except InvalidTokenError as e:
+                logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
+                raise HTTPException(status_code=401, detail="Invalid token") from e
 
 
 def revoke_token_id(token_id: str) -> None:
