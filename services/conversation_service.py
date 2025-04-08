@@ -333,7 +333,7 @@ class ConversationService:
                 )
             # If enabling KB, link to project's KB ID if not already set
             if use_knowledge_base and conv.project_id and not conv.knowledge_base_id:
-                project = await self._validate_project_access(conv.project_id, user_id)
+                project = await self._validate_project_access(UUID(str(conv.project_id)), user_id)
                 if project.knowledge_base_id:
                     conv.knowledge_base_id = project.knowledge_base_id
                 else:
@@ -350,8 +350,10 @@ class ConversationService:
         if ai_settings is not None:
             # Validate new settings against the current/new model
             current_model_id = model_id or conv.model_id
+            if not current_model_id:
+                raise ConversationError("Model ID is required", 400)
             try:
-                validate_model_and_params(current_model_id, ai_settings)
+                validate_model_and_params(str(current_model_id), ai_settings)
             except ConversationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
@@ -486,6 +488,11 @@ class ConversationService:
 
         # 2. Generate AI response if the created message was from the 'user'
         if user_message.role == "user":
+            if not conv.model_id:
+                raise ConversationError(
+                    "Cannot generate AI response: No model configured for conversation",
+                    400
+                )
             try:
                 # Prepare message history for AI
                 # Pass include_system_prompt=True if you have a default system prompt defined elsewhere
@@ -535,7 +542,7 @@ class ConversationService:
                 assistant_msg_obj = await generate_ai_response(
                     conversation_id=conversation_id,
                     messages=message_history,
-                    model_id=conv.model_id,
+                    model_id=str(conv.model_id),
                     db=self.db,
                     # Pass validated & prioritized parameters
                     image_data=image_data,  # Image data comes from the user input directly

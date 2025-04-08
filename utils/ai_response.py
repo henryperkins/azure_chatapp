@@ -260,7 +260,7 @@ async def generate_ai_response(
         total_used = completion_tokens + reasoning_tokens
 
         if not response_usage and assistant_content:
-            completion_tokens = await calculate_tokens(assistant_content, model_id, db)
+            completion_tokens = await calculate_tokens(assistant_content, model_id)
             total_used = completion_tokens
             logger.warning(
                 f"API response missing usage data for model {model_id}. "
@@ -456,7 +456,7 @@ async def handle_websocket_response(
             if total_used == 0 and completion_tokens == 0:
                 model_str = str(model_id) if model_id else ""
                 completion_tokens = await calculate_tokens(
-                    full_response_content, model_str, db
+                    full_response_content, model_str
                 )
                 total_used = completion_tokens
                 logger.warning(
