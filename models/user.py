@@ -87,8 +87,15 @@ class User(Base):
 
 class TokenBlacklist(Base):
     __tablename__ = "token_blacklist"
+    __table_args__ = (
+        Index("ix_token_blacklist_token_type", "token_type"),
+        Index("ix_token_blacklist_expires", "expires"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     jti: Mapped[str] = mapped_column(String(36), unique=True, index=True)
     expires: Mapped[datetime] = mapped_column(TIMESTAMP)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_type: Mapped[str] = mapped_column(String(20), default="access", nullable=False, server_default="access")
+    creation_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))

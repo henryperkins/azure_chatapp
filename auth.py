@@ -343,6 +343,8 @@ async def refresh_token(
                                 jti=decoded["jti"],
                                 expires=decoded["exp"],
                                 user_id=user.id,
+                                token_type="refresh",
+                                creation_reason="refresh_rotation"
                             )
                             session.add(blacklisted)
                             await session.commit()
@@ -444,7 +446,13 @@ async def logout_user(
     expires = decoded.get("exp")
 
     # Add token to blacklist
-    blacklisted_token = TokenBlacklist(jti=token_id, expires=expires, user_id=user.id)
+    blacklisted_token = TokenBlacklist(
+        jti=token_id, 
+        expires=expires, 
+        user_id=user.id,
+        token_type="refresh",
+        creation_reason="logout"
+    )
     session.add(blacklisted_token)
 
     # Invalidate all user tokens
