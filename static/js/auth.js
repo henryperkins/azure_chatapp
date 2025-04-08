@@ -127,6 +127,17 @@ async function refreshTokens() {
     });
   }
 
+  // New safeguard: Recent login check
+  const timeSinceLastVerified = Date.now() - authState.lastVerified;
+  if (timeSinceLastVerified < 5000) { // 5-second threshold
+    console.debug('[Auth] Skipping refresh - recent login detected');
+    return { 
+      success: true, 
+      version: authState.tokenVersion,
+      token: getCookie('access_token') // Return current valid token
+    };
+  }
+
   // Check for too many consecutive failed refresh attempts
   const now = Date.now();
   if (lastRefreshAttempt && (now - lastRefreshAttempt < 5000) && refreshFailCount >= MAX_REFRESH_RETRIES) {
@@ -989,6 +1000,8 @@ function setupUIListeners() {
 
     try {
       await loginUser(username, password);
+      // Reset verification timestamp to prevent immediate refresh
+      authState.lastVerified = Date.now();
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
