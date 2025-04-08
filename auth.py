@@ -209,13 +209,16 @@ async def login_user(
 
     # Set secure cookies for both tokens
     set_secure_cookie(
-        response, "access_token", access_token, max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        response, "access_token", access_token, 
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        request=request
     )
     set_secure_cookie(
         response,
         "refresh_token",
         refresh_token,
         max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+        request=request
     )
 
     logger.info(
@@ -487,7 +490,8 @@ async def logout_user(
 
 
 def set_secure_cookie(
-    response: Response, key: str, value: str, max_age: Optional[int] = None
+    response: Response, key: str, value: str, max_age: Optional[int] = None,
+    request: Optional[Request] = None
 ):
     """
     Sets a secure HTTP-only cookie with explicit expiration to ensure persistence across browser sessions.
@@ -497,14 +501,22 @@ def set_secure_cookie(
         key: Cookie name
         value: Cookie value
         max_age: Maximum age in seconds (None means the cookie persists until browser close)
+        request: Optional request object to get host from headers
     """
-    response.set_cookie(
-        key=key,
-        value=value,
-        httponly=True,
-        secure=settings.ENV == "production",
-        samesite="lax",
-        domain=window.location.hostname,  # Get from browser context
-        path="/",
-        max_age=max_age,
-    )
+    cookie_kwargs = {
+        "key": key,
+        "value": value,
+        "httponly": True,
+        "secure": settings.ENV == "production",
+        "samesite": "lax",
+        "path": "/",
+        "max_age": max_age,
+    }
+
+    # Only set domain if in production and we have request headers
+    if settings.ENV == "production" and request:
+        host = request.headers.get("host", "").split(":")[0]
+        if host and not host.startswith("localhost"):
+            cookie_kwargs["domain"] = host
+
+    response.set_cookie(**cookie_kwargs)
