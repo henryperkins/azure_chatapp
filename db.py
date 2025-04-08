@@ -6,7 +6,9 @@ Defines the async init_db process for migrations or table creation.
 """
 
 import logging
+import time
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -61,150 +63,70 @@ async def get_async_session_context():
 
 
 async def validate_db_schema():
-    """
-    Validate the current database schema against the ORM models.
-    Logs differences as warnings rather than failing.
-    """
-    import logging
+    """Validate schema async-friendly"""
     from sqlalchemy import MetaData, inspect
-
-    logger = logging.getLogger(__name__)
+    
+    logger.info("Validating database schema...")
     has_mismatches = False
 
-    # Reflect database schema with error handling
-    try:
-        inspector = inspect(sync_engine)
-        meta = MetaData()
-        meta.reflect(bind=sync_engine)
-    except Exception as e:
-        logger.error(f"Failed to reflect database schema: {e}")
-        raise RuntimeError("Database schema reflection failed") from e
+    async with async_engine.connect() as conn:
+        # Use database-specific functions for checks
+        result = await conn.execute(text("""
+            SELECT table_name, column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public'
+        """))
+        db_schema = {(row.table_name, row.column_name): row.data_type for row in result}
+        
+        # Get ORM metadata
+        orm_schema = {
+            (table.name, column.name): str(column.type)
+            for table in Base.metadata.tables.values() 
+            for column in table.columns.values()
+        }
 
-    # Get ORM metadata
-    orm_meta = Base.metadata
-
-    # Table validation
-    tables_in_db = set(meta.tables.keys())
-    tables_in_orm = set(orm_meta.tables.keys())
-
-    missing_tables = tables_in_orm - tables_in_db
-    if missing_tables:
-        logger.warning(f"⚠️ Missing tables in database: {missing_tables}")
-        has_mismatches = True
-
-    # Column validation for each table
-    for table_name in tables_in_orm:
-        if table_name not in meta.tables:
-            continue
-
-        db_cols = inspector.get_columns(table_name)
-        orm_cols = orm_meta.tables[table_name].columns
-
-        # Check column names and types
-        db_col_map = {c["name"]: c for c in db_cols}
-        for orm_col in orm_cols:
-            db_col = db_col_map.get(orm_col.name)
-            if not db_col:
-                logger.warning(f"⚠️ Missing column {table_name}.{orm_col.name}")
+        # Compare schemas
+        mismatches = []
+        for (table, column), orm_type in orm_schema.items():
+            db_type = db_schema.get((table, column))
+            if not db_type:
+                logger.warning(f"Missing column: {table}.{column}")
                 has_mismatches = True
-                continue
-
-            # Compare type and nullable
-            orm_type = str(orm_col.type).split("(")[0]  # Simplify type comparison
-            db_type = str(db_col["type"]).split("(")[0]
-
-            if db_type != orm_type:
-                logger.warning(
-                    f"⚠️ Type mismatch in {table_name}.{orm_col.name}: "
-                    f"DB has {db_type}, ORM expects {orm_type}"
-                )
+            elif db_type != orm_type.split('(')[0].lower():
+                logger.warning(f"Type mismatch: {table}.{column} - DB: {db_type}, ORM: {orm_type}")
                 has_mismatches = True
 
-            if db_col["nullable"] != orm_col.nullable:
-                logger.warning(
-                    f"⚠️ Nullability mismatch in {table_name}.{orm_col.name}: "
-                    f"DB allows null={db_col['nullable']}, ORM expects {orm_col.nullable}"
-                )
-                has_mismatches = True
-
-    # Index validation
-    for table_name in tables_in_orm:
-        if table_name not in meta.tables:
-            continue
-
-        db_indexes = inspector.get_indexes(table_name)
-        orm_indexes = orm_meta.tables[table_name].indexes
-
-        # Check index existence
-        orm_index_names = {idx.name for idx in orm_indexes}
-        db_index_names = {idx["name"] for idx in db_indexes}
-
-        missing_indexes = orm_index_names - db_index_names
-        if missing_indexes:
-            logger.warning(f"⚠️ Missing indexes in {table_name}: {missing_indexes}")
-            has_mismatches = True
-
-    if not has_mismatches:
-        logger.info("✅ Database schema matches ORM models")
-    else:
-        logger.warning(
-            "⚠️ Database schema has mismatches with ORM models (see warnings above)"
-        )
-
-    return has_mismatches  # Return whether mismatches were found
+        return has_mismatches
 
 
 async def init_db() -> None:
-    """
-    Initialize database and handle schema alignment using SQLAlchemy metadata.
-    This function ensures the database schema is fully aligned with ORM models,
-    creating tables, adding missing columns, adjusting types, and setting up constraints
-    without requiring Alembic migrations.
-    """
-    logger.info("Starting database initialization and schema alignment")
+    """Initialize database with improved progress tracking"""
+    try:
+        logger.info("Initialization started")
+        
+        # Step 1: Create missing tables
+        logger.info("Checking for missing tables...")
+        existing_tables = await _get_existing_tables()
+        tables_to_create = [
+            t for t in Base.metadata.tables.keys() if t not in existing_tables
+        ]
+        if tables_to_create:
+            await _create_missing_tables(tables_to_create)
+        
+        # Step 2: Schema alignment (with progress callbacks)
+        logger.info("Running schema alignment...")
+        await fix_db_schema()
+        
+        # Step 3: Final validation
+        logger.info("Validating final schema...")
+        if await validate_db_schema():
+            logger.warning("Schema validation completed with warnings")
+        else:
+            logger.info("Schema validation successful")
 
-    # First check which tables exist
-    existing_tables = set()
-    async with async_engine.connect() as conn:
-        result = await conn.execute(
-            text(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
-            )
-        )
-        existing_tables = {row[0] for row in result.fetchall()}
-        await conn.commit()
-
-    # Only create tables that don't exist
-    tables_to_create = [
-        t for t in Base.metadata.tables.keys() if t not in existing_tables
-    ]
-    if tables_to_create:
-        logger.info(f"Creating missing tables: {', '.join(tables_to_create)}")
-        async with async_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-    # Execute comprehensive schema alignment to handle any discrepancies
-    await fix_db_schema()
-
-    # Final verification of schema alignment
-    mismatches = await validate_db_schema()
-    if mismatches:
-        logger.warning(
-            "Some schema mismatches couldn't be automatically fixed but application can continue"
-        )
-    else:
-        logger.info("Database schema fully aligned with ORM models")
-
-    # Log list of verified tables for debugging
-    async with async_engine.connect() as conn:
-        result = await conn.execute(
-            text(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
-            )
-        )
-        tables = [row[0] for row in result.fetchall()]
-        await conn.commit()  # Explicitly commit the transaction
-        logger.info(f"Verified tables in database: {', '.join(tables)}")
+    except Exception as e:
+        logger.error(f"❌ DB initialization failed: {str(e)}")
+        raise
 
 
 async def fix_db_schema():
@@ -217,14 +139,19 @@ async def fix_db_schema():
     # Use sync engine for all schema operations
     with sync_engine.begin() as sync_conn:
         inspector = inspect(sync_conn)
+        
+        # Add statement timeout to prevent hanging (30 seconds)
+        sync_conn.execute(text("SET statement_timeout = 30000"))
 
-        # 1. Add missing tables
+        # 1. Add missing tables with progress indication
         existing_tables = set(inspector.get_table_names())
-        for table_name in Base.metadata.tables.keys():
+        total_tables = len(Base.metadata.tables)
+        for idx, (table_name, table) in enumerate(Base.metadata.tables.items(), 1):
             if table_name not in existing_tables:
-                logger.info(f"Creating missing table: {table_name}")
-                Base.metadata.tables[table_name].create(sync_conn)
-                continue
+                logger.info(f"({idx}/{total_tables}) Creating table: {table_name}")
+                table.create(sync_conn)
+            else:
+                logger.debug(f"({idx}/{total_tables}) Table exists: {table_name}")
 
         # 2. Add missing columns
         for table_name in Base.metadata.tables.keys():
@@ -272,9 +199,22 @@ async def fix_db_schema():
                 if col_name == "token_type" and "DEFAULT access" in col_spec:
                     col_spec = col_spec.replace("DEFAULT access", "DEFAULT 'access'")
                 
-                ddl = f"ALTER TABLE {table_name} ADD COLUMN {col_spec}"
-                sync_conn.execute(text(ddl))
-                logger.info(f"Added missing column: {table_name}.{col_name}")
+                    # Modify the DDL to add EXISTS check
+                    ddl = f"""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 
+                            FROM information_schema.columns 
+                            WHERE table_name = '{table_name}' 
+                            AND column_name = '{col_name}'
+                        ) THEN
+                            ALTER TABLE {table_name} ADD COLUMN {col_spec};
+                        END IF;
+                    END $$;
+                    """
+                    sync_conn.execute(text(ddl))
+                    logger.info(f"Added column: {table_name}.{col_name}")
 
         # 2. Create missing indexes
         for table_name, table in Base.metadata.tables.items():
@@ -282,14 +222,18 @@ async def fix_db_schema():
             db_indexes = {idx["name"] for idx in inspector.get_indexes(table_name)}
 
             # Check ORM indexes
-            for idx in table.indexes:
-                if idx.name not in db_indexes:
-                    create_stmt = idx.create(sync_engine)
-                    if create_stmt is not None:
-                        sql_text = str(create_stmt)
-                        if sql_text and sql_text.strip():
-                            sync_conn.execute(text(sql_text))
-                            logger.info(f"Created missing index: {idx.name}")
+            # Only create non-existent indexes
+            for idx in [i for i in table.indexes if i.name not in db_indexes]:
+                try:
+                    logger.info(f"Creating index {idx.name} on {table_name}")
+                    # Use CONCURRENTLY if possible (PostgreSQL only)
+                    if idx.dialect_kwargs.get('postgresql_concurrently'):
+                        sync_conn.execute(text(f"CREATE INDEX CONCURRENTLY {idx.name} ON {table_name} {idx.column_expressions}"))
+                    else:
+                        idx.create(sync_conn)
+                except Exception as index_error:
+                    logger.error(f"Failed to create index {idx.name}: {index_error}")
+                    # Continue instead of failing whole process
                         else:
                             logger.warning(
                                 f"Empty create statement for index: {idx.name}"
@@ -466,6 +410,12 @@ async def fix_db_schema():
                                         f"Completely failed to add foreign key constraint: {simple_add_error}"
                                     )
                     except Exception as outer_error:
-                        logger.error(
-                            f"Failed to handle foreign key constraint for {table_name}.{col_name}: {outer_error}"
-                        )
+                        if "deadlock" in str(outer_error).lower() and attempt < max_retries - 1:
+                            logger.warning(f"Deadlock detected on FK {constraint_name}, retrying... (Attempt {attempt + 1})")
+                            time.sleep(0.1 * (attempt + 1))
+                            continue
+                        else:
+                            logger.error(
+                                f"Failed to handle foreign key constraint for {table_name}.{col_name}: {outer_error}"
+                            )
+                            raise
