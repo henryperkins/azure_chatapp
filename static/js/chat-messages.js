@@ -198,13 +198,14 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
     throw new Error('Invalid conversation ID');
   }
 
-  // Add authentication check
+  // Add authentication check with improved error handling
   try {
     const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
     if (!isAuthenticated) {
       throw new Error('Not authenticated - please login first');
     }
   } catch (authError) {
+    console.warn('[MessageService] Authentication error when sending message:', authError);
     window.auth.handleAuthError(authError, "sending message");
     throw authError;
   }
