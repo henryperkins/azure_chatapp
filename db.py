@@ -409,7 +409,7 @@ async def fix_db_schema():
                     try:
                         constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
                         ondelete_clause = f" ON DELETE {ondelete}" if ondelete else ""
-                        
+                
                         # Drop existing constraint if it exists but has different rules
                         for existing_fk in db_fks:
                             if (existing_fk["constrained_columns"] and
@@ -465,3 +465,7 @@ async def fix_db_schema():
                                     logger.error(
                                         f"Completely failed to add foreign key constraint: {simple_add_error}"
                                     )
+                    except Exception as outer_error:
+                        logger.error(
+                            f"Failed to handle foreign key constraint for {table_name}.{col_name}: {outer_error}"
+                        )
