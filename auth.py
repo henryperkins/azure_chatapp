@@ -124,6 +124,7 @@ async def register_user(
 
 @router.post("/login", response_model=LoginResponse)
 async def login_user(
+    request: Request,
     response: Response,
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
