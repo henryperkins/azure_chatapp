@@ -15,6 +15,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from contextlib import asynccontextmanager
 
 from config import settings
+from utils.auth_utils import load_revocation_list
 
 logger = logging.getLogger(__name__)
 
