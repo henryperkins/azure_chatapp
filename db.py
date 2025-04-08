@@ -28,7 +28,10 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 # Create sync engine for migrations and schema validation
-sync_engine = create_engine(DATABASE_URL.replace("+asyncpg", ""))
+sync_engine = create_engine(
+    DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL
+    else DATABASE_URL
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 
@@ -68,10 +71,14 @@ async def validate_db_schema():
     logger = logging.getLogger(__name__)
     has_mismatches = False
 
-    # Reflect database schema
-    inspector = inspect(sync_engine)
-    meta = MetaData()
-    meta.reflect(bind=sync_engine)
+    # Reflect database schema with error handling
+    try:
+        inspector = inspect(sync_engine)
+        meta = MetaData()
+        meta.reflect(bind=sync_engine)
+    except Exception as e:
+        logger.error(f"Failed to reflect database schema: {e}")
+        raise RuntimeError("Database schema reflection failed") from e
 
     # Get ORM metadata
     orm_meta = Base.metadata
@@ -261,6 +268,10 @@ async def fix_db_schema():
                 if col.server_default:
                     col_spec += f" DEFAULT {col.server_default.arg}"
 
+                # Handle special case for token_type column to avoid PostgreSQL DEFAULT expression limitation
+                if col_name == "token_type" and "DEFAULT access" in col_spec:
+                    col_spec = col_spec.replace("DEFAULT access", "DEFAULT 'access'")
+                
                 ddl = f"ALTER TABLE {table_name} ADD COLUMN {col_spec}"
                 sync_conn.execute(text(ddl))
                 logger.info(f"Added missing column: {table_name}.{col_name}")
@@ -400,30 +411,56 @@ async def fix_db_schema():
                         
                         # Drop existing constraint if it exists but has different rules
                         for existing_fk in db_fks:
-                            if (existing_fk["constrained_columns"] and 
+                            if (existing_fk["constrained_columns"] and
                                 existing_fk["constrained_columns"][0] == col_name and
                                 existing_fk["referred_table"] == referred_table):
-                                sync_conn.execute(
-                                    text(
-                                        f"ALTER TABLE {table_name} DROP CONSTRAINT {existing_fk['name']}"
+                                try:
+                                    sync_conn.execute(
+                                        text(
+                                            f"ALTER TABLE {table_name} DROP CONSTRAINT {existing_fk['name']}"
+                                        )
                                     )
-                                )
-                                logger.info(
-                                    f"Dropped existing foreign key constraint {existing_fk['name']} to update cascade rules"
-                                )
+                                    logger.info(
+                                        f"Dropped existing foreign key constraint {existing_fk['name']} to update cascade rules"
+                                    )
+                                except Exception as drop_error:
+                                    logger.warning(
+                                        f"Failed to drop existing constraint {existing_fk['name']}: {drop_error}"
+                                    )
+                                    continue  # Skip adding new constraint if we can't drop old one
 
-                        sync_conn.execute(
-                            text(
-                                f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
+                        try:
+                            sync_conn.execute(
+                                text(
+                                    f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
+                                    f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
+                                    f"{ondelete_clause}"
+                                )
+                            )
+                            logger.info(
+                                f"Successfully added foreign key constraint: {table_name}.{col_name} -> {referred_table} "
+                                f"with ON DELETE {ondelete if ondelete else 'NO ACTION'}"
+                            )
+                        except Exception as add_error:
+                            logger.error(
+                                f"Failed to add foreign key constraint for {table_name}.{col_name}: {add_error}\n"
+                                f"SQL: ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
                                 f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
                                 f"{ondelete_clause}"
                             )
-                        )
-                        logger.info(
-                            f"Added foreign key constraint: {table_name}.{col_name} -> {referred_table} "
-                            f"with ON DELETE {ondelete if ondelete else 'NO ACTION'}"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to add foreign key constraint for {table_name}.{col_name}: {e}"
-                        )
+                            # Attempt to create constraint without ondelete clause if that was the issue
+                            if ondelete_clause:
+                                try:
+                                    sync_conn.execute(
+                                        text(
+                                            f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
+                                            f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
+                                        )
+                                    )
+                                    logger.warning(
+                                        f"Added constraint without ON DELETE clause due to previous error"
+                                    )
+                                except Exception as simple_add_error:
+                                    logger.error(
+                                        f"Completely failed to add foreign key constraint: {simple_add_error}"
+                                    )
