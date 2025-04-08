@@ -172,10 +172,14 @@ async def login_user(
 
         locked_user.last_login = datetime.utcnow()
         # Bump token_version
-        current_ts = int(datetime.utcnow().timestamp())
-        locked_user.token_version = (
-            locked_user.token_version + 1 if locked_user.token_version else current_ts
+        from sqlalchemy import update
+        await session.execute(
+            update(User)
+            .where(User.id == locked_user.id)
+            .values(token_version=User.token_version + 1)
+            .execution_options(synchronize_session="fetch")
         )
+        await session.refresh(locked_user)
 
         # Access token
         token_id = str(uuid.uuid4())
@@ -423,6 +427,11 @@ async def get_websocket_token(
     }
 
 
+@router.get("/test-cookie")
+async def test_cookie(response: Response):
+    set_secure_cookie(response, "test_cookie", "works", max_age=30)
+    return {"status": "cookie set"}
+
 @router.get("/timestamp")
 async def get_server_time():
     return {"serverTimestamp": datetime.utcnow().timestamp()}
@@ -506,7 +515,7 @@ def set_secure_cookie(
         key=key,
         value=value,
         httponly=True,
-        secure=True,
+        secure=settings.ENV == "production",
         samesite="lax" if settings.ENV == "development" else "strict",
         domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
         path="/",
