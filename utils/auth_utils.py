@@ -119,27 +119,28 @@ async def verify_token(
             token_type = decoded.get("type")
 
             if db and username and token_type != "refresh":
-                async with db.begin_nested():
-                    user = (await db.execute(
-                        select(User)
-                        .where(User.username == username)
-                        .with_for_update()
-                    )).scalar_one_or_none()
-                if user:
-                    current_version = user.token_version or 0
-                    if token_version is None or token_version < current_version:
-                        logger.warning(
-                            f"Token version mismatch for {username}: "
-                            f"Token version {token_version} < User version {current_version}"
-                        )
-                        raise HTTPException(
-                            status_code=401, detail="Token has been invalidated"
-                        )
+                # Validate against latest database version with separate query
+                user_version = (await db.execute(
+                    select(User.token_version)
+                    .where(User.username == username)
+                    .with_for_update(read=True)
+                )).scalar_one_or_none()
+                
+                if token_version is None or (user_version and token_version < user_version):
+                    logger.warning(
+                        f"Token version mismatch for {username}: "
+                        f"Token version {token_version} < DB version {user_version}"
+                    )
+                    raise HTTPException(
+                        status_code=401, 
+                        detail="Session invalidated - token version mismatch",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
 
-                logger.debug(
-                    f"Token verification successful for jti: {token_id}, user: {username}"
-                )
-                return decoded
+            logger.debug(
+                f"Token verification successful for jti: {token_id}, user: {username}"
+            )
+            return decoded
 
         except ExpiredSignatureError as exc:
             logger.warning("Token expired: jti=%s", token_id)
