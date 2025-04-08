@@ -245,7 +245,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
       headers: {
         Accept: 'application/json',
         'Cache-Control': 'no-cache',
-        Pragma: 'no-cache'
+        Pragma: 'no-cache',
+        'X-Forwarded-Host': window.location.host,
+        'X-Request-Domain': window.location.hostname
       },
       cache: 'no-store',
       redirect: 'follow',
