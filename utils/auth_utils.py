@@ -64,6 +64,7 @@ async def verify_token(
     expected_type: Optional[str] = None,
     request: Optional[Request] = None,
 ) -> Dict[str, Any]:
+    async with get_async_session_context() as db:
     """
     Verify and decode a JWT token from cookies.
     Enforces optional token type and checks if token is revoked.
@@ -71,8 +72,8 @@ async def verify_token(
     decoded = None
     token_id = None
 
-    try:
-        decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        try:
+            decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
         # If a specific token type is expected, confirm
         if expected_type and decoded.get("type") != expected_type:
@@ -132,21 +133,21 @@ async def verify_token(
                         status_code=401, detail="Token has been invalidated"
                     )
 
-        logger.debug(
-            f"Token verification successful for jti: {token_id}, user: {username}"
-        )
-        return decoded
+            logger.debug(
+                f"Token verification successful for jti: {token_id}, user: {username}"
+            )
+            return decoded
 
-    except ExpiredSignatureError as exc:
-        logger.warning("Token expired: jti=%s", token_id)
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired - please refresh your session",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
-    except InvalidTokenError as e:
-        logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
-        raise HTTPException(status_code=401, detail="Invalid token") from e
+        except ExpiredSignatureError as exc:
+            logger.warning("Token expired: jti=%s", token_id)
+            raise HTTPException(
+                status_code=401,
+                detail="Token has expired - please refresh your session",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        except InvalidTokenError as e:
+            logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
+            raise HTTPException(status_code=401, detail="Invalid token") from e
 
 
 def revoke_token_id(token_id: str) -> None:
