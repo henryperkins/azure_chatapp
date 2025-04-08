@@ -234,14 +234,7 @@ async def fix_db_schema():
                 except Exception as index_error:
                     logger.error(f"Failed to create index {idx.name}: {index_error}")
                     # Continue instead of failing whole process
-                    else:
-                        logger.warning(
-                            f"Empty create statement for index: {idx.name}"
-                        )
-                    else:
-                        logger.warning(
-                            f"Could not generate create statement for index: {idx.name}"
-                        )
+                    continue
 
         # 3. Handle column type changes
         for table_name, table in Base.metadata.tables.items():
