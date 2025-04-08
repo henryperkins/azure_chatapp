@@ -181,12 +181,6 @@
         throw new Error('WebSocket auth token not available');
       }
 
-      // The token is only used to build the WebSocket URL and then discarded
-      const params = new URLSearchParams({ token: tokenData.token });
-      if (tokenData.version) {
-        params.append("version", tokenData.version);
-      }
-
       // Build WS host from config or fallback
       let host = window.API_CONFIG?.WS_ENDPOINT || window.location.host;
       host = host.replace(/^(wss?:\/\/|https?:\/\/)/, '');
@@ -213,7 +207,7 @@
         this.projectId = null;
       }
 
-      this.wsUrl = `${protocol}${host}${basePath}?${params}`;
+      this.wsUrl = `${protocol}${host}${basePath}`;
       console.debug('Constructed WebSocket URL:', this.wsUrl);
 
       if (!validateWebSocketUrl(this.wsUrl)) {

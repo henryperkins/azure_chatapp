@@ -540,7 +540,7 @@ def set_secure_cookie(
         "value": value,
         "httponly": True,
         "secure": settings.ENV == "production",
-        "samesite": "lax",
+        "samesite": "none" if settings.ENV == "production" else "lax",  # Changed
         "path": "/",
         "max_age": max_age,
     }
