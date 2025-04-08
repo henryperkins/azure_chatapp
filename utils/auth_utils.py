@@ -215,9 +215,16 @@ async def load_revocation_list(db: AsyncSession) -> None:
 
 
 def extract_token(request_or_websocket):
-    """
-    Extracts the 'access_token' cookie—purely cookie-based approach.
-    """
+    """Get JWT from cookies, works for both HTTP and WebSocket"""
+    if isinstance(request_or_websocket, WebSocket):
+        # Special handling for WebSocket cookie extraction
+        cookie_header = request_or_websocket.headers.get("cookie", "")
+        cookies = {
+            c.split("=", 1)[0].strip(): c.split("=", 1)[1].strip()
+            for c in cookie_header.split(";")
+            if "=" in c
+        }
+        return cookies.get("access_token")
     return request_or_websocket.cookies.get("access_token")
 
 
@@ -309,7 +316,15 @@ async def authenticate_websocket(
     """
     Authenticate a WebSocket connection by extracting the access token cookie.
     """
-    token = extract_token(websocket)
+    # Add special handling for browser clients
+    user_agent = websocket.headers.get("user-agent", "").lower()
+    is_browser = any(s in user_agent for s in ["mozilla", "webkit", "chrome"])
+    
+    if is_browser:
+        token = extract_token(websocket)
+    else:
+        # Non-browser clients can send token directly
+        token = await websocket.receive_text()
     if not token:
         logger.warning("WebSocket connection rejected: No cookie token provided")
         try:
