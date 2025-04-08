@@ -125,8 +125,12 @@ async def validate_db_schema():
             udt_name = db_info['udt_name']
             db_max_length = db_info['max_length']
             
+            # Get the actual ORM column object
+            table_obj = Base.metadata.tables[table]
+            column_obj = table_obj.columns[column]
+
             # Get type equivalents for comparison
-            orm_base_type = str(column.type).split('(')[0].upper()
+            orm_base_type = str(column_obj.type).split('(')[0].upper()
             equivalents = type_equivalents.get(orm_base_type, [orm_base_type.lower()])
             
             # Handle special cases first
