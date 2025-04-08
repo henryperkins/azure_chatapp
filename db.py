@@ -341,9 +341,18 @@ async def fix_db_schema():
             # Get existing indexes
             db_indexes = {idx["name"] for idx in inspector.get_indexes(table_name)}
 
-            # Check ORM indexes
-            # Only create non-existent indexes
+            # Check which indexes need to be created
             for idx in [i for i in table.indexes if i.name not in db_indexes]:
+                # Verify all index columns exist first
+                missing_cols = []
+                for col in idx.columns:
+                    if col.name not in {c["name"] for c in inspector.get_columns(table_name)}:
+                        missing_cols.append(col.name)
+                
+                if missing_cols:
+                    logger.warning(f"Skipping index {idx.name} - missing columns: {missing_cols}")
+                    continue
+                
                 try:
                     logger.info(f"Creating index {idx.name} on {table_name}")
                     # Use CONCURRENTLY if possible (PostgreSQL only)

@@ -100,5 +100,3 @@ class TokenBlacklist(Base):
     token_type: Mapped[str] = mapped_column(String(20), default="access", nullable=False, server_default="access")
     creation_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
-    creation_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
