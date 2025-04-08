@@ -27,6 +27,7 @@ import sys
 import warnings
 from pathlib import Path
 from cryptography.utils import CryptographyDeprecationWarning
+from sqlalchemy import text
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
@@ -55,7 +56,7 @@ from routes.user_preferences import router as user_preferences_router
 # -------------------------
 # Import DB & Config
 # -------------------------
-from db import init_db, get_async_session_context, async_engine
+from db import init_db, get_async_session_context, async_engine, Base
 from config import settings
 
 # -------------------------
