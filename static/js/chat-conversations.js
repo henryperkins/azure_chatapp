@@ -53,9 +53,10 @@ window.ConversationService = class ConversationService {
     // Use auth.js for authentication check
     let isAuthenticated = false;
     try {
-      isAuthenticated = await window.auth.isAuthenticated();
+      isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
     } catch (e) {
       console.warn("[chat-conversations] Auth verification failed:", e);
+      window.auth.handleAuthError(e, "loading conversation");
     }
 
     if (!isAuthenticated) {
@@ -189,9 +190,10 @@ window.ConversationService = class ConversationService {
     // Use auth.js for authentication check
     let isAuthenticated = false;
     try {
-      isAuthenticated = await window.auth.isAuthenticated();
+      isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
     } catch (e) {
       console.warn("[chat-conversations] Auth verification failed:", e);
+      window.auth.handleAuthError(e, "deleting conversation");
     }
 
     if (!isAuthenticated) {
