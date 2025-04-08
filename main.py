@@ -398,19 +398,3 @@ async def on_shutdown():
     logger.info("Shutdown complete")
 
 
-async def _get_existing_tables():
-    """Get existing tables using async connection"""
-    async with async_engine.connect() as conn:
-        result = await conn.execute(
-            text("SELECT table_name FROM information_schema.tables")
-        )
-        return {row[0] for row in result.fetchall()}
-
-async def _create_missing_tables(tables: list[str]):
-    """Create missing tables with progress tracking"""
-    for idx, table_name in enumerate(tables, 1):
-        logger.info(f"Creating table {idx}/{len(tables)}: {table_name}")
-        async with async_engine.begin() as conn:
-            await conn.run_sync(
-                lambda sync_conn: Base.metadata.tables[table_name].create(sync_conn)
-            )
