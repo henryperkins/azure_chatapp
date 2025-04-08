@@ -79,7 +79,7 @@ const modelConfigState = {
   saveToStorage() {
     // Verify authentication before saving
     auth.verifyAuthState().then(isAuthenticated => {
-      if (!isAuth) {
+      if (!isAuthenticated) {
         throw new Error("Not authenticated");
       }
       localStorage.setItem("modelName", this.modelName);
