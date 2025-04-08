@@ -410,9 +410,10 @@
         // Check authentication using auth.js
         let isAuthenticated = false;
         try {
-          isAuthenticated = await window.auth.isAuthenticated();
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
         } catch (e) {
           console.warn("Auth verification failed:", e);
+          window.auth.handleAuthError(e, "WebSocket connection test");
         }
 
         if (!isAuthenticated) {

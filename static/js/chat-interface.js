@@ -437,9 +437,16 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       if (!window.auth?.isInitialized) {
         await window.auth.init();
       }
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
       await window.auth.getAuthToken();
     } catch (authError) {
       console.warn("[chat-interface] Authentication failed:", authError);
+      
+      // Let auth.js handle the error
+      window.auth.handleAuthError(authError, "creating conversation");
       
       // Notify UI and fail immediately for auth errors
       window.dispatchEvent(new CustomEvent('authStateChanged', {

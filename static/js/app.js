@@ -87,9 +87,17 @@ async function ensureAuthenticated(options = {}) {
     return false;
   }
 
-  return window.auth.isAuthenticated({
-    forceVerify: options.forceVerify || false
-  });
+  try {
+    return await window.auth.isAuthenticated({
+      forceVerify: options.forceVerify || false
+    });
+  } catch (error) {
+    console.error('Authentication check failed:', error);
+    if (window.auth?.handleAuthError) {
+      window.auth.handleAuthError(error, 'Authentication check');
+    }
+    return false;
+  }
 }
 
 /**
@@ -105,6 +113,11 @@ function clearAuthState() {
     document.dispatchEvent(new CustomEvent('authStateChanged', {
       detail: { authenticated: false }
     }));
+  }
+  
+  // Disconnect any active WebSocket connections
+  if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
+    window.WebSocketService.disconnectAll();
   }
 }
 
