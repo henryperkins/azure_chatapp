@@ -172,6 +172,18 @@
         );
       }
 
+      // Add auth state change listener
+      document.addEventListener('authStateChanged', (e) => {
+        const { authenticated } = e.detail;
+        if (!authenticated) {
+          // Handle unauthenticated state - disable interactive elements
+          this._disableInteractiveElements();
+        } else {
+          // Re-enable elements and potentially refresh data
+          this._enableInteractiveElements();
+        }
+      });
+
       // Setup debounced search
       this.debouncedSearch = this._debounce(this.searchKnowledgeBase.bind(this), 300); // 300ms delay
 
@@ -409,6 +421,23 @@
         return;
       }
 
+      // Verify authentication before proceeding
+      try {
+        const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        if (!isAuthenticated) {
+          console.warn('Toggle KB failed: User not authenticated');
+          if (window.showNotification) {
+            window.showNotification("Please login to toggle knowledge base", "error");
+          }
+          if (this.elements.kbToggle) this.elements.kbToggle.checked = !enabled;
+          return;
+        }
+      } catch (authError) {
+        window.auth.handleAuthError(authError, "knowledge base toggle");
+        if (this.elements.kbToggle) this.elements.kbToggle.checked = !enabled;
+        return;
+      }
+
       const toggle = this.elements.kbToggle;
       const originalState = toggle ? toggle.checked : !enabled; // Store original state before optimistic update
 
@@ -480,6 +509,24 @@
         }
         this._hideSearchLoading();
         return; // Don't proceed
+      }
+
+      // Verify authentication before proceeding
+      try {
+        const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        if (!isAuthenticated) {
+          console.error('KB Search failed: User not authenticated');
+          if (window.showNotification) {
+            window.showNotification("Please login to search knowledge base", "error");
+          }
+          this._hideSearchLoading();
+          return;
+        }
+      } catch (authError) {
+        // Use auth.js error handling
+        window.auth.handleAuthError(authError, "knowledge base search");
+        this._hideSearchLoading();
+        return;
       }
 
       const trimmedQuery = query ? query.trim() : '';
@@ -576,6 +623,21 @@
         if (window.showNotification) {
           window.showNotification("Please select a project first", "error");
         }
+        return;
+      }
+
+      // Verify authentication before proceeding
+      try {
+        const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        if (!isAuthenticated) {
+          console.warn('Reprocess Files failed: User not authenticated');
+          if (window.showNotification) {
+            window.showNotification("Please login to reprocess files", "error");
+          }
+          return;
+        }
+      } catch (authError) {
+        window.auth.handleAuthError(authError, "knowledge base file reprocessing");
         return;
       }
 
@@ -851,6 +913,21 @@
       e.preventDefault();
       const form = e.target;
       if (!form) return;
+
+      // Verify authentication before proceeding
+      try {
+        const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        if (!isAuthenticated) {
+          console.warn('KB Form Submit failed: User not authenticated');
+          if (window.showNotification) {
+            window.showNotification("Please login to save knowledge base settings", "error");
+          }
+          return;
+        }
+      } catch (authError) {
+        window.auth.handleAuthError(authError, "knowledge base form submission");
+        return;
+      }
 
       const formData = new FormData(form);
       const projectId = this._getCurrentProjectId(); // Use helper to get ID
