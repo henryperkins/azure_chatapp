@@ -336,46 +336,74 @@ async function isTokenExpired(token) {
 }
 
 /**
- * Extracts a cookie value by name
+ * Extracts a cookie value by name with improved persistence
  * @param {string} name - Cookie name 
  * @returns {string|null} Cookie value
  */
 function getCookie(name) {
-  // First try localStorage fallback for token persistence
+  // First try standard cookie parsing
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  let cookieValue = null;
+  
+  if (parts.length === 2) {
+    cookieValue = parts.pop().split(';').shift();
+  }
+  
+  // For auth tokens, implement persistent storage
   if (name === 'access_token' || name === 'refresh_token') {
+    // If cookie found, store in localStorage and sessionStorage for persistence
+    if (cookieValue) {
+      try {
+        // Validate token format before saving
+        if (typeof cookieValue === 'string' &&
+            cookieValue.split('.').length === 3 &&
+            cookieValue.length > 30) {
+          localStorage.setItem(`cookie_${name}`, cookieValue);
+          sessionStorage.setItem(`cookie_${name}`, cookieValue); // Also store in session
+        }
+      } catch (e) {
+        console.warn('[Auth] Failed to store token in storage:', e);
+      }
+      return cookieValue;
+    }
+    
+    // If cookie not found, try localStorage fallback
     try {
       const stored = localStorage.getItem(`cookie_${name}`);
       if (stored) {
-        // Basic JWT format validation (3 parts separated by dots)
+        // Basic JWT format validation
         if (typeof stored === 'string' &&
             stored.split('.').length === 3 &&
             stored.length > 30) {
+            
+          // If valid token found in localStorage but not in cookies,
+          // try to restore it to cookies (may not work due to HttpOnly)
+          if (AUTH_DEBUG) console.debug(`[Auth] Restoring ${name} from localStorage fallback`);
+          
+          // Also store in sessionStorage for double fallback
+          sessionStorage.setItem(`cookie_${name}`, stored);
+          
           return stored;
         }
         // Invalid format - remove from storage
         localStorage.removeItem(`cookie_${name}`);
+        sessionStorage.removeItem(`cookie_${name}`);
+      } else {
+        // Last resort - try sessionStorage
+        const sessionStored = sessionStorage.getItem(`cookie_${name}`);
+        if (sessionStored && typeof sessionStored === 'string' &&
+            sessionStored.split('.').length === 3 &&
+            sessionStored.length > 30) {
+          return sessionStored;
+        }
       }
     } catch (e) {
-      console.warn('[Auth] localStorage access failed:', e);
+      console.warn('[Auth] Storage access failed:', e);
     }
   }
-
-  // Standard cookie parsing
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) {
-    const cookieValue = parts.pop().split(';').shift();
-    // Store in localStorage for persistence
-    if (name === 'access_token' || name === 'refresh_token') {
-      try {
-        localStorage.setItem(`cookie_${name}`, cookieValue);
-      } catch (e) {
-        console.warn('[Auth] Failed to store token in localStorage:', e);
-      }
-    }
-    return cookieValue;
-  }
-  return null;
+  
+  return cookieValue;
 }
 
 /**

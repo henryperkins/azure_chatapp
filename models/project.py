@@ -1,10 +1,7 @@
-"""
-Defines the Project model used to group files, notes, and references
-that can be attached to one or more conversations for context.
-"""
+from __future__ import annotations
 
-from uuid import UUID
-from typing import List, Optional, TYPE_CHECKING
+import uuid
+from typing import TYPE_CHECKING, Any
 from datetime import datetime
 from sqlalchemy import (
     String,
@@ -16,13 +13,23 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Index,
+    event,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import event
+
 from db import Base
+
+if TYPE_CHECKING:
+    from models.user import User
+
+
+"""
+Defines the Project model used to group files, notes, and references
+that can be attached to one or more conversations for context.
+"""
 
 
 class Project(Base):
@@ -43,26 +50,31 @@ class Project(Base):
         Index("ix_projects_updated_at", "updated_at"),
     )
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[uuid.UUID] = mapped_column(
+        postgresql.UUID(as_uuid=True),
         primary_key=True,
-        server_default=text("gen_random_uuid()")
+        server_default=text("gen_random_uuid()"),
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    goals: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    goals: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # token_usage and max_tokens are not nullable, so we can remove none checks.
     token_usage: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, server_default="0"
     )
     max_tokens: Mapped[int] = mapped_column(
         Integer, default=200000, nullable=False, server_default="200000"
     )
-    custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    custom_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
-    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(
+
+    knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(
+        postgresql.UUID(as_uuid=True),
         ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -88,7 +100,7 @@ class Project(Base):
         onupdate=text("CURRENT_TIMESTAMP"),
     )
 
-    extra_data: Mapped[Optional[dict]] = mapped_column(
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB(none_as_null=True), nullable=True
     )
 
@@ -100,7 +112,9 @@ class Project(Base):
         passive_deletes=True,
     )
     artifacts = relationship(
-        "Artifact", back_populates="project", cascade="all, delete-orphan"
+        "Artifact",
+        back_populates="project",
+        cascade="all, delete-orphan",
     )
     files = relationship(
         "ProjectFile",
@@ -108,26 +122,33 @@ class Project(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    members: Mapped[List["ProjectUserAssociation"]] = relationship(
+    members: Mapped[list[ProjectUserAssociation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
     knowledge_base = relationship(
         "KnowledgeBase", uselist=False, foreign_keys=[knowledge_base_id]
     )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Project {self.name} (#{self.id}) user_id={self.user_id}>"
 
     @hybrid_property
     def token_status(self) -> bool:
-        """Returns True if token usage is within limit."""
-        usage = self.token_usage if self.token_usage is not None else 0
-        limit = self.max_tokens if self.max_tokens is not None else 200000
-        return usage <= limit
+        """Returns True if current token usage is within the max tokens limit."""
+        return self.token_usage <= self.max_tokens
 
 
 @event.listens_for(Project.knowledge_base_id, "set")
-def validate_knowledge_base_assignment(_target, value, _oldvalue, _initiator):
+def validate_knowledge_base_assignment(
+    _target: Project,
+    value: uuid.UUID | None,
+    _oldvalue: uuid.UUID | None,
+    _initiator: Any,
+) -> uuid.UUID | None:
+    """
+    Prevent reassigning a different knowledge base
+    once this project is already associated with one.
+    """
     if value and _oldvalue and value != _oldvalue:
         raise ValueError(
             "Cannot change knowledge base association - create a new knowledge base instead"
@@ -138,19 +159,17 @@ def validate_knowledge_base_assignment(_target, value, _oldvalue, _initiator):
 class ProjectUserAssociation(Base):
     __tablename__ = "project_users"
     __table_args__ = (
-        Index('ix_project_users_joined_at', 'joined_at'),
-        Index('ix_project_users_role', 'role'),
+        Index("ix_project_users_joined_at", "joined_at"),
+        Index("ix_project_users_role", "role"),
     )
 
-    project_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        postgresql.UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
-        primary_key=True
+        primary_key=True,
     )
     user_id: Mapped[int] = mapped_column(
-        Integer,  # Matches User.id which uses Integer for user IDs
-        ForeignKey("users.id", ondelete="CASCADE"), 
-        primary_key=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[str] = mapped_column(String(50), default="member")
     joined_at: Mapped[datetime] = mapped_column(
@@ -158,9 +177,5 @@ class ProjectUserAssociation(Base):
     )
 
     # Relationships
-    project: Mapped["Project"] = relationship(back_populates="members")
-    user: Mapped["User"] = relationship(back_populates="project_associations")
-
-
-if TYPE_CHECKING:
-    from models.user import User
+    project: Mapped[Project] = relationship(back_populates="members")
+    user: Mapped[User] = relationship(back_populates="project_associations")

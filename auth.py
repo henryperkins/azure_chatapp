@@ -9,12 +9,12 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta
-from typing import Any, Literal, Optional, cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import bcrypt
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/settings/token-expiry", response_model=dict)
-async def get_token_expiry_settings() -> dict:
+async def get_token_expiry_settings() -> dict[str,int]:
     """
     Expose token expiration settings to the frontend.
     """
@@ -100,7 +100,7 @@ def validate_password(password: str):
 @router.post("/register", response_model=dict)
 async def register_user(
     creds: UserCredentials, session: AsyncSession = Depends(get_async_session)
-) -> dict:
+) -> dict[str, str]:
     """
     Registers a new user with a hashed password, enforcing password policy.
     """
@@ -124,7 +124,11 @@ async def register_user(
     await session.commit()
     await session.refresh(user)
 
-    user.last_login = datetime.utcnow()
+    # Convert UTC timezone-aware datetime to naive datetime for DB compatibility
+    now_utc = datetime.now(timezone.utc)
+    naive_now = now_utc.replace(tzinfo=None)  # Remove timezone info
+    
+    user.last_login = naive_now
     session.add(user)
     await session.commit()
 
@@ -181,20 +185,23 @@ async def login_user(
         if not locked_user:
             raise HTTPException(status_code=500, detail="User lock failed")
 
+        # Use current time without timezone information for DB compatibility
+        # Get current UTC time with timezone info
+        now_utc = datetime.now(timezone.utc)
         locked_user.last_login = datetime.utcnow()
         # Update token version using current timestamp
-        current_ts = int(datetime.utcnow().timestamp())
+        current_ts = int(now_utc.timestamp())
         locked_user.token_version = current_ts
 
         await session.commit()
 
         # Generate tokens after successful commit
         token_id = str(uuid.uuid4())
-        expire_at = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_payload = {
             "sub": locked_user.username,
             "exp": expire_at,
-            "iat": datetime.utcnow(),
+            "iat": datetime.now(timezone.utc),
             "jti": token_id,
             "type": "access",
             "version": locked_user.token_version,
@@ -203,11 +210,11 @@ async def login_user(
         access_token = create_access_token(access_payload)
 
         refresh_token_id = str(uuid.uuid4())
-        refresh_expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        refresh_expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         refresh_payload = {
             "sub": locked_user.username,
             "exp": refresh_expire,
-            "iat": datetime.utcnow(),
+            "iat": datetime.now(timezone.utc),
             "jti": refresh_token_id,
             "type": "refresh",
             "version": locked_user.token_version,
@@ -302,17 +309,21 @@ async def refresh_token(
                 )
 
             # Update last activity for sliding session
-            locked_user.last_login = datetime.utcnow()
-            locked_user.last_activity = datetime.utcnow()
+            # Convert UTC timezone-aware datetime to naive datetime for DB compatibility
+            now_utc = datetime.now(timezone.utc)
+            naive_now = now_utc.replace(tzinfo=None)  # Remove timezone info
+            
+            locked_user.last_login = naive_now
+            locked_user.last_activity = naive_now
 
             token_id = str(uuid.uuid4())
-            expire_at = datetime.utcnow() + timedelta(
+            expire_at = datetime.now(timezone.utc) + timedelta(
                 minutes=ACCESS_TOKEN_EXPIRE_MINUTES
             )
             payload = {
                 "sub": username,
                 "exp": expire_at,
-                "iat": datetime.utcnow(),
+                "iat": datetime.now(timezone.utc),
                 "jti": token_id,
                 "type": "access",
                 "version": locked_user.token_version,  # Use existing version
@@ -329,23 +340,23 @@ async def refresh_token(
                     if decoded and "exp" in decoded:
                         # Calculate time until expiration
                         expires_at = datetime.fromtimestamp(decoded["exp"])
-                        time_remaining = expires_at - datetime.utcnow()
+                        time_remaining = expires_at - datetime.now(timezone.utc)
                         # Renew refresh token if it expires in less than 6 hours
                         if time_remaining < timedelta(hours=6):
                             new_refresh_token_id = str(uuid.uuid4())
-                            new_refresh_expire = datetime.utcnow() + timedelta(
+                            new_refresh_expire = datetime.now(timezone.utc) + timedelta(
                                 days=REFRESH_TOKEN_EXPIRE_DAYS
                             )
                             
                             # Determine time since last login
                             time_since_login = None
                             if locked_user.last_login:
-                                time_since_login = datetime.utcnow() - locked_user.last_login
+                                time_since_login = datetime.now(timezone.utc) - locked_user.last_login
                                 
                             # Only increment version when it's been at least 30 seconds since login
                             # This prevents token invalidation immediately after login
                             if not time_since_login or time_since_login > timedelta(seconds=30):
-                                current_ts = int(datetime.utcnow().timestamp())
+                                current_ts = int(datetime.now(timezone.utc).timestamp())
                                 old_version = locked_user.token_version
                                 locked_user.token_version = max(
                                     current_ts,
@@ -364,7 +375,7 @@ async def refresh_token(
                             new_refresh_payload = {
                                 "sub": username,
                                 "exp": new_refresh_expire,
-                                "iat": datetime.utcnow(),
+                                "iat": datetime.now(timezone.utc),
                                 "jti": new_refresh_token_id,
                                 "type": "refresh",
                                 "version": locked_user.token_version,  # Use new version
@@ -376,6 +387,7 @@ async def refresh_token(
                                 "refresh_token",
                                 new_refresh_token,
                                 max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+                                request=request
                             )
                             # Invalidate the old refresh token
                             revoke_token_id(decoded["jti"])
@@ -398,6 +410,7 @@ async def refresh_token(
             "access_token",
             new_token,
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            request=request
         )
 
         return LoginResponse(access_token=new_token, token_type="bearer")
@@ -409,14 +422,14 @@ async def refresh_token(
 @router.get("/token-info")
 async def get_token_info(
     current_user: User = Depends(get_current_user_and_token),
-) -> dict:
+) -> dict[str, Any]:
     """Returns token metadata including expiry time."""
     return {
         "authenticated": True,
         "username": current_user.username,
         "user_id": current_user.id,
         "expires_at": (
-            datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         ).isoformat(),
         "version": current_user.token_version,
     }
@@ -425,7 +438,7 @@ async def get_token_info(
 @router.get("/verify")
 async def verify_auth_status(
     current_user: User = Depends(get_current_user_and_token),
-) -> dict:
+) -> dict[str, Any]:
     """Verifies valid authentication state."""
     return {
         "authenticated": True,
@@ -438,17 +451,17 @@ async def verify_auth_status(
 async def get_websocket_token(
     current_user: User = Depends(get_current_user_and_token),
     session: AsyncSession = Depends(get_async_session),
-) -> dict:
+) -> dict[str, Any]:
     """
     Generates a short-lived token specifically for WebSocket authentication.
     """
     token_id = str(uuid.uuid4())
-    expire_at = datetime.utcnow() + timedelta(minutes=5)  # Short-lived token
+    expire_at = datetime.now(timezone.utc) + timedelta(minutes=5)  # Short-lived token
 
     payload = {
         "sub": current_user.username,
         "exp": expire_at,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(timezone.utc),
         "jti": token_id,
         "type": "ws",
         "version": current_user.token_version,
@@ -465,13 +478,13 @@ async def get_websocket_token(
 
 
 @router.get("/test-cookie")
-async def test_cookie(response: Response):
-    set_secure_cookie(response, "test_cookie", "works", max_age=30)
+async def test_cookie(request: Request, response: Response) -> dict[str, str]:
+    set_secure_cookie(response, "test_cookie", "works", max_age=30, request=request)
     return {"status": "cookie set"}
 
 @router.get("/timestamp")
-async def get_server_time():
-    return {"serverTimestamp": datetime.utcnow().timestamp()}
+async def get_server_time() -> dict[str, float]:
+    return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
 
 @router.post("/logout")
 async def logout_user(
@@ -479,7 +492,7 @@ async def logout_user(
     response: Response,
     user: User = Depends(get_refresh_token_user),
     session: AsyncSession = Depends(get_async_session),
-) -> dict:
+) -> dict[str, str]:
     """
     Invalidates refresh token and increments token_version to invalidate
     *all* existing tokens. Clears auth cookies.
@@ -507,7 +520,7 @@ async def logout_user(
     # Invalidate all user tokens
     try:
         async with session.begin_nested():
-            current_ts = int(datetime.utcnow().timestamp())
+            current_ts = int(datetime.now(timezone.utc).timestamp())
             locked_user = await session.get(User, user.id, with_for_update=True)
             if locked_user:
                 locked_user.token_version = current_ts
@@ -526,14 +539,14 @@ async def logout_user(
 
     # Expire cookies
     set_secure_cookie(response, "access_token", "", max_age=0, request=request)
-    set_secure_cookie(response, "refresh_token", "", max_age=0)
+    set_secure_cookie(response, "refresh_token", "", max_age=0, request=request)
 
     return {"status": "logged out"}
 
 
 def set_secure_cookie(
-    response: Response, key: str, value: str, max_age: Optional[int] = None,
-    request: Optional[Request] = None
+    response: Response, key: str, value: str, max_age: int | None = None,
+    request: Request | None = None
 ):
     """
     Sets a secure HTTP-only cookie with explicit expiration to ensure persistence across browser sessions.
@@ -550,16 +563,14 @@ def set_secure_cookie(
         "value": value,
         "httponly": True,
         "secure": settings.ENV == "production",
-        "samesite": "lax",  # Changed to lax for better cross-site compatibility
-        "path": "/",
+        "samesite": "lax",  # Use lax for better cross-site compatibility
+        "path": "/",        # Always set path to root to ensure cookies work across all pages
         "max_age": max_age if max_age is not None else 60 * 60 * 24 * 30,  # Default 30 days if not specified
     }
 
-    # Only set domain if in production and we have request headers
-    if settings.ENV == "production" and request:
-        host = request.headers.get("host", "").split(":")[0]
-        if host and not host.startswith("localhost"):
-            cookie_kwargs["domain"] = host
+    # IMPORTANT: Do NOT set domain for typical single-domain applications
+    # Setting domain can cause issues with cookie persistence during navigation
+    # Only set domain for subdomain/cross-domain scenarios, and only when required
 
     # Convert and validate cookie parameters with strict typing
     key = str(cookie_kwargs["key"])
@@ -586,9 +597,15 @@ def set_secure_cookie(
         except (ValueError, TypeError):
             max_age = None
     
-    # Prepare domain if present
+    # Prepare domain if present - Use request to help determine domain if provided
     domain = None
-    if "domain" in cookie_kwargs and cookie_kwargs["domain"] is not None:
+    if request is not None and request.headers.get("host"):
+        # Extract domain from host header, removing port if present
+        host = request.headers.get("host").split(":")[0]
+        # Only set domain for non-localhost domains
+        if not (host == "localhost" or host.startswith("127.0.0.1")):
+            domain = host
+    elif "domain" in cookie_kwargs and cookie_kwargs["domain"] is not None:
         domain = str(cookie_kwargs["domain"])
     
     # Call set_cookie with validated parameters
