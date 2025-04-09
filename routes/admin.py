@@ -35,3 +35,12 @@ from services import knowledgebase_service
 from utils.auth_utils import get_admin_user
 
 router = APIRouter()
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from models.project import Project
+from models.user import User
+from db import get_async_session
+from utils.auth_utils import get_admin_user
+
+router = APIRouter()
