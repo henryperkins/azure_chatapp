@@ -293,12 +293,11 @@ async def update_conversation(
     filters_to_use: list[BinaryExpression[bool]] = []
     if project:
         filters_to_use = [
-            cast(BinaryExpression[bool], Conversation.project_id == project.id),
+            cast(BinaryExpression[bool], (Conversation.project_id == project.id) | (Conversation.project_id.is_(None))),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
     else:
         filters_to_use = [
-            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
 
@@ -449,7 +448,6 @@ async def list_conversation_messages(
         ]
         if project_id
         else [
-            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
         ]
     )
@@ -525,7 +523,6 @@ async def create_message(
         ]
         if project_id
         else [
-            cast(BinaryExpression[bool], Conversation.project_id.is_(None)),
             cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
             cast(BinaryExpression[bool], Conversation.user_id == current_user.id),
         ]
