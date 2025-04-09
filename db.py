@@ -9,7 +9,7 @@ import logging
 import time
 from datetime import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.exc import OperationalError
+# Removed
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -63,10 +63,11 @@ async def get_async_session_context():
         await session.close()
 
 
-async def validate_db_schema():
+# Removed
+
+async def validate_db_schema() -> list[str]:
     """Validate schema and return (has_mismatches, details) tuple"""
-    from sqlalchemy import MetaData, inspect
-    from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+    # Removed
     
     logger.info("Validating database schema...")
     mismatch_details = []
@@ -215,13 +216,17 @@ async def _create_missing_tables(tables: list[str]):
                 lambda sync_conn: Base.metadata.tables[table_name].create(sync_conn)
             )
 
-async def load_revocation_list(engine) -> None:
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+async def load_revocation_list(engine: AsyncEngine) -> None:
     """
     Move revocation list loading into db module 
     to resolve circular dependency
     """
     from utils.auth_utils import REVOCATION_LIST
+    from datetime import datetime
     now = datetime.utcnow()
+    # Removed duplicate or conflicting line
     async with engine.connect() as conn:
         query = text("SELECT jti FROM token_blacklist WHERE expires >= :now")
         result = await conn.execute(query, {'now': now})
@@ -266,7 +271,7 @@ async def init_db() -> None:
         raise
 
 
-async def fix_db_schema():
+async def fix_db_schema() -> None:
     """Comprehensive schema alignment using synchronous session for DDL"""
     from sqlalchemy import inspect, text
     from sqlalchemy.dialects.postgresql import UUID as PG_UUID

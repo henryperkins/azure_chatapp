@@ -97,25 +97,35 @@
           throw new Error('Auth module not available');
         }
 
-        // Check auth state using direct method to avoid verification cycles
-        let isAuthenticated = false;
-        try {
-          isAuthenticated = window.auth.authState?.isAuthenticated ||
-                            await window.auth.isAuthenticated({ skipCache: true });
-        } catch (authError) {
-          console.warn("[WSFix] Auth verification error:", authError);
-          try {
-            // Attempt refresh if verify failed
-            const refreshResult = await window.auth.refreshTokens().catch(e => null);
-            isAuthenticated = refreshResult?.success || false;
-          } catch (refreshError) {
-            console.error("[WSFix] Auth refresh failed:", refreshError);
+        // Use direct token access if available from recent login
+        // This prevents race conditions with token refresh
+        if (window.__directAccessToken && window.__recentLoginTimestamp) {
+          const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
+          if (timeSinceLogin < 5000) {
+            console.log("[WSFix] Using direct access token from recent login");
+            isAuthenticated = true;
           }
-        }
+        } else {
+          // Check auth state using direct method to avoid verification cycles
+          let isAuthenticated = false;
+          try {
+            isAuthenticated = window.auth.authState?.isAuthenticated ||
+                              await window.auth.isAuthenticated({ skipCache: false });
+          } catch (authError) {
+            console.warn("[WSFix] Auth verification error:", authError);
+            try {
+              // Attempt refresh if verify failed
+              const refreshResult = await window.auth.refreshTokens().catch(e => null);
+              isAuthenticated = refreshResult?.success || false;
+            } catch (refreshError) {
+              console.error("[WSFix] Auth refresh failed:", refreshError);
+            }
+          }
 
-        if (!isAuthenticated) {
-          console.error("[WSFix] Not authenticated for WebSocket connection");
-          throw new Error('User not authenticated');
+          if (!isAuthenticated) {
+            console.error("[WSFix] Not authenticated for WebSocket connection");
+            throw new Error('User not authenticated');
+          }
         }
 
         // Add diagnostic data to original connection method
@@ -242,9 +252,22 @@
         // Handle token refresh requests
         if (data.type === 'token_refresh_required') {
           console.log('[WSFix] Server requested token refresh');
-          this._handleTokenRefresh().catch(err => {
-            console.error('[WSFix] Token refresh failed:', err);
-          });
+          // Don't trigger token refresh during navigation or if token is recent
+          if (window.__directAccessToken && window.__recentLoginTimestamp && 
+              (Date.now() - window.__recentLoginTimestamp < 5000)) {
+            console.log('[WSFix] Skipping token refresh - using recent direct token');
+            // Notify server we've handled it
+            if (this.isConnected()) {
+              this.socket.send(JSON.stringify({
+                type: 'token_refresh_acknowledged',
+                timestamp: new Date().toISOString()
+              }));
+            }
+          } else {
+            this._handleTokenRefresh().catch(err => {
+              console.error('[WSFix] Token refresh failed:', err);
+            });
+          }
           return;
         }
 
@@ -279,7 +302,45 @@
     // Enhanced token refresh logic
     window.WebSocketService.prototype._handleTokenRefresh = async function() {
       try {
+        // Check if we have a recent login token - avoid refresh if so
+        if (window.__directAccessToken && window.__recentLoginTimestamp) {
+          const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
+          if (timeSinceLogin < 5000) {
+            console.log("[WSFix] Using direct access token from recent login, skipping refresh");
+            
+            // Still notify the server that we've acknowledged the refresh request
+            if (this.isConnected()) {
+              this.socket.send(JSON.stringify({
+                type: 'token_refresh_acknowledged',
+                timestamp: new Date().toISOString(),
+                source: 'direct_token'
+              }));
+            }
+            return true;
+          }
+        }
+        
         console.log("[WSFix] Performing token refresh");
+
+        // Check if we already have a valid access token in cookie
+        const accessToken = document.cookie.split('; ')
+          .find(row => row.startsWith('access_token='))
+          ?.split('=')[1];
+        
+        if (accessToken && window.auth.authState?.lastVerified && 
+            (Date.now() - window.auth.authState.lastVerified < 10000)) {
+          console.log("[WSFix] Using recently verified token, skipping refresh");
+          
+          // Notify server
+          if (this.isConnected()) {
+            this.socket.send(JSON.stringify({
+              type: 'token_refresh',
+              timestamp: new Date().toISOString(),
+              source: 'verified_token'
+            }));
+          }
+          return true;
+        }
 
         // Attempt token refresh through auth.js
         await window.auth.refreshTokens();
@@ -288,7 +349,8 @@
         if (this.isConnected()) {
           this.socket.send(JSON.stringify({
             type: 'token_refresh',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            source: 'refreshed_token'
           }));
 
           console.log("[WSFix] Token refresh notification sent to server");
@@ -331,13 +393,30 @@
 
       if (isAuthError && window.auth) {
         console.log("[WSFix] Authentication error detected, handling with auth.js");
+        
+        // Check if we're in the middle of navigation (detected by recent page interactions)
+        // This helps prevent unnecessary logout during page transitions
+        const recentPageInteraction = sessionStorage.getItem('last_page_interaction');
+        const isNavigating = recentPageInteraction && 
+                             (Date.now() - parseInt(recentPageInteraction, 10) < 2000);
+        
+        if (isNavigating) {
+          console.log("[WSFix] Detected navigation in progress, deferring auth error handling");
+          // Just use HTTP fallback without triggering auth error flow
+          this.useHttpFallback = true;
+          return;
+        }
+        
         window.auth.refreshTokens()
           .then(() => this.attemptReconnection())
           .catch(refreshError => {
             console.error("[WSFix] Auth refresh failed:", refreshError);
-
-            // Let auth.js handle the error
-            window.auth.handleAuthError(refreshError, 'WebSocket reconnection');
+            
+            // Don't trigger handleAuthError during page navigation
+            if (!isNavigating) {
+              // Let auth.js handle the error
+              window.auth.handleAuthError(refreshError, 'WebSocket reconnection');
+            }
 
             // Fall back to HTTP
             this.useHttpFallback = true;
@@ -498,11 +577,40 @@
     }
   }
 
+  // Add navigation detection to prevent auth errors during page transitions
+  function setupNavigationTracking() {
+    // Store timestamp when user interacts with the page
+    function recordInteraction() {
+      sessionStorage.setItem('last_page_interaction', Date.now().toString());
+    }
+    
+    // Track clicks on navigation elements
+    document.addEventListener('click', (e) => {
+      // Specifically track clicks on project management links
+      if (e.target.closest('a[href*="project"]') || 
+          e.target.closest('button[data-action*="project"]') ||
+          e.target.closest('#manageDashboardBtn') ||
+          e.target.closest('#projectsNav')) {
+        console.log("[WSFix] Detected navigation click");
+        recordInteraction();
+      }
+    });
+    
+    // Also track before unload/navigation events
+    window.addEventListener('beforeunload', recordInteraction);
+    
+    // Record page load as an interaction
+    recordInteraction();
+  }
+  
+  // Set up navigation tracking
+  setupNavigationTracking();
+  
   console.log("[WSFix] All fixes applied");
   
   // Export version for diagnostic purposes
   window.WebSocketFix = {
-    version: "1.0.1",
+    version: "1.0.2",
     applied: true
   };
 })();

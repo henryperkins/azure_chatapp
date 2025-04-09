@@ -981,6 +981,21 @@ window.projectDashboardUtils.notifications = {
   },
   
   // Other notification methods can be added here
+}
+
+// Additional function to fix showProjectsView not defined
+window.showProjectsView = function() {
+  // Show the Projects list view
+  const listView = document.getElementById('projectListView');
+  if(listView) {
+    listView.classList.remove('hidden');
+  }
+
+  // Hide the Project Details view if it's visible
+  const detailsView = document.getElementById('projectDetailsView');
+  if(detailsView) {
+    detailsView.classList.add('hidden');
+  }
 };
 
 // Replace the simple API error function with our enhanced version

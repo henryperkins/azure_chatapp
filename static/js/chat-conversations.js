@@ -133,6 +133,24 @@ window.ConversationService = class ConversationService {
             fallbackProjectId = localStorage.getItem("selectedProjectId");
           }
           
+          // BUGFIX: Also try to extract project ID from URL path as a last resort
+          if (!fallbackProjectId) {
+            const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
+            if (pathMatch && pathMatch[1]) {
+              console.log(`Extracted project ID from URL path: ${pathMatch[1]}`);
+              fallbackProjectId = pathMatch[1];
+            }
+          }
+          
+          // BUGFIX: Check URL query parameters for projectId
+          if (!fallbackProjectId) {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('projectId')) {
+              fallbackProjectId = urlParams.get('projectId');
+              console.log(`Found project ID in URL query: ${fallbackProjectId}`);
+            }
+          }
+          
           if (fallbackProjectId) {
             console.log(`Message retrieval failed with endpoint ${msgUrl}. Trying project endpoint with ID ${fallbackProjectId}.`);
             msgUrl = `/api/chat/projects/${fallbackProjectId}/conversations/${chatId}/messages`;

@@ -1672,10 +1672,10 @@
       const filename = fileInfo.filename || metadata.file_name || "Unknown Source";
 
       // Populate modal content
-      resultTitle.textContent = `Detail: ${this._formatSourceName(filename)}`;
-      resultTitle.title = filename; // Full name in title
-      resultSource.textContent = `Source: ${filename}`;
-      resultScore.textContent = `Match Score: ${scorePercentage}%`;
+  resultTitle.textContent = `Detail: ${this._formatSourceName(filename)}`;
+  resultTitle.title = filename; // Full name in title
+  resultSource.textContent = filename;
+  resultScore.textContent = `${scorePercentage}%`;
       // Use pre-wrap to preserve formatting/line breaks in the text content
       resultContent.textContent = result.text || 'No content available.';
       resultContent.style.whiteSpace = 'pre-wrap';

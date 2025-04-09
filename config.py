@@ -3,8 +3,9 @@
 
 import os
 from dotenv import load_dotenv
+from typing import Any
 from pathlib import Path
-import uuid
+# Removed unused imports
 
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
@@ -65,7 +66,7 @@ class Settings:
         "2025-03-01-preview"  # Recommended for reasoning models
     )
 
-    AZURE_OPENAI_MODELS = {
+    AZURE_OPENAI_MODELS: dict[str, dict[str, Any]] = {
         "o1": {
             "provider": "azure",
             "type": "multimodal",
@@ -178,7 +179,7 @@ class Settings:
         os.getenv("CLAUDE_EXTENDED_THINKING_BUDGET", "16000")
     )
 
-    CLAUDE_MODELS = {
+    CLAUDE_MODELS: dict[str, dict[str, Any]] = {
         "claude-3-opus-20240229": {
             "provider": "anthropic",
             "type": "text",

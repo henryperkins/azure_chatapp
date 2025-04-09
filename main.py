@@ -27,7 +27,8 @@ import sys
 import warnings
 from pathlib import Path
 from cryptography.utils import CryptographyDeprecationWarning
-from sqlalchemy import text
+from typing import Callable, Awaitable
+from fastapi import Response
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
@@ -56,7 +57,7 @@ from routes.user_preferences import router as user_preferences_router
 # -------------------------
 # Import DB & Config
 # -------------------------
-from db import init_db, get_async_session_context, async_engine, Base
+from db import init_db, get_async_session_context, async_engine
 from config import settings
 
 # -------------------------
@@ -151,7 +152,10 @@ app = FastAPI(
 
 # Add Cache-Control headers to auth-related responses
 @app.middleware("http")
-async def add_cache_control(request: Request, call_next):
+async def add_cache_control(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Add Cache-Control headers to auth-related responses to prevent browser caching"""
     response = await call_next(request)
     if request.url.path.startswith("/api/auth/"):
@@ -165,7 +169,10 @@ if settings.ENV == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
 
     @app.middleware("http")
-    async def add_hsts_header(request: Request, call_next):
+    async def add_hsts_header(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         response = await call_next(request)
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
