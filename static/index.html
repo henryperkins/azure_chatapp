@@ -39,6 +39,12 @@
       </div>
 
       <div class="flex items-center space-x-4">
+        <!-- Dark mode toggle -->
+        <button id="darkModeToggle" class="p-2 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600">
+          <svg id="darkModeIcon" class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </button>
         <!-- User status (when logged in) -->
         <span id="userStatus" class="transition-colors text-sm font-medium">Offline</span>
         
@@ -1148,6 +1154,40 @@ window.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
   </div>
+
+  <!-- Dark Mode Toggle -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const darkModeToggle = document.getElementById('darkModeToggle');
+      const darkModeIcon = document.getElementById('darkModeIcon');
+      
+      // Check for saved preference or system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const savedMode = localStorage.getItem('darkMode');
+      const isDark = savedMode ? savedMode === 'true' : prefersDark;
+      
+      // Apply initial mode
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        darkModeIcon.setAttribute('stroke', 'currentColor');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      
+      // Toggle handler
+      darkModeToggle.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('darkMode', isDark);
+        
+        // Update icon
+        if (isDark) {
+          darkModeIcon.setAttribute('stroke', 'currentColor');
+        } else {
+          darkModeIcon.setAttribute('stroke', 'currentColor');
+        }
+      });
+    });
+  </script>
 
   <!-- Core Configuration & Utilities -->
   <script type="module" src="/static/js/app.js"></script>

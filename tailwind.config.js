@@ -95,8 +95,12 @@ module.exports = {
           }
         },
         border: {
-          DEFAULT: '#e5e7eb', // Existing border-gray-200
-          dark: '#374151', // Existing dark:border-gray-700
+          DEFAULT: '#e5e7eb', // border-gray-200
+          dark: '#374151', // dark:border-gray-700
+          hover: {
+            light: '#d1d5db', // border-gray-300
+            dark: '#4b5563' // border-gray-600
+          }
         },
         skeleton: {
           DEFAULT: '#f3f4f6', // bg-gray-100
