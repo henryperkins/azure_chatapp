@@ -188,7 +188,7 @@ class ConversationService:
         title: str,
         model_id: str,
         project_id: Optional[UUID] = None,
-        use_knowledge_base: bool = False,  # Allow explicitly setting KB usage
+        use_knowledge_base: bool = False,  # This parameter will be ignored for project conversations
         # Allow passing initial AI settings
         ai_settings: Optional[Dict[str, Any]] = None,
     ) -> Conversation:
@@ -205,36 +205,27 @@ class ConversationService:
             title=title.strip(),
             model_id=model_id,
             project_id=project_id,
-            use_knowledge_base=use_knowledge_base,
+            use_knowledge_base=False,  # Default to False, will set correctly below
             # Store initial AI settings if provided
             extra_data={"ai_settings": ai_settings} if ai_settings else None,
         )
 
-        # Auto-enable knowledge base if project has one and not explicitly disabled
+        # For project conversations, automatically use KB if it exists
         if project_id:
             project = await self._validate_project_access(
                 project_id, user_id
             )  # Raises on failure
-            if (
-                project and project.knowledge_base_id and not use_knowledge_base
-            ):  # Check if explicitly disabled
+            if project and project.knowledge_base_id:
                 logger.info(
-                    f"Project {project_id} has KB, but use_knowledge_base is false for new conversation."
-                )
-                conv.use_knowledge_base = False
-            elif project and project.knowledge_base_id:
-                logger.info(
-                    f"Project {project_id} has KB, enabling for new conversation {conv.id}."
+                    f"Project {project_id} has KB, automatically enabling for conversation {conv.id}."
                 )
                 conv.use_knowledge_base = True
                 from typing import cast
                 conv.knowledge_base_id = project.knowledge_base_id or None  # type: ignore
-                # Token usage check is better done when messages are added, not on creation
-                # try:
-                #     await conv.validate_knowledge_base(self.db)
-                # except Exception as e:
-                #     logger.warning(f"Knowledge base validation issue during creation: {str(e)}")
-                #     conv.use_knowledge_base = False # Disable if validation fails
+                # The use_knowledge_base parameter is ignored for project conversations
+        else:
+            # For standalone conversations, honor the parameter
+            conv.use_knowledge_base = use_knowledge_base
 
         # Verify project assignment before saving (redundant if _validate_project_access works)
         if project_id and conv.project_id != project_id:
@@ -324,28 +315,34 @@ class ConversationService:
                 updated = True
             except ConversationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
+            
+        # Handle use_knowledge_base toggle - but only for non-project conversations
         if (
             use_knowledge_base is not None
             and conv.use_knowledge_base != use_knowledge_base
         ):
-            if use_knowledge_base and not conv.project_id:
-                raise ConversationError(
-                    "Knowledge base requires project association", 400
-                )
-            # If enabling KB, link to project's KB ID if not already set
-            if use_knowledge_base and conv.project_id and not conv.knowledge_base_id:
+            # If this is a project conversation, don't allow disabling KB if project has one
+            if conv.project_id:
                 project = await self._validate_project_access(UUID(str(conv.project_id)), user_id)
-                if project.knowledge_base_id:
+                if project.knowledge_base_id and not use_knowledge_base:
+                    logger.warning(f"Attempt to disable KB for project conversation {conv.id} ignored")
+                    # Ignore the attempt to disable KB for project conversations
+                elif project.knowledge_base_id:
+                    # Allow enabling it if project has KB (though this should already be enabled)
+                    conv.use_knowledge_base = True
                     conv.knowledge_base_id = project.knowledge_base_id or None  # type: ignore
-                else:
-                    # Project doesn't have a KB, cannot enable
-                    raise ConversationError(
-                        "Cannot enable knowledge base: Project has no associated knowledge base.",
-                        400,
-                    )
-
-            conv.use_knowledge_base = use_knowledge_base
-            updated = True
+                    updated = True
+                elif not project.knowledge_base_id:
+                    # If project has no KB, we can't enable it
+                    if use_knowledge_base:
+                        raise ConversationError(
+                            "Cannot enable knowledge base: Project has no associated knowledge base.",
+                            400,
+                        )
+            else:
+                # For standalone conversations, allow toggling
+                conv.use_knowledge_base = use_knowledge_base
+                updated = True
 
         # Update AI settings (merge or replace)
         if ai_settings is not None:
