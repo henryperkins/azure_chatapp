@@ -67,22 +67,94 @@ window.ConversationService = class ConversationService {
     this.onLoadingStart();
 
     try {
-      const projectId = window.location.pathname.includes('/projects/')
-        ? window.location.pathname.split('/')[2]
-        : null;
-
-      let convUrl, msgUrl;
-
-      if (projectId) {
-        convUrl = `/api/chat/projects/${projectId}/conversations/${chatId}`;
-        msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
-      } else {
-        convUrl = `/api/chat/conversations/${chatId}`;
-        msgUrl = `/api/chat/conversations/${chatId}/messages`;
+      // First determine if the conversation belongs to a project
+      // We'll try the standalone endpoint first
+      let convUrl = `/api/chat/conversations/${chatId}`;
+      let msgUrl = `/api/chat/conversations/${chatId}/messages`;
+      let conversation, messages;
+      let isProjectConversation = false;
+      let projectId = null;
+      
+      try {
+        // Try to load the conversation from the standalone endpoint
+        conversation = await apiRequest(convUrl, "GET");
+      } catch (error) {
+        if (error.status === 404) {
+          // If 404, the conversation might belong to a project
+          // Get the project ID from the URL or localStorage
+          projectId = window.location.pathname.includes('/projects/') 
+            ? window.location.pathname.split('/')[2] 
+            : localStorage.getItem("selectedProjectId");
+            
+          if (projectId) {
+            // Try the project-specific endpoint
+            console.log(`Conversation ${chatId} not found in standalone conversations. Trying project ${projectId}.`);
+            convUrl = `/api/chat/projects/${projectId}/conversations/${chatId}`;
+            msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
+            isProjectConversation = true;
+            conversation = await apiRequest(convUrl, "GET");
+          } else {
+            // If no project ID available, re-throw the original error
+            throw error;
+          }
+        } else {
+          // For other error types, re-throw
+          throw error;
+        }
       }
-
-      const conversation = await apiRequest(convUrl, "GET");
-      const messages = await apiRequest(msgUrl, "GET");
+      
+      // If we got here, we have a valid conversation.
+      
+      // Ensure we are using the correct msg URL based on where we found the conversation
+      if (isProjectConversation) {
+        msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
+      } else if (conversation.project_id) {
+        // If conversation was found via standalone endpoint but has a project_id
+        // This is important - some endpoints might allow retrieving project conversations
+        // via the standalone endpoint (for compatibility), but messages API might be strict
+        projectId = conversation.project_id;
+        msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
+        isProjectConversation = true;
+      }
+      
+      // Now get messages using the correct endpoint
+      try {
+        messages = await apiRequest(msgUrl, "GET");
+      } catch (error) {
+        if (error.status === 404) {
+          // Even if we already tried to handle this by checking conversation.project_id earlier,
+          // we'll still try to fall back to project endpoint if:
+          // 1. We have a project ID from any source
+          // 2. Or we can extract one from the conversation
+          let fallbackProjectId = projectId || conversation.project_id;
+          
+          // Also try localStorage as a last resort
+          if (!fallbackProjectId && localStorage) {
+            fallbackProjectId = localStorage.getItem("selectedProjectId");
+          }
+          
+          if (fallbackProjectId) {
+            console.log(`Message retrieval failed with endpoint ${msgUrl}. Trying project endpoint with ID ${fallbackProjectId}.`);
+            msgUrl = `/api/chat/projects/${fallbackProjectId}/conversations/${chatId}/messages`;
+            
+            try {
+              console.log(`Attempting fallback to: ${msgUrl}`);
+              messages = await apiRequest(msgUrl, "GET");
+              console.log(`Fallback to project endpoint for messages succeeded.`);
+            } catch (fallbackError) {
+              // If even the fallback fails, throw the original error
+              console.error(`Fallback also failed: ${fallbackError.message}`);
+              throw error; 
+            }
+          } else {
+            // No project ID available to try as fallback
+            throw error;
+          }
+        } else {
+          // For non-404 errors, just throw
+          throw error;
+        }
+      }
 
       this.currentConversation = {
         id: chatId,
@@ -96,13 +168,19 @@ window.ConversationService = class ConversationService {
     } catch (error) {
       this.onLoadingEnd();
 
-      // Use window.auth for handling auth errors if available
-      if (error.status === 401 && window.auth?.handleAuthError) {
-        window.auth.handleAuthError(error, 'Loading conversation');
-      } else {
-        window.ChatUtils?.handleError?.('Loading conversation', error, this.showNotification) ||
-          this.onError('Loading conversation', error);
+      let errorMessage = 'Failed to load conversation';
+      if (error.status === 404) {
+        errorMessage = 'Conversation not found - it may have been deleted or moved';
+      } else if (error.status === 401) {
+        if (window.auth?.handleAuthError) {
+          window.auth.handleAuthError(error, 'Loading conversation');
+          return false;
+        }
+        errorMessage = 'Session expired - please log in again';
       }
+
+      window.ChatUtils?.handleError?.(errorMessage, error, this.showNotification) ||
+        this.onError('Loading conversation', new Error(errorMessage));
 
       return false;
     }

@@ -175,7 +175,10 @@ async def get_knowledge_base_status(
             is_active = kb.is_active
             name = kb.name
 
-    return {"exists": kb_status is not None, "isActive": is_active, "name": name}
+    status_data = {"exists": kb_status is not None, "isActive": is_active, "name": name}
+    
+    # Wrap response in standard format to match frontend expectations
+    return await create_standard_response(status_data)
 
 
 # ----------------------------------------------------------------------
@@ -637,7 +640,7 @@ async def get_knowledge_base_health(
         )
     )
 
-    return {
+    health_data = {
         "status": "active" if kb.is_active else "inactive",
         "embedding_model": kb.embedding_model,
         "processed_files": processed_files if processed_files else 0,
@@ -647,6 +650,9 @@ async def get_knowledge_base_health(
             "error": vector_db_error,
         }
     }
+    
+    # Wrap response in standard format to match frontend expectations
+    return await create_standard_response(health_data)
 
 
 # ----------------------------------------------------------------------
