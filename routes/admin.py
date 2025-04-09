@@ -25,3 +25,13 @@ async def fix_missing_knowledge_bases(
         "total_processed": len(projects_without_kb),
         "errors": errors
     }
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from models.project import Project
+from models.user import User
+from db import get_async_session
+from services import knowledgebase_service
+from utils.auth_utils import get_admin_user
+
+router = APIRouter()
