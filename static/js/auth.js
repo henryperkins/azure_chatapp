@@ -384,7 +384,25 @@ function getCookie(name) {
  * @param {Object} options - { allowRefresh: boolean }
  * @returns {boolean} True if valid
  */
-function checkTokenValidity(token, { allowRefresh = false } = {}) {
+async function fetchTokenExpirySettings() {
+  try {
+    const response = await fetch('/settings/token-expiry', {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to fetch token expiry settings');
+    return await response.json();
+  } catch (error) {
+    console.error('[Auth] Failed to fetch token expiry settings:', error);
+    return {
+      access_token_expire_minutes: 30,
+      refresh_token_expire_days: 7
+    };
+  }
+}
+
+async function checkTokenValidity(token, { allowRefresh = false } = {}) {
   if (!token) {
     console.debug('[Auth] Token validity check failed: No token provided');
     return false;
@@ -392,15 +410,16 @@ function checkTokenValidity(token, { allowRefresh = false } = {}) {
   
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
+    const settings = await fetchTokenExpirySettings();
     
     // Enhanced logging to debug token version issues
     if (AUTH_DEBUG) {
       console.debug(`[Auth] Token debug: type=${payload.type}, version=${payload.version}, issued_at=${new Date(payload.iat * 1000).toISOString()}`);
     }
     
-    const maxAge = allowRefresh ? 
-      settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400 : 
-      settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60;
+    const maxAge = allowRefresh ?
+      settings.refresh_token_expire_days * 86400 :
+      settings.access_token_expire_minutes * 60;
     
     const tokenAge = Date.now() / 1000 - payload.iat;
     const isValid = tokenAge < maxAge;
