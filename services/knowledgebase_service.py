@@ -12,7 +12,7 @@ Manages knowledge bases and their components:
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator
+from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, BackgroundTasks
@@ -322,7 +322,7 @@ async def create_knowledge_base(
     await save_model(db, kb)
 
     # Attach to project
-    project.knowledge_base_id = kb.id
+    project.knowledge_base_id = cast(Optional[UUID], kb.id)
     await save_model(db, project)
 
     return kb
