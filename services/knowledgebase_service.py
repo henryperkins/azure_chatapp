@@ -289,6 +289,39 @@ async def _process_file_tokens(
 # Create / Manage KnowledgeBase
 # ---------------------------------------------------------------------
 
+async def ensure_project_has_knowledge_base(
+    project_id: UUID, 
+    db: AsyncSession,
+    user_id: Optional[int] = None
+) -> KnowledgeBase:
+    """
+    Ensures a project has an active knowledge base.
+    If one doesn't exist, creates it automatically.
+    Returns the existing or newly created knowledge base.
+    """
+    # First check if project already has a knowledge base
+    project = await _validate_user_and_project(project_id, user_id, db)
+    
+    if project.knowledge_base_id:
+        # Project already has a knowledge base, make sure it's active
+        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+        if kb and not kb.is_active:
+            kb.is_active = True
+            await save_model(db, kb)
+            logger.info(f"Reactivated existing knowledge base {kb.id} for project {project_id}")
+        return kb
+    
+    # Create a new knowledge base for the project
+    kb = await create_knowledge_base(
+        name=f"{project.name} Knowledge Base",
+        project_id=project_id,
+        description="Automatically created knowledge base",
+        embedding_model=None,  # Use default model
+        db=db
+    )
+    logger.info(f"Created missing knowledge base {kb.id} for project {project_id}")
+    return kb
+
 
 @handle_service_errors("Error creating knowledge base")
 async def create_knowledge_base(
