@@ -7,7 +7,7 @@ statistics, and project-level actions.
 
 import logging
 from uuid import UUID
-from typing import Optional, Dict
+from typing import Optional, Dict, cast
 import os
 import shutil
 from enum import Enum
@@ -600,7 +600,7 @@ async def create_project_knowledge_base(
         )
 
         # Associate with project
-        project.knowledge_base_id = kb.id
+        project.knowledge_base_id = cast(Optional[UUID], kb.id)
         await db.commit()
 
         # Process existing files if requested
