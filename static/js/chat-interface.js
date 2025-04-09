@@ -87,6 +87,7 @@ window.ChatInterface.prototype._handleSendMessage = function (messageText) {
         console.log('[chat-interface] Auth initialized, sending message');
         // Implement message sending logic
         console.log("Sending message:", messageText);
+        this.messageService.sendMessage({ role: "user", content: messageText });
         resolve();
       } else {
         setTimeout(checkInitialized, 50);
