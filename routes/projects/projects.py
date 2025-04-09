@@ -138,22 +138,17 @@ async def create_project(
             f"Project created successfully: {project.id} for user {current_user.id}"
         )
 
-        # Auto-create knowledge base for the project
-        try:
-            # Convert to string and back to UUID to satisfy type checking
-            project_id_str = str(project.id)
-            kb = await knowledgebase_service.create_knowledge_base(
-                name=f"{project.name} Knowledge Base",
-                project_id=UUID(project_id_str),
-                description="Automatically created knowledge base",
-                embedding_model=None,  # Use default model
-                db=db,
-            )
-            logger.info(f"Auto-created knowledge base {kb.id} for project {project.id}")
-            logger.info(f"Auto-created knowledge base {kb.id} for project {project.id}")
-        except Exception as kb_error:
-            logger.error(f"Failed to auto-create knowledge base: {str(kb_error)}")
-            # Continue execution even if KB creation fails
+        # Auto-create knowledge base for the project (CRITICAL - NOT OPTIONAL)
+        # Convert to string and back to UUID to satisfy type checking
+        project_id_str = str(project.id)
+        kb = await knowledgebase_service.create_knowledge_base(
+            name=f"{project.name} Knowledge Base",
+            project_id=UUID(project_id_str),
+            description="Automatically created knowledge base",
+            embedding_model=None,  # Use default model
+            db=db,
+        )
+        logger.info(f"Auto-created knowledge base {kb.id} for project {project.id}")
 
         # Refresh the project to include the KB relationship
         await db.refresh(project)
@@ -167,7 +162,17 @@ async def create_project(
 
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
-        raise HTTPException(500, "Project creation failed")
+        # If the project was created but knowledge base creation failed, 
+        # try to clean up the project to avoid orphaned projects without knowledge bases
+        if 'project' in locals() and project.id:
+            try:
+                await db.delete(project)
+                await db.commit()
+                logger.info(f"Rolled back project {project.id} due to knowledge base creation failure")
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up project after KB creation error: {str(cleanup_error)}")
+        
+        raise HTTPException(500, f"Project creation failed: {str(e)}")
 
 
 @router.get("/", response_model=Dict)
