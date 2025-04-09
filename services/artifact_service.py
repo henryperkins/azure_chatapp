@@ -176,7 +176,7 @@ async def get_artifact(
 
         # Use shared validation function
         return await validate_resource_access(
-            artifact_id, project_id, user, db, Artifact, "Artifact"
+            artifact_id, project_id, user, db, "Artifact", Artifact
         )
 
     # If no user_id provided, just check if artifact exists in project
