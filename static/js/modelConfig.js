@@ -57,16 +57,20 @@ const modelConfigState = {
 
   // Load state from localStorage
   loadFromStorage() {
-    this.modelName = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
-    this.provider = localStorage.getItem("provider") || "anthropic";
-    this.maxTokens = parseInt(localStorage.getItem("maxTokens") || "4096", 10);
-    this.loadAzureSettings();
-    this.reasoningEffort = localStorage.getItem("reasoningEffort") || "medium";
-    this.visionEnabled = localStorage.getItem("visionEnabled") === "true";
-    this.visionDetail = localStorage.getItem("visionDetail") || "auto";
-    this.extendedThinking = localStorage.getItem("extendedThinking") === "true";
-    this.thinkingBudget = parseInt(localStorage.getItem("thinkingBudget") || "16000", 10);
-    this.customInstructions = localStorage.getItem("globalCustomInstructions") || "";
+    try {
+      this.modelName = localStorage.getItem("modelName") || "claude-3-sonnet-20240229";
+      this.provider = localStorage.getItem("provider") || "anthropic";
+      this.maxTokens = parseInt(localStorage.getItem("maxTokens") || "4096", 10);
+      this.loadAzureSettings();
+      this.reasoningEffort = localStorage.getItem("reasoningEffort") || "medium";
+      this.visionEnabled = localStorage.getItem("visionEnabled") === "true";
+      this.visionDetail = localStorage.getItem("visionDetail") || "auto";
+      this.extendedThinking = localStorage.getItem("extendedThinking") === "true";
+      this.thinkingBudget = parseInt(localStorage.getItem("thinkingBudget") || "16000", 10);
+      this.customInstructions = localStorage.getItem("globalCustomInstructions") || "";
+    } catch (e) {
+      console.warn("Failed to load model config from storage:", e);
+    }
 
     // Ensure values are within valid ranges
     this.maxTokens = Math.max(100, Math.min(100000, this.maxTokens));
@@ -76,12 +80,18 @@ const modelConfigState = {
   },
 
   // Save state to localStorage
-  saveToStorage() {
-    // Verify authentication before saving
-    auth.verifyAuthState().then(isAuthenticated => {
+  async saveToStorage() {
+    try {
+      // Verify authentication before saving
+      const isAuthenticated = await auth.verifyAuthState();
       if (!isAuthenticated) {
-        throw new Error("Not authenticated");
+        console.warn("Not authenticated - using session storage only");
+        sessionStorage.setItem("modelName", this.modelName);
+        sessionStorage.setItem("provider", this.provider);
+        this.saveAzureSettings();
+        return this;
       }
+
       localStorage.setItem("modelName", this.modelName);
       localStorage.setItem("provider", this.provider);
       this.saveAzureSettings();
@@ -97,7 +107,10 @@ const modelConfigState = {
       }
 
       return this;
-    });
+    } catch (e) {
+      console.error("Failed to save model config:", e);
+      throw e;
+    }
   },
 
   loadAzureSettings() {
@@ -173,25 +186,37 @@ async function initModelConfig() {
     // Clean up any existing listeners
     cleanupListeners();
 
-    // Verify authentication
-    const isAuthenticated = await auth.verifyAuthState();
-    if (!isAuthenticated) {
-      console.error("User not authenticated");
-      return false;
-    }
-
-    // Load saved values
+    // Load saved values regardless of authentication
     modelConfigState.loadFromStorage().updateGlobalConfig();
 
+    // Wait for auth to initialize if needed
+    if (!window.auth?.isInitialized) {
+      await new Promise(resolve => {
+        const checkAuth = () => {
+          if (window.auth?.isInitialized) {
+            document.removeEventListener('authStateChanged', checkAuth);
+            resolve(true);
+          }
+        };
+        document.addEventListener('authStateChanged', checkAuth);
+        
+        // Timeout fallback
+        setTimeout(() => {
+          document.removeEventListener('authStateChanged', checkAuth);
+          resolve(false);
+        }, 5000);
+      });
+    }
+
     // Initialize UI elements
-    setupModelDropdown();
-    setupMaxTokensUI();
-    setupReasoningUI();
-    setupVisionUI();
-    setupExtendedThinkingUI();
+    await setupModelDropdown();
+    await setupMaxTokensUI();
+    await setupReasoningUI();
+    await setupVisionUI();
+    await setupExtendedThinkingUI();
 
     // Update the display with current values
-    updateModelConfigDisplay();
+    await updateModelConfigDisplay();
 
     console.log("Model config module initialized with:", window.MODEL_CONFIG);
 
@@ -212,12 +237,7 @@ async function initModelConfig() {
  * @returns {Object} The matching model object from getModelOptions()
  */
 async function getCurrentModelConfig() {
-  // Verify authentication
-  const isAuthenticated = await auth.verifyAuthState();
-  if (!isAuthenticated) {
-    console.error("User not authenticated");
-    return null;
-  }
+  // Allow config access without authentication
 
   const models = getModelOptions();
   return models.find(m => m.id === modelConfigState.modelName) || models[0];
@@ -252,8 +272,18 @@ async function setupModelDropdown() {
   // Verify authentication
   const isAuthenticated = await auth.verifyAuthState();
   if (!isAuthenticated) {
-    console.error("User not authenticated");
+    console.log("User not authenticated - showing auth prompt");
+    modelSelect.innerHTML = '<option value="">Please sign in to select model</option>';
     modelSelect.disabled = true;
+    
+    // Listen for auth changes to re-enable
+    const authListener = () => {
+      if (auth.isAuthenticated) {
+        document.removeEventListener('authStateChanged', authListener);
+        setupModelDropdown(); // Retry now that we're authenticated
+      }
+    };
+    document.addEventListener('authStateChanged', authListener);
     return;
   }
 

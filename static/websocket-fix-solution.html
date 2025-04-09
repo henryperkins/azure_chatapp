@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Connection Fix Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #0066cc;
+        }
+        h1 {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: monospace;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .issue {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        .solution {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        .implementation {
+            background-color: #e6f3ff;
+            border-left: 4px solid #0d6efd;
+        }
+        .btn {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px 5px 5px 0;
+            display: inline-block;
+            text-decoration: none;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .files-list {
+            margin: 20px 0;
+        }
+        .files-list li {
+            margin-bottom: 10px;
+        }
+        .file-path {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 3px 6px;
+            border-radius: 3px;
+        }
+        .integration-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .integration-option {
+            flex: 1;
+            min-width: 250px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection & Browser Extension Fix</h1>
+    <p>This document provides a complete overview of the WebSocket connection issues, browser extension errors, and the implemented fixes.</p>
+    
+    <div class="btn-group">
+        <a href="/static/websocket-fix.html" class="btn">WebSocket Fix Tool</a>
+        <a href="/static/websocket-demo.html" class="btn">Interactive Demo</a>
+    </div>
+    
+    <div class="card issue">
+        <h2>Issues Identified</h2>
+        <h3>1. WebSocket Connection Failures</h3>
+        <ul>
+            <li>Failed connections to conversation endpoints</li>
+            <li>Reconnection attempts failing</li>
+            <li>Connection errors through WebSocketService → ChatInterface chain</li>
+            <li>Missing or incorrect reconnection handling</li>
+        </ul>
+        
+        <h3>2. Authentication Issues</h3>
+        <li>User authentication errors in WebSocket sessions (modelConfig.js:255)</li>
+        <li>Missing token refresh on auth failures</li>
+        
+        <h3>3. Browser Extension Errors</h3>
+        <ul>
+            <li>FrameDoesNotExistError in background.js for multiple tab/frame IDs</li>
+            <li>Message port closed before response received (16 occurrences)</li>
+            <li>Missing extension resources (utils.js, heuristicsRedefinitions.js, extensionState.js)</li>
+        </ul>
+    </div>
+    
+    <div class="card solution">
+        <h2>Solution Overview</h2>
+        <p>The implemented solution addresses all identified issues through a comprehensive approach:</p>
+        
+        <h3>1. WebSocket Connection Fix</h3>
+        <ul>
+            <li>Enhanced heartbeat mechanism to detect stale connections</li>
+            <li>Robust error recovery with exponential backoff</li>
+            <li>Seamless token refresh when authentication fails</li>
+            <li>Improved HTTP fallback reliability</li>
+        </ul>
+        
+        <h3>2. Browser Extension Fixes</h3>
+        <ul>
+            <li>Frame connection error handling with recovery ports</li>
+            <li>Missing resource stub implementations</li>
+            <li>Message port closure handling</li>
+        </ul>
+        
+        <h3>3. Integration Approach</h3>
+        <ul>
+            <li>Multiple integration options to match application needs</li>
+            <li>Non-invasive implementation that preserves existing functionality</li>
+            <li>Automatic self-recovery for WebSocket errors</li>
+            <li>Comprehensive diagnostic capabilities</li>
+        </ul>
+    </div>
+    
+    <div class="card implementation">
+        <h2>Implementation Files</h2>
+        <p>The solution consists of the following components:</p>
+        
+        <ul class="files-list">
+            <li>
+                <span class="file-path">static/js/websocket-fix.js</span>
+                <p>Core WebSocket connection fixes and enhancements</p>
+            </li>
+            <li>
+                <span class="file-path">static/js/websocket-integration.js</span>
+                <p>Simple integration script for the WebSocket fix</p>
+            </li>
+            <li>
+                <span class="file-path">static/js/app-integration.js</span>
+                <p>Comprehensive application integration with browser extension fixes</p>
+            </li>
+            <li>
+                <span class="file-path">static/websocket-fix.html</span>
+                <p>Diagnostic tool and interactive fix application</p>
+            </li>
+            <li>
+                <span class="file-path">static/websocket-demo.html</span>
+                <p>Interactive demo to test WebSocket connections with the fix</p>
+            </li>
+        </ul>
+    </div>
+    
+    <div class="card">
+        <h2>Integration Options</h2>
+        <p>Choose the integration option that best fits your application:</p>
+        
+        <div class="integration-options">
+            <div class="integration-option">
+                <h3>Option 1: Basic Integration</h3>
+                <p>Simple script inclusion for WebSocket fixes only</p>
+                <pre><code>&lt;script src="/static/js/websocket-fix.js"&gt;&lt;/script&gt;</code></pre>
+                <p><strong>Best for:</strong> Quick deployment to fix WebSocket issues only</p>
+            </div>
+            
+            <div class="integration-option">
+                <h3>Option 2: Standard Integration</h3>
+                <p>WebSocket fix with auto-loading and basic monitoring</p>
+                <pre><code>&lt;script src="/static/js/websocket-integration.js"&gt;&lt;/script&gt;</code></pre>
+                <p><strong>Best for:</strong> General application usage with WebSocket dependency</p>
+            </div>
+            
+            <div class="integration-option">
+                <h3>Option 3: Comprehensive Integration</h3>
+                <p>Complete integration with browser extension fixes and advanced recovery</p>
+                <pre><code>&lt;script src="/static/js/app-integration.js"&gt;&lt;/script&gt;</code></pre>
+                <p><strong>Best for:</strong> Browser extensions or applications with complex WebSocket needs</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Using the Fix in Code</h2>
+        
+        <h3>Quick Fix Application</h3>
+        <p>To apply the fix in JavaScript when needed:</p>
+        <pre><code>// Load the WebSocket fix script
+const script = document.createElement('script');
+script.src = '/static/js/websocket-fix.js';
+document.head.appendChild(script);
+
+// Optional: Wait for script to load
+script.onload = () => {
+  console.log('WebSocket fix applied');
+  
+  // Reconnect any active WebSocket connections
+  if (window.chatInterface && chatInterface.establishWebSocketConnection) {
+    chatInterface.establishWebSocketConnection(chatInterface.currentChatId);
+  }
+};</code></pre>
+
+        <h3>Using the App Integration API</h3>
+        <p>When using the comprehensive integration, you can use its API for more control:</p>
+        <pre><code>// Check if integration is available
+if (window.appIntegration) {
+  // Apply fixes on demand
+  appIntegration.applyFixes().then(result => {
+    console.log('Fix applied:', result);
+  });
+  
+  // Get diagnostic information
+  const diagnostics = appIntegration.diagnostics();
+  console.log('WebSocket service version:', diagnostics.webSocketServiceVersion);
+  console.log('Active connections:', diagnostics.activeConnections.length);
+}</code></pre>
+    </div>
+    
+    <div class="card">
+        <h2>Testing the Fix</h2>
+        <p>You can verify the fix is working properly by:</p>
+        <ol>
+            <li>Opening the <a href="/static/websocket-demo.html">WebSocket Demo</a> page</li>
+            <li>Following the numbered steps (1-4) to test connection and error handling</li>
+            <li>Checking console logs for "[AppIntegration]" messages showing fix activity</li>
+            <li>Monitoring recovery from simulated errors</li>
+        </ol>
+        
+        <p>For a more complete diagnostic experience, the <a href="/static/websocket-fix.html">WebSocket Fix Tool</a> provides interactive controls and detailed diagnostics.</p>
+    </div>
+    
+    <script>
+        // Check if the WebSocket fix is already applied
+        function checkFixStatus() {
+            const isWSAvailable = !!window.WebSocketService;
+            const isFixApplied = window.WebSocketService && window.WebSocketService.version && window.WebSocketService.version.includes('fixed');
+            const isIntegrationActive = !!window.appIntegration;
+            
+            console.log('WebSocket Service Available:', isWSAvailable);
+            console.log('WebSocket Fix Applied:', isFixApplied);
+            console.log('Integration Active:', isIntegrationActive);
+            
+            // Show current status
+            const statusElement = document.createElement('div');
+            statusElement.className = `card ${isFixApplied ? 'solution' : 'issue'}`;
+            statusElement.innerHTML = `
+                <h2>Current Status</h2>
+                <p><strong>WebSocket Service:</strong> ${isWSAvailable ? 'Available' : 'Not Available'}</p>
+                <p><strong>WebSocket Fix:</strong> ${isFixApplied ? 'Applied' : 'Not Applied'}</p>
+                <p><strong>Integration:</strong> ${isIntegrationActive ? 'Active' : 'Not Active'}</p>
+            `;
+            
+            document.body.appendChild(statusElement);
+        }
+        
+        // Run check on load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkFixStatus);
+        } else {
+            checkFixStatus();
+        }
+    </script>
+    
+    <footer>
+        <p><small>WebSocket Connection Fix Documentation - Version 1.1.0</small></p>
+    </footer>
+</body>
+</html>

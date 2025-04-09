@@ -295,6 +295,20 @@ class ProjectDashboard {
     this.components.projectDetails?.renderFiles(event.detail.files);
   }
 
+  handleProjectNotFound(event) {
+    const { projectId } = event.detail;
+    console.warn(`Project not found: ${projectId}`);
+    
+    // Clear current project reference
+    this.state.currentProject = null;
+    
+    // Show notification
+    this.showNotification('The requested project was not found', 'error');
+    
+    // Return to project list
+    this.showProjectList();
+  }
+
   handleConversationsLoaded(event) {
     let conversations = [];
 
@@ -561,6 +575,11 @@ class ProjectDashboard {
     document.addEventListener(
       "projectArtifactsLoaded",
       this.handleArtifactsLoaded.bind(this)
+    );
+    
+    document.addEventListener(
+      "projectNotFound",
+      this.handleProjectNotFound.bind(this)
     );
 
     // Handle project form

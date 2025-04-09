@@ -40,6 +40,8 @@ async def validate_image_data(image_data: Optional[str]) -> bool:
 
     try:
         base64_str = extract_base64_data(image_data)
+        if base64_str is None:
+            raise HTTPException(status_code=400, detail="No image data provided")
         base64.b64decode(base64_str, validate=True)
         return True
     except Exception as e:

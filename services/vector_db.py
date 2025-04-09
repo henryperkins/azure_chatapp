@@ -28,9 +28,13 @@ SENTENCE_TRANSFORMERS_AVAILABLE = False
 FAISS_AVAILABLE = False
 SKLEARN_AVAILABLE = False
 
-try:
-    from sentence_transformers import SentenceTransformer
+# Global references to optional imports
+faiss = None
+SentenceTransformer = None
 
+try:
+    from sentence_transformers import SentenceTransformer as _SentenceTransformer
+    SentenceTransformer = _SentenceTransformer
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     logger.warning(
@@ -39,8 +43,8 @@ except ImportError:
     )
 
 try:
-    import faiss
-
+    import faiss as _faiss
+    faiss = _faiss
     FAISS_AVAILABLE = True
 except ImportError:
     logger.warning(
@@ -84,12 +88,6 @@ class VectorDB:
         use_faiss: bool = True,
         storage_path: Optional[str] = None,
     ):
-        # Warm up embedding model
-        if self.embedding_model and hasattr(self.embedding_model, "encode"):
-            try:
-                self.embedding_model.encode([""])  # Warmup call
-            except Exception as e:
-                logger.warning(f"Model warmup failed: {str(e)}")
         """Initialize vector database with the specified embedding model."""
         self.embedding_model_name = embedding_model
         self.storage_path = storage_path
@@ -103,7 +101,7 @@ class VectorDB:
 
         # Initialize embedding model if available
         self.embedding_model = None
-        if SENTENCE_TRANSFORMERS_AVAILABLE and embedding_model:
+        if SENTENCE_TRANSFORMERS_AVAILABLE and embedding_model and SentenceTransformer is not None:
             try:
                 self.embedding_model = SentenceTransformer(embedding_model)
                 logger.info(f"Initialized local embedding model: {embedding_model}")
@@ -114,6 +112,13 @@ class VectorDB:
                 raise VectorDBError(f"Failed to initialize embedding model: {str(e)}")
         else:
             logger.info(f"Using external embedding API for model: {embedding_model}")
+
+        # Warm up embedding model if available
+        if self.embedding_model and hasattr(self.embedding_model, "encode"):
+            try:
+                self.embedding_model.encode([""])  # Warmup call
+            except Exception as e:
+                logger.warning(f"Model warmup failed: {str(e)}")
 
         # In-memory storage for vectors and metadata
         self.vectors: Dict[str, List[float]] = {}  # doc_id -> vector
@@ -696,7 +701,7 @@ async def process_file_for_search(
             )
 
         # Extract text chunks
-        text_chunks, metadata = text_extractor.extract_text(
+        text_chunks, metadata = await text_extractor.extract_text(
             file_content,
             filename=project_file.filename,
             chunk_size=chunk_size,

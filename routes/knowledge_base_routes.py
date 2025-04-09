@@ -612,12 +612,20 @@ async def get_knowledge_base_health(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    # Example: load or init vector DB
-    _ = await get_vector_db(
-        model_name=kb.embedding_model or DEFAULT_EMBEDDING_MODEL,
-        storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(kb.project_id)),
-        load_existing=True,
-    )
+    vector_db_status = "unknown"
+    vector_db_error = None
+    try:
+        vector_db = await get_vector_db(
+            model_name=kb.embedding_model or DEFAULT_EMBEDDING_MODEL,
+            storage_path=os.path.join(VECTOR_DB_STORAGE_PATH, str(kb.project_id)),
+            load_existing=True,
+        )
+        test_results = await vector_db.test_connection()
+        vector_db_status = "healthy" if test_results.get("is_healthy", False) else "unhealthy"
+    except Exception as e:
+        vector_db_status = "error"
+        vector_db_error = str(e)
+        logger.error(f"Vector DB initialization failed: {str(e)}")
 
     # Count of successfully processed files
     processed_files = await db.scalar(
@@ -634,6 +642,10 @@ async def get_knowledge_base_health(
         "embedding_model": kb.embedding_model,
         "processed_files": processed_files if processed_files else 0,
         "last_updated": kb.updated_at.isoformat() if kb.updated_at else None,
+        "vector_db": {
+            "status": vector_db_status,
+            "error": vector_db_error,
+        }
     }
 
 

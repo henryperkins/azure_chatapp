@@ -43,6 +43,43 @@ from services.file_storage import get_file_storage
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Temporary debug endpoint - remove after testing
+@router.get("/test/{project_id}", include_in_schema=False)
+async def test_project_exists(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Temporary endpoint to test project existence"""
+    try:
+        project = await validate_project_access(
+            project_id,
+            user=User(id=0),  # Dummy user
+            db=db,
+            skip_ownership_check=True
+        )
+        return {
+            "exists": True,
+            "id": str(project.id),
+            "name": project.name,
+            "archived": project.archived,
+            "user_id": project.user_id
+        }
+    except HTTPException as e:
+        return {
+            "exists": False,
+            "error": e.detail,
+            "status_code": e.status_code
+        }
+    except Exception as e:
+        return {
+            "exists": False,
+            "error": str(e),
+            "status_code": 500
+        }
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
 # ============================
 # Pydantic Schemas
 # ============================

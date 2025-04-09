@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Fix Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #0066cc;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        .log-entry {
+            margin: 5px 0;
+            font-family: monospace;
+        }
+        .action-panel {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Demo</h1>
+    
+    <div class="card">
+        <h2>WebSocket Service Demo</h2>
+        <p>This page demonstrates the WebSocket connection fix working with the actual WebSocketService used in the application.</p>
+        
+        <div class="action-panel">
+            <button id="loadServiceBtn" class="btn">1. Load WebSocket Service</button>
+            <button id="loadFixBtn" class="btn">2. Apply WebSocket Fix</button>
+            <button id="testConnectionBtn" class="btn btn-success" disabled>3. Test Connection</button>
+            <button id="forceErrorBtn" class="btn btn-warning" disabled>4. Simulate Error</button>
+            <button id="clearLogsBtn" class="btn btn-secondary">Clear Logs</button>
+        </div>
+        
+        <div id="statusMessage" class="status">Status: Ready to start</div>
+        
+        <h3>Console Logs</h3>
+        <div id="logContainer" class="log-container">
+            <div class="log-entry">WebSocket demo initialized</div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Connection Status</h2>
+        <div id="connectionStatus">Not connected</div>
+    </div>
+    
+    <script>
+        // Console log capture
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        
+        const logContainer = document.getElementById('logContainer');
+        const statusMessage = document.getElementById('statusMessage');
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        console.log = function(...args) {
+            addLogEntry('log', ...args);
+            originalConsoleLog.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            addLogEntry('error', ...args);
+            originalConsoleError.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            addLogEntry('warn', ...args);
+            originalConsoleWarn.apply(console, args);
+        };
+        
+        function addLogEntry(level, ...args) {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${level}`;
+            
+            const timestamp = new Date().toISOString().slice(11, 19);
+            const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
+            
+            const message = args.map(arg => {
+                if (typeof arg === 'object') {
+                    try {
+                        return JSON.stringify(arg);
+                    } catch (e) {
+                        return String(arg);
+                    }
+                }
+                return String(arg);
+            }).join(' ');
+            
+            entry.textContent = `${prefix} ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status ${type || ''}`;
+        }
+        
+        // Setup WebSocket tests
+        document.getElementById('loadServiceBtn').addEventListener('click', loadWebSocketService);
+        document.getElementById('loadFixBtn').addEventListener('click', loadWebSocketFix);
+        document.getElementById('testConnectionBtn').addEventListener('click', testConnection);
+        document.getElementById('forceErrorBtn').addEventListener('click', simulateError);
+        document.getElementById('clearLogsBtn').addEventListener('click', () => {
+            logContainer.innerHTML = '<div class="log-entry">Logs cleared</div>';
+        });
+        
+        // Mock API_CONFIG for testing
+        window.API_CONFIG = {
+            WS_ENDPOINT: window.location.host
+        };
+        
+        // Create fake conversation for testing
+        window.chatInterface = {
+            conversationService: {
+                currentConversation: {
+                    id: "test-conversation-" + Date.now(),
+                }
+            }
+        };
+        
+        // Mock auth service for testing
+        window.auth = {
+            isInitialized: true,
+            authState: { isAuthenticated: true },
+            isAuthenticated: async () => true,
+            getWSAuthToken: async () => ({ token: "test-token-" + Date.now() }),
+            refreshTokens: async () => ({ success: true }),
+            handleAuthError: (err) => console.error("Auth error:", err)
+        };
+        
+        // Load the WebSocket service
+        function loadWebSocketService() {
+            showStatus('Loading WebSocket service...', 'warning');
+            
+            const script = document.createElement('script');
+            script.src = '/static/js/chat-websocket.js';
+            script.onload = () => {
+                console.log('WebSocketService loaded');
+                showStatus('WebSocket service loaded successfully', 'success');
+                
+                // Enable next button
+                document.getElementById('loadFixBtn').removeAttribute('disabled');
+                
+                updateConnectionStatus();
+            };
+            
+            script.onerror = () => {
+                console.error('Failed to load WebSocketService');
+                showStatus('Failed to load WebSocket service', 'error');
+            };
+            
+            document.head.appendChild(script);
+        }
+        
+        // Load the WebSocket fix
+        function loadWebSocketFix() {
+            if (!window.WebSocketService) {
+                showStatus('WebSocketService not loaded yet. Please load it first.', 'error');
+                return;
+            }
+            
+            showStatus('Loading WebSocket fix...', 'warning');
+            
+            const script = document.createElement('script');
+            script.src = '/static/js/websocket-fix.js';
+            script.onload = () => {
+                console.log('WebSocket fix loaded');
+                showStatus('WebSocket fix applied successfully', 'success');
+                
+                // Enable test buttons
+                document.getElementById('testConnectionBtn').removeAttribute('disabled');
+                document.getElementById('forceErrorBtn').removeAttribute('disabled');
+                
+                updateConnectionStatus();
+            };
+            
+            script.onerror = () => {
+                console.error('Failed to load WebSocket fix');
+                showStatus('Failed to apply WebSocket fix', 'error');
+            };
+            
+            document.head.appendChild(script);
+        }
+        
+        // Test WebSocket connection
+        function testConnection() {
+            if (!window.WebSocketService) {
+                showStatus('WebSocketService not loaded. Please load it first.', 'error');
+                return;
+            }
+            
+            showStatus('Testing connection...', 'warning');
+            
+            try {
+                const wsService = new window.WebSocketService({
+                    onConnect: () => {
+                        console.log('WebSocket connected successfully');
+                        showStatus('WebSocket connection established!', 'success');
+                        updateConnectionStatus('Connected');
+                    },
+                    onError: (error) => {
+                        console.error('WebSocket connection error:', error);
+                        showStatus('WebSocket connection failed: ' + error.message, 'error');
+                        updateConnectionStatus('Connection Error');
+                    },
+                    onMessage: (event) => {
+                        console.log('Received message:', event);
+                    }
+                });
+                
+                // Try to connect to a test conversation
+                wsService.connect('test-conversation-' + Date.now())
+                    .then(result => {
+                        console.log('Connection attempt result:', result);
+                    })
+                    .catch(error => {
+                        console.error('Connection rejected:', error);
+                        showStatus('Connection rejected: ' + error.message, 'error');
+                    });
+                
+                window.testWsService = wsService;
+                
+                updateConnectionStatus('Connecting...');
+            } catch (error) {
+                console.error('Error creating WebSocket service:', error);
+                showStatus('Error creating WebSocket service: ' + error.message, 'error');
+            }
+        }
+        
+        // Simulate a WebSocket error
+        function simulateError() {
+            if (!window.testWsService) {
+                showStatus('No active WebSocket connection to test errors with', 'error');
+                return;
+            }
+            
+            showStatus('Simulating WebSocket error...', 'warning');
+            
+            try {
+                console.log('Triggering simulated WebSocket error');
+                
+                // Force error on the socket if it exists
+                if (window.testWsService.socket) {
+                    // Force close with error code
+                    window.testWsService.socket.close(4000, 'Simulated error');
+                    showStatus('Simulated error triggered', 'warning');
+                } else {
+                    // Use the error handler directly
+                    window.testWsService.handleConnectionError(new Error('Simulated WebSocket error'));
+                    showStatus('Simulated error triggered via handler', 'warning');
+                }
+                
+                updateConnectionStatus('Recovering from error...');
+            } catch (error) {
+                console.error('Error simulating WebSocket error:', error);
+                showStatus('Error simulating WebSocket error: ' + error.message, 'error');
+            }
+        }
+        
+        // Update the connection status display
+        function updateConnectionStatus(status) {
+            if (status) {
+                connectionStatus.textContent = status;
+                return;
+            }
+            
+            if (!window.WebSocketService) {
+                connectionStatus.textContent = 'WebSocketService not loaded yet';
+                return;
+            }
+            
+            if (!window.testWsService) {
+                connectionStatus.textContent = 'No connection attempt yet';
+                return;
+            }
+            
+            const states = window.WebSocketService.CONNECTION_STATES || {
+                DISCONNECTED: 'disconnected',
+                CONNECTING: 'connecting',
+                CONNECTED: 'connected',
+                RECONNECTING: 'reconnecting',
+                ERROR: 'error'
+            };
+            
+            let statusText;
+            switch (window.testWsService.state) {
+                case states.CONNECTED:
+                    statusText = 'Connected';
+                    break;
+                case states.CONNECTING:
+                    statusText = 'Connecting...';
+                    break;
+                case states.RECONNECTING:
+                    statusText = 'Reconnecting... (attempt: ' + window.testWsService.reconnectAttempts + ')';
+                    break;
+                case states.ERROR:
+                    statusText = 'Error: ' + (window.testWsService.lastError?.message || 'Unknown error');
+                    break;
+                case states.DISCONNECTED:
+                    statusText = 'Disconnected';
+                    break;
+                default:
+                    statusText = 'Unknown state: ' + window.testWsService.state;
+            }
+            
+            connectionStatus.textContent = statusText;
+        }
+        
+        // Check for active WebSocket service every 2 seconds
+        setInterval(() => {
+            if (window.testWsService) {
+                updateConnectionStatus();
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
