@@ -155,7 +155,7 @@
         
         <!-- Recent Chats Section (hidden by default) -->
         <div id="recentChatsSection"
-             class="hidden flex-1 flex flex-col overflow-hidden"
+             class="hidden flex-1 flex-col overflow-hidden"
              role="tabpanel"
              aria-labelledby="recentChatsTab"
              tabindex="0">
@@ -178,7 +178,7 @@
         
         <!-- Starred Chats Section (hidden by default) -->
         <div id="starredChatsSection"
-             class="hidden flex-1 flex flex-col overflow-hidden"
+             class="flex-1 flex flex-col overflow-hidden"
              role="tabpanel"
              aria-labelledby="starredChatsTab"
              tabindex="0">
@@ -198,18 +198,33 @@
              tabindex="0">
           <!-- Projects actions -->
           <div class="mb-3 flex space-x-2">
-            <a href="/" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded text-xs transition-colors flex items-center justify-center font-medium">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
-              Manage Projects
-            </a>
-            <button id="sidebarNewProjectBtn" class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 text-xs flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              New Project
-            </button>
+<a href="#" id="manageProjectsLink" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded text-xs transition-colors flex items-center justify-center font-medium">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+  </svg>
+  Manage Projects
+</a>
+<button id="sidebarNewProjectBtn" class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 text-xs flex items-center justify-center">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+  </svg>
+  New Project
+</button>
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  const link = document.getElementById('manageProjectsLink');
+  if (link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (window.showProjectsView) {
+        window.showProjectsView();
+      } else {
+        console.error('showProjectsView is not defined yet.');
+      }
+    });
+  }
+});
+</script>
           </div>
           
           <!-- Projects search input -->
@@ -296,7 +311,7 @@
               </div>
 
               <!-- Loading indicator for config changes -->
-              <div id="modelConfigLoading" class="mt-3 hidden text-blue-600 flex items-center text-xs" aria-hidden="true">
+              <div id="modelConfigLoading" class="mt-3 text-blue-600 flex items-center text-xs" aria-hidden="true">
                 <svg class="animate-spin h-4 w-4 mr-2 text-blue-600"
                      xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -354,7 +369,7 @@
         </div>
 
         <!-- Project Manager Section (shown when authenticated) -->
-        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 hidden flex flex-col min-h-0">
+        <section id="projectManagerPanel" class="bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 flex flex-col min-h-0">
           <!-- Project List View -->
           <div id="projectListView" class="flex-1 flex flex-col min-h-0">
             <div class="mb-4 flex items-center justify-between">
@@ -879,7 +894,7 @@
 
   <!-- Project Creation/Edit Modal -->
   <div id="projectFormModal"
-       class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center"
+       class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden"
        aria-modal="true"
        aria-labelledby="projectFormTitle"
        role="dialog">
@@ -951,7 +966,7 @@
   </div>
   
   <!-- Custom Instructions Modal -->
-  <div id="instructionsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center">
+  <div id="instructionsModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-semibold">Custom Instructions</h3>
@@ -983,7 +998,7 @@
   </div>
   
   <!-- Delete Confirmation Modal -->
-  <div id="deleteConfirmModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center">
+  <div id="deleteConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
       <h3 class="text-xl font-semibold mb-4">Confirm Delete</h3>
       <p id="deleteConfirmText" class="mb-6">Are you sure you want to delete this item?</p>
@@ -1001,7 +1016,7 @@
   </div>
 
   <!-- Content View Modal (for files and artifacts) -->
-  <div id="contentViewModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center">
+  <div id="contentViewModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 id="contentViewModalTitle" class="text-xl font-semibold">File Content</h3>
@@ -1016,7 +1031,7 @@
   </div>
   
   <!-- Knowledge Base Settings Modal -->
-  <div id="knowledgeBaseSettingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center">
+  <div id="knowledgeBaseSettingsModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-semibold">Knowledge Base Settings</h3>
@@ -1088,7 +1103,7 @@
           </p>
         </div>
         
-        <div class="flex justify-end space-x-2 mt-6">
+        <div class="flex justify-end spa ce-x-2 mt-6">
           <button type="button" id="cancelKnowledgeBaseFormBtn" 
                   class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
             Cancel
@@ -1103,7 +1118,7 @@
   </div>
   
   <!-- Knowledge Result Detail Modal -->
-  <div id="knowledgeResultModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center">
+  <div id="knowledgeResultModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 id="knowledgeResultTitle" class="text-xl font-semibold">Knowledge Result</h3>

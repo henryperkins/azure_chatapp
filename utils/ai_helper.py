@@ -9,7 +9,7 @@ knowledge retrieval, and token estimation.
 """
 
 import logging
-from typing import Dict, Optional, List, Any
+from typing import Any
 from uuid import UUID
 import tiktoken  # Import tiktoken globally as it's used conditionally
 
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 def get_model_config(
     model_name: str, config: Settings = settings
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Retrieve model configuration (provider, specific settings) from application settings.
 
@@ -152,7 +152,7 @@ async def retrieve_knowledge_context(
     db: AsyncSession,
     top_k: int = DEFAULT_KB_SEARCH_TOP_K,
     score_threshold: float = DEFAULT_SCORE_THRESHOLD,
-) -> Optional[str]:
+) -> str | None:
     """
     Retrieve relevant knowledge context chunks from a project's knowledge base.
 
@@ -276,10 +276,8 @@ async def augment_with_knowledge(
     user_message: str,
     db: AsyncSession,
     max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS,
-    model_config_override: Optional[
-        Dict[str, Any]
-    ] = None,  # Allow passing specific model config
-) -> List[Dict[str, Any]]:
+    model_config_override: dict[str, Any] | None = None,  # Allow passing specific model config
+) -> list[dict[str, Any]]:
     """
     Augments a conversation prompt by retrieving and formatting relevant knowledge.
 
