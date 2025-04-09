@@ -2,7 +2,7 @@
 # Reason: Validate model parameters, pass parameters down to _generate_ai_response.
 
 import logging
-from typing import Dict, List, Optional, Any, Tuple, Union
+from typing import Dict, List, Optional, Any, Tuple, Union, cast
 from uuid import UUID
 from datetime import datetime
 
@@ -227,7 +227,8 @@ class ConversationService:
                     f"Project {project_id} has KB, enabling for new conversation {conv.id}."
                 )
                 conv.use_knowledge_base = True
-                conv.knowledge_base_id = project.knowledge_base_id
+                from typing import cast
+                conv.knowledge_base_id = project.knowledge_base_id or None  # type: ignore
                 # Token usage check is better done when messages are added, not on creation
                 # try:
                 #     await conv.validate_knowledge_base(self.db)
@@ -335,7 +336,7 @@ class ConversationService:
             if use_knowledge_base and conv.project_id and not conv.knowledge_base_id:
                 project = await self._validate_project_access(UUID(str(conv.project_id)), user_id)
                 if project.knowledge_base_id:
-                    conv.knowledge_base_id = project.knowledge_base_id
+                    conv.knowledge_base_id = project.knowledge_base_id or None  # type: ignore
                 else:
                     # Project doesn't have a KB, cannot enable
                     raise ConversationError(
