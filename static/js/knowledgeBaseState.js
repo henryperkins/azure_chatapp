@@ -19,9 +19,12 @@ class KnowledgeBaseState {
         "GET"
       );
 
+      // Handle both direct and wrapped response formats for backward compatibility
+      const result = response.data?.data || response.data;
+
       // Cache result
-      this._cache.set(projectId, response.data);
-      return response.data;
+      this._cache.set(projectId, result);
+      return result;
     } catch (error) {
       console.error('KB verification failed:', error);
       return { 

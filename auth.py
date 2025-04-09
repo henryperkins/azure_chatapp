@@ -34,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+@router.get("/settings/token-expiry", response_model=dict)
+async def get_token_expiry_settings() -> dict:
+    """
+    Expose token expiration settings to the frontend.
+    """
+    return {
+        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
+        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
+    }
+
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = 1  # Reduced from 7 to 1 day for better security
 

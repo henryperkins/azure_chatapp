@@ -102,7 +102,7 @@
         "@modelcontextprotocol/server-github"
       ],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
       },
       "disabled": false,
       "autoApprove": [],

@@ -907,6 +907,18 @@
       try {
         console.log('Conversation clicked:', conversation.id, conversation);
 
+        // Ensure we have the current project ID (needed for conversation loading)
+        const projectId = this.state.currentProject?.id;
+        if (!projectId) {
+          console.error('No project ID available when loading conversation');
+          window.showNotification('Project context missing', 'error');
+          return;
+        }
+
+        // Store the project ID in localStorage so chat services can use it
+        localStorage.setItem("selectedProjectId", projectId);
+        console.log(`Project context set for conversation: ${projectId}`);
+
         // Show chat container
         const chatContainer = document.getElementById('projectChatContainer');
         if (chatContainer) {
@@ -931,8 +943,11 @@
           }
         }
 
-        // Set target container and load conversation
+        // Set target container
         window.projectChatInterface.setTargetContainer('#projectChatMessages');
+
+        // Try loading conversation with project context
+        console.log(`Loading project conversation: ${conversation.id} (Project: ${projectId})`);
         const success = await window.projectChatInterface.loadConversation(conversation.id);
 
         if (!success) {

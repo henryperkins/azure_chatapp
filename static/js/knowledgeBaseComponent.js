@@ -1131,18 +1131,18 @@
 
       const MAX_RETRIES = 3;
       const BASE_DELAY = 1000; // 1 second
+      const TIMEOUT_MS = 10000; // 10 seconds
       let lastError = null;
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const token = await window.auth.getAuthToken();
+          // No need to pass the token as apiRequest uses credentials: 'include'
           const response = await window.apiRequest(
             `/api/knowledge-bases/${kbId}/health`,
             "GET",
-            null,
-            token,
-            attempt - 1, // pass retry count
-            5000 // 5 second timeout
+            null, // No data for GET request
+            attempt - 1, // retry count
+            TIMEOUT_MS // explicit 10 second timeout
           );
           
           if (!response?.data) {
@@ -1207,7 +1207,7 @@
         errorMsg = `Vector DB error: ${lastError.response.data.vector_db.error}`;
       }
       
-      this._showStatusAlert(errorMsg, "error");
+      this._showStatusAlert(errorMsg, errorType);
       return null;
     }
 
@@ -1770,3 +1770,4 @@
   window.KnowledgeBaseComponent = KnowledgeBaseComponent;
 
 })(); // End of IIFE
+      // Reprocess Files Button Click
