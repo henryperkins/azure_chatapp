@@ -136,6 +136,7 @@ module.exports = {
 
   // Load any official or custom plugins here.
   plugins: [
+    require('tailwindcss/nesting'),
     // e.g., require('@tailwindcss/forms'), require('@tailwindcss/typography'), etc.
   ],
   variants: {
