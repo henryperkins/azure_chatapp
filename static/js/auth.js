@@ -341,9 +341,40 @@ async function isTokenExpired(token) {
  * @returns {string|null} Cookie value
  */
 function getCookie(name) {
+  // First try localStorage fallback for token persistence
+  if (name === 'access_token' || name === 'refresh_token') {
+    try {
+      const stored = localStorage.getItem(`cookie_${name}`);
+      if (stored) {
+        // Basic JWT format validation (3 parts separated by dots)
+        if (typeof stored === 'string' &&
+            stored.split('.').length === 3 &&
+            stored.length > 30) {
+          return stored;
+        }
+        // Invalid format - remove from storage
+        localStorage.removeItem(`cookie_${name}`);
+      }
+    } catch (e) {
+      console.warn('[Auth] localStorage access failed:', e);
+    }
+  }
+
+  // Standard cookie parsing
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
+  if (parts.length === 2) {
+    const cookieValue = parts.pop().split(';').shift();
+    // Store in localStorage for persistence
+    if (name === 'access_token' || name === 'refresh_token') {
+      try {
+        localStorage.setItem(`cookie_${name}`, cookieValue);
+      } catch (e) {
+        console.warn('[Auth] Failed to store token in localStorage:', e);
+      }
+    }
+    return cookieValue;
+  }
   return null;
 }
 
@@ -400,6 +431,8 @@ function clearTokenState() {
   try {
     localStorage.removeItem('authState');
     localStorage.removeItem('lastAuthCheck');
+    localStorage.removeItem('cookie_access_token');
+    localStorage.removeItem('cookie_refresh_token');
     sessionStorage.clear();
   } catch (e) {
     console.warn('[Auth] Failed to clear storage:', e);
@@ -493,6 +526,7 @@ async function init() {
 
     setupUIListeners();
     setupAuthStateMonitoring();
+    setupTokenSync();
     window.auth.isInitialized = true;
 
     console.log("[Auth] Module initialized successfully");
@@ -657,6 +691,29 @@ async function verifyAuthState(bypassCache = false) {
 // ---------------------------------------------------------------------
 // Periodic & On-Focus Auth Monitoring
 // ---------------------------------------------------------------------
+let tokenSyncInterval;
+
+// Sync cookies with localStorage every 5 minutes
+function setupTokenSync() {
+  // Clear any existing interval
+  if (tokenSyncInterval) {
+    clearInterval(tokenSyncInterval);
+  }
+
+  tokenSyncInterval = setInterval(() => {
+    ['access_token', 'refresh_token'].forEach(name => {
+      const cookieValue = getCookie(name);
+      if (cookieValue) {
+        try {
+          localStorage.setItem(`cookie_${name}`, cookieValue);
+        } catch (e) {
+          console.warn(`[Auth] Failed to sync ${name} to localStorage:`, e);
+        }
+      }
+    });
+  }, 5 * 60 * 1000); // 5 minutes
+}
+
 function setupAuthStateMonitoring() {
   // Initial verification
   verifyAuthState(true).then(isAuthenticated => {
@@ -927,9 +984,20 @@ async function handleRegister(formData) {
       password
     });
     // Immediately login
-    await loginUser(username, password);
+    const loginResult = await loginUser(username, password);
+    
+    // Ensure auth state is properly updated
+    authState.isAuthenticated = true;
+    authState.username = username;
+    authState.lastVerified = Date.now();
+    sessionExpiredFlag = false;
+    
+    // Broadcast auth state
+    broadcastAuth(true, username);
+    
     document.getElementById("registerForm")?.reset();
     notify("Registration successful", "success");
+    return loginResult;
   } catch (error) {
     notify(error.message || "Registration failed", "error");
     throw error;

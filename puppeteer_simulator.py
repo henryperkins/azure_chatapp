@@ -339,9 +339,20 @@ class PuppeteerSimulator:
         # Show browser console logs
         print("\n=== Browser Console Logs ===")
         browser_logs = self.get_browser_logs()
-        if browser_logs.get("success"):
-            for log in browser_logs.get("logs", []):
-                print(f"  [{log['timestamp']}] [{log['type']}] {log['text']}")
+        if not isinstance(browser_logs, dict):
+            print("  [No logs available - invalid response format]")
+        elif not browser_logs.get("success"):
+            print("  [No logs available - request failed]")
+        else:
+            logs = browser_logs.get("logs", [])
+            if not isinstance(logs, list):
+                print("  [No logs available - invalid logs format]")
+            else:
+                for log in logs:
+                    if isinstance(log, dict):
+                        print(f"  [{log.get('timestamp', '?')}] [{log.get('type', '?')}] {log.get('text', '')}")
+                    else:
+                        print(f"  [Malformed log entry: {log}]")
         
         # Show console logs
         print("\n=== Console Logs ===")

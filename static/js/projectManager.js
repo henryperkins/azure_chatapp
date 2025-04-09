@@ -119,9 +119,26 @@
    * @returns {Promise<Object>} Project data
    */
   async function loadProjectDetails(projectId) {
+    // Validate project ID format
+    try {
+      if (!projectId || typeof projectId !== 'string') {
+        throw new Error('Invalid project ID');
+      }
+      
+      // Simple UUID format check
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId)) {
+        throw new Error('Malformed project ID');
+      }
+    } catch (err) {
+      emitEvent('projectDetailsError', { error: err });
+      return null;
+    }
+
     const projectEndpoint = `/api/projects/${projectId}/`;
 
     try {
+      // Clear current project while loading
+      currentProject = null;
       // Check auth state using auth.js
       const isAuthenticated = await window.auth.isAuthenticated();
       if (!isAuthenticated) {
@@ -328,6 +345,16 @@
       console.error("[projectManager] Error loading artifacts:", err);
       emitEvent("projectArtifactsLoaded", { artifacts: [] });
       emitEvent("projectArtifactsError", { error: err });
+      // Handle 404 specifically
+      if (err?.response?.status === 404) {
+        emitEvent('projectNotFound', { projectId });
+        // Clear any cached references to this project
+        if (currentProject?.id === projectId) {
+          currentProject = null;
+        }
+      } else {
+        emitEvent('projectDetailsError', { error: err });
+      }
       throw err;
     }
   }

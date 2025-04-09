@@ -14,10 +14,10 @@ and response_utils.py.
 
 import logging
 import tiktoken
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union, AsyncGenerator, cast
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
+import json
 from .openai import openai_chat
 
 
@@ -53,14 +53,37 @@ async def do_summarization(
     summarization_input = [system_prompt] + messages
 
     try:
-        # Using 'await' because openai_chat is expected to be async
-        result = await openai_chat(
+        # Collect all response chunks from the async generator
+        complete_response: Dict[str, Any] = {}
+        result: Union[Dict[str, Any], AsyncGenerator[Union[Dict[str, Any], bytes], None]] = await openai_chat(
             messages=summarization_input,
             model_name=model_name,
             max_completion_tokens=300,
             reasoning_effort=None,
         )
-        summary_text = result["choices"][0]["message"]["content"]
+
+        if isinstance(result, dict):
+            # Non-streaming case - direct dictionary response
+            complete_response = result
+        else:
+            # Streaming case - collect chunks from async generator
+            async for chunk in result:
+                if isinstance(chunk, (dict, bytes, bytearray, memoryview)):
+                    if isinstance(chunk, dict):
+                        complete_response.update(cast(Dict[str, Any], chunk))
+                    else:
+                        try:
+                            if isinstance(chunk, memoryview):
+                                chunk = chunk.tobytes()
+                            chunk_str = chunk.decode("utf-8")
+                            chunk_dict = json.loads(chunk_str)
+                            if isinstance(chunk_dict, Dict):
+                                complete_response.update(chunk_dict)
+                        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                            logger.error(f"Error decoding chunk: {e}")
+                            continue
+        
+        summary_text = complete_response["choices"][0]["message"]["content"]
         return summary_text.strip()
     except Exception as e:
         logger.error(f"Error during summarization: {e}")

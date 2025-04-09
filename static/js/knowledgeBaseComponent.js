@@ -1109,40 +1109,106 @@
         return null;
       }
 
-      try {
-        // Use auth.getAuthToken() for consistent authentication
-        const token = await window.auth.getAuthToken();
-        const response = await window.apiRequest(`/api/knowledge-bases/${kbId}/health`, "GET", null, token);
-        const health = response.data || {};
-
-        console.log("[DEBUG] KB Health:", health);
-
-        // Optionally update UI elements based on health status (e.g., a specific health indicator)
-        // Example: Update a dedicated status badge
-        const healthStatusEl = document.getElementById('kbHealthStatus'); // Assume element exists
-        if (healthStatusEl) {
-          healthStatusEl.textContent = `Status: ${health.status || 'Unknown'}`;
-          healthStatusEl.className = health.status === 'active' ? 'text-green-600' : 'text-yellow-600';
-        }
-
-        // Update main status indicator based on health if needed (might conflict with is_active)
-        // Decide if 'is_active' toggle or 'health.status' should drive the main indicator
-        // this._updateStatusIndicator(health.status === "active");
-
-        // You might want to display specific health metrics like vector count
-        const vectorCountEl = document.getElementById('kbVectorCount');
-        if (vectorCountEl && health.vector_count !== undefined) {
-          vectorCountEl.textContent = `Vectors: ${health.vector_count}`;
-        }
-
-
-        return health;
-      } catch (err) {
-        console.error("Failed to load KB health:", err);
-        // Optionally show a warning to the user about health check failure
-        this._showStatusAlert("Could not verify knowledge base health.", "warning");
+      // Validate KB ID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(kbId)) {
+        this._showStatusAlert("Invalid knowledge base ID format", "error");
         return null;
       }
+
+      // Check auth state first - no point retrying if not authenticated
+      try {
+        const isAuthenticated = await window.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          this._showStatusAlert("Please login to check knowledge base health", "warning");
+          return null;
+        }
+      } catch (authError) {
+        console.error("Auth check failed:", authError);
+        this._showStatusAlert("Authentication check failed", "error");
+        return null;
+      }
+
+      const MAX_RETRIES = 3;
+      const BASE_DELAY = 1000; // 1 second
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const token = await window.auth.getAuthToken();
+          const response = await window.apiRequest(
+            `/api/knowledge-bases/${kbId}/health`,
+            "GET",
+            null,
+            token,
+            attempt - 1, // pass retry count
+            5000 // 5 second timeout
+          );
+          
+          if (!response?.data) {
+            throw new Error("Invalid health check response");
+          }
+
+          const health = response.data;
+          console.log("[DEBUG] KB Health:", health);
+
+          // Update UI elements
+          const healthStatusEl = document.getElementById('kbHealthStatus');
+          if (healthStatusEl) {
+            const statusText = health.status === 'active' ? 'Active' :
+                             health.status === 'inactive' ? 'Inactive' : 'Unknown';
+            healthStatusEl.textContent = `Status: ${statusText}`;
+            healthStatusEl.className = health.status === 'active' ? 'text-green-600' : 'text-yellow-600';
+          }
+
+          const vectorCountEl = document.getElementById('kbVectorCount');
+          if (vectorCountEl) {
+            const vectorStatus = health.vector_db?.status || 'unknown';
+            if (vectorStatus === 'healthy' && health.vector_db?.index_count !== undefined) {
+              vectorCountEl.textContent = `Vectors: ${health.vector_db.index_count}`;
+            } else {
+              vectorCountEl.textContent = `Vectors: Status ${vectorStatus}`;
+            }
+          }
+
+          return health;
+
+        } catch (err) {
+          lastError = err;
+          console.error(`KB Health check attempt ${attempt} failed:`, err);
+          
+          // Skip retries for auth errors - they won't succeed without login
+          if (err?.message?.includes('auth') || err?.message?.includes('authenticat')) {
+            break;
+          }
+          
+          if (attempt < MAX_RETRIES) {
+            const delay = BASE_DELAY * Math.pow(2, attempt - 1);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+
+      // All retries failed - show specific error
+      console.error("KB health check failed:", lastError);
+      let errorMsg = "Could not verify knowledge base health";
+      let errorType = "error";
+      
+      if (!lastError) {
+        errorMsg = "Unknown error checking knowledge base health";
+      } else if (lastError?.message?.includes('auth') || lastError?.message?.includes('authenticat')) {
+        errorMsg = "Please login to check knowledge base health";
+        errorType = "warning";
+      } else if (lastError?.response?.status === 404) {
+        errorMsg = "Knowledge base not found - it may have been deleted";
+      } else if (lastError?.message?.includes('timeout')) {
+        errorMsg = "Health check timed out - vector DB may be unavailable";
+      } else if (lastError?.response?.data?.vector_db?.error) {
+        errorMsg = `Vector DB error: ${lastError.response.data.vector_db.error}`;
+      }
+      
+      this._showStatusAlert(errorMsg, "error");
+      return null;
     }
 
     /**
