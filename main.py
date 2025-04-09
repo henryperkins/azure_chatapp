@@ -92,7 +92,11 @@ for logger_name in sqla_loggers:
 os.environ["AZUREML_ENVIRONMENT_UPDATE"] = "false"
 
 middleware = [
-    Middleware(TrustedHostMiddleware, allowed_hosts=["*"], www_redirect=False),
+    Middleware(
+        TrustedHostMiddleware, 
+        allowed_hosts=["put.photo", "localhost", "127.0.0.1"], 
+        www_redirect=False
+    ),
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
@@ -100,6 +104,7 @@ middleware = [
         same_site="strict",
         https_only=True,
         max_age=60 * 60 * 24 * 7,
+        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
     ),
 ]
 
@@ -193,16 +198,26 @@ async def projects():
 @app.get("/health")
 async def health_check(request: Request):
     """Health check endpoint with same-origin verification."""
-    # Verify request came from same origin
+    # Verify request came from allowed origins
     origin = request.headers.get("origin")
-    if origin and origin != f"{request.url.scheme}://{request.headers.get('host')}":
-        raise HTTPException(403, detail="Cross-origin requests not permitted")
+    host = request.headers.get("host")
+    
+    # Allow put.photo domain requests
+    if origin:
+        allowed_origins = [
+            f"{request.url.scheme}://{host}",
+            f"https://put.photo"
+        ]
+        if origin not in allowed_origins:
+            raise HTTPException(403, detail="Cross-origin requests not permitted")
     
     return {
         "status": "ok",
         "security": {
             "same_origin_verified": True,
-            "session_cookie_secure": True
+            "session_cookie_secure": True,
+            "host": host,
+            "domain": settings.COOKIE_DOMAIN
         }
     }
 
@@ -396,5 +411,3 @@ async def on_shutdown():
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
     logger.info("Shutdown complete")
-
-

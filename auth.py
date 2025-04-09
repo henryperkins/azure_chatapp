@@ -540,9 +540,9 @@ def set_secure_cookie(
         "value": value,
         "httponly": True,
         "secure": settings.ENV == "production",
-        "samesite": "none" if settings.ENV == "production" else "lax",  # Changed
+        "samesite": "lax",  # Changed to lax for better cross-site compatibility
         "path": "/",
-        "max_age": max_age,
+        "max_age": max_age if max_age is not None else 60 * 60 * 24 * 30,  # Default 30 days if not specified
     }
 
     # Only set domain if in production and we have request headers

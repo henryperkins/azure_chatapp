@@ -615,6 +615,7 @@ async def fix_db_schema():
                     except Exception as outer_error:
                         max_retries = 3
                         attempt = 0
+                        constraint_name = f"{table_name}_{col_name}_fkey"  # Default FK naming convention
                         if "deadlock" in str(outer_error).lower() and attempt < max_retries - 1:
                             logger.warning(f"Deadlock detected on FK {constraint_name}, retrying... (Attempt {attempt + 1})")
                             time.sleep(0.1 * (attempt + 1))

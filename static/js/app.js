@@ -923,6 +923,7 @@ window.ensureAuthenticated = ensureAuthenticated; // <-- Add this line
 window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
 window.loadProjects = loadProjects;
+window.loadProjectList = loadProjects; // Add alias for loadProjects function to match auth.js reference
 
 // Central Initialization Controller
 window.appInitializer = {

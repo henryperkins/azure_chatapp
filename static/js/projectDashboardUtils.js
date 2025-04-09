@@ -815,6 +815,20 @@ window.bus = new AppEventBus();
           window.showNotification('Operation timed out. Please try again.', 'error');
         } else if (errorMessage.includes('Authentication') || errorMessage.includes('auth')) {
           window.showNotification('Authentication error: ' + errorMessage, 'error');
+        } else if (errorMessage.includes('Project not found') || errorMessage.includes('404')) {
+          window.showNotification(
+            'The requested project was not found. Returning to projects list.',
+            'error',
+            {
+              action: "View Projects",
+              onAction: () => {
+                if (window.projectManager?.loadProjects) {
+                  window.projectManager.loadProjects();
+                  window.history.pushState({}, '', '/projects');
+                }
+              }
+            }
+          );
         } else {
           window.showNotification('Operation failed: ' + errorMessage, 'error');
         }

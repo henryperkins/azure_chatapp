@@ -557,7 +557,7 @@ async def claude_chat(
                         async for chunk in response.aiter_bytes():
                             yield chunk
 
-                return stream_generator()  # Return the async generator
+                return stream_generator()  # type: ignore[return-value]  # Return the async generator
             else:
                 # Non-streaming request
                 response = await client.post(
@@ -849,8 +849,8 @@ async def count_claude_tokens(messages: List[Dict[str, str]], model_name: str) -
         content = msg.get("content")
         if isinstance(content, str):
             total_chars += len(content)
-        elif isinstance(content, list):  # Handle vision message format
-            for item in content:
+        elif isinstance(content, list):  # type: ignore[arg-type]  # Handle vision message format
+            for item in content:  # type: ignore[union-attr]
                 if isinstance(item, dict) and item.get("type") == "text":
                     total_chars += len(item.get("text", ""))
                 # Image token counting is complex, skip for estimation

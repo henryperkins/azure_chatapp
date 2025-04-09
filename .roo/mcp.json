@@ -1,5 +1,36 @@
 {
   "mcpServers": {
+    "github.com/smithery-ai/mcp-obsidian": {
+      "command": "node",
+      "args": [
+        "/home/azureuser/Cline/MCP/obsidian-mcp/mcp-obsidian/dist/index.js",
+        "/home/azureuser/Cline/MCP/obsidian-vault"
+      ],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/awslabs/mcp/tree/main/src/aws-documentation-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-documentation-mcp-server@latest"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/awslabs/mcp/tree/main/src/bedrock-kb-retrieval-mcp-server": {
+      "command": "/home/azureuser/Cline/MCP/bedrock-kb-venv/bin/awslabs.bedrock-kb-retrieval-mcp-server",
+      "args": [],
+      "env": {
+        "AWS_PROFILE": "default",
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
     "github.com/modelcontextprotocol/servers/tree/main/src/postgres": {
       "command": "npx",
       "args": [

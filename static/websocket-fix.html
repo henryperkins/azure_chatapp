@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Connection Diagnostic & Repair</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #0066cc;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #0066cc;
+            margin-top: 24px;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .issue {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        .solution {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        code {
+            background-color: #f1f1f1;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #eee;
+        }
+        button {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        .log-entry {
+            margin: 5px 0;
+            font-family: monospace;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Diagnostic & Repair Tool</h1>
+    
+    <div class="card issue">
+        <h2>Issues Detected</h2>
+        <ul>
+            <li><strong>WebSocket Connection Failures</strong>: Connections to conversation endpoints failing repeatedly</li>
+            <li><strong>Authentication Issues</strong>: User authentication errors in WebSocket sessions</li>
+            <li><strong>Browser Extension Errors</strong>: Missing resources and frame connection issues</li>
+            <li><strong>HTTP Fallback Overuse</strong>: System falling back to HTTP too frequently</li>
+        </ul>
+    </div>
+
+    <div class="card solution">
+        <h2>Repair Strategy</h2>
+        <ol>
+            <li>Fix WebSocket connection authentication flow</li>
+            <li>Implement robust error recovery for WebSocket connections</li>
+            <li>Resolve resource loading failures in browser extensions</li>
+            <li>Add enhanced diagnostics and heartbeat mechanism</li>
+        </ol>
+        <p>Click the button below to apply fixes to your current application:</p>
+        <button id="applyFixBtn">Apply WebSocket Fixes</button>
+        <div id="statusMessage" class="status hidden"></div>
+    </div>
+
+    <div class="card">
+        <h2>Diagnostic Results</h2>
+        <button id="runDiagnosticBtn">Run Connection Diagnostic</button>
+        <div id="diagnosticResults" class="log-container hidden">
+            <div class="log-entry">Waiting to run diagnostics...</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>How to Install the Fix</h2>
+        <p>To permanently apply the WebSocket connection fix to your application, add the following script tag to your HTML files after loading the existing WebSocket service:</p>
+        <pre><code>&lt;script src="/static/js/websocket-fix.js"&gt;&lt;/script&gt;</code></pre>
+        <p>Or add this to your main application entrypoint:</p>
+        <pre><code>
+// Load the WebSocket fix script
+const wsFixScript = document.createElement('script');
+wsFixScript.src = '/static/js/websocket-fix.js';
+document.head.appendChild(wsFixScript);
+        </code></pre>
+    </div>
+
+    <script>
+        // Store original console methods for diagnostic logging
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        
+        // Override console methods to capture logs
+        const logs = [];
+        function captureLog(level, ...args) {
+            const timestamp = new Date().toISOString();
+            const message = args.map(arg => {
+                if (typeof arg === 'object') {
+                    try {
+                        return JSON.stringify(arg);
+                    } catch (e) {
+                        return String(arg);
+                    }
+                }
+                return String(arg);
+            }).join(' ');
+            
+            logs.push({ level, message, timestamp });
+            
+            // Call original method
+            switch (level) {
+                case 'error':
+                    originalConsoleError.apply(console, args);
+                    break;
+                case 'warn':
+                    originalConsoleWarn.apply(console, args);
+                    break;
+                default:
+                    originalConsoleLog.apply(console, args);
+            }
+            
+            // Update diagnostic display if visible
+            updateDiagnosticDisplay();
+        }
+        
+        console.log = (...args) => captureLog('log', ...args);
+        console.error = (...args) => captureLog('error', ...args);
+        console.warn = (...args) => captureLog('warn', ...args);
+        
+        // Update diagnostic display
+        function updateDiagnosticDisplay() {
+            const diagnosticResults = document.getElementById('diagnosticResults');
+            if (diagnosticResults && !diagnosticResults.classList.contains('hidden')) {
+                diagnosticResults.innerHTML = '';
+                logs.forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = `log-entry ${log.level}`;
+                    logEntry.textContent = `[${log.timestamp.slice(11, 19)}] [${log.level.toUpperCase()}] ${log.message}`;
+                    diagnosticResults.appendChild(logEntry);
+                });
+                
+                // Scroll to bottom
+                diagnosticResults.scrollTop = diagnosticResults.scrollHeight;
+            }
+        }
+        
+        // Show status message
+        function showStatus(message, type) {
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.textContent = message;
+            statusMessage.className = `status ${type}`;
+            statusMessage.classList.remove('hidden');
+        }
+        
+        // Apply WebSocket fixes
+        document.getElementById('applyFixBtn').addEventListener('click', async function() {
+            try {
+                showStatus('Loading WebSocket fix script...', 'warning');
+                
+                // Create and append the script element
+                const script = document.createElement('script');
+                script.src = '/static/js/websocket-fix.js';
+                
+                // Promise to handle script loading
+                const loadPromise = new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = reject;
+                });
+                
+                document.head.appendChild(script);
+                
+                // Wait for script to load
+                await loadPromise;
+                
+                // Check if fix was applied
+                if (window.WebSocketService) {
+                    showStatus('WebSocket fixes applied successfully! Try connecting to a conversation now.', 'success');
+                    console.log('WebSocket fix script loaded and applied');
+                } else {
+                    showStatus('WebSocket service not detected. Fix was applied but may not be effective.', 'warning');
+                }
+            } catch (error) {
+                showStatus(`Failed to load fix script: ${error.message}`, 'error');
+                console.error('Error loading WebSocket fix:', error);
+            }
+        });
+        
+        // Run connection diagnostic
+        document.getElementById('runDiagnosticBtn').addEventListener('click', async function() {
+            const diagnosticResults = document.getElementById('diagnosticResults');
+            diagnosticResults.classList.remove('hidden');
+            diagnosticResults.innerHTML = '<div class="log-entry">Starting diagnostic...</div>';
+            
+            console.log('WebSocket connection diagnostic started');
+            
+            // Check for WebSocket service
+            if (!window.WebSocketService) {
+                console.warn('WebSocketService not found - core service unavailable');
+            } else {
+                console.log('WebSocketService detected, version:', window.WebSocketService.version || 'unknown');
+                
+                // Check for auth service
+                if (!window.auth) {
+                    console.error('Auth service not found - authentication will fail');
+                } else {
+                    console.log('Auth service detected');
+                    
+                    // Check authentication state
+                    try {
+                        const isAuthenticated = await window.auth.isAuthenticated({ skipCache: true });
+                        console.log('Authentication status:', isAuthenticated ? 'Authenticated' : 'Not authenticated');
+                    } catch (error) {
+                        console.error('Error checking authentication:', error.message);
+                    }
+                }
+                
+                // Check WebSocket URL construction
+                if (window.API_CONFIG?.WS_ENDPOINT) {
+                    console.log('WebSocket endpoint configured:', window.API_CONFIG.WS_ENDPOINT);
+                } else {
+                    console.warn('No WebSocket endpoint configured, using window.location.host');
+                }
+                
+                // Check for fix script
+                const isFixApplied = window.WebSocketService.prototype._setupEnhancedHeartbeat !== undefined;
+                if (isFixApplied) {
+                    console.log('WebSocket fix is applied and active');
+                } else {
+                    console.warn('WebSocket fix not detected');
+                }
+                
+                // Check for browser extension issues
+                if (window.chrome && chrome.runtime) {
+                    console.log('Browser extension environment detected');
+                    
+                    // Check for missing resources
+                    const extensionResources = ['utils.js', 'heuristicsRedefinitions.js', 'extensionState.js'];
+                    extensionResources.forEach(resource => {
+                        try {
+                            const script = document.querySelector(`script[src*="${resource}"]`);
+                            if (script) {
+                                console.log(`Extension resource ${resource} is loaded`);
+                            } else {
+                                console.warn(`Extension resource ${resource} may be missing`);
+                            }
+                        } catch (error) {
+                            console.error(`Error checking extension resource ${resource}:`, error.message);
+                        }
+                    });
+                }
+            }
+            
+            console.log('WebSocket connection diagnostic completed');
+            updateDiagnosticDisplay();
+        });
+    </script>
+</body>
+</html>

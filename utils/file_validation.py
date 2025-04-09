@@ -108,7 +108,7 @@ class FileValidator:
     @classmethod
     async def validate_upload_file(
         cls,
-        file: Union[BinaryIO, UploadFile],
+        file: UploadFile,
         scan_content: bool = True,
         preserve_spaces: bool = True,
     ) -> Dict[str, Any]:
@@ -124,8 +124,8 @@ class FileValidator:
         Comprehensive validation for uploaded files.
         Returns file info dict or raises ValueError.
         """
-        original_filename = getattr(file, "filename", "untitled")
-        file_size = getattr(file, "size", None)
+        original_filename = file.filename or "untitled"
+        file_size = file.size
 
         # Validate extension first
         if not cls.validate_extension(original_filename):
@@ -150,7 +150,7 @@ class FileValidator:
                 b"<script",
                 b"eval(",
                 # System commands
-                b"powershell", 
+                b"powershell",
                 b"cmd.exe",
                 b"/bin/bash",
                 b"wget",
@@ -159,7 +159,7 @@ class FileValidator:
                 b"exec(",
                 b"system(",
                 b"passthru(",
-                # Dangerous file operations  
+                # Dangerous file operations
                 b"file_put_contents",
                 b"fopen(",
                 b"unlink(",
