@@ -195,7 +195,7 @@ async def login_user(
         if not old_version or (current_ts - old_version) > 300:  # 5 minute window
             locked_user.token_version = current_ts
         logger.info(
-            f"User '{username}' token_version updated from {old_version} to {locked_user.token_version}"
+            f"User '{lower_username}' token_version updated from {old_version} to {locked_user.token_version}"
         )
 
         await session.commit()
