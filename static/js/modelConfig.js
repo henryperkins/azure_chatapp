@@ -550,7 +550,7 @@ async function setupExtendedThinkingUI() {
   extendedThinkingPanel.classList.toggle("hidden", !supportsExtendedThinking);
 
   // Get UI elements
-  const extendedThinkingToggle = document.getElementById("extendedThinkinging");
+  const extendedThinkingToggle = document.getElementById("extendedThinkingToggle");
   const thinkingBudgetSelect = document.getElementById("thinkingBudget");
 
   // Set initial values
@@ -616,8 +616,8 @@ async function setupVisionFileInput() {
     }
 
     // Validate model
-    if (!["o1", "gpt-4o"].includes(modelConfigState.modelName)) {
-      if (statusEl) statusEl.textContent = 'Vision only works with o1 or gpt-4o model';
+    if (!["o1", "gpt-4o", "claude-3-7-sonnet-20250219", "claude-3-opus-20240229"].includes(modelConfigState.modelName)) {
+      if (statusEl) statusEl.textContent = 'Vision only works with supported vision models';
       e.target.value = '';
       return;
     }

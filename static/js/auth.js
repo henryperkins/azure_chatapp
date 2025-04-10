@@ -350,7 +350,7 @@ function getCookie(name) {
     cookieValue = parts.pop().split(';').shift();
   }
   
-  // For auth tokens, implement persistent storage
+  // For auth tokens, implement improved persistent storage and fallback
   if (name === 'access_token' || name === 'refresh_token') {
     // If cookie found, store in localStorage and sessionStorage for persistence
     if (cookieValue) {
@@ -361,6 +361,8 @@ function getCookie(name) {
             cookieValue.length > 30) {
           localStorage.setItem(`cookie_${name}`, cookieValue);
           sessionStorage.setItem(`cookie_${name}`, cookieValue); // Also store in session
+          
+          if (AUTH_DEBUG) console.debug(`[Auth] Valid ${name} found in cookies and stored in localStorage/sessionStorage`);
         }
       } catch (e) {
         console.warn('[Auth] Failed to store token in storage:', e);
@@ -368,8 +370,9 @@ function getCookie(name) {
       return cookieValue;
     }
     
-    // If cookie not found, try localStorage fallback
+    // If cookie not found, try localStorage fallback with more detailed logging
     try {
+      // Check localStorage first
       const stored = localStorage.getItem(`cookie_${name}`);
       if (stored) {
         // Basic JWT format validation
@@ -380,6 +383,16 @@ function getCookie(name) {
           // If valid token found in localStorage but not in cookies,
           // try to restore it to cookies (may not work due to HttpOnly)
           if (AUTH_DEBUG) console.debug(`[Auth] Restoring ${name} from localStorage fallback`);
+          
+          // Make an attempt to restore the cookie if possible
+          try {
+            // This may not work due to HttpOnly cookies, but worth attempting
+            document.cookie = `${name}=${stored}; path=/; ${
+              location.protocol === 'https:' ? 'Secure; ' : ''
+            }SameSite=Strict; max-age=${name === 'access_token' ? 60*30 : 60*60*24}`;
+          } catch (cookieErr) {
+            // Ignore errors, just use the stored value
+          }
           
           // Also store in sessionStorage for double fallback
           sessionStorage.setItem(`cookie_${name}`, stored);
@@ -565,15 +578,22 @@ async function init() {
     if (AUTH_DEBUG) {
       console.debug("[Auth] Starting initialization");
     }
+    
+    // Set up infrastructure first
+    setupUIListeners();
+    setupTokenSync();
+    
+    // Increased delay to give cookies more time to load before first verification
+    await new Promise(resolve => setTimeout(resolve, 600));
+    
     // Check auth state with server
     const isAuthenticated = await verifyAuthState(true);
     if (!isAuthenticated) {
       broadcastAuth(false);
     }
 
-    setupUIListeners();
+    // Set up monitoring after initial verification
     setupAuthStateMonitoring();
-    setupTokenSync();
     window.auth.isInitialized = true;
 
     console.log("[Auth] Module initialized successfully");
@@ -611,9 +631,27 @@ async function verifyAuthState(bypassCache = false) {
       return authState.isAuthenticated;
     }
 
-    // Check for expired access token
-    const accessToken = getCookie('access_token');
-    const refreshToken = getCookie('refresh_token');
+    // Try getting tokens with improved retries for cookie loading
+    let accessToken, refreshToken;
+    let retries = 5; // Increased from 3 to 5 attempts
+    
+    while (retries-- > 0) {
+      accessToken = getCookie('access_token');
+      refreshToken = getCookie('refresh_token');
+      
+      // Only exit loop when we have BOTH tokens or exhausted retries
+      if (accessToken && refreshToken) {
+        if (AUTH_DEBUG) console.debug(`[Auth] Both tokens found, proceeding with verification`);
+        break;
+      }
+      
+      // Only log when one token is missing
+      if (AUTH_DEBUG) console.debug(`[Auth] Waiting for cookies to load, retries left: ${retries}. ` + 
+                              `Found: ${accessToken ? 'access_token' : ''}${refreshToken ? ' refresh_token' : ''}`);
+      
+      // Increased delay between retries
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
 
     // If access token is expired but refresh token exists, attempt refresh
     if (accessToken && isTokenExpired(accessToken) && refreshToken) {
@@ -623,7 +661,7 @@ async function verifyAuthState(bypassCache = false) {
         await refreshTokens();
 
         // Confirm new access token is set in cookies
-        let retries = 3;
+        retries = 3;
         let newAccessToken;
         while (retries-- > 0) {
           await new Promise(resolve => setTimeout(resolve, 200));
@@ -646,6 +684,7 @@ async function verifyAuthState(bypassCache = false) {
       }
     } else if (!accessToken) {
       // No access token at all
+      if (AUTH_DEBUG) console.debug('[Auth] No access token found after retries');
       broadcastAuth(false);
       return false;
     }
@@ -710,7 +749,9 @@ async function verifyAuthState(bypassCache = false) {
     }
 
     // All verification attempts failed
-    console.error('[Auth] All verification attempts failed');
+    console.error('[Auth] All verification attempts failed. Access token present: ' +
+                  !!getCookie('access_token') + ', Refresh token present: ' + 
+                  !!getCookie('refresh_token'));
     authState.isAuthenticated = false;
     authState.lastVerified = Date.now();
     broadcastAuth(false);
@@ -762,13 +803,15 @@ function setupTokenSync() {
 }
 
 function setupAuthStateMonitoring() {
-  // Initial verification
-  verifyAuthState(true).then(isAuthenticated => {
-    broadcastAuth(isAuthenticated);
-  }).catch(error => {
-    console.error('[Auth] Initial verification error:', error);
-    broadcastAuth(false);
-  });
+  // Delay initial verification to allow cookies to be fully loaded
+  setTimeout(() => {
+    verifyAuthState(true).then(isAuthenticated => {
+      broadcastAuth(isAuthenticated);
+    }).catch(error => {
+      console.error('[Auth] Initial verification error:', error);
+      broadcastAuth(false);
+    });
+  }, 300); // Add 300ms delay to give browser time to load cookies
 
   // Set up periodic verification (every 5 minutes)
   const VERIFICATION_INTERVAL = AUTH_CONSTANTS.VERIFICATION_INTERVAL;
@@ -781,15 +824,18 @@ function setupAuthStateMonitoring() {
     }
   }, VERIFICATION_INTERVAL);
 
-  // Also verify on window focus
+  // Also verify on window focus with a delay
   window.addEventListener('focus', () => {
     // Only verify if not already known to be expired and last check > 1 minute ago
     if (!sessionExpiredFlag &&
       (!authState.lastVerified ||
         Date.now() - authState.lastVerified > 60000)) {
-      verifyAuthState(true).catch(error => {
-        console.warn('[Auth] Focus verification error:', error);
-      });
+      // Add slight delay to allow cookies to be fully accessible after focus
+      setTimeout(() => {
+        verifyAuthState(true).catch(error => {
+          console.warn('[Auth] Focus verification error:', error);
+        });
+      }, 200);
     }
   });
 

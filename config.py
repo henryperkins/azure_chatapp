@@ -50,7 +50,8 @@ class Settings:
     REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
     # Cookie domain for the application
-    COOKIE_DOMAIN: str = "put.photo"
+    # Use "put.photo" in production, empty string otherwise for local dev
+    COOKIE_DOMAIN: str = "put.photo" if ENV == "production" else ""
 
     # --- Unified Model Configurations ---
 

@@ -164,11 +164,12 @@ async def create_project(
         logger.error(f"Project creation failed: {str(e)}")
         # If the project was created but knowledge base creation failed, 
         # try to clean up the project to avoid orphaned projects without knowledge bases
-        if 'project' in locals() and project.id:
+        project_variable = locals().get('project')
+        if project_variable and hasattr(project_variable, 'id') and project_variable.id:
             try:
-                await db.delete(project)
+                await db.delete(project_variable)
                 await db.commit()
-                logger.info(f"Rolled back project {project.id} due to knowledge base creation failure")
+                logger.info(f"Rolled back project {project_variable.id} due to knowledge base creation failure")
             except Exception as cleanup_error:
                 logger.error(f"Failed to clean up project after KB creation error: {str(cleanup_error)}")
         
@@ -201,33 +202,24 @@ async def list_projects(
 
     conditions = [Project.user_id == current_user.id]
 
-    # Get all projects first, then filter in memory for more complex logic
-    projects = await get_all_by_condition(
-        db,
-        Project,
-        Project.user_id == current_user.id,
-        limit=limit,
-        offset=skip,
-        order_by=Project.created_at.desc(),
-    )
-
-    # Apply filter logic after retrieval
-    if filter == ProjectFilter.pinned:
-        projects = [p for p in projects if p.pinned]
-    elif filter == ProjectFilter.archived:
-        projects = [p for p in projects if p.archived]
-    elif filter == ProjectFilter.active:
-        projects = [p for p in projects if not p.archived]
-
     try:
+        # Get all projects first
         projects = await get_all_by_condition(
             db,
             Project,
-            *conditions,
+            Project.user_id == current_user.id,
             limit=limit,
             offset=skip,
             order_by=Project.created_at.desc(),
         )
+
+        # Apply filter logic after retrieval
+        if filter == ProjectFilter.pinned:
+            projects = [p for p in projects if p.pinned]
+        elif filter == ProjectFilter.archived:
+            projects = [p for p in projects if p.archived]
+        elif filter == ProjectFilter.active:
+            projects = [p for p in projects if not p.archived]
     except ValueError as ve:
         # If there's some reason your DB code raises ValueError for invalid conditions
         logger.error(f"Validation error listing projects: {str(ve)}")

@@ -22,7 +22,7 @@ azure-storage-blob
 boto3
 # Text extraction dependencies (optional)
 pypdf
-cryptography>=42.0.0
+cryptography
 python-docx
 numpy
 slowapi
