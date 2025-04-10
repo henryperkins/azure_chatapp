@@ -141,85 +141,84 @@ tokenRefreshInProgress = true;
 lastRefreshAttempt = now;
 window.__tokenRefreshPromise = new Promise(async (resolve, reject) => {
   try {
+    console.debug('[Auth] Refreshing tokens...');
 
-try {
-  console.debug('[Auth] Refreshing tokens...');
+    // Validate we have a token to refresh
+    const currentToken = getCookie('refresh_token');
+    if (!currentToken) {
+      throw new Error('No token available for refresh');
+    }
 
-  // Validate we have a token to refresh
-  const currentToken = getCookie('refresh_token');
-  if (!currentToken) {
-    throw new Error('No token available for refresh');
-  }
+    // Check token expiry
+    const expiry = getTokenExpiry(currentToken);
+    if (expiry && expiry < Date.now()) {
+      throw new Error('Token already expired');
+    }
 
-  // Check token expiry
-  const expiry = getTokenExpiry(currentToken);
-  if (expiry && expiry < Date.now()) {
-    throw new Error('Token already expired');
-  }
+    // Implement retry with exponential backoff
+    let lastError;
+    let response;
+    
+    for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt++) {
+      try {
+        const fetchPromise = apiRequest('/api/auth/refresh', 'POST');
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Token refresh timeout')),
+            AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt-1));
+        });
 
-  // Implement retry with exponential backoff
-  let lastError;
-  let response;
-  
-  for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt++) {
-    try {
-      const fetchPromise = apiRequest('/api/auth/refresh', 'POST');
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Token refresh timeout')),
-          AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt-1));
-      });
+        // Race the fetch against the timeout
+        response = await Promise.race([fetchPromise, timeoutPromise]);
 
-      // Race the fetch against the timeout
-      response = await Promise.race([fetchPromise, timeoutPromise]);
+        // Validate response
+        if (!response?.access_token) {
+          throw new Error('Invalid refresh response');
+        }
 
-      // Validate response
-      if (!response?.access_token) {
-        throw new Error('Invalid refresh response');
-      }
-
-      // Store tokenVersion in auth state
-      if (response.token_version) {
-        authState.tokenVersion = response.token_version;
-      }
-      
-      break; // Success - exit retry loop
-    } catch (error) {
-      lastError = error;
-      if (attempt < MAX_REFRESH_RETRIES) {
-        const delay = 300 * Math.pow(2, attempt-1);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        // Store tokenVersion in auth state
+        if (response.token_version) {
+          authState.tokenVersion = response.token_version;
+        }
+        
+        break; // Success - exit retry loop
+      } catch (error) {
+        lastError = error;
+        if (attempt < MAX_REFRESH_RETRIES) {
+          const delay = 300 * Math.pow(2, attempt-1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
-  }
 
-  if (lastError) {
-    throw lastError;
-  }
+    if (lastError) {
+      throw lastError;
+    }
 
-  // Reset failed attempt counter on success
-  refreshFailCount = 0;
+    // Reset failed attempt counter on success
+    refreshFailCount = 0;
 
-  // Refresh verification timestamp
-  authState.lastVerified = Date.now();
+    // Refresh verification timestamp
+    authState.lastVerified = Date.now();
 
-  console.debug('[Auth] Token refreshed successfully');
+    console.debug('[Auth] Token refreshed successfully');
 
-  // Notify about token refresh
-  document.dispatchEvent(new CustomEvent('tokenRefreshed', {
-    detail: { success: true }
-  }));
+    // Notify about token refresh
+    document.dispatchEvent(new CustomEvent('tokenRefreshed', {
+      detail: { success: true }
+    }));
 
-  // Store token version in cookie
-  if (response.token_version) {
-    document.cookie = `token_version=${response.token_version}; path=/; ${
-      location.protocol === 'https:' ? 'Secure; ' : ''
-    }SameSite=Strict`;
-  }
-  return {
-    success: true,
-    version: response.token_version || authState.tokenVersion,
-    token: response.access_token
-  };
+    // Store token version in cookie
+    if (response.token_version) {
+      document.cookie = `token_version=${response.token_version}; path=/; ${
+        location.protocol === 'https:' ? 'Secure; ' : ''
+      }SameSite=Strict`;
+    }
+    
+    resolve({
+      success: true,
+      version: response.token_version || authState.tokenVersion,
+      token: response.access_token
+    });
   } catch (error) {
     // Increment failed attempt counter
     refreshFailCount++;
@@ -264,10 +263,13 @@ try {
       }
     }));
 
-    throw new Error(errorMessage);
+    reject(new Error(errorMessage));
   } finally {
     tokenRefreshInProgress = false;
   }
+});
+
+return window.__tokenRefreshPromise;
 }
 
 /**
@@ -1220,9 +1222,38 @@ window.auth.standardizeError = function(error, context) {
 // ---------------------------------------------------------------------
 // Expose to window
 // ---------------------------------------------------------------------
-window.auth = window.auth || {
+// Create auth object first if it doesn't exist
+window.auth = window.auth || {};
+
+// Add standardizeError before assignment if it exists
+const standardizeErrorFn = window.auth.standardizeError || function(error, context) {
+  let standardError = {
+    status: error.status || 500,
+    message: error.message || "Unknown error",
+    context: context || "authentication",
+    code: error.code || "UNKNOWN_ERROR",
+    requiresLogin: false
+  };
+  
+  // Standardize common authentication errors
+  if (error.status === 401 || error.message?.includes('expired') || error.message?.includes('Session')) {
+    standardError.status = 401;
+    standardError.message = "Your session has expired. Please log in again.";
+    standardError.code = "SESSION_EXPIRED";
+    standardError.requiresLogin = true;
+  } else if (error.status === 403) {
+    standardError.status = 403;
+    standardError.message = "You don't have permission to access this resource.";
+    standardError.code = "ACCESS_DENIED";
+  }
+  
+  return standardError;
+};
+
+// Now assign all properties and methods
+Object.assign(window.auth, {
   init,
-  standardizeError: window.auth.standardizeError,
+  standardizeError: standardizeErrorFn,
   isAuthenticated: async function (options = {}) {
     const { skipCache = false, forceVerify = false } = options;
     try {
@@ -1245,6 +1276,9 @@ window.auth = window.auth || {
   clear: clearTokenState,
   broadcastAuth,
   isInitialized: false
-};
+});
+
+// Export the auth object for ES module usage
+export default window.auth;
 
 console.log("[Auth] Enhanced module loaded and exposed to window.auth");

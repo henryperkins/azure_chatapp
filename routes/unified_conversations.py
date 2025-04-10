@@ -645,6 +645,7 @@ async def create_message(
 async def websocket_chat_endpoint(
     websocket: WebSocket,
     conversation_id: UUID,
+    token_validation_task=None,
     project_id: Optional[UUID] = None,
     token: str = Query(None),
 ):
@@ -694,7 +695,9 @@ async def websocket_chat_endpoint(
                         
                         # Verify token without raising exception
                         try:
-                            await verify_token(token, "access", None)
+                            test_user = await get_user_from_token(token, db)
+                            if not test_user:
+                                raise ValueError("User not found for token re-validation")
                         except Exception:
                             # Send message to client requesting token refresh
                             await websocket.send_json({"type": "token_refresh_required"})
@@ -810,14 +813,15 @@ async def websocket_chat_endpoint(
                         {"type": "error", "message": str(e)}, websocket
                     )
 
-        except (WebSocketDisconnect, asyncio.CancelledError):
+        except (WebSocketDisconnect, asyncio.CancelledError) as e:
             logger.info(
                 f"WebSocket disconnected for user {user.id if user else 'unknown'}, conversation {conversation_id}"
             )
-            if 'token_validation_task' in locals():
+            if token_validation_task:
                 token_validation_task.cancel()
-        except Exception as e:
-            logger.exception(f"WebSocket error: {str(e)}")
+            logger.info(f"Disconnect reason: {str(e)}")
+        except Exception as exc:
+            logger.exception(f"WebSocket error: {str(exc)}")
         finally:
             # Clean up
             if heartbeat_task:
