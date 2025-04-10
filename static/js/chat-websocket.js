@@ -189,7 +189,8 @@
       }
       
       // Use wss:// in production, ws:// in development
-      const protocol = settings.ENV === 'production' ? 'wss://' : 'ws://';
+      const environment = window?.API_CONFIG?.ENV ?? 'development';
+      const protocol = environment === 'production' ? 'wss://' : 'ws://';
 
       // See if this is a project-based conversation
       const currentConversation = window.chatInterface?.conversationService?.currentConversation;
