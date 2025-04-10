@@ -64,7 +64,7 @@ from config import settings
 # -------------------------
 # Import Utility Functions
 # -------------------------
-from utils.auth_utils import load_revocation_list, clean_expired_tokens
+from utils.auth_utils import clean_expired_tokens
 from utils.db_utils import schedule_token_cleanup
 
 # Ensure Python recognizes config.py as a module
