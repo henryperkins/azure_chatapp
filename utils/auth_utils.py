@@ -28,8 +28,6 @@ logger = logging.getLogger(__name__)
 JWT_SECRET: str = settings.JWT_SECRET
 JWT_ALGORITHM = "HS256"
 
-# In-memory revocation cache (backed by database)
-REVOCATION_LIST = set()
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

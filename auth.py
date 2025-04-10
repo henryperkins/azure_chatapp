@@ -88,7 +88,7 @@ async def get_auth_debug_info():
         "auth_debug_enabled": AUTH_DEBUG,
         "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
         "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
-        "revoked_tokens_count": len(REVOCATION_LIST) if REVOCATION_LIST else "Not loaded",
+        "revoked_tokens_count": "Not tracked",
         "cookie_domain": settings.COOKIE_DOMAIN,
         "environment": settings.ENV,
     }
@@ -274,7 +274,6 @@ async def login_user(
             "iat": datetime.now(timezone.utc),
             "jti": refresh_token_id,
             "type": "refresh",
-            "version": locked_user.token_version,
             "user_id": locked_user.id,
         }
         refresh_token = create_access_token(refresh_payload)
@@ -576,10 +575,7 @@ async def logout_user(
     # Invalidate all user tokens
     try:
         async with session.begin_nested():
-            current_ts = int(datetime.now(timezone.utc).timestamp())
             locked_user = await session.get(User, user.id, with_for_update=True)
-            if locked_user:
-                locked_user.token_version = current_ts
             await session.commit()
     except Exception as e:
         logger.error("Failed to update token version during logout: %s", e)
