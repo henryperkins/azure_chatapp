@@ -187,7 +187,9 @@
       if (!host) {
         throw new Error('Empty WebSocket host');
       }
-      const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      
+      // Use wss:// in production, ws:// in development
+      const protocol = settings.ENV === 'production' ? 'wss://' : 'ws://';
 
       // See if this is a project-based conversation
       const currentConversation = window.chatInterface?.conversationService?.currentConversation;
@@ -292,20 +294,25 @@
 
     this.heartbeatInterval = setInterval(() => {
       if (!this.isConnected()) return;
-
+      
+      // Detect stale connections
       const timeSinceLastPong = Date.now() - this.lastPongTime;
-      if (timeSinceLastPong > 90000) {
-        console.warn('Heartbeat timeout - no pong received in', timeSinceLastPong, 'ms');
+      if (timeSinceLastPong > 60000) { // Reduced from 90s to 60s for faster detection
+        console.warn('Heartbeat timeout detected - no pong received in', timeSinceLastPong, 'ms');
         this.handleConnectionError(new Error(`Heartbeat timeout (${timeSinceLastPong}ms since last pong)`));
         return;
       }
-      try {
-        this.socket.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-        this.pendingPongs++;
-        console.debug('Sent ping, pending pongs:', this.pendingPongs);
-      } catch (err) {
-        console.error('Failed to send heartbeat ping:', err);
-        this.handleConnectionError(err);
+      
+      // Limit pending pings
+      if (this.pendingPongs < 3) {
+        try {
+          this.socket.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+          this.pendingPongs++;
+          console.debug('Sent ping, pending pongs:', this.pendingPongs);
+        } catch (err) {
+          console.error('Failed to send heartbeat ping:', err);
+          this.handleConnectionError(err);
+        }
       }
     }, 30000);
   };
@@ -413,6 +420,15 @@
   window.WebSocketService.prototype.handleTokenRefresh = async function () {
     try {
       console.debug(`${debugPrefix} Token refresh required, using auth.js`);
+
+      // Check if we have a recent login token - avoid refresh if so
+      if (window.__directAccessToken && window.__recentLoginTimestamp) {
+        const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
+        if (timeSinceLogin < 5000) {
+          console.log("Using direct token from login, skipping refresh");
+          return true;
+        }
+      }
 
       // Track refresh attempts
       const refreshStartTime = Date.now();
@@ -697,19 +713,32 @@
   };
 
   /**
-   * Disconnect all active WebSocket connections
-   * Added for better auth state management
+   * Disconnects all active WebSocket connections
+   * Central disconnection handler for cleanup
    */
   window.WebSocketService.disconnectAll = function () {
-    console.debug(`${debugPrefix} Disconnecting all WebSocket connections`);
+    console.log("Disconnecting all WebSocket connections");
+    
+    // Find all active WebSocketService instances
     Array.from(activeInstances.values()).forEach(instance => {
       try {
         instance.disconnect();
       } catch (err) {
-        console.debug(`${debugPrefix} Error during disconnect:`, err);
+        console.error("Error during disconnect:", err);
       }
     });
     activeInstances.clear();
+    
+    // Also find any other potential WebSocketService instances
+    Object.values(window).forEach(value => {
+      if (value instanceof window.WebSocketService && !activeInstances.has(value)) {
+        try {
+          value.disconnect();
+        } catch (e) {
+          console.error("Error during disconnect:", e);
+        }
+      }
+    });
   };
 
   // Expose version info

@@ -321,6 +321,21 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
 
 // Set up event listeners for custom events
 window.ChatInterface.prototype._setupEventListeners = function () {
+  // Tab visibility handling for WebSocket reconnection
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      // Page is now visible again, check connections
+      if (this.currentChatId && this.wsService) {
+        // Check if connection is in error or disconnected state
+        if (this.wsService.state === 'disconnected' || this.wsService.state === 'error') {
+          console.log("Reconnecting stale WebSocket connection on tab focus");
+          this.establishWebSocketConnection(this.currentChatId)
+            .catch(error => console.error("Tab focus reconnection failed:", error));
+        }
+      }
+    }
+  });
+
   document.addEventListener('regenerateChat', () => {
     if (!this.currentChatId) return;
     const lastUserMessage = this._findLastUserMessage();

@@ -256,9 +256,39 @@ function getModelOptions() {
       description: 'Most powerful Claude model for complex tasks',
       provider: 'anthropic',
       supportsExtendedThinking: true,
-      maxTokens: 200000
+      maxTokens: 200000,
+      supportsVision: false,
+      parameters: {
+        reasoning_effort: ['low', 'medium', 'high'],
+        vision_detail: []
+      }
     },
-    // ... (other models)
+    {
+      id: 'claude-3-7-sonnet-20250219',
+      name: 'Claude 3.7 Sonnet',
+      description: 'Upgraded version with advanced features from Anthropic',
+      provider: 'anthropic',
+      supportsExtendedThinking: true,
+      maxTokens: 200000,
+      supportsVision: false,
+      parameters: {
+        reasoning_effort: ['low', 'medium', 'high'],
+        vision_detail: []
+      }
+    },
+    {
+      id: 'o1',
+      name: 'OpenAI GPT-4 with Vision support (Hypothetical Test-Mock)',
+      description: 'GPT-4 with advanced vision capabilities',
+      provider: 'openai',
+      supportsExtendedThinking: false,
+      maxTokens: 32000,
+      supportsVision: true,
+      parameters: {
+        reasoning_effort: ['low', 'medium', 'high'],
+        vision_detail: ['auto', 'low', 'high']
+      }
+    }
   ];
 }
 
