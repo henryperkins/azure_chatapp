@@ -225,9 +225,6 @@ async def init_db() -> None:
     try:
         logger.info("Initialization started")
         
-        # Load revocation list before any auth checks
-        await load_revocation_list(async_engine)
-        
         # Step 1: Create missing tables
         logger.info("Checking for missing tables...")
         existing_tables = await _get_existing_tables()
