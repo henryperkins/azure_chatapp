@@ -570,14 +570,7 @@ async def logout_user(
     )
     session.add(blacklisted_token)
 
-    # Invalidate all user tokens
-    try:
-        async with session.begin_nested():
-            locked_user = await session.get(User, user.id, with_for_update=True)
-            await session.commit()
-    except Exception as e:
-        logger.error("Failed to update token version during logout: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to invalidate session")
+    # Token invalidation handled by expiration
 
 
     logger.info(
