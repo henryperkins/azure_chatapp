@@ -106,29 +106,6 @@ async def verify_token(
                 logger.warning("Token missing required jti claim")
                 raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-            # Check token version if user can be found (skip for refresh tokens)
-            username = decoded.get("sub")
-            token_version = decoded.get("version")
-            token_type = decoded.get("type")
-
-            if db and username and token_type != "refresh":
-                # Validate against latest database version with separate query
-                user_version = (await db.execute(
-                    select(User.token_version)
-                    .where(User.username == username)
-                    .with_for_update(read=True)
-                )).scalar_one_or_none()
-                
-                if token_version is None or (user_version and token_version < user_version):
-                    logger.warning(
-                        f"Token version mismatch for {username}: "
-                        f"Token version {token_version} < DB version {user_version}"
-                    )
-                    raise HTTPException(
-                        status_code=401, 
-                        detail="Session invalidated - token version mismatch",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
 
             logger.debug(
                 f"Token verification successful for jti: {token_id}, user: {username}"
