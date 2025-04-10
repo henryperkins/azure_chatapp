@@ -562,7 +562,7 @@ def set_secure_cookie(
         "key": key,
         "value": value,
         "httponly": True,
-        "secure": settings.ENV == "production",
+        "secure": (False if request and request.url.hostname in ["localhost","127.0.0.1"] else settings.ENV == "production"),
         "samesite": "lax",  # Use lax for better cross-site compatibility
         "path": "/",        # Always set path to root to ensure cookies work across all pages
         "max_age": max_age if max_age is not None else 60 * 60 * 24 * 30,  # Default 30 days if not specified
@@ -601,9 +601,13 @@ def set_secure_cookie(
     domain = None
     if request is not None and request.headers.get("host"):
         # Extract domain from host header, removing port if present
-        host = request.headers.get("host").split(":")[0]
+        host_header = request.headers.get("host")
+        if host_header:
+            host = host_header.split(":")[0]
+        else:
+            host = None
         # Only set domain for non-localhost domains
-        if not (host == "localhost" or host.startswith("127.0.0.1")):
+        if host is not None and not (host == "localhost" or host.startswith("127.0.0.1")):
             domain = host
     elif "domain" in cookie_kwargs and cookie_kwargs["domain"] is not None:
         domain = str(cookie_kwargs["domain"])

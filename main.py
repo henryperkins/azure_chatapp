@@ -101,9 +101,9 @@ middleware = [
     Middleware(
         SessionMiddleware,
         secret_key=os.environ["SESSION_SECRET"],
-        session_cookie="session", 
-        same_site="strict",
-        https_only=True,
+        session_cookie="session",
+        same_site="strict" if settings.ENV == "production" else "lax",
+        https_only=(settings.ENV == "production"),
         max_age=60 * 60 * 24 * 7,
         domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
     ),

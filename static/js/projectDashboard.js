@@ -63,8 +63,9 @@ class ProjectDashboard {
     };
 
     // Use centralized modal manager from Utils
-    // Use the unified modal manager
-    this.modalManager = window.modalManager || window.ModalManager?.isAvailable() ? window.modalManager : null;
+    // Use the unified modal manager (with a bit more explicit grouping to avoid confusion)
+    this.modalManager = window.modalManager ||
+      (window.ModalManager?.isAvailable() ? window.modalManager : null);
   }
 
   /**
@@ -268,7 +269,7 @@ class ProjectDashboard {
     if (project.knowledge_base_id && this.components.knowledgeBase) {
       // If project contains knowledge_base object, pass it
       if (project.knowledge_base) {
-        this.components.knowledgeBase.renderKnowledgeBaseInfo(project.knowledge_base);
+        this.components.knowledgeBase.renderKnowledgeBaseInfo(project.knowledge_base, project.id);
       } else if (window.projectManager?.loadKnowledgeBaseDetails) {
         window.projectManager.loadKnowledgeBaseDetails(project.knowledge_base_id)
           .catch(err => {
@@ -276,8 +277,8 @@ class ProjectDashboard {
           });
       }
     } else if (this.components.knowledgeBase) {
-      // Indicate no KB
-      this.components.knowledgeBase.renderKnowledgeBaseInfo(null);
+      // Indicate no KB, but still pass the project ID
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(null, project.id);
     }
   }
 
@@ -285,9 +286,9 @@ class ProjectDashboard {
     const stats = event.detail;
     this.components.projectDetails?.renderStats(stats);
 
-    // If stats has knowledge_base info, pass it along
+    // If stats has knowledge_base info, pass it along with the project ID
     if (stats && stats.knowledge_base && this.components.knowledgeBase) {
-      this.components.knowledgeBase.renderKnowledgeBaseInfo(stats.knowledge_base);
+      this.components.knowledgeBase.renderKnowledgeBaseInfo(stats.knowledge_base, this.state.currentProject?.id);
     }
   }
 
@@ -298,13 +299,13 @@ class ProjectDashboard {
   handleProjectNotFound(event) {
     const { projectId } = event.detail;
     console.warn(`Project not found: ${projectId}`);
-    
+
     // Clear current project reference
     this.state.currentProject = null;
-    
+
     // Show notification
     this.showNotification('The requested project was not found', 'error');
-    
+
     // Return to project list
     this.showProjectList();
   }
@@ -576,7 +577,7 @@ class ProjectDashboard {
       "projectArtifactsLoaded",
       this.handleArtifactsLoaded.bind(this)
     );
-    
+
     document.addEventListener(
       "projectNotFound",
       this.handleProjectNotFound.bind(this)
@@ -698,7 +699,7 @@ async function initProjectDashboard() {
 }
 
 // Register dashboard with central initializer
-window.initProjectDashboard = function() {
+window.initProjectDashboard = function () {
   window.appInitializer.register({
     init: async () => {
       const dashboard = new ProjectDashboard();

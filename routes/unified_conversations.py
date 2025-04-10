@@ -491,6 +491,11 @@ async def list_conversation_messages(
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
 )
+@router.post(
+    "/chat/projects/{project_id}/conversations/{conversation_id}/messages",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_message(
     conversation_id: UUID,
     new_msg: dict,  # ideally use Pydantic model
@@ -544,7 +549,15 @@ async def create_message(
 
     # Create the message
     role = (new_msg.get("role") or "user").lower().strip()
-    content = (new_msg.get("content") or "").strip()
+    raw_content = new_msg.get("content")
+    
+    if isinstance(raw_content, dict):
+        # Convert dict to a string or extract a specific field
+        # For example, assume we convert the dict to a JSON string
+        import json
+        raw_content = json.dumps(raw_content, ensure_ascii=False)
+    
+    content = str(raw_content or "").strip()
     message = await create_user_message(
         conversation_id=UUID(str(conversation.id)),
         content=content,
