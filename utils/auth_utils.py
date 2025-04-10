@@ -83,10 +83,6 @@ async def verify_token(
                 raise HTTPException(status_code=401, detail="Invalid token type")
 
             token_id = decoded.get("jti")
-            if token_id in REVOCATION_LIST:
-                logger.warning(f"Token ID '{token_id}' is revoked (in-memory)")
-                raise HTTPException(status_code=401, detail="Token is revoked")
-
             if db and token_id:
                 try:
                     query = select(
@@ -105,7 +101,6 @@ async def verify_token(
                         raise
                     
                 if blacklisted:
-                    REVOCATION_LIST.add(token_id)
                     logger.warning(f"Token ID '{token_id}' is revoked (database)")
                     raise HTTPException(status_code=401, detail="Token is revoked")
 
@@ -193,25 +188,12 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     result = await db.execute(query)
     valid_jtis = {row[0] for row in result.fetchall()}
 
-    # Rebuild the in-memory revocation list
-    global REVOCATION_LIST
-    REVOCATION_LIST = valid_jtis
 
     if deleted_count > 0:
         logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
     return deleted_count
 
 
-async def load_revocation_list(db: AsyncSession) -> None:
-    """
-    Load active revoked tokens into memory on startup.
-    """
-    now = datetime.utcnow()
-    query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
-    result = await db.execute(query)
-    token_ids = [row[0] for row in result.fetchall()]
-    REVOCATION_LIST.update(token_ids)
-    logger.info(f"Loaded {len(token_ids)} active blacklisted tokens into memory")
 
 
 def extract_token(request_or_websocket):
