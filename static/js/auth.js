@@ -111,21 +111,8 @@ async function getWSAuthToken() {
 async function refreshTokens() {
   // Prevent multiple simultaneous refresh attempts
   if (tokenRefreshInProgress) {
-    console.debug('[Auth] Token refresh already in progress, waiting...');
-    return new Promise((resolve, reject) => {
-      const checkComplete = () => {
-        if (!tokenRefreshInProgress) {
-          if (getCookie('access_token')) {
-            resolve({ success: true });
-          } else {
-            reject(new Error('Token refresh failed'));
-          }
-        } else {
-          setTimeout(checkComplete, 100);
-        }
-      };
-      setTimeout(checkComplete, 100);
-    });
+    console.debug('[Auth] Token refresh already in progress, returning existing promise');
+    return window.__tokenRefreshPromise;
   }
 
   // New safeguard: Recent login check
@@ -1285,11 +1272,37 @@ function switchForm(isLogin) {
   }
 }
 
+// Standardized error handling
+window.auth.standardizeError = function(error, context) {
+  let standardError = {
+    status: error.status || 500,
+    message: error.message || "Unknown error",
+    context: context || "authentication",
+    code: error.code || "UNKNOWN_ERROR",
+    requiresLogin: false
+  };
+  
+  // Standardize common authentication errors
+  if (error.status === 401 || error.message?.includes('expired') || error.message?.includes('Session')) {
+    standardError.status = 401;
+    standardError.message = "Your session has expired. Please log in again.";
+    standardError.code = "SESSION_EXPIRED";
+    standardError.requiresLogin = true;
+  } else if (error.status === 403) {
+    standardError.status = 403;
+    standardError.message = "You don't have permission to access this resource.";
+    standardError.code = "ACCESS_DENIED";
+  }
+  
+  return standardError;
+}
+
 // ---------------------------------------------------------------------
 // Expose to window
 // ---------------------------------------------------------------------
 window.auth = window.auth || {
   init,
+  standardizeError: window.auth.standardizeError,
   isAuthenticated: async function (options = {}) {
     const { skipCache = false, forceVerify = false } = options;
     try {
