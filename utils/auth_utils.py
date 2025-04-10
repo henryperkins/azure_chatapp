@@ -149,12 +149,6 @@ async def verify_token(
             raise HTTPException(status_code=401, detail="Invalid token") from e
 
 
-def revoke_token_id(token_id: str) -> None:
-    """
-    Add token_id (jti) to the revocation list.
-    """
-    REVOCATION_LIST.add(token_id)
-    logger.info(f"Token ID '{token_id}' has been revoked.")
 
 
 async def clean_expired_tokens(db: AsyncSession) -> int:
