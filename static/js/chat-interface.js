@@ -329,7 +329,7 @@ window.ChatInterface.prototype._setupEventListeners = function () {
         // Check if connection is in error or disconnected state
         if (this.wsService.state === 'disconnected' || this.wsService.state === 'error') {
           console.log("Reconnecting stale WebSocket connection on tab focus");
-          this.establishWebSocketConnection(this.currentChatId)
+          this.wsService.connect(this.currentChatId)
             .catch(error => console.error("Tab focus reconnection failed:", error));
         }
       }
