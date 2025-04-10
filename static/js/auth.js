@@ -43,14 +43,13 @@ const AUTH_CONSTANTS = {
 
 /**
  * Get a valid authentication token for API requests
- * @param {Object} options - Options for token retrieval 
+ * @param {Object} options - Options for token retrieval
  * @returns {Promise<string>} Valid token
  */
 async function getAuthToken(options = {}) {
-  
   const accessToken = getCookie('access_token');
   const refreshToken = getCookie('refresh_token');
-  
+
   if (checkTokenValidity(accessToken)) {
     return accessToken;
   }
@@ -61,7 +60,7 @@ async function getAuthToken(options = {}) {
       return getCookie('access_token');
     }
   }
-  
+
   throw new Error('Not authenticated');
 }
 
@@ -71,9 +70,10 @@ async function getAuthToken(options = {}) {
  */
 async function getWSAuthToken() {
   try {
-    if (AUTH_DEBUG) console.debug('[Auth] Getting WebSocket auth token');
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Getting WebSocket auth token');
+    }
 
-    // If not authenticated, fail fast
     const isAuthenticated = await verifyAuthState(false);
     if (!isAuthenticated) {
       throw new Error('Not authenticated for WebSocket connection');
@@ -81,7 +81,6 @@ async function getWSAuthToken() {
 
     // Request a specialized WebSocket token
     const response = await apiRequest('/api/auth/ws-token', 'GET');
-
     return {
       token: response.token,
       version: response.version || authState.tokenVersion
@@ -93,7 +92,7 @@ async function getWSAuthToken() {
     if (error.message?.includes('expired') || error.status === 401) {
       try {
         await refreshTokens();
-        return getWSAuthToken(); // Retry after refresh
+        return getWSAuthToken();
       } catch (refreshError) {
         console.error('[Auth] WebSocket token retry failed after refresh:', refreshError);
         throw refreshError;
@@ -112,22 +111,21 @@ async function refreshTokens() {
   // Handle concurrent refresh attempts with a 1-second buffer
   if (tokenRefreshInProgress) {
     const now = Date.now();
-    if (now - lastRefreshAttempt < 1000) { // 1-second buffer
+    if (now - lastRefreshAttempt < 1000) {
       console.debug('[Auth] Token refresh already in progress, returning existing promise');
       return window.__tokenRefreshPromise;
     }
-    // If last attempt was >1s ago, allow new refresh to proceed
     console.debug('[Auth] Allowing new refresh attempt after 1s buffer');
   }
 
   // New safeguard: Recent login check
   const timeSinceLastVerified = Date.now() - authState.lastVerified;
-  if (timeSinceLastVerified < 5000) { // 5-second threshold
+  if (timeSinceLastVerified < 5000) {
     console.debug('[Auth] Skipping refresh - recent login detected');
-    return { 
-      success: true, 
+    return {
+      success: true,
       version: authState.tokenVersion,
-      token: getCookie('access_token') // Return current valid token
+      token: getCookie('access_token')
     };
   }
 
@@ -137,150 +135,133 @@ async function refreshTokens() {
     console.warn('[Auth] Too many failed refresh attempts - not forcing logout, just failing');
     return Promise.reject(new Error('Too many refresh attempts - please check your connection'));
   }
-tokenRefreshInProgress = true;
-lastRefreshAttempt = now;
-window.__tokenRefreshPromise = new Promise(async (resolve, reject) => {
-  try {
-    console.debug('[Auth] Refreshing tokens...');
 
-    // Validate we have a token to refresh
-    const currentToken = getCookie('refresh_token');
-    if (!currentToken) {
-      throw new Error('No token available for refresh');
-    }
+  tokenRefreshInProgress = true;
+  lastRefreshAttempt = Date.now();
+  window.__tokenRefreshPromise = new Promise(async (resolve, reject) => {
+    try {
+      console.debug('[Auth] Refreshing tokens...');
 
-    // Check token expiry
-    const expiry = getTokenExpiry(currentToken);
-    if (expiry && expiry < Date.now()) {
-      throw new Error('Token already expired');
-    }
+      const currentToken = getCookie('refresh_token');
+      if (!currentToken) {
+        throw new Error('No token available for refresh');
+      }
 
-    // Implement retry with exponential backoff
-    let lastError;
-    let response;
-    
-    for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt++) {
-      try {
-        const fetchPromise = apiRequest('/api/auth/refresh', 'POST');
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Token refresh timeout')),
-            AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt-1));
-        });
+      const expiry = getTokenExpiry(currentToken);
+      if (expiry && expiry < Date.now()) {
+        throw new Error('Token already expired');
+      }
 
-        // Race the fetch against the timeout
-        response = await Promise.race([fetchPromise, timeoutPromise]);
+      let lastError;
+      let response;
 
-        // Validate response
-        if (!response?.access_token) {
-          throw new Error('Invalid refresh response');
-        }
+      // Exponential backoff attempts
+      for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt++) {
+        try {
+          const fetchPromise = apiRequest('/api/auth/refresh', 'POST');
+          const timeoutPromise = new Promise((_, rej) => {
+            setTimeout(() => rej(new Error('Token refresh timeout')),
+              AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt - 1)
+            );
+          });
 
-        // Store tokenVersion in auth state
-        if (response.token_version) {
-          authState.tokenVersion = response.token_version;
-        }
-        
-        break; // Success - exit retry loop
-      } catch (error) {
-        lastError = error;
-        if (attempt < MAX_REFRESH_RETRIES) {
-          const delay = 300 * Math.pow(2, attempt-1);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          response = await Promise.race([fetchPromise, timeoutPromise]);
+
+          if (!response?.access_token) {
+            throw new Error('Invalid refresh response');
+          }
+
+          if (response.token_version) {
+            authState.tokenVersion = response.token_version;
+          }
+
+          break; // Success, break loop
+        } catch (err) {
+          lastError = err;
+          if (attempt < MAX_REFRESH_RETRIES) {
+            const delay = 300 * Math.pow(2, attempt - 1);
+            await new Promise(r => setTimeout(r, delay));
+          }
         }
       }
-    }
 
-    if (lastError) {
-      throw lastError;
-    }
-
-    // Reset failed attempt counter on success
-    refreshFailCount = 0;
-
-    // Refresh verification timestamp
-    authState.lastVerified = Date.now();
-
-    console.debug('[Auth] Token refreshed successfully');
-
-    // Notify about token refresh
-    document.dispatchEvent(new CustomEvent('tokenRefreshed', {
-      detail: { success: true }
-    }));
-
-    // Store token version in cookie
-    if (response.token_version) {
-      document.cookie = `token_version=${response.token_version}; path=/; ${
-        location.protocol === 'https:' ? 'Secure; ' : ''
-      }SameSite=Strict`;
-    }
-    
-    resolve({
-      success: true,
-      version: response.token_version || authState.tokenVersion,
-      token: response.access_token
-    });
-  } catch (error) {
-    // Increment failed attempt counter
-    refreshFailCount++;
-
-    console.error(`[Auth] Token refresh failed (attempt ${refreshFailCount}/${MAX_REFRESH_RETRIES}):`, error);
-
-    // Provide more specific error message based on error type
-    let errorMessage = "Token refresh failed";
-    let forceLogout = false;
-
-    if (error.status === 401) {
-      errorMessage = "Your session has expired. Please log in again.";
-      forceLogout = true;
-    } else if (error.message?.includes('version mismatch')) {
-      errorMessage = "Session invalidated due to token version mismatch - please login again";
-      forceLogout = true;
-    } else if (error.message?.includes('revoked')) {
-      errorMessage = "Your session has been revoked - please login again";
-      forceLogout = true;
-    } else if (error.message?.includes('timeout')) {
-      errorMessage = "Token refresh timed out - please try again";
-    } else if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
-      errorMessage = "Network error during token refresh - please check your connection";
-    }
-
-    // Force immediate logout for certain errors
-    if (forceLogout) {
-      clearTokenState();
-      broadcastAuth(false);
-
-      // Small delay to allow notification to appear before logout
-      setTimeout(() => logout(), 300);
-    }
-
-    // Notify about token refresh failure
-    document.dispatchEvent(new CustomEvent('tokenRefreshed', {
-      detail: {
-        success: false,
-        error,
-        message: errorMessage,
-        attempts: refreshFailCount
+      if (lastError) {
+        throw lastError;
       }
-    }));
 
-    reject(new Error(errorMessage));
-  } finally {
-    tokenRefreshInProgress = false;
-  }
-});
+      refreshFailCount = 0;
+      authState.lastVerified = Date.now();
+      console.debug('[Auth] Token refreshed successfully');
 
-return window.__tokenRefreshPromise;
+      document.dispatchEvent(new CustomEvent('tokenRefreshed', {
+        detail: { success: true }
+      }));
+
+      if (response.token_version) {
+        document.cookie = `token_version=${response.token_version}; path=/; ${
+          location.protocol === 'https:' ? 'Secure; ' : ''
+        }SameSite=Strict`;
+      }
+
+      resolve({
+        success: true,
+        version: response.token_version || authState.tokenVersion,
+        token: response.access_token
+      });
+    } catch (err) {
+      refreshFailCount++;
+      console.error(`[Auth] Token refresh failed (attempt ${refreshFailCount}/${MAX_REFRESH_RETRIES}):`, err);
+
+      let errorMessage = "Token refresh failed";
+      let forceLogout = false;
+
+      if (err.status === 401) {
+        errorMessage = "Your session has expired. Please log in again.";
+        forceLogout = true;
+      } else if (err.message?.includes('version mismatch')) {
+        errorMessage = "Session invalidated due to token version mismatch - please login again";
+        forceLogout = true;
+      } else if (err.message?.includes('revoked')) {
+        errorMessage = "Your session has been revoked - please login again";
+        forceLogout = true;
+      } else if (err.message?.includes('timeout')) {
+        errorMessage = "Token refresh timed out - please try again";
+      } else if (err.message?.includes('NetworkError') || err.message?.includes('Failed to fetch')) {
+        errorMessage = "Network error during token refresh - please check your connection";
+      }
+
+      if (forceLogout) {
+        clearTokenState();
+        broadcastAuth(false);
+        setTimeout(() => logout(), 300);
+      }
+
+      document.dispatchEvent(new CustomEvent('tokenRefreshed', {
+        detail: {
+          success: false,
+          error: err,
+          message: errorMessage,
+          attempts: refreshFailCount
+        }
+      }));
+
+      reject(new Error(errorMessage));
+    } finally {
+      tokenRefreshInProgress = false;
+    }
+  });
+
+  return window.__tokenRefreshPromise;
 }
 
 /**
  * Extract token expiry time
  * @param {string} token - JWT token
- * @returns {number|null} Expiry timestamp or null if invalid
  */
 function getTokenExpiry(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp * 1000; // Convert to milliseconds
+    return payload.exp * 1000;
   } catch (e) {
     console.warn('[Auth] Error extracting token expiry:', e);
     return null;
@@ -290,48 +271,41 @@ function getTokenExpiry(token) {
 /**
  * Checks if a JWT token is expired
  * @param {string} token - JWT token
- * @returns {boolean} True if expired
  */
 async function isTokenExpired(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    // Get server time reference
     let serverTime;
     try {
-      const { serverTimestamp } = await apiRequest('/api/auth/timestamp');
+      const { serverTimestamp } = await apiRequest('/api/auth/timestamp', 'GET');
       serverTime = serverTimestamp * 1000;
     } catch {
-      // Fallback to client time if server unavailable
       serverTime = Date.now();
     }
-    // 10-second buffer for network delays
     return payload.exp * 1000 < (serverTime - 10000);
   } catch (e) {
     console.warn('[Auth] Error parsing token for expiration check:', e);
-    return true; // Assume expired if we can't parse it
+    return true;
   }
 }
 
 /**
  * Extracts a cookie value by name with improved persistence
- * @param {string} name - Cookie name 
- * @returns {string|null} Cookie value
+ * @param {string} name
  */
 function getCookie(name) {
-  // First try standard cookie parsing
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
   let cookieValue = null;
-  
+
   if (parts.length === 2) {
     cookieValue = parts.pop().split(';').shift();
   }
-  
-  // For auth tokens, only use HttpOnly cookies - no localStorage/sessionStorage fallback
+
   if (name === 'access_token' || name === 'refresh_token') {
     return cookieValue;
   }
-  
+
   return cookieValue;
 }
 
@@ -339,7 +313,6 @@ function getCookie(name) {
  * Checks if token is still valid based on issue time and max age
  * @param {string} token - JWT token
  * @param {Object} options - { allowRefresh: boolean }
- * @returns {boolean} True if valid
  */
 async function fetchTokenExpirySettings() {
   try {
@@ -348,7 +321,9 @@ async function fetchTokenExpirySettings() {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' }
     });
-    if (!response.ok) throw new Error('Failed to fetch token expiry settings');
+    if (!response.ok) {
+      throw new Error('Failed to fetch token expiry settings');
+    }
     return await response.json();
   } catch (error) {
     console.error('[Auth] Failed to fetch token expiry settings:', error);
@@ -364,27 +339,25 @@ async function checkTokenValidity(token, { allowRefresh = false } = {}) {
     console.debug('[Auth] Token validity check failed: No token provided');
     return false;
   }
-  
+
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
     const settings = await fetchTokenExpirySettings();
-    
-    // Enhanced logging to debug token version issues
+
     if (AUTH_DEBUG) {
       console.debug(`[Auth] Token debug: type=${payload.type}, version=${payload.version}, issued_at=${new Date(payload.iat * 1000).toISOString()}`);
     }
-    
-    const maxAge = allowRefresh ?
-      settings.refresh_token_expire_days * 86400 :
-      settings.access_token_expire_minutes * 60;
-    
+
+    const maxAge = allowRefresh
+      ? settings.refresh_token_expire_days * 86400
+      : settings.access_token_expire_minutes * 60;
+
     const tokenAge = Date.now() / 1000 - payload.iat;
     const isValid = tokenAge < maxAge;
-    
+
     if (!isValid && AUTH_DEBUG) {
       console.debug(`[Auth] Token expired by age check: age=${tokenAge}s, max=${maxAge}s`);
     }
-      
     return isValid;
   } catch (err) {
     console.warn('[Auth] Token validity check error:', err);
@@ -396,16 +369,13 @@ async function checkTokenValidity(token, { allowRefresh = false } = {}) {
  * Clear all authorization tokens and state
  */
 function clearTokenState() {
-  // Reset auth state
   authState.isAuthenticated = false;
   authState.username = null;
   authState.lastVerified = 0;
-  sessionExpiredFlag = Date.now(); // Mark session as expired with timestamp
+  sessionExpiredFlag = Date.now(); // Mark session as expired
   refreshFailCount = 0;
 
-  // Dispatch event to inform components
   broadcastAuth(false);
-
   console.debug('[Auth] Auth state cleared');
 }
 
@@ -416,7 +386,7 @@ async function authRequest(endpoint, method, body = null) {
   try {
     const response = await fetch(endpoint, {
       method,
-      credentials: 'include', // Important for cookie-based auth
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined
     });
@@ -437,40 +407,36 @@ async function authRequest(endpoint, method, body = null) {
  * @param {string} url - API endpoint
  * @param {string} method - HTTP method
  * @param {Object} data - Request body for POST/PUT
- * @returns {Promise<Object>} Response data
  */
 async function apiRequest(url, method, data = null) {
-  // Use global API request function if available
   if (window.apiRequest) {
     return window.apiRequest(url, method, data);
   }
-
-  // Fallback to direct fetch with error handling
   return authRequest(url, method, data);
 }
 
 // ---------------------------------------------------------------------
 // Main Verification Logic
 // ---------------------------------------------------------------------
-
-/**
- * Initialize auth module
- * @returns {Promise<boolean>} Success status
- */
 async function init() {
   if (window.__authInitializing) {
     return new Promise(resolve => {
-      const check = () => {
-        if (window.auth.isInitialized) resolve(true);
-        else setTimeout(check, 50);
+      const checkInit = () => {
+        if (window.auth.isInitialized) {
+          resolve(true);
+        } else {
+          setTimeout(checkInit, 50);
+        }
       };
-      check();
+      checkInit();
     });
   }
 
   window.__authInitializing = true;
   if (window.auth.isInitialized) {
-    if (AUTH_DEBUG) console.debug("[Auth] Already initialized");
+    if (AUTH_DEBUG) {
+      console.debug("[Auth] Already initialized");
+    }
     window.__authInitializing = false;
     return true;
   }
@@ -483,21 +449,17 @@ async function init() {
     if (AUTH_DEBUG) {
       console.debug("[Auth] Starting initialization");
     }
-    
-    // Set up infrastructure first
+
     setupUIListeners();
     setupTokenSync();
-    
-    // Increased delay to give cookies more time to load before first verification
+
     await new Promise(resolve => setTimeout(resolve, 600));
-    
-    // Check auth state with server
+
     const isAuthenticated = await verifyAuthState(true);
     if (!isAuthenticated) {
       broadcastAuth(false);
     }
 
-    // Set up monitoring after initial verification
     setupAuthStateMonitoring();
     window.auth.isInitialized = true;
 
@@ -516,66 +478,68 @@ async function init() {
 }
 
 /**
- * Verify auth state with server, handling token refresh when needed
- * @param {boolean} bypassCache - Force server verification 
- * @returns {Promise<boolean>} Authentication state
+ * Verify auth state with server, handling token refresh
+ * @param {boolean} bypassCache
  */
 async function verifyAuthState(bypassCache = false) {
   try {
-    // Skip verification if we know session is expired (but allow retry after 10 seconds)
     if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag < 10000)) {
-      if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - session recently expired');
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Skipping verification - session recently expired');
+      }
       return false;
     }
-    // Clear expired flag if it's old
+
     if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag >= 10000)) {
       sessionExpiredFlag = false;
     }
 
-    // Check cache if not bypassing
     if (!bypassCache &&
       authState.lastVerified &&
       (Date.now() - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION)) {
-      if (AUTH_DEBUG) console.debug('[Auth] Using cached verification result:', authState.isAuthenticated);
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Using cached verification result:', authState.isAuthenticated);
+      }
       return authState.isAuthenticated;
     }
 
-    // Try getting tokens with improved retries for cookie loading
     let accessToken, refreshToken;
-    let retries = 5; // Increased from 3 to 5 attempts
-    
+    let retries = 5; // Wait for cookies to load
     while (retries-- > 0) {
       accessToken = getCookie('access_token');
       refreshToken = getCookie('refresh_token');
-      
-      // Only exit loop when we have BOTH tokens or exhausted retries
+
       if (accessToken && refreshToken) {
-        if (AUTH_DEBUG) console.debug(`[Auth] Both tokens found, proceeding with verification`);
+        if (AUTH_DEBUG) {
+          console.debug(`[Auth] Both tokens found, proceeding with verification`);
+        }
         break;
       }
-      
-      // Only log when one token is missing
-      if (AUTH_DEBUG) console.debug(`[Auth] Waiting for cookies to load, retries left: ${retries}. ` + 
-                              `Found: ${accessToken ? 'access_token' : ''}${refreshToken ? ' refresh_token' : ''}`);
-      
-      // Increased delay between retries
+
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth] Waiting for cookies, retries left: ${retries}. Found: ${
+          accessToken ? 'access_token ' : ''
+        }${refreshToken ? ' refresh_token ' : ''}`);
+      }
+
       await new Promise(resolve => setTimeout(resolve, 250));
     }
 
-    // If access token is expired but refresh token exists, attempt refresh
     if (accessToken && isTokenExpired(accessToken) && refreshToken) {
       try {
-        if (AUTH_DEBUG) console.debug('[Auth] Access token expired, attempting refresh');
-
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Access token expired, attempting refresh');
+        }
         await refreshTokens();
 
-        // Confirm new access token is set in cookies
         retries = 3;
         let newAccessToken;
         while (retries-- > 0) {
           await new Promise(resolve => setTimeout(resolve, 200));
           newAccessToken = getCookie('access_token');
-          if (newAccessToken) break;
+          if (newAccessToken) {
+            break;
+          }
         }
 
         if (!newAccessToken) {
@@ -583,7 +547,6 @@ async function verifyAuthState(bypassCache = false) {
         }
       } catch (refreshError) {
         console.error('[Auth] Token refresh failed:', refreshError);
-
         clearTokenState();
         broadcastAuth(false);
 
@@ -592,37 +555,32 @@ async function verifyAuthState(bypassCache = false) {
         throw new Error(isTimeout ? 'Authentication timed out. Please try again.' : 'Session expired. Please login again.');
       }
     } else if (!accessToken) {
-      // No access token at all
-      if (AUTH_DEBUG) console.debug('[Auth] No access token found after retries');
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] No access token found after retries');
+      }
       broadcastAuth(false);
       return false;
     }
 
-    // Check with the server for auth status - with retry mechanism
-    const MAX_VERIFY_ATTEMPTS = AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS;
+    const MAX_VERIFY = AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS;
     let lastError = null;
 
-    for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= MAX_VERIFY; attempt++) {
       try {
-        const VERIFY_TIMEOUT = AUTH_CONSTANTS.VERIFY_TIMEOUT + (attempt * 1000); // Increase timeout with each attempt
+        const VERIFY_TIMEOUT = AUTH_CONSTANTS.VERIFY_TIMEOUT + (attempt * 1000);
         if (AUTH_DEBUG) {
-          console.debug(`[Auth] Verification attempt ${attempt}/${MAX_VERIFY_ATTEMPTS} with timeout ${VERIFY_TIMEOUT}ms`);
+          console.debug(`[Auth] Verification attempt ${attempt}/${MAX_VERIFY} with timeout ${VERIFY_TIMEOUT}ms`);
         }
 
-        // Add timeout to verify request
         const response = await Promise.race([
           apiRequest('/api/auth/verify', 'GET'),
           new Promise((_, reject) =>
-            setTimeout(() =>
-              reject(new Error(`Auth verification timeout (attempt ${attempt})`)),
-              VERIFY_TIMEOUT
-            )
+            setTimeout(() => reject(new Error(`Auth verification timeout (attempt ${attempt})`)), VERIFY_TIMEOUT)
           )
         ]);
 
         console.debug('[Auth] Verification successful:', response);
 
-        // Update auth state with verification result
         authState.isAuthenticated = response.authenticated;
         authState.username = response.username || null;
         authState.lastVerified = Date.now();
@@ -637,35 +595,29 @@ async function verifyAuthState(bypassCache = false) {
         lastError = verifyError;
         console.warn(`[Auth] Verification attempt ${attempt} failed:`, verifyError);
 
-        // If it's a 401, no need to retry
         if (verifyError.status === 401) {
-          sessionExpiredFlag = Date.now(); // Store timestamp instead of boolean
+          sessionExpiredFlag = Date.now();
           clearTokenState();
 
-          // Show modal or redirect
           if (window.showSessionExpiredModal) {
             window.showSessionExpiredModal();
           }
           throw new Error('Session expired. Please login again.');
         }
 
-        // Exponential backoff
-        if (attempt < MAX_VERIFY_ATTEMPTS) {
+        if (attempt < MAX_VERIFY) {
           const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
         }
       }
     }
 
-    // All verification attempts failed
-    console.error('[Auth] All verification attempts failed. Access token present: ' +
-                  !!getCookie('access_token') + ', Refresh token present: ' + 
-                  !!getCookie('refresh_token'));
+    console.error('[Auth] All verification attempts failed. Access token present:',
+      !!getCookie('access_token'), 'Refresh token present:', !!getCookie('refresh_token'));
     authState.isAuthenticated = false;
     authState.lastVerified = Date.now();
     broadcastAuth(false);
 
-    // Enhanced error message
     let errorMsg = 'Authentication verification failed';
     if (lastError) {
       if (lastError.message && lastError.message.includes('timeout')) {
@@ -688,15 +640,11 @@ async function verifyAuthState(bypassCache = false) {
 // ---------------------------------------------------------------------
 // Periodic & On-Focus Auth Monitoring
 // ---------------------------------------------------------------------
-let tokenSyncInterval;
-
-// No longer needed since we don't sync tokens to localStorage
 function setupTokenSync() {
-  // Empty function kept for backward compatibility
+  // Empty function for backward compatibility
 }
 
 function setupAuthStateMonitoring() {
-  // Delay initial verification to allow cookies to be fully loaded
   setTimeout(() => {
     verifyAuthState(true).then(isAuthenticated => {
       broadcastAuth(isAuthenticated);
@@ -704,12 +652,10 @@ function setupAuthStateMonitoring() {
       console.error('[Auth] Initial verification error:', error);
       broadcastAuth(false);
     });
-  }, 300); // Add 300ms delay to give browser time to load cookies
+  }, 300);
 
-  // Set up periodic verification (every 5 minutes)
   const VERIFICATION_INTERVAL = AUTH_CONSTANTS.VERIFICATION_INTERVAL;
   const AUTH_CHECK = setInterval(() => {
-    // Only verify if not already known to be expired
     if (!sessionExpiredFlag) {
       verifyAuthState(true).catch(error => {
         console.warn('[Auth] Periodic verification error:', error);
@@ -717,13 +663,10 @@ function setupAuthStateMonitoring() {
     }
   }, VERIFICATION_INTERVAL);
 
-  // Also verify on window focus with a delay
   window.addEventListener('focus', () => {
-    // Only verify if not already known to be expired and last check > 1 minute ago
     if (!sessionExpiredFlag &&
       (!authState.lastVerified ||
         Date.now() - authState.lastVerified > 60000)) {
-      // Add slight delay to allow cookies to be fully accessible after focus
       setTimeout(() => {
         verifyAuthState(true).catch(error => {
           console.warn('[Auth] Focus verification error:', error);
@@ -732,7 +675,6 @@ function setupAuthStateMonitoring() {
     }
   });
 
-  // Clear interval on page unload
   window.addEventListener('beforeunload', () => {
     clearInterval(AUTH_CHECK);
   });
@@ -741,22 +683,14 @@ function setupAuthStateMonitoring() {
 // ---------------------------------------------------------------------
 // Broadcast & UI Updates
 // ---------------------------------------------------------------------
-/**
- * Broadcast authentication state changes and update UI
- * @param {boolean} authenticated
- * @param {string} username
- */
 function broadcastAuth(authenticated, username = null) {
-  // Update internal state
   authState.isAuthenticated = authenticated;
   authState.username = username;
 
-  // Keep global state in sync
   if (window.API_CONFIG) {
     window.API_CONFIG.isAuthenticated = authenticated;
   }
 
-  // Broadcast events
   document.dispatchEvent(new CustomEvent("authStateChanged", {
     detail: { authenticated, username }
   }));
@@ -764,15 +698,9 @@ function broadcastAuth(authenticated, username = null) {
     detail: { authenticated, username }
   }));
 
-  // Update UI elements
   updateAuthUI(authenticated, username);
 }
 
-/**
- * Update UI elements based on auth state
- * @param {boolean} authenticated
- * @param {string} username
- */
 function updateAuthUI(authenticated, username = null) {
   const userStatus = document.getElementById('userStatus');
   const authButton = document.getElementById('authButton');
@@ -780,7 +708,7 @@ function updateAuthUI(authenticated, username = null) {
   const authStatus = document.getElementById('authStatus');
 
   if (userStatus) {
-    userStatus.textContent = authenticated ? username || 'Online' : 'Offline';
+    userStatus.textContent = authenticated ? (username || 'Online') : 'Offline';
     userStatus.classList.toggle('text-green-600', authenticated);
     userStatus.classList.toggle('text-gray-600', !authenticated);
   }
@@ -797,11 +725,6 @@ function updateAuthUI(authenticated, username = null) {
   }
 }
 
-/**
- * Display notification to user
- * @param {string} message - Notification message
- * @param {string} type - Notification type (info, error, success, etc.)
- */
 function notify(message, type = "info") {
   if (window.showNotification) {
     window.showNotification(message, type);
@@ -827,12 +750,6 @@ function notify(message, type = "info") {
 // ---------------------------------------------------------------------
 // Login, Logout, Register
 // ---------------------------------------------------------------------
-/**
- * Attempt login with username/password
- * @param {string} username
- * @param {string} password
- * @returns {Promise<Object>} Login result with tokens
- */
 async function loginUser(username, password) {
   try {
     if (AUTH_DEBUG) {
@@ -842,7 +759,7 @@ async function loginUser(username, password) {
     const response = await apiRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password,
-      ws_auth: true // Request WebSocket auth token
+      ws_auth: true
     });
 
     if (AUTH_DEBUG) {
@@ -852,28 +769,18 @@ async function loginUser(username, password) {
       throw new Error('No access token received');
     }
 
-    // Update token version from response
     if (response.token_version) {
       authState.tokenVersion = response.token_version;
     }
 
-    // Update auth state
     authState.isAuthenticated = true;
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
-
-    // Clear any expired session flag
     sessionExpiredFlag = false;
 
-    // CRITICAL: Set a flag to prevent token refresh immediately after login
-    // This prevents the race condition by ensuring the access token from login is used first
     window.__recentLoginTimestamp = Date.now();
-    
-    // Store the access token we received from the login response
-    // so we can use it directly without needing an immediate refresh
     window.__directAccessToken = response.access_token;
-    
-    // Broadcast auth success
+
     broadcastAuth(true, response.username || username);
 
     if (AUTH_DEBUG) {
@@ -882,7 +789,6 @@ async function loginUser(username, password) {
 
     return {
       ...response,
-      // Provide a default WS URL if the server returns it
       ws_url: response.ws_url || `/api/chat/ws?token=${response.access_token}`
     };
   } catch (error) {
@@ -901,8 +807,6 @@ async function loginUser(username, password) {
 
 /**
  * Logout user with improved sequencing and error handling
- * @param {Event} e - (optional) DOM Event
- * @returns {Promise<void>}
  */
 async function logout(e) {
   e?.preventDefault();
@@ -910,6 +814,7 @@ async function logout(e) {
     if (AUTH_DEBUG) {
       console.debug('[Auth] Starting logout process');
     }
+
     // Disconnect any active WebSocket connections
     if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
       window.WebSocketService.disconnectAll();
@@ -917,9 +822,8 @@ async function logout(e) {
 
     // Attempt server-side logout
     try {
-      const LOGOUT_TIMEOUT = 5000; // 5 seconds
+      const LOGOUT_TIMEOUT = 5000;
       const logoutPromise = apiRequest('/api/auth/logout', 'POST');
-
       await Promise.race([
         logoutPromise,
         new Promise((_, reject) =>
@@ -929,10 +833,9 @@ async function logout(e) {
       console.debug('[Auth] Server-side logout successful');
     } catch (apiErr) {
       console.warn("[Auth] Logout API error:", apiErr);
-      // Continue with client-side logout even if API call fails
+      // Continue client-side logout even if API fails
     }
 
-    // Clear token state and broadcast logout
     clearTokenState();
     notify("Logged out successfully", "success");
 
@@ -940,7 +843,6 @@ async function logout(e) {
     window.location.href = '/index.html';
   } catch (error) {
     console.error("[Auth] Logout error:", error);
-    // Force logout state even on error
     clearTokenState();
     window.location.href = '/';
   }
@@ -948,7 +850,7 @@ async function logout(e) {
 
 /**
  * Handle user registration (then auto-login)
- * @param {FormData} formData - registration form data
+ * @param {FormData} formData
  */
 async function handleRegister(formData) {
   const username = formData.get("username");
@@ -957,30 +859,26 @@ async function handleRegister(formData) {
     notify("Please fill out all fields", "error");
     return;
   }
-  // Example password policy check
+
   if (password.length < 12) {
     notify("Password must be at least 12 characters", "error");
     return;
   }
 
   try {
-    // Server sets cookies on success
     await apiRequest('/api/auth/register', 'POST', {
       username: username.trim(),
       password
     });
-    // Immediately login
+
     const loginResult = await loginUser(username, password);
-    
-    // Ensure auth state is properly updated
     authState.isAuthenticated = true;
     authState.username = username;
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
-    
-    // Broadcast auth state
+
     broadcastAuth(true, username);
-    
+
     document.getElementById("registerForm")?.reset();
     notify("Registration successful", "success");
     return loginResult;
@@ -991,53 +889,15 @@ async function handleRegister(formData) {
 }
 
 // ---------------------------------------------------------------------
-// Error Handling
-// ---------------------------------------------------------------------
-/**
- * Standardized error handler for authentication failures
- * @param {Error} error - The authentication error
- * @param {string} context - Context description for logging
- * @returns {Object} Processed error info
- */
-function handleAuthError(error, context = "authentication") {
-  console.error(`[Auth] Error during ${context}:`, error);
-
-  let message = "Authentication failed";
-  let action = null;
-
-  if (error.status === 401) {
-    message = "Your session has expired. Please log in again.";
-    action = "login";
-    clearTokenState();
-  } else if (error.status === 429) {
-    message = "Too many attempts. Please try again later.";
-  } else if (error.message?.includes('timeout')) {
-    message = "Connection timed out. Please check your network and try again.";
-  } else if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
-    message = "Network error. Please check your connection and try again.";
-  } else if (error.message) {
-    message = error.message;
-  }
-
-  notify(message, "error");
-  if (action === "login") {
-    const loginMsg = document.getElementById("loginRequiredMessage");
-    if (loginMsg) loginMsg.classList.remove("hidden");
-  }
-  return { message, action };
-}
-
-// ---------------------------------------------------------------------
 // UI: Setup form listeners, toggles, etc.
 // ---------------------------------------------------------------------
 function setupUIListeners() {
   const authBtn = document.getElementById("authButton");
   const authDropdown = document.getElementById("authDropdown");
   if (authBtn && authDropdown) {
-    authBtn.addEventListener("click", function (e) {
+    authBtn.addEventListener("click", function(e) {
       e.preventDefault();
       e.stopPropagation();
-      // Toggle dropdown
       if (authDropdown.classList.contains("hidden")) {
         authDropdown.classList.remove("hidden");
         setTimeout(() => {
@@ -1048,7 +908,7 @@ function setupUIListeners() {
           authDropdown.classList.add("hidden");
         }, 200);
       }
-      // Close other open dropdowns
+
       document.querySelectorAll('.dropdown-content').forEach(dropdown => {
         if (dropdown !== authDropdown && !dropdown.classList.contains('hidden')) {
           dropdown.classList.add("hidden");
@@ -1071,18 +931,17 @@ function setupUIListeners() {
   const registerForm = document.getElementById("registerForm");
 
   if (loginTab && registerTab && loginForm && registerForm) {
-    loginTab.addEventListener("click", (e) => {
+    loginTab.addEventListener("click", e => {
       e.preventDefault();
       switchForm(true);
     });
-    registerTab.addEventListener("click", (e) => {
+    registerTab.addEventListener("click", e => {
       e.preventDefault();
       switchForm(false);
     });
   }
 
-  // Login form submission
-  loginForm?.addEventListener("submit", async function (e) {
+  loginForm?.addEventListener("submit", async function(e) {
     e.preventDefault();
     console.log("[Auth] Login form submitted via JS handler");
 
@@ -1102,24 +961,20 @@ function setupUIListeners() {
 
     try {
       await loginUser(username, password);
-      // Reset verification timestamp to prevent immediate refresh
       authState.lastVerified = Date.now();
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
       notify("Login successful", "success");
 
-      // Example post-login UI refresh
       const projectListView = document.getElementById('projectListView');
       const projectDetailsView = document.getElementById('projectDetailsView');
       if (projectListView) projectListView.classList.remove('hidden');
       if (projectDetailsView) projectDetailsView.classList.add('hidden');
 
-      // Trigger sidebar UI update
       if (window.sidebar?.updateAuthDependentUI) {
         window.sidebar.updateAuthDependentUI();
       }
 
-      // Load any initial data
       setTimeout(() => {
         const loadTasks = [];
         if (typeof window.loadSidebarProjects === 'function') {
@@ -1139,7 +994,7 @@ function setupUIListeners() {
           loadTasks.push(window.createNewChat());
         }
         Promise.allSettled(loadTasks).then(results => {
-          results.forEach((r) => {
+          results.forEach(r => {
             if (r.status === 'rejected') {
               console.warn("[Auth] Some post-login tasks failed:", r.reason);
             }
@@ -1156,21 +1011,15 @@ function setupUIListeners() {
     }
   });
 
-  // Register form submission
-  registerForm?.addEventListener("submit", async (e) => {
+  registerForm?.addEventListener("submit", async function(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
     await handleRegister(formData);
   });
 
-  // Logout button
   document.getElementById("logoutBtn")?.addEventListener("click", logout);
 }
 
-/**
- * Toggle between login & registration forms
- * @param {boolean} isLogin - True = show login form
- */
 function switchForm(isLogin) {
   const loginTab = document.getElementById("loginTab");
   const registerTab = document.getElementById("registerTab");
@@ -1194,38 +1043,11 @@ function switchForm(isLogin) {
   }
 }
 
-// Standardized error handling
-window.auth.standardizeError = function(error, context) {
-  let standardError = {
-    status: error.status || 500,
-    message: error.message || "Unknown error",
-    context: context || "authentication",
-    code: error.code || "UNKNOWN_ERROR",
-    requiresLogin: false
-  };
-  
-  // Standardize common authentication errors
-  if (error.status === 401 || error.message?.includes('expired') || error.message?.includes('Session')) {
-    standardError.status = 401;
-    standardError.message = "Your session has expired. Please log in again.";
-    standardError.code = "SESSION_EXPIRED";
-    standardError.requiresLogin = true;
-  } else if (error.status === 403) {
-    standardError.status = 403;
-    standardError.message = "You don't have permission to access this resource.";
-    standardError.code = "ACCESS_DENIED";
-  }
-  
-  return standardError;
-}
-
 // ---------------------------------------------------------------------
 // Expose to window
 // ---------------------------------------------------------------------
-// Create auth object first if it doesn't exist
 window.auth = window.auth || {};
 
-// Add standardizeError before assignment if it exists
 const standardizeErrorFn = window.auth.standardizeError || function(error, context) {
   let standardError = {
     status: error.status || 500,
@@ -1234,8 +1056,7 @@ const standardizeErrorFn = window.auth.standardizeError || function(error, conte
     code: error.code || "UNKNOWN_ERROR",
     requiresLogin: false
   };
-  
-  // Standardize common authentication errors
+
   if (error.status === 401 || error.message?.includes('expired') || error.message?.includes('Session')) {
     standardError.status = 401;
     standardError.message = "Your session has expired. Please log in again.";
@@ -1246,19 +1067,17 @@ const standardizeErrorFn = window.auth.standardizeError || function(error, conte
     standardError.message = "You don't have permission to access this resource.";
     standardError.code = "ACCESS_DENIED";
   }
-  
+
   return standardError;
 };
 
-// Now assign all properties and methods
 Object.assign(window.auth, {
   init,
   standardizeError: standardizeErrorFn,
-  isAuthenticated: async function (options = {}) {
-    const { skipCache = false, forceVerify = false } = options;
+  isAuthenticated: async function(options = {}) {
+    const { forceVerify = false } = options;
     try {
-      const isAuthenticated = await verifyAuthState(forceVerify);
-      return isAuthenticated;
+      return await verifyAuthState(forceVerify);
     } catch (error) {
       console.error("[Auth] Authentication check failed:", error);
       return false;
@@ -1269,16 +1088,13 @@ Object.assign(window.auth, {
   getAuthToken,
   getWSAuthToken,
   refreshTokens,
-  handleAuthError,
-  verify: verifyAuthState,
-  verifyAuthState: verifyAuthState, // Added for compatibility with existing code
-  updateStatus: verifyAuthState, // for backward compatibility
+  verifyAuthState,
   clear: clearTokenState,
   broadcastAuth,
-  isInitialized: false
+  isInitialized: false,
+  handleRegister
 });
 
-// Export the auth object for ES module usage
 export default window.auth;
 
 console.log("[Auth] Enhanced module loaded and exposed to window.auth");
