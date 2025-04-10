@@ -591,20 +591,15 @@ def set_secure_cookie(
         except (ValueError, TypeError):
             max_age = None
     
-    # Prepare domain if present - Use request to help determine domain if provided
+    # Handle domain with whitelist approach
     domain = None
-    if request is not None and request.headers.get("host"):
-        # Extract domain from host header, removing port if present
-        host_header = request.headers.get("host")
-        if host_header:
-            host = host_header.split(":")[0]
-        else:
-            host = None
-        # Only set domain for non-localhost domains
-        if host is not None and not (host == "localhost" or host.startswith("127.0.0.1")):
+    allowed_domains = ["put.photo", settings.COOKIE_DOMAIN]
+    if settings.COOKIE_DOMAIN and settings.ENV == "production":
+        domain = settings.COOKIE_DOMAIN
+    elif request and request.headers.get("host"):
+        host = request.headers.get("host").split(":")[0]
+        if host in allowed_domains:
             domain = host
-    elif "domain" in cookie_kwargs and cookie_kwargs["domain"] is not None:
-        domain = str(cookie_kwargs["domain"])
     
     # Call set_cookie with validated parameters
     response.set_cookie(
