@@ -211,15 +211,20 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
   }
 
   try {
-    // Construct the API endpoint URL
-    const projectId = localStorage.getItem('selectedProjectId')?.trim();
-    let apiUrl;
-    
-    if (projectId) {
-      apiUrl = `/api/chat/projects/${projectId}/conversations/${this.chatId}/messages`;
-    } else {
-      apiUrl = `/api/chat/conversations/${this.chatId}/messages`;
-    }
+      // Construct the API endpoint URL
+      const projectId = localStorage.getItem('selectedProjectId')?.trim();
+      const chatId = this.chatId;
+
+      if (!chatId) {
+          throw new Error('No conversation ID is set, cannot send messages');
+      }
+
+      let apiUrl;
+      if (projectId) {
+          apiUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
+      } else {
+          apiUrl = `/api/chat/conversations/${chatId}/messages`;
+      }
     
     // Make the HTTP request
     const response = await window.apiRequest(apiUrl, 'POST', messagePayload);
@@ -261,6 +266,11 @@ window.MessageService.prototype._extractAIErrorMessage = function(errorStr) {
   // If it's a generic "Failed to generate response" error, provide more context
   if (errorStr === "Failed to generate response") {
     return "AI couldn't generate a response. This may be due to content moderation, system load, or connection issues. Please try again or rephrase your message.";
+  }
+  
+  // Handle Claude credit balance errors
+  if (errorStr.includes("credit balance") || errorStr.includes("Plans & Billing")) {
+    return "Your Claude API credit balance is too low. Please go to Plans & Billing to upgrade or purchase credits.";
   }
   
   // Handle common error patterns and map to better user-facing messages
@@ -312,8 +322,18 @@ window.MessageService.prototype._handleAIError = function(error) {
     const statusCode = error.status;
     let message = error.message || "Unknown error";
     
+    // Check for credit balance issues in the error message or response
+    if (statusCode === 400 && 
+        (message.includes("credit balance") || 
+         message.includes("Plans & Billing") || 
+         (error.response && error.response.data && 
+          error.response.data.assistant_error && 
+          (error.response.data.assistant_error.includes("credit balance") || 
+           error.response.data.assistant_error.includes("Plans & Billing"))))) {
+      message = "Your Claude API credit balance is too low. Please go to Plans & Billing to upgrade or purchase credits.";
+    }
     // Map HTTP status codes to better error messages
-    if (statusCode === 429) {
+    else if (statusCode === 429) {
       message = "Too many requests. Please wait a moment before trying again.";
     } else if (statusCode === 400 && message.includes("Failed to generate")) {
       message = this._extractAIErrorMessage("Failed to generate response");

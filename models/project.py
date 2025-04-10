@@ -73,7 +73,9 @@ class Project(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(
+    from typing import Optional
+    
+    knowledge_base_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         postgresql.UUID(as_uuid=True),
         ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
         nullable=True,

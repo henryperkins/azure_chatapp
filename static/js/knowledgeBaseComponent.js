@@ -257,27 +257,30 @@
     }
 
     /**
-     * Get current project ID from multiple sources.
-     * Prioritizes active section data attribute, then localStorage, then projectManager.
-     * @returns {string|null} The current project ID or null if not found.
-     * @private
-     */
-    _getCurrentProjectId() {
-      // 1. Check active section data attribute
-      if (this.elements.activeSection?.dataset?.projectId) {
-        return this.elements.activeSection.dataset.projectId;
-      }
-      // 2. Check localStorage
-      const storedId = localStorage.getItem('selectedProjectId');
-      if (storedId) return storedId;
-      // 3. Check projectManager global (ensure it exists)
-      if (typeof window.projectManager !== 'undefined' && window.projectManager?.currentProject?.id) {
-        return window.projectManager.currentProject.id;
-      }
-      console.warn('Could not determine current project ID.');
-      return null;
-    }
-
+     /**
+      * Get current project ID from multiple sources with fallback support.
+      * @param {string|null} fallbackId - Optional fallback project ID.
+      * @returns {string|null} The current project ID or null if not found.
+      * @private
+      */
+     _getCurrentProjectId(fallbackId = null) {
+       // 1. Check active section data attribute
+       if (this.elements.activeSection?.dataset?.projectId) {
+         return this.elements.activeSection.dataset.projectId;
+       }
+       // 2. Check localStorage
+       const storedId = localStorage.getItem('selectedProjectId');
+       if (storedId) return storedId;
+       // 3. Check projectManager global (ensure it exists)
+       if (typeof window.projectManager !== 'undefined' && window.projectManager?.currentProject?.id) {
+         return window.projectManager.currentProject.id;
+       }
+       // 4. Use provided fallback ID if available
+       if (fallbackId) return fallbackId;
+ 
+       console.warn('Could not determine current project ID.');
+       return null;
+     }
     /**
      * Formats a filename for display, truncating if necessary.
      * @param {string} filename - The original filename.
@@ -342,7 +345,7 @@
      * Render knowledge base information in the UI based on provided data.
      * @param {Object|null} kb - Knowledge base data object, or null if none exists.
      */
-    renderKnowledgeBaseInfo(kb) {
+    renderKnowledgeBaseInfo(kb, projectId = null) {
       const { activeSection, inactiveSection, kbToggle, statusIndicator, kbNameDisplay, kbVersionDisplay, kbLastUsedDisplay } = this.elements;
 
       // Clear previous status alerts
@@ -358,9 +361,9 @@
         this.state.knowledgeBase = kb;
 
         // Store project and KB IDs in data attributes for reference
-        const projectId = this._getCurrentProjectId() || kb.project_id;
-        if (projectId && activeSection) {
-          activeSection.dataset.projectId = projectId;
+        const currentProjectId = this._getCurrentProjectId(projectId) || kb.project_id;
+        if (currentProjectId && activeSection) {
+          activeSection.dataset.projectId = currentProjectId;
         }
         if (kb.id && activeSection) {
           activeSection.dataset.kbId = kb.id;

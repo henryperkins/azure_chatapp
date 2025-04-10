@@ -11,14 +11,31 @@
 // ---------------------------------------------------------------------
 // GLOBAL APP CONFIG & CONSTANTS
 // ---------------------------------------------------------------------
-
+// Create API_CONFIG to track changes to baseUrl
 const API_CONFIG = {
-  baseUrl: '',  // <--- We'll rely on the server to set cookies; override if needed.
+  _baseUrl: '',  // Private property for storage
+  get baseUrl() {
+    return this._baseUrl;
+  },
+  set baseUrl(value) {
+    // Log when baseUrl is being changed to track down unwanted changes
+    if (value !== this._baseUrl) {
+      console.warn(`API_CONFIG.baseUrl changed from "${this._baseUrl}" to "${value}"`, new Error().stack);
+      
+      // Detect and prevent incorrect domain
+      if (value && value.includes('put.photo')) {
+        console.error('Prevented setting incorrect domain (put.photo) as API baseUrl');
+        return; // Don't set the value
+      }
+    }
+    this._baseUrl = value;
+  },
   WS_ENDPOINT: '',  // Removed window.location.origin usage
   isAuthenticated: false,
   authCheckInProgress: false,
   lastErrorStatus: null
 };
+
 
 const SELECTORS = {
   MAIN_SIDEBAR: '#mainSidebar',
@@ -209,6 +226,12 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
     if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
       console.warn('Full URL detected in endpoint, normalizing:', endpoint);
       const urlObj = new URL(endpoint);
+      
+      // Additional protection against incorrect domains
+      if (urlObj.hostname === 'put.photo') {
+        console.warn('Detected incorrect domain in API request. Using relative paths instead.');
+      }
+      
       endpoint = urlObj.pathname + urlObj.search;
     }
 
@@ -302,10 +325,33 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
           }
         }
 
-        const errorBody = await response.text();
-        const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
-        error.status = response.status;
-        throw error;
+        try {
+          // Try to parse response as JSON to handle inconsistent API error formats
+          const errorResponse = await response.json();
+          
+          // Handle the case where status is "error" but message is "Success"
+          if (errorResponse.status === "error" && errorResponse.data?.assistant_error) {
+            console.warn("Detected assistant error in response:", errorResponse.data.assistant_error);
+            const error = new Error(`API error (${response.status}): ${errorResponse.data.assistant_error}`);
+            error.status = response.status;
+            error.data = errorResponse.data;
+            throw error;
+          }
+          
+          // Standard error handling for JSON responses
+          const error = new Error(`API error (${response.status}): ${
+            errorResponse.message || errorResponse.error || response.statusText
+          }`);
+          error.status = response.status;
+          error.data = errorResponse;
+          throw error;
+        } catch (jsonError) {
+          // Fallback to text if response is not JSON
+          const errorBody = await response.text();
+          const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
+          error.status = response.status;
+          throw error;
+        }
       }
 
       let jsonData = null;
@@ -336,6 +382,13 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 function getBaseUrl() {
   // We do not rely on window.location.origin or local storage.
   // If needed, set API_CONFIG.baseUrl explicitly or leave empty for relative paths.
+  
+  // Fix for incorrect domain - if baseUrl contains 'put.photo', reset it
+  if (API_CONFIG.baseUrl && API_CONFIG.baseUrl.includes('put.photo')) {
+    console.warn('Detected incorrect API domain (put.photo). Resetting to relative paths.');
+    API_CONFIG.baseUrl = '';
+  }
+  
   if (!API_CONFIG.baseUrl) {
     // Default to relative root
     API_CONFIG.baseUrl = '';
@@ -845,43 +898,42 @@ async function initializeApplication() {
 
 async function initializeAllModules() {
   try {
-    console.log("Starting application initialization sequence");
-
-    // Main "app-level" init
+    console.log("Initializing all application modules...");
+    
+    // Initialize core application
     await initializeApplication();
-
-    // Check authentication
-    const isAuthenticated = await ensureAuthenticated();
-    API_CONFIG.isAuthenticated = isAuthenticated;
-
-    // Only try to load user data if authenticated
-    if (isAuthenticated) {
-      if (typeof window.loadSidebarProjects === 'function') {
-        await window.loadSidebarProjects();
-      }
-    } else {
-      const loginMsg = document.getElementById("loginRequiredMessage");
-      if (loginMsg) loginMsg.classList.remove("hidden");
+    
+    // Initialize WebSocket service if available
+    if (window.WebSocketService?.initialize) {
+      await window.WebSocketService.initialize(API_CONFIG.WS_ENDPOINT);
+      console.log("WebSocket service initialized");
     }
-
-    // Initialize other modules
-    if (typeof InitUtils !== 'undefined' && InitUtils.featureModules) {
-      for (const module of InitUtils.featureModules) {
-        if (module.init) {
-          await InitUtils.initModule(module.name, module.init);
-        }
-      }
+    
+    // Initialize project manager if available
+    if (window.projectManager?.initialize) {
+      await window.projectManager.initialize();
+      console.log("Project manager initialized");
     }
-
-    console.log("✅ Application initialization sequence complete");
+    
+    // Initialize sidebar if available
+    if (window.sidebar?.initialize) {
+      window.sidebar.initialize();
+      console.log("Sidebar initialized");
+    }
+    
+    // Initialize chat interface if available
+    if (window.chatInterface?.initialize) {
+      await window.chatInterface.initialize();
+      console.log("Chat interface initialized");
+    }
+    
+    // Handle any initial navigation
+    await handleNavigationChange();
+    
+    console.log("All modules initialized successfully");
     return true;
   } catch (error) {
-    console.error("❌ Module initialization failed:", error);
-    Notifications.apiError("Application initialization failed");
-    const loginRequiredMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || document.getElementById('loginRequiredMessage');
-    if (loginRequiredMsg) {
-      loginRequiredMsg.classList.remove('hidden');
-    }
+    console.error("Failed to initialize all modules:", error);
     return false;
   }
 }

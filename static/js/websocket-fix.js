@@ -109,12 +109,21 @@
           // Check auth state using direct method to avoid verification cycles
           let isAuthenticated = false;
           try {
-            isAuthenticated = window.auth.authState?.isAuthenticated ||
-                              await window.auth.isAuthenticated({ skipCache: false });
+            // Wait for cookies to be available
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // First try to use cached auth state
+            isAuthenticated = window.auth.authState?.isAuthenticated;
+            
+            if (!isAuthenticated) {
+              // If not authenticated in cache, verify with server
+              isAuthenticated = await window.auth.isAuthenticated({ skipCache: false });
+            }
           } catch (authError) {
             console.warn("[WSFix] Auth verification error:", authError);
             try {
               // Attempt refresh if verify failed
+              await new Promise(resolve => setTimeout(resolve, 300)); // Add delay before refresh
               const refreshResult = await window.auth.refreshTokens().catch(e => null);
               isAuthenticated = refreshResult?.success || false;
             } catch (refreshError) {
