@@ -44,21 +44,47 @@ if (typeof window.ProjectModal === 'undefined') {
    * @private
    */
   _registerWithModalManager() {
-    if (window.ModalManager && window.modalManager) {
-      // Register this modal
-      window.modalManager.registerModal(this.modalId, this.modalElement);
-      
-      // Add a special handler for cleanup when hiding
-      const originalHide = window.modalManager.hide;
-      window.modalManager.hide = (modalId, ...args) => {
-        if (modalId === this.modalId) {
-          document.body.style.overflow = ''; // Reset body overflow
+    // First try global manager instance
+    if (window.modalManager && typeof window.modalManager.registerModal === 'function') {
+      this._completeRegistration(window.modalManager);
+    } 
+    // Then try ProjectDashboard namespace
+    else if (window.ProjectDashboard && window.ProjectDashboard.modalManager) {
+      this._completeRegistration(window.ProjectDashboard.modalManager);
+    } 
+    // If not available yet, set up a retry with a delay
+    else {
+      console.log('ModalManager not yet available, will retry registration in 500ms');
+      setTimeout(() => {
+        if (window.modalManager || (window.ProjectDashboard && window.ProjectDashboard.modalManager)) {
+          const manager = window.modalManager || window.ProjectDashboard.modalManager;
+          this._completeRegistration(manager);
+        } else {
+          console.warn('ModalManager not available for ProjectModal registration after retry');
         }
-        return originalHide.call(window.modalManager, modalId, ...args);
-      };
-    } else {
-      console.warn('ModalManager not available for ProjectModal registration');
+      }, 500);
     }
+  }
+  
+  /**
+   * Complete the registration with the modal manager
+   * @private
+   * @param {Object} manager - The modal manager instance
+   */
+  _completeRegistration(manager) {
+    // Register this modal
+    manager.registerModal(this.modalId, this.modalElement);
+    
+    // Add a special handler for cleanup when hiding
+    const originalHide = manager.hide;
+    manager.hide = (modalId, ...args) => {
+      if (modalId === this.modalId) {
+        document.body.style.overflow = ''; // Reset body overflow
+      }
+      return originalHide.call(manager, modalId, ...args);
+    };
+    
+    console.log(`ProjectModal registered with ModalManager for ID: ${this.modalId}`);
   }
 
   initEventListeners() {

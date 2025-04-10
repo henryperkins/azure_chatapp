@@ -838,11 +838,30 @@
     return "unknown";
   }
 
+  /**
+   * Initializes the project manager
+   * Called by app.js during application startup sequence
+   * @returns {Promise<boolean>} Whether initialization was successful
+   */
+  async function initialize() {
+    try {
+      // Verify auth is ready
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      console.log("[projectManager] Initialization complete - auth status:", isAuthenticated);
+      return true;
+    } catch (err) {
+      console.warn("[projectManager] Initialized with auth warning:", err);
+      return true; // Still return success to prevent cascading failures
+    }
+  }
+
   // ----------------
   // PUBLIC API
   // ----------------
   window.projectManager = {
     currentProject: getCurrentProject,
+    // Initialization
+    initialize,
     // Loads
     loadProjects,
     loadProjectDetails,

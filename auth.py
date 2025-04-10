@@ -542,82 +542,33 @@ async def logout_user(
 
 
 def set_secure_cookie(
-    response: Response, key: str, value: str, max_age: int | None = None,
-    request: Request | None = None
+    response: Response,
+    key: str,
+    value: str,
+    max_age: int | None = None,
+    request: Request | None = None,
 ):
     """
-    Sets a secure HTTP-only cookie with explicit expiration to ensure persistence across browser sessions.
-    
-    Args:
-        response: FastAPI response object
-        key: Cookie name
-        value: Cookie value
-        max_age: Maximum age in seconds (None means the cookie persists until browser close)
-        request: Optional request object to get host from headers
+    Sets a secure HTTP-only cookie with proper domain detection.
     """
     cookie_kwargs = {
         "key": key,
         "value": value,
         "httponly": True,
-        "secure": (False if request and request.url.hostname in ["localhost","127.0.0.1"] else settings.ENV == "production"),
-        "samesite": "lax",  # Use lax for better cross-site compatibility
-        "path": "/",        # Always set path to root to ensure cookies work across all pages
-        "max_age": max_age if max_age is not None else 60 * 60 * 24 * 30,  # Default 30 days if not specified
+        "secure": (
+            False
+            if request and request.url.hostname in ["localhost", "127.0.0.1"]
+            else settings.ENV == "production"
+        ),
+        "samesite": "lax",
+        "path": "/",
+        "max_age": max_age if max_age is not None else 60 * 60 * 24 * 30,
     }
 
-    # IMPORTANT: Do NOT set domain for typical single-domain applications
-    # Setting domain can cause issues with cookie persistence during navigation
-    # Only set domain for subdomain/cross-domain scenarios, and only when required
+    # For localhost, don't set domain at all
+    if request and request.url.hostname not in ["localhost", "127.0.0.1"]:
+        if settings.COOKIE_DOMAIN:
+            cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
 
-    # Convert and validate cookie parameters with strict typing
-    key = str(cookie_kwargs["key"])
-    value = str(cookie_kwargs["value"])
-    httponly = True if cookie_kwargs.get("httponly", True) else False
-    secure = True if cookie_kwargs.get("secure", settings.ENV == "production") else False
-    
-    # Handle samesite with type casting
-    samesite_val = cookie_kwargs.get("samesite", "lax")
-    samesite: Literal['lax', 'strict', 'none'] = cast(
-        Literal['lax', 'strict', 'none'],
-        samesite_val.lower() if isinstance(samesite_val, str) and samesite_val.lower() in ['lax', 'strict', 'none']
-        else 'lax'
-    )
-    
-    # Handle path and max_age with proper types
-    path = str(cookie_kwargs["path"]) if cookie_kwargs.get("path") else None
-    
-    # Handle max_age with explicit None check and safe conversion
-    max_age = None
-    if "max_age" in cookie_kwargs and cookie_kwargs["max_age"] is not None:
-        try:
-            max_age = int(cookie_kwargs["max_age"])
-        except (ValueError, TypeError):
-            max_age = None
-    
-    # Handle domain with whitelist approach
-    domain = None
-    allowed_domains = ["put.photo", settings.COOKIE_DOMAIN]
-    if settings.COOKIE_DOMAIN and settings.ENV == "production":
-        domain = settings.COOKIE_DOMAIN
-    elif request and request.headers.get("host"):
-        host_header = request.headers.get("host")
-        if host_header:  # Ensure host_header is not None
-            if ":" in host_header:
-                host = host_header.split(":")[0]  # Extract hostname without port
-            else:
-                host = host_header  # Use as-is if no port separator
-            
-            if host in allowed_domains:
-                domain = host
-    
-    # Call set_cookie with validated parameters
-    response.set_cookie(
-        key=key,
-        value=value,
-        max_age=max_age,
-        path=path,
-        domain=domain,
-        secure=secure,
-        httponly=httponly,
-        samesite=samesite
-    )
+    # Set cookie with proper parameters
+    response.set_cookie(**cookie_kwargs)
