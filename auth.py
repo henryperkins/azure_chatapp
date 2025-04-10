@@ -1,8 +1,8 @@
 """
 auth.py
 -------
-Handles user login and registration using purely cookie-based authentication,
-secure password hashing (bcrypt), session expiry logic, and token versioning.
+Remediated authentication module with refined token/session mechanisms,
+reduced duplication, environment-based default admin, and a simple rate-limiter.
 """
 
 import asyncio
@@ -10,11 +10,11 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select, insert
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import bcrypt
@@ -31,81 +31,188 @@ from utils.auth_utils import (
 
 logger = logging.getLogger(__name__)
 
-# Debug flag for verbose auth logging 
+# -----------------------------------------------------------------------------
+# Global/Environment Settings
+# -----------------------------------------------------------------------------
 AUTH_DEBUG = os.getenv("AUTH_DEBUG", "True").lower() == "true"
 
-router = APIRouter()
-
-# Default admin user for development environments
 DEFAULT_ADMIN = {
-    "username": "admin",
-    "password": "Admin123!@#dev",  # This is only for development
+    "username": os.getenv("DEFAULT_ADMIN_USERNAME", "admin"),
+    "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Admin123!@#dev"),
 }
-
-async def create_default_user():
-    """Create a default admin user if no users exist"""
-    try:
-        logging.info("Checking for default user creation")
-        async with get_async_session_context() as session:
-            # Check if any users exist in the database
-            result = await session.execute(select(User).limit(1))
-            if result.scalars().first() is None:
-                logging.info("No users found, creating default admin user")
-                
-                # Hash the password
-                hashed_pw = bcrypt.hashpw(
-                    DEFAULT_ADMIN["password"].encode("utf-8"), 
-                    bcrypt.gensalt()
-                ).decode("utf-8")
-                
-                # Create the admin user
-                admin_user = User(
-                    username=DEFAULT_ADMIN["username"].lower(),
-                    password_hash=hashed_pw,
-                    is_active=True,
-                    role="admin"
-                )
-                session.add(admin_user)
-                await session.commit()
-                logging.info(f"Default admin user '{DEFAULT_ADMIN['username']}' created successfully")
-                logging.info(f"LOGIN WITH: username={DEFAULT_ADMIN['username']}, password={DEFAULT_ADMIN['password']}")
-            else:
-                logging.debug("Users already exist, skipping default user creation")
-    except Exception as e:
-        logging.error(f"Failed to create default user: {str(e)}")
-
-# Debug endpoint to check login attempts
-@router.get("/debug/auth-log", response_model=dict)
-async def get_auth_debug_info():
-    """Returns the current authentication debug info"""
-    from utils.auth_utils import REVOCATION_LIST
-    
-    if settings.ENV == "production":
-        raise HTTPException(status_code=404)
-    
-    return {
-        "auth_debug_enabled": AUTH_DEBUG,
-        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
-        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
-        "revoked_tokens_count": "Not tracked",
-        "cookie_domain": settings.COOKIE_DOMAIN,
-        "environment": settings.ENV,
-    }
-
-@router.get("/settings/token-expiry", response_model=dict)
-async def get_token_expiry_settings() -> dict[str,int]:
-    """
-    Expose token expiration settings to the frontend.
-    """
-    return {
-        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
-        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
-    }
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = 1  # Reduced from 7 to 1 day for better security
 
+router = APIRouter()
 
+
+# -----------------------------------------------------------------------------
+# Cookie Settings
+# -----------------------------------------------------------------------------
+class CookieSettings:
+    """
+    Centralized cookie configuration based on environment and domain.
+    Adjust fields as needed for production vs. local testing.
+    """
+
+    def __init__(self, env: str, cookie_domain: str | None):
+        self.env = env
+        self.cookie_domain = cookie_domain
+
+    @property
+    def secure(self) -> bool:
+        # Use secure cookies only in production (HTTPS)
+        return self.env == "production"
+
+    def domain(self, hostname: str | None) -> str | None:
+        # For localhost/127.0.0.1, we don't set domain
+        if hostname in {"localhost", "127.0.0.1"}:
+            return None
+        return self.cookie_domain
+
+    def same_site(self, hostname: str | None, key: str) -> Literal['lax', 'strict', 'none'] | None:
+        # Default to 'lax'. If you need cross-site requests, adjust accordingly.
+        # For purely local development, 'lax' is typically fine.
+        # Some use-cases might prefer 'strict', but that can block certain flows.
+        return "lax"  # Must be lowercase to match FastAPI's expected values
+
+
+cookie_settings = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
+
+# -----------------------------------------------------------------------------
+# Simple In-Memory Rate Limiter for Demonstration
+# -----------------------------------------------------------------------------
+LOGIN_ATTEMPTS = {}
+MAX_ATTEMPTS = 5
+WINDOW_SECONDS = 300  # 5 minutes
+
+
+async def rate_limit_login(request: Request, username: str):
+    """
+    Simple in-memory rate limiter for login.
+    - Key: (client IP + username)
+    - Clears stale attempts outside the 5-minute window.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"{client_ip}:{username}"
+    now = datetime.now().timestamp()
+
+    # Remove old attempts
+    attempts = [ts for ts in LOGIN_ATTEMPTS.get(key, []) if now - ts < WINDOW_SECONDS]
+    attempts.append(now)
+    LOGIN_ATTEMPTS[key] = attempts
+
+    if len(attempts) > MAX_ATTEMPTS:
+        logger.warning(
+            f"Rate limit exceeded for user '{username}' from IP '{client_ip}'."
+        )
+        raise HTTPException(
+            status_code=429, detail="Too many login attempts. Please wait."
+        )
+
+
+# -----------------------------------------------------------------------------
+# Common Helpers
+# -----------------------------------------------------------------------------
+def naive_utc_now() -> datetime:
+    """Return the current time in UTC without tzinfo (naive)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def build_jwt_payload(
+    user: User,
+    token_type: Literal["access", "refresh", "ws"],
+    expires_delta: timedelta,
+    jti: str | None = None,
+) -> dict[str, Any]:
+    """
+    Creates a standard JWT payload with consistent fields.
+    """
+    jti = jti or str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    return {
+        "sub": user.username,
+        "user_id": user.id,
+        "type": token_type,
+        "version": user.token_version,  # Might be None for newly registered users
+        "iat": now,
+        "exp": now + expires_delta,
+        "jti": jti,
+    }
+
+
+def set_secure_cookie(
+    response: Response, key: str, value: str, max_age: int, request: Request
+):
+    """
+    Sets a secure HTTP-only cookie based on environment.
+    Single method to avoid duplication of cookie logic.
+    """
+    hostname = request.url.hostname or ""
+    domain = cookie_settings.domain(hostname)
+    secure = cookie_settings.secure
+    samesite = cookie_settings.same_site(hostname, key)
+
+    # Debug logging
+    if AUTH_DEBUG:
+        logger.debug(
+            f"Set cookie [{key}] -> domain={domain}, secure={secure}, samesite={samesite}, max_age={max_age}"
+        )
+
+    response.set_cookie(
+        key=key,
+        value=value,
+        max_age=max_age,
+        path="/",
+        domain=domain,
+        secure=secure,
+        httponly=True,
+        samesite=samesite,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Default Admin Creation
+# -----------------------------------------------------------------------------
+async def create_default_user():
+    """Create a default admin user if no users exist, using env-based credentials."""
+    try:
+        logger.info("Checking for default user creation...")
+        async with get_async_session_context() as session:
+            result = await session.execute(select(User).limit(1))
+            if result.scalars().first() is None:
+                logger.info("No users found. Creating default admin user.")
+
+                hashed_pw = bcrypt.hashpw(
+                    DEFAULT_ADMIN["password"].encode("utf-8"), bcrypt.gensalt()
+                ).decode("utf-8")
+
+                admin_user = User(
+                    username=DEFAULT_ADMIN["username"].lower(),
+                    password_hash=hashed_pw,
+                    is_active=True,
+                    role="admin",
+                )
+                session.add(admin_user)
+                await session.commit()
+
+                logger.info(
+                    f"Default admin user '{DEFAULT_ADMIN['username']}' created."
+                )
+                logger.info(
+                    f"DEV LOGIN -> username={DEFAULT_ADMIN['username']}, "
+                    f"password={DEFAULT_ADMIN['password']}"
+                )
+            else:
+                logger.debug("Users already exist, skipping default admin creation.")
+    except Exception as e:
+        logger.error(f"Failed to create default user: {str(e)}")
+
+
+# -----------------------------------------------------------------------------
+# Models
+# -----------------------------------------------------------------------------
 class UserCredentials(BaseModel):
     """Authentication credentials (username and password)."""
 
@@ -120,14 +227,17 @@ class LoginResponse(BaseModel):
     token_type: str
 
 
+# -----------------------------------------------------------------------------
+# Password Validation
+# -----------------------------------------------------------------------------
 def validate_password(password: str):
     """
-    Validates password meets security requirements in a single pass:
+    Validates password meets security requirements:
     - At least 12 chars
     - Contains upper, lower, digit, special char
     """
     if len(password) < 12:
-        raise ValueError("Password must be at least 12 characters")
+        raise ValueError("Password must be at least 12 characters.")
 
     special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?~"
     has_upper = has_lower = has_digit = has_special = False
@@ -146,21 +256,24 @@ def validate_password(password: str):
             return
 
     if not has_upper:
-        raise ValueError("Password must contain uppercase letters")
+        raise ValueError("Password must contain uppercase letters.")
     if not has_lower:
-        raise ValueError("Password must contain lowercase letters")
+        raise ValueError("Password must contain lowercase letters.")
     if not has_digit:
-        raise ValueError("Password must contain numbers")
+        raise ValueError("Password must contain numbers.")
     if not has_special:
-        raise ValueError("Password must contain at least one special character")
+        raise ValueError("Password must contain at least one special character.")
 
 
+# -----------------------------------------------------------------------------
+# Registration Endpoint
+# -----------------------------------------------------------------------------
 @router.post("/register", response_model=dict)
 async def register_user(
     creds: UserCredentials, session: AsyncSession = Depends(get_async_session)
 ) -> dict[str, str]:
     """
-    Registers a new user with a hashed password, enforcing password policy.
+    Registers a new user with hashed password and password policy enforcement.
     """
     lower_username = creds.username.lower()
     validate_password(creds.password)
@@ -171,7 +284,7 @@ async def register_user(
         .first()
     )
     if existing_user:
-        raise HTTPException(status_code=400, detail="Username already taken")
+        raise HTTPException(status_code=400, detail="Username already taken.")
 
     hashed_pw = bcrypt.hashpw(creds.password.encode("utf-8"), bcrypt.gensalt()).decode(
         "utf-8"
@@ -182,18 +295,17 @@ async def register_user(
     await session.commit()
     await session.refresh(user)
 
-    # Convert UTC timezone-aware datetime to naive datetime for DB compatibility
-    now_utc = datetime.now(timezone.utc)
-    naive_now = now_utc.replace(tzinfo=None)  # Remove timezone info
-    
-    user.last_login = naive_now
+    user.last_login = naive_utc_now()
     session.add(user)
     await session.commit()
 
     logger.info("User registered successfully: %s", lower_username)
-    return {"message": f"User '{lower_username}' registered successfully"}
+    return {"message": f"User '{lower_username}' registered successfully."}
 
 
+# -----------------------------------------------------------------------------
+# Login Endpoint
+# -----------------------------------------------------------------------------
 @router.post("/login", response_model=LoginResponse)
 async def login_user(
     request: Request,
@@ -205,12 +317,14 @@ async def login_user(
     Authenticates user, returns access and refresh tokens,
     and sets them in secure HTTP-only cookies.
     """
+    await rate_limit_login(request, creds.username)
+
     lower_username = creds.username.lower()
     result = await session.execute(select(User).where(User.username == lower_username))
     user = result.scalars().first()
     if not user:
         logger.warning("Login attempt for non-existent user: %s", lower_username)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
 
     if not user.is_active:
         logger.warning("Login attempt for disabled account: %s", lower_username)
@@ -218,7 +332,7 @@ async def login_user(
             status_code=403, detail="Account disabled. Contact support."
         )
 
-    # Check password with bcrypt in executor
+    # Password verification in the executor
     try:
         valid_password = await asyncio.get_event_loop().run_in_executor(
             None,
@@ -229,101 +343,86 @@ async def login_user(
     except ValueError as exc:
         logger.error("Corrupted password hash for user '%s': %s", lower_username, exc)
         raise HTTPException(
-            status_code=400,
-            detail="Corrupted password hash. Please reset account.",
+            status_code=400, detail="Corrupted password hash. Please reset account."
         ) from exc
 
     if not valid_password:
-        logger.warning("Failed login attempt for user: %s", lower_username)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        logger.warning("Failed login for user: %s", lower_username)
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
 
-    # Start transaction to safely update user & token_version
+    # Update user and generate tokens in a transaction
     async with session.begin_nested():
         locked_user = await session.get(User, user.id, with_for_update=True)
         if not locked_user:
-            raise HTTPException(status_code=500, detail="User lock failed")
+            raise HTTPException(status_code=500, detail="User lock failed.")
 
-        # Use current time without timezone information for DB compatibility
-        # Get current UTC time with timezone info
-        now_utc = datetime.now(timezone.utc)
-        locked_user.last_login = datetime.utcnow()
-        # No longer tracking token versions
-        logger.info(f"User '{lower_username}' logged in")
-
+        locked_user.last_login = naive_utc_now()
+        # locked_user.token_version remains the same on successful login
         await session.commit()
 
-        # Generate tokens after successful commit
-        token_id = str(uuid.uuid4())
-        expire_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_payload = {
-            "sub": locked_user.username,
-            "exp": expire_at,
-            "iat": datetime.now(timezone.utc),
-            "jti": token_id,
-            "type": "access",
-            "user_id": locked_user.id,
-        }
+        # Generate access token
+        access_payload = build_jwt_payload(
+            locked_user,
+            token_type="access",
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
         access_token = create_access_token(access_payload)
 
-        refresh_token_id = str(uuid.uuid4())
-        refresh_expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        refresh_payload = {
-            "sub": locked_user.username,
-            "exp": refresh_expire,
-            "iat": datetime.now(timezone.utc),
-            "jti": refresh_token_id,
-            "type": "refresh",
-            "user_id": locked_user.id,
-        }
+        # Generate refresh token
+        refresh_payload = build_jwt_payload(
+            locked_user,
+            token_type="refresh",
+            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        )
         refresh_token = create_access_token(refresh_payload)
 
-    # Clean up expired tokens in background
+    # Clean up expired tokens (optional background process)
     await clean_expired_tokens(session)
 
-    # Set secure cookies for both tokens
+    # Set cookies
     set_secure_cookie(
-        response, "access_token", access_token, 
+        response,
+        "access_token",
+        access_token,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        request=request
+        request=request,
     )
     set_secure_cookie(
         response,
         "refresh_token",
         refresh_token,
         max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
-        request=request
+        request=request,
     )
 
-    logger.info(
-        "User '%s' logged in. Token IDs: %s (access), %s (refresh)",
-        lower_username,
-        token_id,
-        refresh_token_id,
-    )
-
+    logger.info("User '%s' logged in. Access & refresh tokens issued.", lower_username)
     return LoginResponse(access_token=access_token, token_type="bearer")
 
 
+# -----------------------------------------------------------------------------
+# Token Refresh Mechanism
+# -----------------------------------------------------------------------------
 async def get_refresh_token_user(
     request: Request, session: AsyncSession = Depends(get_async_session)
 ) -> User:
     """
-    Dependency that extracts a refresh token from cookies
-    and returns the associated user.
+    Dependency to extract refresh token from cookies and return the associated user.
     """
     token = request.cookies.get("refresh_token")
     if not token:
-        raise HTTPException(status_code=401, detail="Refresh token missing")
+        raise HTTPException(status_code=401, detail="Refresh token missing.")
+
     try:
         return await get_user_from_token(token, session, "refresh")
     except Exception as e:
-        error_detail = "Invalid refresh token"
+        error_detail = "Invalid refresh token."
         if "expired" in str(e):
-            error_detail = "Refresh token expired - please login again"
+            error_detail = "Refresh token expired - please login again."
         elif "version" in str(e):
-            error_detail = "Token version mismatch - session invalidated"
+            error_detail = "Token version mismatch - session invalidated."
         elif "revoked" in str(e):
-            error_detail = "Token revoked - please login again"
+            error_detail = "Token revoked - please login again."
+
         raise HTTPException(
             status_code=401, detail=error_detail, headers={"WWW-Authenticate": "Bearer"}
         )
@@ -338,138 +437,100 @@ async def refresh_token(
 ) -> LoginResponse:
     """
     Exchanges a valid refresh token for a new access token,
-    rotating the user's token_version to invalidate old tokens.
+    optionally rotating the refresh token if nearing expiration.
     """
-    # Log detailed token version info at start of refresh
-    try:
-        refresh_token = request.cookies.get("refresh_token")
-        if refresh_token:
-            decoded = await verify_token(refresh_token, "refresh", request)
-            logger.info(
-                f"Token refresh requested for user '{user.username}', "
-                f"refresh token version: {decoded.get('version')}, "
-                f"current DB token version: {user.token_version}"
-            )
-    except Exception as e:
-        logger.warning(f"Error logging refresh token details: {e}")
-    username = user.username
+    refresh_token_cookie = request.cookies.get("refresh_token")
+    if not refresh_token_cookie:
+        raise HTTPException(status_code=401, detail="No refresh token cookie found.")
+
     try:
         async with session.begin_nested():
             locked_user = await session.get(User, user.id, with_for_update=True)
             if not locked_user:
-                raise HTTPException(
-                    status_code=500,
-                    detail="User lock failed during refresh",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                raise HTTPException(status_code=500, detail="User lock failed.")
 
-            # Update last activity for sliding session
-            # Convert UTC timezone-aware datetime to naive datetime for DB compatibility
-            now_utc = datetime.now(timezone.utc)
-            naive_now = now_utc.replace(tzinfo=None)  # Remove timezone info
-            
-            locked_user.last_login = naive_now
-            locked_user.last_activity = naive_now
+            locked_user.last_login = naive_utc_now()
+            locked_user.last_activity = naive_utc_now()
 
-            token_id = str(uuid.uuid4())
-            expire_at = datetime.now(timezone.utc) + timedelta(
-                minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+            # Create new access token
+            access_payload = build_jwt_payload(
+                locked_user,
+                token_type="access",
+                expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
             )
-            payload = {
-                "sub": username,
-                "exp": expire_at,
-                "iat": datetime.now(timezone.utc),
-                "jti": token_id,
-                "type": "access",
-                "version": locked_user.token_version,  # Use existing version
-                "user_id": locked_user.id,
-            }
-            new_token = create_access_token(payload)
+            new_access_token = create_access_token(access_payload)
             await session.commit()
 
-            # Check if the refresh token is nearing expiration and renew if necessary
-            refresh_token = request.cookies.get("refresh_token")
-            if refresh_token:
-                try:
-                    decoded = await verify_token(refresh_token, "refresh", request)
-                    if decoded and "exp" in decoded:
-                        # Calculate time until expiration
-                        expires_at = datetime.fromtimestamp(decoded["exp"])
-                        time_remaining = expires_at - datetime.now(timezone.utc)
-                        # Renew refresh token if it expires in less than 6 hours
-                        if time_remaining < timedelta(hours=6):
-                            new_refresh_token_id = str(uuid.uuid4())
-                            new_refresh_expire = datetime.now(timezone.utc) + timedelta(
-                                days=REFRESH_TOKEN_EXPIRE_DAYS
-                            )
-                            
-                            # Determine time since last login
-                            time_since_login = None
-                            if locked_user.last_login:
-                                time_since_login = datetime.now(timezone.utc) - locked_user.last_login
-                                
-                            # Only increment version if more than 5 minutes have passed since last version change
-                            current_ts = int(datetime.now(timezone.utc).timestamp())
-                            old_version = locked_user.token_version
-                            if not old_version or (current_ts - old_version) > 300:  # 5 minute window
-                                locked_user.token_version = current_ts
-                            logger.info(
-                                f"User '{username}' token_version updated from {old_version} to {locked_user.token_version}"
-                            )
-                            await session.flush()
-                            await session.commit()  # Ensure new version is saved
+            # Check if refresh token is close to expiring
+            decoded = await verify_token(refresh_token_cookie, "refresh", request)
+            expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
+            time_remaining = expires_at - datetime.now(timezone.utc)
 
-                            new_refresh_payload = {
-                                "sub": username,
-                                "exp": new_refresh_expire,
-                                "iat": datetime.now(timezone.utc),
-                                "jti": new_refresh_token_id,
-                                "type": "refresh",
-                                "version": locked_user.token_version,  # Use new version
-                                "user_id": locked_user.id,
-                            }
-                            new_refresh_token = create_access_token(new_refresh_payload)
-                            set_secure_cookie(
-                                response,
-                                "refresh_token",
-                                new_refresh_token,
-                                max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
-                                request=request
-                            )
-                            # Old refresh token is automatically invalidated
-                            blacklisted = TokenBlacklist(
-                                jti=decoded["jti"],
-                                expires=decoded["exp"],
-                                user_id=user.id,
-                                token_type="refresh",
-                                creation_reason="refresh_rotation"
-                            )
-                            session.add(blacklisted)
-                            await session.commit()
-                except Exception as e:
-                    logger.error("Error during refresh token renewal: %s", e)
+            if time_remaining < timedelta(hours=6):
+                # If we haven't updated token_version recently, do so
+                current_ts = int(datetime.now(timezone.utc).timestamp())
+                old_version = locked_user.token_version
+                if not old_version or (current_ts - old_version) > 300:
+                    locked_user.token_version = current_ts
+                    logger.info(
+                        f"User '{locked_user.username}' token_version updated from "
+                        f"{old_version} to {locked_user.token_version}"
+                    )
+                    await session.flush()
+                    await session.commit()
 
-        logger.info("Refreshed token for user '%s', token_id '%s'.", username, token_id)
+                # Issue a new refresh token
+                new_refresh_payload = build_jwt_payload(
+                    locked_user,
+                    token_type="refresh",
+                    expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+                )
+                new_refresh_token = create_access_token(new_refresh_payload)
+
+                # Replace refresh cookie
+                set_secure_cookie(
+                    response,
+                    "refresh_token",
+                    new_refresh_token,
+                    max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+                    request=request,
+                )
+
+                # Blacklist the old refresh token
+                blacklisted = TokenBlacklist(
+                    jti=decoded["jti"],
+                    expires=decoded["exp"],
+                    user_id=locked_user.id,
+                    token_type="refresh",
+                    creation_reason="refresh_rotation",
+                )
+                session.add(blacklisted)
+                await session.commit()
 
         set_secure_cookie(
             response,
             "access_token",
-            new_token,
+            new_access_token,
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            request=request
+            request=request,
         )
+        logger.info("Refreshed token for user '%s'.", locked_user.username)
 
-        return LoginResponse(access_token=new_token, token_type="bearer")
+        return LoginResponse(access_token=new_access_token, token_type="bearer")
+
     except Exception as e:
         logger.error("Error during token refresh: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
 
+# -----------------------------------------------------------------------------
+# Token Info & Verification
+# -----------------------------------------------------------------------------
 @router.get("/token-info")
 async def get_token_info(
     current_user: User = Depends(get_current_user_and_token),
 ) -> dict[str, Any]:
-    """Returns token metadata including expiry time."""
+    """Returns token metadata, e.g., expiry time."""
     return {
         "authenticated": True,
         "username": current_user.username,
@@ -493,45 +554,71 @@ async def verify_auth_status(
     }
 
 
+# -----------------------------------------------------------------------------
+# WebSocket Token Endpoint
+# -----------------------------------------------------------------------------
 @router.get("/ws-token")
 async def get_websocket_token(
     current_user: User = Depends(get_current_user_and_token),
-    session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, Any]:
     """
-    Generates a short-lived token specifically for WebSocket authentication.
+    Generates a short-lived token (5 minutes) for WebSocket authentication.
     """
     token_id = str(uuid.uuid4())
-    expire_at = datetime.now(timezone.utc) + timedelta(minutes=5)  # Short-lived token
-
-    payload = {
-        "sub": current_user.username,
-        "exp": expire_at,
-        "iat": datetime.now(timezone.utc),
-        "jti": token_id,
-        "type": "ws",
-        "version": current_user.token_version,
-        "user_id": current_user.id,
-    }
-
+    payload = build_jwt_payload(
+        current_user, token_type="ws", expires_delta=timedelta(minutes=5), jti=token_id
+    )
     ws_token = create_access_token(payload)
 
     return {
         "token": ws_token,
-        "expires_at": expire_at.isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
         "version": current_user.token_version,
+    }
+
+
+# -----------------------------------------------------------------------------
+# Testing Utilities
+# -----------------------------------------------------------------------------
+@router.get("/debug/auth-log", response_model=dict)
+async def get_auth_debug_info():
+    """Returns the current authentication debug info. Not exposed in production."""
+    if settings.ENV == "production":
+        raise HTTPException(status_code=404)
+    return {
+        "auth_debug_enabled": AUTH_DEBUG,
+        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
+        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
+        "cookie_domain": settings.COOKIE_DOMAIN,
+        "environment": settings.ENV,
+    }
+
+
+@router.get("/settings/token-expiry", response_model=dict)
+async def get_token_expiry_settings() -> dict[str, int]:
+    """Exposes token expiration settings to the frontend."""
+    return {
+        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
+        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
     }
 
 
 @router.get("/test-cookie")
 async def test_cookie(request: Request, response: Response) -> dict[str, str]:
+    """Sets a test cookie for debugging cookie behavior."""
     set_secure_cookie(response, "test_cookie", "works", max_age=30, request=request)
     return {"status": "cookie set"}
 
+
 @router.get("/timestamp")
 async def get_server_time() -> dict[str, float]:
+    """Returns the current server timestamp (UTC)."""
     return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
 
+
+# -----------------------------------------------------------------------------
+# Logout
+# -----------------------------------------------------------------------------
 @router.post("/logout")
 async def logout_user(
     request: Request,
@@ -540,110 +627,53 @@ async def logout_user(
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, str]:
     """
-    Invalidates refresh token and increments token_version to invalidate
-    *all* existing tokens. Clears auth cookies.
+    Invalidates the refresh token and increments token_version
+    to invalidate *all* existing tokens. Clears auth cookies.
     """
     token = request.cookies.get("refresh_token")
     if not token:
-        raise HTTPException(status_code=401, detail="Refresh token missing")
+        raise HTTPException(status_code=401, detail="Refresh token missing.")
 
     decoded = await verify_token(token, "refresh", request)
     token_id = decoded.get("jti")
     if not token_id:
-        raise HTTPException(status_code=401, detail="Invalid token format")
+        raise HTTPException(status_code=401, detail="Invalid token format.")
     expires_timestamp = decoded.get("exp")
-    
-    # Convert Unix timestamp to datetime object with type checking
     if expires_timestamp is not None:
-        expires_datetime = datetime.fromtimestamp(float(expires_timestamp), tz=timezone.utc)
+        expires_datetime = datetime.fromtimestamp(
+            float(expires_timestamp), tz=timezone.utc
+        )
     else:
-        # Default expiry if not provided (1 day from now)
         expires_datetime = datetime.now(timezone.utc) + timedelta(days=1)
-    
-    # Add token to blacklist
+
+    # Blacklist the token
     blacklisted_token = TokenBlacklist(
         jti=token_id,
         expires=expires_datetime,
         user_id=user.id,
         token_type="refresh",
-        creation_reason="logout"
+        creation_reason="logout",
     )
     session.add(blacklisted_token)
 
-    # Token invalidation handled by expiration
+    # Token version increment
+    async with session.begin_nested():
+        locked_user = await session.get(User, user.id, with_for_update=True)
+        if locked_user:
+            current_ts = int(datetime.now(timezone.utc).timestamp())
+            old_version = locked_user.token_version
+            locked_user.token_version = current_ts
+            logger.info(
+                f"User '{locked_user.username}' token_version updated from {old_version} to {current_ts} on logout."
+            )
 
+    # Clear cookies
+    set_secure_cookie(response, "access_token", "", 0, request)
+    set_secure_cookie(response, "refresh_token", "", 0, request)
 
     logger.info(
-        "User %s logged out. Refresh token %s invalidated; token_version incremented.",
+        "User '%s' logged out. Refresh token %s invalidated; token_version incremented.",
         user.username,
         token_id,
     )
-
-    # Expire cookies
-    set_secure_cookie(response, "access_token", "", max_age=0, request=request)
-    set_secure_cookie(response, "refresh_token", "", max_age=0, request=request)
-
     return {"status": "logged out"}
-
-
-def set_secure_cookie(
-    response: Response,
-    key: str,
-    value: str,
-    max_age: int | None = None,
-    request: Request | None = None,
-):
-    """
-    Sets a secure HTTP-only cookie with proper domain detection for improved compatibility.
-    """
-    # Validate and convert parameters
-    key_str = str(key)
-    value_str = str(value)
-    
-    # For local development, ALWAYS use insecure cookies (HTTP) and no domain
-    if request and request.url.hostname in ["localhost", "127.0.0.1"]:
-        is_secure = False  # Force insecure for localhost (HTTP)
-        domain = None      # No domain for localhost
-        if AUTH_DEBUG:
-            logger.debug(f"Local development detected: forcing secure=False, domain=None")
-    else:
-        # For non-localhost, use production settings
-        is_secure = settings.ENV == "production"
-        domain = settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None
-    
-    # Validate max_age - CRITICAL: Ensure we have a valid max_age for persistent cookies
-    if max_age is not None:
-        try:
-            max_age_int = int(max_age)
-        except (ValueError, TypeError):
-            max_age_int = 60 * 60 * 24 * 30  # Default to 30 days
-    else:
-        max_age_int = 60 * 60 * 24 * 30  # Default to 30 days
-    
-    # Determine SameSite attribute - critical for cookie acceptance
-    samesite = "lax"  # Default
-    
-    # For localhost, we need special handling
-    if request and request.url.hostname in ["localhost", "127.0.0.1"]:
-        # For auth cookies specifically, use a more permissive setting
-        if key_str in ["access_token", "refresh_token"]:
-            # For auth cookies, we'll use Lax which doesn't require Secure
-            samesite = "lax"
-            if AUTH_DEBUG:
-                logger.debug(f"Local development: using SameSite=Lax for auth cookie {key_str}")
-    
-    # Log cookie settings for debugging
-    if AUTH_DEBUG:
-        logger.debug(f"Setting cookie: key={key_str}, max_age={max_age_int}, domain={domain}, secure={is_secure}, samesite={samesite}")
-    
-    # Set cookie with individual parameters (type-safe)
-    response.set_cookie(
-        key=key_str,
-        value=value_str,
-        max_age=max_age_int,
-        path="/",
-        domain=domain,
-        secure=is_secure,
-        httponly=True,
-        samesite=samesite
-    )
