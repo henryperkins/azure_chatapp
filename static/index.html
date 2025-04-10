@@ -1216,6 +1216,9 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   </script>
 
+  <!-- Project Manager (needs to load before app.js) -->
+  <script src="/static/js/projectManager.js"></script>
+
   <!-- Core Configuration & Utilities -->
   <script type="module" src="/static/js/app.js"></script>
   <script type="module" src="/static/js/auth.js"></script>
@@ -1358,8 +1361,8 @@ window.addEventListener('DOMContentLoaded', function() {
         const scripts = [
           '/static/js/knowledgeBaseComponent.js', // Ensure these don't also need app.js early
           '/static/js/projectDetailsComponent.js',
-          '/static/js/projectListComponent.js',
-          '/static/js/projectManager.js'
+          '/static/js/projectListComponent.js'
+          // projectManager.js is now loaded directly in the HTML before app.js
         ];
         
         let loadedCount = 0;
