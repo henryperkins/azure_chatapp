@@ -425,17 +425,12 @@ window.UIComponents = function(options = {}) {
     init: function() {
       // More robust element finding logic
       // First try with the provided selectors
-      if (options.inputSelector) {
-        this.element = document.querySelector(options.inputSelector);
-      }
-
-      if (options.sendButtonSelector) {
-        this.button = document.querySelector(options.sendButtonSelector);
-      }
+      this.element = document.querySelector(this.inputSelector);
+      this.button = document.querySelector(this.sendButtonSelector);
 
       // If not found, try common selectors and fallbacks
       if (!this.element) {
-        console.log('Input element not found with selector:', options.inputSelector);
+        console.log('Input element not found with selector:', this.inputSelector);
         // Try common input selectors
         const possibleInputs = [
           '#chatInput',
@@ -457,7 +452,7 @@ window.UIComponents = function(options = {}) {
 
       // If button not found, try common button selectors or find sibling button
       if (!this.button) {
-        console.log('Send button not found with selector:', options.sendButtonSelector);
+        console.log('Send button not found with selector:', this.sendButtonSelector);
         // Try common button selectors
         const possibleButtons = [
           '#sendBtn',

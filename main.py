@@ -47,7 +47,7 @@ from starlette.datastructures import URL
 # -------------------------
 from routes.unified_conversations import router as unified_conversations_router
 from routes import unified_conversations  # for direct WebSocketRoute reference
-from auth import router as auth_router
+from auth import router as auth_router, create_default_user
 from routes.file_upload import router as file_upload_router
 from routes.projects.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
@@ -164,13 +164,20 @@ async def startup_handler() -> None:
         upload_path.mkdir(parents=True, exist_ok=True)
         upload_path.chmod(0o700)
 
-        # 4. Initialize authentication system
+        # 4. Initialize authentication system and create default user if needed
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
             await load_revocation_list(session)
             logger.info(f"Cleaned {deleted_count} expired tokens during startup")
+        
+        # 5. Create default admin user if no users exist
+        try:
+            await create_default_user()
+            logger.info("Default user check completed")
+        except Exception as e:
+            logger.error(f"Error during default user creation: {e}")
 
-        # 5. Schedule periodic token cleanup
+        # 6. Schedule periodic token cleanup
         await schedule_token_cleanup(interval_minutes=30)
 
         logger.info("Startup completed: DB validated, uploads ready, auth initialized")

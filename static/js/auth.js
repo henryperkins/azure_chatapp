@@ -34,7 +34,9 @@ const AUTH_CONSTANTS = {
   VERIFICATION_CACHE_DURATION: 60000,    // 60 seconds
   REFRESH_TIMEOUT: 10000,                // 10 seconds for token refresh
   VERIFY_TIMEOUT: 5000,                  // 5 seconds for auth verification
-  MAX_VERIFY_ATTEMPTS: 3                 // Maximum verification attempts
+  MAX_VERIFY_ATTEMPTS: 3,                // Maximum verification attempts
+  ACCESS_TOKEN_EXPIRE_MINUTES: 30,       // Default access token expiry in minutes
+  REFRESH_TOKEN_EXPIRE_DAYS: 1           // Default refresh token expiry in days
 };
 
 // ---------------------------------------------------------------------
@@ -472,7 +474,7 @@ async function init() {
   } finally {
     if (window.API_CONFIG) {
       window.API_CONFIG.authCheckInProgress = false;
-    }
+    }   
     window.__authInitializing = false;
   }
 }
@@ -504,28 +506,57 @@ async function verifyAuthState(bypassCache = false) {
     }
 
     let accessToken, refreshToken;
-    let retries = 5; // Wait for cookies to load
+    let retries = 15; // Further increased retries: Wait longer for cookies to load (up to ~4.5 seconds total wait)
+    let initialAccessToken = null;
+    let initialRefreshToken = null;
     while (retries-- > 0) {
       accessToken = getCookie('access_token');
       refreshToken = getCookie('refresh_token');
+      if (retries === 6) { // Log initial state once
+          initialAccessToken = accessToken;
+          initialRefreshToken = refreshToken;
+          if (AUTH_DEBUG) console.debug(`[Auth] Initial cookie check: access=${initialAccessToken ? 'yes' : 'no'}, refresh=${initialRefreshToken ? 'yes' : 'no'}`);
+      }
 
       if (accessToken && refreshToken) {
         if (AUTH_DEBUG) {
-          console.debug(`[Auth] Both tokens found, proceeding with verification`);
+          console.debug(`[Auth] Both tokens found after ${7 - retries -1} retries, proceeding with verification`);
         }
         break;
       }
 
       if (AUTH_DEBUG) {
-        console.debug(`[Auth] Waiting for cookies, retries left: ${retries}. Found: ${
-          accessToken ? 'access_token ' : ''
-        }${refreshToken ? ' refresh_token ' : ''}`);
+        console.debug(`[Auth] Waiting for cookies, retries left: ${retries}. Found: access=${accessToken ? 'yes' : 'no'}, refresh=${refreshToken ? 'yes' : 'no'}`);
       }
+      await new Promise(resolve => setTimeout(resolve, 300)); // Slightly increased delay between checks
 
-      await new Promise(resolve => setTimeout(resolve, 250));
+      // This direct access token check might be problematic on refresh, comment out for now to rely on cookies
+      // if (accessToken === window.__directAccessToken && window.__recentLoginTimestamp && (Date.now() - window.__recentLoginTimestamp < 10000)) {
+      //   if (AUTH_DEBUG) { console.debug('[Auth] Using direct access token bypass'); }
+      //   return true;
+      // }
+      // Check for recent login with more flexible token matching
+      if (window.__recentLoginTimestamp && (Date.now() - window.__recentLoginTimestamp < 30000)) {
+        const currentToken = getCookie('access_token');
+        if (currentToken) {
+          if (AUTH_DEBUG) { console.debug('[Auth] Using recent login bypass with valid token'); }
+          return true;
+        }
+        
+        // If cookie is missing but we have a direct token in memory, use that as fallback
+        if (window.__directAccessToken) {
+          if (AUTH_DEBUG) { console.debug('[Auth] Using direct token fallback - cookies missing but recent login detected'); }
+          // Try to set the cookie again as a recovery mechanism
+          document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=1800; SameSite=Lax`;
+          return true;
+        }
+      }
     }
 
-    if (accessToken && isTokenExpired(accessToken) && refreshToken) {
+    if (!accessToken && initialAccessToken && AUTH_DEBUG) {
+        console.warn(`[Auth] Access token became null after initially being present. Retries: ${7 - retries -1}`);
+    }
+    if (accessToken && await isTokenExpired(accessToken) && refreshToken) { // Added await for isTokenExpired
       try {
         if (AUTH_DEBUG) {
           console.debug('[Auth] Access token expired, attempting refresh');
@@ -558,6 +589,25 @@ async function verifyAuthState(bypassCache = false) {
       if (AUTH_DEBUG) {
         console.debug('[Auth] No access token found after retries');
       }
+      
+      // Last resort: Check if we have a direct token from a recent login
+      if (window.__directAccessToken && window.__recentLoginTimestamp &&
+          (Date.now() - window.__recentLoginTimestamp < 60000)) { // Within 1 minute
+        
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] No cookie found but using direct token as last resort');
+        }
+        
+        // Try to set the cookie again as a recovery mechanism
+        document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
+        
+        // Return authenticated since we have a valid direct token
+        authState.isAuthenticated = true;
+        authState.lastVerified = Date.now();
+        broadcastAuth(true);
+        return true;
+      }
+      
       broadcastAuth(false);
       return false;
     }
@@ -773,16 +823,77 @@ async function loginUser(username, password) {
       authState.tokenVersion = response.token_version;
     }
 
+    // Set timestamp BEFORE updating auth state to ensure it's available for verification
+    window.__recentLoginTimestamp = Date.now();
+    window.__directAccessToken = response.access_token;
+    
+    // Force a much longer delay to ensure cookies are properly set before proceeding
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Verify cookies were actually set with retries
+    let accessTokenCookie = null;
+    let refreshTokenCookie = null;
+    let cookieRetries = 5;
+    
+    while (cookieRetries-- > 0) {
+      accessTokenCookie = getCookie('access_token');
+      refreshTokenCookie = getCookie('refresh_token');
+      
+      if (accessTokenCookie && refreshTokenCookie) {
+        break;
+      }
+      
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth] Waiting for cookies after login, retries left: ${cookieRetries}`);
+      }
+      
+      // Wait between retries
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Post-login cookie check:', {
+        accessToken: !!accessTokenCookie,
+        refreshToken: !!refreshTokenCookie,
+        retriesLeft: cookieRetries
+      });
+    }
+    
+    // If cookies still not set, use direct token as fallback
+    if (!accessTokenCookie && response.access_token) {
+      if (AUTH_DEBUG) {
+        console.warn('[Auth] Cookies not set after login, using direct token as fallback');
+      }
+      // Store token in memory for this session
+      window.__directAccessToken = response.access_token;
+      window.__recentLoginTimestamp = Date.now();
+    }
+    
+    // Update auth state
     authState.isAuthenticated = true;
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
 
-    window.__recentLoginTimestamp = Date.now();
-    window.__directAccessToken = response.access_token;
+    // Explicitly broadcast auth state AFTER all state is updated
+    broadcastAuth(true, response.username || username);
 
     broadcastAuth(true, response.username || username);
 
+    // If cookies still not set after retries, try to set them manually on the client side
+    if (!accessTokenCookie && response.access_token) {
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Attempting to set cookies manually on client side as fallback');
+      }
+      
+      // Set cookies manually with maximum compatibility
+      document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
+      
+      if (response.refresh_token) {
+        document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+      }
+    }
+    
     if (AUTH_DEBUG) {
       console.debug('[Auth] Login successful, marking timestamp to prevent immediate refresh:', window.__recentLoginTimestamp);
     }
@@ -964,18 +1075,30 @@ function setupUIListeners() {
       authState.lastVerified = Date.now();
       authDropdown?.classList.add("hidden");
       authDropdown?.classList.remove("slide-in");
-      notify("Login successful", "success");
+notify("Login successful", "success");
 
-      const projectListView = document.getElementById('projectListView');
-      const projectDetailsView = document.getElementById('projectDetailsView');
-      if (projectListView) projectListView.classList.remove('hidden');
-      if (projectDetailsView) projectDetailsView.classList.add('hidden');
+// Make sure the main panel is shown.
+const projectManagerPanel = document.getElementById('projectManagerPanel');
+if (projectManagerPanel) {
+    projectManagerPanel.classList.remove('hidden');
+}
 
-      if (window.sidebar?.updateAuthDependentUI) {
-        window.sidebar.updateAuthDependentUI();
-      }
+// Redirect the user to the project list cards view.
+if (window.projectManager && typeof window.projectManager.showProjectList === 'function') {
+    window.projectManager.showProjectList();
+} else {
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    if (projectListView) projectListView.classList.remove('hidden');
+    if (projectDetailsView) projectDetailsView.classList.add('hidden');
+}
+window.history.pushState({}, '', '/?view=projectList');
 
-      setTimeout(() => {
+if (window.sidebar?.updateAuthDependentUI) {
+    window.sidebar.updateAuthDependentUI();
+}
+
+setTimeout(() => {
         const loadTasks = [];
         if (typeof window.loadSidebarProjects === 'function') {
           loadTasks.push(window.loadSidebarProjects());
