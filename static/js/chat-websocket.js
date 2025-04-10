@@ -27,7 +27,7 @@
     return;
   }
 
-  const activeInstances = new WeakMap();
+  const activeInstances = new Map();
 
   // Connection state constants
   const CONNECTION_STATES = {
@@ -167,7 +167,23 @@
         throw new Error('Auth module not available');
       }
 
-      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      if(!isAuthenticated) {
+        console.debug('[WebSocket] Not authenticated - attempting token refresh before connecting');
+        try {
+          await window.auth.refreshTokens();
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        } catch(refreshError) {
+          console.error('[WebSocket] Refresh tokens failed, forcing logout:', refreshError);
+          await window.auth.logout();
+          throw new Error('Cannot establish WebSocket - user logged out');
+        }
+        if(!isAuthenticated) {
+          console.error('[WebSocket] Still not authenticated after refresh, forcing logout');
+          await window.auth.logout();
+          throw new Error('Cannot establish WebSocket - user logged out');
+        }
+      }
       if (!isAuthenticated) {
         throw new Error('User not authenticated');
       }
