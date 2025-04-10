@@ -680,6 +680,39 @@ async def websocket_chat_endpoint(
             await websocket.accept()
             logger.info(f"WebSocket connection accepted for {conversation_id}")
 
+            # Start background token validation task
+            async def validate_token_periodically():
+                while True:
+                    await asyncio.sleep(300)  # Check every 5 minutes
+                    try:
+                        # Get fresh token from cookie
+                        token = websocket.cookies.get("access_token")
+                        if not token:
+                            logger.warning("WebSocket session lost access token cookie")
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                            return
+                        
+                        # Verify token without raising exception
+                        try:
+                            await verify_token(token, "access", None)
+                        except Exception:
+                            # Send message to client requesting token refresh
+                            await websocket.send_json({"type": "token_refresh_required"})
+                            # Wait for client to refresh token (max 10 seconds)
+                            try:
+                                response = await asyncio.wait_for(websocket.receive_json(), 10)
+                                if response.get("type") != "token_refreshed":
+                                    raise ValueError("Invalid refresh response")
+                            except (asyncio.TimeoutError, ValueError):
+                                logger.warning("WebSocket client failed to refresh token")
+                                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                                return
+                    except Exception as e:
+                        logger.error(f"Error in token validation task: {e}")
+                        break
+                
+            token_validation_task = asyncio.create_task(validate_token_periodically())
+
             # Project validation (if project_id provided) - skip token check since user already validated
             if project_id:
                 try:
@@ -781,6 +814,8 @@ async def websocket_chat_endpoint(
             logger.info(
                 f"WebSocket disconnected for user {user.id if user else 'unknown'}, conversation {conversation_id}"
             )
+            if 'token_validation_task' in locals():
+                token_validation_task.cancel()
         except Exception as e:
             logger.exception(f"WebSocket error: {str(e)}")
         finally:
