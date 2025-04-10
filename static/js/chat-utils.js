@@ -167,11 +167,10 @@ window.addEventListener('error', function(event) {
     console.warn("WebSocket error detected:", event.message);
     
     // Attempt recovery
-    if (window.chatInterface?.currentChatId) {
+    if (window.chatInterface?.currentChatId && window.chatInterface?.wsService) {
       console.log("Attempting automatic WebSocket reconnection");
-      window.chatInterface.establishWebSocketConnection(
-        window.chatInterface.currentChatId
-      ).catch(err => console.error("Reconnection failed:", err));
+      window.chatInterface.wsService.connect(window.chatInterface.currentChatId)
+        .catch(err => console.error("Reconnection failed:", err));
     }
   }
 });
