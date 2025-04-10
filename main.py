@@ -167,7 +167,6 @@ async def startup_handler() -> None:
         # 4. Initialize authentication system and create default user if needed
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
-            await load_revocation_list(session)
             logger.info(f"Cleaned {deleted_count} expired tokens during startup")
         
         # 5. Create default admin user if no users exist
