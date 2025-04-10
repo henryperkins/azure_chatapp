@@ -827,19 +827,22 @@ async function loginUser(username, password) {
     window.__recentLoginTimestamp = Date.now();
     window.__directAccessToken = response.access_token;
     
-    // Force a much longer delay to ensure cookies are properly set before proceeding
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Force a longer delay to ensure cookies are properly set before proceeding
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Verify cookies were actually set with retries
+    // Verify cookies were actually set with more retries
     let accessTokenCookie = null;
     let refreshTokenCookie = null;
-    let cookieRetries = 5;
+    let cookieRetries = 10; // Increased from 5 to 10
     
     while (cookieRetries-- > 0) {
       accessTokenCookie = getCookie('access_token');
       refreshTokenCookie = getCookie('refresh_token');
       
       if (accessTokenCookie && refreshTokenCookie) {
+        if (AUTH_DEBUG) {
+          console.debug(`[Auth] Both cookies found after ${10 - cookieRetries} attempts`);
+        }
         break;
       }
       
@@ -847,8 +850,8 @@ async function loginUser(username, password) {
         console.debug(`[Auth] Waiting for cookies after login, retries left: ${cookieRetries}`);
       }
       
-      // Wait between retries
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait between retries with increasing delay
+      await new Promise(resolve => setTimeout(resolve, 200 + (10 - cookieRetries) * 50));
     }
     
     if (AUTH_DEBUG) {
@@ -859,14 +862,37 @@ async function loginUser(username, password) {
       });
     }
     
-    // If cookies still not set, use direct token as fallback
+    // If cookies still not set, use direct token as fallback and try to set cookies again
     if (!accessTokenCookie && response.access_token) {
-      if (AUTH_DEBUG) {
-        console.warn('[Auth] Cookies not set after login, using direct token as fallback');
-      }
+      console.warn('[Auth] Cookies not set after login, using direct token as fallback');
+      
       // Store token in memory for this session
       window.__directAccessToken = response.access_token;
       window.__recentLoginTimestamp = Date.now();
+      
+      // Try to set cookies manually with multiple approaches for maximum compatibility
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Attempting to set cookies manually on client side as fallback');
+      }
+      
+      // Approach 1: Standard cookie with Lax SameSite
+      document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
+      
+      // Approach 2: Try with domain explicitly set to current hostname
+      const hostname = window.location.hostname;
+      document.cookie = `access_token=${response.access_token}; path=/; domain=${hostname}; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
+      
+      if (response.refresh_token) {
+        document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+        document.cookie = `refresh_token=${response.refresh_token}; path=/; domain=${hostname}; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+      }
+      
+      // Check if our manual cookie setting worked
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const manualCookieCheck = getCookie('access_token');
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth] Manual cookie setting ${manualCookieCheck ? 'succeeded' : 'failed'}`);
+      }
     }
     
     // Update auth state
@@ -877,22 +903,6 @@ async function loginUser(username, password) {
 
     // Explicitly broadcast auth state AFTER all state is updated
     broadcastAuth(true, response.username || username);
-
-    broadcastAuth(true, response.username || username);
-
-    // If cookies still not set after retries, try to set them manually on the client side
-    if (!accessTokenCookie && response.access_token) {
-      if (AUTH_DEBUG) {
-        console.debug('[Auth] Attempting to set cookies manually on client side as fallback');
-      }
-      
-      // Set cookies manually with maximum compatibility
-      document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
-      
-      if (response.refresh_token) {
-        document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
-      }
-    }
     
     if (AUTH_DEBUG) {
       console.debug('[Auth] Login successful, marking timestamp to prevent immediate refresh:', window.__recentLoginTimestamp);

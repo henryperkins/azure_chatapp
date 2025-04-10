@@ -2,190 +2,190 @@
 auth_utils.py
 -------------
 Centralized authentication utilities for the application.
-Handles JWT token generation/validation and user authentication for both
-HTTP and WebSocket connections using cookie-based tokens only.
+Handles JWT token creation/verification, blacklisted token cleanup,
+and user authentication via HTTP or WebSocket using cookie-based tokens.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
-from uuid import UUID
 
-from jwt import encode, decode
-from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
-from fastapi import HTTPException, Request, WebSocket, status, Depends
+import jwt
+from jwt import PyJWTError, ExpiredSignatureError, InvalidTokenError
+from fastapi import HTTPException, Request, WebSocket, status
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from db import get_async_session_context
 from models.user import User, TokenBlacklist
-from models.project import Project, ProjectUserAssociation
 
 logger = logging.getLogger(__name__)
 
-# Token constants
+# -----------------------------------------------------------------------------
+# JWT Configuration
+# -----------------------------------------------------------------------------
 JWT_SECRET: str = settings.JWT_SECRET
 JWT_ALGORITHM = "HS256"
 
 
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+# -----------------------------------------------------------------------------
+# Token Creation
+# -----------------------------------------------------------------------------
+def create_access_token(data: dict) -> str:
     """
-    Create a JWT access token.
+    Encodes a JWT token from the given payload `data`.
+    Assumes 'data' already contains all necessary claims, including 'exp'.
     """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    to_encode.update({"exp": expire})
-    encoded_jwt = encode(
-        to_encode,
+    token = jwt.encode(
+        data,
         JWT_SECRET,
         algorithm=JWT_ALGORITHM,
         headers={
-            "kid": settings.JWT_KEY_ID,  # Key rotation support (optional)
+            "kid": settings.JWT_KEY_ID,  # For key rotation if desired
             "alg": JWT_ALGORITHM,
         },
     )
     logger.debug(
-        f"Access token created for user: {data.get('sub')}, jti: {data.get('jti')}"
+        "Created token with jti=%s for sub=%s, type=%s",
+        data.get("jti"),
+        data.get("sub"),
+        data.get("type"),
     )
-    return encoded_jwt
+    return token
 
 
+# -----------------------------------------------------------------------------
+# Token Verification & Blacklist Checking
+# -----------------------------------------------------------------------------
 async def verify_token(
     token: str,
     expected_type: Optional[str] = None,
     request: Optional[Request] = None,
 ) -> Dict[str, Any]:
-    async with get_async_session_context() as db:
-        """
-        Verify and decode a JWT token from cookies.
-        Enforces optional token type and checks if token is revoked.
-        """
-        decoded = None
-        token_id = None
+    """
+    Verifies and decodes a JWT token.
+    - Checks if token is blacklisted.
+    - Optionally enforces a specific token type (e.g., 'access', 'refresh').
+    - Raises HTTPException(401) if invalid, expired, or revoked.
+    """
+    decoded = None
+    token_id = None
 
-        try:
-            decoded = decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    try:
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        token_id = decoded.get("jti")
 
-            # If a specific token type is expected, confirm
-            if expected_type and decoded.get("type") != expected_type:
-                logger.warning(
-                    f"Token type mismatch. Expected {expected_type}, got {decoded.get('type')}"
-                )
-                raise HTTPException(status_code=401, detail="Invalid token type")
-
-            token_id = decoded.get("jti")
-            if db and token_id:
-                try:
-                    query = select(
-                        TokenBlacklist.jti,
-                        TokenBlacklist.expires,
-                        TokenBlacklist.token_type
-                    ).where(TokenBlacklist.jti == token_id)
-                    result = await db.execute(query)
-                    blacklisted = result.scalar_one_or_none()
-                except Exception as oe:
-                    if "creation_reason" in str(oe):
-                        query = select(TokenBlacklist.jti, TokenBlacklist.expires)
-                        result = await db.execute(query)
-                        blacklisted = result.scalar_one_or_none()
-                    else:
-                        raise
-                    
-                if blacklisted:
-                    logger.warning(f"Token ID '{token_id}' is revoked (database)")
-                    raise HTTPException(status_code=401, detail="Token is revoked")
-
-            if not decoded.get("jti"):
-                logger.warning("Token missing required jti claim")
-                raise HTTPException(status_code=401, detail="Invalid token: missing jti")
-
-            username = decoded.get("sub") or "unknown"
-            logger.debug(
-                f"Token verification successful for jti: {token_id}, user: {username}"
+        # If a specific token type is expected, confirm it
+        if expected_type and decoded.get("type") != expected_type:
+            logger.warning(
+                f"Token type mismatch. Expected '{expected_type}', got '{decoded.get('type')}'"
             )
-            return decoded
+            raise HTTPException(status_code=401, detail="Invalid token type")
 
-        except ExpiredSignatureError as exc:
-            logger.warning("Token expired: jti=%s", token_id)
-            raise HTTPException(
-                status_code=401,
-                detail="Token has expired - please refresh your session", 
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from exc
-        except InvalidTokenError as e:
-            logger.warning("Invalid token - jti=%s, error=%s", token_id, str(e))
-            raise HTTPException(status_code=401, detail="Invalid token") from e
+        if not token_id:
+            logger.warning("Token missing required 'jti' claim")
+            raise HTTPException(status_code=401, detail="Invalid token: missing jti")
+
+        # Check if token is blacklisted
+        async with get_async_session_context() as db:
+            query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
+            result = await db.execute(query)
+            blacklisted = result.scalar_one_or_none()
+            if blacklisted:
+                logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
+                raise HTTPException(status_code=401, detail="Token is revoked")
+
+        username = decoded.get("sub") or "unknown"
+        logger.debug(
+            "Token verification successful for jti=%s, user=%s", token_id, username
+        )
+        return decoded
+
+    except ExpiredSignatureError as exc:
+        logger.warning("Token expired: jti=%s", token_id)
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired - please refresh your session",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    except InvalidTokenError as e:
+        logger.warning("Invalid token jti=%s, error=%s", token_id, str(e))
+        raise HTTPException(status_code=401, detail="Invalid token") from e
+    except PyJWTError as e:
+        logger.error("JWT error for jti=%s: %s", token_id, str(e))
+        raise HTTPException(status_code=401, detail="Token error") from e
 
 
-
-
+# -----------------------------------------------------------------------------
+# Token Blacklist Cleanup
+# -----------------------------------------------------------------------------
 async def clean_expired_tokens(db: AsyncSession) -> int:
     """
-    Clean up expired tokens from the database and sync in-memory cache.
+    Removes expired tokens from the blacklist table,
+    returning the number of records deleted.
+    Also logs a summary of active blacklisted tokens by type.
     """
     now = datetime.utcnow()
 
-    # Delete from DB
+    # Delete expired blacklist entries
     stmt = delete(TokenBlacklist).where(TokenBlacklist.expires < now)
     result = await db.execute(stmt)
     await db.commit()
-    deleted_count = result.rowcount
+    deleted_count = result.rowcount or 0
 
-    # Log token counts by type before cleanup
-    token_count_query = select(
-        TokenBlacklist.token_type, 
-        func.count(TokenBlacklist.id)
-    ).where(
-        TokenBlacklist.expires >= now
-    ).group_by(
-        TokenBlacklist.token_type
+    # Log active token counts by type
+    token_count_query = (
+        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))
+        .where(TokenBlacklist.expires >= now)
+        .group_by(TokenBlacklist.token_type)
     )
     token_counts = await db.execute(token_count_query)
-    
     for token_type, count in token_counts:
         logger.info(f"Active blacklisted tokens of type '{token_type}': {count}")
 
-    # Get active JTIs for the revocation list
-    query = select(TokenBlacklist.jti).where(TokenBlacklist.expires >= now)
-    result = await db.execute(query)
-    valid_jtis = {row[0] for row in result.fetchall()}
-
-
     if deleted_count > 0:
-        logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens")
+        logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens.")
     return deleted_count
 
 
-
-
+# -----------------------------------------------------------------------------
+# Cookie Extraction for HTTP / WebSocket
+# -----------------------------------------------------------------------------
 def extract_token(request_or_websocket):
-    """Get JWT from cookies, works for both HTTP and WebSocket"""
-    if isinstance(request_or_websocket, WebSocket):
-        # Special handling for WebSocket cookie extraction
+    """
+    Retrieves the 'access_token' from cookies.
+    Works with both HTTP (Request) and WebSocket objects.
+    """
+    if hasattr(request_or_websocket, "cookies"):
+        # Likely an HTTP Request
+        return request_or_websocket.cookies.get("access_token")
+    if hasattr(request_or_websocket, "headers"):
+        # WebSocket scenario
         cookie_header = request_or_websocket.headers.get("cookie", "")
-        cookies = {
-            c.split("=", 1)[0].strip(): c.split("=", 1)[1].strip()
-            for c in cookie_header.split(";")
-            if "=" in c
-        }
+        cookies = {}
+        for c in cookie_header.split(";"):
+            if "=" in c:
+                k, v = c.split("=", 1)
+                cookies[k.strip()] = v.strip()
         return cookies.get("access_token")
-    return request_or_websocket.cookies.get("access_token")
+    return None  # Fallback for unexpected types
 
 
+# -----------------------------------------------------------------------------
+# User Retrieval via Token
+# -----------------------------------------------------------------------------
 async def get_user_from_token(
-    token: str, db: AsyncSession, expected_type: Optional[str] = "access"
+    token: str,
+    db: AsyncSession,
+    expected_type: Optional[str] = "access",
 ) -> User:
     """
-    Retrieve a user object by validating a JWT token from cookies.
+    Decodes the given JWT, checks optional token type,
+    then loads the associated user from the database.
+    Raises 401 if user not found or token is invalid/expired/revoked.
     """
-    decoded = await verify_token(token, expected_type, None)
+    decoded = await verify_token(token, expected_type)
 
     username = decoded.get("sub")
     if not username:
@@ -196,22 +196,20 @@ async def get_user_from_token(
 
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalars().first()
-
     if not user:
         logger.warning(f"User '{username}' from token not found in database")
         raise HTTPException(status_code=401, detail="User not found")
-
     if not user.is_active:
         logger.warning(f"Attempt to use token for disabled account: {username}")
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # Check last activity for sliding sessions
+    # Check session inactivity if relevant
     if hasattr(user, "last_activity") and user.last_activity:
         inactive_duration = (datetime.utcnow() - user.last_activity).total_seconds()
         if inactive_duration > 86400:  # 1 day in seconds
             logger.warning(
-                f"Session expired due to inactivity for {username}: "
-                f"{inactive_duration} seconds since last activity"
+                f"Session expired due to inactivity for {username} "
+                f"({inactive_duration} seconds since last activity)."
             )
             raise HTTPException(
                 status_code=401,
@@ -219,6 +217,7 @@ async def get_user_from_token(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+    # Inject token details into the user object if needed
     user.jti = decoded.get("jti")
     user.exp = decoded.get("exp")
     user.active_project_id = decoded.get("project_context")
@@ -226,59 +225,75 @@ async def get_user_from_token(
     return user
 
 
-async def get_current_user_and_token(
-    request: Request
-) -> User:
-    async with get_async_session_context() as db:
-        """
-        FastAPI dependency that extracts and validates a token from cookies, returning the user.
-        """
-        token = extract_token(request)
-        if not token:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+# -----------------------------------------------------------------------------
+# FastAPI Dependency for HTTP Endpoints
+# -----------------------------------------------------------------------------
+async def get_current_user_and_token(request: Request) -> User:
+    """
+    FastAPI dependency that extracts an 'access_token' from the request cookies,
+    verifies it, and loads the corresponding user.
+    """
+    token = extract_token(request)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
+    async with get_async_session_context() as db:
         user = await get_user_from_token(token, db)
     return user
 
 
+# -----------------------------------------------------------------------------
+# WebSocket Authentication
+# -----------------------------------------------------------------------------
 async def authenticate_websocket(
     websocket: WebSocket, db: AsyncSession
 ) -> Tuple[bool, Optional[User]]:
     """
-    Authenticate a WebSocket connection by extracting the access token cookie.
+    Authenticates a WebSocket connection by extracting 'access_token' cookie.
+    - For browsers, reads cookies from headers.
+    - For non-browser clients, expects the token in the first text message.
+    Returns (True, user) if authenticated, else (False, None).
     """
-    # Add special handling for browser clients
     user_agent = websocket.headers.get("user-agent", "").lower()
     is_browser = any(s in user_agent for s in ["mozilla", "webkit", "chrome"])
-    
+
     if is_browser:
         token = extract_token(websocket)
     else:
-        # Non-browser clients can send token directly
-        token = await websocket.receive_text()
-    if not token:
-        logger.warning("WebSocket connection rejected: No cookie token provided")
         try:
-            if websocket.client_state != websocket.client_state.DISCONNECTED:
-                await websocket.close()
+            # Non-browser clients might send the token as raw text
+            token = await websocket.receive_text()
         except Exception as e:
-            logger.error(f"Error closing websocket: {e}")
+            logger.error(f"Error receiving token from websocket: {e}")
+            token = None
+
+    if not token:
+        logger.warning("WebSocket authentication failed: No token provided.")
+        await _close_websocket_if_open(websocket)
         return False, None
 
     try:
-        user = await get_user_from_token(token, db, "access")
+        user = await get_user_from_token(token, db, expected_type="access")
         logger.info(f"WebSocket authenticated for user: {user.id} ({user.username})")
         return True, user
-    except Exception as e:
-        logger.warning(f"WebSocket authentication failed: {str(e)}")
-        try:
-            if websocket.client_state != websocket.client_state.DISCONNECTED:
-                await websocket.close()
-        except Exception as close_err:
-            logger.error(f"Error closing websocket: {close_err}")
+    except HTTPException as exc:
+        logger.warning(f"WebSocket authentication failed: {exc.detail}")
+        await _close_websocket_if_open(websocket)
         return False, None
+    except Exception as e:
+        logger.error(f"Unhandled error during websocket authentication: {e}")
+        await _close_websocket_if_open(websocket)
+        return False, None
+
+
+async def _close_websocket_if_open(websocket: WebSocket):
+    """Utility to safely close the WebSocket if it's still open."""
+    try:
+        if websocket.client_state.name != "DISCONNECTED":
+            await websocket.close()
+    except Exception as close_err:
+        logger.error(f"Error closing WebSocket: {close_err}")
