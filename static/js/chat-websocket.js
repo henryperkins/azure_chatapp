@@ -534,16 +534,24 @@
 
     if (isAuthError) {
       try {
-        console.log('Auth-related error - letting auth.js handle token refresh');
-        // Delegate to auth.js for token issues
+        console.log('Auth-related error - checking if we have a recent token');
+        // First check if we have a very recent token (<5s old)
+        if (window.__recentLoginTimestamp && (Date.now() - window.__recentLoginTimestamp < 5000)) {
+          console.log('Using recently logged-in token for reconnection');
+          return await this.attemptReconnection();
+        }
+          
+        // Otherwise try refresh
+        console.log('Attempting token refresh for WebSocket');
         await window.auth.refreshTokens();
         if (this.reconnectAttempts < MAX_RETRIES) {
           return await this.attemptReconnection();
         }
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
-        // Let auth.js handle auth errors
-        window.auth.handleAuthError(refreshError, 'WebSocket reconnection');
+        // Don't force logout - just fall back to HTTP
+        this.useHttpFallback = true;
+        window.auth.handleAuthError(refreshError, 'WebSocket reconnection', {noLogout: true});
       }
     }
 
