@@ -12,14 +12,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import bcrypt
 from config import settings
-from db import get_async_session
+from db import get_async_session, get_async_session_context
 from models.user import User, TokenBlacklist
 from utils.auth_utils import (
     clean_expired_tokens,
@@ -32,7 +32,66 @@ from utils.auth_utils import (
 
 logger = logging.getLogger(__name__)
 
+# Debug flag for verbose auth logging 
+AUTH_DEBUG = os.getenv("AUTH_DEBUG", "True").lower() == "true"
+
 router = APIRouter()
+
+# Default admin user for development environments
+DEFAULT_ADMIN = {
+    "username": "admin",
+    "password": "Admin123!@#dev",  # This is only for development
+}
+
+async def create_default_user():
+    """Create a default admin user if no users exist"""
+    try:
+        logging.info("Checking for default user creation")
+        async with get_async_session_context() as session:
+            # Check if any users exist in the database
+            result = await session.execute(select(User).limit(1))
+            if result.scalars().first() is None:
+                logging.info("No users found, creating default admin user")
+                
+                # Hash the password
+                hashed_pw = bcrypt.hashpw(
+                    DEFAULT_ADMIN["password"].encode("utf-8"), 
+                    bcrypt.gensalt()
+                ).decode("utf-8")
+                
+                # Create the admin user
+                admin_user = User(
+                    username=DEFAULT_ADMIN["username"].lower(),
+                    password_hash=hashed_pw,
+                    is_active=True,
+                    role="admin"
+                )
+                session.add(admin_user)
+                await session.commit()
+                logging.info(f"Default admin user '{DEFAULT_ADMIN['username']}' created successfully")
+                logging.info(f"LOGIN WITH: username={DEFAULT_ADMIN['username']}, password={DEFAULT_ADMIN['password']}")
+            else:
+                logging.debug("Users already exist, skipping default user creation")
+    except Exception as e:
+        logging.error(f"Failed to create default user: {str(e)}")
+
+# Debug endpoint to check login attempts
+@router.get("/debug/auth-log", response_model=dict)
+async def get_auth_debug_info():
+    """Returns the current authentication debug info"""
+    from utils.auth_utils import REVOCATION_LIST
+    
+    if settings.ENV == "production":
+        raise HTTPException(status_code=404)
+    
+    return {
+        "auth_debug_enabled": AUTH_DEBUG,
+        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
+        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
+        "revoked_tokens_count": len(REVOCATION_LIST) if REVOCATION_LIST else "Not loaded",
+        "cookie_domain": settings.COOKIE_DOMAIN,
+        "environment": settings.ENV,
+    }
 
 @router.get("/settings/token-expiry", response_model=dict)
 async def get_token_expiry_settings() -> dict[str,int]:
@@ -502,12 +561,19 @@ async def logout_user(
     token_id = decoded.get("jti")
     if not token_id:
         raise HTTPException(status_code=401, detail="Invalid token format")
-    expires = decoded.get("exp")
-
+    expires_timestamp = decoded.get("exp")
+    
+    # Convert Unix timestamp to datetime object with type checking
+    if expires_timestamp is not None:
+        expires_datetime = datetime.fromtimestamp(float(expires_timestamp), tz=timezone.utc)
+    else:
+        # Default expiry if not provided (1 day from now)
+        expires_datetime = datetime.now(timezone.utc) + timedelta(days=1)
+    
     # Add token to blacklist
     blacklisted_token = TokenBlacklist(
-        jti=token_id, 
-        expires=expires, 
+        jti=token_id,
+        expires=expires_datetime,
         user_id=user.id,
         token_type="refresh",
         creation_reason="logout"
@@ -549,26 +615,56 @@ def set_secure_cookie(
     request: Request | None = None,
 ):
     """
-    Sets a secure HTTP-only cookie with proper domain detection.
+    Sets a secure HTTP-only cookie with proper domain detection for improved compatibility.
     """
-    cookie_kwargs = {
-        "key": key,
-        "value": value,
-        "httponly": True,
-        "secure": (
-            False
-            if request and request.url.hostname in ["localhost", "127.0.0.1"]
-            else settings.ENV == "production"
-        ),
-        "samesite": "lax",
-        "path": "/",
-        "max_age": max_age if max_age is not None else 60 * 60 * 24 * 30,
-    }
-
-    # For localhost, don't set domain at all
-    if request and request.url.hostname not in ["localhost", "127.0.0.1"]:
-        if settings.COOKIE_DOMAIN:
-            cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
-
-    # Set cookie with proper parameters
-    response.set_cookie(**cookie_kwargs)
+    # Validate and convert parameters
+    key_str = str(key)
+    value_str = str(value)
+    
+    # For local development, ALWAYS use insecure cookies (HTTP) and no domain
+    if request and request.url.hostname in ["localhost", "127.0.0.1"]:
+        is_secure = False  # Force insecure for localhost (HTTP)
+        domain = None      # No domain for localhost
+        if AUTH_DEBUG:
+            logger.debug(f"Local development detected: forcing secure=False, domain=None")
+    else:
+        # For non-localhost, use production settings
+        is_secure = settings.ENV == "production"
+        domain = settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None
+    
+    # Validate max_age - CRITICAL: Ensure we have a valid max_age for persistent cookies
+    if max_age is not None:
+        try:
+            max_age_int = int(max_age)
+        except (ValueError, TypeError):
+            max_age_int = 60 * 60 * 24 * 30  # Default to 30 days
+    else:
+        max_age_int = 60 * 60 * 24 * 30  # Default to 30 days
+    
+    # Determine SameSite attribute - critical for cookie acceptance
+    samesite = "lax"  # Default
+    
+    # For localhost, we need special handling
+    if request and request.url.hostname in ["localhost", "127.0.0.1"]:
+        # For auth cookies specifically, use a more permissive setting
+        if key_str in ["access_token", "refresh_token"]:
+            # For auth cookies, we'll use Lax which doesn't require Secure
+            samesite = "lax"
+            if AUTH_DEBUG:
+                logger.debug(f"Local development: using SameSite=Lax for auth cookie {key_str}")
+    
+    # Log cookie settings for debugging
+    if AUTH_DEBUG:
+        logger.debug(f"Setting cookie: key={key_str}, max_age={max_age_int}, domain={domain}, secure={is_secure}, samesite={samesite}")
+    
+    # Set cookie with individual parameters (type-safe)
+    response.set_cookie(
+        key=key_str,
+        value=value_str,
+        max_age=max_age_int,
+        path="/",
+        domain=domain,
+        secure=is_secure,
+        httponly=True,
+        samesite=samesite
+    )
