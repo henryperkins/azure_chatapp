@@ -248,14 +248,8 @@ async def login_user(
         # Get current UTC time with timezone info
         now_utc = datetime.now(timezone.utc)
         locked_user.last_login = datetime.utcnow()
-        # Update token version using current timestamp only if >5 min since last change
-        current_ts = int(now_utc.timestamp())
-        old_version = locked_user.token_version
-        if not old_version or (current_ts - old_version) > 300:  # 5 minute window
-            locked_user.token_version = current_ts
-        logger.info(
-            f"User '{lower_username}' token_version updated from {old_version} to {locked_user.token_version}"
-        )
+        # No longer tracking token versions
+        logger.info(f"User '{lower_username}' logged in")
 
         await session.commit()
 
@@ -268,7 +262,6 @@ async def login_user(
             "iat": datetime.now(timezone.utc),
             "jti": token_id,
             "type": "access",
-            "version": locked_user.token_version,
             "user_id": locked_user.id,
         }
         access_token = create_access_token(access_payload)
