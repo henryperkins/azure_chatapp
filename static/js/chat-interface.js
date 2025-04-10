@@ -445,10 +445,15 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
         // Initialize message service w/ HTTP initially
         this.messageService.initialize(chatId, null);
 
-        // Use our improved WebSocket connection function
-        this.establishWebSocketConnection(chatId)
+        this.wsService.connect(chatId)
+          .then(() => {
+            console.log("[ChatInterface] WebSocket connected");
+            this.messageService.initialize(chatId, this.wsService);
+            this.notificationFunction("Real-time connection established", "success");
+          })
           .catch(error => {
-            console.warn("WebSocket connection failed completely:", error);
+            console.warn("[ChatInterface] WebSocket connection failed, using HTTP fallback:", error);
+            this.messageService.initialize(chatId, null);
           });
 
         // Update URL if mismatch
@@ -602,7 +607,16 @@ window.ChatInterface.prototype.createNewConversation = async function () {
             this.messageService.updateModelConfig(window.MODEL_CONFIG);
           }
           this.messageService.initialize(conversation.id, null);
-          await this.establishWebSocketConnection(conversation.id);
+          this.wsService.connect(conversation.id)
+            .then(() => {
+              console.log("[ChatInterface] WS connected for new conversation");
+              this.messageService.initialize(conversation.id, this.wsService);
+              this.notificationFunction("Real-time connection established", "success");
+            })
+            .catch(err => {
+              console.warn("[ChatInterface] WebSocket failed for new conversation; using fallback", err);
+              this.messageService.initialize(conversation.id, null);
+            });
         }
 
         // Update UI
@@ -777,52 +791,3 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
   }
 };
 
-/**
- * Establish WebSocket connection with proper retry logic
- * @param {string} conversationId - The ID of the conversation to connect to
- * @returns {Promise<boolean>} Whether connection was successful
- */
-window.ChatInterface.prototype.establishWebSocketConnection = async function (conversationId) {
-  if (!this.wsService) {
-    console.error('WebSocket service not initialized');
-    return false;
-  }
-
-  const MAX_WS_RETRIES = 2;
-  let wsConnected = false;
-
-  for (let attempt = 1; attempt <= MAX_WS_RETRIES; attempt++) {
-    try {
-      console.log(`[ChatInterface] Attempting WebSocket connection (attempt ${attempt})...`);
-      await this.wsService.connect(conversationId);
-      wsConnected = true;
-      console.log('[ChatInterface] WebSocket connected successfully');
-      this.notificationFunction('Real-time connection established', 'success');
-
-      // Initialize message service with WebSocket
-      this.messageService.initialize(conversationId, this.wsService);
-      return true;
-    } catch (error) {
-      console.warn(`[ChatInterface] WebSocket connection attempt ${attempt} failed:`, error);
-
-      // Provide feedback on final attempt
-      if (attempt === MAX_WS_RETRIES) {
-        const msg = error.message?.includes('auth')
-          ? 'WebSocket authentication failed - using HTTP mode'
-          : 'WebSocket connection failed - using HTTP mode';
-        this.notificationFunction(msg, 'warning');
-      }
-
-      // Exponential backoff between attempts
-      if (attempt < MAX_WS_RETRIES) {
-        const backoffMs = 500 * Math.pow(2, attempt - 1);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-      }
-    }
-  }
-
-  // If WebSocket connection failed, initialize with HTTP
-  console.log('[ChatInterface] Using HTTP fallback for messaging');  
-  this.messageService.initialize(conversationId, null);
-  return false;
-};
