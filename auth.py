@@ -600,9 +600,15 @@ def set_secure_cookie(
     if settings.COOKIE_DOMAIN and settings.ENV == "production":
         domain = settings.COOKIE_DOMAIN
     elif request and request.headers.get("host"):
-        host = request.headers.get("host").split(":")[0]
-        if host in allowed_domains:
-            domain = host
+        host_header = request.headers.get("host")
+        if host_header:  # Ensure host_header is not None
+            if ":" in host_header:
+                host = host_header.split(":")[0]  # Extract hostname without port
+            else:
+                host = host_header  # Use as-is if no port separator
+            
+            if host in allowed_domains:
+                domain = host
     
     # Call set_cookie with validated parameters
     response.set_cookie(
