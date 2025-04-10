@@ -321,70 +321,9 @@ function getCookie(name) {
     cookieValue = parts.pop().split(';').shift();
   }
   
-  // For auth tokens, implement improved persistent storage and fallback
+  // For auth tokens, only use HttpOnly cookies - no localStorage/sessionStorage fallback
   if (name === 'access_token' || name === 'refresh_token') {
-    // If cookie found, store in localStorage and sessionStorage for persistence
-    if (cookieValue) {
-      try {
-        // Validate token format before saving
-        if (typeof cookieValue === 'string' &&
-            cookieValue.split('.').length === 3 &&
-            cookieValue.length > 30) {
-          localStorage.setItem(`cookie_${name}`, cookieValue);
-          sessionStorage.setItem(`cookie_${name}`, cookieValue); // Also store in session
-          
-          if (AUTH_DEBUG) console.debug(`[Auth] Valid ${name} found in cookies and stored in localStorage/sessionStorage`);
-        }
-      } catch (e) {
-        console.warn('[Auth] Failed to store token in storage:', e);
-      }
-      return cookieValue;
-    }
-    
-    // If cookie not found, try localStorage fallback with more detailed logging
-    try {
-      // Check localStorage first
-      const stored = localStorage.getItem(`cookie_${name}`);
-      if (stored) {
-        // Basic JWT format validation
-        if (typeof stored === 'string' &&
-            stored.split('.').length === 3 &&
-            stored.length > 30) {
-            
-          // If valid token found in localStorage but not in cookies,
-          // try to restore it to cookies (may not work due to HttpOnly)
-          if (AUTH_DEBUG) console.debug(`[Auth] Restoring ${name} from localStorage fallback`);
-          
-          // Make an attempt to restore the cookie if possible
-          try {
-            // This may not work due to HttpOnly cookies, but worth attempting
-            document.cookie = `${name}=${stored}; path=/; ${
-              location.protocol === 'https:' ? 'Secure; ' : ''
-            }SameSite=Strict; max-age=${name === 'access_token' ? 60*30 : 60*60*24}`;
-          } catch (cookieErr) {
-            // Ignore errors, just use the stored value
-          }
-          
-          // Also store in sessionStorage for double fallback
-          sessionStorage.setItem(`cookie_${name}`, stored);
-          
-          return stored;
-        }
-        // Invalid format - remove from storage
-        localStorage.removeItem(`cookie_${name}`);
-        sessionStorage.removeItem(`cookie_${name}`);
-      } else {
-        // Last resort - try sessionStorage
-        const sessionStored = sessionStorage.getItem(`cookie_${name}`);
-        if (sessionStored && typeof sessionStored === 'string' &&
-            sessionStored.split('.').length === 3 &&
-            sessionStored.length > 30) {
-          return sessionStored;
-        }
-      }
-    } catch (e) {
-      console.warn('[Auth] Storage access failed:', e);
-    }
+    return cookieValue;
   }
   
   return cookieValue;
@@ -457,17 +396,6 @@ function clearTokenState() {
   authState.lastVerified = 0;
   sessionExpiredFlag = Date.now(); // Mark session as expired with timestamp
   refreshFailCount = 0;
-
-  // Reset local/session storage values related to auth
-  try {
-    localStorage.removeItem('authState');
-    localStorage.removeItem('lastAuthCheck');
-    localStorage.removeItem('cookie_access_token');
-    localStorage.removeItem('cookie_refresh_token');
-    sessionStorage.clear();
-  } catch (e) {
-    console.warn('[Auth] Failed to clear storage:', e);
-  }
 
   // Dispatch event to inform components
   broadcastAuth(false);
@@ -752,25 +680,9 @@ async function verifyAuthState(bypassCache = false) {
 // ---------------------------------------------------------------------
 let tokenSyncInterval;
 
-// Sync cookies with localStorage every 5 minutes
+// No longer needed since we don't sync tokens to localStorage
 function setupTokenSync() {
-  // Clear any existing interval
-  if (tokenSyncInterval) {
-    clearInterval(tokenSyncInterval);
-  }
-
-  tokenSyncInterval = setInterval(() => {
-    ['access_token', 'refresh_token'].forEach(name => {
-      const cookieValue = getCookie(name);
-      if (cookieValue) {
-        try {
-          localStorage.setItem(`cookie_${name}`, cookieValue);
-        } catch (e) {
-          console.warn(`[Auth] Failed to sync ${name} to localStorage:`, e);
-        }
-      }
-    });
-  }, 5 * 60 * 1000); // 5 minutes
+  // Empty function kept for backward compatibility
 }
 
 function setupAuthStateMonitoring() {
