@@ -353,13 +353,11 @@ async def refresh_token(
                             if locked_user.last_login:
                                 time_since_login = datetime.now(timezone.utc) - locked_user.last_login
                                 
-                            # Always increment version on refresh to maintain consistency
+                            # Only increment version if more than 5 minutes have passed since last version change
                             current_ts = int(datetime.now(timezone.utc).timestamp())
                             old_version = locked_user.token_version
-                            locked_user.token_version = max(
-                                current_ts,
-                                (locked_user.token_version + 1) if locked_user.token_version else current_ts
-                            )
+                            if not old_version or (current_ts - old_version) > 300:  # 5 minute window
+                                locked_user.token_version = current_ts
                             logger.info(
                                 f"User '{username}' token_version updated from {old_version} to {locked_user.token_version}"
                             )

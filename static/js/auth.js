@@ -109,10 +109,15 @@ async function getWSAuthToken() {
  * @returns {Promise<Object>} Refresh result
  */
 async function refreshTokens() {
-  // Prevent multiple simultaneous refresh attempts
+  // Handle concurrent refresh attempts with a 1-second buffer
   if (tokenRefreshInProgress) {
-    console.debug('[Auth] Token refresh already in progress, returning existing promise');
-    return window.__tokenRefreshPromise;
+    const now = Date.now();
+    if (now - lastRefreshAttempt < 1000) { // 1-second buffer
+      console.debug('[Auth] Token refresh already in progress, returning existing promise');
+      return window.__tokenRefreshPromise;
+    }
+    // If last attempt was >1s ago, allow new refresh to proceed
+    console.debug('[Auth] Allowing new refresh attempt after 1s buffer');
   }
 
   // New safeguard: Recent login check
@@ -128,10 +133,9 @@ async function refreshTokens() {
 
   // Check for too many consecutive failed refresh attempts
   const now = Date.now();
-  if (lastRefreshAttempt && (now - lastRefreshAttempt < 5000) && refreshFailCount >= MAX_REFRESH_RETRIES) {
-    console.error('[Auth] Too many failed refresh attempts, forcing logout');
-    await logout();
-    return Promise.reject(new Error('Too many refresh attempts failed - logged out'));
+  if (lastRefreshAttempt && (now - lastRefreshAttempt < 30000) && refreshFailCount >= MAX_REFRESH_RETRIES) {
+    console.warn('[Auth] Too many failed refresh attempts - not forcing logout, just failing');
+    return Promise.reject(new Error('Too many refresh attempts - please check your connection'));
   }
 tokenRefreshInProgress = true;
 lastRefreshAttempt = now;
@@ -516,10 +520,14 @@ async function init() {
  */
 async function verifyAuthState(bypassCache = false) {
   try {
-    // Skip verification if we know session is expired (but allow retry after 1 minute)
-    if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag < 60000)) {
-      if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - session already expired');
+    // Skip verification if we know session is expired (but allow retry after 10 seconds)
+    if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag < 10000)) {
+      if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - session recently expired');
       return false;
+    }
+    // Clear expired flag if it's old
+    if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag >= 10000)) {
+      sessionExpiredFlag = false;
     }
 
     // Check cache if not bypassing
