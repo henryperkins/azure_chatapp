@@ -353,22 +353,16 @@ async def refresh_token(
                             if locked_user.last_login:
                                 time_since_login = datetime.now(timezone.utc) - locked_user.last_login
                                 
-                            # Only increment version when it's been at least 30 seconds since login
-                            # This prevents token invalidation immediately after login
-                            if not time_since_login or time_since_login > timedelta(seconds=30):
-                                current_ts = int(datetime.now(timezone.utc).timestamp())
-                                old_version = locked_user.token_version
-                                locked_user.token_version = max(
-                                    current_ts,
-                                    (locked_user.token_version + 1) if locked_user.token_version else current_ts
-                                )
-                                logger.info(
-                                    f"User '{username}' token_version updated from {old_version} to {locked_user.token_version}"
-                                )
-                            else:
-                                logger.info(
-                                    f"User '{username}' token_version NOT updated due to recent login ({time_since_login.total_seconds():.1f}s ago)"
-                                )
+                            # Always increment version on refresh to maintain consistency
+                            current_ts = int(datetime.now(timezone.utc).timestamp())
+                            old_version = locked_user.token_version
+                            locked_user.token_version = max(
+                                current_ts,
+                                (locked_user.token_version + 1) if locked_user.token_version else current_ts
+                            )
+                            logger.info(
+                                f"User '{username}' token_version updated from {old_version} to {locked_user.token_version}"
+                            )
                             await session.flush()
                             await session.commit()  # Ensure new version is saved
 
