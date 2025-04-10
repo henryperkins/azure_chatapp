@@ -205,20 +205,6 @@ async def get_user_from_token(
         logger.warning(f"Attempt to use token for disabled account: {username}")
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    token_version = decoded.get("version")
-    # Only invalidate tokens if their version is LESS THAN the user's current version
-    # This matches the behavior in verify_token and fixes the race condition
-    if token_version is None or token_version < user.token_version:
-        logger.critical(
-            f"Token version mismatch for {username}: "
-            f"token={token_version}, user={user.token_version}"
-        )
-        raise HTTPException(
-            status_code=403,
-            detail="Session invalidated - token version mismatch",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     # Check last activity for sliding sessions
     if hasattr(user, "last_activity") and user.last_activity:
         inactive_duration = (datetime.utcnow() - user.last_activity).total_seconds()
