@@ -26,7 +26,6 @@ from utils.auth_utils import (
     get_user_from_token,
     get_current_user_and_token,
     create_access_token,
-    revoke_token_id,
     verify_token,
 )
 
@@ -437,8 +436,7 @@ async def refresh_token(
                                 max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
                                 request=request
                             )
-                            # Invalidate the old refresh token
-                            revoke_token_id(decoded["jti"])
+                            # Old refresh token is automatically invalidated
                             blacklisted = TokenBlacklist(
                                 jti=decoded["jti"],
                                 expires=decoded["exp"],
