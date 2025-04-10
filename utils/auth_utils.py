@@ -238,7 +238,6 @@ async def get_user_from_token(
             f"Token version mismatch for {username}: "
             f"token={token_version}, user={user.token_version}"
         )
-        revoke_token_id(decoded["jti"])
         raise HTTPException(
             status_code=403,
             detail="Session invalidated - token version mismatch",
