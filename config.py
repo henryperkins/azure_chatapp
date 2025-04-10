@@ -53,6 +53,9 @@ class Settings:
     # Use "put.photo" in production, empty string otherwise for local dev
     COOKIE_DOMAIN: str = "put.photo" if ENV == "production" else ""
 
+    # WebSocket configuration
+    WS_ENDPOINT: str = os.getenv("WS_ENDPOINT", "put.photo" if ENV == "production" else "")
+
     # --- Unified Model Configurations ---
 
     # Azure/OpenAI
@@ -238,3 +241,5 @@ class Settings:
 
 
 settings = Settings()
+
+__all__ = ['settings']
