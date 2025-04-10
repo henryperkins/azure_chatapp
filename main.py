@@ -138,8 +138,7 @@ async def startup_handler() -> None:
 
             required_tables = {
                 "project_files": ["config"],
-                "knowledge_bases": ["config"],
-                "users": ["token_version"],
+                "knowledge_bases": ["config"], 
                 "messages": ["context_used"],
             }
 
