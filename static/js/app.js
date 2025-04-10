@@ -745,7 +745,35 @@ function setupEventListeners() {
     }
   });
 
+  // Navigation tracking to prevent auth errors during page transitions
+  setupNavigationTracking();
+
   console.log("Event listeners registered");
+}
+
+// Setup tracking for navigation events to prevent auth errors during transitions
+function setupNavigationTracking() {
+  // Store timestamp when user interacts with the page
+  function recordInteraction() {
+    sessionStorage.setItem('last_page_interaction', Date.now().toString());
+  }
+  
+  // Track clicks on navigation elements
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('a[href*="project"]') ||
+        e.target.closest('button[data-action*="project"]') ||
+        e.target.closest('#manageDashboardBtn') ||
+        e.target.closest('#projectsNav')) {
+      console.log("Detected navigation click");
+      recordInteraction();
+    }
+  });
+  
+  // Also track before unload events
+  window.addEventListener('beforeunload', recordInteraction);
+  
+  // Record page load as an interaction
+  recordInteraction();
 }
 
 function handleAuthStateChange(e) {
