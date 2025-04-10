@@ -703,21 +703,31 @@ window.bus = new AppEventBus();
 
   // Enhanced error handling utilities
   window.ErrorUtils = {
-    // Safe error extraction from any type
-    getErrorMessage: function(error) {
-      if (typeof error === 'string') return error;
-      if (!error) return 'Unknown error';
-      
-      // Handle Error objects or objects with message property
-      if (error.message) return error.message;
-      
-      // Handle response objects
-      if (error.statusText) return `${error.status || ''} ${error.statusText}`;
-      
-      // Last resort - stringify if possible
-      try {
-        return JSON.stringify(error);
-      } catch (e) {
+      // Safe error extraction from any type
+      getErrorMessage: function(error) {
+          if (typeof error === 'string') return error;
+          if (!error) return 'Unknown error';
+          
+          // Handle Error objects or objects with message property
+          if (error.message) return error.message;
+          
+          // Handle response objects
+          if (error.statusText) return `${error.status || ''} ${error.statusText}`;
+          
+          // Last resort - stringify if possible
+          try {
+              return JSON.stringify(error);
+          } catch (e) {
+              return 'Error could not be stringified';
+          }
+      },
+      // Standardize error objects for consistent handling
+      standardizeError: function(error) {
+          return {
+              message: this.getErrorMessage(error),
+              stack: error && error.stack ? error.stack : 'No stack trace available',
+              timestamp: new Date().toISOString()
+          };
         return 'Unspecified error';
       }
     },
@@ -876,7 +886,7 @@ window.bus = new AppEventBus();
   };
 
   console.log('projectDashboardUtils.js loaded successfully');
-})();
+})(); // End of IIFE
 
 /**
  * Project Dashboard Utilities
