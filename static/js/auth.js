@@ -47,24 +47,6 @@ const AUTH_CONSTANTS = {
  * @returns {Promise<string>} Valid token
  */
 async function getAuthToken(options = {}) {
-  // CRITICAL: If we have a direct access token from a recent login, use it
-  // This prevents the race condition by skipping the cookie check
-  if (window.__directAccessToken && window.__recentLoginTimestamp) {
-    // Use direct token for the first 5 seconds after login
-    const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
-    if (timeSinceLogin < 5000) {
-      if (AUTH_DEBUG) {
-        console.debug(`[Auth] Using direct access token from login (${timeSinceLogin}ms since login)`);
-      }
-      return window.__directAccessToken;
-    } else {
-      // Clear the cached token after the grace period
-      if (AUTH_DEBUG) {
-        console.debug(`[Auth] Direct token grace period expired (${timeSinceLogin}ms since login)`);
-      }
-      window.__directAccessToken = null;
-    }
-  }
   
   const accessToken = getCookie('access_token');
   const refreshToken = getCookie('refresh_token');
@@ -166,6 +148,8 @@ async function refreshTokens() {
   }
 tokenRefreshInProgress = true;
 lastRefreshAttempt = now;
+window.__tokenRefreshPromise = new Promise(async (resolve, reject) => {
+  try {
 
 try {
   console.debug('[Auth] Refreshing tokens...');
