@@ -218,21 +218,6 @@ async def _create_missing_tables(tables: list[str]):
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-async def load_revocation_list(engine: AsyncEngine) -> None:
-    """
-    Move revocation list loading into db module 
-    to resolve circular dependency
-    """
-    from utils.auth_utils import REVOCATION_LIST
-    from datetime import datetime
-    now = datetime.utcnow()
-    # Removed duplicate or conflicting line
-    async with engine.connect() as conn:
-        query = text("SELECT jti FROM token_blacklist WHERE expires >= :now")
-        result = await conn.execute(query, {'now': now})
-    token_ids = [row[0] for row in result]
-    REVOCATION_LIST.update(token_ids)
-    logger.info(f"Loaded {len(token_ids)} active blacklisted tokens")
 
 
 async def init_db() -> None:
