@@ -581,7 +581,6 @@ async def logout_user(
         logger.error("Failed to update token version during logout: %s", e)
         raise HTTPException(status_code=500, detail="Failed to invalidate session")
 
-    revoke_token_id(token_id)
 
     logger.info(
         "User %s logged out. Refresh token %s invalidated; token_version incremented.",
