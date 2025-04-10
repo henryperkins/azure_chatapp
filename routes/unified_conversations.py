@@ -657,16 +657,16 @@ async def websocket_chat_endpoint(
     async with AsyncSessionLocal() as db:
         try:
             # Strict same-origin WebSocket auth
-            if not websocket.cookies.get("session"):
-                logger.warning("WebSocket connection attempt without session cookie")
+            if not websocket.cookies.get("access_token"):
+                logger.warning("WebSocket connection attempt without access token cookie")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
                 
             try:
-                # We already checked that the session cookie exists, so we can assert it's not None
-                session_token = websocket.cookies.get("session")
-                assert session_token is not None, "Session token is None despite earlier check"
-                user = await get_user_from_token(session_token, db)
+                # We already checked that the access token cookie exists, so we can assert it's not None
+                access_token = websocket.cookies.get("access_token")
+                assert access_token is not None, "Access token is None despite earlier check"
+                user = await get_user_from_token(access_token, db)
                 if not user:
                     logger.warning("Invalid session cookie in WebSocket handshake")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
