@@ -106,7 +106,7 @@ async def verify_token(
                 logger.warning("Token missing required jti claim")
                 raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-
+            username = decoded.get("sub") or "unknown"
             logger.debug(
                 f"Token verification successful for jti: {token_id}, user: {username}"
             )
