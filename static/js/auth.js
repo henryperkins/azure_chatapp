@@ -518,7 +518,6 @@ async function loginUser(username, password) {
     const response = await apiRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password,
-      ws_auth: true
     });
     if (AUTH_DEBUG) console.debug('[Auth] Login response received', response);
     if (!response.access_token) throw new Error('No access token received');
@@ -626,9 +625,6 @@ async function logout(e) {
   e?.preventDefault();
   try {
     if (AUTH_DEBUG) console.debug('[Auth] Starting logout process');
-    if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
-      window.WebSocketService.disconnectAll();
-    }
     try {
       const LOGOUT_TIMEOUT = 5000;
       const logoutPromise = apiRequest('/api/auth/logout', 'POST');
@@ -872,7 +868,6 @@ Object.assign(window.auth, {
   logout,
   login: loginUser,
   getAuthToken,
-  getWSAuthToken,
   refreshTokens,
   verifyAuthState,
   clear: clearTokenState,
