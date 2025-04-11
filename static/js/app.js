@@ -926,12 +926,6 @@ async function initializeAllModules() {
     // Initialize core application
     await initializeApplication();
     
-    // Initialize WebSocket service if available
-    if (window.WebSocketService?.initialize) {
-      await window.WebSocketService.initialize(API_CONFIG.WS_ENDPOINT);
-      console.log("WebSocket service initialized");
-    }
-    
     // Initialize project manager if available
     if (window.projectManager?.initialize) {
       await window.projectManager.initialize();
