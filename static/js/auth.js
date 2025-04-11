@@ -884,6 +884,12 @@ function setupUIListeners() {
     // Add temporary body lock to prevent interaction
     document.body.style.pointerEvents = 'none';
 
+    // Get submit button state
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" viewBox="0 0 24 24">...</svg>`;
+
     try {
       await loginUser(formData.get("username"), formData.get("password"));
       
@@ -900,14 +906,12 @@ function setupUIListeners() {
       
       // Add visual confirmation
       this.closest('#authDropdown')?.classList.remove('animate-slide-in');
-    } finally {
-      // Restore pointer events
-      document.body.style.pointerEvents = '';
-    }
     } catch (error) {
       console.error("[Auth] Login failed:", error);
       notify(error.message || "Login failed", "error");
     } finally {
+      // Restore pointer events
+      document.body.style.pointerEvents = '';
       submitBtn.disabled = false;
       submitBtn.textContent = originalText;
     }
