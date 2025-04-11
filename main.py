@@ -464,20 +464,4 @@ app.include_router(
     tags=["conversations"],
 )
 
-# ---------------------------
-# WebSocket Routes
-# ---------------------------
-app.routes.extend(
-    [
-        WebSocketRoute(
-            "/api/chat/conversations/{conversation_id}/ws",
-            unified_conversations.websocket_chat_endpoint,
-            name="standalone_websocket_chat",
-        ),
-        WebSocketRoute(
-            "/api/chat/projects/{project_id}/conversations/{conversation_id}/ws",
-            unified_conversations.websocket_chat_endpoint,
-            name="project_websocket_chat",
-        ),
-    ]
-)
+# WebSocket routes removed - using HTTP only

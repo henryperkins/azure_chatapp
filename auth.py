@@ -561,27 +561,7 @@ async def verify_auth_status(
     }
 
 
-# -----------------------------------------------------------------------------
-# WebSocket Token Endpoint
-# -----------------------------------------------------------------------------
-@router.get("/ws-token")
-async def get_websocket_token(
-    current_user: User = Depends(get_current_user_and_token),
-) -> dict[str, Any]:
-    """
-    Generates a short-lived token (5 minutes) for WebSocket authentication.
-    """
-    token_id = str(uuid.uuid4())
-    payload = build_jwt_payload(
-        current_user, token_type="ws", expires_delta=timedelta(minutes=5), jti=token_id
-    )
-    ws_token = create_access_token(payload)
-
-    return {
-        "token": ws_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
-        "version": current_user.token_version,
-    }
+# WebSocket token endpoint removed - using HTTP only
 
 
 # -----------------------------------------------------------------------------
