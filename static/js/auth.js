@@ -548,6 +548,21 @@ async function verifyAuthState(bypassCache = false) {
           if (AUTH_DEBUG) { console.debug('[Auth] Using direct token fallback - cookies missing but recent login detected'); }
           // Try to set the cookie again as a recovery mechanism
           document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=1800; SameSite=Lax`;
+          
+          // Important: Update auth state to reflect this successful authentication
+          authState.isAuthenticated = true;
+          
+          // If we know the username from last login, set it
+          if (window.__lastUsername) {
+            authState.username = window.__lastUsername;
+          }
+          
+          // Set last verified timestamp
+          authState.lastVerified = Date.now();
+          
+          // Broadcast the positive auth state to other components
+          broadcastAuth(true, authState.username);
+          
           return true;
         }
       }
@@ -826,6 +841,7 @@ async function loginUser(username, password) {
     // Set timestamp BEFORE updating auth state to ensure it's available for verification
     window.__recentLoginTimestamp = Date.now();
     window.__directAccessToken = response.access_token;
+    window.__lastUsername = username; // Track the username for fallback
     
     // Force a longer delay to ensure cookies are properly set before proceeding
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -875,6 +891,20 @@ async function loginUser(username, password) {
         console.debug('[Auth] Attempting to set cookies manually on client side as fallback');
       }
       
+      try {
+        // Attempt to make a secondary API call specifically to set cookies
+        await apiRequest('/api/auth/set-cookies', 'POST', {
+          access_token: response.access_token,
+          refresh_token: response.refresh_token
+        });
+        
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Secondary cookie-setting API call completed');
+        }
+      } catch (cookieError) {
+        console.warn('[Auth] Secondary cookie-setting API call failed:', cookieError);
+      }
+      
       // Approach 1: Standard cookie with Lax SameSite
       document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
       
@@ -892,6 +922,54 @@ async function loginUser(username, password) {
       const manualCookieCheck = getCookie('access_token');
       if (AUTH_DEBUG) {
         console.debug(`[Auth] Manual cookie setting ${manualCookieCheck ? 'succeeded' : 'failed'}`);
+      }
+      
+      // If all cookie-setting approaches fail, register a periodic check to retry cookie restoration
+      if (!manualCookieCheck) {
+        if (!window.__cookieRestoreInterval) {
+          let restoreAttempts = 0;
+          window.__cookieRestoreInterval = setInterval(() => {
+            // Check if cookies are now present
+            if (getCookie('access_token')) {
+              clearInterval(window.__cookieRestoreInterval);
+              window.__cookieRestoreInterval = null;
+              if (AUTH_DEBUG) {
+                console.debug('[Auth] Cookie successfully restored via interval check');
+              }
+              return;
+            }
+            
+            // Attempt to restore cookies (maximum 3 attempts)
+            if (window.__directAccessToken && restoreAttempts < 3) {
+              restoreAttempts++;
+              // First try server-side endpoint
+              if (restoreAttempts === 1) {
+                apiRequest('/api/auth/set-cookies', 'POST', {
+                  access_token: window.__directAccessToken,
+                  refresh_token: response.refresh_token
+                }).then(() => {
+                  if (AUTH_DEBUG) {
+                    console.debug('[Auth] Server-side cookie restoration attempted');
+                  }
+                }).catch(err => {
+                  console.warn('[Auth] Server-side cookie restoration failed:', err);
+                });
+              } else {
+                // Try client-side as backup
+                document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
+                if (AUTH_DEBUG) {
+                  console.debug(`[Auth] Client-side cookie restoration attempt ${restoreAttempts}`);
+                }
+              }
+            } else if (restoreAttempts >= 3) {
+              if (AUTH_DEBUG) {
+                console.debug('[Auth] Maximum cookie restoration attempts reached');
+              }
+              clearInterval(window.__cookieRestoreInterval);
+              window.__cookieRestoreInterval = null;
+            }
+          }, 3000);
+        }
       }
     }
     
@@ -1094,7 +1172,9 @@ if (projectManagerPanel) {
 }
 
 // Redirect the user to the project list cards view.
-if (window.projectManager && typeof window.projectManager.showProjectList === 'function') {
+if (window.projectDashboard && typeof window.projectDashboard.showProjectList === 'function') {
+    window.projectDashboard.showProjectList();
+} else if (window.projectManager && typeof window.projectManager.showProjectList === 'function') {
     window.projectManager.showProjectList();
 } else {
     const projectListView = document.getElementById('projectListView');
@@ -1105,35 +1185,65 @@ if (window.projectManager && typeof window.projectManager.showProjectList === 'f
 window.history.pushState({}, '', '/?view=projectList');
 
 if (window.sidebar?.updateAuthDependentUI) {
-    window.sidebar.updateAuthDependentUI();
+    window.sidebar.updateAuthDependentUI(true, username);
 }
 
 setTimeout(() => {
+        console.debug('[Auth] Running post-login tasks...');
+        
         const loadTasks = [];
-        if (typeof window.loadSidebarProjects === 'function') {
-          loadTasks.push(window.loadSidebarProjects());
-        }
-        if (typeof window.loadProjectList === 'function') {
-          loadTasks.push(window.loadProjectList());
-        }
-        if (typeof window.initProjectDashboard === 'function') {
+        
+        // Ensure we initialize the project dashboard if needed
+        if (typeof window.initProjectDashboard === 'function' && !window.projectDashboard) {
+          console.debug('[Auth] Initializing project dashboard...');
           loadTasks.push(window.initProjectDashboard());
         }
+        
+        // Always try to load sidebar projects after login
+        if (typeof window.loadSidebarProjects === 'function') {
+          console.debug('[Auth] Loading sidebar projects...');
+          loadTasks.push(window.loadSidebarProjects());
+        }
+        
+        // Load main project list if function exists
+        if (typeof window.loadProjectList === 'function') {
+          console.debug('[Auth] Loading main project list...');
+          loadTasks.push(window.loadProjectList());
+        } else if (window.projectDashboard?.loadProjects) {
+          console.debug('[Auth] Loading projects via dashboard...');
+          loadTasks.push(window.projectDashboard.loadProjects());
+        } else if (window.projectManager?.loadProjects) {
+          console.debug('[Auth] Loading projects via project manager...');
+          loadTasks.push(window.projectManager.loadProjects());
+        }
+        
+        // Load starred conversations
         if (typeof window.loadStarredConversations === 'function') {
           loadTasks.push(window.loadStarredConversations());
         }
+        
+        // Create new chat if needed
         const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
         if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
           loadTasks.push(window.createNewChat());
         }
+        
         Promise.allSettled(loadTasks).then(results => {
+          let successCount = 0;
+          let failureCount = 0;
+          
           results.forEach(r => {
             if (r.status === 'rejected') {
-              console.warn("[Auth] Some post-login tasks failed:", r.reason);
+              failureCount++;
+              console.warn("[Auth] Post-login task failed:", r.reason);
+            } else {
+              successCount++;
             }
           });
+          
+          console.debug(`[Auth] Post-login tasks completed: ${successCount} succeeded, ${failureCount} failed`);
         });
-      }, 500);
+      }, 1000);
 
     } catch (error) {
       console.error("[Auth] Login failed:", error);

@@ -32,7 +32,7 @@ from models.message import Message
 from services.project_service import validate_project_access
 from services import get_conversation_service
 from services.conversation_service import ConversationService
-from utils.ai_helper import augment_with_knowledge
+from utils.ai_helper import augment_with_knowledge  # Function is correctly defined in ai_helper.py
 
 # Utils
 from utils.auth_utils import (
