@@ -829,4 +829,7 @@ async def toggle_project_kb(
     await save_model(db, kb)
 
     return {
-        "project_
+        "project_id": str(project_id),
+        "knowledge_base_active": enable,
+        "knowledge_base_id": str(kb.id),
+    }
