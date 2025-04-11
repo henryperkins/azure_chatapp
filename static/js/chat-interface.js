@@ -139,8 +139,6 @@ window.ChatInterface.prototype.initialize = async function () {
   const urlParams = new URLSearchParams(window.location.search);
   this.currentChatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
 
-  // WebSocket service removed - using HTTP only
-
   try {
     if (!window.MessageService) {
       throw new Error('MessageService not available');
@@ -150,6 +148,7 @@ window.ChatInterface.prototype.initialize = async function () {
       onSending: () => this.ui.messageList.addThinking(),
       onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
     });
+    this.wsService = null; // Explicitly nullify WebSocket reference
   } catch (error) {
     console.error('Failed to initialize MessageService:', error);
     throw new Error(`MessageService initialization failed: ${error.message}`);
@@ -170,20 +169,7 @@ window.ChatInterface.prototype.initialize = async function () {
     showNotification: this.notificationFunction
   }).init();
 
-  // Set up auth listeners
-  document.addEventListener('authStateChanged', (e) => {
-    if (e.detail?.authenticated && this.currentChatId) {
-      this.wsService.connect(this.currentChatId)
-        .then(() => {
-          this.messageService.initialize(this.currentChatId, this.wsService);
-        })
-        .catch((err) => {
-          console.warn("WebSocket connection failed, using HTTP fallback:", err);
-        });
-    } else if (!e.detail?.authenticated) {
-      this.wsService.disconnect();
-    }
-  });
+  // No WebSocket auth listeners needed
 
   // Set up custom event handlers
   this._setupEventListeners();
@@ -413,11 +399,7 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
   const previousChatId = this.currentChatId;
   this.currentChatId = chatId;
 
-  // Disconnect from previous WebSocket
-  if (this.wsService && this.wsService.chatId !== chatId && this.wsService.isConnected()) {
-    console.log('Disconnecting from previous WebSocket before connecting to new conversation');
-    this.wsService.disconnect();
-  }
+  // No WebSocket disconnection needed
 
   // Clear message service state
   if (this.messageService) {
@@ -591,16 +573,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
             this.messageService.updateModelConfig(window.MODEL_CONFIG);
           }
           this.messageService.initialize(conversation.id, null);
-          this.wsService.connect(conversation.id)
-            .then(() => {
-              console.log("[ChatInterface] WS connected for new conversation");
-              this.messageService.initialize(conversation.id, this.wsService);
-              this.notificationFunction("Real-time connection established", "success");
-            })
-            .catch(err => {
-              console.warn("[ChatInterface] WebSocket failed for new conversation; using fallback", err);
-              this.messageService.initialize(conversation.id, null);
-            });
+          console.log("[ChatInterface] New conversation initialized with HTTP transport");
         }
 
         // Update UI
