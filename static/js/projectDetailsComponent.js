@@ -12,8 +12,6 @@
       this._bindEvents();
       this._setupDragDropHandlers();
       this._initializeChatInterface();
-      if (window.projectManager?.currentProject?.id) {
-      }
       document.addEventListener("projectConversationsLoaded", (e) => { this.renderConversations(e.detail); });
     }
 
@@ -863,19 +861,6 @@ a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     }
 
 
-    _updateFileStatus(fileId, status, error) {
-      const fileItem = this.elements.filesList.querySelector(`[data-file-id="${fileId}"]`);
-      if (!fileItem) return;
-      const statusDiv = fileItem.querySelector('.processing-status');
-      if (statusDiv) {
-        statusDiv.textContent = status === 'success' ? 'Search Ready' :
-          status === 'error' ? `Error: ${error?.substring(0, 30)}...` : 'Processing...';
-        statusDiv.className = `processing-status text-xs px-2 py-1 rounded ${status === 'success' ? 'bg-green-100 text-green-800' :
-            status === 'error' ? 'bg-red-100 text-red-800' :
-              'bg-yellow-100 text-yellow-800'
-          }`;
-      }
-    }
   }
   window.ProjectDetailsComponent = ProjectDetailsComponent;
 })();
