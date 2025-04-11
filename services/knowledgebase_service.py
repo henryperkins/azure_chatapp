@@ -18,7 +18,7 @@ Key Improvements:
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator, List
+from typing import Dict, Any, Optional, Tuple, List
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, BackgroundTasks
@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, exists
 from sqlalchemy.exc import SQLAlchemyError
 from functools import wraps
+from db import get_async_session_context
 
 import config
 from models.project_file import ProjectFile
@@ -83,7 +84,6 @@ class VectorDBManager:
         model_name: Optional[str] = None,
         db: Optional[AsyncSession] = None
     ) -> VectorDB:
-        from services.vector_db import get_vector_db
         config = KBConfig.get()
         return await get_vector_db(
             model_name=model_name or config["default_embedding_model"],
@@ -157,15 +157,15 @@ def handle_service_errors(
                 logger.warning(f"Validation error in {func.__name__}: {e}")
                 raise HTTPException(
                     status_code=400, detail=f"{detail_message}: {str(e)}"
-                )
+                ) from e
             except SQLAlchemyError as e:
                 logger.error(f"Database error in {func.__name__}: {str(e)}", exc_info=True)
-                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
             except Exception as e:
                 logger.exception(f"Unhandled error in {func.__name__}: {str(e)}")
                 raise HTTPException(
                     status_code=status_code, detail=f"{detail_message}: {str(e)}"
-                )
+                ) from e
         return wrapper
     return decorator
 
@@ -306,8 +306,6 @@ async def process_single_file_for_search(
     db: Optional[AsyncSession] = None
 ) -> None:
     """Process a file for search in background"""
-    from db import get_async_session_context
-
     async def _process_core(session: AsyncSession) -> None:
         file_record = await get_by_id(session, ProjectFile, file_id)
         if not file_record:
@@ -326,7 +324,7 @@ async def process_single_file_for_search(
             project_file=file_record,
             vector_db=vector_db,
             file_content=content,
-            knowledge_base_id=knowledge_base_id
+            knowledge_base_id=UUID(str(knowledge_base_id))
         )
 
         # Update processing status
@@ -473,7 +471,7 @@ async def _validate_file_access(
     file_record = None
     if file_id:
         file_record = await get_by_id(db, ProjectFile, file_id)
-        if not file_record or file_record.project_id != project_id:
+        if not file_record or str(file_record.project_id) != str(project_id):
             raise HTTPException(status_code=404, detail="File not found")
     return project, file_record
 
@@ -501,7 +499,7 @@ async def _estimate_file_tokens(
         content_to_process = (
             contents if len(contents) <= KBConfig.get()["stream_threshold"] else file.file
         )
-        tok_count, tok_metadata = await text_extractor.estimate_tokens(
+        tok_count, tok_metadata = await text_extractor.estimate_token_count(
             content_to_process,
             filename
         )
@@ -703,8 +701,8 @@ async def get_knowledge_base_health(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    vector_db = await VectorDBManager.get_for_project(kb.project_id, db=db)
-    stats = await vector_db.get_knowledge_base_status(UUID(str(kb.project_id)), db)
+    vector_db = await VectorDBManager.get_for_project(UUID(str(kb.project_id)), db=db)
+    stats = await vector_db.get_knowledge_base_status(kb.project_id, db)
 
     return {
         "id": str(kb.id),
@@ -810,9 +808,12 @@ async def toggle_project_kb(
     project_id: UUID,
     enable: bool,
     user_id: Optional[int] = None,
-    db: AsyncSession = None
+    db: Optional[AsyncSession] = None
 ) -> Dict[str, Any]:
     """Enable/disable knowledge base for a project"""
+    if db is None:
+        raise ValueError("Database session is required")
+        
     project = await _validate_user_and_project(project_id, user_id, db)
     if not project.knowledge_base_id:
         raise HTTPException(
@@ -828,117 +829,4 @@ async def toggle_project_kb(
     await save_model(db, kb)
 
     return {
-        "project_id": str(project_id),
-        "knowledge_base_id": str(kb.id),
-        "is_active": enable,
-    }
-
-@handle_service_errors("Error retrieving file stats")
-async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
-    """Get statistics about project files"""
-    project = await get_by_id(db, Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Count
-    file_count = (await db.execute(
-        select(func.count()).where(ProjectFile.project_id == project_id)
-    )).scalar() or 0
-
-    # Total size
-    total_size = (await db.execute(
-        select(func.sum(ProjectFile.file_size)).where(
-            ProjectFile.project_id == project_id
-        )
-    )).scalar() or 0
-
-    # Type distribution
-    file_types = {
-        row[0]: row[1] for row in (
-            await db.execute(
-                select(ProjectFile.file_type, func.count().label("count"))
-                .where(ProjectFile.project_id == project_id)
-                .group_by(ProjectFile.file_type)
-            )
-        )
-    }
-
-    return {
-        "file_count": file_count,
-        "total_size_bytes": total_size,
-        "total_size_mb": round(total_size / (1024 * 1024), 2) if total_size > 0 else 0,
-        "file_types": file_types,
-        "token_usage": project.token_usage,
-        "max_tokens": project.max_tokens,
-    }
-
-@handle_service_errors("Error retrieving project files")
-async def get_project_file_list(
-    project_id: UUID,
-    user_id: int,
-    db: AsyncSession,
-    skip: int = 0,
-    limit: int = 100,
-    file_type: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Get a paginated list of files for a project with optional filtering.
-    
-    Args:
-        project_id: Project UUID
-        user_id: User ID for authorization
-        db: Database session
-        skip: Pagination offset
-        limit: Max number of files to return
-        file_type: Optional filter by file type
-        
-    Returns:
-        Dictionary containing files list and metadata
-    """
-    # Validate project access
-    project = await _validate_user_and_project(project_id, user_id, db)
-    
-    # Build query conditions
-    conditions = [ProjectFile.project_id == project_id]
-    if file_type:
-        conditions.append(ProjectFile.file_type == file_type.lower())
-    
-    # Get files from database
-    project_files = await get_all_by_condition(
-        db,
-        ProjectFile,
-        *conditions,
-        order_by=ProjectFile.created_at.desc(),
-        limit=limit,
-        offset=skip,
-    )
-    
-    # Format response
-    return {
-        "files": [
-            {
-                "id": str(file.id),
-                "filename": file.filename,
-                "file_type": file.file_type,
-                "file_size": file.file_size,
-                "created_at": file.created_at.isoformat() if file.created_at else None,
-                "processing_status": (
-                    file.config.get("search_processing", {}).get("status", "not_processed")
-                    if file.config else "not_processed"
-                ),
-                "chunk_count": (
-                    file.config.get("search_processing", {}).get("chunk_count", 0)
-                    if file.config else 0
-                ),
-                "last_processed": (
-                    file.config.get("search_processing", {}).get("processed_at")
-                    if file.config else None
-                ),
-            }
-            for file in project_files
-        ],
-        "count": len(project_files),
-        "skip": skip,
-        "limit": limit,
-        "file_type": file_type,
-    }
+        "project_
