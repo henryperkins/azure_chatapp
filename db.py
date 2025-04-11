@@ -357,22 +357,22 @@ async def fix_db_schema() -> None:
                 if col_name == "token_type" and "DEFAULT access" in col_spec:
                     col_spec = col_spec.replace("DEFAULT access", "DEFAULT 'access'")
                 
-                    # Modify the DDL to add EXISTS check
-                    ddl = f"""
-                    DO $$
-                    BEGIN
-                        IF NOT EXISTS (
-                            SELECT 1 
-                            FROM information_schema.columns 
-                            WHERE table_name = '{table_name}' 
-                            AND column_name = '{col_name}'
-                        ) THEN
-                            ALTER TABLE {table_name} ADD COLUMN {col_spec};
-                        END IF;
-                    END $$;
-                    """
-                    sync_conn.execute(text(ddl))
-                    logger.info(f"Added column: {table_name}.{col_name}")
+                # Modify the DDL to add EXISTS check
+                ddl = f"""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 
+                        FROM information_schema.columns 
+                        WHERE table_name = '{table_name}' 
+                        AND column_name = '{col_name}'
+                    ) THEN
+                        ALTER TABLE {table_name} ADD COLUMN {col_spec};
+                    END IF;
+                END $$;
+                """
+                sync_conn.execute(text(ddl))
+                logger.info(f"Added column: {table_name}.{col_name}")
 
         # 2. Create missing indexes
         for table_name, table in Base.metadata.tables.items():
