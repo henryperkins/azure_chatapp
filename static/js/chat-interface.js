@@ -573,6 +573,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
             this.messageService.updateModelConfig(window.MODEL_CONFIG);
           }
           this.messageService.initialize(conversation.id, null);
+          console.log("[ChatInterface] Message service initialized for new conversation");
           console.log("[ChatInterface] New conversation initialized with HTTP transport");
         }
 

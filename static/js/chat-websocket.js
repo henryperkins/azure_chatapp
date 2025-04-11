@@ -1,1 +1,1 @@
-// File removed - WebSocket functionality no longer used
+// WebSocket functionality removed - using HTTP only
