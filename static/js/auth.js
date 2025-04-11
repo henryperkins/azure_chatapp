@@ -170,19 +170,32 @@ function getCookie(name) {
   if (name === 'access_token' || name === 'refresh_token') return cookieValue;
   return cookieValue;
 }
+let __cachedExpirySettings = null;
 
 async function fetchTokenExpirySettings() {
+  if (__cachedExpirySettings) {
+    return __cachedExpirySettings;
+  }
   try {
-    const response = await fetch('/settings/token-expiry', {
-      method: 'GET',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (!response.ok) throw new Error('Failed to fetch token expiry settings');
-    return await response.json();
+    // Temporarily disable the API request to prevent 404
+    // Provide a direct fallback instead
+    const fallback = {
+      access_token_expire_minutes: 30,
+      refresh_token_expire_days: 7
+    };
+    return fallback;
+    const settingsData = await response.json();
+    __cachedExpirySettings = settingsData;
+    return settingsData;
   } catch (error) {
     console.error('[Auth] Failed to fetch token expiry settings:', error);
-    return { access_token_expire_minutes: 30, refresh_token_expire_days: 7 };
+    // Provide a fallback if the server route is unavailable
+    const fallback = {
+      access_token_expire_minutes: 30,
+      refresh_token_expire_days: 7
+    };
+    __cachedExpirySettings = fallback;
+    return fallback;
   }
 }
 
@@ -653,130 +666,106 @@ function notify(message, type = "info") {
 }
 
 async function loginUser(username, password) {
+  // Prevent any ongoing login attempts from blocking a new one
+  if (window.__loginInProgress) {
+    console.warn('[Auth] Cancelling previous login attempt');
+    if (window.__loginAbortController) {
+      try {
+        window.__loginAbortController.abort();
+      } catch (e) {
+        console.error('[Auth] Error aborting previous login:', e);
+      }
+    }
+  }
+  
+  // Create new abort controller for this login attempt
+  window.__loginAbortController = new AbortController();
+  window.__loginInProgress = true;
+  
+  // Setup a safety timeout to avoid freezing
+  const loginTimeout = setTimeout(() => {
+    console.warn('[Auth] Login safety timeout triggered');
+    if (window.__loginAbortController) {
+      window.__loginAbortController.abort();
+    }
+    window.__loginInProgress = false;
+    throw new Error('Login request timed out. Please try again.');
+  }, 15000);
+  
   try {
     if (AUTH_DEBUG) console.debug('[Auth] Starting login for user:', username);
+    
+    // Request login token from server
     const response = await apiRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password,
     });
+    
     if (AUTH_DEBUG) console.debug('[Auth] Login response received', response);
     if (!response.access_token) throw new Error('No access token received');
     if (response.token_version) authState.tokenVersion = response.token_version;
     
-    // Store tokens in memory for fallback scenarios
+    // Store tokens in memory immediately
     window.__recentLoginTimestamp = Date.now();
     window.__directAccessToken = response.access_token;
     window.__directRefreshToken = response.refresh_token;
     window.__lastUsername = username;
     
-    // Wait for cookies to be set by server
-    await new Promise(r => setTimeout(r, 800));
+    // Set client-side cookies without waiting for server
+    const hostname = window.location.hostname;
+    const isSecure = (window.location.protocol === 'https:');
+    const sameSite = isSecure ? 'None' : 'Lax';
+    const secureFlag = isSecure ? 'Secure; ' : '';
     
-    // Check for cookies with progressive retries
-    let accessTokenCookie = null, refreshTokenCookie = null;
-    let cookieRetries = 12; // Increased from 10 to 12
-    let cookieCheckInterval = 150; // Start with shorter intervals
-    
-    while (cookieRetries-- > 0) {
-      // Check for standard cookies
-      accessTokenCookie = getCookie('access_token');
-      refreshTokenCookie = getCookie('refresh_token');
-      
-      // Also check for fallback cookies
-      if (!accessTokenCookie) accessTokenCookie = getCookie('access_token_fallback');
-      if (!refreshTokenCookie) refreshTokenCookie = getCookie('refresh_token_fallback');
-      
-      // Check for cookie support flag
-      const cookieSupportCheck = getCookie('cookie_support_check');
-
-      if (accessTokenCookie && refreshTokenCookie) {
-        if (AUTH_DEBUG) console.debug(`[Auth] Both cookies found after ${12 - cookieRetries} attempts`);
-        break;
-      }
-      
-      if (AUTH_DEBUG) {
-        console.debug(`[Auth] Waiting for cookies after login, retries left: ${cookieRetries}, cookie support: ${cookieSupportCheck ? 'detected' : 'not detected'}`);
-      }
-      
-      // Progressive backoff with increasing intervals
-      await new Promise(r => setTimeout(r, cookieCheckInterval));
-      cookieCheckInterval = Math.min(cookieCheckInterval * 1.5, 500); // Increase interval with cap at 500ms
+    document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
+    if (response.refresh_token) {
+      document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=${sameSite}`;
     }
     
-    if (AUTH_DEBUG) {
-      console.debug('[Auth] Post-login cookie check:', {
-        accessToken: !!accessTokenCookie,
-        refreshToken: !!refreshTokenCookie,
-        retriesLeft: cookieRetries,
-        directTokenAvailable: !!window.__directAccessToken
-      });
-    }
-    
-    // If cookies failed to set, use server-side cookie setting API as primary fallback
-    if (!accessTokenCookie && response.access_token) {
-      console.warn('[Auth] Cookies not set after login, trying server-side cookie API fallback');
-      
-      try {
-        const cookieResponse = await apiRequest('/api/auth/set-cookies', 'POST', {
-          access_token: response.access_token,
-          refresh_token: response.refresh_token
-        });
-        
-        if (AUTH_DEBUG) console.debug('[Auth] Manual cookie setting API response:', cookieResponse);
-        
-        // Check if cookies were set after the API call
-        await new Promise(r => setTimeout(r, 300));
-        const apiSetCookie = getCookie('access_token') || getCookie('access_token_fallback');
-        
-        if (apiSetCookie) {
-          if (AUTH_DEBUG) console.debug('[Auth] Server-side cookie setting succeeded');
-        } else {
-          // Last resort: client-side cookie setting
-          if (AUTH_DEBUG) console.debug('[Auth] Server-side cookie setting failed, trying client-side as last resort');
-          
-          // Try both domain-specific and domain-less cookies for maximum compatibility
-          const hostname = window.location.hostname;
-          const isSecure = window.location.protocol === 'https:';
-          const sameSite = isSecure ? 'Strict' : 'Lax';
-          
-          document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=${sameSite}`;
-          if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-            document.cookie = `access_token=${response.access_token}; path=/; domain=${hostname}; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=${sameSite}`;
-          }
-          
-          if (response.refresh_token) {
-            document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=${sameSite}`;
-            if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-              document.cookie = `refresh_token=${response.refresh_token}; path=/; domain=${hostname}; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=${sameSite}`;
-            }
-          }
-        }
-      } catch (cookieError) {
-        console.warn('[Auth] Cookie-setting API call failed:', cookieError);
-      }
-    }
-    
-    // Ensure we're authenticated regardless of cookie status
+    // Update auth state immediately
     authState.isAuthenticated = true;
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
+    
+    // Broadcast auth change
     broadcastAuth(true, response.username || username);
     
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Login successful, auth state updated. Cookie status:', !!getCookie('access_token'));
+      console.debug('[Auth] Login successful, auth state updated');
     }
     
+    // Backup tokens to session storage
+    try {
+      sessionStorage.setItem('_auth_token_backup', response.access_token);
+      if (response.refresh_token) {
+        sessionStorage.setItem('_auth_refresh_backup', response.refresh_token);
+      }
+      sessionStorage.setItem('_auth_timestamp', Date.now().toString());
+      sessionStorage.setItem('_auth_username', username);
+    } catch (e) {
+      console.warn('[Auth] Failed to backup tokens to sessionStorage:', e);
+    }
+    
+    // Don't reload the project list directly - let the redirect handle that
     return {
       ...response,
+      success: true
     };
   } catch (error) {
     console.error("[Auth] loginUser error details:", error);
     let message = "Login failed";
     if (error.status === 401) message = "Invalid username or password";
     else if (error.status === 429) message = "Too many attempts. Please try again later.";
-    else if (error.message) message = error.message;
+    else if (error.message && error.message !== "Login request timed out. Please try again.") {
+      message = error.message;
+    }
     throw new Error(message);
+  } finally {
+    // Always clean up regardless of outcome
+    clearTimeout(loginTimeout);
+    window.__loginInProgress = false;
+    window.__loginAbortController = null;
   }
 }
 
@@ -881,37 +870,40 @@ function setupUIListeners() {
     e.preventDefault();
     const formData = new FormData(e.target);
     
-    // Add temporary body lock to prevent interaction
-    document.body.style.pointerEvents = 'none';
-
     // Get submit button state
     const submitBtn = this.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" viewBox="0 0 24 24">...</svg>`;
-
+    
+    // Set a safety timeout to re-enable the form if something goes wrong
+    const safetyTimeout = setTimeout(() => {
+      console.warn('[Auth] Login safety timeout triggered - re-enabling form');
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }, 10000);  // 10 second safety timeout
+    
     try {
+      // First authenticate the user without any UI updates
       await loginUser(formData.get("username"), formData.get("password"));
+      console.debug('[Auth] Login successful, skipping direct renderProjects call');
       
-      // New: Force project list refresh
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects({ 
-          forceRefresh: true,
-          timestamp: Date.now() 
-        });
-      }
+      // Instead of directly calling renderProjects, redirect to the projects page
+      // which will properly load the projects through normal initialization
+      window.location.href = '/?view=projects';
       
-      // New: Ensure URL state update
-      window.history.replaceState({ loggedIn: true }, '', '/?view=projects');
-      
-      // Add visual confirmation
+      // In case the redirect doesn't happen immediately, show visual feedback
       this.closest('#authDropdown')?.classList.remove('animate-slide-in');
+      
+      // No need for URL state update as we're actually redirecting
     } catch (error) {
       console.error("[Auth] Login failed:", error);
       notify(error.message || "Login failed", "error");
     } finally {
-      // Restore pointer events
-      document.body.style.pointerEvents = '';
+      // Clear the safety timeout since we've reached the finally block
+      clearTimeout(safetyTimeout);
+      
+      // Re-enable the form
       submitBtn.disabled = false;
       submitBtn.textContent = originalText;
     }

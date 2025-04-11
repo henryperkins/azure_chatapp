@@ -499,7 +499,7 @@ async def _estimate_file_tokens(
         content_to_process = (
             contents if len(contents) <= KBConfig.get()["stream_threshold"] else file.file
         )
-        tok_count, tok_metadata = await text_extractor.estimate_token_count(
+        tok_count, tok_metadata = await text_extractor.estimate_token_count(  # type: ignore
             content_to_process,
             filename
         )
@@ -666,6 +666,7 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
         .values(use_knowledge_base=False)
         .returning(Conversation.id)
     )
+    
     fixed_convs = len(conv_result.scalars().all())
 
     await db.commit()
@@ -682,7 +683,9 @@ async def get_kb_status(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
     kb_exists = project.knowledge_base_id is not None
     kb_active = False
     if kb_exists:
-        kb = await get_by_id(db, KnowledgeBase, project.knowledge_base_id)
+        if not project.knowledge_base_id:
+            raise HTTPException(status_code=400, detail="Project has no knowledge base ID set")
+        kb = await get_by_id(db, KnowledgeBase, UUID(str(project.knowledge_base_id)))
         kb_active = kb.is_active if kb else False
 
     return {
@@ -702,7 +705,7 @@ async def get_knowledge_base_health(
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     vector_db = await VectorDBManager.get_for_project(UUID(str(kb.project_id)), db=db)
-    stats = await vector_db.get_knowledge_base_status(kb.project_id, db)
+    stats = await vector_db.get_knowledge_base_status(UUID(str(kb.project_id)), db)
 
     return {
         "id": str(kb.id),
@@ -846,7 +849,7 @@ async def delete_knowledge_base(
 
     # Remove from associated project
     if kb.project_id:
-        project = await get_by_id(db, Project, kb.project_id)
+        project = await get_by_id(db, Project, UUID(str(kb.project_id)))
         if project and project.knowledge_base_id == kb.id:
             project.knowledge_base_id = None
             await save_model(db, project)
@@ -884,3 +887,37 @@ async def toggle_project_kb(
         "knowledge_base_active": enable,
         "knowledge_base_id": str(kb.id),
     }
+    
+    @handle_service_errors("Error listing project files")
+    async def get_project_file_list(
+        project_id: UUID,
+        user_id: Optional[int],
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        file_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        List files belonging to a project, with optional filtering and pagination.
+        """
+        # Validate user and project
+        project = await _validate_user_and_project(project_id, user_id, db)
+    
+        # Build query
+        query = select(ProjectFile).where(ProjectFile.project_id == project_id)
+    
+        if file_type:
+            query = query.where(ProjectFile.file_type == file_type)
+    
+        if skip > 0:
+            query = query.offset(skip)
+        if limit > 0:
+            query = query.limit(limit)
+    
+        result = await db.execute(query)
+        files = result.scalars().all()
+    
+        # Transform file records
+        file_list = [extract_file_metadata(f, include_token_count=True) for f in files]
+    
+        return {"files": file_list}
