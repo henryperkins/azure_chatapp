@@ -438,16 +438,7 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
         // Initialize message service w/ HTTP initially
         this.messageService.initialize(chatId, null);
 
-        this.wsService.connect(chatId)
-          .then(() => {
-            console.log("[ChatInterface] WebSocket connected");
-            this.messageService.initialize(chatId, this.wsService);
-            this.notificationFunction("Real-time connection established", "success");
-          })
-          .catch(error => {
-            console.warn("[ChatInterface] WebSocket connection failed, using HTTP fallback:", error);
-            this.messageService.initialize(chatId, null);
-          });
+        this.messageService.initialize(chatId, null);
 
         // Update URL if mismatch
         const urlParams = new URLSearchParams(window.location.search);
