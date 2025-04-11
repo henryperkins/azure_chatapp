@@ -9,7 +9,6 @@ const AUTH_DEBUG = true;  // Toggle as needed
 
 // Converted from ES modules to global references
 const ConversationService = window.ConversationService;
-const WebSocketService = window.WebSocketService;
 const MessageService = window.MessageService;
 const UIComponents = window.UIComponents;
 
@@ -58,7 +57,6 @@ window.ChatInterface = function (options = {}) {
     sendButton: this.sendButtonSelector
   });
 
-  this.wsService = null;
   this.messageService = null;
   this.conversationService = null;
   this.ui = null;
@@ -98,21 +96,6 @@ window.ChatInterface.prototype._handleSendMessage = function (messageText) {
 };
 
 window.ChatInterface.prototype.initialize = async function () {
-  // Check dependencies
-  if (!window.WebSocketService) {
-    console.warn('WebSocketService dependency not loaded - attempting dynamic load');
-    await new Promise(resolve => {
-      const script = document.createElement('script');
-      script.src = '/static/js/chat-websocket.js';
-      script.onload = resolve;
-      document.head.appendChild(script);
-    });
-
-    if (!window.WebSocketService) {
-      throw new Error('WebSocketService dependency not loaded after dynamic load');
-    }
-  }
-
   // Prevent double initialization
   if (this.initialized) {
     console.warn("Chat interface already initialized");
@@ -148,7 +131,7 @@ window.ChatInterface.prototype.initialize = async function () {
       onSending: () => this.ui.messageList.addThinking(),
       onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
     });
-    this.wsService = null; // Explicitly nullify WebSocket reference
+    // WebSocket service removed
   } catch (error) {
     console.error('Failed to initialize MessageService:', error);
     throw new Error(`MessageService initialization failed: ${error.message}`);
@@ -197,7 +180,7 @@ window.ChatInterface.prototype.initialize = async function () {
   }
 
   // Check dependencies
-  const requiredServices = ['ConversationService', 'MessageService', 'WebSocketService', 'UIComponents'];
+  const requiredServices = ['ConversationService', 'MessageService', 'UIComponents'];
   const missingServices = requiredServices.filter(service => !window[service]);
 
   if (missingServices.length > 0) {
@@ -304,14 +287,7 @@ window.ChatInterface.prototype._setupEventListeners = function () {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       // Page is now visible again, check connections
-      if (this.currentChatId && this.wsService) {
-        // Check if connection is in error or disconnected state
-        if (this.wsService.state === 'disconnected' || this.wsService.state === 'error') {
-          console.log("Reconnecting stale WebSocket connection on tab focus");
-          this.wsService.connect(this.currentChatId)
-            .catch(error => console.error("Tab focus reconnection failed:", error));
-        }
-      }
+      // WebSocket reconnection removed
     }
   });
 
@@ -399,8 +375,6 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
   const previousChatId = this.currentChatId;
   this.currentChatId = chatId;
 
-  // No WebSocket disconnection needed
-
   // Clear message service state
   if (this.messageService) {
     this.messageService.clear();
@@ -417,10 +391,8 @@ window.ChatInterface.prototype.loadConversation = function (chatId) {
       if (success) {
         console.log(`Successfully loaded conversation: ${chatId}`, this.conversationService.currentConversation);
 
-        // Initialize message service w/ HTTP initially
-        this.messageService.initialize(chatId, null);
-
-        this.messageService.initialize(chatId, null);
+        // Initialize message service
+        this.messageService.initialize(chatId);
 
         // Update URL if mismatch
         const urlParams = new URLSearchParams(window.location.search);
@@ -624,9 +596,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
     }
 
     this.currentChatId = null;
-    if (this.wsService?.isConnected()) {
-      this.wsService.disconnect();
-    }
+    // WebSocket disconnection removed
     throw error;
   }
 };

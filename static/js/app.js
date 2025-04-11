@@ -938,11 +938,8 @@ async function initializeAllModules() {
       console.log("Sidebar initialized");
     }
     
-    // Initialize chat interface if available
-    if (window.chatInterface?.initialize) {
-      await window.chatInterface.initialize();
-      console.log("Chat interface initialized");
-    }
+  // Removed redundant chat interface initialization to avoid double init
+  // (Handled in chat-core.js / ChatManager)
     
     // Handle any initial navigation
     await handleNavigationChange();

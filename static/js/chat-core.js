@@ -375,75 +375,6 @@
       return this.chatInterface._handleSendMessage(userMsg);
     },
 
-    /**
-     * Setup WebSocket for the given chat, or fallback to currentChatId.
-     */
-    setupWebSocket: async function (chatId) {
-      if (!this.chatInterface) {
-        await this.initializeChat();
-      }
-      if (!chatId && this.chatInterface.currentChatId) {
-        chatId = this.chatInterface.currentChatId;
-      }
-      if (chatId && this.chatInterface.wsService) {
-        try {
-          const connected = await this.chatInterface.wsService.connect(chatId);
-          if (connected) {
-            this.chatInterface.messageService.initialize(chatId, this.chatInterface.wsService);
-            return true;
-          }
-        } catch (error) {
-          console.warn("Failed to set up WebSocket:", error);
-        }
-      }
-      return false;
-    },
-
-    /**
-     * Test WebSocket connection prerequisites.
-     */
-    testWebSocketConnection: async function () {
-      try {
-        await this.ensureModulesLoaded();
-
-        // Check authentication using auth.js
-        let isAuthenticated = false;
-        try {
-          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
-        } catch (e) {
-          console.warn("Auth verification failed:", e);
-          window.auth.handleAuthError(e, "WebSocket connection test");
-        }
-
-        if (!isAuthenticated) {
-          return { success: false, authenticated: false, message: "Authentication required" };
-        }
-
-        // Construct WS URL
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        const host = window.location.host;
-        if (!host) throw new Error('Cannot determine host for WebSocket connection');
-
-        const chatId = window.CHAT_CONFIG?.chatId;
-        if (!chatId) throw new Error('No chatId available for WebSocket connection');
-
-        const wsUrl = `${wsProtocol}${host}/ws?chatId=${chatId}`;
-
-        return {
-          success: true,
-          authenticated: true,
-          wsUrl,
-          message: "WebSocket prerequisites passed"
-        };
-      } catch (error) {
-        window.ChatUtils?.handleError?.('WebSocket test', error);
-        return {
-          success: false,
-          error: error.message,
-          message: "WebSocket test failed"
-        };
-      }
-    }
   };
 
   // ---------------------------
@@ -455,8 +386,7 @@
   window.loadConversation = ChatManager.loadConversation.bind(ChatManager);
   window.createNewChat = ChatManager.createNewConversation.bind(ChatManager);
   window.sendMessage = ChatManager.sendMessage.bind(ChatManager);
-  // WebSocket setup removed - using HTTP only
-  window.testWebSocketConnection = ChatManager.testWebSocketConnection.bind(ChatManager);
+  // WebSocket references removed
 
   // ---------------------------
   // 4) EVENT LISTENERS
