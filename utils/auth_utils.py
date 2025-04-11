@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, Tuple
 
 import jwt
 from jwt import PyJWTError, ExpiredSignatureError, InvalidTokenError
-from fastapi import HTTPException, Request, WebSocket, status
+from fastapi import HTTPException, Request, status
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -246,54 +246,3 @@ async def get_current_user_and_token(request: Request) -> User:
     return user
 
 
-# -----------------------------------------------------------------------------
-# WebSocket Authentication
-# -----------------------------------------------------------------------------
-async def authenticate_websocket(
-    websocket: WebSocket, db: AsyncSession
-) -> Tuple[bool, Optional[User]]:
-    """
-    Authenticates a WebSocket connection by extracting 'access_token' cookie.
-    - For browsers, reads cookies from headers.
-    - For non-browser clients, expects the token in the first text message.
-    Returns (True, user) if authenticated, else (False, None).
-    """
-    user_agent = websocket.headers.get("user-agent", "").lower()
-    is_browser = any(s in user_agent for s in ["mozilla", "webkit", "chrome"])
-
-    if is_browser:
-        token = extract_token(websocket)
-    else:
-        try:
-            # Non-browser clients might send the token as raw text
-            token = await websocket.receive_text()
-        except Exception as e:
-            logger.error(f"Error receiving token from websocket: {e}")
-            token = None
-
-    if not token:
-        logger.warning("WebSocket authentication failed: No token provided.")
-        await _close_websocket_if_open(websocket)
-        return False, None
-
-    try:
-        user = await get_user_from_token(token, db, expected_type="access")
-        logger.info(f"WebSocket authenticated for user: {user.id} ({user.username})")
-        return True, user
-    except HTTPException as exc:
-        logger.warning(f"WebSocket authentication failed: {exc.detail}")
-        await _close_websocket_if_open(websocket)
-        return False, None
-    except Exception as e:
-        logger.error(f"Unhandled error during websocket authentication: {e}")
-        await _close_websocket_if_open(websocket)
-        return False, None
-
-
-async def _close_websocket_if_open(websocket: WebSocket):
-    """Utility to safely close the WebSocket if it's still open."""
-    try:
-        if websocket.client_state.name != "DISCONNECTED":
-            await websocket.close()
-    except Exception as close_err:
-        logger.error(f"Error closing WebSocket: {close_err}")
