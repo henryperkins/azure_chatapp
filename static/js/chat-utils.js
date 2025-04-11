@@ -154,4 +154,3 @@ window.ChatUtils = {
 // Initialize ChatUtils
 window.ChatUtils.init();
 
-// WebSocket error handling removed - using HTTP only

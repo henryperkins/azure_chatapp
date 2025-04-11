@@ -30,7 +30,6 @@ const API_CONFIG = {
     }
     this._baseUrl = value;
   },
-  WS_ENDPOINT: '',  // Removed window.location.origin usage
   isAuthenticated: false,
   authCheckInProgress: false,
   lastErrorStatus: null
@@ -132,10 +131,6 @@ function clearAuthState() {
     }));
   }
   
-  // Disconnect any active WebSocket connections
-  if (window.WebSocketService && typeof window.WebSocketService.disconnectAll === 'function') {
-    window.WebSocketService.disconnectAll();
-  }
 }
 
 

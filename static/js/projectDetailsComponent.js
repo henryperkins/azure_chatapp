@@ -863,56 +863,6 @@ a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
       });
     }
 
-    async _setupProcessingWS(projectId) {
-      if (!projectId) return;
-      if (this.processingWS) {
-        this.processingWS.close();
-        this.processingWS = null;
-      }
-      try {
-        const isAuthenticated = await window.auth.isAuthenticated();
-        if (!isAuthenticated) {
-          console.warn('User not authenticated, cannot set up processing WebSocket');
-          return;
-        }
-        const wsAuth = await window.auth.getWSAuthToken();
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws/processing/${projectId}?token=${wsAuth.token}`);
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'processing_update' && this.state.currentProject) {
-              this._updateFileStatus(data.file_id, data.status, data.error);
-            }
-          } catch (e) {
-            console.error('Error processing websocket message:', e);
-          }
-        };
-        ws.onerror = (error) => {
-          console.error('Processing WebSocket error:', error);
-          if (error.message?.includes('401') || error.message?.includes('auth') || error.message?.includes('token') || error.message?.includes('unauthorized')) {
-            window.auth.handleAuthError(error, 'WebSocket connection');
-          }
-          setTimeout(() => this._setupProcessingWS(projectId), 5000);
-        };
-        ws.onclose = (event) => {
-          if (event.code === 1008 || event.code === 4001) {
-            window.auth.verify(true).catch(() => {
-              console.warn('Authentication verification failed after WebSocket close');
-            });
-          }
-          if (window.projectManager?.currentProject?.id === projectId) {
-            setTimeout(() => this._setupProcessingWS(projectId), 5000);
-          }
-        };
-        this.processingWS = ws;
-      } catch (error) {
-        console.error('Failed to set up processing WebSocket:', error);
-        if (error.message?.includes('auth') || error.message?.includes('token') || error.message?.includes('unauthorized') || error?.status === 401 || error?.response?.status === 401) {
-          window.auth.handleAuthError(error, 'WebSocket setup');
-        }
-      }
-    }
 
     _updateFileStatus(fileId, status, error) {
       const fileItem = this.elements.filesList.querySelector(`[data-file-id="${fileId}"]`);

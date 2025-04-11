@@ -13,7 +13,6 @@
       { name: 'ChatUtils', path: '/static/js/chat-utils.js' },
       { name: 'ConversationService', path: '/static/js/chat-conversations.js' },
       { name: 'MessageService', path: '/static/js/chat-messages.js' },
-      { name: 'WebSocketService', path: '/static/js/chat-websocket.js' },
       { name: 'UIComponents', path: '/static/js/chat-ui.js' },
       { name: 'ChatInterface', path: '/static/js/chat-interface.js' }
     ],
