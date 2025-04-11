@@ -1,4 +1,3 @@
-
 """
 vector_db.py
 -----------
@@ -37,6 +36,7 @@ SentenceTransformer = None
 
 try:
     from sentence_transformers import SentenceTransformer as _SentenceTransformer
+
     SentenceTransformer = _SentenceTransformer
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -47,6 +47,7 @@ except ImportError:
 
 try:
     import faiss as _faiss
+
     faiss = _faiss
     FAISS_AVAILABLE = True
 except ImportError:
@@ -56,6 +57,7 @@ except ImportError:
 
 try:
     from sklearn.metrics.pairwise import cosine_similarity
+
     SKLEARN_AVAILABLE = True
 except ImportError:
     logger.warning(
@@ -65,6 +67,7 @@ except ImportError:
 
 class VectorDBError(Exception):
     """Exception raised for errors in vector operations."""
+
     pass
 
 
@@ -77,7 +80,7 @@ DEFAULT_CHUNK_OVERLAP = 200
 class VectorDB:
     """
     Handles vector embeddings and similarity search operations.
-    
+
     IMPORTANT:
     - All documents require project_id, knowledge_base_id, and file_id in metadata
     - Search filters should always include both project_id and knowledge_base_id
@@ -115,12 +118,16 @@ class VectorDB:
         """Initialize the embedding model with proper error handling."""
         self.embedding_model = None
         if not SENTENCE_TRANSFORMERS_AVAILABLE or not SentenceTransformer:
-            logger.info(f"Using external embedding API for model: {self.embedding_model_name}")
+            logger.info(
+                f"Using external embedding API for model: {self.embedding_model_name}"
+            )
             return
 
         try:
             self.embedding_model = SentenceTransformer(self.embedding_model_name)
-            logger.info(f"Initialized local embedding model: {self.embedding_model_name}")
+            logger.info(
+                f"Initialized local embedding model: {self.embedding_model_name}"
+            )
             self._warmup_embedding_model()
         except Exception as e:
             logger.error(f"Error initializing embedding model: {str(e)}")
@@ -137,9 +144,13 @@ class VectorDB:
     async def test_connection(self) -> Dict[str, Any]:
         """Test the vector database connection and basic functionality."""
         try:
-            model_ready = (self.embedding_model is not None or not SENTENCE_TRANSFORMERS_AVAILABLE)
-            faiss_ready = not self.use_faiss or (FAISS_AVAILABLE and self.faiss is not None)
-            
+            model_ready = (
+                self.embedding_model is not None or not SENTENCE_TRANSFORMERS_AVAILABLE
+            )
+            faiss_ready = not self.use_faiss or (
+                FAISS_AVAILABLE and self.faiss is not None
+            )
+
             return {
                 "is_healthy": model_ready and faiss_ready,
                 "index_count": len(self.vectors),
@@ -172,9 +183,11 @@ class VectorDB:
         model_dimensions = {
             "text-embedding-3-small": 1536,
             "text-embedding-3-large": 3072,
-            "embed-english": 1024
+            "embed-english": 1024,
         }
-        return model_dimensions.get(self.embedding_model_name, 384)  # Default for all-MiniLM-L6-v2
+        return model_dimensions.get(
+            self.embedding_model_name, 384
+        )  # Default for all-MiniLM-L6-v2
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of text chunks."""
@@ -273,9 +286,7 @@ class VectorDB:
         for i in range(0, len(chunks), batch_size):
             batch_end = min(i + batch_size, len(chunks))
             batch_results = await self._process_document_batch(
-                chunks[i:batch_end],
-                metadatas[i:batch_end],
-                ids[i:batch_end]
+                chunks[i:batch_end], metadatas[i:batch_end], ids[i:batch_end]
             )
             successful_ids.extend(batch_results)
 
@@ -288,18 +299,19 @@ class VectorDB:
         """Validate that all metadatas contain required fields."""
         required_fields = ["project_id", "knowledge_base_id", "file_id"]
         for i, metadata in enumerate(metadatas):
-            missing_fields = [field for field in required_fields if field not in metadata]
+            missing_fields = [
+                field for field in required_fields if field not in metadata
+            ]
             if missing_fields:
-                logger.error(f"Missing required metadata fields: {missing_fields} for document {i}")
+                logger.error(
+                    f"Missing required metadata fields: {missing_fields} for document {i}"
+                )
                 raise VectorDBError(
                     "Documents require project_id, knowledge_base_id, and file_id in metadata"
                 )
 
     async def _process_document_batch(
-        self,
-        chunks: List[str],
-        metadatas: List[Dict[str, Any]],
-        ids: List[str]
+        self, chunks: List[str], metadatas: List[Dict[str, Any]], ids: List[str]
     ) -> List[str]:
         """Process a single batch of documents."""
         embeddings = await self.generate_embeddings(chunks)
@@ -307,7 +319,9 @@ class VectorDB:
             return []
 
         successful_ids = []
-        for doc_id, embedding, metadata, text in zip(ids, embeddings, metadatas, chunks):
+        for doc_id, embedding, metadata, text in zip(
+            ids, embeddings, metadatas, chunks
+        ):
             self.vectors[doc_id] = embedding
             self.metadata[doc_id] = {**metadata, "text": text}
             successful_ids.append(doc_id)
@@ -318,9 +332,7 @@ class VectorDB:
         return successful_ids
 
     def _update_faiss_index(
-        self,
-        embeddings: List[List[float]],
-        ids: List[str]
+        self, embeddings: List[List[float]], ids: List[str]
     ) -> None:
         """Update FAISS index with new embeddings."""
         if not (self.use_faiss and FAISS_AVAILABLE):
@@ -364,11 +376,7 @@ class VectorDB:
                 raise VectorDBError("Failed to generate embedding for query")
 
             search_func = self._get_search_backend()
-            return await search_func(
-                query_embedding[0],
-                top_k,
-                filter_metadata
-            )
+            return await search_func(query_embedding[0], top_k, filter_metadata)
         except Exception as e:
             logger.error(f"Search failed: {str(e)}")
             raise VectorDBError(f"Search operation failed: {str(e)}") from e
@@ -420,11 +428,10 @@ class VectorDB:
         similarities = cosine_similarity(query_np, vectors_np)[0]  # type: ignore
 
         id_score_pairs = [
-            (doc_id, float(score)) 
+            (doc_id, float(score))
             for doc_id, score in zip(ids, similarities)
-            if not filter_metadata or self._matches_filter(
-                self.metadata.get(doc_id, {}), filter_metadata
-            )
+            if not filter_metadata
+            or self._matches_filter(self.metadata.get(doc_id, {}), filter_metadata)
         ]
         id_score_pairs.sort(key=lambda x: x[1], reverse=True)
 
@@ -454,9 +461,7 @@ class VectorDB:
         return results[:top_k]
 
     def _calculate_cosine_similarity(
-        self,
-        vec1: List[float],
-        vec2: List[float]
+        self, vec1: List[float], vec2: List[float]
     ) -> float:
         """Compute cosine similarity between two vectors."""
         try:
@@ -478,9 +483,7 @@ class VectorDB:
         }
 
     def _matches_filter(
-        self,
-        metadata: Dict[str, Any],
-        filter_criteria: Dict[str, Any]
+        self, metadata: Dict[str, Any], filter_criteria: Dict[str, Any]
     ) -> bool:
         """Check if document metadata matches the given filter criteria."""
         for key, value in filter_criteria.items():
@@ -532,14 +535,14 @@ class VectorDB:
 
             remaining_vectors = [self.vectors[d_id] for d_id in remaining_ids]
             vectors_np = np.array(remaining_vectors, dtype=np.float32)
-            
+
             dimension = self.get_embedding_dimension()
             self.index = faiss.IndexFlatL2(dimension)  # type: ignore
-            
+
             if vectors_np.size > 0:
                 self.index.add(vectors_np)  # type: ignore
             self.id_map = remaining_ids
-            
+
             logger.info(f"Rebuilt FAISS index with {len(remaining_ids)} vectors")
         except Exception as e:
             logger.error(f"Failed to rebuild FAISS index: {str(e)}")
@@ -552,7 +555,8 @@ class VectorDB:
             return 0
 
         ids_to_delete = [
-            doc_id for doc_id, meta in self.metadata.items()
+            doc_id
+            for doc_id, meta in self.metadata.items()
             if self._matches_filter(meta, filter_metadata)
         ]
         return await self.delete_by_ids(ids_to_delete)
@@ -568,17 +572,19 @@ class VectorDB:
             "metadata": {k: v for k, v in self.metadata[doc_id].items() if k != "text"},
             "vector": self.vectors.get(doc_id),
         }
-        
-    async def get_knowledge_base_status(self, project_id: UUID, db: Any) -> Dict[str, Any]:
+
+    async def get_knowledge_base_status(
+        self, project_id: UUID, db: Any
+    ) -> Dict[str, Any]:
         """Get comprehensive status of the knowledge base for a project.
-        
+
         This method provides detailed metrics and health information about
         the vector database for a specific project.
-        
+
         Args:
             project_id: UUID of the project
             db: Database session for querying related records
-            
+
         Returns:
             Dict containing status information about:
             - Vector DB health (connection, model, index)
@@ -586,15 +592,17 @@ class VectorDB:
             - Content metrics (document count, file types)
         """
         connection_status = await self.test_connection()
-        storage_exists = os.path.exists(self.storage_path) if self.storage_path else False
-        
+        storage_exists = (
+            os.path.exists(self.storage_path) if self.storage_path else False
+        )
+
         # Count documents by type
         doc_types = {}
         for meta in self.metadata.values():
             if meta.get("project_id") == str(project_id):
                 file_type = meta.get("file_type", "unknown")
                 doc_types[file_type] = doc_types.get(file_type, 0) + 1
-        
+
         # Get storage size
         storage_size_mb = 0
         if storage_exists and self.storage_path:
@@ -602,24 +610,27 @@ class VectorDB:
                 storage_size_mb = os.path.getsize(self.storage_path) / (1024 * 1024)
             except Exception as e:
                 logger.error(f"Error getting storage size: {str(e)}")
-        
+
         return {
             "vector_db": {
                 "status": "active" if connection_status["is_healthy"] else "error",
                 "index_size": len(self.vectors),
                 "embedding_model": self.embedding_model_name,
-                **connection_status
+                **connection_status,
             },
             "storage": {
                 "path": self.storage_path,
                 "exists": storage_exists,
-                "size_mb": storage_size_mb
+                "size_mb": storage_size_mb,
             },
             "documents": {
-                "total_count": sum(1 for meta in self.metadata.values() 
-                                if meta.get("project_id") == str(project_id)),
-                "by_type": doc_types
-            }
+                "total_count": sum(
+                    1
+                    for meta in self.metadata.values()
+                    if meta.get("project_id") == str(project_id)
+                ),
+                "by_type": doc_types,
+            },
         }
 
     async def _save_to_disk(self) -> None:
@@ -639,10 +650,21 @@ class VectorDB:
     async def load_from_disk(self) -> bool:
         """Load vectors and metadata from disk."""
         if not self.storage_path or not os.path.exists(self.storage_path):
-    if load_existing and storage_path and os.path.exists(storage_path):
-        await vector_db.load_from_disk()
+            return False
 
-    return vector_db
+        with open(self.storage_path, "r") as f:
+            data = json.load(f)
+            self.vectors = data.get("vectors", {})
+            self.metadata = data.get("metadata", {})
+            if "model" in data and data["model"] != self.embedding_model_name:
+                logger.warning(
+                    f"Loaded model {data['model']} differs from current model {self.embedding_model_name}"
+                )
+
+        if self.use_faiss:
+            self._rebuild_faiss_index()
+
+        return True
 
 
 async def process_file_for_search(
@@ -672,8 +694,9 @@ async def process_file_for_search(
 
         # Prepare metadata
         resolved_kb_id = knowledge_base_id or (
-            project_file.project.knowledge_base_id if hasattr(project_file, "project") 
-            and project_file.project else None
+            project_file.project.knowledge_base_id
+            if hasattr(project_file, "project") and project_file.project
+            else None
         )
 
         if not resolved_kb_id:
@@ -681,22 +704,24 @@ async def process_file_for_search(
 
         chunk_metadatas = []
         for i in range(len(text_chunks)):
-            chunk_metadatas.append({
-                "file_id": str(project_file.id),
-                "project_id": str(project_file.project_id),
-                "knowledge_base_id": str(resolved_kb_id),
-                "chunk_index": i,
-                "total_chunks": len(text_chunks),
-                "file_name": project_file.filename,
-                "file_type": project_file.file_type,
-                "source": "project_file",
-            })
+            chunk_metadatas.append(
+                {
+                    "file_id": str(project_file.id),
+                    "project_id": str(project_file.project_id),
+                    "knowledge_base_id": str(resolved_kb_id),
+                    "chunk_index": i,
+                    "total_chunks": len(text_chunks),
+                    "file_name": project_file.filename,
+                    "file_type": project_file.file_type,
+                    "source": "project_file",
+                }
+            )
 
         # Add to vector database
         added_ids = await vector_db.add_documents(
             chunks=text_chunks,
             metadatas=chunk_metadatas,
-            ids=[f"{project_file.id}_chunk_{i}" for i in range(len(text_chunks))]
+            ids=[f"{project_file.id}_chunk_{i}" for i in range(len(text_chunks))],
         )
 
         return {
@@ -721,39 +746,33 @@ async def process_file_for_search(
 
 
 async def search_context_for_query(
-    query: str,
-    vector_db: VectorDB,
-    project_id: Optional[str] = None,
-    top_k: int = 5
+    query: str, vector_db: VectorDB, project_id: Optional[str] = None, top_k: int = 5
 ) -> List[Dict[str, Any]]:
     """Search for relevant context for a query within a project."""
     filter_metadata = {"project_id": project_id} if project_id else None
     return await vector_db.search(
-        query=query,
-        top_k=top_k,
-        filter_metadata=filter_metadata
+        query=query, top_k=top_k, filter_metadata=filter_metadata
     )
 
 
 async def cleanup_project_resources(
-    project_id: UUID,
-    storage_root: str = VECTOR_DB_STORAGE_PATH
+    project_id: UUID, storage_root: str = VECTOR_DB_STORAGE_PATH
 ) -> bool:
     """Delete all vector resources for a project."""
     storage_path = os.path.join(storage_root, str(project_id))
-    
+
     try:
         vector_db = await initialize_project_vector_db(
-            project_id=project_id,
-            storage_root=storage_root
+            project_id=project_id, storage_root=storage_root
         )
-        
+
         await vector_db.delete_by_filter({"project_id": str(project_id)})
-        
+
         if os.path.exists(storage_path):
             import shutil
+
             shutil.rmtree(storage_path)
-            
+
         return True
     except Exception as e:
         logger.error(f"Failed to cleanup project vectors: {str(e)}")
@@ -765,20 +784,20 @@ async def process_files_for_project(
     file_ids: Optional[List[UUID]] = None,
     db: Optional[Any] = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> Dict[str, Any]:
     """Batch process project files with progress tracking.
-    
+
     Processes files associated with a project for search indexing.
     Handles the complete workflow from database fetching to vector storage.
-    
+
     Args:
         project_id: UUID of the project
         file_ids: Optional list of specific file IDs to process, processes all if None
         db: SQLAlchemy AsyncSession for database access
         chunk_size: Size of text chunks for processing
         chunk_overlap: Overlap between chunks
-        
+
     Returns:
         Dictionary with processing results including:
         - processed: Count of successfully processed files
@@ -787,56 +806,52 @@ async def process_files_for_project(
         - details: List of detailed results per file
     """
     from sqlalchemy import select
-    
+
     # Initialize vector DB for project
     vector_db = await initialize_project_vector_db(project_id)
-    
+
     # Initialize file storage
     from services.file_storage import get_file_storage, get_storage_config
+
     config = await get_storage_config()
     storage = get_file_storage(config)
-    
-    results = {
-        "processed": 0,
-        "failed": 0,
-        "errors": [],
-        "details": []
-    }
-    
+
+    results = {"processed": 0, "failed": 0, "errors": [], "details": []}
+
     # Get file records to process
     if db:
         query = select(ProjectFile).where(ProjectFile.project_id == project_id)
         if file_ids:
             query = query.where(ProjectFile.id.in_(file_ids))
-        
+
         file_records = await db.execute(query)
         file_records = file_records.scalars().all()
     else:
         # If no DB session, we should at least have file IDs
         if not file_ids:
             return {
-                "processed": 0, 
+                "processed": 0,
                 "failed": 0,
                 "errors": ["Database session or file IDs required"],
-                "details": []
+                "details": [],
             }
         file_records = []
-    
+
     # Process each file
     for file_record in file_records:
         try:
             # Get file content from storage
             content = await storage.get_file(file_record.file_path)
-            
+
             # Process the file
             result = await process_file_for_search(
                 project_file=file_record,
                 vector_db=vector_db,
                 file_content=content,
                 chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap
+                chunk_overlap=chunk_overlap,
             )
-            
+
             # Track results
             results["details"].append(result)
             if result["success"]:
@@ -844,48 +859,45 @@ async def process_files_for_project(
             else:
                 results["failed"] += 1
                 if "error" in result:
-                    results["errors"].append(f"File {file_record.id}: {result['error']}")
-                    
+                    results["errors"].append(
+                        f"File {file_record.id}: {result['error']}"
+                    )
+
         except Exception as e:
             results["failed"] += 1
             results["errors"].append(f"File {file_record.id}: {str(e)}")
             logger.error(f"Error processing file {file_record.id}: {str(e)}")
-    
+
     return results
 
 
 async def search_project_context(
-    project_id: UUID,
-    query: str,
-    top_k: int = 5,
-    filters: Optional[Dict] = None
+    project_id: UUID, query: str, top_k: int = 5, filters: Optional[Dict] = None
 ) -> List[Dict[str, Any]]:
     """Project-scoped search with automatic vector DB setup.
-    
-    Performs search within a specific project context with automatic vector DB 
-    initialization. Applies project filtering by default along with any 
+
+    Performs search within a specific project context with automatic vector DB
+    initialization. Applies project filtering by default along with any
     additional filters specified.
-    
+
     Args:
         project_id: UUID of the project to search within
         query: Search query text
         top_k: Maximum number of results to return
         filters: Optional additional metadata filters to apply
-        
+
     Returns:
         List of search results with metadata and relevance scores
     """
     vector_db = await initialize_project_vector_db(project_id)
-    
+
     # Always filter by project_id
     base_filters = {"project_id": str(project_id)}
-    
+
     # Add any additional filters
     if filters:
         base_filters.update(filters)
-    
+
     return await vector_db.search(
-        query=query,
-        top_k=top_k,
-        filter_metadata=base_filters
+        query=query, top_k=top_k, filter_metadata=base_filters
     )
