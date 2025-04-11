@@ -8,6 +8,18 @@
   <link rel="stylesheet" href="/static/dist/tailwind.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
   
+  <style>
+    /* Add transition for project list visibility */
+    #projectListView {
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    #projectListView[aria-busy="true"] {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  </style>
+  
   <!-- Ensure responsive, mobile-friendly behavior -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
