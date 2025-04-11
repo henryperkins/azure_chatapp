@@ -13,7 +13,6 @@
       this._setupDragDropHandlers();
       this._initializeChatInterface();
       if (window.projectManager?.currentProject?.id) {
-        this._setupProcessingWS(window.projectManager.currentProject.id);
       }
       document.addEventListener("projectConversationsLoaded", (e) => { this.renderConversations(e.detail); });
     }
