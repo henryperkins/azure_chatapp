@@ -11,7 +11,8 @@ exclude =
     docs,
     MCP,
     *.drawio,
-    new_env
+    new_env,
+    sam-installation
 per-file-ignores =
     routers/security.py: E,F,W
     .aider.chat.history.md: E,F,W

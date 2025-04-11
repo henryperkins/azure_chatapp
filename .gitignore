@@ -14,3 +14,4 @@ uploads/*
 /blob-report/
 /playwright/.cache/
 migrations/*
+sam-installation/*
