@@ -456,7 +456,7 @@
   window.loadConversation = ChatManager.loadConversation.bind(ChatManager);
   window.createNewChat = ChatManager.createNewConversation.bind(ChatManager);
   window.sendMessage = ChatManager.sendMessage.bind(ChatManager);
-  window.setupWebSocket = ChatManager.setupWebSocket.bind(ChatManager);
+  // WebSocket setup removed - using HTTP only
   window.testWebSocketConnection = ChatManager.testWebSocketConnection.bind(ChatManager);
 
   // ---------------------------

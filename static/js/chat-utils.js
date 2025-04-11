@@ -154,23 +154,4 @@ window.ChatUtils = {
 // Initialize ChatUtils
 window.ChatUtils.init();
 
-/**
- * WebSocket error detection and recovery
- * Monitors global errors and attempts reconnection for WebSocket-specific issues
- */
-window.addEventListener('error', function(event) {
-  // Check if error is WebSocket-related
-  if (event.message && (
-      event.message.includes('WebSocket') ||
-      event.message.includes('ws://') ||
-      event.message.includes('wss://'))) {
-    console.warn("WebSocket error detected:", event.message);
-    
-    // Attempt recovery
-    if (window.chatInterface?.currentChatId && window.chatInterface?.wsService) {
-      console.log("Attempting automatic WebSocket reconnection");
-      window.chatInterface.wsService.connect(window.chatInterface.currentChatId)
-        .catch(err => console.error("Reconnection failed:", err));
-    }
-  }
-});
+// WebSocket error handling removed - using HTTP only

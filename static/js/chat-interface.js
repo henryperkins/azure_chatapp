@@ -139,14 +139,7 @@ window.ChatInterface.prototype.initialize = async function () {
   const urlParams = new URLSearchParams(window.location.search);
   this.currentChatId = window.CHAT_CONFIG?.chatId || urlParams.get('chatId');
 
-  // Create services with standardized error handling
-  this.wsService = new window.WebSocketService({
-    onConnect: () => {
-      console.log("WebSocket connected");
-      document.dispatchEvent(new CustomEvent('webSocketConnected'));
-    },
-    onError: (err) => window.ChatUtils?.handleError?.('WebSocket', err, this.notificationFunction)
-  });
+  // WebSocket service removed - using HTTP only
 
   try {
     if (!window.MessageService) {

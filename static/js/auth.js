@@ -35,27 +35,7 @@ async function getAuthToken(options = {}) {
   throw new Error('Not authenticated');
 }
 
-async function getWSAuthToken() {
-  try {
-    if (AUTH_DEBUG) console.debug('[Auth] Getting WebSocket auth token');
-    const isAuthenticated = await verifyAuthState(false);
-    if (!isAuthenticated) throw new Error('Not authenticated for WebSocket connection');
-    const response = await apiRequest('/api/auth/ws-token', 'GET');
-    return { token: response.token, version: response.version || authState.tokenVersion };
-  } catch (error) {
-    console.error('[Auth] Failed to get WebSocket auth token:', error);
-    if (error.message?.includes('expired') || error.status === 401) {
-      try {
-        await refreshTokens();
-        return getWSAuthToken();
-      } catch (refreshError) {
-        console.error('[Auth] WebSocket token retry failed after refresh:', refreshError);
-        throw refreshError;
-      }
-    }
-    throw error;
-  }
-}
+// WebSocket token function removed - using HTTP only
 
 async function refreshTokens() {
   if (tokenRefreshInProgress) {
