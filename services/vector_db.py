@@ -873,10 +873,11 @@ async def process_files_for_project(
     
     # Initialize file storage
     from services.file_storage import get_file_storage
-    from config import settings
-    storage = await get_file_storage(settings.STORAGE_PROVIDER)
+
+    # Get file storage service
+    storage = await get_file_storage()
     
-    results = {
+    results: Dict[str, Any] = {
         "processed": 0,
         "failed": 0,
         "errors": [],
@@ -888,8 +889,10 @@ async def process_files_for_project(
             # Get file record from database
             file_record = await db.get(ProjectFile, file_id)
             if not file_record:
-                results["failed"] += 1
-                results["errors"].append(f"File {file_id}: Not found in database")
+                results["failed"] = results["failed"] + 1
+                errors = results["errors"]
+                if isinstance(errors, list):
+                    errors.append(f"File {file_id}: Not found in database")
                 continue
                 
             # Get file content from storage
@@ -905,17 +908,24 @@ async def process_files_for_project(
             )
             
             # Update statistics
-            results["details"].append(result)
+            details = results["details"]
+            if isinstance(details, list):
+                details.append(result)
+                
             if result["success"]:
-                results["processed"] += 1
+                results["processed"] = results["processed"] + 1
             else:
-                results["failed"] += 1
+                results["failed"] = results["failed"] + 1
                 if "error" in result:
-                    results["errors"].append(f"File {file_id}: {result['error']}")
+                    errors = results["errors"]
+                    if isinstance(errors, list):
+                        errors.append(f"File {file_id}: {result['error']}")
                     
         except Exception as e:
-            results["failed"] += 1
-            results["errors"].append(f"File {file_id}: {str(e)}")
+            results["failed"] = results["failed"] + 1
+            errors = results["errors"]
+            if isinstance(errors, list):
+                errors.append(f"File {file_id}: {str(e)}")
             logger.error(f"Error processing file {file_id}: {str(e)}")
     
     return results
