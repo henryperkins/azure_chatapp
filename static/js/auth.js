@@ -611,7 +611,6 @@ async function loginUser(username, password) {
     }
     return {
       ...response,
-      ws_url: response.ws_url || `/api/chat/ws?token=${response.access_token}`
     };
   } catch (error) {
     console.error("[Auth] loginUser error details:", error);
