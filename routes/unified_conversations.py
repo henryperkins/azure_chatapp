@@ -10,8 +10,6 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    WebSocket,
-    WebSocketDisconnect,
     status,
     Query,
     Request,
@@ -48,13 +46,11 @@ from utils.message_handlers import (
     validate_image_data,
     update_project_token_usage,
 )
-from utils.websocket_manager import ConnectionManager
 from utils.ai_response import generate_ai_response
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Conversations"])
-manager = ConnectionManager()
 
 
 # --------------------------------------------------------------------------
