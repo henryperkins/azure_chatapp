@@ -220,6 +220,13 @@ class UserCredentials(BaseModel):
     password: str
 
 
+class TokenRequest(BaseModel):
+    """Request model for manually setting cookies."""
+
+    access_token: str
+    refresh_token: str = ""
+
+
 class LoginResponse(BaseModel):
     """Response model for login endpoint."""
 
@@ -614,6 +621,37 @@ async def test_cookie(request: Request, response: Response) -> dict[str, str]:
 async def get_server_time() -> dict[str, float]:
     """Returns the current server timestamp (UTC)."""
     return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
+
+
+# -----------------------------------------------------------------------------
+# Set Cookies Endpoint
+# -----------------------------------------------------------------------------
+@router.post("/set-cookies")
+async def set_cookies_endpoint(
+    request: Request,
+    response: Response,
+    token_req: TokenRequest
+):
+    """
+    Manually sets authentication tokens in secure cookies.
+    Used by frontend when automatic cookie setting fails.
+    """
+    set_secure_cookie(
+        response,
+        "access_token",
+        token_req.access_token,
+        max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
+        request=request
+    )
+    if token_req.refresh_token:
+        set_secure_cookie(
+            response,
+            "refresh_token",
+            token_req.refresh_token,
+            max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+            request=request
+        )
+    return {"status": "cookies set successfully"}
 
 
 # -----------------------------------------------------------------------------

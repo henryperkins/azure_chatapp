@@ -380,17 +380,31 @@ function setupSidebarTabs() {
     });
 
     // Check auth status before loading data
-    // Use auth.js to check authentication
-    window.auth.isAuthenticated()
-      .then(isAuthenticated => {
+    // Use auth.js to check authentication - with retry
+    const checkAuth = async () => {
+      try {
+        let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        
+        // Retry with force verify if needed
+        if (!isAuthenticated) {
+          console.debug(`[Sidebar] First auth check failed for tab ${tabName}, retrying with forceVerify`);
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+        }
+        
         // Only load data if authenticated and tab has a loader
         if (isAuthenticated && tabs[tabName].loader) {
+          console.debug(`[Sidebar] Loading data for authenticated tab: ${tabName}`);
           setTimeout(() => tabs[tabName].loader(), 300);
+        } else if (!isAuthenticated) {
+          console.warn(`[Sidebar] Not authenticated, skipping data load for tab: ${tabName}`);
         }
-      })
-      .catch(err => {
-        console.warn("[sidebar] Auth verification failed:", err);
-      });
+      } catch (err) {
+        console.warn("[Sidebar] Auth verification failed:", err);
+      }
+    };
+    
+    // Execute auth check
+    checkAuth();
   }
 
   // Activate the initial tab
@@ -1138,13 +1152,22 @@ function updateAuthDependentUI(authenticated, username = null) {
 
   // Refresh content if authenticated
   if (authenticated) {
+    console.debug('[Sidebar] User is authenticated, refreshing appropriate tab content');
+    
+    // Force refresh of projects tab since that's what we're debugging
+    if (typeof window.loadSidebarProjects === 'function') {
+      console.debug('[Sidebar] Forcing refresh of sidebar projects');
+      setTimeout(() => window.loadSidebarProjects(), 500);
+    }
+    
+    // Also refresh active tab
     const activeTab = localStorage.getItem('sidebarActiveTab');
     if (activeTab === 'starred' && document.getElementById('starredChatsSection')?.classList.contains('hidden') === false) {
-      loadStarredConversations();
+      setTimeout(() => loadStarredConversations(), 500);
     } else if (activeTab === 'projects' && document.getElementById('projectsSection')?.classList.contains('hidden') === false) {
-      window.loadSidebarProjects?.();
+      setTimeout(() => window.loadSidebarProjects?.(), 500);
     } else if (activeTab === 'recent' && document.getElementById('recentChatsSection')?.classList.contains('hidden') === false) {
-      window.loadConversationList?.();
+      setTimeout(() => window.loadConversationList?.(), 500);
     }
   }
 }
