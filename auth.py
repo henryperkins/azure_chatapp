@@ -602,6 +602,7 @@ async def get_auth_debug_info():
 
 
 @router.get("/settings/token-expiry", response_model=dict)
+@router.get("/api/auth/settings/token-expiry", response_model=dict)
 async def get_token_expiry_settings() -> dict[str, int]:
     """Exposes token expiration settings to the frontend."""
     return {
@@ -621,6 +622,12 @@ async def test_cookie(request: Request, response: Response) -> dict[str, str]:
 async def get_server_time() -> dict[str, float]:
     """Returns the current server timestamp (UTC)."""
     return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
+
+@router.get("/apple-touch-icon.png")
+@router.get("/apple-touch-icon-precomposed.png") 
+async def ignore_apple_touch_icon():
+    """Prevent 404s from iOS icon requests"""
+    return Response(status_code=204)
 
 
 # -----------------------------------------------------------------------------
