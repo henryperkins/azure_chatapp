@@ -573,6 +573,22 @@ class VectorDB:
             "vector": self.vectors.get(doc_id),
         }
 
+    async def get_stats(self) -> Dict[str, Any]:
+        """Get basic statistics about the vector database.
+        
+        Returns:
+            Dictionary containing:
+            - index_size: Number of vectors in index
+            - model_name: Name of embedding model
+            - is_healthy: Boolean indicating if connection is healthy
+        """
+        conn_status = await self.test_connection()
+        return {
+            "index_size": len(self.vectors),
+            "model_name": self.embedding_model_name,
+            "is_healthy": conn_status["is_healthy"],
+        }
+
     async def get_knowledge_base_status(
         self, project_id: UUID, db: Any
     ) -> Dict[str, Any]:
@@ -816,7 +832,12 @@ async def process_files_for_project(
     config = await get_storage_config()
     storage = get_file_storage(config)
 
-    results = {"processed": 0, "failed": 0, "errors": [], "details": []}
+    results: Dict[str, Any] = {
+        "processed": 0,  # int
+        "failed": 0,     # int
+        "errors": [],    # List[str]
+        "details": []    # List[Dict[str, Any]]
+    }
 
     # Get file records to process
     if db:
@@ -901,3 +922,32 @@ async def search_project_context(
     return await vector_db.search(
         query=query, top_k=top_k, filter_metadata=base_filters
     )
+
+async def get_vector_db(
+    model_name: str,
+    storage_path: str,
+    load_existing: bool = True
+) -> VectorDB:
+    """
+    Creates a new VectorDB instance given a model name and storage path.
+    Optionally loads existing data from disk if load_existing is True.
+    """
+    vdb = VectorDB(embedding_model=model_name, use_faiss=True, storage_path=storage_path)
+    if load_existing:
+        await vdb.load_from_disk()
+    return vdb
+
+async def initialize_project_vector_db(
+    project_id: UUID,
+    storage_root: str = VECTOR_DB_STORAGE_PATH,
+) -> VectorDB:
+    """
+    Initializes a VectorDB for a project, loading from disk if an index file is present.
+    This function resolves the 'initialize_project_vector_db' undefined error.
+    """
+    path = os.path.join(storage_root, str(project_id), "index.json")
+    # Use a default model name; this could be improved to dynamically look up project config
+    model_name = "all-MiniLM-L6-v2"
+    vdb = VectorDB(embedding_model=model_name, use_faiss=True, storage_path=path)
+    await vdb.load_from_disk()
+    return vdb
