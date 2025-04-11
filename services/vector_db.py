@@ -568,6 +568,59 @@ class VectorDB:
             "metadata": {k: v for k, v in self.metadata[doc_id].items() if k != "text"},
             "vector": self.vectors.get(doc_id),
         }
+        
+    async def get_knowledge_base_status(self, project_id: UUID, db: Any) -> Dict[str, Any]:
+        """Get comprehensive status of the knowledge base for a project.
+        
+        This method provides detailed metrics and health information about
+        the vector database for a specific project.
+        
+        Args:
+            project_id: UUID of the project
+            db: Database session for querying related records
+            
+        Returns:
+            Dict containing status information about:
+            - Vector DB health (connection, model, index)
+            - Storage metrics (size, location)
+            - Content metrics (document count, file types)
+        """
+        connection_status = await self.test_connection()
+        storage_exists = os.path.exists(self.storage_path) if self.storage_path else False
+        
+        # Count documents by type
+        doc_types = {}
+        for meta in self.metadata.values():
+            if meta.get("project_id") == str(project_id):
+                file_type = meta.get("file_type", "unknown")
+                doc_types[file_type] = doc_types.get(file_type, 0) + 1
+        
+        # Get storage size
+        storage_size_mb = 0
+        if storage_exists and self.storage_path:
+            try:
+                storage_size_mb = os.path.getsize(self.storage_path) / (1024 * 1024)
+            except Exception as e:
+                logger.error(f"Error getting storage size: {str(e)}")
+        
+        return {
+            "vector_db": {
+                "status": "active" if connection_status["is_healthy"] else "error",
+                "index_size": len(self.vectors),
+                "embedding_model": self.embedding_model_name,
+                **connection_status
+            },
+            "storage": {
+                "path": self.storage_path,
+                "exists": storage_exists,
+                "size_mb": storage_size_mb
+            },
+            "documents": {
+                "total_count": sum(1 for meta in self.metadata.values() 
+                                if meta.get("project_id") == str(project_id)),
+                "by_type": doc_types
+            }
+        }
 
     async def _save_to_disk(self) -> None:
         """Persist the current state to disk."""
@@ -586,59 +639,6 @@ class VectorDB:
     async def load_from_disk(self) -> bool:
         """Load vectors and metadata from disk."""
         if not self.storage_path or not os.path.exists(self.storage_path):
-            return False
-
-        try:
-            with open(self.storage_path, "r") as f:
-                data = json.load(f)
-
-            if data.get("model") != self.embedding_model_name:
-                logger.warning(
-                    f"Model mismatch in saved data: {data.get('model')} vs {self.embedding_model_name}"
-                )
-
-            self.vectors = data.get("vectors", {})
-            self.metadata = data.get("metadata", {})
-
-            if self.use_faiss and self.vectors:
-                self._rebuild_faiss_index()
-
-            return True
-        except Exception as e:
-            logger.error(f"Error loading vector DB from disk: {str(e)}")
-            return False
-
-
-# Public API functions
-async def initialize_project_vector_db(
-    project_id: UUID,
-    embedding_model: str = "all-MiniLM-L6-v2",
-    storage_root: str = VECTOR_DB_STORAGE_PATH
-) -> VectorDB:
-    """Centralized project vector DB initialization."""
-    storage_path = os.path.join(storage_root, str(project_id))
-    os.makedirs(storage_path, exist_ok=True)
-
-    return await get_vector_db(
-        model_name=embedding_model,
-        storage_path=storage_path,
-        load_existing=True
-    )
-
-
-async def get_vector_db(
-    model_name: str = "all-MiniLM-L6-v2",
-    use_faiss: bool = True,
-    storage_path: Optional[str] = None,
-    load_existing: bool = True,
-) -> VectorDB:
-    """Get or create a vector database instance."""
-    vector_db = VectorDB(
-        embedding_model=model_name,
-        use_faiss=use_faiss,
-        storage_path=storage_path
-    )
-
     if load_existing and storage_path and os.path.exists(storage_path):
         await vector_db.load_from_disk()
 
@@ -758,3 +758,134 @@ async def cleanup_project_resources(
     except Exception as e:
         logger.error(f"Failed to cleanup project vectors: {str(e)}")
         return False
+
+
+async def process_files_for_project(
+    project_id: UUID,
+    file_ids: Optional[List[UUID]] = None,
+    db: Optional[Any] = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
+) -> Dict[str, Any]:
+    """Batch process project files with progress tracking.
+    
+    Processes files associated with a project for search indexing.
+    Handles the complete workflow from database fetching to vector storage.
+    
+    Args:
+        project_id: UUID of the project
+        file_ids: Optional list of specific file IDs to process, processes all if None
+        db: SQLAlchemy AsyncSession for database access
+        chunk_size: Size of text chunks for processing
+        chunk_overlap: Overlap between chunks
+        
+    Returns:
+        Dictionary with processing results including:
+        - processed: Count of successfully processed files
+        - failed: Count of failed files
+        - errors: List of specific error messages
+        - details: List of detailed results per file
+    """
+    from sqlalchemy import select
+    
+    # Initialize vector DB for project
+    vector_db = await initialize_project_vector_db(project_id)
+    
+    # Initialize file storage
+    from services.file_storage import get_file_storage, get_storage_config
+    config = await get_storage_config()
+    storage = get_file_storage(config)
+    
+    results = {
+        "processed": 0,
+        "failed": 0,
+        "errors": [],
+        "details": []
+    }
+    
+    # Get file records to process
+    if db:
+        query = select(ProjectFile).where(ProjectFile.project_id == project_id)
+        if file_ids:
+            query = query.where(ProjectFile.id.in_(file_ids))
+        
+        file_records = await db.execute(query)
+        file_records = file_records.scalars().all()
+    else:
+        # If no DB session, we should at least have file IDs
+        if not file_ids:
+            return {
+                "processed": 0, 
+                "failed": 0,
+                "errors": ["Database session or file IDs required"],
+                "details": []
+            }
+        file_records = []
+    
+    # Process each file
+    for file_record in file_records:
+        try:
+            # Get file content from storage
+            content = await storage.get_file(file_record.file_path)
+            
+            # Process the file
+            result = await process_file_for_search(
+                project_file=file_record,
+                vector_db=vector_db,
+                file_content=content,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            
+            # Track results
+            results["details"].append(result)
+            if result["success"]:
+                results["processed"] += 1
+            else:
+                results["failed"] += 1
+                if "error" in result:
+                    results["errors"].append(f"File {file_record.id}: {result['error']}")
+                    
+        except Exception as e:
+            results["failed"] += 1
+            results["errors"].append(f"File {file_record.id}: {str(e)}")
+            logger.error(f"Error processing file {file_record.id}: {str(e)}")
+    
+    return results
+
+
+async def search_project_context(
+    project_id: UUID,
+    query: str,
+    top_k: int = 5,
+    filters: Optional[Dict] = None
+) -> List[Dict[str, Any]]:
+    """Project-scoped search with automatic vector DB setup.
+    
+    Performs search within a specific project context with automatic vector DB 
+    initialization. Applies project filtering by default along with any 
+    additional filters specified.
+    
+    Args:
+        project_id: UUID of the project to search within
+        query: Search query text
+        top_k: Maximum number of results to return
+        filters: Optional additional metadata filters to apply
+        
+    Returns:
+        List of search results with metadata and relevance scores
+    """
+    vector_db = await initialize_project_vector_db(project_id)
+    
+    # Always filter by project_id
+    base_filters = {"project_id": str(project_id)}
+    
+    # Add any additional filters
+    if filters:
+        base_filters.update(filters)
+    
+    return await vector_db.search(
+        query=query,
+        top_k=top_k,
+        filter_metadata=base_filters
+    )
