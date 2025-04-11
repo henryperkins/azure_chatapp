@@ -252,7 +252,7 @@ async def create_project_knowledge_base(
             file_stats = await knowledgebase_service.get_project_files_stats(
                 project_id, db
             )
-            result_data["stats"] = file_stats
+            result_data["stats"] = file_stats  # type: ignore
 
             # Process files in background
             BackgroundTasks().add_task(

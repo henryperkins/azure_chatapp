@@ -118,7 +118,25 @@
         // New: Ensure container visibility
         const container = document.getElementById("projectListView");
         if (container) container.classList.remove("hidden");
-
+        
+        // Check if this is a direct call (like from auth.js after login)
+        // where we need to load data through projectManager instead
+        if (eventOrProjects && (eventOrProjects.forceRefresh || eventOrProjects.directCall)) {
+          console.debug("[ProjectListComponent] Detected direct call, using projectManager.loadProjects()");
+          if (window.projectManager?.loadProjects) {
+            this._showLoadingState();
+            window.projectManager.loadProjects()
+              .catch(err => {
+                console.error('Project loading failed:', err);
+                this._renderErrorState('Failed to load projects');
+              })
+              .finally(() => {
+                this._hideLoadingState();
+              });
+            return;
+          }
+        }
+        
         const projects = this._extractProjects(eventOrProjects);
         this.state.projects = projects;
 
@@ -1124,9 +1142,10 @@
      */
     _showLoadingState() {
       if (!this.element) return;
-      this.element.classList.add('opacity-50');
-      this.element.style.pointerEvents = 'none';
-
+      // Removing pointer locking to prevent freezes
+      // Optionally keep opacity styling, but restore pointer events
+      this.element.classList.remove('opacity-50');
+      this.element.style.pointerEvents = 'auto';
       // Add loading spinner if not already present
       if (!this.element.querySelector('.loading-spinner')) {
         const spinner = document.createElement('div');

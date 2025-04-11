@@ -619,16 +619,6 @@ async def get_token_expiry_settings() -> dict[str, int]:
         "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
     }
 
-@router.get("/settings/token-expiry", response_model=dict)
-async def get_token_expiry_settings_alias() -> dict[str, int]:
-    """
-    Alias route for /settings/token-expiry
-    that does not require /api/auth prefix.
-    """
-    return {
-        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
-        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
-    }
 
 
 @router.get("/test-cookie")
