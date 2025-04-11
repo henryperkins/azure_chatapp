@@ -713,6 +713,57 @@ async def get_knowledge_base_health(
         "created_at": kb.created_at.isoformat() if kb.created_at else None,
     }
 
+@handle_service_errors("Error getting project files stats")
+async def get_project_files_stats(
+    project_id: UUID,
+    db: AsyncSession
+) -> Dict[str, Any]:
+    """Get statistics about files in a project including processing status.
+    
+    Returns:
+        Dictionary containing:
+        - total_files: Total number of files in project
+        - processed_files: Count of files successfully processed for search
+        - failed_files: Count of files that failed processing
+        - pending_files: Count of files not yet processed
+        - total_tokens: Sum of tokens from all processed files
+    """
+    # Get total file count
+    total_files = await db.scalar(
+        select(func.count(ProjectFile.id))
+        .where(ProjectFile.project_id == project_id)
+    )
+
+    # Get processed files count and total tokens
+    processed_result = await db.execute(
+        select(
+            func.count(ProjectFile.id),
+            func.sum(ProjectFile.config["token_count"].as_integer())
+        )
+        .where(
+            ProjectFile.project_id == project_id,
+            ProjectFile.config["search_processing"]["status"].as_string() == "success"
+        )
+    )
+    processed_files, total_tokens = processed_result.first() or (0, 0)
+
+    # Get failed files count
+    failed_files = await db.scalar(
+        select(func.count(ProjectFile.id))
+        .where(
+            ProjectFile.project_id == project_id,
+            ProjectFile.config["search_processing"]["status"].as_string() == "error"
+        )
+    )
+
+    return {
+        "total_files": total_files or 0,
+        "processed_files": processed_files or 0,
+        "failed_files": failed_files or 0,
+        "pending_files": (total_files or 0) - (processed_files or 0) - (failed_files or 0),
+        "total_tokens": total_tokens or 0,
+    }
+
 @handle_service_errors("Error listing knowledge bases")
 async def list_knowledge_bases(
     db: AsyncSession,
