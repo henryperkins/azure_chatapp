@@ -41,9 +41,21 @@
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
     try {
-      // Use auth.js to check authentication
-      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      // Use auth.js to check authentication with retry
+      let isAuthenticated = false;
+      try {
+        isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        // If cookie-based auth fails, try one more time with forceVerify
+        if (!isAuthenticated) {
+          console.debug('[ProjectManager] First auth check failed, retrying with forceVerify');
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+        }
+      } catch (authError) {
+        console.warn('[ProjectManager] Auth check error:', authError);
+      }
+      
       if (!isAuthenticated) {
+        console.warn('[ProjectManager] Not authenticated, returning empty projects list');
         // Not authenticated, dispatch an empty list
         emitEvent("projectsLoaded", {
           data: {

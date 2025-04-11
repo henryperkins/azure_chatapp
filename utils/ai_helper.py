@@ -54,15 +54,31 @@ def get_model_config(
     Returns:
         A dictionary containing the model's configuration, or None if not found.
     """
-    # Access model configurations directly from the settings object
-    if model_name in config.AZURE_OPENAI_MODELS:
-        logger.debug(f"Found Azure OpenAI model config for: {model_name}")
-        return config.AZURE_OPENAI_MODELS[model_name]
-    if model_name in config.CLAUDE_MODELS:
-        logger.debug(f"Found Claude model config for: {model_name}")
-        return config.CLAUDE_MODELS[model_name]
+    # Normalize model name to handle case sensitivity and extra whitespace
+    normalized_name = model_name.strip()
+    
+    # Check for exact match first
+    if normalized_name in config.AZURE_OPENAI_MODELS:
+        logger.debug(f"Found Azure OpenAI model config for: {normalized_name}")
+        return config.AZURE_OPENAI_MODELS[normalized_name]
+    
+    # Check with case-insensitive matching if no exact match found
+    for azure_model_name, model_config in config.AZURE_OPENAI_MODELS.items():
+        if azure_model_name.lower() == normalized_name.lower():
+            logger.debug(f"Found Azure OpenAI model config (case-insensitive) for: {normalized_name} -> {azure_model_name}")
+            return model_config
+    
+    # Check for Claude models using the same approach
+    if normalized_name in config.CLAUDE_MODELS:
+        logger.debug(f"Found Claude model config for: {normalized_name}")
+        return config.CLAUDE_MODELS[normalized_name]
+    
+    for claude_model_name, model_config in config.CLAUDE_MODELS.items():
+        if claude_model_name.lower() == normalized_name.lower():
+            logger.debug(f"Found Claude model config (case-insensitive) for: {normalized_name} -> {claude_model_name}")
+            return model_config
 
-    logger.warning(f"No configuration found for model: {model_name}")
+    logger.warning(f"No configuration found for model: {normalized_name}")
     return None
 
 
