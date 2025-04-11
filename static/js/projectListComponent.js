@@ -115,66 +115,92 @@
      */
     renderProjects(eventOrProjects) {
       try {
+        // New: Ensure container visibility
+        const container = document.getElementById("projectListView");
+        if (container) container.classList.remove("hidden");
+
+        const projects = this._extractProjects(eventOrProjects);
+        this.state.projects = projects;
+
+        // New: Cancel if element missing
         if (!this.element) {
           console.error('ProjectListComponent: Missing container element');
           return;
         }
 
-        // Extract projects from various input formats
-        const projects = this._extractProjects(eventOrProjects);
-        this.state.projects = projects;
+        // New: Reset scroll position
+        if (projects.length > 0) {
+          requestAnimationFrame(() => {
+            if (this.element) this.element.scrollTop = 0;
+          });
+        }
 
-        // Get current filter from state
+        // Enhanced filter handling
         const currentFilter = this.state.filter || 'all';
+        const filteredProjects = projects.filter(p => 
+          currentFilter === 'all' ? true :
+          currentFilter === 'pinned' ? p.pinned :
+          currentFilter === 'archived' ? p.archived : true
+        );
 
-        // Clear existing content
-        this.element.innerHTML = "";
+        // New: Debounced render
+        clearTimeout(this._renderDebounce);
+        this._renderDebounce = setTimeout(() => {
+          this._performDOMUpdate(filteredProjects, currentFilter);
+        }, 50); // Short debounce for rapid auth state changes
 
-        // Handle error case
-        if (projects.error) {
-          this._renderErrorState();
-          return;
-        }
-
-        // Filter projects based on current filter
-        let filteredProjects = projects;
-        if (currentFilter === 'pinned') {
-          filteredProjects = projects.filter(p => p.pinned);
-        } else if (currentFilter === 'archived') {
-          filteredProjects = projects.filter(p => p.archived);
-        }
-
-        // Handle empty state
-        if (filteredProjects.length === 0) {
-          const emptyMsg = document.createElement('div');
-          emptyMsg.className = 'text-gray-500 dark:text-gray-400 text-center py-8 col-span-3';
-          emptyMsg.textContent = currentFilter === 'all'
-            ? 'No projects available'
-            : `No ${currentFilter} projects found`;
-          this.element.appendChild(emptyMsg);
-          if (this.messageEl) this.messageEl.classList.add("hidden");
-          return;
-        }
-
-        // Hide "no projects" message if we have projects
-        if (this.messageEl) this.messageEl.classList.add("hidden");
-
-        // Render each filtered project
-        filteredProjects.forEach(project => {
-          try {
-            const card = this._createProjectCard(project);
-            if (card) {
-              this.element.appendChild(card);
-            }
-          } catch (err) {
-            console.error('Error rendering project card:', err, project);
-          }
-        });
       } catch (err) {
         console.error('Error in renderProjects:', err);
         this._renderErrorState("Error displaying projects");
       }
     }
+
+    // New helper method
+    _performDOMUpdate(filteredProjects, currentFilter) {
+      // Safe element reference
+      const element = this.element;
+      if (!element) return;
+
+      // Cache DOM nodes
+      const noProjectsMsg = document.getElementById("noProjectsMessage");
+      
+      // Clear existing content
+      element.innerHTML = "";
+
+      // Handle empty state
+      if (filteredProjects.length === 0) {
+        const message = filteredProjects === this.state.projects ? 
+          currentFilter === 'all' ?
+            'No projects available' :
+            `No ${currentFilter} projects found` :
+          'Loading projects...';
+
+        if (noProjectsMsg) {
+          noProjectsMsg.textContent = message;
+          noProjectsMsg.classList.remove("hidden");
+        }
+        return;
+      }
+
+      // Create DOM fragments
+      const fragment = document.createDocumentFragment();
+      filteredProjects.forEach(project => {
+        const card = this._createProjectCard(project);
+        if (card) fragment.appendChild(card);
+      });
+
+      // Atomic DOM update
+      element.appendChild(fragment);
+      if (noProjectsMsg) noProjectsMsg.classList.add("hidden");
+      
+      // New: Force layout recalc if needed
+      if (filteredProjects.length > 4) {
+        element.offsetHeight; // Trigger reflow
+      }
+    }
+
+    // Add this to the class
+    _renderDebounce = null;
 
     /**
      * Apply a theme to all project cards

@@ -877,136 +877,33 @@ function setupUIListeners() {
       switchForm(false);
     });
   }
-  loginForm?.addEventListener("submit", async function (e) {
+  loginForm?.addEventListener("submit", async function(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const username = formData.get("username");
-    const password = formData.get("password");
-    if (!username || !password) {
-      notify("Please enter both username and password", "error");
-      return;
-    }
-    const submitBtn = this.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" viewBox="0 0 24 24">...</svg>`;
+    
+    // Add temporary body lock to prevent interaction
+    document.body.style.pointerEvents = 'none';
+
     try {
-      await loginUser(username, password);
-      authState.lastVerified = Date.now();
-      authDropdown?.classList.add("hidden");
-      authDropdown?.classList.remove("slide-in");
-      notify("Login successful", "success");
-      const projectManagerPanel = document.getElementById('projectManagerPanel');
-      if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
-      if (window.projectDashboard?.showProjectList) {
-        window.projectDashboard.showProjectList();
-      } else if (window.projectManager?.showProjectList) {
-        window.projectManager.showProjectList();
-      } else {
-        const projectListView = document.getElementById('projectListView');
-        const projectDetailsView = document.getElementById('projectDetailsView');
-        if (projectListView) projectListView.classList.remove('hidden');
-        if (projectDetailsView) projectDetailsView.classList.add('hidden');
-      }
-      window.history.pushState({}, '', '/?view=projectList');
-      if (window.sidebar?.updateAuthDependentUI) {
-        window.sidebar.updateAuthDependentUI(true, username);
-      }
-      // Ensure project list loads immediately after login
-      await new Promise(r => setTimeout(r, 500)); // Short delay to allow DOM updates
+      await loginUser(formData.get("username"), formData.get("password"));
       
-      // Define a more reliable project list loading function
-      const ensureProjectListLoaded = async () => {
-        try {
-          if (AUTH_DEBUG) console.debug('[Auth] Running post-login tasks with prioritized project list loading...');
-          
-          // First priority: Initialize dashboard if needed
-          if (typeof window.initProjectDashboard === 'function' && !window.projectDashboard) {
-            if (AUTH_DEBUG) console.debug('[Auth] Initializing project dashboard...');
-            try {
-              await window.initProjectDashboard();
-              if (AUTH_DEBUG) console.debug('[Auth] Dashboard initialized successfully');
-            } catch (err) {
-              console.error('[Auth] Dashboard initialization failed:', err);
-            }
-          }
-          
-          // Second priority: Show project list using the dashboard
-          if (window.projectDashboard?.showProjectList) {
-            if (AUTH_DEBUG) console.debug('[Auth] Showing project list via dashboard...');
-            window.projectDashboard.showProjectList();
-          }
-          
-          // Third priority: Load projects data
-          const projectLoadMethods = [
-            // Try these methods in order
-            () => window.projectDashboard?.loadProjects(),
-            () => window.loadProjectList?.(),
-            () => window.projectManager?.loadProjects()
-          ];
-          
-          // Find first available method
-          const loadMethod = projectLoadMethods.find(method => typeof method() === 'function');
-          if (loadMethod) {
-            if (AUTH_DEBUG) console.debug('[Auth] Loading projects data...');
-            await loadMethod();
-          }
-          
-          // Load sidebar projects if available
-          if (typeof window.loadSidebarProjects === 'function') {
-            if (AUTH_DEBUG) console.debug('[Auth] Loading sidebar projects...');
-            await window.loadSidebarProjects();
-          }
-          
-          // Additional tasks
-          const additionalTasks = [];
-          
-          if (typeof window.loadStarredConversations === 'function') {
-            additionalTasks.push(window.loadStarredConversations());
-          }
-          
-          const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
-          if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
-            additionalTasks.push(window.createNewChat());
-          }
-          
-          // Run additional tasks in parallel
-          if (additionalTasks.length > 0) {
-            const results = await Promise.allSettled(additionalTasks);
-            let successCount = 0, failureCount = 0;
-            results.forEach(r => {
-              if (r.status === 'rejected') {
-                failureCount++;
-                console.warn("[Auth] Additional task failed:", r.reason);
-              } else {
-                successCount++;
-              }
-            });
-            
-            if (AUTH_DEBUG) console.debug(`[Auth] Additional tasks completed: ${successCount} succeeded, ${failureCount} failed`);
-          }
-          
-          // Ensure project list view is visible
-          const projectListView = document.getElementById('projectListView');
-          if (projectListView) {
-            projectListView.classList.remove('hidden');
-            const projectDetailsView = document.getElementById('projectDetailsView');
-            if (projectDetailsView) projectDetailsView.classList.add('hidden');
-          }
-          
-          // Update URL to indicate project list view
-          if (!window.location.search.includes('project=')) {
-            window.history.pushState({}, '', '/?view=projectList');
-          }
-          
-          if (AUTH_DEBUG) console.debug('[Auth] Project list loading completed successfully');
-        } catch (error) {
-          console.error('[Auth] Error in post-login project loading:', error);
-        }
-      };
+      // New: Force project list refresh
+      if (window.projectListComponent?.renderProjects) {
+        window.projectListComponent.renderProjects({ 
+          forceRefresh: true,
+          timestamp: Date.now() 
+        });
+      }
       
-      // Execute project list loading
-      ensureProjectListLoaded();
+      // New: Ensure URL state update
+      window.history.replaceState({ loggedIn: true }, '', '/?view=projects');
+      
+      // Add visual confirmation
+      this.closest('#authDropdown')?.classList.remove('animate-slide-in');
+    } finally {
+      // Restore pointer events
+      document.body.style.pointerEvents = '';
+    }
     } catch (error) {
       console.error("[Auth] Login failed:", error);
       notify(error.message || "Login failed", "error");
