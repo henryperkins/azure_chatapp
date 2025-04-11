@@ -97,12 +97,8 @@ async def resolve_project_if_any(
 # --------------------------------------------------------------------------
 # Create Conversation
 # --------------------------------------------------------------------------
-@router.post("/conversations", response_model=dict, status_code=status.HTTP_201_CREATED)
-@router.post(
-    "/projects/{project_id}/conversations",
-    response_model=dict,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/conversations", response_model=dict)
+@router.post("/projects/{project_id}/conversations", response_model=dict)
 async def create_conversation(
     conversation_data: ConversationCreate,
     project_id: Optional[UUID] = None,
@@ -110,58 +106,23 @@ async def create_conversation(
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
-    """
-    Create a new conversation.
-    - If `project_id`, conversation is bound to that project.
-    - Otherwise, it's standalone.
-    """
-    logger.info(f"Attempting to create conversation. project_id={project_id}")
-    logger.info(f"Received ConversationCreate data: {conversation_data.dict()}")
-
-    project = await resolve_project_if_any(project_id, current_user, db)
-
-    # Use the provided model_id or the project's default model, or fallback
-    model_id = conversation_data.model_id
-    if not model_id and project:
-        model_id = project.default_model
-    if not model_id:
-        default_model_fallback = "claude-3-sonnet-20240229"
-        logger.info(
-            "No model_id provided/found; using default: %s", default_model_fallback
-        )
-        model_id = default_model_fallback
-    else:
-        logger.info(f"Using model_id: {model_id}")
-
+    """Create a new conversation."""
     try:
         conv = await conv_service.create_conversation(
             user_id=current_user.id,
             title=conversation_data.title.strip(),
-            model_id=model_id,
-            project_id=UUID(str(project.id)) if project else None,
+            model_id=conversation_data.model_id or "claude-3-sonnet-20240229",
+            project_id=project_id,
         )
-
-        if conv is None:
-            logger.error("Conversation service returned None unexpectedly.")
-            raise HTTPException(
-                status_code=500, detail="Failed to create conversation object."
-            )
 
         return await create_standard_response(
             serialize_conversation(conv), "Conversation created successfully"
         )
-
-    except HTTPException as http_exc:
-        logger.warning(
-            f"HTTPException during conversation creation: {http_exc.status_code} - {http_exc.detail}"
-        )
-        raise
     except Exception as e:
-        logger.exception("Unexpected error during conversation creation: %s", e)
-        # Here you can comply with lint recommendation using `from e`
+        logger.error(f"Conversation creation failed: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Internal server error: {str(e)}"
-        ) from e
+            status_code=500, detail=f"Failed to create conversation: {str(e)}"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -498,6 +459,7 @@ async def create_message(
     project_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
+    conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
     Add a new message to the specified conversation.
@@ -507,130 +469,42 @@ async def create_message(
         f"Creating message in conversation {conversation_id}, project {project_id}, user {current_user.id}"
     )
 
-    # Validate project if provided
-    if project_id:
-        project = await validate_project_access(project_id, current_user, db)
-        if not project:
-            logger.error(f"Project validation failed for {project_id}")
-            raise HTTPException(
-                status_code=404, detail="Project not found or not accessible"
-            )
+    try:
+        # Extract content from the message
+        role = (new_msg.get("role") or "user").lower().strip()
+        content = new_msg.get("content", "")
 
-    # Validate conversation
-    filters_to_use = (
-        [
-            cast(BinaryExpression[bool], Conversation.project_id == project_id),
-            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
-        ]
-        if project_id
-        else [
-            cast(BinaryExpression[bool], Conversation.is_deleted.is_(False)),
-            cast(BinaryExpression[bool], Conversation.user_id == current_user.id),
-        ]
-    )
+        # Handle content if it's a dictionary
+        if isinstance(content, dict):
+            import json
 
-    conversation = await validate_resource_access(
-        conversation_id,
-        Conversation,
-        current_user,
-        db,
-        "Conversation",
-        additional_filters=filters_to_use,
-        require_ownership=False,
-    )
+            content = json.dumps(content, ensure_ascii=False)
 
-    # Validate image data if present
-    if "image_data" in new_msg and new_msg["image_data"]:
-        await validate_image_data(new_msg["image_data"])
+        # Use the conversation service to create the message and generate AI response
+        # The service handles validation, processing, and AI response generation
+        response = await conv_service.create_message(
+            conversation_id=conversation_id,
+            user_id=current_user.id,
+            content=str(content).strip(),
+            role=role,
+            project_id=project_id,
+            # Pass optional parameters for AI response generation
+            image_data=new_msg.get("image_data"),
+            vision_detail=new_msg.get("vision_detail", "auto"),
+            enable_thinking=new_msg.get("enable_thinking", False),
+            thinking_budget=new_msg.get("thinking_budget"),
+            reasoning_effort=new_msg.get("reasoning_effort"),
+            temperature=new_msg.get("temperature"),
+            max_tokens=new_msg.get("max_tokens"),
+        )
 
-    # Create the message
-    role = (new_msg.get("role") or "user").lower().strip()
-    raw_content = new_msg.get("content")
-    
-    if isinstance(raw_content, dict):
-        # Convert dict to a string or extract a specific field
-        # For example, assume we convert the dict to a JSON string
-        import json
-        raw_content = json.dumps(raw_content, ensure_ascii=False)
-    
-    content = str(raw_content or "").strip()
-    message = await create_user_message(
-        conversation_id=UUID(str(conversation.id)),
-        content=content,
-        role=role,
-        db=db,
-    )
-    response_payload = serialize_message(message)
+        return await create_standard_response(response)
 
-    # Generate AI response if user message
-    if message.role == "user":
-        try:
-            msg_dicts = await get_conversation_messages(
-                UUID(str(conversation.id)), db, include_system_prompt=True
-            )
-
-            # Possibly augment with knowledge base
-            kb_context = []
-            if conversation.use_knowledge_base:
-                kb_context = await augment_with_knowledge(
-                    conversation_id=UUID(str(conversation.id)),
-                    user_message=content,
-                    db=db,
-                )
-
-            try:
-                assistant_msg = await generate_ai_response(
-                    conversation_id=UUID(str(conversation.id)),
-                    messages=kb_context + msg_dicts,
-                    model_id=conversation.model_id or "claude-3-sonnet-20240229",
-                    image_data=new_msg.get("image_data"),
-                    vision_detail=new_msg.get("vision_detail", "auto"),
-                    enable_thinking=new_msg.get("enable_thinking", False),
-                    thinking_budget=new_msg.get("thinking_budget"),
-                    db=db,
-                )
-            except HTTPException as e:
-                response_payload["assistant_error"] = e.detail
-                return await create_standard_response(
-                    response_payload, success=False, status_code=e.status_code
-                )
-
-            if assistant_msg:
-                metadata = (
-                    assistant_msg.get_metadata_dict()
-                    if hasattr(assistant_msg, "get_metadata_dict")
-                    else {}
-                )
-                response_payload["assistant_message"] = {
-                    "id": str(assistant_msg.id),
-                    "role": assistant_msg.role,
-                    "content": assistant_msg.content,
-                    "message": assistant_msg.content,
-                    "metadata": metadata,
-                }
-                # For older clients
-                response_payload["content"] = assistant_msg.content
-                response_payload["message"] = assistant_msg.content
-
-                if metadata:
-                    if "thinking" in metadata:
-                        response_payload["thinking"] = metadata["thinking"]
-                    if "redacted_thinking" in metadata:
-                        response_payload["redacted_thinking"] = metadata[
-                            "redacted_thinking"
-                        ]
-
-                # Update usage (roughly 4 chars/1 token)
-                token_estimate = len(assistant_msg.content) // 4
-                await update_project_token_usage(conversation, token_estimate, db)
-            else:
-                response_payload["assistant_error"] = "Failed to generate response"
-
-        except Exception as e:
-            logger.error(f"Error generating AI response: {e}")
-            response_payload["assistant_error"] = str(e)
-
-    return await create_standard_response(response_payload)
-
-
-# WebSocket endpoint removed - using HTTP only
+    except HTTPException as e:
+        # Re-raise HTTP exceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Error creating message: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create message: {str(e)}"
+        )
