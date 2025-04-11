@@ -872,10 +872,11 @@ async def process_files_for_project(
     vector_db = await initialize_project_vector_db(project_id)
     
     # Initialize file storage
-    from services.file_storage import get_file_storage
+    from services.file_storage import get_file_storage, get_storage_config
 
     # Get file storage service
-    storage = await get_file_storage()
+    config = await get_storage_config()
+    storage = get_file_storage(config)
     
     results: Dict[str, Any] = {
         "processed": 0,
