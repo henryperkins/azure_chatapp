@@ -18,7 +18,7 @@ Key Improvements:
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator
+from typing import Dict, Any, Optional, Tuple, Union, BinaryIO, AsyncGenerator, List
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, BackgroundTasks
@@ -33,9 +33,9 @@ from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from models.user import User
 from models.conversation import Conversation
-from services.vector_db import VectorDB, process_file_for_search
+from services.vector_db import VectorDB, process_file_for_search, get_vector_db
 from utils.file_validation import FileValidator, sanitize_filename
-from utils.db_utils import get_by_id, save_model
+from utils.db_utils import get_all_by_condition, get_by_id, save_model
 from utils.serializers import serialize_vector_result
 
 logger = logging.getLogger(__name__)
@@ -205,7 +205,7 @@ async def create_knowledge_base(
     await save_model(db, kb)
 
     # Attach to project
-    project.knowledge_base_id = kb.id
+    project.knowledge_base_id = kb.id  # type: ignore
     await save_model(db, project)
 
     return kb
@@ -674,6 +674,165 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
     return {"projects_fixed": fixed_projects, "conversations_fixed": fixed_convs}
 
 
+@handle_service_errors("Error retrieving KB status")
+async def get_kb_status(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
+    """Get basic status of knowledge base for a project"""
+    project = await get_by_id(db, Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    kb_exists = project.knowledge_base_id is not None
+    kb_active = False
+    if kb_exists:
+        kb = await get_by_id(db, KnowledgeBase, project.knowledge_base_id)
+        kb_active = kb.is_active if kb else False
+
+    return {
+        "exists": kb_exists,
+        "isActive": kb_active,
+        "project_id": str(project_id),
+    }
+
+@handle_service_errors("Error retrieving KB health")
+async def get_knowledge_base_health(
+    knowledge_base_id: UUID,
+    db: AsyncSession
+) -> Dict[str, Any]:
+    """Get detailed health status of a knowledge base"""
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    vector_db = await VectorDBManager.get_for_project(kb.project_id, db=db)
+    stats = await vector_db.get_knowledge_base_status(UUID(str(kb.project_id)), db)
+
+    return {
+        "id": str(kb.id),
+        "name": kb.name,
+        "is_active": kb.is_active,
+        "embedding_model": kb.embedding_model,
+        "vector_stats": stats,
+        "created_at": kb.created_at.isoformat() if kb.created_at else None,
+    }
+
+@handle_service_errors("Error listing knowledge bases")
+async def list_knowledge_bases(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    active_only: bool = True
+) -> List[Dict[str, Any]]:
+    """List knowledge bases with optional filtering"""
+    query = select(KnowledgeBase)
+    if active_only:
+        query = query.where(KnowledgeBase.is_active.is_(True))
+    
+    if skip > 0:
+        query = query.offset(skip)
+    if limit > 0:
+        query = query.limit(limit)
+
+    result = await db.execute(query)
+    kbs = result.scalars().all()
+    
+    return [
+        {
+            "id": str(kb.id),
+            "name": kb.name,
+            "description": kb.description,
+            "is_active": kb.is_active,
+            "project_id": str(kb.project_id) if kb.project_id else None,
+            "created_at": kb.created_at.isoformat() if kb.created_at else None,
+        }
+        for kb in kbs
+    ]
+
+@handle_service_errors("Error getting knowledge base")
+async def get_knowledge_base(
+    knowledge_base_id: UUID,
+    db: AsyncSession
+) -> Dict[str, Any]:
+    """Get a knowledge base by ID"""
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    return {
+        "id": str(kb.id),
+        "name": kb.name,
+        "description": kb.description,
+        "is_active": kb.is_active,
+        "project_id": str(kb.project_id) if kb.project_id else None,
+        "embedding_model": kb.embedding_model,
+        "created_at": kb.created_at.isoformat() if kb.created_at else None,
+    }
+
+@handle_service_errors("Error updating knowledge base")
+async def update_knowledge_base(
+    knowledge_base_id: UUID,
+    update_data: Dict[str, Any],
+    db: AsyncSession
+) -> Dict[str, Any]:
+    """Update a knowledge base"""
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    for field, value in update_data.items():
+        if hasattr(kb, field):
+            setattr(kb, field, value)
+
+    await save_model(db, kb)
+    return await get_knowledge_base(knowledge_base_id, db)
+
+@handle_service_errors("Error deleting knowledge base")
+async def delete_knowledge_base(
+    knowledge_base_id: UUID,
+    db: AsyncSession
+) -> bool:
+    """Delete a knowledge base"""
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    # Remove from associated project
+    if kb.project_id:
+        project = await get_by_id(db, Project, kb.project_id)
+        if project and project.knowledge_base_id == kb.id:
+            project.knowledge_base_id = None
+            await save_model(db, project)
+
+    await db.delete(kb)
+    return True
+
+@handle_service_errors("Error toggling project KB")
+async def toggle_project_kb(
+    project_id: UUID,
+    enable: bool,
+    user_id: Optional[int] = None,
+    db: AsyncSession = None
+) -> Dict[str, Any]:
+    """Enable/disable knowledge base for a project"""
+    project = await _validate_user_and_project(project_id, user_id, db)
+    if not project.knowledge_base_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Project does not have a knowledge base"
+        )
+
+    kb = await get_by_id(db, KnowledgeBase, project.knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    kb.is_active = enable
+    await save_model(db, kb)
+
+    return {
+        "project_id": str(project_id),
+        "knowledge_base_id": str(kb.id),
+        "is_active": enable,
+    }
+
 @handle_service_errors("Error retrieving file stats")
 async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
     """Get statistics about project files"""
@@ -711,4 +870,75 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
         "file_types": file_types,
         "token_usage": project.token_usage,
         "max_tokens": project.max_tokens,
+    }
+
+@handle_service_errors("Error retrieving project files")
+async def get_project_file_list(
+    project_id: UUID,
+    user_id: int,
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    file_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get a paginated list of files for a project with optional filtering.
+    
+    Args:
+        project_id: Project UUID
+        user_id: User ID for authorization
+        db: Database session
+        skip: Pagination offset
+        limit: Max number of files to return
+        file_type: Optional filter by file type
+        
+    Returns:
+        Dictionary containing files list and metadata
+    """
+    # Validate project access
+    project = await _validate_user_and_project(project_id, user_id, db)
+    
+    # Build query conditions
+    conditions = [ProjectFile.project_id == project_id]
+    if file_type:
+        conditions.append(ProjectFile.file_type == file_type.lower())
+    
+    # Get files from database
+    project_files = await get_all_by_condition(
+        db,
+        ProjectFile,
+        *conditions,
+        order_by=ProjectFile.created_at.desc(),
+        limit=limit,
+        offset=skip,
+    )
+    
+    # Format response
+    return {
+        "files": [
+            {
+                "id": str(file.id),
+                "filename": file.filename,
+                "file_type": file.file_type,
+                "file_size": file.file_size,
+                "created_at": file.created_at.isoformat() if file.created_at else None,
+                "processing_status": (
+                    file.config.get("search_processing", {}).get("status", "not_processed")
+                    if file.config else "not_processed"
+                ),
+                "chunk_count": (
+                    file.config.get("search_processing", {}).get("chunk_count", 0)
+                    if file.config else 0
+                ),
+                "last_processed": (
+                    file.config.get("search_processing", {}).get("processed_at")
+                    if file.config else None
+                ),
+            }
+            for file in project_files
+        ],
+        "count": len(project_files),
+        "skip": skip,
+        "limit": limit,
+        "file_type": file_type,
     }
