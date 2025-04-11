@@ -35,7 +35,7 @@ async function getAuthToken(options = {}) {
   throw new Error('Not authenticated');
 }
 
-// WebSocket token function removed - using HTTP only
+
 
 async function refreshTokens() {
   if (tokenRefreshInProgress) {
@@ -263,18 +263,71 @@ async function init() {
   if (window.API_CONFIG) window.API_CONFIG.authCheckInProgress = true;
   try {
     if (AUTH_DEBUG) console.debug("[Auth] Starting initialization");
+    
+    // First try to restore tokens from sessionStorage
+    let restoredFromStorage = false;
+    try {
+      const token = sessionStorage.getItem('_auth_token_backup');
+      const refresh = sessionStorage.getItem('_auth_refresh_backup');
+      const timestamp = sessionStorage.getItem('_auth_timestamp');
+      const username = sessionStorage.getItem('_auth_username');
+      
+      if (token && timestamp) {
+        window.__directAccessToken = token;
+        window.__directRefreshToken = refresh || null;
+        window.__recentLoginTimestamp = parseInt(timestamp, 10) || Date.now();
+        window.__lastUsername = username || null;
+        
+        // Ensure tokens are immediately available as cookies
+        document.cookie = `access_token=${token}; path=/; max-age=${60 * 30}; SameSite=Lax`;
+        if (refresh) {
+          document.cookie = `refresh_token=${refresh}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+        }
+        
+        // Mark as authenticated immediately based on storage
+        authState.isAuthenticated = true;
+        authState.username = username;
+        authState.lastVerified = Date.now();
+        
+        if (AUTH_DEBUG) console.debug('[Auth] Successfully restored auth state from sessionStorage');
+        restoredFromStorage = true;
+        
+        // Broadcast authentication state
+        broadcastAuth(true, username);
+      }
+    } catch (e) {
+      console.warn('[Auth] Failed to restore auth from sessionStorage:', e);
+    }
+    
     setupUIListeners();
     setupTokenSync();
-    await new Promise(r => setTimeout(r, 600));
-    const isAuthenticated = await verifyAuthState(true);
-    if (!isAuthenticated) broadcastAuth(false);
+    
+    // Setup auth monitoring regardless of current state
     setupAuthStateMonitoring();
+    
+    // Only do a full verification if we haven't restored from storage
+    if (!restoredFromStorage) {
+      await new Promise(r => setTimeout(r, 600));
+      
+      try {
+        // Use non-forcing verification to avoid unnecessary server calls
+        const isAuthenticated = await verifyAuthState(false);
+        if (!isAuthenticated) broadcastAuth(false);
+      } catch (verifyError) {
+        console.warn('[Auth] Initial verification error (non-critical):', verifyError);
+        // Don't necessarily broadcast false here, let the monitoring handle it
+      }
+    }
+    
     window.auth.isInitialized = true;
     console.log("[Auth] Module initialized successfully");
     return true;
   } catch (error) {
     console.error("[Auth] Initialization failed:", error);
-    broadcastAuth(false);
+    // Only broadcast false if we're not already authenticated from storage
+    if (!authState.isAuthenticated) {
+      broadcastAuth(false);
+    }
     return false;
   } finally {
     if (window.API_CONFIG) window.API_CONFIG.authCheckInProgress = false;
@@ -291,6 +344,39 @@ async function verifyAuthState(bypassCache = false) {
     if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) {
       sessionExpiredFlag = false;
     }
+    
+    // Check for direct token from previous login that can be reused
+    if (window.__directAccessToken && window.__recentLoginTimestamp) {
+      const tokenAge = Date.now() - window.__recentLoginTimestamp;
+      // If we have a direct token and it's recent (less than 20 minutes old)
+      if (tokenAge < 1000 * 60 * 20) {
+        if (AUTH_DEBUG) console.debug('[Auth] Using direct token from memory that is still valid');
+        
+        // Ensure the token is also set as a cookie
+        const existingCookie = getCookie('access_token');
+        if (!existingCookie) {
+          if (AUTH_DEBUG) console.debug('[Auth] Setting access_token cookie from memory');
+          
+          // Set max-age to 25 minutes (longer than the check interval)
+          const maxAge = 60 * 25; // 25 minutes in seconds
+          document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          
+          // If we also have a refresh token, set it as well
+          if (window.__directRefreshToken) {
+            document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+          }
+        }
+        
+        // Update auth state
+        authState.isAuthenticated = true;
+        if (window.__lastUsername) authState.username = window.__lastUsername;
+        authState.lastVerified = Date.now();
+        broadcastAuth(true, authState.username);
+        return true;
+      }
+    }
+    
+    // Use cache if available and not bypassing
     if (
       !bypassCache &&
       authState.lastVerified &&
@@ -299,82 +385,61 @@ async function verifyAuthState(bypassCache = false) {
       if (AUTH_DEBUG) console.debug('[Auth] Using cached verification result:', authState.isAuthenticated);
       return authState.isAuthenticated;
     }
-    let accessToken, refreshToken;
-    let retries = 15;
-    let initialAccessToken = null, initialRefreshToken = null;
-    while (retries-- > 0) {
-      accessToken = getCookie('access_token');
-      refreshToken = getCookie('refresh_token');
-      if (retries === 6) {
-        initialAccessToken = accessToken;
-        initialRefreshToken = refreshToken;
-        if (AUTH_DEBUG) {
-          console.debug(`[Auth] Initial cookie check: access=${initialAccessToken ? 'yes' : 'no'}, refresh=${initialRefreshToken ? 'yes' : 'no'}`);
-        }
-      }
-      if (accessToken && refreshToken) {
-        if (AUTH_DEBUG) console.debug(`[Auth] Both tokens found after ${7 - retries - 1} retries, proceeding`);
-        break;
-      }
-      if (AUTH_DEBUG) {
-        console.debug(`[Auth] Waiting for cookies, retries left: ${retries}. Found: access=${accessToken ? 'yes' : 'no'}, refresh=${refreshToken ? 'yes' : 'no'}`);
-      }
-      await new Promise(r => setTimeout(r, 300));
-      if (window.__recentLoginTimestamp && Date.now() - window.__recentLoginTimestamp < 30000) {
-        const currentToken = getCookie('access_token');
-        if (currentToken) {
-          if (AUTH_DEBUG) console.debug('[Auth] Using recent login bypass with valid token');
-          return true;
-        }
-        if (window.__directAccessToken) {
-          if (AUTH_DEBUG) console.debug('[Auth] Using direct token fallback - cookies missing but recent login');
-          document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=1800; SameSite=Lax`;
-          authState.isAuthenticated = true;
-          if (window.__lastUsername) authState.username = window.__lastUsername;
-          authState.lastVerified = Date.now();
-          broadcastAuth(true, authState.username);
-          return true;
-        }
+    
+    // Look for cookies - check both standard and fallback cookies
+    let accessToken = getCookie('access_token') || getCookie('access_token_fallback');
+    let refreshToken = getCookie('refresh_token') || getCookie('refresh_token_fallback');
+    
+    // If no cookies found, but we have the tokens in memory, restore them
+    if (!accessToken && window.__directAccessToken) {
+      if (AUTH_DEBUG) console.debug('[Auth] No access_token cookie found but using direct token from memory');
+      const maxAge = 60 * 25; // 25 minutes
+      document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; SameSite=Lax`;
+      
+      // Try to get the cookie again
+      accessToken = window.__directAccessToken;
+      
+      // If we also have a refresh token in memory, set that too
+      if (!refreshToken && window.__directRefreshToken) {
+        document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+        refreshToken = window.__directRefreshToken;
       }
     }
-    if (!accessToken && initialAccessToken && AUTH_DEBUG) {
-      console.warn(`[Auth] Access token became null after initially being present. Retries: ${7 - retries - 1}`);
+    
+    // No tokens available at all - not authenticated
+    if (!accessToken && !refreshToken) {
+      if (AUTH_DEBUG) console.debug('[Auth] No tokens found - user is not authenticated');
+      broadcastAuth(false);
+      return false;
     }
-    if (accessToken && (await isTokenExpired(accessToken)) && refreshToken) {
+    
+    // If access token is expired but we have a refresh token, try refreshing
+    if ((!accessToken || (await isTokenExpired(accessToken))) && refreshToken) {
       try {
-        if (AUTH_DEBUG) console.debug('[Auth] Access token expired, attempting refresh');
-        await refreshTokens();
-        retries = 3;
-        let newAccessToken;
-        while (retries-- > 0) {
-          await new Promise(r => setTimeout(r, 200));
-          newAccessToken = getCookie('access_token');
-          if (newAccessToken) break;
+        if (AUTH_DEBUG) console.debug('[Auth] Access token expired or missing, attempting refresh with refresh token');
+        const refreshResult = await refreshTokens();
+        
+        if (refreshResult.success) {
+          if (AUTH_DEBUG) console.debug('[Auth] Token refresh successful');
+          
+          // Store the new token in memory for future use
+          window.__directAccessToken = refreshResult.token;
+          window.__recentLoginTimestamp = Date.now();
+          
+          // Update auth state
+          authState.isAuthenticated = true;
+          authState.lastVerified = Date.now();
+          broadcastAuth(true);
+          return true;
+        } else {
+          throw new Error('Token refresh failed');
         }
-        if (!newAccessToken) throw new Error('No access token received after refresh');
       } catch (refreshError) {
         console.error('[Auth] Token refresh failed:', refreshError);
         clearTokenState();
         broadcastAuth(false);
-        const msg = refreshError.message || 'Session expired. Please login again.';
-        throw new Error(msg.includes('timeout') ? 'Authentication timed out. Please try again.' : 'Session expired. Please login again.');
+        return false;
       }
-    } else if (!accessToken) {
-      if (AUTH_DEBUG) console.debug('[Auth] No access token found after retries');
-      if (
-        window.__directAccessToken &&
-        window.__recentLoginTimestamp &&
-        Date.now() - window.__recentLoginTimestamp < 60000
-      ) {
-        if (AUTH_DEBUG) console.debug('[Auth] No cookie found but using direct token as last resort');
-        document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
-        authState.isAuthenticated = true;
-        authState.lastVerified = Date.now();
-        broadcastAuth(true);
-        return true;
-      }
-      broadcastAuth(false);
-      return false;
     }
     const MAX_VERIFY = AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS;
     let lastError = null;
@@ -433,32 +498,107 @@ async function verifyAuthState(bypassCache = false) {
 function setupTokenSync() { }
 
 function setupAuthStateMonitoring() {
+  // Don't force verification on initial page load - rely more on in-memory state
   setTimeout(() => {
-    verifyAuthState(true).then(isAuthenticated => {
+    verifyAuthState(false).then(isAuthenticated => {
       broadcastAuth(isAuthenticated);
     }).catch(error => {
       console.error('[Auth] Initial verification error:', error);
-      broadcastAuth(false);
+      // Don't broadcast false if we've already set a memory token
+      if (!window.__directAccessToken) {
+        broadcastAuth(false);
+      }
     });
   }, 300);
-  const VERIFICATION_INTERVAL = AUTH_CONSTANTS.VERIFICATION_INTERVAL;
+  
+  // Use a longer interval for periodic checks
+  const VERIFICATION_INTERVAL = AUTH_CONSTANTS.VERIFICATION_INTERVAL * 2; // Double the normal interval
   const AUTH_CHECK = setInterval(() => {
     if (!sessionExpiredFlag) {
-      verifyAuthState(true).catch(error => {
+      // Use non-forced verification to avoid excessive server calls
+      verifyAuthState(false).catch(error => {
         console.warn('[Auth] Periodic verification error:', error);
+        // Only clear auth if it's a clear 401 unauthorized response
+        if (error.status === 401) {
+          clearTokenState();
+        }
       });
     }
   }, VERIFICATION_INTERVAL);
+  
+  // Be very selective about focus verification - don't trigger it unnecessarily
   window.addEventListener('focus', () => {
-    if (!sessionExpiredFlag && (!authState.lastVerified || Date.now() - authState.lastVerified > 60000)) {
+    // Only verify on focus if it's been a very long time since last verification
+    if (!sessionExpiredFlag && 
+        !window.__verifyingOnFocus && 
+        (!authState.lastVerified || Date.now() - authState.lastVerified > 300000)) { // 5 minutes
+      window.__verifyingOnFocus = true;
       setTimeout(() => {
-        verifyAuthState(true).catch(error => {
+        verifyAuthState(false).catch(error => {
           console.warn('[Auth] Focus verification error:', error);
+        }).finally(() => {
+          window.__verifyingOnFocus = false;
         });
-      }, 200);
+      }, 1000); // Longer delay to avoid race conditions
     }
   });
-  window.addEventListener('beforeunload', () => clearInterval(AUTH_CHECK));
+  
+  // Add a special handler for page refresh to ensure tokens are preserved
+  // Store tokens in sessionStorage as an additional backup
+  const storeTokenBackup = () => {
+    if (window.__directAccessToken) {
+      try {
+        // We're storing tokens in sessionStorage as a backup - they won't persist across browser restarts
+        // but will persist across page refreshes
+        sessionStorage.setItem('_auth_token_backup', window.__directAccessToken);
+        sessionStorage.setItem('_auth_refresh_backup', window.__directRefreshToken || '');
+        sessionStorage.setItem('_auth_timestamp', window.__recentLoginTimestamp?.toString() || '');
+        sessionStorage.setItem('_auth_username', window.__lastUsername || '');
+      } catch (e) {
+        console.warn('[Auth] Failed to backup tokens to sessionStorage:', e);
+      }
+    }
+  };
+  
+  // Restore tokens from sessionStorage if they exist
+  const restoreTokenBackup = () => {
+    try {
+      const token = sessionStorage.getItem('_auth_token_backup');
+      const refresh = sessionStorage.getItem('_auth_refresh_backup');
+      const timestamp = sessionStorage.getItem('_auth_timestamp');
+      const username = sessionStorage.getItem('_auth_username');
+      
+      if (token && timestamp) {
+        window.__directAccessToken = token;
+        window.__directRefreshToken = refresh || null;
+        window.__recentLoginTimestamp = parseInt(timestamp, 10) || Date.now();
+        window.__lastUsername = username || null;
+        
+        if (AUTH_DEBUG) console.debug('[Auth] Restored tokens from sessionStorage backup');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[Auth] Failed to restore tokens from sessionStorage:', e);
+    }
+    return false;
+  };
+  
+  // Try to restore tokens from backup if they exist
+  if (!window.__directAccessToken) {
+    const restored = restoreTokenBackup();
+    if (restored && window.__directAccessToken) {
+      if (AUTH_DEBUG) console.debug('[Auth] Using restored tokens from sessionStorage');
+    }
+  }
+  
+  // Keep the tokens backed up
+  window.setInterval(storeTokenBackup, 30000);
+  
+  // Backup tokens before unload
+  window.addEventListener('beforeunload', () => {
+    storeTokenBackup();
+    clearInterval(AUTH_CHECK);
+  });
 }
 
 function broadcastAuth(authenticated, username = null) {
@@ -522,92 +662,111 @@ async function loginUser(username, password) {
     if (AUTH_DEBUG) console.debug('[Auth] Login response received', response);
     if (!response.access_token) throw new Error('No access token received');
     if (response.token_version) authState.tokenVersion = response.token_version;
+    
+    // Store tokens in memory for fallback scenarios
     window.__recentLoginTimestamp = Date.now();
     window.__directAccessToken = response.access_token;
+    window.__directRefreshToken = response.refresh_token;
     window.__lastUsername = username;
-    await new Promise(r => setTimeout(r, 1500));
+    
+    // Wait for cookies to be set by server
+    await new Promise(r => setTimeout(r, 800));
+    
+    // Check for cookies with progressive retries
     let accessTokenCookie = null, refreshTokenCookie = null;
-    let cookieRetries = 10;
+    let cookieRetries = 12; // Increased from 10 to 12
+    let cookieCheckInterval = 150; // Start with shorter intervals
+    
     while (cookieRetries-- > 0) {
+      // Check for standard cookies
       accessTokenCookie = getCookie('access_token');
       refreshTokenCookie = getCookie('refresh_token');
+      
+      // Also check for fallback cookies
+      if (!accessTokenCookie) accessTokenCookie = getCookie('access_token_fallback');
+      if (!refreshTokenCookie) refreshTokenCookie = getCookie('refresh_token_fallback');
+      
+      // Check for cookie support flag
+      const cookieSupportCheck = getCookie('cookie_support_check');
+
       if (accessTokenCookie && refreshTokenCookie) {
-        if (AUTH_DEBUG) console.debug(`[Auth] Both cookies found after ${10 - cookieRetries} attempts`);
+        if (AUTH_DEBUG) console.debug(`[Auth] Both cookies found after ${12 - cookieRetries} attempts`);
         break;
       }
-      if (AUTH_DEBUG) console.debug(`[Auth] Waiting for cookies after login, retries left: ${cookieRetries}`);
-      await new Promise(r => setTimeout(r, 200 + (10 - cookieRetries) * 50));
+      
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth] Waiting for cookies after login, retries left: ${cookieRetries}, cookie support: ${cookieSupportCheck ? 'detected' : 'not detected'}`);
+      }
+      
+      // Progressive backoff with increasing intervals
+      await new Promise(r => setTimeout(r, cookieCheckInterval));
+      cookieCheckInterval = Math.min(cookieCheckInterval * 1.5, 500); // Increase interval with cap at 500ms
     }
+    
     if (AUTH_DEBUG) {
       console.debug('[Auth] Post-login cookie check:', {
         accessToken: !!accessTokenCookie,
         refreshToken: !!refreshTokenCookie,
-        retriesLeft: cookieRetries
+        retriesLeft: cookieRetries,
+        directTokenAvailable: !!window.__directAccessToken
       });
     }
+    
+    // If cookies failed to set, use server-side cookie setting API as primary fallback
     if (!accessTokenCookie && response.access_token) {
-      console.warn('[Auth] Cookies not set after login, using direct token as fallback');
-      window.__directAccessToken = response.access_token;
-      window.__recentLoginTimestamp = Date.now();
-      if (AUTH_DEBUG) console.debug('[Auth] Attempting to set cookies manually on client side as fallback');
+      console.warn('[Auth] Cookies not set after login, trying server-side cookie API fallback');
+      
       try {
-        await apiRequest('/api/auth/set-cookies', 'POST', {
+        const cookieResponse = await apiRequest('/api/auth/set-cookies', 'POST', {
           access_token: response.access_token,
           refresh_token: response.refresh_token
         });
-      } catch (cookieError) {
-        console.warn('[Auth] Secondary cookie-setting API call failed:', cookieError);
-      }
-      const hostname = window.location.hostname;
-      document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
-      document.cookie = `access_token=${response.access_token}; path=/; domain=${hostname}; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
-      if (response.refresh_token) {
-        document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
-        document.cookie = `refresh_token=${response.refresh_token}; path=/; domain=${hostname}; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
-      }
-      await new Promise(r => setTimeout(r, 300));
-      const manualCookieCheck = getCookie('access_token');
-      if (AUTH_DEBUG) console.debug(`[Auth] Manual cookie setting ${manualCookieCheck ? 'succeeded' : 'failed'}`);
-      if (!manualCookieCheck && !window.__cookieRestoreInterval) {
-        let restoreAttempts = 0;
-        window.__cookieRestoreInterval = setInterval(() => {
-          if (getCookie('access_token')) {
-            clearInterval(window.__cookieRestoreInterval);
-            window.__cookieRestoreInterval = null;
-            if (AUTH_DEBUG) console.debug('[Auth] Cookie successfully restored via interval check');
-            return;
+        
+        if (AUTH_DEBUG) console.debug('[Auth] Manual cookie setting API response:', cookieResponse);
+        
+        // Check if cookies were set after the API call
+        await new Promise(r => setTimeout(r, 300));
+        const apiSetCookie = getCookie('access_token') || getCookie('access_token_fallback');
+        
+        if (apiSetCookie) {
+          if (AUTH_DEBUG) console.debug('[Auth] Server-side cookie setting succeeded');
+        } else {
+          // Last resort: client-side cookie setting
+          if (AUTH_DEBUG) console.debug('[Auth] Server-side cookie setting failed, trying client-side as last resort');
+          
+          // Try both domain-specific and domain-less cookies for maximum compatibility
+          const hostname = window.location.hostname;
+          const isSecure = window.location.protocol === 'https:';
+          const sameSite = isSecure ? 'Strict' : 'Lax';
+          
+          document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=${sameSite}`;
+          if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+            document.cookie = `access_token=${response.access_token}; path=/; domain=${hostname}; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=${sameSite}`;
           }
-          if (window.__directAccessToken && restoreAttempts < 3) {
-            restoreAttempts++;
-            if (restoreAttempts === 1) {
-              apiRequest('/api/auth/set-cookies', 'POST', {
-                access_token: window.__directAccessToken,
-                refresh_token: response.refresh_token
-              }).then(() => {
-                if (AUTH_DEBUG) console.debug('[Auth] Server-side cookie restoration attempted');
-              }).catch(err => {
-                console.warn('[Auth] Server-side cookie restoration failed:', err);
-              });
-            } else {
-              document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; SameSite=Lax`;
-              if (AUTH_DEBUG) console.debug(`[Auth] Client-side cookie restoration attempt ${restoreAttempts}`);
+          
+          if (response.refresh_token) {
+            document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=${sameSite}`;
+            if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+              document.cookie = `refresh_token=${response.refresh_token}; path=/; domain=${hostname}; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=${sameSite}`;
             }
-          } else if (restoreAttempts >= 3) {
-            if (AUTH_DEBUG) console.debug('[Auth] Maximum cookie restoration attempts reached');
-            clearInterval(window.__cookieRestoreInterval);
-            window.__cookieRestoreInterval = null;
           }
-        }, 3000);
+        }
+      } catch (cookieError) {
+        console.warn('[Auth] Cookie-setting API call failed:', cookieError);
       }
     }
+    
+    // Ensure we're authenticated regardless of cookie status
     authState.isAuthenticated = true;
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
     broadcastAuth(true, response.username || username);
+    
     if (AUTH_DEBUG) {
-      console.debug('[Auth] Login successful, marking timestamp to prevent immediate refresh:', window.__recentLoginTimestamp);
+      console.debug('[Auth] Login successful, auth state updated. Cookie status:', !!getCookie('access_token'));
     }
+    
     return {
       ...response,
     };
@@ -753,47 +912,101 @@ function setupUIListeners() {
       if (window.sidebar?.updateAuthDependentUI) {
         window.sidebar.updateAuthDependentUI(true, username);
       }
-      setTimeout(() => {
-        if (AUTH_DEBUG) console.debug('[Auth] Running post-login tasks...');
-        const loadTasks = [];
-        if (typeof window.initProjectDashboard === 'function' && !window.projectDashboard) {
-          if (AUTH_DEBUG) console.debug('[Auth] Initializing project dashboard...');
-          loadTasks.push(window.initProjectDashboard());
-        }
-        if (typeof window.loadSidebarProjects === 'function') {
-          if (AUTH_DEBUG) console.debug('[Auth] Loading sidebar projects...');
-          loadTasks.push(window.loadSidebarProjects());
-        }
-        if (typeof window.loadProjectList === 'function') {
-          if (AUTH_DEBUG) console.debug('[Auth] Loading main project list...');
-          loadTasks.push(window.loadProjectList());
-        } else if (window.projectDashboard?.loadProjects) {
-          if (AUTH_DEBUG) console.debug('[Auth] Loading projects via dashboard...');
-          loadTasks.push(window.projectDashboard.loadProjects());
-        } else if (window.projectManager?.loadProjects) {
-          if (AUTH_DEBUG) console.debug('[Auth] Loading projects via project manager...');
-          loadTasks.push(window.projectManager.loadProjects());
-        }
-        if (typeof window.loadStarredConversations === 'function') {
-          loadTasks.push(window.loadStarredConversations());
-        }
-        const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
-        if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
-          loadTasks.push(window.createNewChat());
-        }
-        Promise.allSettled(loadTasks).then(results => {
-          let successCount = 0, failureCount = 0;
-          results.forEach(r => {
-            if (r.status === 'rejected') {
-              failureCount++;
-              console.warn("[Auth] Post-login task failed:", r.reason);
-            } else {
-              successCount++;
+      // Ensure project list loads immediately after login
+      await new Promise(r => setTimeout(r, 500)); // Short delay to allow DOM updates
+      
+      // Define a more reliable project list loading function
+      const ensureProjectListLoaded = async () => {
+        try {
+          if (AUTH_DEBUG) console.debug('[Auth] Running post-login tasks with prioritized project list loading...');
+          
+          // First priority: Initialize dashboard if needed
+          if (typeof window.initProjectDashboard === 'function' && !window.projectDashboard) {
+            if (AUTH_DEBUG) console.debug('[Auth] Initializing project dashboard...');
+            try {
+              await window.initProjectDashboard();
+              if (AUTH_DEBUG) console.debug('[Auth] Dashboard initialized successfully');
+            } catch (err) {
+              console.error('[Auth] Dashboard initialization failed:', err);
             }
-          });
-          if (AUTH_DEBUG) console.debug(`[Auth] Post-login tasks completed: ${successCount} succeeded, ${failureCount} failed`);
-        });
-      }, 1000);
+          }
+          
+          // Second priority: Show project list using the dashboard
+          if (window.projectDashboard?.showProjectList) {
+            if (AUTH_DEBUG) console.debug('[Auth] Showing project list via dashboard...');
+            window.projectDashboard.showProjectList();
+          }
+          
+          // Third priority: Load projects data
+          const projectLoadMethods = [
+            // Try these methods in order
+            () => window.projectDashboard?.loadProjects(),
+            () => window.loadProjectList?.(),
+            () => window.projectManager?.loadProjects()
+          ];
+          
+          // Find first available method
+          const loadMethod = projectLoadMethods.find(method => typeof method() === 'function');
+          if (loadMethod) {
+            if (AUTH_DEBUG) console.debug('[Auth] Loading projects data...');
+            await loadMethod();
+          }
+          
+          // Load sidebar projects if available
+          if (typeof window.loadSidebarProjects === 'function') {
+            if (AUTH_DEBUG) console.debug('[Auth] Loading sidebar projects...');
+            await window.loadSidebarProjects();
+          }
+          
+          // Additional tasks
+          const additionalTasks = [];
+          
+          if (typeof window.loadStarredConversations === 'function') {
+            additionalTasks.push(window.loadStarredConversations());
+          }
+          
+          const isChatPage = window.location.pathname === '/' || window.location.pathname.includes('chat');
+          if (isChatPage && typeof window.createNewChat === 'function' && !window.CHAT_CONFIG?.chatId) {
+            additionalTasks.push(window.createNewChat());
+          }
+          
+          // Run additional tasks in parallel
+          if (additionalTasks.length > 0) {
+            const results = await Promise.allSettled(additionalTasks);
+            let successCount = 0, failureCount = 0;
+            results.forEach(r => {
+              if (r.status === 'rejected') {
+                failureCount++;
+                console.warn("[Auth] Additional task failed:", r.reason);
+              } else {
+                successCount++;
+              }
+            });
+            
+            if (AUTH_DEBUG) console.debug(`[Auth] Additional tasks completed: ${successCount} succeeded, ${failureCount} failed`);
+          }
+          
+          // Ensure project list view is visible
+          const projectListView = document.getElementById('projectListView');
+          if (projectListView) {
+            projectListView.classList.remove('hidden');
+            const projectDetailsView = document.getElementById('projectDetailsView');
+            if (projectDetailsView) projectDetailsView.classList.add('hidden');
+          }
+          
+          // Update URL to indicate project list view
+          if (!window.location.search.includes('project=')) {
+            window.history.pushState({}, '', '/?view=projectList');
+          }
+          
+          if (AUTH_DEBUG) console.debug('[Auth] Project list loading completed successfully');
+        } catch (error) {
+          console.error('[Auth] Error in post-login project loading:', error);
+        }
+      };
+      
+      // Execute project list loading
+      ensureProjectListLoaded();
     } catch (error) {
       console.error("[Auth] Login failed:", error);
       notify(error.message || "Login failed", "error");

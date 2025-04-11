@@ -63,18 +63,26 @@ class CookieSettings:
     @property
     def secure(self) -> bool:
         # Use secure cookies only in production (HTTPS)
+        # For development, we might need non-secure cookies to work with HTTP
         return self.env == "production"
 
     def domain(self, hostname: str | None) -> str | None:
-        # For localhost/127.0.0.1, we don't set domain
-        if hostname in {"localhost", "127.0.0.1"}:
+        # More comprehensive check for local environments
+        if not hostname or hostname in {"localhost", "127.0.0.1"} or hostname.startswith("192.168.") or hostname.startswith("10."):
             return None
+        
+        # For custom domain environments like Azure, we may need to be more flexible
+        if '.' not in hostname:
+            return None
+            
         return self.cookie_domain
 
     def same_site(self, hostname: str | None, key: str) -> Literal['lax', 'strict', 'none'] | None:
-        # Default to 'lax'. If you need cross-site requests, adjust accordingly.
-        # For purely local development, 'lax' is typically fine.
-        # Some use-cases might prefer 'strict', but that can block certain flows.
+        # For access and refresh tokens, allow 'none' in development for more flexible testing
+        if self.env != "production" and key in ["access_token", "refresh_token"]:
+            return "none" if not self.secure else "lax"
+        
+        # Default to 'lax' for production which balances security and usability
         return "lax"  # Must be lowercase to match FastAPI's expected values
 
 
@@ -150,26 +158,48 @@ def set_secure_cookie(
     Single method to avoid duplication of cookie logic.
     """
     hostname = request.url.hostname or ""
-    domain = cookie_settings.domain(hostname)
+    domain = None
     secure = cookie_settings.secure
     samesite = cookie_settings.same_site(hostname, key)
 
+    # In development or testing environments, make cookies work without HTTPS
+    if settings.ENV != "production":
+        secure = False
+        
     # Debug logging
     if AUTH_DEBUG:
         logger.debug(
-            f"Set cookie [{key}] -> domain={domain}, secure={secure}, samesite={samesite}, max_age={max_age}"
+            f"Set cookie [{key}] -> domain={domain}, secure={secure}, samesite={samesite}, max_age={max_age}, hostname={hostname}"
         )
 
-    response.set_cookie(
-        key=key,
-        value=value,
-        max_age=max_age,
-        path="/",
-        domain=domain,
-        secure=secure,
-        httponly=True,
-        samesite=samesite,
-    )
+    # Set the cookie with carefully determined settings
+    try:
+        response.set_cookie(
+            key=key,
+            value=value,
+            max_age=max_age,
+            path="/",
+            domain=domain,
+            secure=secure,
+            httponly=True,
+            samesite=samesite,
+        )
+        
+        # For development environments, try setting a fallback cookie without domain
+        # This helps in cases where domain resolution is problematic
+        if settings.ENV != "production" and domain:
+            response.set_cookie(
+                key=f"{key}_fallback",
+                value=value,
+                max_age=max_age,
+                path="/",
+                domain=None,
+                secure=secure,
+                httponly=True,
+                samesite=samesite,
+            )
+    except Exception as e:
+        logger.error(f"Error setting cookie {key}: {str(e)}")
 
 
 # -----------------------------------------------------------------------------
@@ -581,10 +611,20 @@ async def get_auth_debug_info():
     }
 
 
-@router.get("/settings/token-expiry", response_model=dict)
 @router.get("/api/auth/settings/token-expiry", response_model=dict)
 async def get_token_expiry_settings() -> dict[str, int]:
     """Exposes token expiration settings to the frontend."""
+    return {
+        "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
+        "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
+    }
+
+@router.get("/settings/token-expiry", response_model=dict)
+async def get_token_expiry_settings_alias() -> dict[str, int]:
+    """
+    Alias route for /settings/token-expiry
+    that does not require /api/auth prefix.
+    """
     return {
         "access_token_expire_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
         "refresh_token_expire_days": REFRESH_TOKEN_EXPIRE_DAYS,
@@ -623,21 +663,40 @@ async def set_cookies_endpoint(
     Manually sets authentication tokens in secure cookies.
     Used by frontend when automatic cookie setting fails.
     """
-    set_secure_cookie(
-        response,
-        "access_token",
-        token_req.access_token,
-        max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
-        request=request
-    )
-    if token_req.refresh_token:
+    logger.info(f"Manual cookie set request from: {request.client.host if request.client else 'unknown'}, hostname: {request.url.hostname}")
+    
+    # Try both approaches - standard secure cookies and fallback non-secure cookies
+    try:
+        # Standard secure cookie setting
         set_secure_cookie(
             response,
-            "refresh_token",
-            token_req.refresh_token,
-            max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+            "access_token",
+            token_req.access_token,
+            max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
             request=request
         )
+        
+        if token_req.refresh_token:
+            set_secure_cookie(
+                response,
+                "refresh_token",
+                token_req.refresh_token,
+                max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+                request=request
+            )
+            
+        # Also set a third-party cookie flag to help client detect support
+        response.set_cookie(
+            key="cookie_support_check",
+            value="1",
+            max_age=300,
+            path="/",
+            httponly=False,
+        )
+    except Exception as e:
+        logger.error(f"Error in manual cookie setting: {str(e)}")
+        return {"status": "error", "message": str(e)}
+        
     return {"status": "cookies set successfully"}
 
 

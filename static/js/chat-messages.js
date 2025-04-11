@@ -9,7 +9,6 @@ window.MessageService = function (options = {}) {
   this.onSending = options.onSending || (() => { });
   this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error));
   this.chatId = null;
-  this.wsService = null;
 
   // Initialize with current model configuration if available
   this.modelConfig = window.MODEL_CONFIG || {
@@ -31,23 +30,6 @@ window.MessageService = function (options = {}) {
 window.MessageService.prototype.clear = function() {
   this.chatId = null;
   
-  // Gracefully handle WebSocket disconnection to prevent error cascade
-  try {
-    // Disconnect WebSocket if connected
-    if (this.wsService && typeof this.wsService.disconnect === 'function') {
-      console.log('MessageService: Safely disconnecting WebSocket');
-      // Store current state to avoid error on disconnect
-      const currentState = this.wsService.state;
-      
-      // Only disconnect if in connected state
-      if (this.wsService.isConnected()) {
-        this.wsService.disconnect();
-      }
-    }
-  } catch (error) {
-    console.error('Error disconnecting WebSocket:', error);
-    // Don't rethrow, just log - this prevents error cascade
-  }
   
   try {
     // Clear any UI state with empty array
@@ -79,13 +61,8 @@ window.MessageService.prototype.countClaudeTokens = async function(text) {
 /**
  * Initialize the service with a chat ID and optional WebSocket service
  */
-window.MessageService.prototype.initialize = function (chatId, wsService) {
+window.MessageService.prototype.initialize = function (chatId) {
   this.chatId = chatId;
-  this.wsService = wsService;
-  if (wsService) {
-    // Assign a default WebSocket 'onmessage' -> funnel to our handler
-    wsService.onMessage = this._handleWsMessage.bind(this);
-  }
 };
 
 /**
@@ -166,18 +143,7 @@ window.MessageService.prototype.sendMessage = async function (content) {
   }
 
   try {
-    // Try WebSocket first if available
-    if (this.wsService && this.wsService.isConnected()) {
-      try {
-        return await this.wsService.send(messagePayload);
-      } catch (wsError) {
-        console.warn("WebSocket send failed, falling back to HTTP:", wsError);
-        // Fall through to HTTP
-        return await this._sendMessageHttp(messagePayload);
-      }
-    } else {
-      return await this._sendMessageHttp(messagePayload);
-    }
+    return await this._sendMessageHttp(messagePayload);
   } catch (error) {
     // Only handle error if it hasn't been handled yet
     if (!error._handled) {
@@ -352,105 +318,6 @@ window.MessageService.prototype._handleAIError = function(error) {
   return error;
 };
 
-/**
- * Handle WebSocket messages
- */
-window.MessageService.prototype._handleWsMessage = function (event) {
-  try {
-    const data = JSON.parse(event.data);
-    console.log('[WS IN] Raw message:', event.data);
-    console.debug('[WS IN] Parsed:', data);
-
-    // Log ping/pong messages
-    if (data.type === 'ping' || data.type === 'pong') {
-      console.debug('[WS] Keepalive:', data.type);
-      return;
-    }
-
-    // Plain message broadcast from server
-    if (data.type === 'message') {
-      this.onMessageReceived({
-        role: 'assistant',
-        content: data.content || data.message || '',
-        thinking: data.thinking,
-        redacted_thinking: data.redacted_thinking,
-        metadata: data.metadata || {},
-        is_streaming: false
-      });
-    }
-    // Handle streaming thinking blocks
-    else if (data.type === 'content_block_delta') {
-      if (data.delta?.type === 'thinking_delta') {
-        this.onMessageReceived({
-          role: 'assistant',
-          content: '',
-          thinking: data.delta.thinking,
-          is_streaming: true
-        });
-      }
-      // Handle redacted thinking in streams
-      if (data.delta?.type === 'redacted_thinking') {
-        this.onMessageReceived({
-          role: 'assistant', 
-          content: '',
-          redacted_thinking: data.delta.content,
-          is_streaming: true
-        });
-      }
-    }
-    // Claude-specific response format
-    else if (data.type === 'claude_response') {
-      this.onMessageReceived({
-        role: 'assistant',
-        content: data.answer || data.content || '',
-        thinking: data.thinking,
-        redacted_thinking: data.redacted_thinking,
-        metadata: {
-          model: data.model || '',
-          tokens: data.token_count || 0,
-          thinking: data.thinking,
-          redacted_thinking: data.redacted_thinking
-        }
-      });
-    }
-    // Claude-specific response format
-    else if (data.type === 'claude_response') {
-      this.onMessageReceived({
-        role: 'assistant',
-        content: data.answer || data.content || '',
-        thinking: data.thinking,
-        redacted_thinking: data.redacted_thinking,
-        metadata: {
-          model: data.model || '',
-          tokens: data.token_count || 0,
-          thinking: data.thinking,
-          redacted_thinking: data.redacted_thinking
-        }
-      });
-    }
-    // Assistant message with a role
-    else if (data.role === 'assistant') {
-      this.onMessageReceived({
-        role: 'assistant',
-        content: data.content || data.message || '',
-        thinking: data.thinking,
-        redacted_thinking: data.redacted_thinking,
-        metadata: {
-          model: data.model_id,
-          tokens: data.token_count,
-          ...data.metadata
-        }
-      });
-    }
-    // WebSocket status updates
-    else if (data.type === 'status') {
-      console.log('WebSocket status update:', data.message);
-    }
-  } catch (error) {
-    window.ChatUtils?.handleError?.('Processing WebSocket message', error) ||
-      this.onError('Processing WebSocket message', error);
-  }
-};
 
 /**
  * Check if knowledge base is enabled for a project
