@@ -1,11 +1,59 @@
-/*
- * tailwind.css
- * Main CSS file with Tailwind CSS v4 configuration
- */
-
-/* Import Tailwind CSS - new v4 syntax */
+/* Main CSS file with Tailwind CSS v4 and daisyUI 5 */
 @import "tailwindcss";
-@import "daisyui";
+
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+  root: ":root";
+}
+
+/* Custom daisyUI theme */
+@plugin "daisyui/theme" {
+  name: "azure-chat";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  /* Primary colors */
+  --color-primary: oklch(62.3% 0.214 259.815);
+  --color-primary-content: oklch(98.5% 0.002 247.839);
+  --color-secondary: oklch(58.5% 0.233 277.117);
+  --color-secondary-content: oklch(98.5% 0.002 247.839);
+  --color-accent: oklch(79.2% 0.209 151.711);
+  --color-accent-content: oklch(21% 0.034 264.665);
+
+  /* Neutral colors */
+  --color-neutral: oklch(44.6% 0.03 256.802);
+  --color-neutral-content: oklch(98.5% 0.002 247.839);
+
+  /* Base colors */
+  --color-base-100: oklch(98.5% 0.002 247.839);
+  --color-base-200: oklch(96.7% 0.003 264.542);
+  --color-base-300: oklch(92.8% 0.006 264.531);
+  --color-base-content: oklch(21% 0.034 264.665);
+
+  /* State colors */
+  --color-info: oklch(70.7% 0.165 254.624);
+  --color-info-content: oklch(21% 0.034 264.665);
+  --color-success: oklch(72.3% 0.219 149.579);
+  --color-success-content: oklch(21% 0.034 264.665);
+  --color-warning: oklch(79.5% 0.184 86.047);
+  --color-warning-content: oklch(21% 0.034 264.665);
+  --color-error: oklch(63.7% 0.237 25.331);
+  --color-error-content: oklch(98.5% 0.002 247.839);
+
+  /* Border radius settings */
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+
+  /* Base size settings */
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+
+  /* Other settings */
+  --border: 1px;
+  --depth: 1;
+}
 
 /* Container query support */
 @container (min-width: 640px) {
@@ -19,11 +67,40 @@
   border-left: 2px solid var(--color-primary);
 }
 
-/* Media queries for mid-size screens */
-@media (min-width: 480px) and (max-width: 767px) {
-  .project-card {
-    padding: 1.5rem;
-  }
+/* Header and footer text sizing */
+header {
+  font-size: 0.875rem;
+  /* 14px */
+}
+
+header h1 {
+  font-size: 1.25rem;
+  /* 20px */
+}
+
+#userStatus {
+  font-size: 0.875rem;
+  /* 14px */
+}
+
+/* Project list transition effects */
+#projectListView {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Line clamping utilities */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Text wrap balance */
@@ -31,193 +108,36 @@
   text-wrap: balance;
 }
 
-/* Dark theme custom properties */
-.dark-theme {
-  --surface-color: var(--color-gray-900);
+/* Media queries for mid-size screens */
+@media (min-width: 480px) and (max-width: 767px) {
+  .project-card {
+    padding: 1.5rem;
+  }
 }
 
-.dark-theme .project-card {
-  background: var(--surface-color);
-}
-/* Theme configuration using CSS variables via @theme instead of JavaScript */
-@theme {
-  /* Colors */
-  /* Core colors from the original config */
-  --color-primary-50: oklch(97% 0.014 254.604);
-  --color-primary-100: oklch(93.2% 0.032 255.585);
-  --color-primary-200: oklch(88.2% 0.059 254.128);
-  --color-primary-300: oklch(80.9% 0.105 251.813);
-  --color-primary-400: oklch(70.7% 0.165 254.624);
-  --color-primary-500: oklch(62.3% 0.214 259.815);
-  --color-primary-600: oklch(54.6% 0.245 262.881);
-  --color-primary-700: oklch(48.8% 0.243 264.376);
-  --color-primary-800: oklch(42.4% 0.199 265.638);
-  --color-primary-900: oklch(37.9% 0.146 265.522);
-
-  --color-secondary: oklch(58.5% 0.233 277.117);
-  --color-secondary-light: oklch(70.7% 0.165 254.624);
-  --color-secondary-dark: oklch(37.9% 0.146 265.522);
-
-  --color-success-50: oklch(98.2% 0.018 155.826);
-  --color-success-100: oklch(96.2% 0.044 156.743);
-  --color-success-200: oklch(92.5% 0.084 155.995);
-  --color-success-300: oklch(87.1% 0.15 154.449);
-  --color-success-400: oklch(79.2% 0.209 151.711);
-  --color-success-500: oklch(72.3% 0.219 149.579);
-  --color-success-600: oklch(62.7% 0.194 149.214);
-  --color-success-700: oklch(52.7% 0.154 150.069);
-  --color-success-800: oklch(44.8% 0.119 151.328);
-  --color-success-900: oklch(39.3% 0.095 152.535);
-
-  --color-warning-50: oklch(98.7% 0.026 102.212);
-  --color-warning-100: oklch(97.3% 0.071 103.193);
-  --color-warning-200: oklch(94.5% 0.129 101.54);
-  --color-warning-300: oklch(90.5% 0.182 98.111);
-  --color-warning-400: oklch(87.6% 0.226 93.907);
-  --color-warning-500: oklch(79.5% 0.184 86.047);
-  --color-warning-600: oklch(68.1% 0.162 75.834);
-  --color-warning-700: oklch(55.4% 0.135 66.442);
-  --color-warning-800: oklch(47.6% 0.114 61.907);
-  --color-warning-900: oklch(42.1% 0.095 57.708);
-
-  --color-danger-50: oklch(97.1% 0.013 17.38);
-  --color-danger-100: oklch(93.6% 0.032 17.717);
-  --color-danger-200: oklch(88.5% 0.062 18.334);
-  --color-danger-300: oklch(80.8% 0.114 19.571);
-  --color-danger-400: oklch(70.4% 0.191 22.216);
-  --color-danger-500: oklch(63.7% 0.237 25.331);
-  --color-danger-600: oklch(57.7% 0.245 27.325);
-  --color-danger-700: oklch(50.5% 0.213 27.518);
-  --color-danger-800: oklch(44.4% 0.177 26.899);
-  --color-danger-900: oklch(39.6% 0.141 25.723);
-
-  --color-surface: #ffffff;
-  --color-surface-dark: #111827;
-  --color-surface-light: #ffffff;
-
-  /* Dark Mode Surface Colors */
-  --color-surface-dark-hover: #1f2937;
-  --color-surface-light-hover: #f9fafb;
-
-  /* Gray scale */
-  --color-gray-50: oklch(98.5% 0.002 247.839);
-  --color-gray-100: oklch(96.7% 0.003 264.542);
-  --color-gray-200: oklch(92.8% 0.006 264.531);
-  --color-gray-300: oklch(87.2% 0.01 258.338);
-  --color-gray-400: oklch(70.7% 0.022 261.325);
-  --color-gray-500: oklch(55.1% 0.027 264.364);
-  --color-gray-600: oklch(44.6% 0.03 256.802);
-  --color-gray-700: oklch(37.3% 0.034 259.733);
-  --color-gray-800: oklch(27.8% 0.033 256.848);
-  --color-gray-900: oklch(21% 0.034 264.665);
-
-  /* Border colors */
-  --color-border: #e5e7eb;
-  --color-border-dark: #374151;
-  --color-border-hover-light: #d1d5db;
-  --color-border-hover-dark: #4b5563;
-
-  /* Skeleton colors */
-  --color-skeleton: #f3f4f6;
-  --color-skeleton-dark: #4b5563;
-
-  /* Base colors */
-  --color-black: #000;
-  --color-white: #fff;
-
-  /* Spacing */
-  --spacing: 0.25rem;
-  --spacing-card-padding: 1rem;
-  --spacing-card-spacing: 1rem;
-  --spacing-touch-min: 44px;
-
-  /* Typography */
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  /* Breakpoints */
-  --breakpoint-xs: 320px;
-  --breakpoint-sm: 640px;
-  --breakpoint-md: 768px;
-  --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1280px;
-  --breakpoint-2xl: 1536px;
-  --breakpoint-3xl: 1920px;
-  --breakpoint-4xl: 2560px;
-
-  /* Border radius */
-  --radius-xs: 0.125rem;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
-  --radius-3xl: 1.5rem;
-  --radius-4xl: 2rem;
-  --radius-card: 0.5rem;
-  --radius-empty-state: 0.75rem;
-
-  /* Box shadows */
-  --shadow-2xs: 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-  --shadow-sm: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-  --shadow-card-hover: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-
-  /* Dark mode shadows */
-  --shadow-dark-xs: 0 1px 3px 0 rgb(0 0 0 / 0.3);
-  --shadow-dark-sm: 0 4px 6px -1px rgb(0 0 0 / 0.3);
-
-  /* Z-index layers */
-  --z-index-60: 60;
-  --z-index-70: 70;
-  --z-index-80: 80;
-  --z-index-90: 90;
-  --z-index-100: 100;
-  --z-index-999: 999;
-  --z-index-modal: 1000;
-  --z-index-dropdown: 1010;
-  --z-index-tooltip: 1020;
-  --z-index-notification: 1030;
-
-  /* Transitions */
-  --default-transition-duration: 150ms;
-  --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+/* Animation safety */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-/* Dark mode override for system preference - Used with .dark class */
-.dark {
-  color-scheme: dark;
-
-  /* Surface colors in dark mode */
-  --color-surface: var(--color-surface-dark);
-  --color-surface-hover: var(--color-surface-dark-hover);
-
-  /* Border colors in dark mode */
-  --color-border: var(--color-border-dark);
-  --color-border-hover: var(--color-border-hover-dark);
-
-  /* Skeleton in dark mode */
-  --color-skeleton: var(--color-skeleton-dark);
-
-  /* Shadow adjustments for dark mode */
-  --shadow-xs: var(--shadow-dark-xs);
-  --shadow-sm: var(--shadow-dark-sm);
-}
-
-/* Add custom utilities */
+/* Add custom components */
 @layer components {
   .project-card {
     @apply flex flex-col rounded-sm border border-base-200 bg-base-100 p-4 shadow-xs;
     /* Open-props style transitions */
-    transition: 
+    transition:
       transform 0.2s ease-out,
       box-shadow 0.2s ease-out;
-  
+
     @variant hover {
       @apply shadow-sm;
     }
-  
+
     @variant dark {
       @apply border-base-300 bg-base-200;
     }
@@ -252,10 +172,10 @@
   }
 }
 
+/* Project Card Variations */
 .project-card-pinned {
-  border-left-style: var(--tw-border-style);
   border-left-width: 4px;
-  border-color: var(--color-warning-500);
+  border-color: var(--color-warning);
 }
 
 .project-card-archived {
@@ -263,11 +183,11 @@
 }
 
 .project-card-theme-default {
-  background-color: var(--color-white);
+  background-color: var(--color-base-100);
 }
 
 .dark .project-card-theme-default {
-  background-color: var(--color-gray-800);
+  background-color: var(--color-base-300);
 }
 
 .project-card-theme-primary {
@@ -279,42 +199,42 @@
 }
 
 .project-card-theme-success {
-  border-color: var(--color-success-200);
-  /* Simplified color-mix syntax */
-  background-color: color-mix(in oklch, var(--color-success-900) 20%, transparent);
+  border-color: var(--color-success);
+  background-color: color-mix(in oklch, var(--color-success) 20%, transparent);
 }
 
 .dark .project-card-theme-success {
-  border-color: var(--color-success-800);
-  background-color: color-mix(in oklch, var(--color-success-900) 30%, transparent);
+  border-color: var(--color-success);
+  background-color: color-mix(in oklch, var(--color-success) 30%, transparent);
 }
 
 .project-card-theme-warning {
-  border-color: var(--color-warning-200);
-  background-color: var(--color-warning-50);
+  border-color: var(--color-warning);
+  background-color: color-mix(in oklch, var(--color-warning) 20%, transparent);
 }
 
 .dark .project-card-theme-warning {
-  border-color: var(--color-warning-800);
-  background-color: color-mix(in oklab, var(--color-warning-900) 30%, transparent);
+  border-color: var(--color-warning);
+  background-color: color-mix(in oklab, var(--color-warning) 30%, transparent);
 }
 
 .project-card-theme-danger {
-  border-color: var(--color-danger-200);
-  background-color: var(--color-danger-50);
+  border-color: var(--color-error);
+  background-color: color-mix(in oklch, var(--color-error) 20%, transparent);
 }
 
 .dark .project-card-theme-danger {
-  border-color: var(--color-danger-800);
-  background-color: color-mix(in oklab, var(--color-danger-900) 30%, transparent);
+  border-color: var(--color-error);
+  background-color: color-mix(in oklab, var(--color-error) 30%, transparent);
 }
 
+/* Drag & Drop Zone */
 .drag-zone {
   @apply rounded-lg border-2 border-dashed border-base-300 p-6 text-center;
 }
 
 .dark .drag-zone {
-  @apply border-base-700;
+  @apply border-base-content/30;
 }
 
 .drag-zone-active {
@@ -325,12 +245,12 @@
   @apply bg-primary/20;
 }
 
-/* Update these utility definitions */
+/* Custom utilities */
 @utility progress-outer {
   @apply h-2 overflow-hidden rounded-full bg-base-200;
-  
+
   @variant dark {
-    @apply bg-base-700;
+    @apply bg-base-content/20;
   }
 }
 
@@ -339,52 +259,40 @@
 }
 
 @utility tab-heading {
-  margin-bottom: calc(var(--spacing) * 2);
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-medium);
+  margin-bottom: 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 500;
 }
 
 @utility tab-content {
-  color: var(--color-gray-700);
-
-  @variant dark {
-    color: var(--color-gray-300);
-  }
+  color: var(--color-base-content);
 }
 
 @utility tab-section {
-  margin-bottom: calc(var(--spacing) * 6);
+  margin-bottom: 1.5rem;
 }
 
+/* Project Tab Button */
 .project-tab-btn {
-  border-bottom-style: var(--tw-border-style);
   border-bottom-width: 2px;
   border-color: transparent;
-  padding-inline: calc(var(--spacing) * 4);
-  padding-block: calc(var(--spacing) * 2);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  padding-inline: 1rem;
+  padding-block: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .project-tab-btn:hover {
-  color: var(--color-gray-700);
+  color: var(--color-base-content);
 }
 
 .project-tab-btn:focus {
   outline-style: none;
 }
 
-.dark .project-tab-btn:hover {
-  color: var(--color-gray-200);
-}
-
 .project-tab-btn-active {
-  border-color: var(--color-primary-600);
-  color: var(--color-primary-600);
-}
-
-.dark .project-tab-btn-active {
-  color: var(--color-primary-400);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* Define keyframes */
@@ -412,10 +320,32 @@
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes countUp {
+  from {
+    opacity: 0.5;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Animation utilities */
 @utility animate-spin {
   animation: spin 1s linear infinite;
-  
+
   @variant motion-reduce {
     animation-duration: 3s;
   }
@@ -423,7 +353,7 @@
 
 @utility animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  
+
   @variant motion-reduce {
     animation-iteration-count: 1;
   }
@@ -437,27 +367,6 @@
   animation: fadeIn 0.3s ease-in-out;
 }
 
-/* Define extra keyframes */
-@keyframes countUp {
-  from {
-    opacity: 0.5;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @utility animate-count-up {
   animation: countUp 0.5s ease-out;
 }
@@ -467,25 +376,18 @@
   padding: 0.5rem;
   border-radius: 9999px;
   transition-property: all;
-  transition-timing-function: var(--default-transition-timing-function);
-  transition-duration: var(--default-transition-duration);
+  transition-duration: 150ms;
 }
 
 .dark-mode-toggle:hover {
-  background-color: var(--color-gray-200);
+  background-color: var(--color-base-200);
 }
 
 .dark .dark-mode-toggle:hover {
-  background-color: var(--color-gray-700);
+  background-color: var(--color-base-content/20);
 }
 
 .dark-mode-toggle:focus {
   outline: none;
-  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width, 2px) var(--tw-ring-offset-color, transparent);
-  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--color-gray-400);
-  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
-}
-
-.dark .dark-mode-toggle:focus {
-  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--color-gray-600);
+  box-shadow: 0 0 0 2px var(--color-base-content/30);
 }
