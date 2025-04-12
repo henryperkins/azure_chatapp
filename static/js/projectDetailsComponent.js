@@ -1,866 +1,874 @@
-(function () {
-  class ProjectDetailsComponent {
-    constructor(options = {}) {
-      this.onBack = options.onBack;
-      this.state = { currentProject: null, activeTab: 'files' };
-      this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
-      this.fileConstants = {
-        allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'],
-        maxSizeMB: 30
-      };
-      this.elements = this._initializeElements();
-      this._bindEvents();
-      this._setupDragDropHandlers();
-      this._initializeChatInterface();
-      document.addEventListener("projectConversationsLoaded", (e) => { this.renderConversations(e.detail); });
+/**
+ * ProjectDetailsComponent - A comprehensive UI component for managing project details,
+ * files, conversations, and artifacts with modern interactive features.
+ */
+export class ProjectDetailsComponent {
+  constructor(options = {}) {
+    // Validate required options
+    if (!options.onBack || typeof options.onBack !== 'function') {
+      throw new Error('onBack callback function is required');
     }
 
-    _initializeElements() {
-      return {
-        container: document.getElementById("projectDetailsView"),
-        title: document.getElementById("projectTitle"),
-        description: document.getElementById("projectDescription"),
-        tokenUsage: document.getElementById("tokenUsage"),
-        maxTokens: document.getElementById("maxTokens"),
-        tokenPercentage: document.getElementById("tokenPercentage"),
-        tokenProgressBar: document.getElementById("tokenProgressBar"),
-        filesList: document.getElementById("projectFilesList"),
-        conversationsList: document.getElementById("projectConversationsList"),
-        artifactsList: document.getElementById("projectArtifactsList"),
-        uploadProgress: document.getElementById("filesUploadProgress"),
-        progressBar: document.getElementById("fileProgressBar"),
-        uploadStatus: document.getElementById("uploadStatus"),
-        pinBtn: document.getElementById("pinProjectBtn"),
-        backBtn: document.getElementById("backToProjectsBtn"),
-        dragZone: document.getElementById("dragDropZone")
-      };
-    }
+    // Initialize core properties
+    this.onBack = options.onBack;
+    this.utils = options.utils || window.uiUtilsInstance;
+    this.projectManager = options.projectManager || window.projectManager;
+    this.auth = options.auth || window.auth;
+    this.notification = options.notification || window.showNotification;
 
-    show() {
-      window.uiUtilsInstance.toggleVisibility(this.elements.container, true);
-    }
+    this.state = {
+      currentProject: null,
+      activeTab: 'files',
+      searchCache: new Map()
+    };
 
-    hide() {
-      if (window.uiUtilsInstance?.toggleVisibility) {
-        window.uiUtilsInstance.toggleVisibility(this.elements.container, false);
-      } else if (this.elements.container) {
-        this.elements.container.classList.add('hidden');
-      }
-    }
+    this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
+    this.fileConstants = {
+      allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'],
+      maxSizeMB: 30
+    };
 
-    renderProject(project) {
-      this.state.currentProject = project;
-      if (this.elements.title) this.elements.title.textContent = project.name;
-      if (this.elements.description) {
-        this.elements.description.textContent = project.description || "No description provided.";
-      }
-      if (this.elements.pinBtn) {
-        const svg = this.elements.pinBtn.querySelector("svg");
-        if (svg) svg.setAttribute("fill", project.pinned ? "currentColor" : "none");
-        this.elements.pinBtn.classList.toggle("text-yellow-600", project.pinned);
-      }
-    }
+    // Initialize scroll handler for virtual scrolling
+    this.scrollHandler = this.handleScroll.bind(this);
+    this.boundRenderConversations = this.renderConversations.bind(this);
+    this.handleDragEvent = this.handleDragEvent.bind(this);
+    this.handleDrop = this.handleDrop.bind(this);
 
-    renderStats(stats) {
-      const { tokenUsage, maxTokens, tokenPercentage, tokenProgressBar } = this.elements;
-      const formatNumber = window.uiUtilsInstance?.formatNumber || (n => n.toString());
-      if (tokenUsage) tokenUsage.textContent = formatNumber(stats.token_usage || 0);
-      if (maxTokens) maxTokens.textContent = formatNumber(stats.max_tokens || 0);
-      const usage = stats.token_usage || 0, maxT = stats.max_tokens || 0;
-      const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(1) : 0;
-      if (tokenPercentage) tokenPercentage.textContent = `${pct}%`;
-      this._animateProgressBar(tokenProgressBar, pct);
-      this._updateCounters(stats);
-    }
-
-    renderFiles(files) {
-      if (!this.elements.filesList) return;
-      if (!files || files.length === 0) {
-        this.elements.filesList.innerHTML = `<div class="text-gray-500 text-center py-8">No files uploaded yet.</div>`;
-        return;
-      }
-      this.elements.filesList.innerHTML = "";
-      files.forEach(file => this._renderFileItem(file));
-    }
-
-    renderConversations(conversations) {
-      if (!this.elements.conversationsList) return;
-      const convos = Array.isArray(conversations) ? conversations : [];
-      if (!convos || convos.length === 0) {
-        this.elements.conversationsList.innerHTML = `<div class="text-gray-500 text-center py-8">No conversations yet.</div>`;
-        return;
-      }
-      this.elements.conversationsList.innerHTML = "";
-      conversations.forEach(conversation => { this._renderConversationItem(conversation); });
-    }
-
-    renderArtifacts(artifacts) {
-      if (!this.elements.artifactsList) return;
-      if (!artifacts || artifacts.length === 0) {
-        this.elements.artifactsList.innerHTML = `<div class="text-gray-500 text-center py-8">No artifacts created yet.</div>`;
-        return;
-      }
-      this.elements.artifactsList.innerHTML = "";
-      artifacts.forEach(artifact => this._renderArtifactItem(artifact));
-    }
-
-    async uploadFiles(projectId, files) {
-      try {
-        const isAuthenticated = await window.auth.isAuthenticated();
-        if (!isAuthenticated) {
-          window.showNotification('Please log in to upload files', 'warning');
-          return;
-        }
-        const project = window.projectManager?.currentProject;
-        if (!project) throw new Error("No project selected");
-        await this._verifyTextExtractionService();
-        const { totalTokens } = await this._countFilesTokens(files);
-        this._checkTokenLimits(project, totalTokens);
-        await this._ensureKnowledgeBase(projectId, project);
-        this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-        return this._processFiles(projectId, files);
-      } catch (error) {
-        console.error('Upload failed:', error);
-        throw error;
-      }
-    }
-
-    switchTab(tabName) {
-      document.querySelectorAll('.project-tab-content').forEach(tabContent => { tabContent.classList.add('hidden'); });
-      const activeTab = document.getElementById(`${tabName}Tab`); if (activeTab) activeTab.classList.remove('hidden');
-      document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-        tabBtn.classList.remove('active'); tabBtn.setAttribute('aria-selected', 'false');
-      });
-      const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
-      if (activeTabBtn) {
-        activeTabBtn.classList.add('active');
-        activeTabBtn.setAttribute('aria-selected', 'true');
-      }
-      this.state.activeTab = tabName;
-    }
-
-    async _verifyTextExtractionService() {
-      try {
-        const response = await window.apiRequest('/api/text-extractor/initialize', 'POST');
-        if (response?.status !== 'ready') throw new Error('Text extraction service not ready');
-      } catch (err) {
-        const msg = "Text extraction service unavailable - please try again later";
-        console.error(msg, err);
-        if (window.Notifications?.apiError) window.Notifications.apiError(msg);
-        throw new Error(msg);
-      }
-    }
-
-    async _countFilesTokens(files) {
-      let totalTokens = 0; const tokenCounts = {};
-      for (const file of files) {
-        try {
-          const formData = new FormData(); formData.append('file', file);
-          const response = await window.apiRequest('/api/text-extractor/extract', 'POST', formData);
-          if (!response || !response.metadata) throw new Error('Invalid response from text extraction service');
-          const tokenCount = response.metadata?.token_count;
-          if (typeof tokenCount !== 'number' || tokenCount < 0) throw new Error('Invalid or missing token count in response');
-          tokenCounts[file.name] = tokenCount; totalTokens += tokenCount;
-        } catch (error) {
-          console.error(`Error counting tokens for ${file.name}:`, error);
-          const errorMsg = this._getFileAnalysisErrorMessage(error);
-          throw new Error(`Could not analyze ${file.name}: ${errorMsg}`);
-        }
-      }
-      return { totalTokens, tokenCounts };
-    }
-
-    _getFileAnalysisErrorMessage(error) {
-      if (error.response?.data?.code === 'TEXT_EXTRACTION_ERROR') {
-        return error.response.data.message || 'File processing error';
-      } else if (error.message.includes('Text extraction failed')) {
-        return 'Unsupported file content';
-      } else if (error.message.includes('object tuple')) {
-        return 'File processing error - please try a different file';
-      }
-      return error.message || 'Unknown error';
-    }
-
-    _checkTokenLimits(project, totalTokens) {
-      const availableTokens = project.max_tokens - (project.token_usage || 0);
-      if (totalTokens > availableTokens) {
-        const errorMsg = `These files would exceed token limit by ${(totalTokens - availableTokens).toLocaleString()} tokens
-Current usage: ${project.token_usage.toLocaleString()}/${project.max_tokens.toLocaleString()} tokens
-Options:
-1. Increase project token limit
-2. Split large files
-3. Delete unused files`;
-        throw new Error(errorMsg);
-      } else if (totalTokens > availableTokens * 0.8) {
-        window.showNotification(
-          `Warning: Upload will use ${Math.round((totalTokens / availableTokens) * 100)}% of remaining tokens`,
-          "warning",
-          { timeout: 8000 }
-        );
-      }
-    }
-
-    async _ensureKnowledgeBase(projectId, project) {
-      if (!project.knowledge_base_id) {
-        try {
-          const newKb = await this._attemptAutoCreateKB(projectId);
-          if (newKb) window.showNotification("Created default knowledge base", "success");
-        } catch (kbErr) {
-          console.warn('KB auto-creation failed:', kbErr);
-        }
-      }
-    }
-
-    async _attemptAutoCreateKB(projectId) {
-      if (!window.projectManager?.createKnowledgeBase) {
-        return null;
-      }
-      try {
-        const defaultKb = { name: 'Default Knowledge Base', description: 'Automatically created for file uploads', is_active: true };
-        return await window.projectManager.createKnowledgeBase(projectId, defaultKb);
-      } catch (error) {
-        console.error('KB auto-creation failed:', error);
-        return null;
-      }
-    }
-
-    _processFiles(projectId, files) {
-      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-      this._updateFileTypesInfo();
-      this._showUploadProgressUI(files.length);
-      const { validFiles, invalidFiles } = this._validateFiles(files);
-      this._handleInvalidFiles(invalidFiles);
-      if (validFiles.length > 0) {
-        return this._uploadValidFiles(projectId, validFiles).finally(() => this._refreshProjectData(projectId));
-      }
-      return Promise.resolve();
-    }
-
-    _updateFileTypesInfo() {
-      const { allowedExtensions, maxSizeMB } = this.fileConstants;
-      const fileTypesInfo = document.getElementById('supportedFileTypes');
-      if (fileTypesInfo) {
-        fileTypesInfo.innerHTML = `
-          <div class="text-xs text-gray-500 mt-2">
-            Supported: ${allowedExtensions.join(', ')} (Max ${maxSizeMB}MB)
-            <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">ℹ️</span>
-          </div>
-        `;
-      }
-    }
-
-    _showUploadProgressUI(fileCount) {
-      if (this.elements.uploadProgress) {
-        this.elements.uploadProgress.classList.remove("hidden");
-        this.elements.progressBar.style.width = "0%";
-        this.elements.uploadStatus.textContent = `Uploading 0/${fileCount} files...`;
-      }
-    }
-
-    _validateFiles(files) {
-      const { allowedExtensions, maxSizeMB } = this.fileConstants;
-      const validFiles = [], invalidFiles = [];
-      Array.from(files).forEach(file => {
-        const fileExt = file.name.split('.').pop().toLowerCase();
-        const isValidExt = allowedExtensions.includes(`.${fileExt}`);
-        const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
-        if (isValidExt && isValidSize) {
-          validFiles.push(file);
-        } else {
-          let errorMsg = !isValidExt
-            ? `Invalid file type (.${fileExt}). Allowed: ${allowedExtensions.join(', ')}`
-            : `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB limit)`;
-          invalidFiles.push({ file, error: errorMsg });
-        }
-      });
-      return { validFiles, invalidFiles };
-    }
-
-    _handleInvalidFiles(invalidFiles) {
-      if (invalidFiles.length > 0) {
-        invalidFiles.forEach(({ file, error }) => {
-          window.showNotification(`Skipped ${file.name}: ${error}`, 'error');
-          this.fileUploadStatus.failed++; this.fileUploadStatus.completed++;
-        });
-        this._updateUploadProgress();
-      }
-    }
-
-    _uploadValidFiles(projectId, validFiles) {
-      const currentProjectId = projectId;
-      return Promise.all(validFiles.map(file => {
-        return window.projectManager.uploadFile(currentProjectId, file)
-          .then(response => {
-            this.fileUploadStatus.completed++;
-            if (response.processing?.status === "pending") {
-              window.showNotification(`${file.name} uploaded - processing for knowledge base`, "info", { timeout: 5000 });
-            } else {
-              window.showNotification(`${file.name} uploaded successfully`, "success", { timeout: 3000 });
-            }
-            this._updateUploadProgress();
-            if (this.fileUploadStatus.completed === 1) {
-              this._refreshKnowledgeBase(currentProjectId);
-            }
-          })
-          .catch(error => {
-            console.error(`Upload error for ${file.name}:`, error);
-            const errorMessage = this._formatUploadErrorMessage(error, file.name);
-            window.showNotification(`Failed to upload ${file.name}: ${errorMessage}`, 'error', { timeout: 6000 });
-            this.fileUploadStatus.failed++; this.fileUploadStatus.completed++;
-            this._updateUploadProgress();
-          });
-      }));
-    }
-
-    _showFileUploadSuccessNotification(fileName, response) {
-      if (response.processing?.status === "pending") {
-        window.showNotification(`${fileName} uploaded - processing for knowledge base`, "info", { timeout: 5000 });
-      } else {
-        window.showNotification(`${fileName} uploaded successfully`, "success", { timeout: 3000 });
-      }
-    }
-
-    _formatUploadErrorMessage(error, fileName) {
-      if (error?.status === 401 || error?.response?.status === 401 || error.message?.includes('auth') || error.message?.includes('token') || error.message?.includes('unauthorized')) {
-        window.auth.handleAuthError(error, 'file upload');
-        return "Authentication error - please log in again";
-      }
-      let errorMessage = "Upload failed";
-      if (error?.message) {
-        errorMessage = error.message;
-      } else if (error?.response?.data) {
-        const data = error.response.data;
-        errorMessage = typeof data === 'string' ? data : (data.detail || data.message || data.error || "Unknown error");
-      }
-      if (errorMessage.includes("dangerous patterns") || errorMessage.includes("<script")) {
-        return "File contains potentially unsafe content (such as script tags). Please sanitize the file before uploading.";
-      } else if (errorMessage.includes("validation") || errorMessage.includes("format")) {
-        return "File format not supported or validation failed";
-      } else if (errorMessage.includes("too large")) {
-        return "File exceeds size limit";
-      } else if (errorMessage.includes("token") || errorMessage.includes("exceeds the project's token limit")) {
-        const tokenMatch = errorMessage.match(/(\d+) tokens.*limit \((\d+)/);
-        if (tokenMatch) {
-          const fileTokens = parseInt(tokenMatch[1]).toLocaleString();
-          const limitTokens = parseInt(tokenMatch[2]).toLocaleString();
-          return `File too large (${fileTokens} tokens > project limit of ${limitTokens}).
-Options:
-1. Increase project token limit
-2. Split file into smaller parts
-3. Delete unused files`;
-        }
-        return "Project token limit exceeded";
-      } else if (error.response?.status === 422) {
-        return "File validation failed - unsupported format or content";
-      } else if (error.response?.status === 400 && errorMessage.includes("File upload failed")) {
-        return "File upload failed - check format and content";
-      }
-      return errorMessage;
-    }
-
-    _refreshProjectData(projectId) {
-      const pid = projectId || (window.projectManager?.currentProject?.id);
-      if (pid) {
-        window.projectManager.loadProjectFiles(pid);
-        window.projectManager.loadProjectStats(pid);
-      } else {
-        console.warn('Cannot refresh project data - no valid project ID available');
-      }
-    }
-
-    _refreshKnowledgeBase(projectId) {
-      if (this.state.currentProject?.knowledge_base_id) {
-        window.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id);
-      }
-    }
-
-    _updateUploadProgress() {
-      const { completed, failed, total } = this.fileUploadStatus;
-      const percentage = Math.round((completed / total) * 100);
-      if (this.elements.progressBar) {
-        this.elements.progressBar.classList.add('transition-all', 'duration-300');
-        this._animateProgressBar(this.elements.progressBar, percentage);
-      }
-      if (this.elements.uploadStatus) {
-        this.elements.uploadStatus.textContent = `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
-      }
-      if (completed === total) {
-        setTimeout(() => {
-          if (this.elements.uploadProgress) this.elements.uploadProgress.classList.add("hidden");
-          if (failed === 0) {
-            window.showNotification("Files uploaded successfully", "success");
-          } else {
-            window.showNotification(`${failed} file(s) failed to upload`, "error");
-          }
-        }, 1000);
-      }
-    }
-
-    _animateProgressBar(progressBar, percentage) {
-      if (!progressBar) return;
-      progressBar.style.width = "0%";
-      if (window.animationUtilsInstance) {
-        window.animationUtilsInstance.animateProgress(progressBar, 0, percentage);
-      } else {
-        progressBar.style.width = `${percentage}%`;
-      }
-    }
-
-    _updateCounters(stats) {
-      const updateElement = (id, value) => {
-        const el = document.getElementById(id);
-        if (el && value !== undefined) {
-          el.textContent = window.uiUtilsInstance?.formatNumber?.(value) || value;
-        }
-      };
-      updateElement('fileCount', stats.file_count);
-      updateElement('conversationCount', stats.conversation_count);
-      updateElement('artifactCount', stats.artifact_count);
-    }
-
-    _renderFileItem(file) {
-      const utils = window.uiUtilsInstance;
-      const item = utils.createElement("div", { className: "content-item", "data-file-id": file.id });
-      const infoDiv = utils.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(utils.createElement("span", { className: "text-lg mr-2", textContent: utils.fileIcon(file.file_type) }));
-      const detailDiv = utils.createElement("div", { className: "flex flex-col" });
-      detailDiv.appendChild(utils.createElement("div", { className: "font-medium", textContent: file.filename }));
-      detailDiv.appendChild(utils.createElement("div", { className: "text-xs text-gray-500", textContent: `${utils.formatBytes(file.file_size)} · ${utils.formatDate(file.created_at)}` }));
-      const processing = file.metadata?.search_processing || {};
-      const statusBadge = this._createProcessingBadge(processing);
-      detailDiv.appendChild(statusBadge);
-      infoDiv.appendChild(detailDiv);
-      item.appendChild(infoDiv);
-      const actions = utils.createElement("div", { className: "flex space-x-2" });
-      actions.appendChild(utils.createElement("button", {
-        className: "text-red-600 hover:text-red-800",
-        innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
-a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
-a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-</svg>`,
-        onclick: () => this._confirmDeleteFile(file)
-      }));
-      item.appendChild(actions);
-      this.elements.filesList.appendChild(item);
-    }
-
-    _createProcessingBadge(processing) {
-      const statusMappings = {
-        'success': { class: "bg-green-100 text-green-800", text: "Ready for Search", icon: "✓" },
-        'error': { class: "bg-red-100 text-red-800", text: processing.error ? `Error: ${processing.error.substring(0, 25)}...` : 'Processing Failed', icon: "⚠" },
-        'pending': { class: "bg-yellow-100 text-yellow-800", text: "Processing...", icon: "⏳" },
-        'default': { class: "bg-gray-100 text-gray-600", text: "Not Processed", icon: "•" }
-      };
-      const status = processing.status || 'default';
-      const mapping = statusMappings[status] || statusMappings.default;
-      const badge = document.createElement('div');
-      badge.className = `processing-status text-xs px-2 py-1 rounded-sm ${mapping.class} mt-1 flex items-center`;
-      badge.innerHTML = `<span class="mr-1">${mapping.icon}</span> ${mapping.text}`;
-      badge.title = processing.error || mapping.text;
-      return badge;
-    }
-
-    _renderConversationItem(conversation) {
-      const utils = window.uiUtilsInstance;
-      const convoEl = utils.createElement("div", {
-        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-sm mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
-        onclick: async (e) => this._handleConversationClick(e, conversation)
-      });
-      const infoDiv = utils.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(utils.createElement("span", { className: "text-lg mr-2", textContent: "💬" }));
-      const textDiv = utils.createElement("div");
-      textDiv.appendChild(utils.createElement("div", { className: "font-medium", textContent: conversation.title || "Untitled conversation" }));
-      textDiv.appendChild(utils.createElement("div", { className: "text-xs text-gray-500", textContent: utils.formatDate(conversation.created_at) }));
-      infoDiv.appendChild(textDiv);
-      const deleteBtn = utils.createElement("button", {
-        className: "text-red-600 hover:text-red-800 ml-4",
-        innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
-a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
-a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-</svg>`,
-        onclick: (e) => {
-          e.stopPropagation();
-          this._confirmDeleteConversation(conversation);
-        }
-      });
-      convoEl.appendChild(infoDiv); convoEl.appendChild(deleteBtn);
-      convoEl.dataset.conversationId = conversation.id;
-      this.elements.conversationsList.appendChild(convoEl);
-    }
-
-    async _handleConversationClick(e, conversation) {
-      try {
-        const projectId = this.state.currentProject?.id;
-        if (!projectId) {
-          window.showNotification('Project context missing', 'error');
-          return;
-        }
-        localStorage.setItem("selectedProjectId", projectId);
-        const chatContainer = document.getElementById('projectChatContainer');
-        if (chatContainer) {
-          chatContainer.classList.remove('hidden');
-          chatContainer.scrollIntoView({ behavior: 'smooth' });
-        }
-        if (!window.projectChatInterface) {
-          window.showNotification('Chat system not ready', 'error');
-          return;
-        }
-        if (!window.projectChatInterface.initialized) {
-          try {
-            await window.projectChatInterface.initialize();
-          } catch (initErr) {
-            console.error('Failed to initialize chat interface:', initErr);
-            window.showNotification('Failed to initialize chat', 'error');
-            return;
-          }
-        }
-        window.projectChatInterface.setTargetContainer('#projectChatMessages');
-        const success = await window.projectChatInterface.loadConversation(conversation.id);
-        if (!success) throw new Error('loadConversation returned false');
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('chatId', conversation.id);
-        window.history.pushState({}, "", newUrl);
-      } catch (err) {
-        console.error('Error in conversation click handler:', err);
-        window.showNotification(`Error loading conversation: ${err.message || 'Unknown error'}`, 'error');
-      }
-    }
-
-    _renderArtifactItem(artifact) {
-      const utils = window.uiUtilsInstance;
-      const item = utils.createElement("div", { className: "content-item" });
-      const infoDiv = utils.createElement("div", { className: "flex items-center" });
-      infoDiv.appendChild(utils.createElement("span", { className: "text-lg mr-2", textContent: "📄" }));
-      const detailDiv = utils.createElement("div", { className: "flex flex-col" });
-      detailDiv.appendChild(utils.createElement("div", { className: "font-medium", textContent: artifact.title || "Untitled artifact" }));
-      detailDiv.appendChild(utils.createElement("div", { className: "text-xs text-gray-500", textContent: `${artifact.type || "Unknown type"} · ${utils.formatDate(artifact.created_at)}` }));
-      infoDiv.appendChild(detailDiv);
-      item.appendChild(infoDiv);
-      const actions = utils.createElement("div", { className: "flex space-x-2" });
-      actions.appendChild(utils.createElement("button", {
-        className: "text-blue-600 hover:text-blue-800",
-        innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7
--1.274 4.057-5.064 7-9.542 7
--4.477 0-8.268-2.943-9.542-7z" />
-</svg>`,
-        onclick: () => this._viewArtifact(artifact)
-      }));
-      actions.appendChild(utils.createElement("button", {
-        className: "text-red-600 hover:text-red-800",
-        innerHTML: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
-a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4
-a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-</svg>`,
-        onclick: () => this._confirmDeleteArtifact(artifact)
-      }));
-      item.appendChild(actions);
-      this.elements.artifactsList.appendChild(item);
-    }
-
-    _initializeChatInterface() {
-      if (typeof window.ChatInterface === 'function') {
-        if (!window.projectChatInterface) {
-          try {
-            window.projectChatInterface = new window.ChatInterface({
-              containerSelector: '#projectChatUI',
-              messageContainerSelector: '#projectChatMessages',
-              inputSelector: '#projectChatInput',
-              sendButtonSelector: '#projectChatSendBtn'
-            });
-            window.projectChatInterface.initialize();
-          } catch (err) {
-            console.error('Failed to initialize chat interface:', err);
-          }
-        }
-      } else {
-        console.warn('ChatInterface not available - chat functionality will be limited');
-      }
-    }
-
-    _bindEvents() {
-      if (this.elements.backBtn) {
-        this.elements.backBtn.addEventListener("click", () => {
-          if (this.onBack) this.onBack();
-        });
-      }
-      if (this.elements.pinBtn) {
-        this.elements.pinBtn.addEventListener("click", () => this._togglePin());
-      }
-      document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-        tabBtn.addEventListener('click', () => {
-          const tabName = tabBtn.dataset.tab; this.switchTab(tabName);
-        });
-      });
-      const minimizeChatBtn = document.getElementById('minimizeChatBtn');
-      if (minimizeChatBtn) {
-        minimizeChatBtn.addEventListener('click', () => {
-          const chatContainer = document.getElementById('projectChatContainer');
-          if (chatContainer) chatContainer.classList.add('hidden');
-        });
-      }
-      const newConvoBtn = document.getElementById('newConversationBtn');
-      if (newConvoBtn) {
-        newConvoBtn.addEventListener('click', async (e) => this._handleNewConversation(e));
-      }
-    }
-
-    async _handleNewConversation(e) {
-      e.preventDefault(); e.stopPropagation();
-      try {
-        const isAuthenticated = await window.auth.isAuthenticated();
-        if (!isAuthenticated) {
-          window.showNotification('Please log in to create a conversation', 'warning');
-          return;
-        }
-        const projectId = this.state.currentProject?.id;
-        if (!projectId) {
-          window.showNotification('No project selected', 'warning');
-          return;
-        }
-        try {
-          this._verifyRequiredChatElements();
-          const chatContainer = document.getElementById('projectChatContainer');
-          chatContainer.classList.remove('hidden');
-          if (!window.projectChatInterface) {
-            await this._initializeProjectChatInterface();
-          }
-          const conversation = await window.projectChatInterface.createNewConversation();
-          window.projectChatInterface.setTargetContainer('#projectChatMessages');
-          window.projectChatInterface.loadConversation(conversation.id);
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set('chatId', conversation.id);
-          window.history.pushState({}, "", newUrl);
-        } catch (error) {
-          console.error('Error creating conversation:', error);
-          if (error.status === 401 || error.status === 403 || error.message?.includes('auth') || error.message?.includes('token')) {
-            window.auth.handleAuthError(error, 'conversation creation');
-          } else {
-            window.showNotification(`Failed to create conversation: ${error.message || 'Unknown error'}`, 'error');
-          }
-        }
-      } catch (error) {
-        console.error('Authentication check failed:', error);
-        window.showNotification('Authentication error', 'error');
-      }
-    }
-
-    _verifyRequiredChatElements() {
-      const requiredElements = [
-        'projectChatContainer', 'projectChatUI', 'projectChatMessages', 'projectChatInput', 'projectChatSendBtn'
-      ];
-      const missingElements = requiredElements.filter(id => !document.getElementById(id));
-      if (missingElements.length > 0) throw new Error(`Required chat UI elements not found: ${missingElements.join(', ')}`);
-    }
-
-    async _initializeProjectChatInterface() {
-      window.projectChatInterface = new window.ChatInterface({
-        containerSelector: '#projectChatUI',
-        messageContainerSelector: '#projectChatMessages',
-        inputSelector: '#projectChatInput',
-        sendButtonSelector: '#projectChatSendBtn'
-      });
-      await window.projectChatInterface.initialize();
-    }
-
-    _setupDragDropHandlers() {
-      const dragZone = this.elements.dragZone;
-      if (!dragZone) return;
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
-        dragZone.addEventListener(event, e => {
-          e.preventDefault(); e.stopPropagation();
-        });
-      });
-      ['dragenter', 'dragover'].forEach(event => {
-        dragZone.addEventListener(event, () => {
-          dragZone.classList.add('drag-zone-active');
-        });
-      });
-      ['dragleave', 'drop'].forEach(event => {
-        dragZone.addEventListener(event, () => {
-          dragZone.classList.remove('drag-zone-active');
-        });
-      });
-      dragZone.addEventListener('drop', async (e) => {
-        const files = e.dataTransfer.files;
-        const projectId = this.state.currentProject?.id;
-        if (projectId && files.length > 0) {
-          try {
-            await this.uploadFiles(projectId, files);
-          } catch (error) {
-            console.error('Error uploading files:', error);
-          }
-        }
-      });
-    }
-
-    _togglePin() {
-      const project = this.state.currentProject;
-      if (!project) return;
-      window.projectManager?.togglePinProject(project.id)
-        .then(() => {
-          window.showNotification(project.pinned ? "Project unpinned" : "Project pinned", "success");
-          window.projectManager.loadProjectDetails(project.id);
-        })
-        .catch(err => {
-          console.error("Error toggling pin:", err);
-          window.showNotification("Failed to update project", "error");
-        });
-    }
-
-    _confirmDeleteFile(file) {
-      window.ModalManager.confirmAction({
-        title: "Delete File",
-        message: `Delete "${file.filename}"?`,
-        confirmText: "Delete",
-        cancelText: "Cancel",
-        confirmClass: "bg-red-600",
-        onConfirm: () => {
-          const projectId = this.state.currentProject?.id;
-          if (!projectId) return;
-          window.projectManager?.deleteFile(projectId, file.id)
-            .then(() => {
-              window.showNotification("File deleted", "success");
-              return Promise.all([
-                window.projectManager.loadProjectFiles(projectId),
-                window.projectManager.loadProjectStats(projectId)
-              ]);
-            })
-            .catch(err => {
-              console.error("Error deleting file:", err);
-              window.showNotification("Failed to delete file", "error");
-            });
-        }
-      });
-    }
-
-    async _confirmDeleteConversation(conversation) {
-      try {
-        const isAuthenticated = await window.auth.isAuthenticated();
-        if (!isAuthenticated) {
-          window.showNotification('Please log in to delete conversations', 'warning');
-          return;
-        }
-        const confirmed = await window.ModalManager.confirmAction({
-          title: "Delete Conversation",
-          message: `Delete "${conversation.title || 'this conversation'}" and all its messages?`,
-          confirmText: "Delete Forever",
-          cancelText: "Cancel",
-          confirmClass: "bg-red-600",
-          destructive: true
-        });
-        if (!confirmed) return;
-        const projectId = this.state.currentProject?.id;
-        if (!projectId) throw new Error("No active project selected");
-        const deleteBtn = document.activeElement;
-        const originalText = deleteBtn.innerHTML;
-        deleteBtn.innerHTML = `<span class="animate-spin">⏳</span> Deleting...`;
-        deleteBtn.disabled = true;
-        try {
-          await window.projectManager.deleteProjectConversation(projectId, conversation.id);
-          await Promise.all([
-            window.projectManager.loadProjectStats(projectId),
-            window.projectManager.loadProjectConversations(projectId)
-          ]);
-          this._closeDeleteModal();
-          window.showNotification("Conversation deleted", "success", {
-            action: "Undo",
-            onAction: async () => {
-              try {
-                await window.apiRequest(
-                  `/api/projects/${projectId}/conversations/${conversation.id}/restore`,
-                  "POST"
-                );
-                await Promise.all([
-                  window.projectManager.loadProjectStats(projectId),
-                  window.projectManager.loadProjectConversations(projectId)
-                ]);
-              } catch (err) {
-                console.error("Restore failed:", err);
-              }
-            },
-            timeout: 5000
-          });
-        } finally {
-          deleteBtn.innerHTML = originalText; deleteBtn.disabled = false;
-        }
-      } catch (error) {
-        console.error("Delete failed:", error);
-        this._handleDeleteConversationError(error);
-      }
-    }
-
-    _closeDeleteModal() {
-      try {
-        if (window.modalManager?.hide) {
-          window.modalManager.hide('delete');
-        } else if (window.ModalManager?.closeActiveModal) {
-          window.ModalManager.closeActiveModal();
-        } else {
-          const modal = document.getElementById('deleteConfirmModal');
-          if (modal) modal.classList.add('hidden');
-        }
-      } catch (err) {
-        console.warn("Error closing modal:", err);
-      }
-    }
-
-    _handleDeleteConversationError(error) {
-      if (error?.response?.status === 401 ||
-        error?.status === 401 ||
-        error.message?.includes('auth') ||
-        error.message?.includes('token') ||
-        error.message?.includes('unauthorized')) {
-        window.auth.handleAuthError(error, 'conversation deletion');
-        return;
-      }
-      let errorMsg = "Failed to delete conversation";
-      if (error?.response?.status === 403) errorMsg = "You don't have permission to delete this";
-      else if (error?.response?.status === 404) errorMsg = "Conversation not found - may already be deleted";
-      else if (error.message.includes("No active project")) errorMsg = "No project selected";
-      window.showNotification(errorMsg, "error");
-    }
-
-    _viewArtifact(artifact) {
-      window.showNotification("Artifact viewing not yet implemented", "info");
-    }
-
-    _confirmDeleteArtifact(artifact) {
-      window.ModalManager.confirmAction({
-        title: "Delete Artifact",
-        message: `Delete "${artifact.title || 'this artifact'}"?`,
-        confirmText: "Delete",
-        cancelText: "Cancel",
-        confirmClass: "bg-red-600",
-        onConfirm: () => {
-          const projectId = this.state.currentProject?.id;
-          if (!projectId) return;
-          window.projectManager?.deleteArtifact(projectId, artifact.id)
-            .then(() => {
-              window.showNotification("Artifact deleted", "success");
-              Promise.all([
-                window.projectManager.loadProjectStats(projectId),
-                window.projectManager.loadProjectArtifacts(projectId)
-              ]).catch(err => { console.error("Error refreshing data:", err); });
-            })
-            .catch(err => {
-              console.error("Error deleting artifact:", err);
-              window.showNotification("Failed to delete artifact", "error");
-            });
-        }
-      });
-    }
-
-
+    // Setup component
+    this.initElements();
+    this.bindEvents();
+    this.setupDragDropHandlers();
+    this.initChatInterface();
   }
-  window.ProjectDetailsComponent = ProjectDetailsComponent;
-})();
+
+  /* -------------------- DOM Initialization Methods -------------------- */
+
+  initElements() {
+    const getElement = (selector, required = false) => {
+      const el = document.querySelector(selector);
+      if (required && !el) {
+        console.error(`Required element not found: ${selector}`);
+      }
+      return el;
+    };
+
+    this.elements = {
+      container: getElement("#projectDetailsView", true),
+      title: getElement("#projectTitle"),
+      description: getElement("#projectDescription"),
+      tokenUsage: getElement("#tokenUsage"),
+      maxTokens: getElement("#maxTokens"),
+      tokenPercentage: getElement("#tokenPercentage"),
+      tokenProgressBar: getElement("#tokenProgressBar"),
+      filesList: getElement("#projectFilesList", true),
+      conversationsList: getElement("#projectConversationsList"),
+      artifactsList: getElement("#projectArtifactsList"),
+      uploadProgress: getElement("#filesUploadProgress"),
+      progressBar: getElement("#fileProgressBar"),
+      uploadStatus: getElement("#uploadStatus"),
+      pinBtn: getElement("#pinProjectBtn"),
+      backBtn: getElement("#backToProjectsBtn", true),
+      dragZone: getElement("#dragDropZone", true),
+      loadingStates: {
+        files: getElement("#filesLoading"),
+        search: getElement("#knowledgeSearchLoading"),
+        conversations: getElement("#conversationsLoading")
+      }
+    };
+  }
+
+  bindEvents() {
+    if (this.elements.backBtn) {
+      this.elements.backBtn.addEventListener('click', this.onBack);
+    }
+
+    document.addEventListener("projectConversationsLoaded", this.boundRenderConversations);
+  }
+
+  /* -------------------- Lifecycle Methods -------------------- */
+
+  show() {
+    if (!this.elements.container) return;
+    this.elements.container.classList.remove('hidden', 'opacity-0');
+    this.elements.container.classList.add('block', 'opacity-100');
+  }
+
+  hide() {
+    if (!this.elements.container) return;
+    this.elements.container.classList.add('opacity-0');
+    setTimeout(() => {
+      this.elements.container.classList.add('hidden');
+      this.elements.container.classList.remove('block');
+    }, 150);
+  }
+
+  destroy() {
+    // Clean up event listeners
+    document.removeEventListener("projectConversationsLoaded", this.boundRenderConversations);
+    if (this.elements.filesList) {
+      this.elements.filesList.removeEventListener('scroll', this.scrollHandler);
+    }
+    if (this.elements.dragZone) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+        this.elements.dragZone.removeEventListener(event, this.handleDragEvent);
+      });
+    }
+  }
+
+  /* -------------------- Core Rendering Methods -------------------- */
+
+  renderProject(project) {
+    if (!project || typeof project !== 'object') {
+      console.error('Invalid project data');
+      return;
+    }
+
+    this.state.currentProject = project;
+
+    if (!this.elements.container) return;
+    this.elements.container.classList.add('opacity-0');
+
+    // Update title and description
+    if (this.elements.title) {
+      this.elements.title.textContent = project.name || '';
+      this.elements.title.classList.add('animate-fade-in');
+    }
+
+    if (this.elements.description) {
+      this.elements.description.textContent = project.description || "No description provided.";
+      this.elements.description.classList.add('animate-fade-in');
+    }
+
+    this.updatePinButton(project.pinned);
+
+    setTimeout(() => {
+      this.elements.container.classList.remove('opacity-0');
+      this.elements.container.classList.add('opacity-100');
+    }, 50);
+
+    // Load associated project data
+    this.refreshProjectData(project.id);
+  }
+
+  updatePinButton(pinned) {
+    if (!this.elements.pinBtn) return;
+
+    const svg = this.elements.pinBtn.querySelector("svg");
+    if (svg) {
+      svg.classList.toggle('[fill:none]', !pinned);
+      svg.classList.toggle('[fill:currentColor]', pinned);
+    }
+    this.elements.pinBtn.classList.toggle('text-yellow-600', pinned);
+  }
+
+  renderStats(stats) {
+    if (!stats || typeof stats !== 'object') {
+      console.error('Invalid stats data');
+      return;
+    }
+
+    const { tokenUsage, maxTokens, tokenPercentage, tokenProgressBar } = this.elements;
+    const formatNumber = this.utils?.formatNumber || (n => n.toString());
+
+    if (tokenUsage) {
+      tokenUsage.textContent = formatNumber(stats.token_usage || 0);
+      tokenUsage.classList.add('animate-count-up');
+    }
+
+    if (maxTokens) {
+      maxTokens.textContent = formatNumber(stats.max_tokens || 0);
+    }
+
+    const usage = stats.token_usage || 0;
+    const maxT = stats.max_tokens || 1;
+    const pct = Math.min(100, (usage / maxT) * 100).toFixed(1);
+
+    if (tokenPercentage) {
+      tokenPercentage.textContent = `${pct}%`;
+      tokenPercentage.classList.add('animate-count-up');
+    }
+
+    this.animateProgressBar(tokenProgressBar, pct);
+  }
+
+  /* -------------------- File Management Methods -------------------- */
+
+  renderFiles(files = []) {
+    if (!this.elements.filesList) return;
+
+    this.showLoading('files');
+
+    requestAnimationFrame(() => {
+      if (!files || files.length === 0) {
+        this.renderEmptyFilesState();
+      } else {
+        this.setupVirtualScroll(files);
+      }
+      this.hideLoading('files');
+    });
+  }
+
+  renderEmptyFilesState() {
+    if (!this.elements.filesList) return;
+
+    this.elements.filesList.innerHTML = `
+      <div class="text-gray-500 text-center py-8 animate-fade-in">
+        <svg class="w-12 h-12 mx-auto opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        </svg>
+        <p class="mt-2">No files uploaded yet</p>
+        <button id="uploadFileBtn" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-colors">
+          Upload Files
+        </button>
+      </div>
+    `;
+  }
+
+  setupVirtualScroll(files) {
+    if (!this.elements.filesList) return;
+
+    this.elements.filesList.innerHTML = "";
+
+    // Handle initial zero height case
+    if (this.elements.filesList.clientHeight === 0) {
+      setTimeout(() => this.setupVirtualScroll(files), 100);
+      return;
+    }
+
+    const containerHeight = this.elements.filesList.clientHeight;
+    const itemHeight = 72;
+    const visibleCount = Math.ceil(containerHeight / itemHeight) + 2;
+
+    this.virtualScroll = {
+      startIndex: 0,
+      endIndex: Math.min(visibleCount, files.length),
+      itemHeight,
+      files
+    };
+
+    this.updateVisibleFiles();
+    this.elements.filesList.addEventListener('scroll', this.scrollHandler);
+  }
+
+  updateVisibleFiles() {
+    if (!this.virtualScroll || !this.elements.filesList) return;
+
+    const { startIndex, endIndex, files, itemHeight } = this.virtualScroll;
+    const fragment = document.createDocumentFragment();
+
+    for (let i = startIndex; i < endIndex; i++) {
+      if (files[i]) {
+        const fileItem = this.createFileItem(files[i]);
+        fileItem.style.position = 'absolute';
+        fileItem.style.top = `${i * itemHeight}px`;
+        fragment.appendChild(fileItem);
+      }
+    }
+
+    this.elements.filesList.innerHTML = '';
+    this.elements.filesList.appendChild(fragment);
+    this.elements.filesList.style.height = `${files.length * itemHeight}px`;
+  }
+
+  createFileItem(file) {
+    if (!file || !this.utils) return document.createElement('div');
+
+    const item = this.utils.createElement("div", {
+      className: "content-item relative transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-sm",
+      "data-file-id": file.id
+    });
+
+    const infoDiv = this.utils.createElement("div", {
+      className: "flex items-center gap-3 p-3"
+    });
+
+    const icon = this.utils.createElement("span", {
+      className: `text-xl ${file.file_type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`
+    });
+
+    icon.innerHTML = this.getFileIcon(file.file_type);
+
+    const detailDiv = this.utils.createElement("div", {
+      className: "flex flex-col min-w-0 flex-1"
+    });
+
+    detailDiv.appendChild(this.utils.createElement("div", {
+      className: "font-medium truncate text-gray-800 dark:text-gray-200",
+      textContent: file.filename
+    }));
+
+    const sizeDate = this.utils.createElement("div", {
+      className: "text-xs text-gray-500 dark:text-gray-400",
+      textContent: `${this.utils.formatBytes(file.file_size)} · ${this.utils.formatDate(file.created_at)}`
+    });
+    detailDiv.appendChild(sizeDate);
+
+    const statusBadge = this.createProcessingBadge(file.metadata?.search_processing || {});
+    detailDiv.appendChild(statusBadge);
+
+    infoDiv.appendChild(icon);
+    infoDiv.appendChild(detailDiv);
+    item.appendChild(infoDiv);
+
+    const actions = this.utils.createElement("div", { className: "flex gap-1 pe-2" });
+    actions.appendChild(this.createActionButton({
+      icon: "trash",
+      color: "red",
+      action: () => this.confirmDeleteFile(file),
+      tooltip: "Delete file"
+    }));
+
+    actions.appendChild(this.createActionButton({
+      icon: "download",
+      color: "blue",
+      action: () => this.downloadFile(file),
+      tooltip: "Download file"
+    }));
+
+    item.appendChild(actions);
+    return item;
+  }
+
+  getFileIcon(fileType) {
+    const iconMap = {
+      pdf: `<path d="M10 8v8m4-8v4m0 4v-4m4 0h-4m-8-4h4m8 0h-4"/>`,
+      txt: `<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>`,
+      md: `<path d="M12 6v12m-3-3l3 3 3-3M3 6h18M3 12h18M3 18h18"/>`,
+      default: `<path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>`
+    };
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      ${iconMap[fileType] || iconMap.default}
+    </svg>`;
+  }
+
+  /* -------------------- File Upload Methods -------------------- */
+
+  async uploadFiles(projectId, files) {
+    try {
+      const isAuthenticated = await this.auth?.isAuthenticated();
+      if (!isAuthenticated) {
+        this.notification?.('Please log in to upload files', 'warning');
+        return;
+      }
+
+      this.showLoading('files');
+      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+      this.updateUploadProgress();
+
+      const { validFiles, invalidFiles } = this.validateFiles(files);
+      this.handleInvalidFiles(invalidFiles);
+
+      if (validFiles.length === 0) return;
+
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+        const batch = validFiles.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(file => this.processFile(projectId, file)));
+      }
+
+      await this.refreshProjectData(projectId);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      this.notification?.('File upload failed', 'error');
+    } finally {
+      this.hideLoading('files');
+    }
+  }
+
+  async processFile(projectId, file) {
+    try {
+      if (!this.projectManager?.uploadFile) {
+        throw new Error('Project manager not available');
+      }
+
+      const response = await this.projectManager.uploadFile(projectId, file);
+
+      this.fileUploadStatus.completed++;
+      this.updateUploadProgress();
+
+      if (this.notification) {
+        this.notification(`${file.name} uploaded successfully`, 'success');
+      }
+
+      if (this.fileUploadStatus.completed === 1) {
+        this.refreshKnowledgeBase(projectId);
+      }
+    } catch (error) {
+      console.error(`Upload error for ${file.name}:`, error);
+      this.fileUploadStatus.failed++;
+      this.fileUploadStatus.completed++;
+      this.updateUploadProgress();
+
+      const errorMessage = this.formatUploadErrorMessage(error, file.name);
+      this.notification?.(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
+    }
+  }
+
+  validateFiles(files) {
+    const { allowedExtensions, maxSizeMB } = this.fileConstants;
+    const validFiles = [], invalidFiles = [];
+
+    Array.from(files).forEach(file => {
+      const fileExt = `.${file.name.split('.').pop().toLowerCase()}`;
+      const isValidExt = allowedExtensions.includes(fileExt);
+      const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
+
+      if (isValidExt && isValidSize) {
+        validFiles.push(file);
+      } else {
+        const errorMsg = !isValidExt
+          ? `Invalid file type (${fileExt}). Allowed: ${allowedExtensions.join(', ')}`
+          : `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB limit)`;
+
+        invalidFiles.push({ file, error: errorMsg });
+      }
+    });
+
+    return { validFiles, invalidFiles };
+  }
+
+  handleInvalidFiles(invalidFiles = []) {
+    invalidFiles.forEach(({ file, error }) => {
+      this.notification?.(`Skipped ${file.name}: ${error}`, 'warning');
+    });
+  }
+
+  /* -------------------- UI Interaction Methods -------------------- */
+
+  confirmDeleteFile(file) {
+    if (!file?.id || !this.state.currentProject?.id) return;
+
+    const confirmed = confirm(`Delete ${file.filename}? This cannot be undone.`);
+    if (confirmed && this.projectManager?.deleteFile) {
+      this.projectManager.deleteFile(this.state.currentProject.id, file.id)
+        .then(() => this.refreshProjectData(this.state.currentProject.id))
+        .catch(err => {
+          console.error('Delete failed:', err);
+          this.notification?.('Failed to delete file', 'error');
+        });
+    }
+  }
+
+  async downloadFile(file) {
+    if (!file?.id || !this.state.currentProject?.id || !this.projectManager?.downloadFile) return;
+
+    try {
+      this.showLoading('files');
+      const success = await this.projectManager.downloadFile(this.state.currentProject.id, file.id);
+      if (!success) {
+        throw new Error('Download failed');
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      this.notification?.('File download failed', 'error');
+    } finally {
+      this.hideLoading('files');
+    }
+  }
+
+  switchTab(tabName) {
+    if (!tabName || this.state.activeTab === tabName) return;
+
+    // Transition out current tab
+    const currentTab = document.querySelector(`.project-tab-content:not(.hidden)`);
+    if (currentTab) {
+      currentTab.classList.add('opacity-0');
+      setTimeout(() => {
+        currentTab.classList.add('hidden');
+        currentTab.classList.remove('opacity-0');
+      }, 150);
+    }
+
+    // Transition in new tab
+    const newTab = document.getElementById(`${tabName}Tab`);
+    if (newTab) {
+      newTab.classList.remove('hidden');
+      newTab.classList.add('opacity-0');
+      setTimeout(() => {
+        newTab.classList.remove('opacity-0');
+      }, 50);
+    }
+
+    // Update tab buttons
+    document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
+      tabBtn.classList.remove('active', 'text-blue-600', 'dark:text-blue-400');
+      tabBtn.setAttribute('aria-selected', 'false');
+    });
+
+    const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
+    if (activeTabBtn) {
+      activeTabBtn.classList.add('active', 'text-blue-600', 'dark:text-blue-400');
+      activeTabBtn.setAttribute('aria-selected', 'true');
+    }
+
+    this.state.activeTab = tabName;
+  }
+
+  /* -------------------- Drag & Drop Methods -------------------- */
+
+  setupDragDropHandlers() {
+    if (!this.elements.dragZone) return;
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+      this.elements.dragZone.addEventListener(event, this.handleDragEvent);
+    });
+
+    this.elements.dragZone.addEventListener('drop', this.handleDrop);
+  }
+
+  handleDragEvent(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (this.elements.dragZone) {
+      this.elements.dragZone.classList.toggle('drag-zone-active',
+        ['dragenter', 'dragover'].includes(e.type));
+    }
+  }
+
+  async handleDrop(e) {
+    this.handleDragEvent(e);
+    const files = e.dataTransfer.files;
+    const projectId = this.state.currentProject?.id;
+
+    if (projectId && files.length > 0) {
+      try {
+        await this.uploadFiles(projectId, files);
+      } catch (error) {
+        console.error('Error uploading files:', error);
+      }
+    }
+  }
+
+  /* -------------------- Chat Interface Methods -------------------- */
+
+  initChatInterface() {
+    if (typeof window.ChatInterface !== 'function') {
+      console.warn('ChatInterface not available - chat functionality will be limited');
+      return;
+    }
+
+    if (!window.projectChatInterface) {
+      try {
+        window.projectChatInterface = new window.ChatInterface({
+          containerSelector: '#projectChatUI',
+          messageContainerSelector: '#projectChatMessages',
+          inputSelector: '#projectChatInput',
+          sendButtonSelector: '#projectChatSendBtn',
+          typingIndicator: true,
+          readReceipts: true,
+          messageStatus: true
+        });
+
+        window.projectChatInterface.on('messageSent', (data) => {
+          this.handleMessageSent(data);
+        });
+
+        window.projectChatInterface.on('error', (err) => {
+          this.handleChatError(err);
+        });
+
+        window.projectChatInterface.initialize();
+      } catch (err) {
+        console.error('Failed to initialize chat interface:', err);
+      }
+    }
+  }
+
+  handleMessageSent(data) {
+    // Handle chat message sent event
+    console.log('Message sent:', data);
+    if (this.notification) {
+      this.notification('Message sent successfully', 'success');
+    }
+  }
+
+  handleChatError(error) {
+    console.error('Chat error:', error);
+    if (this.notification) {
+      this.notification(`Chat error: ${error.message || 'Unknown error'}`, 'error');
+    }
+  }
+
+  async handleConversationClick(conversation) {
+    if (!conversation?.id || !this.state.currentProject?.id) {
+      this.notification?.('Invalid conversation data', 'error');
+      return;
+    }
+
+    try {
+      localStorage.setItem("selectedProjectId", this.state.currentProject.id);
+
+      const chatContainer = document.getElementById('projectChatContainer');
+      if (chatContainer) {
+        chatContainer.classList.remove('hidden', 'opacity-0');
+        chatContainer.classList.add('block', 'opacity-100');
+        chatContainer.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      if (!window.projectChatInterface) {
+        this.notification?.('Chat system not ready', 'error');
+        return;
+      }
+
+      this.showLoading('conversations');
+
+      if (!window.projectChatInterface.initialized) {
+        await window.projectChatInterface.initialize();
+      }
+
+      window.projectChatInterface.setTargetContainer('#projectChatMessages');
+      const success = await window.projectChatInterface.loadConversation(conversation.id);
+
+      if (!success) throw new Error('Failed to load conversation');
+
+      // Update URL history
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('chatId', conversation.id);
+      window.history.pushState({}, "", newUrl);
+    } catch (err) {
+      console.error('Error loading conversation:', err);
+      this.notification?.(
+        `Error loading conversation: ${err.message || 'Unknown error'}`,
+        'error'
+      );
+    } finally {
+      this.hideLoading('conversations');
+    }
+  }
+
+  renderConversations(conversations = []) {
+    if (!this.elements.conversationsList) return;
+
+    this.showLoading('conversations');
+
+    if (!conversations || conversations.length === 0) {
+      this.elements.conversationsList.innerHTML = `
+        <div class="text-gray-500 text-center py-8">
+          <p>No conversations yet</p>
+        </div>
+      `;
+    } else {
+      this.elements.conversationsList.innerHTML = conversations
+        .map(conv => this.createConversationItem(conv))
+        .join('');
+    }
+
+    this.hideLoading('conversations');
+  }
+
+  createConversationItem(conversation) {
+    return `
+      <div class="conversation-item p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+           onclick="projectDetails.handleConversationClick(${JSON.stringify(conversation).replace(/"/g, '&quot;')})">
+        <h4 class="font-medium truncate">${conversation.title || 'Untitled conversation'}</h4>
+        <p class="text-sm text-gray-500 truncate">
+          ${conversation.last_message || 'No messages yet'}
+        </p>
+        <div class="flex justify-between mt-1 text-xs text-gray-400">
+          <span>${this.utils?.formatDate(conversation.updated_at) || conversation.updated_at}</span>
+          <span>${conversation.message_count || 0} messages</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /* -------------------- Utility Methods -------------------- */
+
+  createActionButton({ icon, color, action, tooltip }) {
+    if (!this.utils) return document.createElement('div');
+
+    const button = this.utils.createElement("button", {
+      className: `p-1.5 rounded-sm text-${color}-600 hover:text-${color}-800 hover:bg-${color}-50 dark:hover:bg-${color}-900/20 transition-colors`,
+      onclick: action,
+      "aria-label": tooltip
+    });
+
+    const iconMap = {
+      trash: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>',
+      download: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>'
+    };
+
+    button.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        ${iconMap[icon] || ''}
+      </svg>
+    `;
+    return button;
+  }
+
+  createProcessingBadge(processing = {}) {
+    const statusMappings = {
+      'success': {
+        class: "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300",
+        text: "Ready for Search",
+        icon: "✓"
+      },
+      'error': {
+        class: "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300",
+        text: processing.error ? `Error: ${processing.error.substring(0, 25)}...` : 'Processing Failed',
+        icon: "⚠"
+      },
+      'pending': {
+        class: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300",
+        text: "Processing...",
+        icon: "⏳"
+      },
+      'default': {
+        class: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+        text: "Not Processed",
+        icon: "•"
+      }
+    };
+
+    const status = processing.status || 'default';
+    const mapping = statusMappings[status] || statusMappings.default;
+
+    const badge = document.createElement('div');
+    badge.className = `processing-status text-xs px-2 py-1 rounded-full ${mapping.class} mt-1 flex items-center gap-1 w-fit`;
+    badge.innerHTML = `<span>${mapping.icon}</span> ${mapping.text}`;
+    badge.title = processing.error || mapping.text;
+
+    return badge;
+  }
+
+  formatUploadErrorMessage(error, fileName) {
+    if (error?.response?.status === 401 || error.message?.includes('auth')) {
+      this.auth?.handleAuthError?.(error);
+      return "Authentication error - please log in again";
+    }
+
+    const errorMessages = {
+      "dangerous patterns": "File contains potentially unsafe content",
+      "validation": "File format not supported",
+      "too large": `File exceeds ${this.fileConstants.maxSizeMB}MB limit`,
+      "token limit": "Project token limit exceeded",
+      "422": "File validation failed",
+      "default": error.message || "Upload failed"
+    };
+
+    const messageKey = Object.keys(errorMessages).find(key =>
+      error.message?.includes(key) ||
+      error.response?.data?.message?.includes(key)
+    );
+
+    return errorMessages[messageKey || "default"];
+  }
+
+  async refreshProjectData(projectId) {
+    if (!projectId || !this.projectManager) {
+      console.warn('Cannot refresh project data - no valid project ID');
+      return;
+    }
+
+    try {
+      await Promise.all([
+        this.projectManager.loadProjectFiles(projectId),
+        this.projectManager.loadProjectStats(projectId),
+        this.projectManager.loadProjectConversations(projectId),
+        this.projectManager.loadProjectArtifacts(projectId)
+      ]);
+    } catch (err) {
+      console.error("Error refreshing project data:", err);
+    }
+  }
+
+  refreshKnowledgeBase(projectId) {
+    if (this.state.currentProject?.knowledge_base_id && this.projectManager?.loadKnowledgeBaseDetails) {
+      this.projectManager.loadKnowledgeBaseDetails(
+        this.state.currentProject.knowledge_base_id
+      );
+    }
+  }
+
+  /* -------------------- UI Helper Methods -------------------- */
+
+  showLoading(type) {
+    if (this.elements.loadingStates?.[type]) {
+      this.elements.loadingStates[type].classList.remove('hidden');
+    }
+  }
+
+  hideLoading(type) {
+    if (this.elements.loadingStates?.[type]) {
+      this.elements.loadingStates[type].classList.add('hidden');
+    }
+  }
+
+  animateProgressBar(progressBar, percentage) {
+    if (!progressBar || percentage === undefined) return;
+
+    progressBar.style.width = "0%";
+    progressBar.classList.add('transition-all', 'duration-500', 'ease-out');
+
+    requestAnimationFrame(() => {
+      progressBar.style.width = `${Math.min(100, percentage)}%`;
+    });
+  }
+
+  updateUploadProgress() {
+    const { completed, failed, total } = this.fileUploadStatus;
+    if (total === 0) return;
+
+    const percentage = Math.round((completed / total) * 100);
+    this.animateProgressBar(this.elements.progressBar, percentage);
+
+    if (this.elements.uploadStatus) {
+      this.elements.uploadStatus.textContent =
+        `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
+    }
+
+    if (completed === total) {
+      setTimeout(() => {
+        if (this.elements.uploadProgress) {
+          this.elements.uploadProgress.classList.add("opacity-0");
+          setTimeout(() => {
+            this.elements.uploadProgress.classList.add("hidden");
+            this.elements.uploadProgress.classList.remove("opacity-0");
+          }, 300);
+        }
+
+        if (this.notification) {
+          if (failed === 0) {
+            this.notification("Files uploaded successfully", "success");
+          } else {
+            this.notification(
+              `${failed} file(s) failed to upload`,
+              "error",
+              { timeout: 5000 }
+            );
+          }
+        }
+      }, 1000);
+    }
+  }
+
+  handleScroll() {
+    if (!this.virtualScroll || !this.elements.filesList) return;
+
+    const scrollTop = this.elements.filesList.scrollTop;
+    const { itemHeight, files } = this.virtualScroll;
+
+    const startIndex = Math.floor(scrollTop / itemHeight);
+    const endIndex = Math.min(
+      startIndex + Math.ceil(this.elements.filesList.clientHeight / itemHeight) + 2,
+      files.length
+    );
+
+    if (startIndex !== this.virtualScroll.startIndex ||
+      endIndex !== this.virtualScroll.endIndex) {
+      this.virtualScroll.startIndex = startIndex;
+      this.virtualScroll.endIndex = endIndex;
+      this.updateVisibleFiles();
+    }
+  }
+}
+
+ // Global reference for event handlers (simplified integration)
+window.projectDetails = new ProjectDetailsComponent({
+  onBack: () => console.log('Back button clicked'),
+  utils: window.uiUtilsInstance,
+  projectManager: window.projectManager,
+  auth: window.auth,
+  notification: window.showNotification
+});
