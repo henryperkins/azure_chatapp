@@ -1,9 +1,10 @@
 export default {
   plugins: {
     "@tailwindcss/postcss": {
-      // Optional configuration
-      nesting: true, // Enable nesting plugin
-      autoprefixer: true // Keep autoprefixer
+      // Enable nesting plugin for nested CSS syntax
+      nesting: true,
+      // Keep autoprefixer enabled for vendor prefixes
+      autoprefixer: true
     }
   }
 }

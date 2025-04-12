@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "description": "Azure OpenAI Chat Application",
   "scripts": {
-    "build:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css",
-    "dev:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --watch",
+    "build:css": "npx @tailwindcss/cli -i ./static/css/tailwind.css -o ./static/css/dist/tailwind.css",
+    "dev:css": "npx @tailwindcss/cli -i ./static/css/tailwind.css -o ./static/css/dist/tailwind.css -w",
     "prebuild": "npm run build:css",
     "lint:css": "stylelint './static/css/**/*.css'"
   },
@@ -13,7 +13,12 @@
     "type": "git",
     "url": "git+https://github.com/henryperkins/azure_chatapp.git"
   },
-  "keywords": ["azure", "openai", "chat", "tailwind"],
+  "keywords": [
+    "azure",
+    "openai",
+    "chat",
+    "tailwind"
+  ],
   "author": "",
   "license": "ISC",
   "bugs": {
@@ -23,16 +28,20 @@
   "devDependencies": {
     "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4.1.3",
+    "@tailwindcss/cli": "^4.0.0",
     "@types/node": "^22.13.14",
     "postcss": "^8.4.38",
     "postcss-cli": "^11.0.0",
     "postcss-import": "^16.0.1",
     "postcss-nested": "^6.0.1",
     "tailwindcss": "^4.0.0",
-    "stylelint": "^16.2.1",
-    "stylelint-config-standard": "^34.0.0"
+    "stylelint": "^16.18.0",
+    "stylelint-config-standard": "^38.0.0"
   },
   "dependencies": {
     "mcp": "^1.4.2"
+  },
+  "engines": {
+    "node": ">=18.12.0"
   }
 }
