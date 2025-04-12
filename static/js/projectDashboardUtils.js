@@ -15,6 +15,9 @@
  * - auth.js (for session handling, broadcastAuth, notify, etc.)
  */
 
+// Set the global flag immediately at the top level to avoid race conditions
+window.dashboardUtilsReady = true;
+
 (function () {
   // Prevent double-initialization
   if (window.ProjectDashboard && window.ProjectDashboard._initialized) {
@@ -544,10 +547,13 @@
    * ========================================================================= */
   // Dispatch event indicating the dashboard utils are ready
   function dispatchReady() {
+    // Set a global flag that can be checked directly
+    window.dashboardUtilsReady = true;
     document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
     console.log('[ProjectDashboard] dashboardUtilsReady event dispatched');
   }
 
+  // Ensure the ready flag is set immediately and the event is dispatched
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', dispatchReady);
   } else {
@@ -563,11 +569,19 @@
     } else {
       console.warn('[ProjectDashboard] projectDashboard.js not loaded yet, dashboard initialization deferred');
       // Return a promise that will be resolved when projectDashboard is initialized
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         document.addEventListener('projectDashboardInitialized', () => {
           console.log('[ProjectDashboard] Dashboard initialization completed via event');
           resolve(window.projectDashboard);
         }, { once: true });
+
+        // Add a timeout to reject the promise if initialization takes too long
+        setTimeout(() => {
+          if (!window.projectDashboard) {
+            console.error('[ProjectDashboard] Dashboard initialization timed out');
+            reject(new Error('Dashboard initialization timed out'));
+          }
+        }, 10000); // 10 seconds timeout
       });
     }
   };
