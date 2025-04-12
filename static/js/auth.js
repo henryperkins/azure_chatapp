@@ -1676,3 +1676,24 @@ export {
   standardizeErrorFn as standardizeError,
   handleAuthError
 };
+
+// Export as default for ES module consumers
+export default {
+  init,
+  login: loginUser,
+  logout,
+  verifyAuthState,
+  refreshTokens,
+  getAuthToken,
+  clear: clearTokenState,
+  standardizeError: standardizeErrorFn,
+  handleAuthError,
+  isAuthenticated: async function (options = {}) {
+    try {
+      return await verifyAuthState(options.forceVerify || false);
+    } catch (error) {
+      console.error("[Auth] Authentication check failed:", error);
+      return false;
+    }
+  }
+};

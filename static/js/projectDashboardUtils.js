@@ -575,10 +575,34 @@ window.dashboardUtilsReady = true;
    *  6. HELPER FUNCTIONS (SHOW/HIDE VIEWS, ETC.)
    * ========================================================================= */
   ProjectDashboard.showProjectsView = function () {
+    console.log('[ProjectDashboardUtils] Executing showProjectsView'); // Add log
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
-    if (listView) listView.classList.remove('hidden');
-    if (detailsView) detailsView.classList.add('hidden');
+
+    if (listView) {
+      listView.classList.remove('hidden');
+      // Ensure flex-1 is added if needed for layout when visible
+      listView.classList.add('flex-1');
+      console.log('[ProjectDashboardUtils] projectListView made visible');
+    } else {
+      console.warn('[ProjectDashboardUtils] projectListView not found');
+    }
+
+    if (detailsView) {
+      detailsView.classList.add('hidden');
+      console.log('[ProjectDashboardUtils] projectDetailsView hidden');
+    } else {
+      console.warn('[ProjectDashboardUtils] projectDetailsView not found');
+    }
+
+    // Also potentially hide the main chat UI if switching back to projects view
+    const chatUI = document.getElementById('chatUI');
+    const noChatSelectedMessage = document.getElementById('noChatSelectedMessage');
+    if (chatUI) chatUI.classList.add('hidden');
+    if (noChatSelectedMessage) noChatSelectedMessage.classList.remove('hidden'); // Show placeholder
+
+     // Update URL
+     window.history.pushState({}, '', '/?view=projects');
   };
 
   // Provide a global reference if needed:
@@ -597,11 +621,90 @@ window.dashboardUtilsReady = true;
     console.log('[ProjectDashboard] dashboardUtilsReady event dispatched');
   }
 
+  // Add event listeners for project detail buttons
+  function setupProjectDetailButtonListeners() {
+    const backBtn = document.getElementById('backToProjectsBtn');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        ProjectDashboard.showProjectsView();
+      });
+    }
+
+    const editBtn = document.getElementById('editProjectBtn');
+    if (editBtn) {
+      editBtn.addEventListener('click', () => {
+        const currentProjectId = window.projectManager?.currentProject()?.id;
+        if (currentProjectId && window.projectModal?.show) {
+          window.projectModal.show(currentProjectId); // Assuming projectModal handles editing
+        } else {
+          console.warn('Cannot edit project: No current project ID or projectModal not available.');
+          ProjectDashboard.showNotification('Could not open edit project form.', 'warning');
+        }
+      });
+    }
+
+    const pinBtn = document.getElementById('pinProjectBtn');
+    if (pinBtn) {
+      pinBtn.addEventListener('click', async () => {
+        const currentProjectId = window.projectManager?.currentProject()?.id;
+        if (currentProjectId && window.projectManager?.togglePinProject) {
+          try {
+            await window.projectManager.togglePinProject(currentProjectId);
+            ProjectDashboard.showNotification('Project pin status toggled.', 'success');
+            // Optionally refresh project details or list
+            window.projectManager.loadProjectDetails(currentProjectId);
+            window.projectManager.loadProjects(); // Refresh list in background
+          } catch (error) {
+            console.error('Failed to toggle pin:', error);
+            ProjectDashboard.showNotification(`Error toggling pin: ${error.message}`, 'error');
+          }
+        } else {
+          console.warn('Cannot toggle pin: No current project ID or togglePinProject function.');
+        }
+      });
+    }
+
+    const archiveBtn = document.getElementById('archiveProjectBtn');
+    if (archiveBtn) {
+      archiveBtn.addEventListener('click', async () => {
+        const currentProject = window.projectManager?.currentProject();
+        if (currentProject?.id && window.projectManager?.toggleArchiveProject) {
+           const confirmArchive = await ProjectDashboard.modalManager.confirmAction({
+              title: currentProject.archived ? 'Unarchive Project?' : 'Archive Project?',
+              message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} this project? ${currentProject.archived ? '' : 'Archived projects are hidden by default.'}`,
+              confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
+              confirmClass: currentProject.archived ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700',
+           });
+
+           if (confirmArchive) {
+             try {
+               await window.projectManager.toggleArchiveProject(currentProject.id);
+               ProjectDashboard.showNotification(`Project ${currentProject.archived ? 'unarchived' : 'archived'}.`, 'success');
+               // Go back to project list after archiving/unarchiving
+               ProjectDashboard.showProjectsView();
+               window.projectManager.loadProjects(); // Refresh list
+             } catch (error) {
+               console.error('Failed to toggle archive:', error);
+               ProjectDashboard.showNotification(`Error toggling archive: ${error.message}`, 'error');
+             }
+           }
+        } else {
+          console.warn('Cannot toggle archive: No current project ID or toggleArchiveProject function.');
+        }
+      });
+    }
+  }
+
+
   // Ensure the ready flag is set immediately and the event is dispatched
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', dispatchReady);
+    document.addEventListener('DOMContentLoaded', () => {
+        dispatchReady();
+        setupProjectDetailButtonListeners(); // Setup listeners after DOM is ready
+    });
   } else {
     dispatchReady();
+    setupProjectDetailButtonListeners(); // Setup listeners immediately if DOM already ready
   }
 
   // Add a proxy for initProjectDashboard in case it's called before projectDashboard.js loads

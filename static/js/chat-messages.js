@@ -29,8 +29,8 @@ window.MessageService = function (options = {}) {
  */
 window.MessageService.prototype.clear = function() {
   this.chatId = null;
-  
-  
+
+
   try {
     // Clear any UI state with empty array
     if (typeof this.onMessageReceived === 'function') {
@@ -39,7 +39,7 @@ window.MessageService.prototype.clear = function() {
   } catch (error) {
     console.error('Error clearing messages:', error);
   }
-  
+
 };
 
 /**
@@ -48,7 +48,7 @@ window.MessageService.prototype.clear = function() {
 window.MessageService.prototype.countClaudeTokens = async function(text) {
   try {
     const response = await window.apiRequest(
-      '/api/claude/count_tokens', 
+      '/api/claude/count_tokens',
       'POST',
       { text, model: this.modelConfig?.modelName }
     );
@@ -96,7 +96,7 @@ window.MessageService.prototype.sendMessage = async function (content) {
   if (!this.chatId) {
     throw new Error('Invalid conversation ID: No conversation ID set');
   }
-  
+
   if (!window.ChatUtils.isValidUUID(this.chatId)) {
     console.error(`Cannot send message: Invalid conversation ID format: ${this.chatId}`);
     throw new Error(`Invalid conversation ID: ${this.chatId}`);
@@ -110,7 +110,7 @@ window.MessageService.prototype.sendMessage = async function (content) {
   // Create the message payload with Claude-specific fields
   const messagePayload = {
     content: content,
-    role: "user", 
+    role: "user",
     type: "message",
     vision_detail: this.modelConfig?.visionDetail || "auto"
   };
@@ -191,10 +191,10 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
       } else {
           apiUrl = `/api/chat/conversations/${chatId}/messages`;
       }
-    
+
     // Make the HTTP request
     const response = await window.apiRequest(apiUrl, 'POST', messagePayload);
-    
+
     // Parse and handle the response
     if (response.data?.assistant_message) {
       // Handle assistant response message
@@ -212,7 +212,7 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
       const errorMsg = this._extractAIErrorMessage(response.data.assistant_error);
       throw new Error(errorMsg);
     }
-    
+
     return response.data;
   } catch (error) {
     // Enhanced error handling
@@ -225,39 +225,47 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
 
 /**
  * Extract detailed error message from AI response error
- * @param {string} errorStr - Error message from AI
+ * @param {string|any} errorStr - Error message from AI
  * @returns {string} - User-friendly error message
  */
 window.MessageService.prototype._extractAIErrorMessage = function(errorStr) {
+  // Ensure errorStr is a string to avoid "errorStr.includes is not a function"
+  if (errorStr === null || errorStr === undefined) {
+    return "AI couldn't generate a response due to an unknown error.";
+  }
+
+  // Convert to string if it's not already a string
+  const errorString = typeof errorStr === 'string' ? errorStr : String(errorStr);
+
   // If it's a generic "Failed to generate response" error, provide more context
-  if (errorStr === "Failed to generate response") {
+  if (errorString === "Failed to generate response") {
     return "AI couldn't generate a response. This may be due to content moderation, system load, or connection issues. Please try again or rephrase your message.";
   }
-  
+
   // Handle Claude credit balance errors
-  if (errorStr.includes("credit balance") || errorStr.includes("Plans & Billing")) {
+  if (errorString.includes("credit balance") || errorString.includes("Plans & Billing")) {
     return "Your Claude API credit balance is too low. Please go to Plans & Billing to upgrade or purchase credits.";
   }
-  
+
   // Handle common error patterns and map to better user-facing messages
-  if (errorStr.includes("token") && errorStr.includes("limit")) {
+  if (errorString.includes("token") && errorString.includes("limit")) {
     return "Response exceeded maximum length. Please try a shorter prompt or break your request into smaller parts.";
   }
-  
-  if (errorStr.includes("content policy") || errorStr.includes("moderation")) {
+
+  if (errorString.includes("content policy") || errorString.includes("moderation")) {
     return "Your request was flagged by content moderation. Please modify your message and try again.";
   }
-  
-  if (errorStr.includes("rate limit") || errorStr.includes("throttling")) {
+
+  if (errorString.includes("rate limit") || errorString.includes("throttling")) {
     return "Too many requests. Please wait a moment before trying again.";
   }
-  
-  if (errorStr.includes("timeout")) {
+
+  if (errorString.includes("timeout")) {
     return "The AI response timed out. This could be due to high system load or a complex request. Please try again later.";
   }
-  
+
   // If we can't categorize the error, return the original with a prefix
-  return `AI generation error: ${errorStr}`;
+  return `AI generation error: ${errorString}`;
 };
 
 /**
@@ -274,7 +282,7 @@ window.MessageService.prototype._handleAIError = function(error) {
     }
     return error;
   }
-  
+
   // If it's a string, create a proper Error
   if (typeof error === 'string') {
     const enhancedError = new Error(this._extractAIErrorMessage(error));
@@ -282,19 +290,19 @@ window.MessageService.prototype._handleAIError = function(error) {
     enhancedError.originalMessage = error;
     return enhancedError;
   }
-  
+
   // If it's an API error object with status
   if (error.status) {
     const statusCode = error.status;
     let message = error.message || "Unknown error";
-    
+
     // Check for credit balance issues in the error message or response
-    if (statusCode === 400 && 
-        (message.includes("credit balance") || 
-         message.includes("Plans & Billing") || 
-         (error.response && error.response.data && 
-          error.response.data.assistant_error && 
-          (error.response.data.assistant_error.includes("credit balance") || 
+    if (statusCode === 400 &&
+        (message.includes("credit balance") ||
+         message.includes("Plans & Billing") ||
+         (error.response && error.response.data &&
+          error.response.data.assistant_error &&
+          (error.response.data.assistant_error.includes("credit balance") ||
            error.response.data.assistant_error.includes("Plans & Billing"))))) {
       message = "Your Claude API credit balance is too low. Please go to Plans & Billing to upgrade or purchase credits.";
     }
@@ -306,14 +314,14 @@ window.MessageService.prototype._handleAIError = function(error) {
     } else if (statusCode >= 500) {
       message = "The AI service is currently unavailable. Please try again later.";
     }
-    
+
     const enhancedError = new Error(message);
     enhancedError.status = statusCode;
     enhancedError.code = "AI_SERVICE_ERROR";
     enhancedError.originalError = error;
     return enhancedError;
   }
-  
+
   // Return original if we can't enhance it
   return error;
 };

@@ -1,6 +1,6 @@
-
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Projects - Azure OpenAI Chat</title>
@@ -22,6 +22,7 @@
   <!-- CSRF token with dynamic injection pattern -->
   <meta name="csrf-token" content="" id="csrfToken" />
 </head>
+
 <body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
 
   <!--
@@ -32,15 +33,11 @@
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <!-- Enhance toggle button with proper accessibility attributes -->
-        <button id="navToggleBtn"
-                class="focus:outline-hidden md:hidden"
-                aria-label="Toggle sidebar navigation"
-                aria-expanded="false"
-                aria-controls="mainSidebar">
-          <svg role="img" aria-hidden="true" class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor"
-               viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 6h16M4 12h16M4 18h16" />
+        <button id="navToggleBtn" type="button" class="focus:outline-hidden md:hidden"
+          aria-label="Toggle sidebar navigation" aria-expanded="false" aria-controls="mainSidebar">
+          <svg role="img" aria-hidden="true" class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none"
+            stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
         <h1 class="text-xl font-semibold dark:text-gray-100">Azure OpenAI Chat</h1>
@@ -48,9 +45,12 @@
 
       <div class="flex items-center gap-4">
         <!-- Dark mode toggle -->
-        <button id="darkModeToggle" class="p-2 rounded-full focus:outline-hidden focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600">
-          <svg id="darkModeIcon" class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        <button id="darkModeToggle" type="button"
+          class="p-2 rounded-full focus:outline-hidden focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600">
+          <svg id="darkModeIcon" class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707
+              M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </button>
         <!-- User status (when logged in) -->
@@ -59,23 +59,32 @@
         <!-- Auth container -->
         <div class="relative" id="authContainer">
           <!-- When logged out: Auth Button -->
-          <button id="authButton" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded-xs hover:bg-blue-700 transition-colors focus:outline-hidden">
+          <button id="authButton" type="button"
+            class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded-xs hover:bg-blue-700 transition-colors focus:outline-hidden">
             Login
           </button>
 
           <!-- Auth Dropdown (hidden by default) -->
-          <div id="authDropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-sm shadow-xs p-3 z-dropdown animate-slide-in hidden">
+          <div id="authDropdown"
+            class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-sm shadow-xs p-3 z-dropdown animate-slide-in hidden">
             <div class="flex border-b border-gray-200 dark:border-gray-700 mb-2 justify-center">
-              <button id="loginTab" class="px-2 py-1 text-xs font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">Login</button>
-              <button id="registerTab" class="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">Register</button>
+              <button id="loginTab" type="button"
+                class="px-2 py-1 text-xs font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">Login</button>
+              <button id="registerTab" type="button"
+                class="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">Register</button>
             </div>
-            <form id="loginForm" method="POST" class="" onsubmit="event.preventDefault(); return false;">
+            <form id="loginForm" method="POST" onsubmit="event.preventDefault(); return false;">
               <div class="flex flex-col gap-2 mb-2">
-                <input type="text" name="username" id="login-username" placeholder="Username" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
-                <input type="password" name="password" id="login-password" placeholder="Password" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
+                <input type="text" name="username" id="login-username" placeholder="Username"
+                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
+                <input type="password" name="password" id="login-password" placeholder="Password"
+                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
               </div>
               <div id="login-error" class="text-red-500 text-xs mb-2 hidden"></div>
-              <button type="button" id="loginSubmitBtn" onclick="submitLoginForm()" class="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-colors">Log In</button>
+              <button type="button" id="loginSubmitBtn" onclick="submitLoginForm()"
+                class="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-colors">
+                Log In
+              </button>
             </form>
 
             <script>
@@ -118,7 +127,15 @@
                 // Show loading state
                 const originalText = submitBtn.textContent;
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = `<svg class="animate-spin h-3 w-3 mx-auto text-white" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+                submitBtn.innerHTML = `<svg class="animate-spin h-3 w-3 mx-auto text-white" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10"
+                          stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373
+                        0 0 5.373 0 12h4zm2 5.291A7.962
+                        7.962 0 014 12H0c0 3.042
+                        1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>`;
                 errorMsg.classList.add('hidden');
 
                 if (AUTH_DEBUG) console.debug("[Auth] Login form UI updated to loading state");
@@ -180,11 +197,12 @@
                       if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Login promise settled. Executing .finally block to cleanup UI state.`);
                       // Always clear safety timeout and restore button
                       clearTimeout(safetyTimeout);
-                      // Explicitly clear innerHTML before setting textContent
                       submitBtn.innerHTML = '';
                       submitBtn.textContent = originalText;
                       submitBtn.disabled = false;
-                      if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Submit button restored. Disabled: ${submitBtn.disabled}, Text: "${submitBtn.textContent}"`);
+                      if (AUTH_DEBUG) {
+                        console.debug(`[Auth][${timestamp}] Submit button restored. Disabled: ${submitBtn.disabled}, Text: "${submitBtn.textContent}"`);
+                      }
                     });
                 }).catch(error => {
                   // Either auth module failed to initialize or readyPromise is not supported
@@ -199,21 +217,29 @@
             </script>
             <form id="registerForm" class="hidden">
               <div class="flex flex-col gap-2 mb-2">
-                <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
-                <input type="password" name="password" placeholder="Password" class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
+                <input type="text" name="username" placeholder="Username"
+                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
+                <input type="password" name="password" placeholder="Password"
+                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
               </div>
               <div class="relative mb-2 group">
                 <button type="button" class="text-xs text-gray-500 flex items-center focus:outline-hidden">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9
+                          9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Password requirements
                 </button>
-                <div class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-sm py-1 px-2 w-full z-10">
+                <div
+                  class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-sm py-1 px-2 w-full z-10">
                   Password must be 12+ characters with uppercase, lowercase, number, and special character.
                 </div>
               </div>
-              <button type="submit" class="w-full px-2 py-1 text-xs bg-green-600 text-white rounded-sm hover:bg-green-700 transition-colors">Register</button>
+              <button type="submit"
+                class="w-full px-2 py-1 text-xs bg-green-600 text-white rounded-sm hover:bg-green-700 transition-colors">
+                Register
+              </button>
             </form>
           </div>
 
@@ -233,81 +259,76 @@
   -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Enhanced Sidebar with improved accessibility attributes -->
-    <nav id="mainSidebar"
-         aria-labelledby="sidebarHeading"
-         aria-hidden="true"
-         class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg md:shadow-none
+    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg md:shadow-none
                 transform transition-transform duration-300 ease-in-out
                 -translate-x-full md:translate-x-0">
       <!-- Accessible heading for screen readers -->
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
 
       <!-- Improve close button accessibility -->
-      <button id="closeSidebarBtn"
-              class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-hidden"
-              aria-label="Close sidebar">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <button id="closeSidebarBtn" type="button"
+        class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-hidden"
+        aria-label="Close sidebar">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
 
       <div class="p-4 dark:text-gray-100 flex flex-col h-full">
         <!-- New Chat Button (Prominent) -->
-        <a href="/" class="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md flex items-center justify-center mb-4 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+        <a href="/"
+          class="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md flex items-center justify-center mb-4 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
           </svg>
           Back to Chat
         </a>
 
         <!-- Tab navigation for sidebar sections - Improved accessibility -->
         <div class="flex mb-4 border-b border-gray-200 dark:border-gray-700" role="tablist">
-          <button id="recentChatsTab"
-                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                  role="tab"
-                  aria-selected="false"
-                  aria-controls="recentChatsSection"
-                  tabindex="-1">
+          <button id="recentChatsTab" type="button"
+            class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
             Recent
           </button>
-          <button id="starredChatsTab"
-                  class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                  role="tab"
-                  aria-selected="false"
-                  aria-controls="starredChatsSection"
-                  tabindex="-1">
+          <button id="starredChatsTab" type="button"
+            class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
             Starred
           </button>
-          <button id="projectsTab"
-                  class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                  role="tab"
-                  aria-selected="true"
-                  aria-controls="projectsSection"
-                  tabindex="0">
+          <button id="projectsTab" type="button"
+            class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
             Projects
           </button>
         </div>
 
         <!-- Recent Chats Section (hidden by default) -->
-        <div id="recentChatsSection"
-             class="hidden flex-1 flex-col overflow-hidden"
-             role="tabpanel"
-             aria-labelledby="recentChatsTab"
-             tabindex="0">
+        <div id="recentChatsSection" class="hidden flex-1 flex-col overflow-hidden" role="tabpanel"
+          aria-labelledby="recentChatsTab" tabindex="0">
           <!-- Search and pin sidebar controls -->
           <div class="mb-3 flex items-center">
             <div class="relative flex-grow">
               <label for="chatSearchInput" class="sr-only">Search conversations</label>
               <input type="search" aria-label="Search conversations" id="chatSearchInput"
-                     placeholder="Search conversations..."
-                     class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded-sm focus:ring-blue-500 focus:outline-hidden dark:bg-gray-800 dark:text-gray-100" />
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                placeholder="Search conversations..."
+                class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded-sm focus:ring-blue-500 focus:outline-hidden dark:bg-gray-800 dark:text-gray-100" />
+              <svg xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
+                      7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <button id="pinSidebarBtn" class="ml-2 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Pin sidebar open">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            <button id="pinSidebarBtn" type="button"
+              class="ml-2 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Pin sidebar open">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012
+                      2v16l-7-3.5L5 21V5z" />
               </svg>
             </button>
           </div>
@@ -317,12 +338,10 @@
         </div>
 
         <!-- Starred Chats Section (hidden by default) -->
-        <div id="starredChatsSection"
-             class="flex-1 flex flex-col overflow-hidden"
-             role="tabpanel"
-             aria-labelledby="starredChatsTab"
-             tabindex="0">
-          <p class="text-xs text-gray-500 mb-3">Starred chats are conversations you've marked as important for quick access.</p>
+        <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
+          aria-labelledby="starredChatsTab" tabindex="0">
+          <p class="text-xs text-gray-500 mb-3">Starred chats are conversations you've marked as important for quick
+            access.</p>
           <ul id="starredConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
             <li class="text-center text-gray-500 py-4">
               No starred conversations yet. Click the star icon on any conversation to add it here.
@@ -331,47 +350,249 @@
         </div>
 
         <!-- Projects Section (visible by default on projects page) -->
-        <div id="projectsSection"
-             class="flex-1 flex flex-col overflow-hidden"
-             role="tabpanel"
-             aria-labelledby="projectsTab"
-             tabindex="0">
+        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
+          aria-labelledby="projectsTab" tabindex="0">
           <!-- Projects actions -->
           <div class="mb-3 flex gap-2">
-<a href="#" id="manageProjectsLink" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-sm text-xs transition-colors flex items-center justify-center font-medium">
-  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-  </svg>
-  Manage Projects
-</a>
-<button id="sidebarNewProjectBtn" class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded-sm hover:bg-blue-700 text-xs flex items-center justify-center">
-  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-  </svg>
-  New Project
-</button>
-<script>
-window.addEventListener('DOMContentLoaded', function() {
-  const link = document.getElementById('manageProjectsLink');
-  if (link) {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      if (window.showProjectsView) {
-        window.showProjectsView();
-      } else {
-        console.error('showProjectsView is not defined yet.');
-      }
-    });
-  }
-});
-</script>
+            <a href="#" id="manageProjectsLink"
+              class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-sm text-xs transition-colors flex items-center justify-center font-medium">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2
+                  2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2
+                  2 0 00-2 2z" />
+              </svg>
+              Manage Projects
+            </a>
+            <button id="sidebarNewProjectBtn" type="button"
+              class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded-sm hover:bg-blue-700 text-xs flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6
+                      0H6" />
+              </svg>
+              New Project
+            </button>
+            <script>
+              window.addEventListener('DOMContentLoaded', function () {
+                const link = document.getElementById('manageProjectsLink');
+                if (link) {
+                  link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    if (window.showProjectsView) {
+                      window.showProjectsView();
+                    } else {
+                      console.error('showProjectsView is not defined yet.');
+                    }
+                  });
+                }
+              });
+            </script>
           </div>
 
           <!-- Projects search input -->
           <div class="relative mb-2">
             <label for="sidebarProjectSearch" class="sr-only">Search projects</label>
-            <input type="search" id="sidebarProjectSearch" aria-label="Search projects"
-                   placeholder="Search projects..."
+            <input type="search" id="sidebarProjectSearch" aria-label="Search projects" placeholder="Search projects..."
+              class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded-sm focus:ring-blue-500 focus:outline-hidden dark:bg-gray-800 dark:text-gray-100" />
+            <svg xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none"
+              viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
+                    7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+
+          <ul id="sidebarProjects" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
+            <!-- Projects will be loaded dynamically -->
+          </ul>
+        </div>
+
+        <!-- Settings section (collapsible) -->
+        <div class="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          <!-- Model configuration toggle button -->
+          <button id="toggleModelConfig" type="button"
+            class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            aria-expanded="false" aria-controls="modelConfigPanel" role="button">
+            <span>Model Configuration</span>
+            <svg id="modelConfigChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <!-- Model Configuration UI (collapsible) -->
+          <div id="modelConfigPanel"
+            class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
+            aria-labelledby="toggleModelConfig">
+            <div class="pt-2 pb-1">
+              <!-- Model Selection -->
+              <div class="mb-3">
+                <label for="modelSelect" class="block font-medium dark:text-gray-200 text-xs">Select Model</label>
+                <select id="modelSelect"
+                  class="w-full mt-1 border border-gray-300 rounded-sm dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500 text-sm">
+                  <option value="o3-mini">o3-mini</option>
+                  <option value="o1">o1 (Vision Support)</option>
+                  <option value="o1-mini">o1-mini</option>
+                  <option value="o1-preview">o1-preview</option>
+                </select>
+              </div>
+
+              <!-- Max Tokens Input Group -->
+              <div id="maxTokensContainer" class="mb-3">
+                <label class="block font-medium dark:text-gray-200 text-xs">Max Completion Tokens</label>
+                <!-- Slider and input will be injected by modelConfig.js -->
+              </div>
+
+              <!-- Reasoning Effort Panel (slider) -->
+              <div id="reasoningPanel" class="bg-gray-50 dark:bg-gray-700 p-2 rounded-sm mt-2 mb-3">
+                <!-- Slider is injected by modelConfig.js -->
+              </div>
+
+              <!-- Extended Thinking Panel -->
+              <div id="extendedThinkingPanel" class="hidden mb-3">
+                <label class="block font-medium dark:text-gray-200 text-xs">Extended Thinking</label>
+                <div class="flex items-center mt-2">
+                  <input type="checkbox" id="extendedThinkingToggle"
+                    class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm">
+                  <label for="extendedThinkingToggle" class="ml-2 text-sm">Enable extended thinking for complex
+                    tasks</label>
+                </div>
+                <div class="mt-2">
+                  <label for="thinkingBudget" class="block text-xs text-gray-500 mb-1">Thinking budget (tokens)</label>
+                  <select id="thinkingBudget" class="w-full text-sm border rounded-sm p-1">
+                    <option value="2048">2,048 tokens (minimum)</option>
+                    <option value="4096">4,096 tokens</option>
+                    <option value="8192">8,192 tokens</option>
+                    <option value="16000" selected>16,000 tokens (recommended)</option>
+                    <option value="32000">32,000 tokens (maximum)</option>
+                  </select>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                  Extended thinking gives Claude more space to solve complex problems, but uses more tokens.
+                </p>
+              </div>
+
+              <!-- Vision Panel (for image upload) -->
+              <div id="visionPanel" class="hidden mb-3">
+                <label class="block font-medium dark:text-gray-200 text-xs">Image Upload (o1 Vision)</label>
+                <input type="file" accept="image/png,image/jpeg" class="mt-2 text-sm dark:text-gray-200"
+                  id="visionFileInput" />
+                <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                  Upload JPEG or PNG (≤4 MB).
+                </p>
+                <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                  <!-- Filled dynamically: "Analyzing..." or error messages -->
+                </div>
+                <div id="visionPreview" class="mt-2"></div>
+              </div>
+
+              <!-- Live region for model config display -->
+              <div id="modelConfigDisplay"
+                class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded-sm text-xs dark:text-gray-200" aria-live="polite">
+                <p><span class="font-medium">Selected Model:</span> <span id="currentModelName">o3-mini</span></p>
+                <p><span class="font-medium">Max Tokens:</span> <span id="currentMaxTokens">500</span></p>
+                <p><span class="font-medium">Reasoning Effort:</span> <span id="currentReasoning">N/A</span></p>
+                <p><span class="font-medium">Vision:</span> <span id="visionEnabledStatus">Disabled</span></p>
+              </div>
+
+              <!-- Loading indicator for config changes -->
+              <div id="modelConfigLoading" class="mt-3 text-blue-600 flex items-center text-xs" aria-hidden="true">
+                <svg class="animate-spin h-4 w-4 mr-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+                  viewBox="0 0 24 24" aria-hidden="true">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span>Updating configuration...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Instructions toggle button -->
+          <button id="toggleCustomInstructions" type="button"
+            class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            aria-expanded="false" aria-controls="customInstructionsPanel" role="button">
+            <span>Custom Instructions</span>
+            <svg id="customInstructionsChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <!-- Custom Instructions panel (collapsible) -->
+          <div id="customInstructionsPanel"
+            class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
+            aria-labelledby="toggleCustomInstructions">
+            <div class="pt-2 pb-1">
+              <p class="text-xs text-gray-500 mb-2">Set default instructions for how the AI should respond.</p>
+              <textarea id="globalCustomInstructions"
+                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 h-20 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                placeholder="Enter instructions for the AI to follow (e.g., response style, format preferences)..."></textarea>
+              <button id="saveGlobalInstructions"
+                class="mt-2 px-3 py-1 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-xs">
+                Save Instructions
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Notification area for ephemeral toasts -->
+      <div id="notificationArea" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
+
+      <!-- Scroll container -->
+      <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
+        <!-- Login required message (shown when not authenticated) -->
+        <div id="loginRequiredMessage" class="hidden text-center py-8">
+          <p class="text-lg">Please log in to access projects</p>
+          <button id="showLoginBtn" type="button"
+            class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
+            Login
+          </button>
+        </div>
+
+        <!-- Project Manager Section (shown when authenticated) -->
+        <section id="projectManagerPanel"
+          class="bg-white dark:bg-gray-800 rounded-sm shadow-sm p-4 mb-6 flex flex-col min-h-0 border border-gray-200 dark:border-gray-700">
+          <!-- Project List View -->
+          <div id="projectListView" class="flex-1 flex flex-col min-h-0">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-xl font-semibold">Projects</h2>
+              <div class="flex gap-2">
+                <input id="projectSearchInput" type="search" placeholder="Search projects..."
+                  class="border px-2 py-1 rounded-sm text-sm" />
+                <button id="createProjectBtn" type="button"
+                  class="bg-blue-600 text-white px-3 py-1 rounded-sm hover:bg-blue-700 text-sm">
+                  New Project
+                </button>
+              </div>
+            </div>
+
+            <!-- Projects filter tabs -->
+            <div class="flex border-b border-gray-200 dark:border-gray-700 mb-4" id="projectFilterTabs">
+              <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200"
+                data-filter="all" type="button" aria-current="page" onclick="handleProjectFilterClick('all', this)">
+                <span class="relative py-1.5">
+                  <span class="block">All Projects</span>
+                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>
+                </span>
+              </button>
+              <button
+                class="project-filter-btn px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
+                data-filter="pinned" type="button" onclick="handleProjectFilterClick('pinned', this)">
+                <span class="relative py-1.5">
+                  <span class="block">Pinned</span>
+                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
+                </span>
+              </button>
+              <button
+                class="project-filter-btn px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
+                data-filter="archived" type="button" onclick="handleProjectFilterClick('archived', this)">
+                <span class="relative py-1.5">
+                  <span class="block">Archived</span>
                   <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
                 </span>
               </button>
@@ -408,7 +629,21 @@ window.addEventListener('DOMContentLoaded', function() {
             </script>
 
             <!-- Project list container -->
-            <div id="projectList" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 h-full overflow-y-auto p-2"></div>
+            <div id="projectList" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 h-full overflow-y-auto p-2">
+              <!-- Project cards will be dynamically inserted here.
+                   Example structure assumed by projectListComponent.js:
+              <div class="project-card bg-white dark:bg-gray-700 p-4 rounded shadow" data-project-id="[PROJECT_ID]">
+                <h3 class="font-semibold">[Project Name]</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">[Description snippet]</p>
+                <div class="mt-2 flex gap-2">
+                  <button data-action="view-project" class="text-blue-600">View</button>
+                  <button data-action="pin-project" class="text-yellow-600">Pin</button>
+                  <button data-action="archive-project" class="text-gray-500">Archive</button>
+                   <button data-action="edit-project" class="text-purple-600">Edit</button>
+                </div>
+              </div>
+              -->
+            </div>
 
             <!-- No projects message -->
             <div id="noProjectsMessage" class="hidden text-center py-8 text-gray-500">
@@ -420,9 +655,15 @@ window.addEventListener('DOMContentLoaded', function() {
           <div id="projectDetailsView" class="hidden">
             <!-- Breadcrumb navigation for better navigation -->
             <div class="flex items-center mb-4 text-sm text-gray-500">
-              <button id="backToProjectsBtn" class="mr-2 text-gray-500 hover:text-gray-700 flex items-center">
+              <button id="backToProjectsBtn" type="button"
+                class="mr-2 text-gray-500 hover:text-gray-700 flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  <path fill-rule="evenodd" d="M9.707 16.707a1 1
+                        0 01-1.414 0l-6-6a1 1
+                        0 010-1.414l6-6a1 1
+                        0 011.414 1.414L5.414
+                        9H17a1 1 0 110 2H5.414l4.293
+                        4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
                 </svg>
                 <span class="ml-1">All Projects</span>
               </button>
@@ -432,19 +673,34 @@ window.addEventListener('DOMContentLoaded', function() {
 
             <!-- Enhanced action buttons -->
             <div class="flex justify-end mb-4 gap-2">
-              <button id="editProjectBtn" class="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-sm" title="Edit project details">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <button id="editProjectBtn" type="button"
+                class="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-sm" title="Edit project details">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2
+                        2v11a2 2 0 002 2h11a2
+                        2 0 002-2v-5m-1.414-9.414a2
+                        2 0 112.828 2.828L11.828
+                        15H9v-2.828l8.586-8.586z" />
                 </svg>
               </button>
-              <button id="pinProjectBtn" class="p-2 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-sm" title="Pin project">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              <button id="pinProjectBtn" type="button"
+                class="p-2 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-sm" title="Pin project">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2
+                        0 012-2h10a2 2 0 012
+                        2v16l-7-3.5L5 21V5z" />
                 </svg>
               </button>
-              <button id="archiveProjectBtn" class="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-sm" title="Archive project">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              <button id="archiveProjectBtn" type="button"
+                class="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-sm" title="Archive project">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2
+                        2 0 110-4h14a2 2 0 110
+                        4M5 8v10a2 2 0 002 2h10a2
+                        2 0 002-2V8m-9 4h4" />
                 </svg>
               </button>
             </div>
@@ -453,9 +709,11 @@ window.addEventListener('DOMContentLoaded', function() {
             <div id="projectChatContainer" class="mt-4 transition-all duration-300 ease-in-out">
               <div class="flex justify-between items-center mb-2">
                 <h3 class="font-medium text-lg">Conversation</h3>
-                <button id="minimizeChatBtn" class="text-gray-500 hover:text-gray-700 p-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <button id="minimizeChatBtn" type="button" class="text-gray-500 hover:text-gray-700 p-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18
+                          6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
@@ -463,16 +721,20 @@ window.addEventListener('DOMContentLoaded', function() {
                 <div id="projectChatMessages" class="chat-message-container"></div>
                 <div class="flex items-center border-t border-gray-200 dark:border-gray-700 p-2">
                   <input id="projectChatInput" type="text" class="flex-1 border rounded-l-sm px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Type your message...">
-                  <button id="projectChatSendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-sm transition-colors">Send</button>
+                  <button id="projectChatSendBtn" type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-sm transition-colors">
+                    Send
+                  </button>
                 </div>
               </div>
             </div>
 
             <!-- Project stats panel -->
-            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-2 sm:p-4 rounded-sm mb-4 sm:mb-6 shadow-xs" data-testid="project-stats">
+            <div id="projectStats" class="bg-gray-50 dark:bg-gray-700 p-2 sm:p-4 rounded-sm mb-4 sm:mb-6 shadow-xs"
+              data-testid="project-stats">
               <div class="mb-2 sm:mb-4">
                 <div class="flex justify-between mb-1">
-                  <span class="text-xs sm:text-sm font-medium">Token Usage: <span id="tokenUsage" class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
+                  <span class="text-xs sm:text-sm font-medium">Token Usage: <span id="tokenUsage"
+                      class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
                   <span id="tokenPercentage" class="text-xs sm:text-sm">0%</span>
                 </div>
                 <div class="progress-outer overflow-hidden">
@@ -480,15 +742,19 @@ window.addEventListener('DOMContentLoaded', function() {
                 </div>
               </div>
               <div class="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-                <div class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-sm shadow-xs hover:shadow-md transition-shadow">
-                  <div id="conversationCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0</div>
+                <div
+                  class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-sm shadow-xs hover:shadow-md transition-shadow">
+                  <div id="conversationCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0
+                  </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Conversations</div>
                 </div>
-                <div class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-sm shadow-xs hover:shadow-md transition-shadow">
+                <div
+                  class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-sm shadow-xs hover:shadow-md transition-shadow">
                   <div id="fileCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Files</div>
                 </div>
-                <div class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-sm shadow-xs hover:shadow-md transition-shadow">
+                <div
+                  class="bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-sm shadow-xs hover:shadow-md transition-shadow">
                   <div id="artifactCount" class="text-sm sm:text-lg font-semibold transition-all duration-300">0</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Artifacts</div>
                 </div>
@@ -498,50 +764,25 @@ window.addEventListener('DOMContentLoaded', function() {
             <!-- Tab navigation -->
             <div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
               <div class="flex whitespace-nowrap min-w-full -mb-px" role="tablist">
-                <button id="detailsTabBtn"
-                        class="project-tab-btn active"
-                        role="tab"
-                        aria-selected="true"
-                        aria-controls="detailsTab"
-                        tabindex="0"
-                        data-tab="details">
+                <button id="detailsTabBtn" type="button" class="project-tab-btn active" role="tab" aria-selected="true"
+                  aria-controls="detailsTab" tabindex="0" data-tab="details">
                   Details
                 </button>
-                <button id="filesTabBtn"
-                        class="project-tab-btn"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="filesTab"
-                        tabindex="-1"
-                        data-tab="files">
+                <button id="filesTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
+                  aria-controls="filesTab" tabindex="-1" data-tab="files">
                   Files
                 </button>
-                <button id="conversationsTabBtn"
-                        class="project-tab-btn"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="conversationsTab"
-                        tabindex="-1"
-                        data-tab="conversations">
+                <button id="conversationsTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
+                  aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
                   <span class="hidden xs:inline">Conversations</span>
                   <span class="xs:hidden">Convos</span>
                 </button>
-                <button id="artifactsTabBtn"
-                        class="project-tab-btn"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="artifactsTab"
-                        tabindex="-1"
-                        data-tab="artifacts">
+                <button id="artifactsTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
+                  aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
                   Artifacts
                 </button>
-                <button id="knowledgeTabBtn"
-                        class="project-tab-btn"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="knowledgeTab"
-                        tabindex="-1"
-                        data-tab="knowledge">
+                <button id="knowledgeTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
+                  aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
                   <span class="hidden xs:inline">Knowledge Base</span>
                   <span class="xs:hidden">KB</span>
                 </button>
@@ -551,11 +792,8 @@ window.addEventListener('DOMContentLoaded', function() {
             <!-- Tab content -->
             <div id="projectTabContent">
               <!-- Details tab -->
-              <div id="detailsTab"
-                   class="project-tab-content"
-                   role="tabpanel"
-                   aria-labelledby="detailsTabBtn"
-                   tabindex="0">
+              <div id="detailsTab" class="project-tab-content" role="tabpanel" aria-labelledby="detailsTabBtn"
+                tabindex="0">
                 <div class="tab-section">
                   <h3 class="tab-heading">Description</h3>
                   <p id="projectDescription" class="tab-content">
@@ -572,7 +810,7 @@ window.addEventListener('DOMContentLoaded', function() {
                   <h3 class="tab-heading">Custom Instructions</h3>
                   <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-sm">
                     <p id="projectInstructions" class="tab-content">No custom instructions set.</p>
-                    <button id="editInstructionsBtn" class="mt-3 text-sm text-blue-600 hover:underline">
+                    <button id="editInstructionsBtn" type="button" class="mt-3 text-sm text-blue-600 hover:underline">
                       Edit Instructions
                     </button>
                   </div>
@@ -580,18 +818,21 @@ window.addEventListener('DOMContentLoaded', function() {
               </div>
 
               <!-- Files tab -->
-              <div id="filesTab"
-                   class="project-tab-content hidden"
-                   role="tabpanel"
-                   aria-labelledby="filesTabBtn"
-                   tabindex="0">
+              <div id="filesTab" class="project-tab-content hidden" role="tabpanel" aria-labelledby="filesTabBtn"
+                tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Project Files</h3>
                   <div>
                     <input type="file" id="fileInput" class="hidden" multiple />
-                    <button id="uploadFileBtn" class="px-3 py-1 bg-green-600 text-white rounded-sm hover:bg-green-700 text-sm flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <button id="uploadFileBtn" type="button"
+                      class="px-3 py-1 bg-green-600 text-white rounded-sm hover:bg-green-700 text-sm flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0
+                              01-.88-7.903A5 5 0
+                              1115.9 6L16 6a5 5
+                              0 011 9.9M15 13l-3-3m0
+                              0l-3 3m3-3v12" />
                       </svg>
                       Upload Files
                     </button>
@@ -600,8 +841,12 @@ window.addEventListener('DOMContentLoaded', function() {
 
                 <!-- Drag and drop zone -->
                 <div id="dragDropZone" class="mb-4 drag-zone">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5
+                          5 0 1115.9 6L16 6a5
+                          5 0 011 9.9M15 13l-3-3m0
+                          0l-3 3m3-3v12" />
                   </svg>
                   <p class="text-sm font-medium mb-1">Drag and drop your files here</p>
                   <p class="text-xs text-gray-500">or click the Upload button above</p>
@@ -611,12 +856,14 @@ window.addEventListener('DOMContentLoaded', function() {
                 <div id="filesUploadProgress" class="hidden mb-4 bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
                   <div class="flex items-center justify-between mb-2">
                     <span id="kbStatusIndicator" class="text-sm font-medium"></span>
-                    <div id="kbRequirementTooltip" class="hidden text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-sm">
+                    <div id="kbRequirementTooltip"
+                      class="hidden text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-sm">
                       Files are indexed in Knowledge Base for AI search
                     </div>
                   </div>
                   <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-                    <div id="fileProgressBar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    <div id="fileProgressBar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
+                      style="width: 0%"></div>
                   </div>
                   <p id="uploadStatus" class="text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
                   <div id="supportedFileTypes" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
@@ -632,16 +879,16 @@ window.addEventListener('DOMContentLoaded', function() {
               </div>
 
               <!-- Conversations tab -->
-              <div id="conversationsTab"
-                   class="project-tab-content hidden"
-                   role="tabpanel"
-                   aria-labelledby="conversationsTabBtn"
-                   tabindex="0">
+              <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel"
+                aria-labelledby="conversationsTabBtn" tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Conversations</h3>
-                  <button id="projectNewConversationBtn" class="px-3 py-1 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-sm flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  <button id="projectNewConversationBtn" type="button"
+                    class="px-3 py-1 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-sm flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6
+                            0H6" />
                     </svg>
                     New Conversation
                   </button>
@@ -653,15 +900,13 @@ window.addEventListener('DOMContentLoaded', function() {
               </div>
 
               <!-- Artifacts tab -->
-              <div id="artifactsTab"
-                   class="project-tab-content hidden"
-                   role="tabpanel"
-                   aria-labelledby="artifactsTabBtn"
-                   tabindex="0">
+              <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel"
+                aria-labelledby="artifactsTabBtn" tabindex="0">
                 <div class="tab-section">
                   <h3 class="tab-heading">Generated Artifacts</h3>
                   <p class="tab-content mt-1">
-                    Artifacts are automatically created during conversations when you ask the AI to generate code, documents, or other content.
+                    Artifacts are automatically created during conversations when you ask the AI to generate code,
+                    documents, or other content.
                   </p>
                 </div>
                 <div id="projectArtifactsList" class="mt-4">
@@ -671,33 +916,80 @@ window.addEventListener('DOMContentLoaded', function() {
               </div>
 
               <!-- Knowledge Base tab -->
-              <div id="knowledgeTab"
-                   class="project-tab-content hidden"
-                   role="tabpanel"
-                   aria-labelledby="knowledgeTabBtn"
-                   tabindex="0">
+              <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel"
+                aria-labelledby="knowledgeTabBtn" tabindex="0">
                 <div class="tab-section flex justify-between items-center">
                   <h3 class="tab-heading">Knowledge Base</h3>
                   <div id="knowledgeBaseActions" class="flex flex-col sm:flex-row gap-2 w-full">
-                    <button id="searchKnowledgeBtn"
+                    <button id="searchKnowledgeBtn" type="button"
                       class="w-full sm:w-auto px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-sm hover:bg-blue-700 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
+                              7 0 11-14 0 7 7 0
+                              0114 0z" />
                       </svg>
                       Search Knowledge
                     </button>
-                    <button id="reprocessFilesBtn"
+                    <button id="reprocessFilesBtn" type="button"
                       class="w-full sm:w-auto px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-yellow-600 text-white rounded-sm hover:bg-yellow-700 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356
+                              2A8.001 8.001 0
+                              004.582 9m0 0H9m11 11v-5h-.581m0
+                              0a8.003 8.003 0
+                              01-15.357-2m15.357
+                              2H15" />
                       </svg>
                       Reprocess
                     </button>
-                    <button id="knowledgeBaseSettingsBtn"
+                    <button id="knowledgeBaseSettingsBtn" type="button"
                       class="w-full sm:w-auto px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-600 text-white rounded-sm hover:bg-gray-700 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 001.066-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325
+                              4.317c.426-1.756
+                              2.924-1.756
+                              3.35 0a1.724
+                              1.724 0
+                              002.573
+                              1.066c1.543-.94
+                              3.31.826
+                              2.37 2.37a1.724
+                              1.724 0
+                              001.065
+                              2.572c1.756.426
+                              1.756 2.924
+                              0 3.35a1.724
+                              1.724 0
+                              00-1.066
+                              2.573c-.94
+                              1.543-.826
+                              3.31-2.37
+                              2.37a1.724
+                              1.724 0
+                              00-2.572
+                              1.065c-.426
+                              1.756-2.924
+                              1.756-3.35
+                              0a1.724
+                              1.724 0
+                              00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724
+                              1.724 0
+                              001.066-2.572c-1.756-.426-1.756-2.924
+                              0-3.35a1.724
+                              1.724 0
+                              001.066-2.573c-.94-1.543.826-3.31
+                              2.37-2.37.996.608
+                              2.296.07
+                              2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15
+                              12a3 3
+                              0 11-6 0
+                              3 3
+                              0 016
+                              0z" />
                       </svg>
                       Settings
                     </button>
@@ -707,30 +999,60 @@ window.addEventListener('DOMContentLoaded', function() {
                 <!-- Knowledge Base Status -->
                 <div id="knowledgeBaseStatus" class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-sm">
                   <div id="knowledgeBaseInactive" class="flex flex-col items-center justify-center py-8">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-3" fill="none"
+                      viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832
+                            5.477 9.246 5
+                            7.5 5S4.168
+                            5.477 3
+                            6.253v13C4.168
+                            18.477 5.754
+                            18 7.5
+                            18s3.332.477
+                            4.5 1.253m0-13C13.168
+                            5.477 14.754
+                            5 16.5
+                            5c1.747
+                            0 3.332.477
+                            4.5
+                            1.253v13C19.832
+                            18.477 18.247
+                            18 16.5
+                            18c-1.746
+                            0-3.332.477-4.5
+                            1.253" />
                     </svg>
                     <h4 class="text-lg font-medium mb-2">Knowledge Base Not Configured</h4>
                     <p class="text-gray-500 text-center mb-3 max-w-lg">
-                      Configure a knowledge base to enable AI to search your project files and use relevant information to answer your questions.
+                      Configure a knowledge base to enable AI to search your project files and use relevant information
+                      to answer your questions.
                     </p>
-                    <button id="setupKnowledgeBaseBtn" class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
+                    <button id="setupKnowledgeBaseBtn" type="button"
+                      class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
                       Set Up Knowledge Base
                     </button>
                   </div>
 
                   <div id="knowledgeBaseActive" class="hidden">
                     <div class="flex items-center mb-4">
-                      <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mr-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <div
+                        class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none"
+                          viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6
+                                2a9 9
+                                0 11-18
+                                0 9 9
+                                0 0118
+                                0z" />
                         </svg>
                       </div>
                       <div>
                         <h4 class="font-medium text-lg"><span id="knowledgeBaseName">Project Knowledge Base</span></h4>
                         <p class="text-sm text-gray-500">
                           <span id="kbStatusText">Active</span>
-                          <span id="kbStatusBadge" class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <span id="kbStatusBadge"
+                            class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             <span class="h-2 w-2 rounded-full bg-green-400 mr-1.5 flex-shrink-0"></span>
                             Enabled
                           </span>
@@ -738,8 +1060,10 @@ window.addEventListener('DOMContentLoaded', function() {
                       </div>
                       <div class="ml-auto">
                         <span id="knowledgeBaseToggle" class="relative inline-block w-12 mr-2 align-middle select-none">
-                          <input type="checkbox" name="knowledgeBaseEnabled" id="knowledgeBaseEnabled" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
-                          <label for="knowledgeBaseEnabled" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                          <input type="checkbox" name="knowledgeBaseEnabled" id="knowledgeBaseEnabled" checked
+                            class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" />
+                          <label for="knowledgeBaseEnabled"
+                            class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
                         </span>
                         <span class="text-sm" id="knowledgeBaseEnabledLabel">Enabled</span>
                       </div>
@@ -755,18 +1079,16 @@ window.addEventListener('DOMContentLoaded', function() {
                         <div class="text-xs text-gray-500">Text Chunks</div>
                       </div>
                       <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
-                        <div class="text-2xl font-semibold mb-1"
-                             id="kbVersionDisplay"
-                             aria-label="Knowledge Base Schema Version">
+                        <div class="text-2xl font-semibold mb-1" id="kbVersionDisplay"
+                          aria-label="Knowledge Base Schema Version">
                           Schema v1
                         </div>
                         <div class="text-xs text-gray-500">Schema Version</div>
                       </div>
 
                       <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
-                        <div class="text-2xl font-semibold mb-1"
-                             id="kbLastUsedDisplay"
-                             aria-label="Last Used Timestamp">
+                        <div class="text-2xl font-semibold mb-1" id="kbLastUsedDisplay"
+                          aria-label="Last Used Timestamp">
                           Never
                         </div>
                         <div class="text-xs text-gray-500">Last Used</div>
@@ -778,22 +1100,20 @@ window.addEventListener('DOMContentLoaded', function() {
                       </div>
 
                       <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
-                        <div class="text-2xl font-semibold mb-1" id="knowledgeSearchCount">0</div>
-                        <div class="text-xs text-gray-500">Searches</div>
-                      </div>
-
-                      <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
-                        <select id="knowledgeBaseModelSelect" class="w-full text-sm border rounded-sm">
-                          <option value="all-MiniLM-L6-v2" selected>Default Model</option>
-                          <option value="text-embedding-3-small">OpenAI Small</option>
-                          <option value="text-embedding-3-large">OpenAI Large</option>
-                        </select>
+                        <div>
+                          <select id="knowledgeBaseModelSelect" class="w-full text-sm border rounded-sm">
+                            <option value="all-MiniLM-L6-v2" selected>Default Model</option>
+                            <option value="text-embedding-3-small">OpenAI Small</option>
+                            <option value="text-embedding-3-large">OpenAI Large</option>
+                          </select>
+                        </div>
                         <div class="text-xs text-gray-500 mt-1">Embedding Model</div>
                       </div>
                     </div>
 
                     <div class="text-sm text-gray-600 mt-2 dark:text-gray-300" id="knowledgeBaseDescription">
-                      This knowledge base helps the AI provide more accurate responses by searching relevant information from your project files.
+                      This knowledge base helps the AI provide more accurate responses by searching relevant information
+                      from your project files.
                     </div>
                   </div>
                 </div>
@@ -803,10 +1123,14 @@ window.addEventListener('DOMContentLoaded', function() {
                   <h3 class="font-medium mb-3">Search Knowledge</h3>
                   <div class="flex mb-3">
                     <input type="text" id="knowledgeSearchInput" placeholder="Search your project knowledge..."
-                           class="w-full px-4 py-2 border border-gray-300 rounded-l-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-                    <button id="runKnowledgeSearchBtn" class="bg-blue-600 text-white px-4 py-2 rounded-r-sm hover:bg-blue-700 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      class="w-full px-4 py-2 border border-gray-300 rounded-l-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
+                    <button id="runKnowledgeSearchBtn" type="button"
+                      class="bg-blue-600 text-white px-4 py-2 rounded-r-sm hover:bg-blue-700 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
+                              7 0 11-14 0 7 7 0
+                              0114 0z" />
                       </svg>
                     </button>
                   </div>
@@ -832,8 +1156,19 @@ window.addEventListener('DOMContentLoaded', function() {
                 <!-- No results placeholder -->
                 <div id="knowledgeNoResults" class="mb-6 hidden">
                   <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-sm text-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none"
+                      viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172
+                            16.172a4 4 0 015.656
+                            0M9
+                            10h.01M15
+                            10h.01M21
+                            12a9
+                            9 0
+                            11-18
+                            0 9 9
+                            0 0118
+                            0z" />
                     </svg>
                     <h4 class="text-lg font-medium mb-2">No results found</h4>
                     <p class="text-gray-500">Try a different search query or add more files to your project.</p>
@@ -845,7 +1180,8 @@ window.addEventListener('DOMContentLoaded', function() {
                   <h3 class="font-medium mb-3">Files with Knowledge Processing</h3>
                   <div id="knowledgeProcessedFiles">
                     <!-- Files with processing status will be displayed here -->
-                    <div class="text-gray-500 text-center py-8">No files have been processed for knowledge search yet.</div>
+                    <div class="text-gray-500 text-center py-8">No files have been processed for knowledge search yet.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -858,15 +1194,12 @@ window.addEventListener('DOMContentLoaded', function() {
 
   <!-- Project Creation/Edit Modal -->
   <div id="projectFormModal"
-       class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden"
-       aria-modal="true"
-       aria-labelledby="projectFormTitle"
-       role="dialog">
-    <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
-         @click.stop>
+    class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden" aria-modal="true"
+    aria-labelledby="projectFormTitle" role="dialog">
+    <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 id="projectFormTitle" class="text-xl font-semibold">Create New Project</h3>
-        <button id="closeProjectFormBtn" class="text-gray-500 hover:text-gray-700">
+        <button id="closeProjectFormBtn" type="button" class="text-gray-500 hover:text-gray-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -878,13 +1211,9 @@ window.addEventListener('DOMContentLoaded', function() {
           <label for="projectForm-nameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Project Name <span class="text-red-500">*</span>
           </label>
-          <input id="projectForm-nameInput"
-                 name="name"
-                 type="text"
-                 required
-                 aria-required="true"
-                 class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                 aria-describedby="projectForm-nameError" />
+          <input id="projectForm-nameInput" name="name" type="text" required aria-required="true"
+            class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            aria-describedby="projectForm-nameError" />
           <div id="projectForm-nameError" class="text-red-500 text-xs mt-1 hidden" role="alert">
             Project name is required
           </div>
@@ -894,18 +1223,18 @@ window.addEventListener('DOMContentLoaded', function() {
             Description
           </label>
           <textarea id="projectDescInput" name="description" rows="3"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+            class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
         </div>
         <div class="mb-4">
           <label for="projectGoalsInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Goals
           </label>
           <textarea id="projectGoalsInput" name="goals" rows="3"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+            class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
         </div>
         <div class="mb-4">
           <label for="projectMaxTokensInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Maximum Tokens
+            MaximumTokens
           </label>
           <div id="projectMaxTokensContainer" class="mt-2">
             <!-- Slider and input will be injected by projectManager.js -->
@@ -917,11 +1246,11 @@ window.addEventListener('DOMContentLoaded', function() {
         </div>
         <div class="flex justify-end gap-2 mt-6">
           <button type="button" id="cancelProjectFormBtn"
-                  class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
+            class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
             Cancel
           </button>
           <button type="submit" id="submitProjectFormBtn"
-                  class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
+            class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
             Save Project
           </button>
         </div>
@@ -930,13 +1259,15 @@ window.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Custom Instructions Modal -->
-  <div id="instructionsModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
+  <div id="instructionsModal"
+    class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-semibold">Custom Instructions</h3>
-        <button id="closeInstructionsBtn" class="text-gray-500 hover:text-gray-700">
+        <button id="closeInstructionsBtn" type="button" class="text-gray-500 hover:text-gray-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6
+                  18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -945,16 +1276,16 @@ window.addEventListener('DOMContentLoaded', function() {
           Custom instructions are sent at the beginning of every conversation in this project.
         </p>
         <textarea id="customInstructionsInput" rows="8"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Enter instructions for the AI to follow in this project..."></textarea>
+          class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 h-20 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          placeholder="Enter instructions for the AI to follow in this project..."></textarea>
       </div>
       <div class="flex justify-end gap-2">
-        <button id="cancelInstructionsBtn"
-                class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
+        <button id="cancelInstructionsBtn" type="button"
+          class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
           Cancel
         </button>
-        <button id="saveInstructionsBtn"
-                class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
+        <button id="saveInstructionsBtn" type="button"
+          class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
           Save Instructions
         </button>
       </div>
@@ -962,17 +1293,17 @@ window.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Delete Confirmation Modal -->
-  <div id="deleteConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
+  <div id="deleteConfirmModal"
+    class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-md w-full">
       <h3 class="text-xl font-semibold mb-4">Confirm Delete</h3>
       <p id="deleteConfirmText" class="mb-6">Are you sure you want to delete this item?</p>
       <div class="flex justify-end gap-2">
-        <button id="cancelDeleteBtn"
-                class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
+        <button id="cancelDeleteBtn" type="button"
+          class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
           Cancel
         </button>
-        <button id="confirmDeleteBtn"
-                class="px-4 py-2 bg-red-600 text-white rounded-sm hover:bg-red-700">
+        <button id="confirmDeleteBtn" type="button" class="px-4 py-2 bg-red-600 text-white rounded-sm hover:bg-red-700">
           Delete
         </button>
       </div>
@@ -980,13 +1311,15 @@ window.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Content View Modal (for files and artifacts) -->
-  <div id="contentViewModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
+  <div id="contentViewModal"
+    class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 id="contentViewModalTitle" class="text-xl font-semibold">File Content</h3>
-        <button id="closeContentViewModalBtn" class="text-gray-500 hover:text-gray-700">
+        <button id="closeContentViewModalBtn" type="button" class="text-gray-500 hover:text-gray-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18
+                  6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -995,13 +1328,15 @@ window.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Knowledge Base Settings Modal -->
-  <div id="knowledgeBaseSettingsModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
+  <div id="knowledgeBaseSettingsModal"
+    class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-lg w-full">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-semibold">Knowledge Base Settings</h3>
-        <button id="closeKnowledgeSettingsBtn" class="text-gray-500 hover:text-gray-700">
+        <button id="closeKnowledgeSettingsBtn" type="button" class="text-gray-500 hover:text-gray-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18
+                  6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -1014,7 +1349,7 @@ window.addEventListener('DOMContentLoaded', function() {
             Knowledge Base Name*
           </label>
           <input id="knowledgeBaseNameInput" name="name" type="text" required
-                 class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
         </div>
 
         <div class="mb-4">
@@ -1022,7 +1357,7 @@ window.addEventListener('DOMContentLoaded', function() {
             Description
           </label>
           <textarea id="knowledgeBaseDescInput" name="description" rows="3"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+            class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
         </div>
 
         <div class="mb-4">
@@ -1030,7 +1365,7 @@ window.addEventListener('DOMContentLoaded', function() {
             Embedding Model
           </label>
           <select id="embeddingModelSelect" name="embedding_model"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
+            class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
             <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (384d • Fast • Default)</option>
             <option value="text-embedding-3-small">OpenAI: text-embedding-3-small (1536d • Recommended)</option>
             <option value="text-embedding-3-large">OpenAI: text-embedding-3-large (3072d • Largest)</option>
@@ -1044,36 +1379,38 @@ window.addEventListener('DOMContentLoaded', function() {
         <div class="mb-4">
           <div class="flex items-center mb-2">
             <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files"
-                   class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" />
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" />
             <label for="processAllFilesCheckbox" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
               Process all project files for knowledge search
             </label>
           </div>
           <p class="text-xs text-gray-500 mt-1">
-            This will process all existing files in the project for knowledge search. New files will be automatically processed when added.
+            This will process all existing files in the project for knowledge search. New files will be automatically
+            processed when added.
           </p>
         </div>
 
         <div class="mb-4">
           <div class="flex items-center mb-2">
             <input type="checkbox" id="autoEnableCheckbox" name="auto_enable"
-                   class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" checked />
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" checked />
             <label for="autoEnableCheckbox" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
               Automatically use knowledge in conversations
             </label>
           </div>
           <p class="text-xs text-gray-500 mt-1">
-            When enabled, the AI will automatically search your project files for relevant information when answering questions.
+            When enabled, the AI will automatically search your project files for relevant information when answering
+            questions.
           </p>
         </div>
 
         <div class="flex justify-end gap-2 mt-6">
           <button type="button" id="cancelKnowledgeBaseFormBtn"
-                  class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
+            class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
             Cancel
           </button>
           <button type="submit" id="submitKnowledgeBaseFormBtn"
-                  class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
+            class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
             Save Settings
           </button>
         </div>
@@ -1082,13 +1419,15 @@ window.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Knowledge Result Detail Modal -->
-  <div id="knowledgeResultModal" class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
+  <div id="knowledgeResultModal"
+    class="fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center hidden">
     <div class="bg-white dark:bg-gray-800 rounded-sm p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 id="knowledgeResultTitle" class="text-xl font-semibold">Knowledge Result</h3>
-        <button id="closeKnowledgeResultBtn" class="text-gray-500 hover:text-gray-700">
+        <button id="closeKnowledgeResultBtn" type="button" class="text-gray-500 hover:text-gray-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6
+                  18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -1106,283 +1445,249 @@ window.addEventListener('DOMContentLoaded', function() {
         <pre id="knowledgeResultContent" class="whitespace-pre-wrap text-sm"></pre>
       </div>
       <div class="mt-4 flex justify-end">
-        <button id="useInChatBtn" class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-sm">
+        <button id="useInChatBtn" type="button"
+          class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-sm">
           Use in Conversation
         </button>
       </div>
     </div>
   </div>
 
-<!-- Dark Mode Toggle -->
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const darkModeToggle = document.getElementById('darkModeToggle');
-    const darkModeIcon = document.getElementById('darkModeIcon');
+  <!-- Load all scripts as ES modules and consolidate initialization -->
+  <script type="module">
+    import auth from '/static/js/auth.js';
+    import '/static/js/projectManager.js';
+    import '/static/js/app.js';
+    import '/static/js/chat-utils.js';
+    import '/static/js/chat-conversations.js';
+    import '/static/js/chat-messages.js';
+    import '/static/js/chat-ui.js';
+    import '/static/js/formatting.js';
+    import '/static/js/modelConfig.js';
+    import '/static/js/chat-core.js';
+    import '/static/js/chat-interface.js';
+    import '/static/js/projectDashboardUtils.js';
+    import '/static/js/projectModal.js';
+    import '/static/js/knowledgeBaseState.js';
+    import '/static/js/projectListComponent.js';
+    import '/static/js/sidebar.js';
 
-    // Check for saved preference or system preference
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const savedMode = localStorage.getItem('darkMode');
-    const isDark = savedMode ? savedMode === 'true' : prefersDark;
+    // Centralized initialization after the DOM is ready
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('[index.html] Document loaded, initializing application...');
 
-    // Apply initial mode
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      darkModeIcon.setAttribute('stroke', 'currentColor');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+      // 1) Initialize auth
+      try {
+        await auth.init();
+        console.log('[Auth] Initialization complete.');
 
-    // Toggle handler
-    darkModeToggle.addEventListener('click', () => {
-      const isDark = document.documentElement.classList.toggle('dark');
-      localStorage.setItem('darkMode', isDark);
+        // Listen for auth state changes
+        document.addEventListener('authStateChanged', e => {
+          const { authenticated } = e.detail;
+          const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+          const projectManagerPanel = document.getElementById('projectManagerPanel');
 
-      // Update icon
-      darkModeIcon.setAttribute('stroke', 'currentColor');
-    });
-  });
-</script>
-
-<!-- Module Loading - Core first, then dependencies -->
-<!-- Auth Module (loads first for dependencies) -->
-<script type="module" src="/static/js/auth.js"></script>
-<!-- Project Manager (loads after auth.js) -->
-<script src="/static/js/projectManager.js"></script>
-<!-- Core Configuration & Utilities -->
-<script type="module" src="/static/js/app.js"></script>
-<script type="module" src="/static/js/chat-utils.js"></script>
-<!-- Chat Services (foundational) -->
-<script type="module" src="/static/js/chat-conversations.js"></script>
-<script type="module" src="/static/js/chat-messages.js"></script>
-<!-- UI Components -->
-<script type="module" src="/static/js/chat-ui.js"></script>
-<script type="module" src="/static/js/formatting.js"></script>
-<script type="module" src="/static/js/modelConfig.js"></script>
-<!-- Chat Core (depends on above) -->
-<script type="module" src="/static/js/chat-core.js"></script>
-<script type="module" src="/static/js/chat-interface.js"></script>
-<!-- Core Utilities -->
-<script src="/static/js/projectDashboardUtils.js"></script>
-<script src="/static/js/projectModal.js"></script>
-<!-- Project Utilities -->
-<script src="/static/js/knowledgeBaseState.js"></script>
-<!-- UI Components -->
-<script src="/static/js/projectListComponent.js"></script>
-<script src="/static/js/sidebar.js"></script>
-
-<!-- Error handling -->
-<script>
-  // Consolidated script error handling
-  (function () {
-    window.handleScriptError = function (src, error) {
-      console.error(`Failed to load ${src}:`, error);
-      if (window.showNotification) {
-        window.showNotification('Failed to load required components', 'error');
-      }
-    };
-
-    document.addEventListener('DOMContentLoaded', function () {
-      const scripts = document.querySelectorAll('script[src]');
-      window.scriptLoading = {
-        loaded: 0,
-        total: scripts.length,
-        checkComplete: function () {
-          this.loaded++;
-          if (this.loaded === this.total && window.initializeAllModules) {
-            window.initializeAllModules();
+          if (authenticated) {
+            if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+            if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
+            if (window.projectManager) {
+              window.projectManager.loadProjects('all');
+            }
+          } else {
+            if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
+            if (projectManagerPanel) projectManagerPanel.classList.add('hidden');
           }
-        }
-      };
+        });
 
-      // Add error handlers to all scripts
-      scripts.forEach(script => {
-        script.onerror = () => handleScriptError(script.src, new Error('Load failed'));
-      });
-    });
-  })();
-</script>
-
-<!-- Authentication and UI Integration -->
-<script>
-  // Authentication lifecycle management
-  (function () {
-    document.addEventListener('DOMContentLoaded', function () {
-      // Initialize auth using window.auth async methods
-      if (window.auth) {
-        console.log("[Auth] Initializing auth module from DOM ready event");
-
-        // Initialize auth module
-        window.auth.init()
-          .then(result => {
-            console.log("[Auth] Auth initialization result:", result);
-
-            // Set up auth state change listener
-            document.addEventListener('authStateChanged', function (e) {
-              console.log("[Auth] Auth state changed:", e.detail);
-              const loginRequiredMessage = document.getElementById('loginRequiredMessage');
-              const projectManagerPanel = document.getElementById('projectManagerPanel');
-
-              if (e.detail.authenticated) {
-                // User is authenticated
-                if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
-                if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
-                if (window.projectManager) {
-                  window.projectManager.loadProjects('all');
-                  if (!window.projectDashboardInitialized) {
-                    initProjectDashboard().catch(err => console.error("[Auth] ProjectDashboard initialization failed:", err));
-                  }
-                }
-              } else {
-                // User is not authenticated
-                if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
-                if (projectManagerPanel) projectManagerPanel.classList.add('hidden');
-              }
-            });
-          })
-          .catch(err => {
-            console.error("[Auth] Auth initialization failed:", err);
-          });
-      } else {
-        console.error("[Auth] Auth module not available on page load");
+      } catch (err) {
+        console.error('[Auth] Initialization failed:', err);
       }
 
-      // Show login button handler
+      // 2) Dark mode toggle logic
+      initDarkModeToggle();
+
+      // 3) Setup tab keyboard navigation
+      setupTabKeyboardNavigation();
+
+      // 4) Show login button handler
       const showLoginBtn = document.getElementById('showLoginBtn');
       if (showLoginBtn) {
-        showLoginBtn.addEventListener('click', function () {
+        showLoginBtn.addEventListener('click', () => {
           document.getElementById('authButton').click();
         });
       }
-    });
-  })();
-</script>
 
-<!-- Project List Component Configuration -->
-<script>
-  (function () {
-    document.addEventListener('DOMContentLoaded', function () {
-      // Create ProjectListComponent only once when DOM is ready
+      // 5) Initialize Project List component
+      //   (the ProjectListComponent constructor was imported above)
       window.projectListComponent = new ProjectListComponent({
-        elementId: "projectListView",
+        elementId: "projectList", // Corrected ID from projectListView to projectList
         onViewProject: function (projectId) {
-          console.log('[Index] Opening project:', projectId);
-          // Load the project details or switch UI as needed
-          window.projectManager.loadProjectDetails(projectId)
-            .catch(err => console.error('Failed to load project details', err));
+          console.log('[Index] onViewProject triggered for project:', projectId);
+          // Ensure projectManager and loadProjectDetails are available
+          if (window.projectManager && typeof window.projectManager.loadProjectDetails === 'function') {
+            // Show details view, hide list view
+            const listView = document.getElementById('projectListView');
+            const detailsView = document.getElementById('projectDetailsView');
+            if (listView) listView.classList.add('hidden');
+            if (detailsView) detailsView.classList.remove('hidden');
+
+            window.projectManager.loadProjectDetails(projectId)
+              .then(project => {
+                console.log('[Index] Project details loaded successfully:', project?.id);
+                // Potentially update breadcrumbs or title here if needed
+                const projectTitleEl = document.getElementById('projectTitle');
+                if (projectTitleEl && project) {
+                    projectTitleEl.textContent = project.name;
+                }
+              })
+              .catch(err => {
+                console.error('[Index] Failed to load project details via projectManager:', err);
+                window.showNotification?.('Error loading project details. Please try again.', 'error');
+                 // Optionally switch back to list view on error
+                if (listView) listView.classList.remove('hidden');
+                if (detailsView) detailsView.classList.add('hidden');
+              });
+          } else {
+            console.error('[Index] projectManager or loadProjectDetails is not available.');
+            window.showNotification?.('Cannot load project details component.', 'error');
+          }
         }
       });
 
-      // Listen for project data updates
+      // React to projectsLoaded event to render
       document.addEventListener('projectsLoaded', event => {
-        if (!event.detail?.data?.projects) {
-          console.warn('No projects found in event detail');
-          return;
-        }
-        const { projects } = event.detail.data;
-        if (window.projectListComponent) {
-          console.log('[Index] Rendering projects from projectsLoaded event; Count:', projects.length);
+        const projects = event.detail?.data?.projects;
+        if (projects && window.projectListComponent) {
+          console.log('[Index] Rendering projects; Count:', projects.length);
           window.projectListComponent.renderProjects(projects);
         }
       });
+
+      console.log('[index.html] Initialization steps completed.');
     });
-  })();
-</script>
 
-<!-- Tab Keyboard Navigation -->
-<script>
-  (function () {
-    document.addEventListener('DOMContentLoaded', function () {
-      function setupTabKeyboardNavigation() {
-        const tabButtons = document.querySelectorAll('[role="tab"]');
+    function initDarkModeToggle() {
+      const darkModeToggle = document.getElementById('darkModeToggle');
+      const darkModeIcon = document.getElementById('darkModeIcon');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const savedMode = localStorage.getItem('darkMode');
+      const isDark = savedMode ? (savedMode === 'true') : prefersDark;
 
-        tabButtons.forEach(button => {
-          button.addEventListener('keydown', (e) => {
-            // Handle arrow key navigation
-            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-              e.preventDefault();
+      applyDarkMode(isDark);
 
-              const tabs = Array.from(tabButtons);
-              const currentIndex = tabs.indexOf(e.target);
-              let newIndex;
-
-              if (e.key === 'ArrowRight') {
-                newIndex = (currentIndex + 1) % tabs.length;
-              } else {
-                newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-              }
-
-              // Update ARIA and focus state
-              tabs.forEach(tab => {
-                tab.setAttribute('aria-selected', 'false');
-                tab.setAttribute('tabindex', '-1');
-              });
-              tabs[newIndex].setAttribute('aria-selected', 'true');
-              tabs[newIndex].setAttribute('tabindex', '0');
-              tabs[newIndex].focus();
-            }
-          });
-        });
-      }
-
-      // Call this after tabs are initialized
-      if (window.isProjectDashboardUtilsReady && window.isProjectDashboardUtilsReady()) {
-        setupTabKeyboardNavigation();
-      } else {
-        document.addEventListener('dashboardUtilsReady', setupTabKeyboardNavigation);
-      }
-    });
-  })();
-</script>
-
-<!-- Application Initialization -->
-<script>
-  (function () {
-    // Centralized application initialization
-    document.addEventListener('DOMContentLoaded', function () {
-      // Wait for app.js to be ready before loading dependent components
-      document.addEventListener('appJsReady', function () {
-        console.log('[index.html] appJsReady event received, proceeding with component loading.');
-
-        // Now wait for dashboard utilities (if needed, or load directly)
-        if (window.isProjectDashboardUtilsReady && window.isProjectDashboardUtilsReady()) {
-          loadProjectComponents();
-        } else {
-          // Assuming dashboardUtils might also depend on app.js, listen here
-          document.addEventListener('dashboardUtilsReady', loadProjectComponents);
-        }
+      darkModeToggle.addEventListener('click', () => {
+        const newMode = !document.documentElement.classList.contains('dark');
+        applyDarkMode(newMode);
+        localStorage.setItem('darkMode', newMode);
       });
 
-      function loadProjectComponents() {
-        console.log('[index.html] Loading project components...');
-        const scripts = [
-          '/static/js/knowledgeBaseComponent.js',
-          '/static/js/projectDetailsComponent.js'
-          // Removed projectListComponent.js as it's already loaded above
-        ];
+      function applyDarkMode(enableDark) {
+        if (enableDark) {
+          document.documentElement.classList.add('dark');
+          // Example: swap icon to a "moon"
+          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M20.354 15.354A9 9 0 1111.05
+                                    4.05 7
+                                    7 0 0020.354
+                                    15.354z" />`;
+        } else {
+          document.documentElement.classList.remove('dark');
+          // Example: swap icon back to "sun"
+          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 3v1m0
+                                    16v1m9-9h-1M4
+                                    12H3m15.364
+                                    6.364l-.707-.707M6.343
+                                    6.343l-.707-.707m12.728
+                                    0l-.707.707M6.343
+                                    17.657l-.707.707M16
+                                    12a4 4
+                                    0 11-8
+                                    0 4 4
+                                    0 018
+                                    0z" />`;
+        }
+      }
+    }
 
-        let loadedCount = 0;
-        scripts.forEach(src => {
-          const script = document.createElement('script');
-          script.src = src;
-          script.onload = () => {
-            loadedCount++;
-            if (loadedCount === scripts.length) {
-              // All component scripts loaded, now load dashboard
-              const dashboardScript = document.createElement('script');
-              dashboardScript.src = '/static/js/projectDashboard.js';
-              dashboardScript.onload = () => console.log('All dashboard components loaded successfully');
-              document.head.appendChild(dashboardScript);
+    function setupTabKeyboardNavigation() {
+      const tabButtons = document.querySelectorAll('[role="tab"]');
+      tabButtons.forEach(button => {
+        button.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const tabs = Array.from(tabButtons);
+            const currentIndex = tabs.indexOf(e.target);
+            let newIndex;
+
+            if (e.key === 'ArrowRight') {
+              newIndex = (currentIndex + 1) % tabs.length;
+            } else {
+              newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
             }
-          };
-          document.head.appendChild(script);
+
+            tabs.forEach(t => {
+              t.setAttribute('aria-selected', 'false');
+              t.setAttribute('tabindex', '-1');
+            });
+            tabs[newIndex].setAttribute('aria-selected', 'true');
+            tabs[newIndex].setAttribute('tabindex', '0');
+            tabs[newIndex].focus();
+          }
         });
+      });
+    }
+  </script>
+
+  <!-- Project Chat Configuration Script -->
+  <script>
+    // Script to run when projectDetailsView becomes visible
+    const projectDetailsObserver = new MutationObserver((mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const targetElement = mutation.target;
+          if (!targetElement.classList.contains('hidden')) {
+            console.log('[ProjectDetailsView] View became visible, attempting to configure chat.');
+            // Attempt to configure the chat interface specifically for this view
+            if (window.chatInterface && typeof window.chatInterface.configureSelectors === 'function') {
+               window.chatInterface.configureSelectors({
+                 container: "#projectChatUI",
+                 messages: "#projectChatMessages",
+                 input: "#projectChatInput",
+                 sendButton: "#projectChatSendBtn" // Use 'sendButton' as per chat-ui.js logs
+               });
+               console.log('[ProjectDetailsView] Chat selectors configured.');
+            } else if (window.ChatManager && typeof window.ChatManager.initializeProjectChat === 'function') {
+               // Alternative: Use a dedicated manager if available
+               const projectId = document.getElementById('projectTitle')?.dataset.projectId; // Assuming projectId is stored somewhere accessible
+               if (projectId) {
+                 window.ChatManager.initializeProjectChat(projectId, {
+                   container: "#projectChatUI",
+                   messages: "#projectChatMessages",
+                   input: "#projectChatInput",
+                   sendBtn: "#projectChatSendBtn" // Use 'sendBtn' if ChatManager expects this
+                 });
+                 console.log('[ProjectDetailsView] ChatManager initialized project chat.');
+               } else {
+                 console.warn('[ProjectDetailsView] Could not find project ID to initialize chat.');
+               }
+            } else {
+               console.warn('[ProjectDetailsView] Could not find chatInterface.configureSelectors or ChatManager.initializeProjectChat.');
+            }
+            // Optional: Disconnect observer if configuration should only happen once per view load
+            // projectDetailsObserver.disconnect();
+          }
+        }
       }
     });
-  })();
 
-  // Final confirmation when all scripts are loaded
-  console.log('All scripts initialized');
-</script>
+    const detailsViewElement = document.getElementById('projectDetailsView');
+    if (detailsViewElement) {
+      projectDetailsObserver.observe(detailsViewElement, { attributes: true });
+    } else {
+      console.error('[ProjectDetailsView] Could not find #projectDetailsView to observe.');
+    }
+  </script>
 </body>
 
 </html>

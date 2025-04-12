@@ -23,8 +23,11 @@
    * @param {Object} detail - Event data
    */
   function emitEvent(eventName, detail) {
-    document.dispatchEvent(new CustomEvent(eventName, { detail }));
+    // Ensure detail is always an object, even if empty
+    const eventDetail = typeof detail === 'object' && detail !== null ? detail : {};
+    document.dispatchEvent(new CustomEvent(eventName, { detail: eventDetail }));
   }
+
 
   /* ===========================
      DATA OPERATIONS - PROJECTS
@@ -141,7 +144,7 @@
    * Dispatches "projectLoaded" with { detail: project }.
    * Also loads stats, files, conversations, artifacts if not archived.
    * @param {string} projectId - Project ID
-   * @returns {Promise<Object>} Project data
+   * @returns {Promise<Object|null>} Project data or null on failure
    */
   async function loadProjectDetails(projectId) {
     // Validate project ID format
@@ -155,7 +158,8 @@
         throw new Error('Malformed project ID');
       }
     } catch (err) {
-      emitEvent('projectDetailsError', { error: err });
+      // Ensure projectId is included in the error event
+      emitEvent('projectDetailsError', { projectId, error: err });
       return null;
     }
 
@@ -164,10 +168,13 @@
     try {
       // Clear current project while loading
       currentProject = null;
+      emitEvent("projectDetailsLoading", { projectId }); // Add loading event
+
       // Check auth state using auth.js
       const isAuthenticated = await window.auth.isAuthenticated();
       if (!isAuthenticated) {
         emitEvent("projectDetailsError", {
+          projectId, // Add projectId to error event
           error: new Error("Not authenticated - please login first")
         });
         return null;
@@ -176,16 +183,20 @@
       const response = await window.apiRequest(projectEndpoint, "GET");
       let projectData = null;
 
-      if (response?.data) {
-        projectData = response.data;
-      } else if (response?.success && response?.data) {
-        projectData = response.data;
-      } else if (response?.id) {
-        projectData = response;
+      // Standardize response parsing
+      if (response?.data?.id) { // Prioritize response.data if it looks like a project object
+          projectData = response.data;
+      } else if (response?.id) { // Fallback to response itself if it looks like a project object
+          projectData = response;
+      } else if (response?.success && response?.data?.id) { // Handle { success: true, data: {...} }
+          projectData = response.data;
       }
 
+
       if (!projectData || !projectData.id) {
-        throw new Error("Invalid project response format");
+        // Include response snippet in error for debugging
+        const responseSnippet = JSON.stringify(response || {}).substring(0, 100);
+        throw new Error(`Invalid project response format. Received: ${responseSnippet}...`);
       }
 
       currentProject = projectData;
@@ -197,33 +208,65 @@
 
       // If we have a KB ID but no attached knowledge_base object, load it
       if (currentProject.knowledge_base_id && !currentProject.knowledge_base) {
-        await loadKnowledgeBaseDetails(currentProject.knowledge_base_id);
+        // Use try-catch for non-critical KB load
+        try {
+            // Assuming loadKnowledgeBaseDetails updates some shared state or returns the KB
+            const kbDetails = await loadKnowledgeBaseDetails(currentProject.knowledge_base_id);
+            // Explicitly attach if loadKnowledgeBaseDetails returns the object
+            if (kbDetails && kbDetails.id === currentProject.knowledge_base_id) {
+                 currentProject.knowledge_base = kbDetails;
+            }
+            // Or check a global manager if that's how it works
+            else if (window.knowledgeBaseManager?.getCurrentKnowledgeBase) {
+               const kb = window.knowledgeBaseManager.getCurrentKnowledgeBase();
+               if (kb && kb.id === currentProject.knowledge_base_id) {
+                   currentProject.knowledge_base = kb;
+               }
+            }
+        } catch (kbError) {
+            console.warn(`[ProjectManager] Failed to load associated knowledge base details (${currentProject.knowledge_base_id}):`, kbError);
+            // Continue without KB details if it fails, maybe set kb to null explicitly
+            currentProject.knowledge_base = null;
+        }
       }
 
-      // Dispatch "projectLoaded"
-      emitEvent("projectLoaded", currentProject);
+      // Dispatch "projectLoaded" with a clone to prevent mutation issues
+      // Ensure the dispatched event detail is the project object itself
+      emitEvent("projectLoaded", { ...currentProject });
 
       // If archived, skip loading extra data
       if (currentProject.archived) {
         emitEvent("projectArchivedNotice", { id: currentProject.id });
-        return currentProject;
+        return { ...currentProject }; // Return a clone
       }
 
       // Load stats, files, conversations, artifacts in parallel
-      await Promise.all([
+      // Use Promise.allSettled to avoid failing all if one fails
+      const results = await Promise.allSettled([
         loadProjectStats(projectId),
         loadProjectFiles(projectId),
         loadProjectConversations(projectId),
         loadProjectArtifacts(projectId)
-      ]).catch(err => {
-        console.warn("[projectManager] Some project detail loads failed:", err);
+      ]);
+
+      results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+              const loadType = ['stats', 'files', 'conversations', 'artifacts'][index];
+              console.warn(`[projectManager] Failed to load project ${loadType}:`, result.reason);
+              // Optionally emit specific errors here if needed by UI
+              emitEvent(`project${loadType.charAt(0).toUpperCase() + loadType.slice(1)}Error`, { projectId, error: result.reason });
+          }
       });
 
-      return currentProject;
+
+      return { ...currentProject }; // Return a clone
     } catch (err) {
       console.error("[projectManager] Error loading project details:", err);
-      emitEvent("projectDetailsError", { error: err });
-      throw err;
+      // Ensure projectId is included in the error event
+      emitEvent("projectDetailsError", { projectId, error: err });
+      // Reset current project on error
+      currentProject = null;
+      return null; // Indicate failure
     }
   }
 
@@ -803,11 +846,12 @@
      =========================== */
 
   /**
-   * Get the current project object
-   * @returns {Object|null}
+   * Get the currently loaded project data.
+   * @returns {Object|null} A clone of the current project data or null.
    */
   function getCurrentProject() {
-    return currentProject;
+    // Return a clone to prevent external modification
+    return currentProject ? { ...currentProject } : null;
   }
 
   // Add token refresh awareness with better error handling
@@ -884,39 +928,50 @@
   // PUBLIC API
   // ----------------
   window.projectManager = {
-    currentProject: getCurrentProject,
-    // Initialization
-    initialize,
-    // Loads
     loadProjects,
     loadProjectDetails,
     loadProjectStats,
     loadProjectFiles,
     loadProjectConversations,
     loadProjectArtifacts,
-    // Project CRUD
     createOrUpdateProject,
     deleteProject,
     togglePinProject,
     toggleArchiveProject,
     saveCustomInstructions,
-    // File/Artifact CRUD
+    isKnowledgeBaseReady,
+    isKnowledgeBaseActive,
     prepareFileUploads,
     uploadFile,
     deleteFile,
-    deleteArtifact,
-    // Conversations
-    createConversation,
     deleteProjectConversation,
+    deleteArtifact,
+    createConversation,
     linkConversationToKnowledgeBase,
-    // Knowledge Base
-    isKnowledgeBaseReady,
-    loadKnowledgeBaseDetails,
-    // Error formatting
-    formatProjectError,
-    // API utils
-    checkProjectApiEndpoint,
-    // Event utility
-    emitEvent
+    getCurrentProject, // Expose getter
+    // Add any other functions that need to be globally accessible
+    // e.g., loadKnowledgeBaseDetails if it's defined within this scope and needed externally
   };
-})();
+
+  // Optional: Add an initialization function if needed, e.g., for event listeners within this module
+  function initialize() {
+      console.log("[projectManager] Initializing...");
+      // Example: Listen for auth changes if needed within projectManager itself
+      document.addEventListener('authStateChanged', (event) => {
+          const isAuthenticated = event.detail?.authenticated;
+          console.log(`[projectManager] Auth state changed: ${isAuthenticated ? 'authenticated' : 'logged out'}`);
+          if (!isAuthenticated) {
+              currentProject = null; // Clear current project on logout
+          }
+      });
+      // Check initial auth state? Maybe not needed if relying on callers to check.
+      console.log("[projectManager] Initialization complete - current auth status:", window.auth?.getCachedAuthState?.()?.authenticated);
+  }
+
+  // Add initialize to the exports if you have one
+  window.projectManager.initialize = initialize;
+
+
+  console.log('[ProjectManager] projectManager.js loaded');
+
+})(); // End IIFE

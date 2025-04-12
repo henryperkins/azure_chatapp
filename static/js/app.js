@@ -435,6 +435,69 @@ function getBaseUrl() {
 // DATA LOADING & RENDERING
 // ---------------------------------------------------------------------
 
+// Add a simple debounce utility
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func.apply(this, args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Variable to track the currently loading project ID
+let currentlyLoadingProjectId = null;
+const DEBOUNCE_DELAY = 300; // milliseconds
+
+// Debounced version of the project loading logic
+const debouncedLoadProject = debounce(async (projectId) => {
+  if (currentlyLoadingProjectId === projectId) {
+    console.log(`[App] Project ${projectId} is already loading.`);
+    return;
+  }
+  currentlyLoadingProjectId = projectId;
+
+  try {
+    // Switch UI immediately for responsiveness
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    if (projectListView) projectListView.classList.add('hidden');
+    if (projectDetailsView) projectDetailsView.classList.remove('hidden');
+
+    // Dispatch project selected event
+    document.dispatchEvent(new CustomEvent('projectSelected', {
+      detail: { projectId: projectId }
+    }));
+
+    // Load project details using projectManager if available
+    if (window.projectManager?.loadProjectDetails) {
+      console.log(`[App] Debounced load triggered for project: ${projectId}`);
+      await window.projectManager.loadProjectDetails(projectId);
+    } else if (window.loadProjectDetails) { // Fallback if projectManager isn't ready
+      console.log(`[App] Debounced load triggered (fallback) for project: ${projectId}`);
+      await window.loadProjectDetails(projectId);
+    } else {
+      console.warn(`[App] No function found to load project details for ${projectId}`);
+    }
+  } catch (error) {
+    console.error(`[App] Error loading project ${projectId}:`, error);
+    // Optionally, switch back to the list view on error
+    // const projectListView = document.getElementById('projectListView');
+    // const projectDetailsView = document.getElementById('projectDetailsView');
+    // if (projectListView) projectListView.classList.remove('hidden');
+    // if (projectDetailsView) projectDetailsView.classList.add('hidden');
+  } finally {
+    // Allow loading again after completion or error
+    if (currentlyLoadingProjectId === projectId) {
+      currentlyLoadingProjectId = null;
+    }
+  }
+}, DEBOUNCE_DELAY);
+
+
 function createProjectListItem(project) {
   try {
     const projectData = project.data || project;
@@ -459,22 +522,9 @@ function createProjectListItem(project) {
       li.appendChild(pinIcon);
     }
 
+    // Use the debounced function for the click handler
     li.addEventListener('click', () => {
-      // Switch UI to project details
-      const projectListView = document.getElementById('projectListView');
-      const projectDetailsView = document.getElementById('projectDetailsView');
-      if (projectListView) projectListView.classList.add('hidden');
-      if (projectDetailsView) projectDetailsView.classList.remove('hidden');
-
-      // Dispatch project selected event
-      document.dispatchEvent(new CustomEvent('projectSelected', {
-        detail: { projectId: projectData.id }
-      }));
-
-      // Load project details
-      if (window.loadProjectDetails) {
-        window.loadProjectDetails(projectData.id);
-      }
+      debouncedLoadProject(projectData.id);
     });
 
     return li;
@@ -624,30 +674,71 @@ function navigateToConversation(conversationId) {
 async function handleNavigationChange() {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
+  const view = urlParams.get('view'); // Check for view parameter
 
-  if (!await ensureAuthenticated()) {
-    const loginMsg = document.getElementById("loginRequiredMessage");
-    if (loginMsg) loginMsg.classList.remove("hidden");
+  // Prioritize showing projects view if specified
+  if (view === 'projects') {
+    console.log('[handleNavigationChange] View=projects detected, showing projects view.');
+    if (window.ProjectDashboard?.showProjectsView) {
+      window.ProjectDashboard.showProjectsView();
+    } else {
+       // Fallback if ProjectDashboard isn't ready or doesn't have the function
+       const listView = document.getElementById('projectListView');
+       const detailsView = document.getElementById('projectDetailsView');
+       if (listView) listView.classList.remove('hidden');
+       if (detailsView) detailsView.classList.add('hidden');
+    }
+    // Don't proceed to load/create chat if showing projects
     return;
   }
 
+
+  if (!await ensureAuthenticated()) {
+    console.log('[handleNavigationChange] Not authenticated, showing login message.');
+    const loginMsg = document.getElementById("loginRequiredMessage");
+    if (loginMsg) loginMsg.classList.remove("hidden");
+    setChatUIVisibility(false); // Ensure chat UI is hidden
+    return;
+  }
+
+  // Hide login message if authenticated
+  const loginMsg = document.getElementById("loginRequiredMessage");
+  if (loginMsg) loginMsg.classList.add("hidden");
+
+
   if (chatId) {
+    console.log(`[handleNavigationChange] ChatId=${chatId} found, loading conversation.`);
     setChatUIVisibility(true);
     if (typeof window.loadConversation === 'function') {
       window.loadConversation(chatId).catch(err => {
         handleAPIError('loading conversation', err);
         setChatUIVisibility(false);
-      });
-    }
-  } else {
-    if (typeof window.createNewChat === 'function') {
-      window.createNewChat().catch(err => {
-        handleAPIError('creating new chat', err);
-        setChatUIVisibility(false);
+        // Maybe redirect or show an error message specific to chat loading failure
+        window.history.replaceState({}, '', '/'); // Clear invalid chatId from URL
       });
     } else {
-      setChatUIVisibility(false);
+       console.warn('[handleNavigationChange] window.loadConversation function not found.');
+       setChatUIVisibility(false);
     }
+  } else {
+    // Only create a new chat if NO chatId is present AND we are not explicitly viewing projects
+    console.log('[handleNavigationChange] No chatId found, showing empty state (no automatic new chat creation).');
+    // Instead of creating a new chat automatically, show the placeholder/empty state.
+    // Let the user explicitly click "New Chat" or select a project/conversation.
+    setChatUIVisibility(false);
+
+    // --- Removed automatic new chat creation ---
+    // if (typeof window.createNewChat === 'function') {
+    //   console.log('[handleNavigationChange] No chatId found, creating new chat.');
+    //   window.createNewChat().catch(err => {
+    //     handleAPIError('creating new chat', err);
+    //     setChatUIVisibility(false);
+    //   });
+    // } else {
+    //   console.warn('[handleNavigationChange] window.createNewChat function not found.');
+    //   setChatUIVisibility(false);
+    // }
+    // --- End Removed ---
   }
 }
 
@@ -752,34 +843,25 @@ async function loadSidebarProjects() {
         if (projectsArray.length > 0) {
           console.debug('[loadSidebarProjects] Rendering', projectsArray.length, 'projects.');
           projectsArray.forEach(project => {
-            const li = createProjectListItem(project);
+            const li = createProjectListItem(project); // Uses the updated function
             if (li) container.appendChild(li);
           });
 
-          // Also unhide the "projectsSection" if it exists
-          const projectsSection = document.getElementById('projectsSection');
-          if (projectsSection) {
-            projectsSection.classList.remove('hidden');
-          }
-
-          const projectListView = document.getElementById('projectListView');
-          const projectDetailsView = document.getElementById('projectDetailsView');
-          if (projectListView && projectDetailsView) {
-            console.debug('[loadSidebarProjects] Showing projectListView, hiding projectDetailsView');
-            projectListView.classList.remove('hidden');
-            projectDetailsView.classList.add('hidden');
-          } else {
-            console.warn('[loadSidebarProjects] Missing #projectListView or #projectDetailsView elements.');
-          }
+          // REMOVED: Manual view switching logic from here as well.
+          // Let the default state or another component manage initial view.
         } else {
           console.warn('[loadSidebarProjects] No projects found, rendering empty state.');
           showEmptyState(container, MESSAGES.NO_PROJECTS, 'py-4');
         }
+        // Dispatch an event indicating projects are loaded in the sidebar
+        document.dispatchEvent(new CustomEvent('sidebarProjectsRendered', { detail: { count: projectsArray.length } }));
         return projectsArray;
       })
       .catch(error => {
         console.error('[loadSidebarProjects] Failed to load sidebar projects:', error);
-        throw error;
+        // Dispatch error event
+        document.dispatchEvent(new CustomEvent('sidebarProjectsError', { detail: { error } }));
+        throw error; // Re-throw if needed
       });
   } catch (error) {
     console.error('Failed to load sidebar projects:', error);
@@ -815,6 +897,124 @@ function setupEventListeners() {
     if (event.target.closest('#newConversationBtn')) {
       handleNewConversationClick();
     }
+    // Listener for the main "New Project" button in the project list view
+    if (event.target.closest('#createProjectBtn')) {
+      console.log('Create Project button clicked');
+      if (window.modalManager && typeof window.modalManager.show === 'function') {
+        window.modalManager.show('project', {
+          updateContent: (modalEl) => {
+            // Reset form if needed
+            const form = modalEl.querySelector('form');
+            if (form) form.reset();
+            // Clear project ID if editing vs creating
+            const projectIdInput = modalEl.querySelector('#projectId');
+            if (projectIdInput) projectIdInput.value = '';
+            // Update title
+            const title = modalEl.querySelector('.modal-title, h3');
+            if (title) title.textContent = 'Create New Project';
+          }
+        });
+      } else {
+        console.error('ModalManager or show function not available.');
+      }
+    }
+    // Listener for the "Back to Projects" button in the details view
+    if (event.target.closest('#backToProjectsBtn')) {
+        console.log('Back to Projects button clicked');
+        if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectsView === 'function') {
+            window.ProjectDashboard.showProjectsView();
+        } else if (typeof window.showProjectsView === 'function') {
+            window.showProjectsView();
+        } else {
+            console.error('showProjectsView function not available.');
+            // Fallback logic
+            const listView = document.getElementById('projectListView');
+            const detailsView = document.getElementById('projectDetailsView');
+            if (listView) listView.classList.remove('hidden');
+            if (detailsView) detailsView.classList.add('hidden');
+        }
+    }
+    // Listener for Edit Project Button
+    if (event.target.closest('#editProjectBtn')) {
+        console.log('Edit Project button clicked');
+        const currentProject = window.projectManager?.currentProject();
+        if (currentProject && window.modalManager) {
+            window.modalManager.show('project', {
+                updateContent: (modalEl) => {
+                    // Populate form with current project data
+                    const form = modalEl.querySelector('form');
+                    if (form) {
+                        form.querySelector('#projectId').value = currentProject.id;
+                        form.querySelector('#projectName').value = currentProject.name;
+                        form.querySelector('#projectDescription').value = currentProject.description || '';
+                        // Update title
+                        const title = modalEl.querySelector('.modal-title, h3');
+                        if (title) title.textContent = `Edit Project: ${currentProject.name}`;
+                    }
+                }
+            });
+        } else {
+            console.error('Cannot edit: Project data or ModalManager not available.');
+        }
+    }
+    // Listener for Pin Project Button
+    if (event.target.closest('#pinProjectBtn')) {
+        console.log('Pin Project button clicked');
+        const currentProject = window.projectManager?.currentProject();
+        if (currentProject && window.projectManager?.togglePinProject) {
+            window.projectManager.togglePinProject(currentProject.id)
+                .then(updatedProject => {
+                    window.showNotification?.(`Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}`, 'success');
+                    // Optionally refresh project details or list
+                    window.loadProjectDetails?.(currentProject.id); // Refresh details view
+                    window.loadSidebarProjects?.(); // Refresh sidebar list
+                })
+                .catch(err => {
+                    console.error('Error toggling pin:', err);
+                    window.showNotification?.('Failed to update pin status', 'error');
+                });
+        } else {
+             console.error('Cannot pin: Project data or togglePinProject function not available.');
+        }
+    }
+    // Listener for Archive Project Button
+    if (event.target.closest('#archiveProjectBtn')) {
+        console.log('Archive Project button clicked');
+        const currentProject = window.projectManager?.currentProject();
+        if (currentProject && window.projectManager?.toggleArchiveProject && window.ModalManager?.confirmAction) {
+             window.ModalManager.confirmAction({
+                title: 'Confirm Archive',
+                message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} this project?`,
+                confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
+                confirmClass: currentProject.archived ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700',
+                onConfirm: () => {
+                    window.projectManager.toggleArchiveProject(currentProject.id)
+                        .then(updatedProject => {
+                            window.showNotification?.(`Project ${updatedProject.archived ? 'archived' : 'unarchived'}`, 'success');
+                            // Go back to list view after archiving/unarchiving
+                            if (window.ProjectDashboard?.showProjectsView) window.ProjectDashboard.showProjectsView();
+                            window.loadSidebarProjects?.(); // Refresh sidebar list
+                            window.loadProjects?.(); // Refresh main list
+                        })
+                        .catch(err => {
+                            console.error('Error toggling archive:', err);
+                            window.showNotification?.('Failed to update archive status', 'error');
+                        });
+                }
+            });
+        } else {
+            console.error('Cannot archive: Project data, toggleArchiveProject, or ModalManager not available.');
+        }
+    }
+    // Listener for Minimize Chat Button (in project details)
+    if (event.target.closest('#minimizeChatBtn')) {
+        console.log('Minimize chat button clicked');
+        const chatContainer = document.getElementById('projectChatContainer');
+        if (chatContainer) {
+          // Example: Toggle visibility or add a class to collapse
+          chatContainer.classList.toggle('hidden'); // Simple hide/show
+        }
+    }
   });
 
   // Navigation tracking to prevent auth errors during page transitions
@@ -848,10 +1048,15 @@ function setupNavigationTracking() {
   recordInteraction();
 }
 
+// Keep track of the last known auth state to avoid redundant actions
+let lastKnownAuthState = null;
+
 function handleAuthStateChange(e) {
   const { authenticated, username } = e.detail;
+  const stateChanged = authenticated !== lastKnownAuthState;
+  lastKnownAuthState = authenticated; // Update last known state
 
-  // Update auth status elements
+  // Update auth status elements (always do this)
   const authStatus = ELEMENTS.AUTH_STATUS || getElement(SELECTORS.AUTH_STATUS);
   if (authStatus) {
     authStatus.textContent = authenticated ? (username || 'Authenticated') : 'Not Authenticated';
@@ -859,31 +1064,54 @@ function handleAuthStateChange(e) {
     authStatus.classList.toggle('text-red-600', !authenticated);
   }
 
-  // Update UI based on auth state
+  // Update general UI based on auth state (always do this)
   handleAppUpdateAuthUI(authenticated, username);
 
   API_CONFIG.isAuthenticated = authenticated;
 
   if (authenticated) {
-    loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-    loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+    // Only load data if the state *changed* to authenticated or if data hasn't been loaded yet
+    // (Need a flag or check for existing data, simplified here)
+    if (stateChanged) {
+      console.log("[AuthStateChange] User authenticated, loading initial data.");
+      loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+      loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
 
-    // Check for chatId in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const chatId = urlParams.get('chatId');
-    if (chatId && typeof window.loadConversation === 'function') {
-      window.loadConversation(chatId).catch(err => {
-        console.warn("Failed to load conversation:", err);
-      });
+      // Check for chatId in URL only on initial load/auth change
+      const urlParams = new URLSearchParams(window.location.search);
+      const chatId = urlParams.get('chatId');
+      if (chatId && typeof window.loadConversation === 'function') {
+        window.loadConversation(chatId).catch(err => {
+          console.warn("Failed to load conversation:", err);
+        });
+      }
+    } else {
+      console.log("[AuthStateChange] Auth state confirmed as authenticated, skipping redundant data load.");
     }
   } else {
-    // Clear the conversation area or show "Please log in"
+    // Clear UI elements when logged out
     const conversationArea = ELEMENTS.CONVERSATION_AREA || getElement(SELECTORS.CONVERSATION_AREA);
-    if (conversationArea) {
-      conversationArea.innerHTML = '';
-    }
+    if (conversationArea) conversationArea.innerHTML = '';
+
+    const sidebarConversations = ELEMENTS.SIDEBAR_CONVERSATIONS || getElement(SELECTORS.SIDEBAR_CONVERSATIONS);
+    if (sidebarConversations) showEmptyState(sidebarConversations, 'Please log in', 'py-4');
+
+    const sidebarProjects = ELEMENTS.SIDEBAR_PROJECTS || getElement(SELECTORS.SIDEBAR_PROJECTS);
+    if (sidebarProjects) showEmptyState(sidebarProjects, 'Please log in', 'py-4');
+
     const loginMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || getElement(SELECTORS.LOGIN_REQUIRED_MESSAGE);
     loginMsg?.classList.remove('hidden');
+
+    const projectManagerPanel = ELEMENTS.PROJECT_MANAGER_PANEL || getElement(SELECTORS.PROJECT_MANAGER_PANEL);
+    projectManagerPanel?.classList.add('hidden');
+
+    // Clear current project view if necessary
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    if (projectDetailsView) projectDetailsView.classList.add('hidden');
+    const projectListView = document.getElementById('projectListView');
+    if (projectListView) projectListView.classList.remove('hidden'); // Show list view (which might show login required)
+
+    console.log("[AuthStateChange] User logged out, UI cleared.");
   }
 }
 
@@ -992,18 +1220,25 @@ function safeInitialize() {
   const projectSearch = ELEMENTS.SIDEBAR_PROJECT_SEARCH;
   if (projectSearch) {
     projectSearch.addEventListener('input', (e) => {
-      // Project search logic goes here
+      // Project search logic goes here (ensure this is implemented if needed)
+      const searchTerm = e.target.value.toLowerCase();
+      const projectItems = document.querySelectorAll('#sidebarProjects li');
+      projectItems.forEach(item => {
+          const projectName = item.textContent.toLowerCase();
+          item.style.display = projectName.includes(searchTerm) ? '' : 'none';
+      });
     });
   }
 
   const newProjectBtn = ELEMENTS.SIDEBAR_NEW_PROJECT_BTN;
   if (newProjectBtn) {
     newProjectBtn.addEventListener('click', () => {
-      if (window.projectManager?.showProjectCreateForm) {
-        window.projectManager.showProjectCreateForm();
-      } else if (ELEMENTS.CREATE_PROJECT_BTN) {
-        ELEMENTS.CREATE_PROJECT_BTN.click();
-      }
+        console.log('Sidebar New Project button clicked');
+        if (window.modalManager && typeof window.modalManager.show === 'function') {
+            window.modalManager.show('project', { /* options as needed */ });
+        } else {
+            console.error('ModalManager or show function not available.');
+        }
     });
   }
 
@@ -1061,4 +1296,46 @@ document.addEventListener('DOMContentLoaded', () => {
   // Signal that app.js is loaded and initialized
   console.log('[app.js] Dispatching appJsReady event');
   document.dispatchEvent(new CustomEvent('appJsReady'));
+});
+
+// Add listener for projectSelected event to handle view switching
+document.addEventListener('projectSelected', (event) => {
+  const projectId = event.detail.projectId;
+  console.log(`[app.js] projectSelected event received for project: ${projectId}`);
+
+  // Hide list view, show details view
+  const projectListView = document.getElementById('projectListView');
+  const projectDetailsView = document.getElementById('projectDetailsView');
+
+  if (projectListView) {
+    projectListView.classList.add('hidden');
+    console.log('[app.js] Hiding projectListView');
+  } else {
+    console.warn('[app.js] projectListView not found');
+  }
+
+  if (projectDetailsView) {
+    projectDetailsView.classList.remove('hidden');
+    console.log('[app.js] Showing projectDetailsView');
+     // Scroll to top of details view might be helpful
+     projectDetailsView.scrollTop = 0;
+  } else {
+     console.warn('[app.js] projectDetailsView not found');
+  }
+
+  // Update URL maybe? (Optional, depends on desired behavior)
+  // window.history.pushState({ projectId }, '', `/?view=project&projectId=${projectId}`);
+});
+
+// Add listener to go back to project list
+// This could be triggered by a "Back" button in the details view
+document.addEventListener('showProjectList', () => {
+  console.log('[app.js] showProjectList event received');
+  const projectListView = document.getElementById('projectListView');
+  const projectDetailsView = document.getElementById('projectDetailsView');
+  if (projectListView) projectListView.classList.remove('hidden');
+  if (projectDetailsView) projectDetailsView.classList.add('hidden');
+
+  // Update URL maybe?
+   window.history.pushState({}, '', '/?view=projects');
 });
