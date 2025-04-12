@@ -368,7 +368,7 @@
               <button id="cancelActionBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
                 ${config.cancelText || 'Cancel'}
               </button>
-              <button id="confirmActionBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ${
+              <button id="confirmActionBtn" class="px-4 py-2 bg-red-600 text-white rounded-sm hover:bg-red-700 transition-colors ${
                 config.confirmClass || ''
               }">
                 ${config.confirmText || 'Confirm'}
