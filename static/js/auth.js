@@ -1465,6 +1465,8 @@ function setupUIListeners() {
         code: standardError.code,
         duration: Date.now() - logContext.timestamp
       });
+
+      notify(error.message || "Registration failed", "error");
     } finally {
       // Clear the safety timeout
       clearTimeout(safetyTimeout);

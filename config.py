@@ -53,6 +53,10 @@ class Settings:
     # Use "put.photo" in production, empty string otherwise for local dev
     COOKIE_DOMAIN: str = "put.photo" if ENV == "production" else ""
 
+    # Session Security
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SECURE = ENV == "production"
+    SESSION_COOKIE_SAMESITE = "Strict" if ENV == "production" else "Lax"
 
     # --- Unified Model Configurations ---
 
