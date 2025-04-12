@@ -194,5 +194,12 @@ if (!window.auth) {
   window.auth = {};
 }
 
+// Initialize auth system
+window.auth.init = function() {
+  if (AUTH_DEBUG) console.debug('[Auth] Initializing auth system');
+  // Initial verification check
+  return verifyAuthState(true); // Bypass cache on init
+};
+
 // Attach this function so other scripts can call auth.verifyAuthState(...)
 window.auth.verifyAuthState = verifyAuthState;
