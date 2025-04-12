@@ -1,11 +1,11 @@
-const colors = require('tailwindcss/colors');
+import tailwindcss from 'tailwindcss'
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // Enable dark mode using the 'class' strategy:
-  // By toggling the 'dark' class on <html> or <body>, 
-  // you can control dark mode in your application.
-  darkMode: 'class',
+  darkMode: { 
+    algorithm: 'mediaQuery',
+    fallback: 'media'
+  },
 
   // The 'content' array tells Tailwind which files to scan for class names.
   content: [

@@ -1,4 +1,16 @@
-@import "tailwindcss";
+@import "tailwindcss" config("./tailwind.config.js");
+
+:root {
+  --surface-light: 255 255 255;
+  --surface-dark: 17 24 39;
+  --border-dark: 55 65 81;
+}
+
+.dark {
+  --surface-light: 31 41 55;
+  --surface-dark: 3 7 18;
+  --border-dark: 75 85 99;
+}
 
 /* Base Typography */
 @layer base {
@@ -281,7 +293,7 @@
     @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 h-full
       border-2 hover:shadow-lg transition-all duration-200 ease-in-out
       w-full min-w-[300px] min-h-[200px] mb-4
-      hover:border-blue-500 dark:hover:border-blue-400
+      hover:border-blue-500/100 dark:hover:border-blue-400/100
       dark:border-gray-600;
   }
   
@@ -540,10 +552,13 @@ svg {
   @apply fill-current stroke-current;
 }
 
-@utility container {
-  max-width: 100%;
-  margin-inline: auto;
-  padding-inline: 2rem;
+@layer utilities {
+  .container {
+    container-type: inline-size;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 5cqw, 2rem);
+    width: min(100% - 2rem, 1600px);
+  }
 }
 
 /* Dark mode specific improvements */
