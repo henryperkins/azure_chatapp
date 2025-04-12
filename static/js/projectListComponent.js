@@ -924,12 +924,12 @@ const actions = window.uiUtilsInstance.createElement("div", { className: "flex g
         const formHtml = `
           <div class="mb-4">
             <label class="block text-sm font-medium mb-1">Badge Text</label>
-            <input type="text" id="projectBadgeText" class="w-full px-3 py-2 border rounded"
+            <input type="text" id="projectBadgeText" class="w-full px-3 py-2 border rounded-sm"
                    placeholder="e.g., In Progress, Urgent, etc.">
           </div>
           <div class="mb-4">
             <label class="block text-sm font-medium mb-1">Icon (Optional)</label>
-            <input type="text" id="projectBadgeIcon" class="w-full px-3 py-2 border rounded"
+            <input type="text" id="projectBadgeIcon" class="w-full px-3 py-2 border rounded-sm"
                    placeholder="Emoji e.g., 🚀, 🔥, ⚠️">
           </div>
           <div class="mb-4">
