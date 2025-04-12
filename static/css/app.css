@@ -1,6 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" layer(base);
+@import "tailwindcss" layer(components);
+@import "tailwindcss" layer(utilities);
 
 /* Header and footer text sizing */
 header {
@@ -35,32 +35,12 @@ header h1 {
   overflow: hidden;
 }
 
-/* Custom project card styles */
-.project-card {
-  @apply flex flex-col rounded-md border border-base-300 bg-base-100 p-4 shadow-sm transition-all duration-200;
-}
-
-.project-card:hover {
-  @apply shadow-md;
-}
-
-/* Project card themes */
-.project-card-theme-default {
-  @apply bg-base-100 text-base-content;
-}
-
-.project-card-theme-primary {
-  @apply bg-primary/10 border-primary/20 text-primary-content;
-}
-
-.project-card-theme-secondary {
-  @apply bg-secondary/10 border-secondary/20 text-secondary-content;
-}
-
-.project-card-theme-accent {
-  @apply bg-accent/10 border-accent/20 text-accent-content;
-}
-
-.project-card-theme-neutral {
-  @apply bg-neutral/10 border-neutral/20 text-neutral-content;
+/* Animation safety */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
