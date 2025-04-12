@@ -188,3 +188,11 @@ async function verifyAuthState(bypassCache = false) {
     return false;
   }
 }
+
+// Ensure global auth object
+if (!window.auth) {
+  window.auth = {};
+}
+
+// Attach this function so other scripts can call auth.verifyAuthState(...)
+window.auth.verifyAuthState = verifyAuthState;
