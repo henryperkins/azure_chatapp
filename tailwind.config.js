@@ -1,9 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class', // Class strategy - uses .dark on the html element
+  // Change from 'class' to 'data-theme' for DaisyUI compatibility
+  darkMode: ['class', '[data-theme="dark"]'],
   content: [
     './static/**/*.js',
-    './static/*.html' 
+    './static/*.html'
   ],
   theme: {
     extend: {
@@ -47,7 +48,7 @@ export default {
           400: '#60a5fa',
           500: '#3b82f6',
           600: '#2563eb',
-          700: '1d4ed8',
+          700: '#1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
           DEFAULT: '#3b82f6',
@@ -152,5 +153,14 @@ export default {
       }
     },
   },
-  plugins: [],
+  // Add DaisyUI to plugins
+  plugins: [
+    require('daisyui')
+  ],
+  // Add DaisyUI configuration
+  daisyui: {
+    themes: ["light", "dark"],
+    darkTheme: "dark",
+    logs: false
+  }
 };
