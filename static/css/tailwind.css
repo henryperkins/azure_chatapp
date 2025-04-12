@@ -19,8 +19,8 @@
   border-left: 2px solid var(--color-primary);
 }
 
-/* Media query ranges */
-@media (480px <= width < 768px) {
+/* Media queries for mid-size screens */
+@media (min-width: 480px) and (max-width: 767px) {
   .project-card {
     padding: 1.5rem;
   }
@@ -31,15 +31,13 @@
   text-wrap: balance;
 }
 
-/* Scoped custom properties */
-@scope (.dark-theme) {
-  :scope {
-    --surface-color: var(--color-gray-900);
-  }
-  
-  .project-card {
-    background: var(--surface-color);
-  }
+/* Dark theme custom properties */
+.dark-theme {
+  --surface-color: var(--color-gray-900);
+}
+
+.dark-theme .project-card {
+  background: var(--surface-color);
 }
 /* Theme configuration using CSS variables via @theme instead of JavaScript */
 @theme {
