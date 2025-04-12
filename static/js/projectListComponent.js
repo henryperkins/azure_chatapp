@@ -165,11 +165,16 @@
         clearTimeout(this._renderDebounce);
         this._renderDebounce = setTimeout(() => {
           this._performDOMUpdate(filteredProjects, currentFilter);
+          // Always hide loading state after rendering is complete,
+          // regardless of how renderProjects was called
+          this._hideLoadingState();
         }, 50); // Short debounce for rapid auth state changes
 
       } catch (err) {
         console.error('Error in renderProjects:', err);
         this._renderErrorState("Error displaying projects");
+        // Ensure loading state is hidden even if rendering fails
+        this._hideLoadingState();
       }
     }
 

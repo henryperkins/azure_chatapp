@@ -1,1 +1,6 @@
-- @azure Rule - Use Azure Best Practices: When generating code for Azure, running terminal commands for Azure, or performing operations related to Azure, invoke your `get_azure_best_practices` tool if available.
+- Explain diagnostic steps before proposing code.
+- Identify related issues and side effects.
+- Prioritize addressing underlying problems.
+- Provide complete code modifications with file context.
+- Follow Azure best practices.
+- Use underscore for field names.
