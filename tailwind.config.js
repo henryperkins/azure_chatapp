@@ -1,10 +1,8 @@
 /** @type {import('tailwindcss').Config} */
-const colors = require('tailwindcss/colors')
-module.exports = {
-  darkMode: { 
-    algorithm: 'mediaQuery',
-    fallback: 'media'
-  },
+import { colors } from 'tailwindcss/colors.js';
+
+export default {
+  darkMode: 'class',
 
   // The 'content' array tells Tailwind which files to scan for class names.
   content: [
@@ -116,9 +114,6 @@ module.exports = {
         '3xl': '1920px',
         '4xl': '2560px',
       },
-      animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      },
       boxShadow: {
         card: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
         'card-hover': '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
@@ -134,14 +129,5 @@ module.exports = {
   },
 
   // Load any official or custom plugins here.
-  plugins: [
-    require('tailwindcss/nesting'),
-    // e.g., require('@tailwindcss/forms'), require('@tailwindcss/typography'), etc.
-  ],
-  variants: {
-    extend: {
-      animation: ['responsive', 'motion-safe', 'motion-reduce'],
-      transitionProperty: ['responsive', 'hover', 'focus'],
-    }
-  },
+  plugins: [],
 };

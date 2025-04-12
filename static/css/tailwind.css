@@ -1,437 +1,9 @@
 @import "tailwindcss";
 
-/* Collapsible panels */
-@utility collapsible-panel {
-  @apply transition-all duration-300 ease-in-out overflow-hidden;
-  will-change: max-height;
-}
-@utility btn-primary {
-  /* Primary button */
-  @apply px-4 py-2 bg-primary-600 text-white rounded-sm 
-           hover:bg-primary-700 focus:ring-3 focus:ring-primary-500/50 focus:ring-offset-2
-           transition-colors duration-200 font-medium text-sm
-           dark:bg-primary-500 dark:hover:bg-primary-400 dark:focus:ring-primary-400;
-}
-@utility btn-secondary {
-  /* Secondary button */
-  @apply px-4 py-2 bg-gray-600 text-white rounded-lg
-           hover:bg-gray-700 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50
-           transition-colors duration-200 font-medium text-sm;
-}
-@utility btn-outline {
-  /* Outline button */
-  @apply px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg
-           hover:bg-gray-50 dark:hover:bg-gray-700 focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600
-           transition-colors duration-200 font-medium text-sm;
-}
-@utility btn-danger {
-  /* Danger button */
-  @apply px-4 py-2 bg-red-600 text-white rounded-lg
-           hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-opacity-50
-           transition-colors duration-200 font-medium text-sm;
-}
-@utility btn-sm {
-  /* Small button variant */
-  @apply px-3 py-1.5 text-xs min-w-[44px] min-h-[44px];
-}
-@utility content-item {
-  /* List items */
-  @apply min-h-[44px] px-4 py-3;
-
-  /* Responsive content hiding/showing based on screen size */
-
-  /* File and content items */
-  @apply flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600;
-}
-@utility sidebar-item {
-  /* List item touch targets */
-  @apply min-h-[48px];
-}
-@utility project-card {
-  @apply min-h-[48px];
-
-  /* Project card component */
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 h-full
-      border-2 hover:shadow-lg transition-all duration-200 ease-in-out
-      w-full min-w-[300px] min-h-[200px] mb-4
-      hover:border-blue-500/100 dark:hover:border-blue-400/100
-      dark:border-gray-600;
-}
-
-@utility loading-spinner {
-  /* Loading spinner component */
-  @apply animate-spin rounded-full border-2 border-gray-300 border-t-blue-500;
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-@utility loading-spinner-lg {
-  @apply loading-spinner;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-width: 3px;
-}
-
-@utility card {
-  /* Card components */
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4
-           border border-gray-200/100 dark:border-gray-700/100
-           hover:shadow-md transition-shadow duration-200;
-}
-
-@utility card-header {
-  @apply flex justify-between items-center mb-4 pb-2
-           border-b border-gray-200 dark:border-gray-700;
-}
-
-@utility card-title {
-  @apply font-semibold text-lg text-gray-800 dark:text-gray-100;
-}
-
-@utility card-content {
-  @apply text-gray-600 dark:text-gray-300;
-}
-
-@utility form-input {
-  /* Form components */
-  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-           focus:ring-2 focus:ring-primary-500 focus:outline-none
-           dark:bg-gray-700 dark:text-white transition-colors duration-200;
-}
-
-@utility form-label {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
-}
-
-@utility form-group {
-  @apply mb-4;
-}
-
-@utility toggle-checkbox {
-  /* Toggle switch component using only Tailwind classes */
-  &:checked {
-    @apply translate-x-full border-blue-500;
-  }
-  &:checked + .toggle-label {
-    @apply bg-blue-500;
-  }
-}
-
-@utility toggle-label {
-  .toggle-checkbox:checked + & {
-    @apply bg-blue-500;
-  }
-}
-
-@utility tab-heading {
-  /* Tab UI components */
-  @apply text-lg font-medium text-gray-800 dark:text-gray-200 mb-3;
-}
-
-@utility tab-subheading {
-  @apply text-base font-medium text-gray-700 dark:text-gray-300 mb-2;
-}
-
-@utility tab-content {
-  @apply text-sm text-gray-600 dark:text-gray-400 leading-relaxed;
-}
-
-@utility tab-section {
-  @apply mb-6 last:mb-0;
-}
-
-@utility project-tab-btn {
-  /* Refine project tab button styles */
-  @apply inline-block px-3 sm:px-4 py-2.5 font-medium text-sm border-b-2 border-transparent 
-           transition-colors duration-200 focus:outline-none;
-
-  &:not(.active) {
-    @apply text-gray-500 hover:text-gray-700 hover:border-gray-300;
-  }
-}
-
-@utility project-tab-btn-active {
-  @apply border-blue-600 text-blue-600 dark:text-blue-400;
-}
-
-@utility projects-grid {
-  &:has(.project-card-pinned) {
-    @apply bg-yellow-50/20 dark:bg-yellow-900/10;
-  }
-}
-
-@utility project-card-pinned {
-  .projects-grid:has(&) {
-    @apply bg-yellow-50/20 dark:bg-yellow-900/10;
-  }
-  @apply border-yellow-400;
-}
-
-@utility project-card-unpinned {
-  @apply border-blue-400;
-}
-
-@utility project-card-archived {
-  @apply opacity-75;
-}
-
-@utility project-card-theme-default {
-  /* New card theme classes */
-  @apply bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-400;
-}
-
-@utility project-card-theme-primary {
-  &.dark {
-    @apply bg-blue-900/30 border-blue-400;
-  }
-  @apply bg-blue-50 border-blue-500;
-}
-
-@utility dark {
-  &.project-card-theme-primary {
-    @apply bg-blue-900/30 border-blue-400;
-  }
-}
-
-@utility project-card-theme-success {
-  @apply bg-green-50 dark:bg-green-900/30 border-green-500 dark:border-green-400;
-}
-
-@utility project-card-theme-warning {
-  @apply bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500 dark:border-yellow-400;
-}
-
-@utility project-card-theme-danger {
-  @apply bg-red-50 dark:bg-red-900/30 border-red-500 dark:border-red-400;
-}
-
-@utility project-card-theme-info {
-  @apply bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-400;
-}
-
-@utility project-card-theme-neutral {
-  @apply bg-gray-50 dark:bg-gray-900/50 border-gray-500 dark:border-gray-400;
-}
-
-@utility project-card-badge {
-  /* Custom card badges */
-  @apply text-xs px-2 py-1 rounded-full inline-flex items-center font-medium;
-}
-
-@utility project-card-badge-default {
-  @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200;
-}
-
-@utility project-card-badge-blue {
-  @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
-}
-
-@utility project-card-badge-green {
-  @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
-}
-
-@utility project-card-badge-yellow {
-  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
-}
-
-@utility project-card-badge-red {
-  @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
-}
-
-@utility project-card-badge-purple {
-  @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200;
-}
-
-@utility project-card-priority-high {
-  /* Enhanced priority visibility for responsive layouts */
-  @apply order-first;
-}
-
-@utility project-card-priority-medium {
-  @apply order-none;
-}
-
-@utility project-card-priority-low {
-  @apply order-last;
-}
-
-@utility project-card-badges {
-  /* Helper class for containing multiple badges */
-  @apply flex flex-wrap gap-1 mt-1;
-}
-
-@utility project-card-hide-sm {
-  @media (max-width: 640px) {
-    @apply hidden;
-  }
-}
-
-@utility project-card-sm-only {
-  @media (max-width: 640px) {
-    @apply block;
-  }
-
-  @media (min-width: 641px) {
-    @apply hidden;
-  }
-}
-
-@utility notification {
-  /* Notification styles */
-  @apply p-3 rounded-sm shadow-sm mb-2 flex items-center text-sm;
-
-  &.success {
-    @apply bg-green-100 text-green-800 border-l-4 border-green-500;
-  }
-
-  &.error {
-    @apply bg-red-100 text-red-800 border-l-4 border-red-500;
-  }
-
-  &.info {
-    @apply bg-blue-100 text-blue-800 border-l-4 border-blue-500;
-  }
-
-  &.warning {
-    @apply bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500;
-  }
-}
-
-@utility success {
-  &.notification {
-    @apply bg-green-100 text-green-800 border-l-4 border-green-500;
-  }
-}
-
-@utility error {
-  &.notification {
-    @apply bg-red-100 text-red-800 border-l-4 border-red-500;
-  }
-}
-
-@utility info {
-  &.notification {
-    @apply bg-blue-100 text-blue-800 border-l-4 border-blue-500;
-  }
-}
-
-@utility warning {
-  &.notification {
-    @apply bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500;
-  }
-}
-
-@utility min-h-0 {
-  /* Scrolling fixes */
-  min-height: 0;
-}
-
-@utility content-overflow {
-  @apply flex-1 min-h-0 overflow-y-auto;
-}
-
-@utility scroll-smooth {
-  /* Smooth scrolling */
-  scroll-behavior: smooth;
-}
-
-@utility transition-colors-slow {
-  /* Dark mode transition */
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-duration: 500ms;
-}
-
-@utility animate-count-up {
-  animation: countUp 0.3s ease-out;
-}
-
-@utility transition-sidebar {
-  /* Transition utilities */
-  @apply transition-transform duration-300 ease-in-out;
-  will-change: transform;
-  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-@utility transition-opacity-custom {
-  transition-property: opacity;
-  transition-duration: 300ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@utility transition-slide {
-  /* Slide transitions */
-  transition-property: transform, opacity;
-  transition-duration: 300ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@utility hover-scale {
-  /* Scale hover effect for cards */
-  @apply transition-transform duration-200;
-
-  &:hover {
-    @apply transform scale-[1.02];
-  }
-}
-
-@utility focus-visible {
-  /* Focus styles for accessibility */
-  @apply focus:outline-hidden focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2;
-}
-
-@utility sr-only {
-  /* Visually hidden content (for screen readers) */
-  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
-}
-
-@utility border-transparent {
-  @media (forced-colors: active) {
-    border-color: ButtonText !important;
-  }
-}
-
-@utility bg-primary-500 {
-  @media (forced-colors: active) {
-    background-color: Highlight !important;
-    color: HighlightText !important;
-  }
-}
-
-@utility chat-message-container {
-  /* High contrast mode support */
-
-  /* Chat message container */
-  @apply h-[calc(var(--vh,1vh)*50)] sm:h-[calc(var(--vh,1vh)*60)] md:h-[calc(var(--vh,1vh)*70)] overflow-y-auto p-4;
-}
-
-@utility drag-zone {
-  /* Draggable zone utilities */
-  @apply border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 
-           text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 
-           transition-colors;
-}
-
-@utility drag-zone-active {
-  @apply bg-gray-100 dark:bg-gray-700 border-blue-400;
-}
-
-@utility container {
-  container-type: inline-size;
-  margin-inline: auto;
-  padding-inline: clamp(1rem, 5cqw, 2rem);
-  width: min(100% - 2rem, 1600px);
-}
-
-:root {
-  --surface-light: 255 255 255;
-  --surface-dark: 17 24 39;
-  --border-dark: 55 65 81;
-}
-
-.dark {
-  --surface-light: 31 41 55;
-  --surface-dark: 3 7 18;
-  --border-dark: 75 85 99;
+@theme {
+  /* Define your theme variables here */
+  --default-ring-width: 3px;
+  --default-ring-color: var(--color-blue-500);
 }
 
 /* Base Typography */
@@ -440,27 +12,48 @@
   h1 {
     @apply text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100;
   }
-  
+
   h2 {
     @apply text-xl md:text-2xl font-semibold text-gray-800 dark:text-gray-200;
   }
-  
+
   h3 {
     @apply text-lg md:text-xl font-medium text-gray-800 dark:text-gray-200;
   }
-  
+
   /* Consistent paragraph text */
   p {
     @apply text-gray-600 dark:text-gray-300 leading-relaxed;
   }
-  
+
   /* Small text */
   .text-small {
     @apply text-sm text-gray-500 dark:text-gray-400;
   }
+
+  /* For consistent border colors like v3 */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
 }
 
-/* Animation utilities - consolidated */
+/* Convert existing @layer components to @utility */
+@utility collapsible-panel {
+  transition-property: all;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  will-change: max-height;
+}
+
+@utility animate-slide-in {
+  animation: slideIn 0.2s ease-out forwards;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -472,337 +65,81 @@
   }
 }
 
-.animate-slide-in {
-  animation: slideIn 0.2s ease-out forwards;
-}
-
 /* Modal styles */
-.confirm-modal {
-  @apply fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1050]; /* Higher than sidebar */
+@utility confirm-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgb(0 0 0 / 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1050;
 }
 
-.confirm-modal-content {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-6 mx-auto my-8;
+@utility confirm-modal-content {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  max-width: 28rem;
+  width: 100%;
+  padding: 1.5rem;
+  margin: 2rem auto;
 }
 
-/* Project modal specific styles */
-.project-modal-container {
-  @apply fixed inset-0 flex items-center justify-center z-[1050] p-4;
-  background-color: rgba(0, 0, 0, 0.5);
-}
-
-.project-modal-container > div {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-auto;
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
-}
-
-@media (min-width: 640px) {
-  .project-modal-container > div {
-    @apply max-w-lg;
+@variant dark {
+  .confirm-modal-content {
+    background-color: var(--color-gray-800);
   }
-}
-
-@media (min-width: 1024px) {
-  .project-modal-container > div {
-    @apply max-w-xl;
-  }
-}
-
-.confirm-modal-header {
-  @apply text-lg font-semibold mb-4 dark:text-gray-100;
-}
-
-.confirm-modal-body {
-  @apply text-gray-600 dark:text-gray-300 mb-6;
-}
-
-.confirm-modal-footer {
-  @apply flex justify-end space-x-3;
 }
 
 /* Button components */
-@layer components {
+@utility btn-primary {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  background-color: var(--color-primary-600);
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition-property: color, background-color, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
 
-  /* Modal close button touch targets */
-  [id$="CloseBtn"], [id$="closeBtn"] {
-    @apply p-3 min-w-[48px] min-h-[48px];
+@variant hover {
+  .btn-primary {
+    background-color: var(--color-primary-700);
   }
 }
 
-/* Unified z-index scale */
-:root {
-  --z-base: 1000;
-  --z-dropdown: calc(var(--z-base) + 10);
-  --z-sidebar: calc(var(--z-base) + 30);
-  --z-notification: calc(var(--z-base) + 40);
-  --z-modal: calc(var(--z-base) + 50);
-}
-
-#authDropdown {
-  z-index: var(--z-dropdown);
-  position: absolute;
-}
-
-
-#sidebarBackdrop {
-  z-index: var(--z-sidebar);
-}
-
-.modal {
-  z-index: var(--z-modal);
-}
-
-#notificationArea {
-  z-index: var(--z-notification);
-}
-
-.projects-page #mainSidebar {
-  width: 22rem;
-}
-
-.projects-page #sidebarProjects {
-  padding-bottom: 6rem;
-}
-
-@layer utilities {
-  
-  @keyframes countUp {
-    from { 
-      @apply opacity-50 translate-y-1;
-    }
-    to { 
-      @apply opacity-100 translate-y-0;
-    }
+@variant focus {
+  .btn-primary {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    --ring-color: var(--color-primary-500);
+    --ring-opacity: 0.5;
+    box-shadow: 0 0 0 2px var(--ring-color);
   }
 }
 
-/* Dark mode specific styles */
-.dark .file-item,
-.dark .artifact-item,
-.dark .conversation-item {
-  @apply bg-gray-800 text-gray-200;
-}
-
-/* Project list scrolling */
-#projectListView {
-  @apply flex-1 min-h-0 flex flex-col;
-}
-
-#projectList {
-  @apply content-overflow;
-}
-
-/* SVG icon handling */
-svg {
-  @apply fill-current stroke-current;
-}
-
-/* Dark mode specific improvements */
-.dark .card {
-  @apply bg-surface-dark border-border-dark shadow-xl;
-}
-
-.dark .btn-outline {
-  @apply border-gray-600 text-gray-200 hover:bg-gray-700;
-}
-
-.dark .project-card {
-  @apply bg-surface-dark border-border-dark hover:border-primary-500;
-}
-
-.dark .btn-outline {
-  @apply text-gray-200 border-gray-600 hover:bg-gray-700;
-}
-
-/* Text color hierarchy for dark mode */
-.dark {
-  /* Base text */
-  --tw-text-opacity: 1;
-  color: rgba(243, 244, 246, var(--tw-text-opacity)); /* gray-100 */
-
-  /* Headings */
-  h1, h2, h3, h4 {
-    @apply text-gray-100;
-  }
-
-  /* Secondary text */
-  .text-secondary, .text-small, .text-xs {
-    @apply text-gray-300;
-  }
-
-  /* Tertiary/muted text */
-  .text-muted, .text-gray-500 {
-    @apply text-gray-400;
-  }
-
-  /* Card content */
-  .card-content {
-    @apply text-gray-300;
-  }
-
-  /* Links */
-  a {
-    @apply text-blue-400 hover:text-blue-300;
+@variant dark {
+  .btn-primary {
+    background-color: var(--color-primary-500);
   }
 }
 
-/* Improved dark mode form controls */
-.dark .form-input, 
-.dark .form-select {
-  @apply bg-gray-700 border-gray-600 text-white placeholder-gray-400;
-}
-
-/* Dark mode modal */
-.dark .modal-content {
-  @apply bg-gray-800 text-gray-100;
-}
-
-/* Consolidated sidebar styles */
-#mainSidebar {
-  @apply fixed md:relative inset-y-0 left-0 w-64 bg-white dark:bg-gray-800;
-  z-index: var(--z-sidebar);
-  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-  will-change: transform;
-}
-
-/* Respect reduced motion preferences */
-@media (prefers-reduced-motion: reduce) {
-  #mainSidebar {
-    transition: none;
+@variant dark {
+  .btn-primary:hover {
+    background-color: var(--color-primary-400);
   }
 }
 
-/* Mobile-specific sidebar styles */
-@media (max-width: 767px) {
-  #mainSidebar {
-    width: 85% !important;
-    max-width: 320px;
-    transform: translateX(-100%);
+@variant dark {
+  .btn-primary:focus {
+    --ring-color: var(--color-primary-400);
   }
-  
-  #mainSidebar.translate-x-0 {
-    transform: translateX(0);
-  }
-  
-  #sidebarBackdrop {
-    backdrop-filter: blur(2px);
-  }
-}
-
-/* Desktop behavior */
-@media (min-width: 768px) {
-  #mainSidebar {
-    transform: none !important;
-  }
-  
-  #sidebarBackdrop {
-    @apply hidden !important;
-  }
-}
-
-/* Sidebar tab styling */
-.project-tab-btn {
-  @apply px-3 sm:px-4 py-2.5 font-medium text-sm border-b-2 border-transparent
-         transition-colors duration-200 focus:outline-none focus:ring-2
-         focus:ring-opacity-50 focus:ring-blue-500;
-}
-
-.project-tab-btn-active {
-  @apply border-blue-600 text-blue-600 dark:text-blue-400;
-}
-
-.project-tab-btn:not(.active) {
-  @apply text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300;
-}
-
-/* Collapsible panel styles */
-.collapsible-panel {
-  @apply transition-all duration-300 ease-in-out overflow-hidden;
-  will-change: max-height;
-}
-
-/* Sidebar backdrop styling */
-#sidebarBackdrop {
-  @apply fixed inset-0 bg-black/50 z-[99] md:hidden;
-  transition: opacity 0.3s ease-out;
-  will-change: opacity;
-}
-
-/* Body state when sidebar is open on mobile */
-body.sidebar-open {
-  @apply overflow-hidden;
-  position: fixed;
-  width: 100%;
-  height: 100%;
-}
-
-/* Pinned sidebar state */
-body.pinned-sidebar #mainSidebar {
-  @apply w-72 border-r border-gray-200 dark:border-gray-700;
-}
-
-/* Improved tap target size for buttons */
-#navToggleBtn, #closeSidebarBtn, #pinSidebarBtn {
-  min-width: 48px;
-  min-height: 48px;
-  @apply flex items-center justify-center;
-}
-
-/* Enhanced focus states for accessibility */
-.focus-visible-within:focus-within {
-  @apply ring-2 ring-blue-500 ring-opacity-70 outline-none;
-}
-
-/* Toggle checkbox styling for settings panels */
-.toggle-checkbox:checked {
-  @apply translate-x-full border-blue-500;
-}
-
-.toggle-checkbox:checked + .toggle-label {
-  @apply bg-blue-500;
-}
-@media (min-width: 1920px) {
-  #mainSidebar {
-    width: 20rem; /* 320px */
-  }
-}
-
-/* Vision feature styles */
-.vision-response {
-  @apply pl-4 bg-gray-100;
-}
-
-.vision-indicator {
-  @apply inline-flex items-center text-sm text-purple-600 dark:text-purple-300;
-}
-
-/* Progress bars */
-.progress-outer {
-  @apply w-full bg-gray-200/50 dark:bg-gray-600/80 rounded-full h-1.5;
-}
-
-.progress-inner {
-  @apply bg-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out;
-}
-
-/* Clean up duplicate styles and harmonize with Tailwind conventions */
-.sidebar-transition {
-  @apply transition-transform duration-200 ease-in-out;
-}
-
-.dark #mainSidebar {
-  @apply bg-gray-900 border-gray-700;
-}
-
-.project-tab-content {
-  @apply transition-opacity duration-200;
-}
-
-#dragDropZone {
-  @apply transition-all duration-200 ease-in-out;
-}
-
-#dragDropZone:hover {
-  @apply border-blue-400 bg-blue-50 bg-opacity-5;
 }
