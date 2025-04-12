@@ -703,7 +703,7 @@ export class ProjectDetailsComponent {
     if (window.ChatManager?.initializeProjectChat) {
       try {
         debugLog('[ProjectDetailsView] Using ChatManager to init chat');
-        window.ChatManager.initializeProjectChat(chatOptions);
+        window.ChatManager.initializeProjectChat('#projectChatContainer', chatOptions);
         return;
       } catch (err) {
         console.error('[ProjectDetailsView] Error initializing chat via ChatManager:', err);

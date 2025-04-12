@@ -123,19 +123,19 @@ function updateBackdrop(show) {
     backdrop.id = 'sidebarBackdrop';
     backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
     backdrop.setAttribute('aria-hidden', 'true');
-    backdrop.style.touchAction = 'none';
+    backdrop.style.touchAction = 'auto'; // Changed from 'none' to 'auto'
     backdrop.style.pointerEvents = 'auto';
 
     // Handle click on backdrop
     const clickHandler = (e) => {
-      e.preventDefault();
       if (e.target === backdrop) {
+        e.preventDefault();
         toggleSidebar(false);
         document.activeElement?.blur();
       }
     };
 
-    backdrop.addEventListener('touchstart', clickHandler, { passive: false });
+    backdrop.addEventListener('touchstart', clickHandler); // Removed { passive: false }
     backdrop.addEventListener('click', clickHandler);
 
     document.body.appendChild(backdrop);

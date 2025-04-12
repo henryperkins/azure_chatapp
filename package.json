@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "description": "Azure OpenAI Chat Application",
   "scripts": {
-    "build:css": "postcss ./static/css/app.css -o ./static/css/dist/app.css",
-    "dev:css": "postcss ./static/css/app.css -o ./static/css/dist/app.css -w",
     "prebuild": "npm run build:css",
+    "build:css": "postcss ./static/css/app.css -o ./static/css/dist/app.css",
+    "watch:css": "postcss ./static/css/app.css -o ./static/css/dist/app.css --watch",
+    "dev": "npm run watch:css",
     "lint:css": "stylelint './static/css/**/*.css' --custom-syntax postcss-lit"
   },
   "repository": {
@@ -27,13 +28,12 @@
   "homepage": "https://github.com/henryperkins/azure_chatapp#readme",
   "devDependencies": {
     "@playwright/test": "^1.51.1",
+    "@tailwindcss/postcss": "^0.1.1",
     "@tailwindcss/typography": "^0.5.12",
     "@types/node": "^22.13.14",
-    "autoprefixer": "^10.4.21",
     "daisyui": "^5.0.19",
     "postcss": "^8.5.3",
     "postcss-cli": "^10.0.0",
-    "postcss-import": "^16.0.1",
     "postcss-nested": "^6.0.1",
     "stylelint": "^16.18.0",
     "stylelint-config-standard": "^38.0.0",
