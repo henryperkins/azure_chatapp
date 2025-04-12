@@ -558,10 +558,10 @@ async function init() {
         window.__recentLoginTimestamp = parseInt(timestamp, 10) || Date.now();
         window.__lastUsername = username || null;
 
-        // Ensure tokens are immediately available as cookies
-        document.cookie = `access_token=${token}; path=/; max-age=${60 * 30}; SameSite=Lax`;
+        // Ensure tokens are immediately available as cookies with proper security attributes
+        document.cookie = `access_token=${token}; path=/; max-age=${60 * 30}; Secure; SameSite=Strict`;
         if (refresh) {
-          document.cookie = `refresh_token=${refresh}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+          document.cookie = `refresh_token=${refresh}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; Secure; SameSite=Strict`;
         }
 
         // Mark as authenticated immediately based on storage
@@ -646,11 +646,11 @@ async function verifyAuthState(bypassCache = false) {
 
           // Set max-age to 25 minutes (longer than the check interval)
           const maxAge = 60 * 25; // 25 minutes in seconds
-          document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; Secure; SameSite=Strict`;
 
           // If we also have a refresh token, set it as well
           if (window.__directRefreshToken) {
-            document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+            document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; Secure; SameSite=Strict`;
           }
         }
 
@@ -681,14 +681,19 @@ async function verifyAuthState(bypassCache = false) {
     if (!accessToken && window.__directAccessToken) {
       if (AUTH_DEBUG) console.debug('[Auth] No access_token cookie found but using direct token from memory');
       const maxAge = 60 * 25; // 25 minutes
-      document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; SameSite=Lax`;
+
+      // Always include Secure flag for authentication cookies
+      const secureFlag = 'Secure; ';
+
+      // Use SameSite=Strict for sensitive authentication cookies (more secure than None)
+      document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; ${secureFlag}SameSite=Strict`;
 
       // Try to get the cookie again
       accessToken = window.__directAccessToken;
 
       // If we also have a refresh token in memory, set that too
       if (!refreshToken && window.__directRefreshToken) {
-        document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; SameSite=Lax`;
+        document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=Strict`;
         refreshToken = window.__directRefreshToken;
       }
     }
@@ -900,18 +905,36 @@ function setupAuthStateMonitoring() {
 function broadcastAuth(authenticated, username = null) {
   // Only broadcast if the state OR username has actually changed
   if (authState.isAuthenticated === authenticated && authState.username === username) {
-    if (AUTH_DEBUG) console.debug("[Auth] Auth state unchanged, skipping broadcast");
+    // To reduce debug noise, only log this at debug level when explicitly enabled
+    if (AUTH_DEBUG && window._AUTH_VERBOSE_DEBUG) console.debug("[Auth] Auth state unchanged, skipping broadcast");
     return;
   }
 
+  // Update state before broadcasting to ensure consistent state
   authState.isAuthenticated = authenticated;
   authState.username = username;
-  if (window.API_CONFIG) window.API_CONFIG.isAuthenticated = authenticated;
-  document.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated, username } }));
-  window.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated, username } }));
-  updateAuthUI(authenticated, username);
-}
 
+  // Update global config if available
+  if (window.API_CONFIG) window.API_CONFIG.isAuthenticated = authenticated;
+
+  // Use a single event detail object to ensure consistency
+  const eventDetail = {
+    detail: {
+      authenticated,
+      username,
+      timestamp: Date.now()
+    }
+  };
+
+  // Dispatch events for both document and window listeners
+  document.dispatchEvent(new CustomEvent("authStateChanged", eventDetail));
+  window.dispatchEvent(new CustomEvent("authStateChanged", eventDetail));
+
+  // Update UI elements based on auth state
+  updateAuthUI(authenticated, username);
+
+  if (AUTH_DEBUG) console.debug(`[Auth] Auth state broadcast: ${authenticated ? 'authenticated' : 'not authenticated'}${username ? ' as ' + username : ''}`);
+}
 function updateAuthUI(authenticated, username = null) {
   if (AUTH_DEBUG) {
     console.debug("[Auth] Updating UI with authentication state:", {
@@ -921,58 +944,66 @@ function updateAuthUI(authenticated, username = null) {
     });
   }
 
+  // Get UI elements, but don't require all of them to exist
   const userStatus = document.getElementById('userStatus');
   const authButton = document.getElementById('authButton');
-  const userMenu = document.getElementById('userMenu');
-  const authStatus = document.getElementById('authStatus');
+  const loggedInState = document.getElementById('loggedInState');
+  const loggedInUsername = document.getElementById('loggedInUsername');
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const loginTab = document.getElementById('loginTab');
+  const registerTab = document.getElementById('registerTab');
 
   // Track UI elements found/missing for debugging
   const elementsFound = {
     userStatus: !!userStatus,
     authButton: !!authButton,
-    userMenu: !!userMenu,
-    authStatus: !!authStatus
+    loggedInState: !!loggedInState,
+    loggedInUsername: !!loggedInUsername,
+    loginForm: !!loginForm,
+    registerForm: !!registerForm
   };
 
   // Check if any UI elements are missing and log once
-  if (AUTH_DEBUG && (!userStatus || !authButton || !userMenu || !authStatus)) {
+  if (AUTH_DEBUG && Object.values(elementsFound).some(found => !found)) {
     console.debug("[Auth] Some UI elements not found:", elementsFound);
   }
 
-  // Update user status text and classes
+  // Update user status text if element exists
   if (userStatus) {
-    const newText = authenticated ? (username || 'Online') : 'Offline';
-    userStatus.textContent = newText;
-    userStatus.classList.toggle('text-green-600', authenticated);
-    userStatus.classList.toggle('text-gray-600', !authenticated);
+    userStatus.textContent = authenticated ? (username || 'Online') : 'Offline';
   }
 
-  if (authButton && userMenu) {
-    const authButtonWasHidden = authButton.classList.contains('hidden');
-    const userMenuWasHidden = userMenu.classList.contains('hidden');
-
-    authButton.classList.toggle('hidden', authenticated);
-    userMenu.classList.toggle('hidden', !authenticated);
-
-    if (AUTH_DEBUG) {
-      if (authButtonWasHidden !== authenticated) {
-        console.debug(`[Auth] Auth button visibility changed: ${authButtonWasHidden ? 'hidden' : 'visible'} → ${authenticated ? 'hidden' : 'visible'}`);
-      }
-      if (userMenuWasHidden === !authenticated) {
-        console.debug(`[Auth] User menu visibility changed: ${userMenuWasHidden ? 'hidden' : 'visible'} → ${!authenticated ? 'hidden' : 'visible'}`);
-      }
+  // Update auth button and logged in state if they exist
+  if (authButton) {
+    if (authenticated) {
+      authButton.textContent = username || 'Account';
+    } else {
+      authButton.textContent = 'Login';
     }
   }
 
-  if (authStatus) {
-    const oldStatus = authStatus.textContent;
-    const newStatus = authenticated ? 'Authenticated' : 'Not Authenticated';
-    authStatus.textContent = newStatus;
-    authStatus.classList.toggle('text-green-600', authenticated);
-    authStatus.classList.toggle('text-red-600', !authenticated);
+  // Update logged in state if it exists
+  if (loggedInState && loggedInUsername) {
+    if (authenticated) {
+      loggedInState.classList.remove('hidden');
+      loggedInUsername.textContent = username || '';
+    } else {
+      loggedInState.classList.add('hidden');
+    }
+  }
 
-    if (AUTH_DEBUG && oldStatus !== newStatus) {
-      console.debug(`[Auth] Auth status text changed: "${oldStatus}" → "${newStatus}"`);
+  // Update login/register forms if they exist
+  if (loginForm && registerForm) {
+    if (authenticated) {
+      loginForm.classList.add('hidden');
+      registerForm.classList.add('hidden');
+    } else {
+      // Reset to login tab
+      if (loginTab) loginTab.classList.add('tab-active');
+      if (registerTab) registerTab.classList.remove('tab-active');
+      loginForm.classList.remove('hidden');
+      registerForm.classList.add('hidden');
     }
   }
 
@@ -1120,22 +1151,49 @@ async function loginUser(username, password) {
       const hostname = window.location.hostname;
       const isSecure = (window.location.protocol === 'https:');
 
-      // When using SameSite=None, Secure attribute MUST be included
-      // For HTTP contexts, we'll use SameSite=Lax instead for better compatibility
-      let sameSite, secureFlag;
-      if (isSecure) {
-        sameSite = 'None';
-        secureFlag = 'Secure; '; // Always include Secure with SameSite=None
-      } else {
-        sameSite = 'Lax';
-        secureFlag = ''; // No Secure flag for HTTP
+      // Always include Secure flag for authentication cookies
+      const secureFlag = 'Secure; ';
+
+      // Use SameSite=Strict for sensitive authentication cookies
+      const sameSite = 'Strict';
+
+      // Debug refresh token availability
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Login response token details:', {
+          hasAccessToken: !!response.access_token,
+          hasRefreshToken: !!response.refresh_token,
+          timestamp: new Date().toISOString()
+        });
       }
 
-      // Set Cookies
+      // First clear any existing tokens to prevent stale tokens
+      document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=Strict';
+      document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=Strict';
+
+      // Set access token cookie with improved security attributes - use Secure flag and SameSite=Strict
       document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
+
+      // Explicitly check for refresh token before setting cookie
       if (response.refresh_token) {
+        if (AUTH_DEBUG) console.debug('[Auth] Setting refresh_token cookie with Secure and SameSite=Strict');
         document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=${sameSite}`;
+      } else if (AUTH_DEBUG) {
+        console.warn('[Auth] No refresh_token received in login response');
       }
+
+      // Double check cookies were set properly
+      setTimeout(() => {
+        const accessTokenCookie = getCookie('access_token');
+        const refreshTokenCookie = getCookie('refresh_token');
+        if (AUTH_DEBUG) {
+          console.debug('[Auth] Cookie verification after login:', {
+            accessTokenSet: !!accessTokenCookie,
+            accessTokenLength: accessTokenCookie?.length || 0,
+            refreshTokenSet: !!refreshTokenCookie,
+            refreshTokenLength: refreshTokenCookie?.length || 0
+          });
+        }
+      }, 50);
 
       // Update Auth State
       authState.isAuthenticated = true;
@@ -1635,6 +1693,46 @@ function handleAuthError(error, context = '') {
 function showSessionExpiredModal() {
   if (window.showNotification) {
     window.showNotification("Your session has expired. Please log in again.", "error");
+
+    // Add a more visible notification for session expiration
+    const sessionExpiredDiv = document.createElement('div');
+    sessionExpiredDiv.id = 'session-expired-alert';
+    sessionExpiredDiv.className = 'fixed top-4 right-4 left-4 md:left-auto md:w-96 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50 shadow-lg';
+    sessionExpiredDiv.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+          </svg>
+          <span><strong>Session Expired</strong> - Please log in again</span>
+        </div>
+        <button id="close-session-alert" class="ml-4" aria-label="Close">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+          </svg>
+        </button>
+      </div>
+    `;
+
+    // Remove any existing alert
+    const existingAlert = document.getElementById('session-expired-alert');
+    if (existingAlert) {
+      existingAlert.remove();
+    }
+
+    document.body.appendChild(sessionExpiredDiv);
+
+    // Add close button functionality
+    document.getElementById('close-session-alert')?.addEventListener('click', () => {
+      sessionExpiredDiv.remove();
+    });
+
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      if (document.body.contains(sessionExpiredDiv)) {
+        sessionExpiredDiv.remove();
+      }
+    }, 10000);
   }
 }
 

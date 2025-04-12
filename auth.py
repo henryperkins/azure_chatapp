@@ -165,17 +165,20 @@ def set_secure_cookie(
     secure = cookie_settings.secure
     samesite = cookie_settings.same_site(hostname, key)
 
-    # In development or testing environments, make cookies work without HTTPS
-    if settings.ENV != "production":
+    # If SameSite=None is chosen, the cookie must be Secure, or modern browsers will reject it.
+    if samesite == "none":
+        secure = True
+
+    # In development or testing environments, we typically don't use HTTPS,
+    # but if SameSite=None is set, we override secure to True above to avoid rejection.
+    if settings.ENV != "production" and samesite != "none":
         secure = False
 
-    # Debug logging
     if AUTH_DEBUG:
         logger.debug(
             f"Set cookie [{key}] -> domain={domain}, secure={secure}, samesite={samesite}, max_age={max_age}, hostname={hostname}"
         )
 
-    # Set the cookie with carefully determined settings
     try:
         response.set_cookie(
             key=key,
@@ -189,7 +192,6 @@ def set_secure_cookie(
         )
 
         # For development environments, try setting a fallback cookie without domain
-        # This helps in cases where domain resolution is problematic
         if settings.ENV != "production" and domain:
             response.set_cookie(
                 key=f"{key}_fallback",
@@ -444,7 +446,7 @@ async def login_user(
         )
 
     logger.info("User '%s' logged in. Access & refresh tokens issued.", lower_username)
-    return LoginResponse(access_token=access_token, token_type="bearer")
+    return LoginResponse(access_token=access_token, token_type="bearer", refresh_token=refresh_token)
 
 
 # -----------------------------------------------------------------------------

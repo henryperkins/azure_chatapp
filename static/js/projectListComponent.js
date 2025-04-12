@@ -490,8 +490,8 @@ ${content}`)) {
       // Use the specific class for filter tabs
       const buttons = document.querySelectorAll('.project-filter-tabs .project-filter-btn');
       if (!buttons.length) {
-         console.warn("No project filter buttons found with '.project-filter-tabs .project-filter-btn'");
-         return;
+        console.debug("No project filter buttons found. Creating fallback filter tabs...");
+        this._createFallbackFilterTabs();
       }
 
       const initialFilter = this._getInitialFilter();
@@ -505,6 +505,28 @@ ${content}`)) {
       });
 
       window.addEventListener('popstate', () => this._handlePopState(buttons));
+    }
+
+    _createFallbackFilterTabs() {
+      // Attempt to locate or create a .project-filter-tabs container
+      let container = document.querySelector(".project-filter-tabs");
+      if (!container) {
+        console.debug("[ProjectListComponent] Creating fallback .project-filter-tabs container.");
+        container = document.createElement("div");
+        container.className = "project-filter-tabs tabs mb-4";
+        // For a basic fallback, append near the top of body or an existing parent
+        // to keep it accessible. Adjust as needed in your layout.
+        document.body.prepend(container);
+      }
+
+      // Create default filters if none exist
+      ["all", "pinned", "archived"].forEach(filter => {
+        const btn = document.createElement("button");
+        btn.className = "tab tab-bordered project-filter-btn";
+        btn.dataset.filter = filter;
+        btn.textContent = filter.charAt(0).toUpperCase() + filter.slice(1);
+        container.appendChild(btn);
+      });
     }
 
     _getInitialFilter() {
@@ -636,10 +658,14 @@ ${content}`)) {
 
     _initializeCustomizationUI() {
       // Find the button added in index.html
-      const button = document.getElementById('customizeCardsBtn');
+      let button = document.getElementById('customizeCardsBtn');
       if (!button) {
-         console.warn("Customize cards button (customizeCardsBtn) not found.");
-         return;
+        console.debug("Customize cards button (customizeCardsBtn) not found. Creating fallback...");
+        button = document.createElement("button");
+        button.id = "customizeCardsBtn";
+        button.className = "btn btn-sm btn-primary hidden";
+        button.textContent = "Customize";
+        document.body.appendChild(button);
       }
 
       // Make it visible and add listener
@@ -651,14 +677,56 @@ ${content}`)) {
     }
 
     _createCustomizationModal() {
-      // Use the existing modal structure in index.html
-      const modal = document.getElementById('cardCustomizationModal');
+      // Attempt to find an existing modal structure in index.html
+      let modal = document.getElementById('cardCustomizationModal');
       if (!modal) {
-         console.error("Card customization modal element not found in HTML.");
-         return; // Don't create dynamically if it's expected in HTML
+         console.debug("cardCustomizationModal not found in HTML, creating fallback...");
+         // Create a fallback <dialog> dynamically
+         modal = document.createElement('dialog');
+         modal.id = 'cardCustomizationModal';
+         // Basic modal styling for DaisyUI (if needed)
+         modal.className = 'modal';
+
+         // Provide a minimal structure with the needed elements
+         modal.innerHTML = `
+           <form method="dialog" class="modal-box">
+             <h3 class="font-bold text-xl mb-4">Customize Card Appearance</h3>
+             <div class="mb-4">
+               <label for="cardThemeSelect" class="block mb-1">Theme:</label>
+               <select id="cardThemeSelect" class="select select-bordered w-full max-w-xs"></select>
+             </div>
+
+             <div class="mb-4">
+               <label class="label cursor-pointer flex items-center gap-2">
+                 <span class="label-text">Show Description</span>
+                 <input type="checkbox" id="showDescriptionCheckbox" class="checkbox checkbox-primary"/>
+               </label>
+               <label class="label cursor-pointer flex items-center gap-2">
+                 <span class="label-text">Show Date</span>
+                 <input type="checkbox" id="showDateCheckbox" class="checkbox checkbox-primary"/>
+               </label>
+               <label class="label cursor-pointer flex items-center gap-2">
+                 <span class="label-text">Show Badges</span>
+                 <input type="checkbox" id="showBadgesCheckbox" class="checkbox checkbox-primary"/>
+               </label>
+             </div>
+
+             <div class="mb-6">
+               <label for="defaultBadgeStyleSelect" class="block mb-1">Default Badge Style:</label>
+               <select id="defaultBadgeStyleSelect" class="select select-bordered w-full max-w-xs"></select>
+             </div>
+
+             <div class="modal-action">
+               <button type="button" id="resetCustomizationBtn" class="btn btn-secondary">Reset</button>
+               <button type="button" id="applyCustomizationBtn" class="btn btn-primary">Apply</button>
+               <button type="button" id="closeCustomizationBtn" class="btn">Close</button>
+             </div>
+           </form>
+         `;
+         document.body.appendChild(modal);
       }
 
-      // Add listeners to buttons within the existing modal
+      // Now we have a modal reference, wire up the controls
       const closeBtn = modal.querySelector('#closeCustomizationBtn');
       const applyBtn = modal.querySelector('#applyCustomizationBtn');
       const resetBtn = modal.querySelector('#resetCustomizationBtn');
