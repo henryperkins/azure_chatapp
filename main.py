@@ -53,7 +53,6 @@ from starlette.datastructures import URL
 from routes.unified_conversations import router as unified_conversations_router
 from routes import unified_conversations  # for direct WebSocketRoute reference
 from auth import router as auth_router, create_default_user
-from routes.file_upload import router as file_upload_router
 from routes.projects.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
 from routes.projects.files import router as project_files_router
@@ -485,7 +484,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # Register Routers
 # ---------------------------
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
-app.include_router(file_upload_router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(knowledge_base_router, prefix="/api", tags=["knowledge-bases"])
 app.include_router(user_preferences_router, prefix="", tags=["user-preferences"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])

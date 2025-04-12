@@ -513,24 +513,55 @@ window.dashboardUtilsReady = true;
     const errorMessage = reason?.message || 'Unhandled Rejection';
     const errorStack = reason?.stack || '';
 
-    // Could integrate with auth.js error standardization
+    // Enhanced auth error detection pattern
+    const isAuthError =
+      errorMessage.includes('Authentication required') ||
+      errorMessage.includes('Not authenticated') ||
+      errorMessage.includes('auth token') ||
+      errorMessage.includes('login') ||
+      (reason?.status === 401);
+
+    // Integrate with auth.js error standardization if available
     const stdErr = window.auth?.standardizeError?.(reason) || reason;
 
-    // Session expiration check
-    if (stdErr.requiresLogin || stdErr.code === 'SESSION_EXPIRED') {
-      console.warn('[GlobalRejection] Session expired, logging out or clearing state...');
-      // handle session expiration
-      window.auth?.clear?.();
+    // Session expiration check with improved detection
+    if (isAuthError || stdErr.requiresLogin || stdErr.code === 'SESSION_EXPIRED') {
+      console.warn('[GlobalRejection] Auth error detected:', errorMessage);
+
+      // Try to recover - check if auth module exists
+      if (window.auth) {
+        // Try to verify authentication state
+        window.auth.isAuthenticated({forceVerify: true}).then(authenticated => {
+          if (!authenticated) {
+            console.log('[GlobalRejection] Confirmed not authenticated, clearing state');
+            window.auth.clear();
+
+            // Show login dialog if not already showing
+            const authButton = document.getElementById('authButton');
+            if (authButton) {
+              setTimeout(() => {
+                authButton.click();
+              }, 300); // Small delay to avoid UI glitches
+            }
+          }
+        }).catch(() => {
+          // On verification error, clear anyway as a safety measure
+          window.auth?.clear?.();
+        });
+      }
+
       // Provide user feedback
+      const message = "Authentication required. Please log in and try again.";
       if (typeof notify === 'function') {
-        notify(stdErr.message, 'error');
+        notify(message, 'error');
       } else {
-        ProjectDashboard.showNotification(stdErr.message, 'error');
+        ProjectDashboard.showNotification(message, 'error');
       }
       evt.preventDefault();
       return;
     }
 
+    // For non-auth errors, just log and display
     console.error('[UnhandledRejection]', errorMessage, errorStack);
     if (typeof notify === 'function') {
       notify(errorMessage, 'error');

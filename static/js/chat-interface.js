@@ -41,21 +41,29 @@ window.ChatInterface = function (options = {}) {
   this.container = document.querySelector(options.containerSelector || '#chatUI');
   this.titleEl = document.querySelector(options.titleSelector || '#chatTitle');
 
-  // Set up container selectors
+  // Set up container selectors by unifying logic into a single function
   this._setupProjectContext();
 
-  // Determine correct selectors based on context
-  this.containerSelector = options.containerSelector || (this.isProjectsPage ? '#projectChatUI' : '#chatUI');
-  this.messageContainerSelector = options.messageContainerSelector || (this.isProjectsPage ? '#projectChatMessages' : '#conversationArea');
-  this.inputSelector = options.inputSelector || (this.isProjectsPage ? '#projectChatInput' : '#chatInput');
-  this.sendButtonSelector = options.sendButtonSelector || (this.isProjectsPage ? '#projectChatSendBtn' : '#sendBtn');
+  const getSelector = (optKey, fallbackProjects, fallbackCenter) => {
+    // If user passed an explicit option, use it
+    if (options[optKey]) return options[optKey];
+    // Otherwise, pick fallback based on isProjectsPage
+    return this.isProjectsPage ? fallbackProjects : fallbackCenter;
+  };
 
-  console.log('ChatInterface selectors:', {
-    container: this.containerSelector,
-    messages: this.messageContainerSelector,
-    input: this.inputSelector,
-    sendButton: this.sendButtonSelector
-  });
+  this.containerSelector = getSelector('containerSelector', '#projectChatUI', '#chatUI');
+  this.messageContainerSelector = getSelector('messageContainerSelector', '#projectChatMessages', '#conversationArea');
+  this.inputSelector = getSelector('inputSelector', '#projectChatInput', '#chatInput');
+  this.sendButtonSelector = getSelector('sendButtonSelector', '#projectChatSendBtn', '#sendBtn');
+
+  if (AUTH_DEBUG) {
+    console.log('[ChatInterface] Determined selectors:', {
+      container: this.containerSelector,
+      messages: this.messageContainerSelector,
+      input: this.inputSelector,
+      sendButton: this.sendButtonSelector
+    });
+  }
 
   this.messageService = null;
   this.conversationService = null;
@@ -736,4 +744,3 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
     throw error;
   }
 };
-

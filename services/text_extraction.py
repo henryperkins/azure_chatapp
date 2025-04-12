@@ -23,35 +23,40 @@ DOCX_AVAILABLE = False
 docx = None  # type: ignore
 try:
     import docx  # type: ignore
-
     DOCX_AVAILABLE = True
 except ImportError:
-    pass
+    logger.warning(
+        "DOCX extraction unavailable: python-docx package not installed. "
+        "Install with 'pip install python-docx' to enable .docx file support."
+    )
 
+PDF_AVAILABLE = False
+pypdf = None
 try:
     import pypdf
-
     PDF_AVAILABLE = True
 except ImportError:
     try:
         # Attempt fallback to older PyPDF2
         import PyPDF2
-
         PDF_AVAILABLE = True
         pypdf = PyPDF2  # Alias for compatibility
     except ImportError:
-        PDF_AVAILABLE = False
+        logger.warning(
+            "PDF extraction unavailable: pypdf/PyPDF2 package not installed. "
+            "Install with 'pip install pypdf' to enable PDF file support."
+        )
 
 # Try to import tiktoken
+TIKTOKEN_AVAILABLE = False
+tiktoken = None
 try:
     import tiktoken
-
     TIKTOKEN_AVAILABLE = True
 except ImportError:
-    TIKTOKEN_AVAILABLE = False
-    tiktoken = None  # Set to None after the import attempt fails
-    print(
-        "Warning: tiktoken not installed. Token counts will be estimates. `pip install tiktoken` for accurate counts."
+    logger.warning(
+        "Token counting will be approximate: tiktoken not installed. "
+        "Install with 'pip install tiktoken' for accurate token counts."
     )
 
 
@@ -379,11 +384,33 @@ class TextExtractor:
     ) -> Tuple[str, Dict[str, Any]]:
         """Extract text from PDF files."""
         if not PDF_AVAILABLE:
-            raise TextExtractionError("PDF extraction requires pypdf or PyPDF2 library")
+            logger.error("PDF extraction failed: missing dependencies")
+            return (
+                f"[PDF EXTRACTION FAILED: Missing library] - To process PDF files, please install: "
+                f"pip install pypdf\n\nFile: {file_info.get('filename', 'unknown')}",
+                {
+                    **file_info,
+                    "extraction_error": "Missing PDF library (pypdf or PyPDF2)",
+                    "extraction_status": "failed",
+                    "token_count": 0,
+                }
+            )
 
         try:
             # Reset file pointer
             file_obj.seek(0)
+
+            # Make sure pypdf is not None before using it
+            if pypdf is None:
+                return (
+                    f"[PDF EXTRACTION FAILED: Library not properly imported] - Please restart the application.",
+                    {
+                        **file_info,
+                        "extraction_error": "PDF library import issue",
+                        "extraction_status": "failed",
+                        "token_count": 0,
+                    }
+                )
 
             reader = pypdf.PdfReader(file_obj)
             page_count = len(reader.pages)
@@ -404,28 +431,44 @@ class TextExtractor:
                 "word_count": len(re.findall(r"\b\w+\b", text)),
                 "char_count": len(text),
                 "token_count": token_count,  # Add token count
+                "extraction_status": "success",
             }
 
             return text, metadata
 
         except Exception as e:
-            raise TextExtractionError(f"PDF extraction error: {str(e)}")
+            error_msg = f"PDF extraction error: {str(e)}"
+            logger.error(error_msg)
+            return (
+                f"[PDF EXTRACTION ERROR] - {error_msg}\n\nFile: {file_info.get('filename', 'unknown')}",
+                {
+                    **file_info,
+                    "extraction_error": error_msg,
+                    "extraction_status": "failed",
+                    "token_count": 0,
+                }
+            )
 
     def _extract_from_docx(
         self, file_obj: BinaryIO, file_info: Dict[str, Any]
     ) -> Tuple[str, Dict[str, Any]]:
         """Extract text from DOCX files."""
         if not DOCX_AVAILABLE:
-            raise TextExtractionError("DOCX extraction requires python-docx library")
+            logger.error("DOCX extraction failed: missing dependencies")
+            return (
+                f"[DOCX EXTRACTION FAILED: Missing library] - To process DOCX files, please install: "
+                f"pip install python-docx\n\nFile: {file_info.get('filename', 'unknown')}",
+                {
+                    **file_info,
+                    "extraction_error": "Missing DOCX library (python-docx)",
+                    "extraction_status": "failed",
+                    "token_count": 0,
+                }
+            )
 
         try:
             # Reset file pointer
             file_obj.seek(0)
-
-            if not DOCX_AVAILABLE or docx is None:
-                raise TextExtractionError(
-                    "DOCX extraction requires python-docx library"
-                )
 
             doc = docx.Document(file_obj)  # type: ignore
             paragraphs = [p.text for p in doc.paragraphs]
@@ -439,12 +482,23 @@ class TextExtractor:
                 "word_count": len(re.findall(r"\b\w+\b", text)),
                 "char_count": len(text),
                 "token_count": token_count,  # Add token count
+                "extraction_status": "success",
             }
 
             return text, metadata
 
         except Exception as e:
-            raise TextExtractionError(f"DOCX extraction error: {str(e)}")
+            error_msg = f"DOCX extraction error: {str(e)}"
+            logger.error(error_msg)
+            return (
+                f"[DOCX EXTRACTION ERROR] - {error_msg}\n\nFile: {file_info.get('filename', 'unknown')}",
+                {
+                    **file_info,
+                    "extraction_error": error_msg,
+                    "extraction_status": "failed",
+                    "token_count": 0,
+                }
+            )
 
     def _extract_from_json(
         self, content: bytes, file_info: Dict[str, Any]
@@ -644,19 +698,7 @@ class TextExtractor:
 
                 # Count common HTML elements
                 tag_counts = {}
-                for tag in [
-                    "div",
-                    "p",
-                    "a",
-                    "span",
-                    "img",
-                    "ul",
-                    "li",
-                    "h1",
-                    "h2",
-                    "h3",
-                    "table",
-                ]:
+                for tag in ["div", "p", "a", "span", "img", "ul", "li", "h1", "h2", "h3", "table"]:
                     tag_counts[tag] = tags.count(tag)
 
                 metadata.update({"tag_counts": tag_counts, "total_tags": len(tags)})

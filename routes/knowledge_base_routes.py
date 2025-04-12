@@ -27,11 +27,29 @@ from models.user import User
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from utils.response_utils import create_standard_response
-from services import knowledgebase_service
 from services.vector_db import (
     search_project_context,
     process_files_for_project,
     initialize_project_vector_db,
+)
+# Import from knowledgebase_service with aliases to avoid name conflicts with route handlers
+from services.knowledgebase_service import (
+    get_kb_status as kb_service_get_status,
+    get_project_files_stats as kb_service_get_files_stats,
+    get_knowledge_base_health as kb_service_get_health,
+    list_knowledge_bases as kb_service_list_kbs,
+    get_knowledge_base as kb_service_get_kb,
+    create_knowledge_base as kb_service_create_kb,
+    update_knowledge_base as kb_service_update_kb,
+    delete_knowledge_base as kb_service_delete_kb,
+    toggle_project_kb as kb_service_toggle_kb,
+    upload_file_to_project as kb_service_upload_file,
+)
+from services.text_extraction import (
+    get_text_extractor,
+    PDF_AVAILABLE,
+    DOCX_AVAILABLE,
+    TIKTOKEN_AVAILABLE,
 )
 from services.project_service import validate_project_access
 
@@ -96,7 +114,7 @@ async def get_knowledge_base_status(
     """Check basic knowledge base status for a project."""
     try:
         # Service function handles all status gathering
-        status_data = await knowledgebase_service.get_kb_status(project_id, db)
+        status_data = await kb_service_get_status(project_id, db)
         return await create_standard_response(status_data)
     except Exception as e:
         logger.error(f"Error retrieving KB status: {str(e)}")
@@ -123,7 +141,7 @@ async def get_project_knowledge_base_status(
         kb_status = await vector_db.get_knowledge_base_status(project_id, db)
 
         # Get file stats using knowledgebase service
-        file_stats = await knowledgebase_service.get_project_files_stats(project_id, db)
+        file_stats = await kb_service_get_files_stats(project_id, db)
 
         return await create_standard_response(
             {"vector_db": kb_status, "files": file_stats}
@@ -135,7 +153,7 @@ async def get_project_knowledge_base_status(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve knowledge base status: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/knowledge-bases/{knowledge_base_id}/health", response_model=dict)
@@ -146,7 +164,7 @@ async def get_knowledge_base_health(
 ):
     """Get health status of a knowledge base, including vector DB stats."""
     try:
-        kb_health = await knowledgebase_service.get_knowledge_base_health(
+        kb_health = await kb_service_get_health(
             knowledge_base_id=knowledge_base_id, db=db
         )
         return await create_standard_response(kb_health)
@@ -156,7 +174,7 @@ async def get_knowledge_base_health(
         logger.error(f"Error getting KB health: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to check knowledge base health: {str(e)}"
-        )
+        ) from e
 
 
 # ----------------------------------------------------------------------
@@ -165,7 +183,7 @@ async def get_knowledge_base_health(
 
 
 @router.get("/knowledge-bases", response_model=dict)
-async def list_knowledge_bases(
+async def list_kb_route(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     skip: int = 0,
@@ -174,7 +192,7 @@ async def list_knowledge_bases(
 ):
     """List available knowledge bases."""
     try:
-        knowledge_bases = await knowledgebase_service.list_knowledge_bases(
+        knowledge_bases = await kb_service_list_kbs(
             db=db, skip=skip, limit=limit, active_only=active_only
         )
 
@@ -196,7 +214,7 @@ async def get_knowledge_base(
 ):
     """Get a specific knowledge base by ID."""
     try:
-        kb = await knowledgebase_service.get_knowledge_base(
+        kb = await kb_service_get_kb(
             knowledge_base_id=knowledge_base_id, db=db
         )
 
@@ -210,7 +228,7 @@ async def get_knowledge_base(
         logger.error(f"Error getting knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error retrieving knowledge base: {str(e)}"
-        )
+        ) from e
 
 
 @router.post(
@@ -230,13 +248,17 @@ async def create_project_knowledge_base(
         await validate_project_access(project_id, current_user, db)
 
         # Create knowledge base using service
-        kb = await knowledgebase_service.create_knowledge_base(
-            name=kb_data.name,
-            project_id=project_id,
-            description=kb_data.description,
-            embedding_model=kb_data.embedding_model,
-            db=db,
-        )
+        kb_params: Dict[str, Any] = {
+            "name": str(kb_data.name),
+            "project_id": UUID(str(project_id)),
+            "db": db
+        }
+        if kb_data.description is not None:
+            kb_params["description"] = kb_data.description
+        if kb_data.embedding_model is not None:
+            kb_params["embedding_model"] = kb_data.embedding_model
+
+        kb = await kb_service_create_kb(**kb_params)
 
         result_data = {
             "id": str(kb.id),
@@ -249,7 +271,7 @@ async def create_project_knowledge_base(
 
         # Process existing files if requested
         if kb_data.process_existing_files:
-            file_stats = await knowledgebase_service.get_project_files_stats(
+            file_stats = await kb_service_get_files_stats(
                 project_id, db
             )
             result_data["stats"] = file_stats  # type: ignore
@@ -268,7 +290,7 @@ async def create_project_knowledge_base(
         logger.error(f"Error creating knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to create knowledge base: {str(e)}"
-        )
+        ) from e
 
 
 @router.post(
@@ -285,13 +307,17 @@ async def create_knowledge_base(
         await validate_project_access(kb_data.project_id, current_user, db)
 
         # Use service to create the knowledge base
-        kb = await knowledgebase_service.create_knowledge_base(
-            name=kb_data.name,
-            project_id=kb_data.project_id,
-            description=kb_data.description,
-            embedding_model=kb_data.embedding_model,
-            db=db,
-        )
+        kb_params: Dict[str, Any] = {
+            "name": str(kb_data.name),
+            "project_id": UUID(str(kb_data.project_id)),
+            "db": db
+        }
+        if kb_data.description is not None:
+            kb_params["description"] = kb_data.description
+        if kb_data.embedding_model is not None:
+            kb_params["embedding_model"] = kb_data.embedding_model
+
+        kb = await kb_service_create_kb(**kb_params)
 
         return await create_standard_response(
             {
@@ -311,7 +337,7 @@ async def create_knowledge_base(
         logger.error(f"Error creating knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to create knowledge base: {str(e)}"
-        )
+        ) from e
 
 
 @router.patch("/knowledge-bases/{knowledge_base_id}", response_model=dict)
@@ -323,9 +349,12 @@ async def update_knowledge_base(
 ):
     """Update an existing knowledge base by ID."""
     try:
-        kb = await knowledgebase_service.update_knowledge_base(
+        # Convert Pydantic model to dict for the service function
+        update_dict = update_data.dict(exclude_unset=True)
+
+        kb = await kb_service_update_kb(
             knowledge_base_id=knowledge_base_id,
-            update_data=update_data.dict(exclude_unset=True),
+            update_data=update_dict,
             db=db,
         )
 
@@ -336,7 +365,7 @@ async def update_knowledge_base(
         logger.error(f"Error updating knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error updating knowledge base: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/knowledge-bases/{knowledge_base_id}", response_model=dict)
@@ -347,7 +376,7 @@ async def delete_knowledge_base(
 ):
     """Delete a knowledge base by ID."""
     try:
-        result = await knowledgebase_service.delete_knowledge_base(
+        result = await kb_service_delete_kb(
             knowledge_base_id=knowledge_base_id, db=db
         )
 
@@ -360,7 +389,7 @@ async def delete_knowledge_base(
         logger.error(f"Error deleting knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error deleting knowledge base: {str(e)}"
-        )
+        ) from e
 
 
 # ----------------------------------------------------------------------
@@ -399,7 +428,7 @@ async def search_project_knowledge(
         raise
     except Exception as e:
         logger.error(f"Error searching project knowledge: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}") from e
 
 
 # ----------------------------------------------------------------------
@@ -418,7 +447,7 @@ async def upload_file_to_knowledge_base(
     """Upload a file to a project's knowledge base."""
     try:
         # The service handles all validation and processing
-        result = await knowledgebase_service.upload_file_to_project(
+        result = await kb_service_upload_file(
             project_id=project_id,
             file=file,
             db=db,
@@ -431,7 +460,7 @@ async def upload_file_to_knowledge_base(
         raise
     except Exception as e:
         logger.error(f"File upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}") from e
 
 
 @router.post("/projects/{project_id}/knowledge-base/reindex", response_model=dict)
@@ -470,7 +499,7 @@ async def reindex_project_knowledge_base(
         logger.error(f"Error reindexing files: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to reindex files: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/projects/{project_id}/knowledge-bases/toggle", response_model=dict)
@@ -483,7 +512,7 @@ async def toggle_project_knowledge_base(
     """Enable or disable knowledge base for all conversations in a project."""
     try:
         # Let the service handle all the logic
-        result = await knowledgebase_service.toggle_project_kb(
+        result = await kb_service_toggle_kb(
             project_id=project_id, enable=enable, user_id=current_user.id, db=db
         )
 
@@ -496,7 +525,7 @@ async def toggle_project_knowledge_base(
         logger.error(f"Error toggling knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to toggle knowledge base: {str(e)}"
-        )
+        ) from e
 
 
 # ----------------------------------------------------------------------
@@ -507,13 +536,6 @@ async def toggle_project_knowledge_base(
 @router.post("/text-extractor/initialize", response_model=Dict[str, Any])
 async def initialize_text_extractor():
     """Initialize the text extraction service."""
-    from services.text_extraction import (
-        get_text_extractor,
-        PDF_AVAILABLE,
-        DOCX_AVAILABLE,
-        TIKTOKEN_AVAILABLE,
-    )
-
     extractor = get_text_extractor()
     return {
         "status": "ready",
@@ -535,8 +557,6 @@ async def extract_text_from_file(
 ):
     """Extract text and metadata from uploaded file."""
     try:
-        from services.text_extraction import get_text_extractor
-
         extractor = get_text_extractor()
         chunks, metadata = await extractor.extract_text(
             file.file, filename=file.filename, mimetype=file.content_type

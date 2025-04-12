@@ -141,7 +141,7 @@
 
     async _verifyTextExtractionService() {
       try {
-        const response = await window.apiRequest('/api/text-extractor/initialize', 'GET');
+        const response = await window.apiRequest('/api/text-extractor/initialize', 'POST');
         if (response?.status !== 'ready') throw new Error('Text extraction service not ready');
       } catch (err) {
         const msg = "Text extraction service unavailable - please try again later";

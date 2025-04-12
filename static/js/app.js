@@ -275,17 +275,23 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
     // Body for POST/PUT
       if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
-        try {
-          // Attempt to retrieve an access token from auth.js
-          const token = await window.auth.getAuthToken();
-          if (token) {
-            requestOptions.headers['Authorization'] = 'Bearer ' + token;
-          }
-        } catch (err) {
-          console.error('[app.js] Unable to retrieve auth token:', err);
-          // Propagate authentication errors rather than continuing without auth
-          if (err.message === 'Not authenticated') {
-            throw new Error('Authentication required. Please log in and try again.');
+        // Check if auth is ready before trying to get token
+        if (window.auth?.isInitialized) {
+          try {
+            // Attempt to retrieve an access token from auth.js
+            // but don't block the request if it fails
+            const token = await window.auth.getAuthToken().catch(err => {
+              console.warn('[app.js] Auth token retrieval failed:', err.message);
+              // Log the error but don't throw - let the request continue
+              return null;
+            });
+
+            if (token) {
+              requestOptions.headers['Authorization'] = 'Bearer ' + token;
+            }
+          } catch (err) {
+            // Just log the error instead of throwing
+            console.error('[app.js] Auth token error:', err);
           }
         }
 
@@ -325,15 +331,26 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
           error.isPermanent = true; // Mark 404 as permanent
           throw error;
         } else if (response.status === 422) {
+          // Clone immediately for 422 errors since we need to parse the validation details
+          const responseClone = response.clone();
           try {
-            const errorData = await response.json();
+            const errorData = await responseClone.json();
             console.error('Validation error details:', errorData);
+            const error = new Error(`Validation error (422): ${errorData.message || 'Invalid request data'}`);
+            error.status = 422;
+            error.data = errorData;
+            throw error;
           } catch (parseErr) {
             console.error('Could not parse validation error', parseErr);
+            // Fall back to text using the original response
+            const errorText = await response.text();
+            const error = new Error(`Validation error (422): ${errorText || 'Invalid request data'}`);
+            error.status = 422;
+            throw error;
           }
         }
 
-        // Clone response before consuming its body
+        // Clone response before consuming its body for other error cases
         const responseClone = response.clone();
 
         try {
