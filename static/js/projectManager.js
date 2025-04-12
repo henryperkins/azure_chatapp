@@ -551,7 +551,7 @@
 
     try {
       const response = await window.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/files`,
+        `/api/projects/${projectId}/files`,
         "POST",
         formData
       );

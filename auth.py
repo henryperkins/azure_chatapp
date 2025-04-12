@@ -428,29 +428,11 @@ async def login_user(
 
     # Set cookies with type-safe settings
     try:
-        # Set access token cookie
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            path="/",
-            httponly=True,
-            secure=settings.ENV == "production",
-            samesite="lax"
-        )
+        # Use the unified set_secure_cookie method for consistency
+        set_secure_cookie(response, "access_token", access_token, ACCESS_TOKEN_EXPIRE_MINUTES * 60, request)
+        set_secure_cookie(response, "refresh_token", refresh_token, 60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS, request)
 
-        # Set refresh token cookie
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
-            path="/",
-            httponly=True,
-            secure=settings.ENV == "production",
-            samesite="lax"
-        )
-
-        logger.debug(f"Cookies set successfully for {lower_username}")
+        logger.debug(f"Cookies set via set_secure_cookie for {lower_username}")
     except Exception as e:
         logger.error(f"Failed to set cookies for {lower_username}: {str(e)}")
         # Fallback to returning tokens in response body while maintaining LoginResponse type

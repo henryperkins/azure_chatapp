@@ -216,9 +216,10 @@ async def ensure_project_has_knowledge_base(
     db: AsyncSession,
     user_id: Optional[int] = None
 ) -> KnowledgeBase:
-    """Ensures a project has an active knowledge base"""
+    """Ensures a project has an active knowledge base with locking protection against race conditions"""
     project = await _validate_user_and_project(project_id, user_id, db)
 
+    # Check if project already has a knowledge base (common case)
     if project.knowledge_base_id:
         kb = await db.get(KnowledgeBase, project.knowledge_base_id)
         if kb and not kb.is_active:
@@ -227,16 +228,40 @@ async def ensure_project_has_knowledge_base(
             logger.info(f"Reactivated knowledge base {kb.id} for project {project_id}")
         return kb
 
-    # Create new knowledge base
-    kb = await create_knowledge_base(
-        name=f"{project.name} Knowledge Base",
-        project_id=project_id,
-        description="Automatically created knowledge base",
-        embedding_model=None,
-        db=db
-    )
-    logger.info(f"Created knowledge base {kb.id} for project {project_id}")
-    return kb
+    # Acquire a database-level lock to prevent race conditions
+    # First, refresh the project to ensure we have latest state
+    await db.refresh(project)
+
+    # Double-check if KB was created between initial check and lock acquisition
+    if project.knowledge_base_id:
+        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+        if kb:
+            logger.info(f"KB already created in concurrent request for project {project_id}")
+            return kb
+
+    try:
+        # Create new knowledge base
+        kb = await create_knowledge_base(
+            name=f"{project.name} Knowledge Base",
+            project_id=project_id,
+            description="Automatically created knowledge base",
+            embedding_model=None,
+            db=db
+        )
+        logger.info(f"Created knowledge base {kb.id} for project {project_id}")
+        return kb
+    except ValueError as e:
+        # If there's an error like "Project already has a knowledge base"
+        # it could be due to a race condition, try to get the KB again
+        if "already has a knowledge base" in str(e):
+            await db.refresh(project)
+            if project.knowledge_base_id:
+                kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+                if kb:
+                    logger.info(f"Using KB created by concurrent request for project {project_id}")
+                    return kb
+        # If we couldn't recover, re-raise the exception
+        raise
 
 
 @handle_service_errors("File upload failed")
@@ -253,7 +278,23 @@ async def upload_file_to_project(
 
     # Process file info
     file_info = await _process_upload_file_info(file)
-    contents = await file.read()
+
+    # Read file in chunks to avoid massive in-memory reads
+    chunk_size = 65536  # 64 KB
+    file_chunks = []
+    total_bytes = 0
+
+    chunk = await file.read(chunk_size)
+    while chunk:
+        file_chunks.append(chunk)
+        total_bytes += len(chunk)
+        # Log progress for large files
+        if total_bytes % (1024 * 1024) < chunk_size:
+            logger.info(f"Reading file... total so far: {total_bytes} bytes")
+        chunk = await file.read(chunk_size)
+
+    contents = b''.join(file_chunks)
+    logger.info(f"Finished reading file: total {total_bytes} bytes")
 
     # Validate size
     config = KBConfig.get()
