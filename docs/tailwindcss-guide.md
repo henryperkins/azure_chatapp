@@ -224,8 +224,8 @@ Tailwind supports responsive design with breakpoints and container queries.
 **Container Queries**:
 - Use `@container` for container-based styles.
   ```html
-  <div class="@container">
-    <div class="flex flex-col @md:flex-row"></div>
+  <div class="container">
+    <div class="flex flex-col md:flex-row"></div>
   </div>
   ```
 
