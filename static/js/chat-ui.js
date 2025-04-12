@@ -105,7 +105,7 @@ window.UIComponents = function(options = {}) {
         }
         // Create message container
         const msgDiv = document.createElement('div');
-        msgDiv.className = `mb-4 p-4 rounded-lg shadow-sm ${this.getClass(role)}`;
+        msgDiv.className = `mb-4 p-4 rounded-sm shadow-xs ${this.getClass(role)}`;
         if (id) msgDiv.id = id;
         
         // Add data attributes for message metadata

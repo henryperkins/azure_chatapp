@@ -810,7 +810,7 @@
       const chunkIndex = metadata?.chunk_index ?? 'N/A';
       const tokenCount = metadata?.token_count ?? fileInfo?.token_count ?? 'N/A';
       const item = utils.createElement("div", {
-        className: "content-item bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm mb-3 " +
+        className: "content-item bg-surface dark:bg-gray-800 p-3 sm:p-4 rounded-sm shadow-xs mb-3 " +
           "border border-gray-200 dark:border-gray-700 cursor-pointer " +
           "hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-150",
         role: "button", tabIndex: "0"
