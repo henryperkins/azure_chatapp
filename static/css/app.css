@@ -1,7 +1,7 @@
-@import "tailwindcss" layer(base);
-@import "tailwindcss" layer(components);
-@import "tailwindcss" layer(utilities);
-@import "daisyui" layer(components);
+@import "tailwindcss/base" layer(base);
+@import "tailwindcss/components" layer(components);
+@import "tailwindcss/utilities" layer(utilities);
+@import "daisyui/dist/full" layer(components);
 
 /* Header and footer text sizing */
 header {
