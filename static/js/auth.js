@@ -1049,47 +1049,60 @@ async function loginUser(username, password) {
 
     if (AUTH_DEBUG) console.debug('[Auth] Tokens stored in memory successfully');
 
-    // Set client-side cookies without waiting for server
-    const hostname = window.location.hostname;
-    const isSecure = (window.location.protocol === 'https:');
-    const sameSite = isSecure ? 'None' : 'Lax';
-    const secureFlag = isSecure ? 'Secure; ' : '';
+    // Show loading state before expensive operations
+    document.dispatchEvent(new CustomEvent('authLoading', { detail: true }));
 
-    document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
-    if (response.refresh_token) {
-      document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=${sameSite}`;
-    }
+    // Move storage operations to microtasks to prevent blocking
+    await new Promise(resolve => {
+      setTimeout(() => {
+        try {
+          // Set cookies in a way that minimizes layout thrashing
+          requestAnimationFrame(() => {
+            const hostname = window.location.hostname;
+            const isSecure = (window.location.protocol === 'https:');
+            const sameSite = isSecure ? 'None' : 'Lax';
+            const secureFlag = isSecure ? 'Secure; ' : '';
 
-    if (AUTH_DEBUG) console.debug('[Auth] Cookies set successfully');
+            document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
+            if (response.refresh_token) {
+              document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=${sameSite}`;
+            }
 
-    // Update auth state immediately
-    authState.isAuthenticated = true;
-    authState.username = response.username || username;
-    authState.lastVerified = Date.now();
-    sessionExpiredFlag = false;
+            // Batch state updates
+            requestAnimationFrame(() => {
+              authState.isAuthenticated = true;
+              authState.username = response.username || username;
+              authState.lastVerified = Date.now();
+              sessionExpiredFlag = false;
 
-    if (AUTH_DEBUG) {
-      console.debug('[Auth] Auth state updated:', {
-        isAuthenticated: authState.isAuthenticated,
-        username: authState.username,
-        lastVerified: new Date(authState.lastVerified).toISOString(),
-        tokenVersion: authState.tokenVersion
+              // Throttle the broadcast
+              setTimeout(() => {
+                broadcastAuth(true, response.username || username);
+                resolve();
+              }, 50);
+            });
+          });
+        } catch (e) {
+          console.warn('[Auth] Storage operations failed:', e);
+          resolve();
+        }
+      }, 0);
+    });
+
+    // Backup tokens in idle time
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => {
+        try {
+          sessionStorage.setItem('_auth_token_backup', response.access_token);
+          if (response.refresh_token) {
+            sessionStorage.setItem('_auth_refresh_backup', response.refresh_token);
+          }
+          sessionStorage.setItem('_auth_timestamp', Date.now().toString());
+          sessionStorage.setItem('_auth_username', username);
+        } catch (e) {
+          console.warn('[Auth] Failed to backup tokens:', e);
+        }
       });
-    }
-
-    // Broadcast auth change
-    broadcastAuth(true, response.username || username);
-
-    // Backup tokens to session storage
-    try {
-      sessionStorage.setItem('_auth_token_backup', response.access_token);
-      if (response.refresh_token) {
-        sessionStorage.setItem('_auth_refresh_backup', response.refresh_token);
-      }
-      sessionStorage.setItem('_auth_timestamp', Date.now().toString());
-      sessionStorage.setItem('_auth_username', username);
-    } catch (e) {
-      console.warn('[Auth] Failed to backup tokens to sessionStorage:', e);
     }
 
     // Let the redirect handle loading the project list

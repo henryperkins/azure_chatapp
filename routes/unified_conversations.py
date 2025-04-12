@@ -1,6 +1,5 @@
 import json
 import logging
-import asyncio
 from typing import Optional, cast
 from uuid import UUID
 from sqlalchemy.sql.expression import BinaryExpression
@@ -14,11 +13,10 @@ from fastapi import (
     Query,
     Request,
 )
-from config import settings
 from pydantic import BaseModel, Field
 
 # DB Session
-from db import AsyncSessionLocal, get_async_session
+from db import get_async_session
 
 # Models
 from models.user import User
@@ -30,23 +28,14 @@ from models.message import Message
 from services.project_service import validate_project_access
 from services import get_conversation_service
 from services.conversation_service import ConversationService
-from utils.ai_helper import augment_with_knowledge  # Function is correctly defined in ai_helper.py
 
 # Utils
 from utils.auth_utils import (
     get_current_user_and_token,
-    get_user_from_token,
 )
 from utils.db_utils import validate_resource_access, get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_message, serialize_conversation
-from utils.message_handlers import (
-    create_user_message,
-    get_conversation_messages,
-    validate_image_data,
-    update_project_token_usage,
-)
-from utils.ai_response import generate_ai_response
 
 
 logger = logging.getLogger(__name__)
@@ -78,14 +67,14 @@ class ConversationUpdate(BaseModel):
 # Helper: Resolve optional project
 # --------------------------------------------------------------------------
 async def resolve_project_if_any(
-    project_id: Optional[UUID], current_user: User, db: AsyncSession
+    project_id: Optional[UUID], current_user: User, _db: AsyncSession
 ) -> Optional[Project]:
     """
     If project_id is provided, validate access and return the Project.
     If None, return None for standalone usage.
     """
     if project_id:
-        proj = await validate_project_access(project_id, current_user, db)
+        proj = await validate_project_access(project_id, current_user, _db)
         if not proj:
             raise HTTPException(
                 status_code=404, detail="Project not found or not accessible"
@@ -507,4 +496,4 @@ async def create_message(
         logger.error(f"Error creating message: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to create message: {str(e)}"
-        )
+        ) from e

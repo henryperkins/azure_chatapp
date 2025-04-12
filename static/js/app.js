@@ -21,7 +21,7 @@ const API_CONFIG = {
     // Log when baseUrl is being changed to track down unwanted changes
     if (value !== this._baseUrl) {
       console.warn(`API_CONFIG.baseUrl changed from "${this._baseUrl}" to "${value}"`, new Error().stack);
-      
+
       // Detect and prevent incorrect domain
       if (value && value.includes('put.photo')) {
         console.error('Prevented setting incorrect domain (put.photo) as API baseUrl');
@@ -130,7 +130,7 @@ function clearAuthState() {
       detail: { authenticated: false }
     }));
   }
-  
+
 }
 
 
@@ -221,12 +221,12 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
     if (endpoint.startsWith('https://') || endpoint.startsWith('http://')) {
       console.warn('Full URL detected in endpoint, normalizing:', endpoint);
       const urlObj = new URL(endpoint);
-      
+
       // Additional protection against incorrect domains
       if (urlObj.hostname === 'put.photo') {
         console.warn('Detected incorrect domain in API request. Using relative paths instead.');
       }
-      
+
       endpoint = urlObj.pathname + urlObj.search;
     }
 
@@ -275,8 +275,17 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 
     // Body for POST/PUT
     if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
+      try {
+        // Attempt to retrieve an access token from auth.js
+        const token = await window.auth.getAuthToken();
+        if (token) {
+          requestOptions.headers['Authorization'] = 'Bearer ' + token;
+        }
+      } catch (err) {
+        console.warn('[app.js] Unable to retrieve auth token:', err);
+      }
+
       if (data instanceof FormData) {
-        requestOptions.body = data;
       } else {
         requestOptions.headers['Content-Type'] = 'application/json';
         requestOptions.body = JSON.stringify(data);
@@ -323,7 +332,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
         try {
           // Try to parse response as JSON to handle inconsistent API error formats
           const errorResponse = await response.json();
-          
+
           // Handle the case where status is "error" but message is "Success"
           if (errorResponse.status === "error" && errorResponse.data?.assistant_error) {
             console.warn("Detected assistant error in response:", errorResponse.data.assistant_error);
@@ -332,7 +341,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
             error.data = errorResponse.data;
             throw error;
           }
-          
+
           // Standard error handling for JSON responses
           const error = new Error(`API error (${response.status}): ${
             errorResponse.message || errorResponse.error || response.statusText
@@ -377,13 +386,13 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
 function getBaseUrl() {
   // We do not rely on window.location.origin or local storage.
   // If needed, set API_CONFIG.baseUrl explicitly or leave empty for relative paths.
-  
+
   // Fix for incorrect domain - if baseUrl contains 'put.photo', reset it
   if (API_CONFIG.baseUrl && API_CONFIG.baseUrl.includes('put.photo')) {
     console.warn('Detected incorrect API domain (put.photo). Resetting to relative paths.');
     API_CONFIG.baseUrl = '';
   }
-  
+
   if (!API_CONFIG.baseUrl) {
     // Default to relative root
     API_CONFIG.baseUrl = '';
@@ -752,7 +761,7 @@ function setupNavigationTracking() {
   function recordInteraction() {
     sessionStorage.setItem('last_page_interaction', Date.now().toString());
   }
-  
+
   // Track clicks on navigation elements
   document.addEventListener('click', (e) => {
     if (e.target.closest('a[href*="project"]') ||
@@ -763,10 +772,10 @@ function setupNavigationTracking() {
       recordInteraction();
     }
   });
-  
+
   // Also track before unload events
   window.addEventListener('beforeunload', recordInteraction);
-  
+
   // Record page load as an interaction
   recordInteraction();
 }
@@ -783,7 +792,7 @@ function handleAuthStateChange(e) {
   }
 
   // Update UI based on auth state
-  updateAuthUI(authenticated, username);
+  handleAppUpdateAuthUI(authenticated, username);
 
   API_CONFIG.isAuthenticated = authenticated;
 
@@ -843,50 +852,9 @@ async function handleNewConversationClick() {
   }
 }
 
-function updateAuthUI(authenticated, username = null) {
-  const authBtn = ELEMENTS.AUTH_BUTTON || document.getElementById('authButton');
-  const authDropdown = document.getElementById('authDropdown');
-  const userMenu = ELEMENTS.USER_MENU || document.getElementById('userMenu');
-  const authStatus = ELEMENTS.AUTH_STATUS || document.getElementById('authStatus');
-  const userStatus = ELEMENTS.USER_STATUS || document.getElementById('userStatus');
-  const projectPanel = ELEMENTS.PROJECT_MANAGER_PANEL || document.getElementById('projectManagerPanel');
-  const loginMsg = ELEMENTS.LOGIN_REQUIRED_MESSAGE || document.getElementById('loginRequiredMessage');
-  const loginForm = document.getElementById('loginForm');
-  const registerForm = document.getElementById('registerForm');
-
-  if (authenticated) {
-    authBtn?.classList.add('hidden');
-    userMenu?.classList.remove('hidden');
-    if (authStatus) authStatus.textContent = username || 'Authenticated';
-    if (userStatus) {
-      userStatus.textContent = 'Online';
-      userStatus.classList.remove('text-gray-500');
-      userStatus.classList.add('text-green-500');
-    }
-    authDropdown?.classList.add('hidden');
-    authDropdown?.classList.remove('slide-in');
-    loginForm?.reset?.();
-    loginForm?.classList.add('hidden');
-    registerForm?.reset?.();
-    registerForm?.classList.add('hidden');
-    projectPanel?.classList.remove('hidden');
-    loginMsg?.classList.add('hidden');
-
-    const projectListView = document.getElementById('projectListView');
-    const projectDetailsView = document.getElementById('projectDetailsView');
-    projectListView?.classList.remove('hidden');
-    projectDetailsView?.classList.add('hidden');
-  } else {
-    authBtn?.classList.remove('hidden');
-    userMenu?.classList.add('hidden');
-    if (authStatus) authStatus.textContent = 'Not Authenticated';
-    if (userStatus) {
-      userStatus.textContent = 'Offline';
-      userStatus.classList.remove('text-green-500');
-      userStatus.classList.add('text-gray-500');
-    }
-    projectPanel?.classList.add('hidden');
-    loginMsg?.classList.remove('hidden');
+function handleAppUpdateAuthUI(authenticated, username = null) {
+  if (window.auth && typeof window.auth.updateAuthUI === 'function') {
+    window.auth.updateAuthUI(authenticated, username);
   }
 }
 
@@ -922,28 +890,28 @@ async function initializeApplication() {
 async function initializeAllModules() {
   try {
     console.log("Initializing all application modules...");
-    
+
     // Initialize core application
     await initializeApplication();
-    
+
     // Initialize project manager if available
     if (window.projectManager?.initialize) {
       await window.projectManager.initialize();
       console.log("Project manager initialized");
     }
-    
+
     // Initialize sidebar if available
     if (window.sidebar?.initialize) {
       window.sidebar.initialize();
       console.log("Sidebar initialized");
     }
-    
+
   // Removed redundant chat interface initialization to avoid double init
   // (Handled in chat-core.js / ChatManager)
-    
+
     // Handle any initial navigation
     await handleNavigationChange();
-    
+
     console.log("All modules initialized successfully");
     return true;
   } catch (error) {
