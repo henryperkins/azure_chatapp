@@ -14,6 +14,9 @@ const UIComponents = window.UIComponents;
 
 // Initialize the interface
 window.ChatInterface = function (options = {}) {
+  // Event system
+  this._eventHandlers = {};
+
   // Removed localStorage usage: now simply stores projectId in memory
   this._setupProjectContext = function () {
     this.isProjectsPage = window.location.pathname.includes('/projects');
@@ -137,7 +140,12 @@ window.ChatInterface.prototype.initialize = async function () {
     this.messageService = new window.MessageService({
       onMessageReceived: this._handleMessageReceived.bind(this),
       onSending: () => this.ui.messageList.addThinking(),
-      onError: (context, err) => window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
+      onError: (context, err) => {
+        // Emit error event to any registered handlers
+        this.emit('error', { context, error: err });
+        // Also use the default error handler
+        window.ChatUtils?.handleError?.(context, err, this.notificationFunction)
+      }
     });
     // WebSocket service removed
   } catch (error) {
@@ -682,6 +690,10 @@ window.ChatInterface.prototype._handleMessageReceived = function (message) {
     message.metadata
   );
 
+  // Emit event to any registered handlers (for ProjectDetailsComponent)
+  this.emit('messageSent', message);
+
+  // Also dispatch a DOM event (for backwards compatibility)
   document.dispatchEvent(new CustomEvent('messageReceived', {
     detail: { message }
   }));
@@ -743,4 +755,62 @@ window.ChatInterface.prototype.deleteConversation = async function (chatId) {
     this.notificationFunction("Failed to delete conversation", "error");
     throw error;
   }
+};
+
+// Event system methods
+window.ChatInterface.prototype.on = function(eventName, handler) {
+  if (!this._eventHandlers) {
+    this._eventHandlers = {};
+  }
+
+  if (!this._eventHandlers[eventName]) {
+    this._eventHandlers[eventName] = [];
+  }
+
+  this._eventHandlers[eventName].push(handler);
+  console.log(`[ChatInterface] Registered handler for event: ${eventName}`);
+  return this; // For chaining
+};
+
+window.ChatInterface.prototype.emit = function(eventName, data) {
+  if (!this._eventHandlers || !this._eventHandlers[eventName]) {
+    return false; // No handlers for this event
+  }
+
+  console.log(`[ChatInterface] Emitting event: ${eventName}`, data);
+  this._eventHandlers[eventName].forEach(handler => {
+    try {
+      handler(data);
+    } catch (err) {
+      console.error(`[ChatInterface] Error in event handler for ${eventName}:`, err);
+    }
+  });
+
+  return true;
+};
+
+window.ChatInterface.prototype.configureSelectors = function(customOpts = {}) {
+  if (!customOpts) return;
+
+  // Example logic that sets new container/input selectors if provided:
+  if (customOpts.containerSelector) {
+    this.containerSelector = customOpts.containerSelector;
+  }
+  if (customOpts.messageContainerSelector) {
+    this.messageContainerSelector = customOpts.messageContainerSelector;
+  }
+  if (customOpts.inputSelector) {
+    this.inputSelector = customOpts.inputSelector;
+  }
+  if (customOpts.sendButtonSelector) {
+    this.sendButtonSelector = customOpts.sendButtonSelector;
+  }
+
+  // For debugging
+  console.log('[ChatInterface.configureSelectors] Updated selectors:', {
+    container: this.containerSelector,
+    messages: this.messageContainerSelector,
+    input: this.inputSelector,
+    sendButton: this.sendButtonSelector
+  });
 };

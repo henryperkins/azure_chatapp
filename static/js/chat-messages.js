@@ -115,6 +115,25 @@ window.MessageService.prototype.sendMessage = async function (content) {
     vision_detail: this.modelConfig?.visionDetail || "auto"
   };
 
+  // If this is a system message, handle it specially for Claude API
+  if ((typeof content === 'string' && content.startsWith('system:')) || (typeof content === 'object' && content.role === 'system')) {
+    // Extract system message content
+    let systemContent = '';
+    if (typeof content === 'string' && content.startsWith('system:')) {
+      systemContent = content.substring(7).trim();
+      // Update the regular content to be empty or a default user message
+      messagePayload.content = '';
+    } else if (typeof content === 'object' && content.role === 'system') {
+      systemContent = content.content;
+      messagePayload.content = '';
+    }
+
+    // Add system content as a top-level parameter as required by Claude API
+    if (systemContent) {
+      messagePayload.system = systemContent;
+    }
+  }
+
   // Add extended thinking config if enabled
   if (this.modelConfig?.extendedThinking) {
     messagePayload.thinking = {
@@ -232,6 +251,29 @@ window.MessageService.prototype._extractAIErrorMessage = function(errorStr) {
   // Ensure errorStr is a string to avoid "errorStr.includes is not a function"
   if (errorStr === null || errorStr === undefined) {
     return "AI couldn't generate a response due to an unknown error.";
+  }
+
+  // Handle object errors more gracefully
+  if (typeof errorStr === 'object') {
+    // Try to extract meaningful properties from the error object
+    const errorMessage = errorStr.message || errorStr.error || errorStr.description ||
+                         errorStr.details || errorStr.reason;
+
+    if (errorMessage) {
+      return this._extractAIErrorMessage(errorMessage); // Process the extracted message
+    }
+
+    // If we have no specific error message but have keys, show what's available
+    const keys = Object.keys(errorStr);
+    if (keys.length > 0) {
+      try {
+        // Try to stringify the object for more details
+        return `AI generation error: ${JSON.stringify(errorStr)}`;
+      } catch (e) {
+        // If stringify fails, provide keys at least
+        return `AI generation error: Object with properties [${keys.join(', ')}]`;
+      }
+    }
   }
 
   // Convert to string if it's not already a string

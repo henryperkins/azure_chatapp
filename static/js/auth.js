@@ -1119,8 +1119,17 @@ async function loginUser(username, password) {
     try {
       const hostname = window.location.hostname;
       const isSecure = (window.location.protocol === 'https:');
-      const sameSite = isSecure ? 'None' : 'Lax'; // Adjust SameSite based on context
-      const secureFlag = isSecure ? 'Secure; ' : '';
+
+      // When using SameSite=None, Secure attribute MUST be included
+      // For HTTP contexts, we'll use SameSite=Lax instead for better compatibility
+      let sameSite, secureFlag;
+      if (isSecure) {
+        sameSite = 'None';
+        secureFlag = 'Secure; '; // Always include Secure with SameSite=None
+      } else {
+        sameSite = 'Lax';
+        secureFlag = ''; // No Secure flag for HTTP
+      }
 
       // Set Cookies
       document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
