@@ -3,19 +3,11 @@ export default {
   darkMode: 'class',
   content: [
     './static/**/*.{html,js}',
-    '../backend/**/*.html',
-    './static/css/*.css',
+    '../backend/**/*.html' 
   ],
   theme: {
     extend: {
-      animation: {
-        'spin-slow': 'spin 3s linear infinite',
-        'slide-in': 'slideIn 0.2s ease-out forwards',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'count-up': 'countUp 0.3s ease-out',
-        'fade-in': 'fadeIn 0.3s ease-in-out forwards',
-        'fade-in-slow': 'fadeIn 0.5s ease-in-out forwards'
-      },
+      // Keyframes moved to CSS file
       keyframes: {
         slideIn: {
           from: { opacity: '0', transform: 'translateY(-10px)' },
