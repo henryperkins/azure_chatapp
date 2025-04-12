@@ -212,13 +212,13 @@ async def create_knowledge_base(
 
 
 async def ensure_project_has_knowledge_base(
-    project_id: UUID, 
+    project_id: UUID,
     db: AsyncSession,
     user_id: Optional[int] = None
 ) -> KnowledgeBase:
     """Ensures a project has an active knowledge base"""
     project = await _validate_user_and_project(project_id, user_id, db)
-    
+
     if project.knowledge_base_id:
         kb = await db.get(KnowledgeBase, project.knowledge_base_id)
         if kb and not kb.is_active:
@@ -226,7 +226,7 @@ async def ensure_project_has_knowledge_base(
             await save_model(db, kb)
             logger.info(f"Reactivated knowledge base {kb.id} for project {project_id}")
         return kb
-    
+
     # Create new knowledge base
     kb = await create_knowledge_base(
         name=f"{project.name} Knowledge Base",
@@ -250,11 +250,11 @@ async def upload_file_to_project(
     """Upload and process a file for a project"""
     # Validate access and get KB
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
-    
+
     # Process file info
     file_info = await _process_upload_file_info(file)
     contents = await file.read()
-    
+
     # Validate size
     config = KBConfig.get()
     if len(contents) > config["max_file_bytes"]:
@@ -397,7 +397,7 @@ async def search_project_context(
 
     # Get vector DB
     model_name = (
-        project.knowledge_base.embedding_model 
+        project.knowledge_base.embedding_model
         if project.knowledge_base else None
     )
     vector_db = await VectorDBManager.get_for_project(
@@ -666,7 +666,7 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
         .values(use_knowledge_base=False)
         .returning(Conversation.id)
     )
-    
+
     fixed_convs = len(conv_result.scalars().all())
 
     await db.commit()
@@ -722,7 +722,7 @@ async def get_project_files_stats(
     db: AsyncSession
 ) -> Dict[str, Any]:
     """Get statistics about files in a project including processing status.
-    
+
     Returns:
         Dictionary containing:
         - total_files: Total number of files in project
@@ -778,7 +778,7 @@ async def list_knowledge_bases(
     query = select(KnowledgeBase)
     if active_only:
         query = query.where(KnowledgeBase.is_active.is_(True))
-    
+
     if skip > 0:
         query = query.offset(skip)
     if limit > 0:
@@ -786,7 +786,7 @@ async def list_knowledge_bases(
 
     result = await db.execute(query)
     kbs = result.scalars().all()
-    
+
     return [
         {
             "id": str(kb.id),
@@ -867,7 +867,7 @@ async def toggle_project_kb(
     """Enable/disable knowledge base for a project"""
     if db is None:
         raise ValueError("Database session is required")
-        
+
     project = await _validate_user_and_project(project_id, user_id, db)
     if not project.knowledge_base_id:
         raise HTTPException(
@@ -887,37 +887,61 @@ async def toggle_project_kb(
         "knowledge_base_active": enable,
         "knowledge_base_id": str(kb.id),
     }
-    
-    @handle_service_errors("Error listing project files")
-    async def get_project_file_list(
-        project_id: UUID,
-        user_id: Optional[int],
-        db: AsyncSession,
-        skip: int = 0,
-        limit: int = 100,
-        file_type: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        List files belonging to a project, with optional filtering and pagination.
-        """
-        # Validate user and project
-        project = await _validate_user_and_project(project_id, user_id, db)
-    
-        # Build query
-        query = select(ProjectFile).where(ProjectFile.project_id == project_id)
-    
-        if file_type:
-            query = query.where(ProjectFile.file_type == file_type)
-    
-        if skip > 0:
-            query = query.offset(skip)
-        if limit > 0:
-            query = query.limit(limit)
-    
-        result = await db.execute(query)
-        files = result.scalars().all()
-    
-        # Transform file records
-        file_list = [extract_file_metadata(f, include_token_count=True) for f in files]
-    
-        return {"files": file_list}
+
+async def get_project_file_list(
+    project_id: UUID,
+    user_id: UUID,
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    file_type: Optional[str] = None,
+):
+    """
+    Retrieve a list of files for a specific project with pagination and optional filtering.
+
+    Args:
+        project_id: UUID of the project
+        user_id: UUID of the user requesting the files (for access control)
+        db: Database session
+        skip: Number of items to skip for pagination
+        limit: Maximum number of items to return
+        file_type: Optional filter for file type
+
+    Returns:
+        Dictionary containing the list of files and pagination metadata
+    """
+    from services.project_service import validate_project_access
+    from models.file import File
+    from sqlalchemy import select, func
+
+    # Validate user has access to the project
+    await validate_project_access(project_id, user_id, db)
+
+    # Build query for files associated with this project
+    query = select(File).where(File.project_id == project_id)
+
+    # Apply file type filter if specified
+    if file_type:
+        query = query.where(File.file_type == file_type)
+
+    # Get total count (for pagination)
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.execute(count_query)
+    total_count = total.scalar() or 0
+
+    # Apply pagination
+    query = query.offset(skip).limit(limit).order_by(File.created_at.desc())
+
+    # Execute query
+    result = await db.execute(query)
+    files = result.scalars().all()
+
+    # Format response
+    return {
+        "files": [file.to_dict() for file in files],
+        "pagination": {
+            "total": total_count,
+            "skip": skip,
+            "limit": limit
+        }
+    }
