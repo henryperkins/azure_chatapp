@@ -129,8 +129,9 @@ export default {
         '4xl': '2560px',
       },
       boxShadow: {
-        xs: '0 1px 2px -1px rgb(0 0 0 / 0.1)',
-        sm: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+        '2xs': '0 1px 2px -1px rgb(0 0 0 / 0.1)',
+        xs: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+        sm: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
         card: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
         'card-hover': '0 4px 6px -1px rgb(0 0 0 / 0.1)',
       },
@@ -138,6 +139,14 @@ export default {
         card: '1px',
       },
       borderRadius: {
+        xs: '0.125rem',
+        sm: '0.25rem',
+        md: '0.375rem',
+        lg: '0.5rem',
+        xl: '0.75rem',
+        '2xl': '1rem',
+        '3xl': '1.5rem',
+        '4xl': '2rem',
         card: '0.5rem',
         'empty-state': '0.75rem',
       }
