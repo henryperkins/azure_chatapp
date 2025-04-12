@@ -137,6 +137,8 @@
     _bindEvents() {
       this._bindFilterEvents();
       this._bindCreateProjectButton();
+      // Add event delegation for project card clicks
+      this._bindProjectCardEvents();
     }
 
     _setupCustomization() {
@@ -146,18 +148,28 @@
 
     _toggleListViewVisibility(show) {
       const listView = document.getElementById('projectListView');
-      const detailsView = document.getElementById('projectDetailsView');
+      // const detailsView = document.getElementById('projectDetailsView'); // REMOVE - Let app.js handle details view
 
       if (listView) {
         listView.classList.toggle('hidden', !show);
-        listView.classList.toggle('flex-1', show);
+        listView.classList.toggle('flex-1', show); // Ensure layout class is toggled correctly
+        console.log(`[ProjectListComponent] Toggled projectListView visibility: ${show ? 'visible' : 'hidden'}`);
+      } else {
+        console.warn('[ProjectListComponent] projectListView element not found for visibility toggle.');
       }
 
-      if (detailsView) detailsView.classList.toggle('hidden', show);
+      // REMOVED - Let app.js handle details view
+      // if (detailsView) {
+      //   detailsView.classList.toggle('hidden', show);
+      //   console.log(`[ProjectListComponent] Toggled projectDetailsView visibility: ${show ? 'hidden' : 'visible'}`);
+      // } else {
+      //    console.warn('[ProjectListComponent] projectDetailsView element not found for visibility toggle.');
+      // }
 
-      if (this.element) {
-        this.element.style.display = show ? 'grid' : 'none';
-      }
+      // This part seems redundant if listView itself is the container
+      // if (this.element) {
+      //   this.element.style.display = show ? 'grid' : 'none';
+      // }
     }
 
     _ensureContainerVisibility() {
@@ -237,13 +249,12 @@
         return;
       }
 
-      const fragment = document.createDocumentFragment();
       filteredProjects.forEach(project => {
         const card = this._createProjectCard(project);
-        if (card) fragment.appendChild(card);
+        if (card) {
+          this.element.appendChild(card);
+        }
       });
-
-      this.element.appendChild(fragment);
       if (this.messageEl) this.messageEl.classList.add("hidden");
     }
 
@@ -263,237 +274,23 @@
     }
 
     _createProjectCard(project) {
-      if (!project?.id) {
-        console.error('Invalid project data:', project);
-        return null;
-      }
-
       const card = document.createElement('div');
-      card.className = this._getCardClasses(project);
+      card.className = 'project-card bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer';
       card.dataset.projectId = project.id;
 
-      this._addCardHeader(card, project);
-      this._addCardContent(card, project);
-      this._addCardFooter(card, project);
-
-      card.addEventListener('click', () => this.onViewProject(project.id));
-
-      return card;
-    }
-
-    _getCardClasses(project) {
-      const theme = project.theme || this.state.cardCustomization.theme;
-      return [
-        'project-card',
-        'flex',
-        'flex-col',
-        project.pinned ? 'project-card-pinned' : 'project-card-unpinned',
-        project.archived ? 'project-card-archived' : '',
-        `project-card-theme-${theme}`
-      ].join(' ');
-    }
-
-    _addCardHeader(card, project) {
-      const header = document.createElement('div');
-      header.className = 'flex justify-between mb-2';
-
-      const title = document.createElement('h3');
-      title.className = 'text-lg font-semibold';
-      title.textContent = project.name;
-
-      const status = document.createElement('div');
-      status.className = this._getStatusClasses(project);
-      status.textContent = this._getStatusText(project);
-
-      header.appendChild(title);
-      header.appendChild(status);
-      card.appendChild(header);
-    }
-
-    _getStatusClasses(project) {
-      const base = 'text-xs ml-2 px-2 py-1 rounded-full';
-
-      if (project.archived) return `${base} bg-gray-100 text-gray-600`;
-      if (project.pinned) return `${base} bg-yellow-100 text-yellow-700`;
-      return `${base} bg-blue-100 text-blue-700`;
-    }
-
-    _getStatusText(project) {
-      if (project.archived) return 'Archived';
-      if (project.pinned) return 'Pinned';
-      return 'Active';
-    }
-
-    _addCardContent(card, project) {
-      if (this.state.cardCustomization.showDescription) {
-        this._addDescription(card, project);
-      }
-
-      if (this.state.cardCustomization.showBadges) {
-        this._addBadges(card, project);
-      }
-
-      if (this.state.cardCustomization.showTokens) {
-        this._addTokenUsage(card, project);
-      }
-    }
-
-    _addDescription(card, project) {
-      const desc = document.createElement('p');
-      desc.className = 'text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2';
-      desc.textContent = project.description || 'No description';
-      card.appendChild(desc);
-    }
-
-    _addBadges(card, project) {
-      const badges = this._getAllBadges(project);
-      if (badges.length === 0) return;
-
-      const container = document.createElement('div');
-      container.className = 'project-card-badges';
-
-      badges.forEach(badge => {
-        container.appendChild(this._createBadgeElement(badge));
-      });
-
-      card.appendChild(container);
-    }
-
-    _getAllBadges(project) {
-      const globalBadges = this.state.cardCustomization.globalBadges || [];
-      const projectBadges = project.badges || [];
-      return [...globalBadges, ...projectBadges];
-    }
-
-    _createBadgeElement(badge) {
-      const element = document.createElement('span');
-      element.className = `project-card-badge project-card-badge-${badge.style || this.state.cardCustomization.defaultBadgeStyle}`;
-
-      if (badge.icon) {
-        element.textContent = `${badge.icon} ${badge.text}`;
-      } else {
-        element.textContent = badge.text;
-      }
-
-      return element;
-    }
-
-    _addTokenUsage(card, project) {
-      const usage = project.token_usage || 0;
-      const max = project.max_tokens || 0;
-      const percent = max > 0 ? Math.min(100, (usage / max) * 100).toFixed(1) : 0;
-
-      const wrapper = document.createElement('div');
-      wrapper.className = 'mb-2';
-
-      const header = document.createElement('div');
-      header.className = 'flex justify-between mb-1 text-xs';
-      header.innerHTML = `
-        <span>Tokens: ${this._formatNumber(usage)} / ${this._formatNumber(max)}</span>
-        <span>${percent}%</span>
+      // Add project name, description, etc.
+      card.innerHTML = `
+        <div>
+          <h3 class="text-lg font-semibold mb-2 truncate">${project.name || 'Unnamed Project'}</h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">${project.description || 'No description'}</p>
+        </div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-auto pt-2 border-t border-gray-200 dark:border-gray-600">
+          <span>Updated: ${new Date(project.updated_at).toLocaleDateString()}</span>
+          ${project.pinned ? '<span class="ml-2">📌</span>' : ''}
+        </div>
       `;
 
-      const progress = document.createElement('div');
-      progress.className = 'progress-outer';
-
-      const bar = document.createElement('div');
-      bar.className = 'progress-inner h-full transition-all duration-500 ease-out';
-      bar.style.width = `${percent}%`;
-
-      progress.appendChild(bar);
-      wrapper.appendChild(header);
-      wrapper.appendChild(progress);
-      card.appendChild(wrapper);
-    }
-
-    _formatNumber(num) {
-      return num?.toLocaleString() || '0';
-    }
-
-    _addCardFooter(card, project) {
-      const footer = document.createElement('div');
-      footer.className = 'flex justify-between mt-auto pt-3';
-
-      const date = document.createElement('div');
-      date.className = 'text-xs text-gray-500';
-      date.textContent = `Created ${this._formatDate(project.created_at)}`;
-
-      const actions = document.createElement('div');
-      actions.className = 'flex gap-1';
-
-      actions.appendChild(this._createViewButton(project.id));
-      actions.appendChild(this._createBadgeButton(project.id));
-      actions.appendChild(this._createDeleteButton(project));
-
-      footer.appendChild(date);
-      footer.appendChild(actions);
-      card.appendChild(footer);
-    }
-
-    _formatDate(dateString) {
-      if (!dateString) return 'unknown date';
-
-      try {
-        return new Date(dateString).toLocaleDateString();
-      } catch {
-        return dateString;
-      }
-    }
-
-    _createViewButton(projectId) {
-      return this._createActionButton({
-        className: 'text-blue-600 hover:text-blue-800',
-        icon: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
-        onClick: (e) => {
-          e.stopPropagation();
-          this.onViewProject(projectId);
-        }
-      });
-    }
-
-    _createBadgeButton(projectId) {
-      return this._createActionButton({
-        className: 'text-green-600 hover:text-green-800',
-        icon: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z',
-        onClick: (e) => {
-          e.stopPropagation();
-          this._showAddBadgeDialog(projectId);
-        }
-      });
-    }
-
-    _createDeleteButton(project) {
-      return this._createActionButton({
-        className: 'text-red-600 hover:text-red-800',
-        icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
-        onClick: (e) => {
-          e.stopPropagation();
-          this._confirmDelete(project);
-        }
-      });
-    }
-
-    _createActionButton({ className, icon, onClick }) {
-      const button = document.createElement('button');
-      button.className = `p-1 ${className} transition-colors duration-150`;
-
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('class', 'h-4 w-4');
-      svg.setAttribute('fill', 'none');
-      svg.setAttribute('viewBox', '0 0 24 24');
-      svg.setAttribute('stroke', 'currentColor');
-
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('stroke-linejoin', 'round');
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('d', icon);
-
-      svg.appendChild(path);
-      button.appendChild(svg);
-      button.addEventListener('click', onClick);
-
-      return button;
+      return card;
     }
 
     _updateProjectCard(projectId) {
@@ -958,6 +755,60 @@
 
     _isValidTheme(themeId) {
       return this.availableThemes.some(theme => theme.id === themeId);
+    }
+
+    _bindProjectCardEvents() {
+      if (!this.element) return;
+
+      this.element.addEventListener('click', (event) => {
+        const projectCard = event.target.closest('.project-card'); // Assuming project cards have this class
+        if (!projectCard) return;
+
+        const projectId = projectCard.dataset.projectId;
+        if (!projectId) return;
+
+        // Check if a specific action button within the card was clicked
+        const viewButton = event.target.closest('[data-action="view-project"]');
+        const pinButton = event.target.closest('[data-action="pin-project"]');
+        const archiveButton = event.target.closest('[data-action="archive-project"]');
+        const editButton = event.target.closest('[data-action="edit-project"]');
+
+        if (viewButton || !event.target.closest('button, a')) { // Treat click on card itself as view
+          if (this.onViewProject && typeof this.onViewProject === 'function') {
+            event.preventDefault();
+            this.onViewProject(projectId);
+          } else if (window.projectManager && window.projectManager.loadProjectDetails) {
+             event.preventDefault();
+             // Hide list view, show details view (can be handled by listener for projectLoaded event)
+             this._toggleListViewVisibility(false);
+             window.projectManager.loadProjectDetails(projectId);
+          }
+        } else if (pinButton) {
+           event.preventDefault();
+           if (window.projectManager && window.projectManager.togglePinProject) {
+             window.projectManager.togglePinProject(projectId).then(() => {
+               // Optionally refresh just this card or the list
+               this._loadProjectsThroughManager(); // Reload all for simplicity
+             }).catch(err => console.error('Error pinning project:', err));
+           }
+        } else if (archiveButton) {
+           event.preventDefault();
+           if (window.projectManager && window.projectManager.toggleArchiveProject) {
+             window.projectManager.toggleArchiveProject(projectId).then(() => {
+                this._loadProjectsThroughManager(); // Reload all
+             }).catch(err => console.error('Error archiving project:', err));
+           }
+        } else if (editButton) {
+            event.preventDefault();
+            // Assuming a modal or form is shown by projectModal.js or similar
+            if (window.ProjectModal && typeof window.ProjectModal.showEditForm === 'function') {
+                window.ProjectModal.showEditForm(projectId);
+            } else {
+                console.warn('Edit project function not found');
+            }
+        }
+        // Add more actions as needed (e.g., delete)
+      });
     }
   }
 
