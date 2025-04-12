@@ -1,6 +1,6 @@
 export default {
   plugins: {
-    '@tailwindcss': {},
-    'autoprefixer': {},
+    '@tailwindcss/postcss': {},
+    // autoprefixer not needed in Tailwind v4 as it uses Lightning CSS
   }
 }

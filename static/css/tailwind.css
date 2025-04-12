@@ -3,14 +3,44 @@
  * Main CSS file with Tailwind CSS v4 configuration
  */
 
-/* Variant definitions */
-@custom-media --dark (prefers-color-scheme: dark);
-@custom-media --motion-safe (prefers-reduced-motion: no-preference);
-@custom-media --motion-reduce (prefers-reduced-motion: reduce);
-
 /* Import Tailwind CSS - new v4 syntax */
 @import "tailwindcss";
 @import "daisyui";
+
+/* Container query support */
+@container (min-width: 640px) {
+  .drag-zone {
+    padding: 2rem;
+  }
+}
+
+/* Modern :has() selector */
+.nav-item:has(.active) {
+  border-left: 2px solid var(--color-primary);
+}
+
+/* Media query ranges */
+@media (480px <= width < 768px) {
+  .project-card {
+    padding: 1.5rem;
+  }
+}
+
+/* Text wrap balance */
+.modal-content {
+  text-wrap: balance;
+}
+
+/* Scoped custom properties */
+@scope (.dark-theme) {
+  :scope {
+    --surface-color: var(--color-gray-900);
+  }
+  
+  .project-card {
+    background: var(--surface-color);
+  }
+}
 /* Theme configuration using CSS variables via @theme instead of JavaScript */
 @theme {
   /* Colors */
@@ -181,15 +211,46 @@
 @layer components {
   .project-card {
     @apply flex flex-col rounded-sm border border-base-200 bg-base-100 p-4 shadow-xs;
-    transition: all var(--default-transition-duration) var(--default-transition-timing-function);
-    
+    /* Open-props style transitions */
+    transition: 
+      transform 0.2s ease-out,
+      box-shadow 0.2s ease-out;
+  
     @variant hover {
       @apply shadow-sm;
     }
-    
+  
     @variant dark {
       @apply border-base-300 bg-base-200;
     }
+  }
+
+  /* 3D transform utilities */
+  .modal-content {
+    transform: translateZ(10px);
+    perspective: 1000px;
+  }
+
+  /* Forced color mode adjustments */
+  @media (forced-colors: active) {
+    button {
+      border: 1px solid transparent;
+    }
+  }
+
+  /* Size-based utilities */
+  .drag-drop-icon {
+    size: theme('size.16');
+  }
+
+  /* Viewport-based typography */
+  .project-title {
+    font-size: clamp(1.25rem, 5vw, 2rem);
+  }
+
+  /* Dynamic viewport units */
+  .modal-container {
+    min-height: 100dvh;
   }
 }
 
@@ -221,12 +282,13 @@
 
 .project-card-theme-success {
   border-color: var(--color-success-200);
-  background-color: var(--color-success-50);
+  /* Simplified color-mix syntax */
+  background-color: color-mix(in oklch, var(--color-success-900) 20%, transparent);
 }
 
 .dark .project-card-theme-success {
   border-color: var(--color-success-800);
-  background-color: color-mix(in oklab, var(--color-success-900) 30%, transparent);
+  background-color: color-mix(in oklch, var(--color-success-900) 30%, transparent);
 }
 
 .project-card-theme-warning {
