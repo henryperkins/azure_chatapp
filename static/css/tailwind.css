@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* Base Typography */
 @layer base {
@@ -101,8 +99,8 @@
 @layer components {
   /* Primary button */
   .btn-primary {
-    @apply px-4 py-2 bg-primary-600 text-white rounded-lg 
-           hover:bg-primary-700 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 
+    @apply px-4 py-2 bg-primary-600 text-white rounded-sm 
+           hover:bg-primary-700 focus:ring-3 focus:ring-primary-500 focus:ring-opacity-50 
            transition-colors duration-200 font-medium text-sm
            dark:bg-primary-500 dark:hover:bg-primary-400 dark:focus:ring-primary-400;
   }
@@ -399,7 +397,7 @@
   
   /* Notification styles */
   .notification {
-    @apply p-3 rounded-lg shadow-lg mb-2 flex items-center text-sm;
+    @apply p-3 rounded-sm shadow-sm mb-2 flex items-center text-sm;
   }
   
   .notification.success {
@@ -540,6 +538,12 @@
 /* SVG icon handling */
 svg {
   @apply fill-current stroke-current;
+}
+
+@utility container {
+  max-width: 100%;
+  margin-inline: auto;
+  padding-inline: 2rem;
 }
 
 /* Dark mode specific improvements */
