@@ -764,25 +764,30 @@
             <!-- Tab navigation -->
             <div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
               <div class="flex whitespace-nowrap min-w-full -mb-px" role="tablist">
-                <button id="detailsTabBtn" type="button" class="project-tab-btn active" role="tab" aria-selected="true"
-                  aria-controls="detailsTab" tabindex="0" data-tab="details">
+                <button id="detailsTabBtn" type="button"
+                  class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 active text-blue-600 dark:text-blue-400 border-blue-600"
+                  role="tab" aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
                   Details
                 </button>
-                <button id="filesTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
-                  aria-controls="filesTab" tabindex="-1" data-tab="files">
+                <button id="filesTabBtn" type="button"
+                  class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+                  role="tab" aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
                   Files
                 </button>
-                <button id="conversationsTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
-                  aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
+                <button id="conversationsTabBtn" type="button"
+                  class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+                  role="tab" aria-selected="false" aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
                   <span class="hidden xs:inline">Conversations</span>
                   <span class="xs:hidden">Convos</span>
                 </button>
-                <button id="artifactsTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
-                  aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
+                <button id="artifactsTabBtn" type="button"
+                  class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+                  role="tab" aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
                   Artifacts
                 </button>
-                <button id="knowledgeTabBtn" type="button" class="project-tab-btn" role="tab" aria-selected="false"
-                  aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
+                <button id="knowledgeTabBtn" type="button"
+                  class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+                  role="tab" aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
                   <span class="hidden xs:inline">Knowledge Base</span>
                   <span class="xs:hidden">KB</span>
                 </button>
@@ -1471,111 +1476,152 @@
     import '/static/js/knowledgeBaseState.js';
     import '/static/js/projectListComponent.js';
     import '/static/js/sidebar.js';
+import { ProjectDetailsComponent } from '/static/js/projectDetailsComponent.js'; // Import the class
+import '/static/js/sidebar.js';
 
-    // Centralized initialization after the DOM is ready
-    document.addEventListener('DOMContentLoaded', async () => {
-      console.log('[index.html] Document loaded, initializing application...');
+// Centralized initialization after the DOM is ready
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[index.html] Document loaded, initializing application...');
 
-      // 1) Initialize auth
-      try {
-        await auth.init();
-        console.log('[Auth] Initialization complete.');
+  // 1) Initialize auth
+  try {
+    await auth.init();
+    console.log('[Auth] Initialization complete.');
 
-        // Listen for auth state changes
-        document.addEventListener('authStateChanged', e => {
-          const { authenticated } = e.detail;
-          const loginRequiredMessage = document.getElementById('loginRequiredMessage');
-          const projectManagerPanel = document.getElementById('projectManagerPanel');
+    // Listen for auth state changes
+    document.addEventListener('authStateChanged', e => {
+      const { authenticated } = e.detail;
+      const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+      const projectManagerPanel = document.getElementById('projectManagerPanel');
 
-          if (authenticated) {
-            if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
-            if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
-            if (window.projectManager) {
-              window.projectManager.loadProjects('all');
-            }
-          } else {
-            if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
-            if (projectManagerPanel) projectManagerPanel.classList.add('hidden');
-          }
-        });
-
-      } catch (err) {
-        console.error('[Auth] Initialization failed:', err);
-      }
-
-      // 2) Dark mode toggle logic
-      initDarkModeToggle();
-
-      // 3) Setup tab keyboard navigation
-      setupTabKeyboardNavigation();
-
-      // 4) Show login button handler
-      const showLoginBtn = document.getElementById('showLoginBtn');
-      if (showLoginBtn) {
-        showLoginBtn.addEventListener('click', () => {
-          document.getElementById('authButton').click();
-        });
-      }
-
-      // 5) Initialize Project List component
-      //   (the ProjectListComponent constructor was imported above)
-      window.projectListComponent = new ProjectListComponent({
-        elementId: "projectList", // Corrected ID from projectListView to projectList
-        onViewProject: function (projectId) {
-          console.log('[Index] onViewProject triggered for project:', projectId);
-          // Ensure projectManager and loadProjectDetails are available
-          if (window.projectManager && typeof window.projectManager.loadProjectDetails === 'function') {
-            // Show details view, hide list view
-            const listView = document.getElementById('projectListView');
-            const detailsView = document.getElementById('projectDetailsView');
-            if (listView) listView.classList.add('hidden');
-            if (detailsView) detailsView.classList.remove('hidden');
-
-            window.projectManager.loadProjectDetails(projectId)
-              .then(project => {
-                console.log('[Index] Project details loaded successfully:', project?.id);
-                // Potentially update breadcrumbs or title here if needed
-                const projectTitleEl = document.getElementById('projectTitle');
-                if (projectTitleEl && project) {
-                    projectTitleEl.textContent = project.name;
-                }
-              })
-              .catch(err => {
-                console.error('[Index] Failed to load project details via projectManager:', err);
-                window.showNotification?.('Error loading project details. Please try again.', 'error');
-                 // Optionally switch back to list view on error
-                if (listView) listView.classList.remove('hidden');
-                if (detailsView) detailsView.classList.add('hidden');
-              });
-          } else {
-            console.error('[Index] projectManager or loadProjectDetails is not available.');
-            window.showNotification?.('Cannot load project details component.', 'error');
-          }
+      if (authenticated) {
+        if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+        if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
+        if (window.projectManager) {
+          window.projectManager.loadProjects('all');
         }
-      });
-
-      // React to projectsLoaded event to render
-      document.addEventListener('projectsLoaded', event => {
-        const projects = event.detail?.data?.projects;
-        if (projects && window.projectListComponent) {
-          console.log('[Index] Rendering projects; Count:', projects.length);
-          window.projectListComponent.renderProjects(projects);
-        }
-      });
-
-      console.log('[index.html] Initialization steps completed.');
+      } else {
+        if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
+        if (projectManagerPanel) projectManagerPanel.classList.add('hidden');
+      }
     });
 
+  } catch (err) {
+    console.error('[Auth] Initialization failed:', err);
+  }
+
+  // 2) Dark mode toggle logic
+  initDarkModeToggle();
+
+  // 3) Setup tab keyboard navigation
+  setupTabKeyboardNavigation();
+
+  // 4) Show login button handler
+  const showLoginBtn = document.getElementById('showLoginBtn');
+  if (showLoginBtn) {
+    showLoginBtn.addEventListener('click', () => {
+      document.getElementById('authButton').click();
+    });
+  }
+
+  // 5) Initialize Project List component
+  window.projectListComponent = new ProjectListComponent({
+    elementId: "projectList",
+    onViewProject: function (projectId) {
+      console.log('[Index] onViewProject triggered for project:', projectId);
+      if (window.projectManager && typeof window.projectManager.loadProjectDetails === 'function') {
+        const listView = document.getElementById('projectListView');
+        const detailsView = document.getElementById('projectDetailsView');
+        if (listView) listView.classList.add('hidden');
+        if (detailsView) detailsView.classList.remove('hidden');
+
+        window.projectManager.loadProjectDetails(projectId)
+          .then(project => {
+            console.log('[Index] Project details loaded successfully:', project?.id);
+            const projectTitleEl = document.getElementById('projectTitle');
+            if (projectTitleEl && project) {
+              projectTitleEl.textContent = project.name;
+            }
+            // Ensure ProjectDetails component is ready/rendered before potentially interacting
+            if (window.projectDetails && typeof window.projectDetails.renderProject === 'function') {
+               window.projectDetails.renderProject(project); // Pass project data to details component
+            } else {
+               console.warn('[Index] window.projectDetails not ready when trying to render project.');
+               // Might need a slight delay or event listener if details component loads asynchronously
+            }
+          })
+          .catch(err => {
+            console.error('[Index] Failed to load project details via projectManager:', err);
+            window.showNotification?.('Error loading project details. Please try again.', 'error');
+            if (listView) listView.classList.remove('hidden');
+            if (detailsView) detailsView.classList.add('hidden');
+          });
+      } else {
+        console.error('[Index] projectManager or loadProjectDetails is not available.');
+        window.showNotification?.('Cannot load project details component.', 'error');
+      }
+    }
+  });
+
+  // 6) Initialize Project Details component AFTER DOM is ready
+  console.log('[Index] Attempting to instantiate ProjectDetailsComponent...');
+  // --- Add dependency checks ---
+  console.log('[Index] Checking dependencies for ProjectDetailsComponent:');
+  console.log(`  - typeof ProjectDetailsComponent: ${typeof ProjectDetailsComponent}`);
+  console.log(`  - window.uiUtilsInstance available: ${!!window.uiUtilsInstance}`);
+  console.log(`  - window.projectManager available: ${!!window.projectManager}`);
+  console.log(`  - window.auth available: ${!!window.auth}`);
+  console.log(`  - window.showNotification available: ${!!window.showNotification}`);
+  // --- End dependency checks ---
+  try {
+    // Ensure dependencies are actually ready (simple check)
+    if (typeof ProjectDetailsComponent !== 'function' || !window.uiUtilsInstance || !window.projectManager || !window.auth || !window.showNotification) {
+       throw new Error('One or more dependencies for ProjectDetailsComponent are not ready.');
+    }
+
+    window.projectDetails = new ProjectDetailsComponent({
+      onBack: () => {
+        console.log('[Debug] Back button clicked, attempting to show project list.');
+        const listView = document.getElementById('projectListView');
+        const detailsView = document.getElementById('projectDetailsView');
+        if (listView) listView.classList.remove('hidden');
+        if (detailsView) detailsView.classList.add('hidden');
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete('projectId');
+        window.history.pushState({}, '', currentUrl);
+      },
+      utils: window.uiUtilsInstance,
+      projectManager: window.projectManager,
+      auth: window.auth,
+      notification: window.showNotification
+    });
+    console.log('[Index] Global window.projectDetails instantiated successfully.');
+  } catch (error) {
+    console.error('[Index] Error instantiating ProjectDetailsComponent:', error);
+  }
+
+
+  // React to projectsLoaded event to render
+  document.addEventListener('projectsLoaded', event => {
+    const projects = event.detail?.data?.projects;
+    if (projects && window.projectListComponent) {
+      console.log('[Index] Rendering projects; Count:', projects.length);
+      window.projectListComponent.renderProjects(projects);
+    }
+  });
+
+  console.log('[index.html] Initialization steps completed.');
+});
     function initDarkModeToggle() {
       const darkModeToggle = document.getElementById('darkModeToggle');
       const darkModeIcon = document.getElementById('darkModeIcon');
-      
+
       // Check for system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      
+
       // Get saved preference from localStorage
       const savedMode = localStorage.getItem('darkMode');
-      
+
       // Determine initial dark mode state
       const isDark = savedMode ? (savedMode === 'true') : prefersDark;
 
@@ -1587,7 +1633,7 @@
         // Toggle dark mode
         const newMode = !document.documentElement.classList.contains('dark');
         applyDarkMode(newMode);
-        
+
         // Save preference to localStorage
         localStorage.setItem('darkMode', newMode);
       });
@@ -1597,26 +1643,26 @@
         if (enableDark) {
           // Enable dark mode
           document.documentElement.classList.add('dark');
-          
+
           // Change icon to moon
-          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M20.354 15.354A9 9 0 1111.05 4.05 7 7 0 0020.354 15.354z" />`;
-          
+
           // Update button ARIA label
           darkModeToggle.setAttribute('aria-label', 'Switch to light mode');
         } else {
           // Disable dark mode
           document.documentElement.classList.remove('dark');
-          
+
           // Change icon to sun
-          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />`;
-          
+
           // Update button ARIA label
           darkModeToggle.setAttribute('aria-label', 'Switch to dark mode');
         }
       }
-      
+
       // Listen for system preference changes
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         // Only apply if user hasn't set a preference
