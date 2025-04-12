@@ -118,7 +118,7 @@
         // New: Ensure container visibility
         const container = document.getElementById("projectListView");
         if (container) container.classList.remove("hidden");
-        
+
         // Check if this is a direct call (like from auth.js after login)
         // where we need to load data through projectManager instead
         if (eventOrProjects && (eventOrProjects.forceRefresh || eventOrProjects.directCall)) {
@@ -136,7 +136,7 @@
             return;
           }
         }
-        
+
         const projects = this._extractProjects(eventOrProjects);
         this.state.projects = projects;
 
@@ -155,7 +155,7 @@
 
         // Enhanced filter handling
         const currentFilter = this.state.filter || 'all';
-        const filteredProjects = projects.filter(p => 
+        const filteredProjects = projects.filter(p =>
           currentFilter === 'all' ? true :
           currentFilter === 'pinned' ? p.pinned :
           currentFilter === 'archived' ? p.archived : true
@@ -186,13 +186,13 @@
 
       // Cache DOM nodes
       const noProjectsMsg = document.getElementById("noProjectsMessage");
-      
+
       // Clear existing content
       element.innerHTML = "";
 
       // Handle empty state
       if (filteredProjects.length === 0) {
-        const message = filteredProjects === this.state.projects ? 
+        const message = filteredProjects === this.state.projects ?
           currentFilter === 'all' ?
             'No projects available' :
             `No ${currentFilter} projects found` :
@@ -215,7 +215,7 @@
       // Atomic DOM update
       element.appendChild(fragment);
       if (noProjectsMsg) noProjectsMsg.classList.add("hidden");
-      
+
       // New: Force layout recalc if needed
       if (filteredProjects.length > 4) {
         element.offsetHeight; // Trigger reflow
@@ -340,18 +340,18 @@
               </svg>
             </button>
           </div>
-          
+
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Card Theme
             </label>
-            <select id="cardThemeSelect" class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <select id="cardThemeSelect" class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
               ${this.availableThemes.map(theme =>
         `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`
       ).join('')}
             </select>
           </div>
-          
+
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Card Content Display Priority
@@ -383,34 +383,34 @@
               </div>
             </div>
           </div>
-          
+
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Default Badge Style
             </label>
-            <select id="defaultBadgeStyleSelect" class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <select id="defaultBadgeStyleSelect" class="w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
               ${this.badgeStyles.map(style =>
         `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`
       ).join('')}
             </select>
           </div>
-          
+
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Custom Badge
             </label>
             <div class="flex mb-2">
-              <input type="text" id="badgeTextInput" placeholder="Badge text" 
-                     class="flex-1 px-3 py-2 border border-gray-300 rounded-l shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-              <select id="badgeStyleSelect" class="px-3 py-2 border-t border-b border-r border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+              <input type="text" id="badgeTextInput" placeholder="Badge text"
+                     class="flex-1 px-3 py-2 border border-gray-300 rounded-l shadow-xs focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
+              <select id="badgeStyleSelect" class="px-3 py-2 border-t border-b border-r border-gray-300 focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
                 ${this.badgeStyles.map(style =>
         `<option value="${style.id}">${style.name}</option>`
       ).join('')}
               </select>
             </div>
             <div class="flex mb-2">
-              <input type="text" id="badgeEmojiInput" placeholder="Optional emoji (e.g., 🚀, 🔥)" 
-                     class="w-24 px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+              <input type="text" id="badgeEmojiInput" placeholder="Optional emoji (e.g., 🚀, 🔥)"
+                     class="w-24 px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
               <div class="flex-1"></div>
               <button id="addBadgeBtn" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2">
                 Add Badge
@@ -420,13 +420,13 @@
               ℹ️ Badges will be added to all projects. You can add project-specific badges from each card.
             </p>
           </div>
-          
-          <div class="flex justify-end space-x-2 mt-6">
-            <button id="resetCustomizationBtn" 
+
+          <div class="flex justify-end gap-2 mt-6">
+            <button id="resetCustomizationBtn"
                     class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
               Reset to Default
             </button>
-            <button id="applyCustomizationBtn" 
+            <button id="applyCustomizationBtn"
                     class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
               Apply Changes
             </button>
@@ -709,14 +709,14 @@
       let card;
       if (window.uiUtilsInstance && window.uiUtilsInstance.createElement) {
         card = window.uiUtilsInstance.createElement("div", {
-          className: `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"} 
+          className: `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"}
                       ${project.archived ? "project-card-archived" : ""} ${themeClass}`,
           "data-project-id": project.id
         });
       } else {
         // Fallback implementation
         card = document.createElement('div');
-        card.className = `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"} 
+        card.className = `project-card flex flex-col ${project.pinned ? "project-card-pinned" : "project-card-unpinned"}
                           ${project.archived ? "project-card-archived" : ""} ${themeClass}`;
         card.dataset.projectId = project.id;
       }
@@ -846,8 +846,7 @@
         className: "text-xs text-gray-500",
         textContent: `Created ${window.uiUtilsInstance.formatDate(project.created_at)}`
       });
-
-      const actions = window.uiUtilsInstance.createElement("div", { className: "flex space-x-1" });
+const actions = window.uiUtilsInstance.createElement("div", { className: "flex gap-1" });
 
       // View button
       const viewBtn = window.uiUtilsInstance.createElement("button", {
@@ -855,7 +854,7 @@
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7
                      -1.274 4.057-5.064 7-9.542 7
                      -4.477 0-8.268-2.943-9.542-7z" />
@@ -872,7 +871,7 @@
         className: "p-1 text-green-600 hover:text-green-800 badge-project-btn",
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
           </svg>
         `,
@@ -887,7 +886,7 @@
         className: "p-1 text-red-600 hover:text-red-800 delete-project-btn",
         innerHTML: `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862
                      a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6
                      m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

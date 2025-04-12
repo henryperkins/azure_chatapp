@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tailwind v4 Migration Test</title>
+  <link rel="stylesheet" href="/static/dist/tailwind.css">
+  <script>
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    function toggleCollapse(id) {
+      const element = document.getElementById(id);
+      if (element.style.maxHeight === "0px" || !element.style.maxHeight) {
+        element.style.maxHeight = element.scrollHeight + "px";
+      } else {
+        element.style.maxHeight = "0px";
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 p-6">
+  <header class="mb-8">
+    <h1 class="text-3xl font-bold mb-2">Tailwind v4 Migration Test</h1>
+    <p class="mb-4">This page tests various components and utilities migrated to Tailwind v4.</p>
+    <button
+      onclick="toggleDarkMode()"
+      class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+    >
+      Toggle Dark Mode
+    </button>
+  </header>
+
+  <main class="space-y-8">
+    <!-- Shadow Utilities -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Shadow Utilities</h2>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-700 p-4 rounded-sm shadow-xs">
+          shadow-xs (was shadow-sm)
+        </div>
+        <div class="bg-white dark:bg-gray-700 p-4 rounded-sm shadow-sm">
+          shadow-sm (was shadow)
+        </div>
+        <div class="bg-white dark:bg-gray-700 p-4 rounded-sm shadow-md">
+          shadow-md (unchanged)
+        </div>
+        <div class="bg-white dark:bg-gray-700 p-4 rounded-sm shadow-lg">
+          shadow-lg (unchanged)
+        </div>
+      </div>
+    </section>
+
+    <!-- Border Radius -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Border Radius</h2>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="bg-blue-500 text-white p-4 rounded-xs">
+          rounded-xs
+        </div>
+        <div class="bg-blue-500 text-white p-4 rounded-sm">
+          rounded-sm (was rounded)
+        </div>
+        <div class="bg-blue-500 text-white p-4 rounded-md">
+          rounded-md
+        </div>
+        <div class="bg-blue-500 text-white p-4 rounded-lg">
+          rounded-lg
+        </div>
+        <div class="bg-blue-500 text-white p-4 rounded-full">
+          rounded-full
+        </div>
+      </div>
+    </section>
+
+    <!-- Focus States -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Focus States</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input
+          type="text"
+          placeholder="focus:outline-hidden (was focus:outline-none)"
+          class="p-2 border border-gray-300 dark:border-gray-600 rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 w-full"
+        >
+        <input
+          type="text"
+          placeholder="With explicit focus:ring-blue-500"
+          class="p-2 border border-gray-300 dark:border-gray-600 rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-full"
+        >
+      </div>
+    </section>
+
+    <!-- Spacing Utilities (gap vs space) -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Spacing Utilities</h2>
+
+      <h3 class="text-lg font-semibold mb-2">Using gap (new in v4)</h3>
+      <div class="flex gap-4 mb-4">
+        <div class="bg-green-500 text-white p-4 rounded-sm">Item 1</div>
+        <div class="bg-green-500 text-white p-4 rounded-sm">Item 2</div>
+        <div class="bg-green-500 text-white p-4 rounded-sm">Item 3</div>
+      </div>
+
+      <h3 class="text-lg font-semibold mb-2">Using space (may need review)</h3>
+      <div class="flex space-x-4 mb-4">
+        <div class="bg-yellow-500 text-white p-4 rounded-sm">Item 1</div>
+        <div class="bg-yellow-500 text-white p-4 rounded-sm">Item 2</div>
+        <div class="bg-yellow-500 text-white p-4 rounded-sm">Item 3</div>
+      </div>
+    </section>
+
+    <!-- Custom Utilities -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Custom Utilities (@utility)</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h3 class="text-lg font-semibold mb-2">Button Component</h3>
+          <button class="btn-primary">Button Primary</button>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold mb-2">Card Component</h3>
+          <div class="card">
+            <h4 class="font-medium mb-2">Card Title</h4>
+            <p class="text-sm">This is content inside a card component.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <h3 class="text-lg font-semibold mb-2">Collapsible Panel</h3>
+        <button
+          onclick="toggleCollapse('collapseExample')"
+          class="bg-blue-600 text-white px-4 py-2 rounded-sm mb-2"
+        >
+          Toggle Collapse
+        </button>
+        <div id="collapseExample" class="collapsible-panel bg-blue-100 dark:bg-blue-900 p-4 rounded-sm max-h-0">
+          <p>This content can be collapsed and expanded. The collapsible-panel utility handles the animation.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dark Mode -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Dark Mode</h2>
+      <p>Tailwind dark mode is functioning using the dark: variant and a custom dark variant with the .dark class.</p>
+
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-blue-100 dark:bg-blue-800 p-4 rounded-sm">
+          Dark mode background change
+        </div>
+        <div class="text-gray-800 dark:text-gray-200 p-4 bg-gray-200 dark:bg-gray-700 rounded-sm">
+          Dark mode text color change
+        </div>
+        <div class="border border-gray-300 dark:border-gray-600 p-4 rounded-sm">
+          Dark mode border color change
+        </div>
+      </div>
+    </section>
+
+    <!-- Variant Stacking -->
+    <section class="bg-white dark:bg-gray-800 p-4 rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Variant Stacking</h2>
+      <p class="mb-4">Testing proper variant stacking in dark mode with hover/focus (buttons and card hover effects)</p>
+
+      <button class="btn-primary mr-4">Hover Me (In Light/Dark)</button>
+
+      <div class="card mt-4 inline-block">
+        Hover over this card
+      </div>
+    </section>
+  </main>
+
+  <footer class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700 text-center text-sm text-gray-500 dark:text-gray-400">
+    Tailwind CSS v4 Migration Test - AzureChat Project
+  </footer>
+</body>
+</html>

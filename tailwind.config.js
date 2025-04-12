@@ -1,20 +1,11 @@
 /** @type {import('tailwindcss').Config} */
-import { colors } from 'tailwindcss/colors.js';
-
 export default {
   darkMode: 'class',
-
-  // The 'content' array tells Tailwind which files to scan for class names.
   content: [
-    './static/index.html',
-    './static/projects.html',
-    './static/js/*.js',
-    './static/css/*.css',
-    // If you have additional subdirectories or template files:
+    './static/**/*.{html,js}',
     '../backend/**/*.html',
-    // Adjust or add paths to match your project structure:
+    './static/css/*.css',
   ],
-
   theme: {
     extend: {
       animation: {
@@ -27,19 +18,18 @@ export default {
       },
       keyframes: {
         slideIn: {
-          'from': { opacity: '0', transform: 'translateY(-10px)' },
-          'to': { opacity: '1', transform: 'translateY(0)' }
+          from: { opacity: '0', transform: 'translateY(-10px)' },
+          to: { opacity: '1', transform: 'translateY(0)' }
         },
         countUp: {
-          'from': { opacity: '0.5', transform: 'translateY(5px)' },
-          'to': { opacity: '1', transform: 'translateY(0)' }
+          from: { opacity: '0.5', transform: 'translateY(5px)' },
+          to: { opacity: '1', transform: 'translateY(0)' }
         },
         fadeIn: {
-          'from': { opacity: '0' },
-          'to': { opacity: '1' }
+          from: { opacity: '0' },
+          to: { opacity: '1' }
         }
       },
-      // Add proper z-index values
       zIndex: {
         '60': '60',
         '70': '70',
@@ -57,7 +47,6 @@ export default {
         'slide': 'transform, opacity'
       },
       colors: {
-        // Primary color palette
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -66,24 +55,57 @@ export default {
           400: '#60a5fa',
           500: '#3b82f6',
           600: '#2563eb',
-          700: '#1d4ed8',
+          700: '1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
           DEFAULT: '#3b82f6',
         },
-        // Secondary color palette
         secondary: {
           DEFAULT: '#4F46E5',
           light: '#818CF8',
           dark: '#3730A3',
         },
-        // State colors
-        success: colors.green,
-        warning: colors.amber,
-        danger: colors.rose,
-        // Dark mode surface colors
+        success: {
+          DEFAULT: '#10B981',
+          50: '#ECFDF5',
+          100: '#D1FAE5',
+          200: '#A7F3D0',
+          300: '#6EE7B7',
+          400: '#34D399',
+          500: '#10B981',
+          600: '#059669',
+          700: '#047857',
+          800: '#065F46',
+          900: '#064E3B',
+        },
+        warning: {
+          DEFAULT: '#F59E0B',
+          50: '#FFFBEB',
+          100: '#FEF3C7',
+          200: '#FDE68A',
+          300: '#FCD34D',
+          400: '#FBBF24',
+          500: '#F59E0B',
+          600: '#D97706',
+          700: '#B45309',
+          800: '#92400E',
+          900: '#78350F',
+        },
+        danger: {
+          DEFAULT: '#EF4444',
+          50: '#FEF2F2',
+          100: '#FEE2E2',
+          200: '#FECACA',
+          300: '#FCA5A5',
+          400: '#F87171',
+          500: '#EF4444',
+          600: '#DC2626',
+          700: '#B91C1C',
+          800: '#991B1B',
+          900: '#7F1D1D',
+        },
         surface: {
-          DEFAULT: colors.white,
+          DEFAULT: '#ffffff',
           dark: '#111827',
           light: '#ffffff',
           hover: {
@@ -92,16 +114,16 @@ export default {
           }
         },
         border: {
-          DEFAULT: '#e5e7eb', // border-gray-200
-          dark: '#374151', // dark:border-gray-700
+          DEFAULT: '#e5e7eb',
+          dark: '#374151',
           hover: {
-            light: '#d1d5db', // border-gray-300
-            dark: '#4b5563' // border-gray-600
+            light: '#d1d5db',
+            dark: '#4b5563'
           }
         },
         skeleton: {
-          DEFAULT: '#f3f4f6', // bg-gray-100
-          dark: '#4b5563', // dark:bg-gray-700
+          DEFAULT: '#f3f4f6',
+          dark: '#4b5563',
         }
       },
       spacing: {
@@ -127,7 +149,5 @@ export default {
       }
     },
   },
-
-  // Load any official or custom plugins here.
   plugins: [],
 };
