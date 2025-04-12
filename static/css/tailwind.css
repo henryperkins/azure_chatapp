@@ -213,7 +213,7 @@
   /* Card components */
   .card {
     @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4
-           border border-gray-200 dark:border-gray-700
+           border border-gray-200/100 dark:border-gray-700/100
            hover:shadow-md transition-shadow duration-200;
   }
   
@@ -314,8 +314,11 @@
     @apply bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-400;
   }
   
+  .project-card-theme-primary.dark {
+    @apply bg-blue-900/30 border-blue-400;
+  }
   .project-card-theme-primary {
-    @apply bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400;
+    @apply bg-blue-50 border-blue-500;
   }
   
   .project-card-theme-success {
