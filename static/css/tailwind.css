@@ -112,7 +112,7 @@
   /* Primary button */
   .btn-primary {
     @apply px-4 py-2 bg-primary-600 text-white rounded-sm 
-           hover:bg-primary-700 focus:ring-3 focus:ring-primary-500 focus:ring-opacity-50 
+           hover:bg-primary-700 focus:ring-3 focus:ring-primary-500/50 
            transition-colors duration-200 font-medium text-sm
            dark:bg-primary-500 dark:hover:bg-primary-400 dark:focus:ring-primary-400;
   }
