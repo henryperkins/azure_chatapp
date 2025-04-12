@@ -1,3 +1,424 @@
+/* Collapsible panels */
+@utility collapsible-panel {
+  @apply transition-all duration-300 ease-in-out overflow-hidden;
+  will-change: max-height;
+}
+@utility btn-primary {
+  /* Primary button */
+  @apply px-4 py-2 bg-primary-600 text-white rounded-sm 
+           hover:bg-primary-700 focus:ring-3 focus:ring-primary-500/50 focus:ring-offset-2
+           transition-colors duration-200 font-medium text-sm
+           dark:bg-primary-500 dark:hover:bg-primary-400 dark:focus:ring-primary-400;
+}
+@utility btn-secondary {
+  /* Secondary button */
+  @apply px-4 py-2 bg-gray-600 text-white rounded-lg
+           hover:bg-gray-700 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50
+           transition-colors duration-200 font-medium text-sm;
+}
+@utility btn-outline {
+  /* Outline button */
+  @apply px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg
+           hover:bg-gray-50 dark:hover:bg-gray-700 focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600
+           transition-colors duration-200 font-medium text-sm;
+}
+@utility btn-danger {
+  /* Danger button */
+  @apply px-4 py-2 bg-red-600 text-white rounded-lg
+           hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-opacity-50
+           transition-colors duration-200 font-medium text-sm;
+}
+@utility btn-sm {
+  /* Small button variant */
+  @apply px-3 py-1.5 text-xs min-w-[44px] min-h-[44px];
+}
+@utility content-item {
+  /* List items */
+  @apply min-h-[44px] px-4 py-3;
+
+  /* Responsive content hiding/showing based on screen size */
+
+  /* File and content items */
+  @apply flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600;
+}
+@utility sidebar-item {
+  /* List item touch targets */
+  @apply min-h-[48px];
+}
+@utility project-card {
+  @apply min-h-[48px];
+
+  /* Project card component */
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 h-full
+      border-2 hover:shadow-lg transition-all duration-200 ease-in-out
+      w-full min-w-[300px] min-h-[200px] mb-4
+      hover:border-blue-500/100 dark:hover:border-blue-400/100
+      dark:border-gray-600;
+}
+
+@utility loading-spinner {
+  /* Loading spinner component */
+  @apply animate-spin rounded-full border-2 border-gray-300 border-t-blue-500;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+@utility loading-spinner-lg {
+  @apply loading-spinner;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-width: 3px;
+}
+
+@utility card {
+  /* Card components */
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4
+           border border-gray-200/100 dark:border-gray-700/100
+           hover:shadow-md transition-shadow duration-200;
+}
+
+@utility card-header {
+  @apply flex justify-between items-center mb-4 pb-2
+           border-b border-gray-200 dark:border-gray-700;
+}
+
+@utility card-title {
+  @apply font-semibold text-lg text-gray-800 dark:text-gray-100;
+}
+
+@utility card-content {
+  @apply text-gray-600 dark:text-gray-300;
+}
+
+@utility form-input {
+  /* Form components */
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+           focus:ring-2 focus:ring-primary-500 focus:outline-none
+           dark:bg-gray-700 dark:text-white transition-colors duration-200;
+}
+
+@utility form-label {
+  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
+}
+
+@utility form-group {
+  @apply mb-4;
+}
+
+@utility toggle-checkbox {
+  /* Toggle switch component using only Tailwind classes */
+  &:checked {
+    @apply translate-x-full border-blue-500;
+  }
+  &:checked + .toggle-label {
+    @apply bg-blue-500;
+  }
+}
+
+@utility toggle-label {
+  .toggle-checkbox:checked + & {
+    @apply bg-blue-500;
+  }
+}
+
+@utility tab-heading {
+  /* Tab UI components */
+  @apply text-lg font-medium text-gray-800 dark:text-gray-200 mb-3;
+}
+
+@utility tab-subheading {
+  @apply text-base font-medium text-gray-700 dark:text-gray-300 mb-2;
+}
+
+@utility tab-content {
+  @apply text-sm text-gray-600 dark:text-gray-400 leading-relaxed;
+}
+
+@utility tab-section {
+  @apply mb-6 last:mb-0;
+}
+
+@utility project-tab-btn {
+  /* Refine project tab button styles */
+  @apply inline-block px-3 sm:px-4 py-2.5 font-medium text-sm border-b-2 border-transparent 
+           transition-colors duration-200 focus:outline-none;
+
+  &:not(.active) {
+    @apply text-gray-500 hover:text-gray-700 hover:border-gray-300;
+  }
+}
+
+@utility project-tab-btn-active {
+  @apply border-blue-600 text-blue-600 dark:text-blue-400;
+}
+
+@utility projects-grid {
+  &:has(.project-card-pinned) {
+    @apply bg-yellow-50/20 dark:bg-yellow-900/10;
+  }
+}
+
+@utility project-card-pinned {
+  .projects-grid:has(&) {
+    @apply bg-yellow-50/20 dark:bg-yellow-900/10;
+  }
+  @apply border-yellow-400;
+}
+
+@utility project-card-unpinned {
+  @apply border-blue-400;
+}
+
+@utility project-card-archived {
+  @apply opacity-75;
+}
+
+@utility project-card-theme-default {
+  /* New card theme classes */
+  @apply bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-400;
+}
+
+@utility project-card-theme-primary {
+  &.dark {
+    @apply bg-blue-900/30 border-blue-400;
+  }
+  @apply bg-blue-50 border-blue-500;
+}
+
+@utility dark {
+  &.project-card-theme-primary {
+    @apply bg-blue-900/30 border-blue-400;
+  }
+}
+
+@utility project-card-theme-success {
+  @apply bg-green-50 dark:bg-green-900/30 border-green-500 dark:border-green-400;
+}
+
+@utility project-card-theme-warning {
+  @apply bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500 dark:border-yellow-400;
+}
+
+@utility project-card-theme-danger {
+  @apply bg-red-50 dark:bg-red-900/30 border-red-500 dark:border-red-400;
+}
+
+@utility project-card-theme-info {
+  @apply bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-400;
+}
+
+@utility project-card-theme-neutral {
+  @apply bg-gray-50 dark:bg-gray-900/50 border-gray-500 dark:border-gray-400;
+}
+
+@utility project-card-badge {
+  /* Custom card badges */
+  @apply text-xs px-2 py-1 rounded-full inline-flex items-center font-medium;
+}
+
+@utility project-card-badge-default {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200;
+}
+
+@utility project-card-badge-blue {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
+}
+
+@utility project-card-badge-green {
+  @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
+}
+
+@utility project-card-badge-yellow {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
+}
+
+@utility project-card-badge-red {
+  @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
+}
+
+@utility project-card-badge-purple {
+  @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200;
+}
+
+@utility project-card-priority-high {
+  /* Enhanced priority visibility for responsive layouts */
+  @apply order-first;
+}
+
+@utility project-card-priority-medium {
+  @apply order-none;
+}
+
+@utility project-card-priority-low {
+  @apply order-last;
+}
+
+@utility project-card-badges {
+  /* Helper class for containing multiple badges */
+  @apply flex flex-wrap gap-1 mt-1;
+}
+
+@utility project-card-hide-sm {
+  @media (max-width: 640px) {
+    @apply hidden;
+  }
+}
+
+@utility project-card-sm-only {
+  @media (max-width: 640px) {
+    @apply block;
+  }
+
+  @media (min-width: 641px) {
+    @apply hidden;
+  }
+}
+
+@utility notification {
+  /* Notification styles */
+  @apply p-3 rounded-sm shadow-sm mb-2 flex items-center text-sm;
+
+  &.success {
+    @apply bg-green-100 text-green-800 border-l-4 border-green-500;
+  }
+
+  &.error {
+    @apply bg-red-100 text-red-800 border-l-4 border-red-500;
+  }
+
+  &.info {
+    @apply bg-blue-100 text-blue-800 border-l-4 border-blue-500;
+  }
+
+  &.warning {
+    @apply bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500;
+  }
+}
+
+@utility success {
+  &.notification {
+    @apply bg-green-100 text-green-800 border-l-4 border-green-500;
+  }
+}
+
+@utility error {
+  &.notification {
+    @apply bg-red-100 text-red-800 border-l-4 border-red-500;
+  }
+}
+
+@utility info {
+  &.notification {
+    @apply bg-blue-100 text-blue-800 border-l-4 border-blue-500;
+  }
+}
+
+@utility warning {
+  &.notification {
+    @apply bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500;
+  }
+}
+
+@utility min-h-0 {
+  /* Scrolling fixes */
+  min-height: 0;
+}
+
+@utility content-overflow {
+  @apply flex-1 min-h-0 overflow-y-auto;
+}
+
+@utility scroll-smooth {
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
+}
+
+@utility transition-colors-slow {
+  /* Dark mode transition */
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 500ms;
+}
+
+@utility animate-count-up {
+  animation: countUp 0.3s ease-out;
+}
+
+@utility transition-sidebar {
+  /* Transition utilities */
+  @apply transition-transform duration-300 ease-in-out;
+  will-change: transform;
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@utility transition-opacity-custom {
+  transition-property: opacity;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@utility transition-slide {
+  /* Slide transitions */
+  transition-property: transform, opacity;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@utility hover-scale {
+  /* Scale hover effect for cards */
+  @apply transition-transform duration-200;
+
+  &:hover {
+    @apply transform scale-[1.02];
+  }
+}
+
+@utility focus-visible {
+  /* Focus styles for accessibility */
+  @apply focus:outline-hidden focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2;
+}
+
+@utility sr-only {
+  /* Visually hidden content (for screen readers) */
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+}
+
+@utility border-transparent {
+  @media (forced-colors: active) {
+    border-color: ButtonText !important;
+  }
+}
+
+@utility bg-primary-500 {
+  @media (forced-colors: active) {
+    background-color: Highlight !important;
+    color: HighlightText !important;
+  }
+}
+
+@utility chat-message-container {
+  /* High contrast mode support */
+
+  /* Chat message container */
+  @apply h-[calc(var(--vh,1vh)*50)] sm:h-[calc(var(--vh,1vh)*60)] md:h-[calc(var(--vh,1vh)*70)] overflow-y-auto p-4;
+}
+
+@utility drag-zone {
+  /* Draggable zone utilities */
+  @apply border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 
+           text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 
+           transition-colors;
+}
+
+@utility drag-zone-active {
+  @apply bg-gray-100 dark:bg-gray-700 border-blue-400;
+}
+
+@utility container {
+  container-type: inline-size;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 5cqw, 2rem);
+  width: min(100% - 2rem, 1600px);
+}
 
 :root {
   --surface-light: 255 255 255;
@@ -34,14 +455,6 @@
   /* Small text */
   .text-small {
     @apply text-sm text-gray-500 dark:text-gray-400;
-  }
-}
-
-/* Collapsible panels */
-@layer components {
-  .collapsible-panel {
-    @apply transition-all duration-300 ease-in-out overflow-hidden;
-    will-change: max-height;
   }
 }
 
@@ -108,53 +521,10 @@
 
 /* Button components */
 @layer components {
-  /* Primary button */
-  .btn-primary {
-    @apply px-4 py-2 bg-primary-600 text-white rounded-sm 
-           hover:bg-primary-700 focus:ring-3 focus:ring-primary-500/50 focus:ring-offset-2
-           transition-colors duration-200 font-medium text-sm
-           dark:bg-primary-500 dark:hover:bg-primary-400 dark:focus:ring-primary-400;
-  }
-  
-  /* Secondary button */
-  .btn-secondary {
-    @apply px-4 py-2 bg-gray-600 text-white rounded-lg
-           hover:bg-gray-700 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50
-           transition-colors duration-200 font-medium text-sm;
-  }
-  
-  /* Outline button */
-  .btn-outline {
-    @apply px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg
-           hover:bg-gray-50 dark:hover:bg-gray-700 focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600
-           transition-colors duration-200 font-medium text-sm;
-  }
-  
-  /* Danger button */
-  .btn-danger {
-    @apply px-4 py-2 bg-red-600 text-white rounded-lg
-           hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-opacity-50
-           transition-colors duration-200 font-medium text-sm;
-  }
-  
-  /* Small button variant */
-  .btn-sm {
-    @apply px-3 py-1.5 text-xs min-w-[44px] min-h-[44px];
-  }
-
-  /* List items */
-  .content-item {
-    @apply min-h-[44px] px-4 py-3;
-  }
 
   /* Modal close button touch targets */
   [id$="CloseBtn"], [id$="closeBtn"] {
     @apply p-3 min-w-[48px] min-h-[48px];
-  }
-
-  /* List item touch targets */
-  .sidebar-item, .project-card {
-    @apply min-h-[48px];
   }
 }
 
@@ -193,264 +563,7 @@
   padding-bottom: 6rem;
 }
 
-
-@layer components {
-  /* Loading spinner component */
-  .loading-spinner {
-    @apply animate-spin rounded-full border-2 border-gray-300 border-t-blue-500;
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-  
-  .loading-spinner-lg {
-    @apply loading-spinner;
-    width: 2.5rem;
-    height: 2.5rem;
-    border-width: 3px;
-  }
-  
-  /* Card components */
-  .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4
-           border border-gray-200/100 dark:border-gray-700/100
-           hover:shadow-md transition-shadow duration-200;
-  }
-  
-  .card-header {
-    @apply flex justify-between items-center mb-4 pb-2
-           border-b border-gray-200 dark:border-gray-700;
-  }
-  
-  .card-title {
-    @apply font-semibold text-lg text-gray-800 dark:text-gray-100;
-  }
-  
-  .card-content {
-    @apply text-gray-600 dark:text-gray-300;
-  }
-  
-  /* Form components */
-  .form-input {
-    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-           focus:ring-2 focus:ring-primary-500 focus:outline-none
-           dark:bg-gray-700 dark:text-white transition-colors duration-200;
-  }
-  
-  .form-label {
-    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
-  }
-  
-  .form-group {
-    @apply mb-4;
-  }
-
-  /* Toggle switch component using only Tailwind classes */
-  .toggle-checkbox:checked {
-    @apply translate-x-full border-blue-500;
-  }
-  .toggle-checkbox:checked + .toggle-label {
-    @apply bg-blue-500;
-  }
-  
-  /* Tab UI components */
-  .tab-heading {
-    @apply text-lg font-medium text-gray-800 dark:text-gray-200 mb-3;
-  }
-  
-  .tab-subheading {
-    @apply text-base font-medium text-gray-700 dark:text-gray-300 mb-2;
-  }
-  
-  .tab-content {
-    @apply text-sm text-gray-600 dark:text-gray-400 leading-relaxed;
-  }
-  
-  .tab-section {
-    @apply mb-6 last:mb-0;
-  }
-  
-  /* Refine project tab button styles */
-  .project-tab-btn {
-    @apply inline-block px-3 sm:px-4 py-2.5 font-medium text-sm border-b-2 border-transparent 
-           transition-colors duration-200 focus:outline-none;
-  }
-  
-  .project-tab-btn-active {
-    @apply border-blue-600 text-blue-600 dark:text-blue-400;
-  }
-        
-  .projects-grid:has(.project-card-pinned) {
-    @apply bg-yellow-50/20 dark:bg-yellow-900/10;
-  }
-  
-  .project-tab-btn:not(.active) {
-    @apply text-gray-500 hover:text-gray-700 hover:border-gray-300;
-  }
-  
-  /* Project card component */
-  .project-card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 h-full
-      border-2 hover:shadow-lg transition-all duration-200 ease-in-out
-      w-full min-w-[300px] min-h-[200px] mb-4
-      hover:border-blue-500/100 dark:hover:border-blue-400/100
-      dark:border-gray-600;
-  }
-  
-  .project-card-pinned {
-    @apply border-yellow-400;
-  }
-  
-  .project-card-unpinned {
-    @apply border-blue-400;
-  }
-  
-  .project-card-archived {
-    @apply opacity-75;
-  }
-  
-  /* New card theme classes */
-  .project-card-theme-default {
-    @apply bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-400;
-  }
-  
-  .project-card-theme-primary.dark {
-    @apply bg-blue-900/30 border-blue-400;
-  }
-  .project-card-theme-primary {
-    @apply bg-blue-50 border-blue-500;
-  }
-  
-  .project-card-theme-success {
-    @apply bg-green-50 dark:bg-green-900/30 border-green-500 dark:border-green-400;
-  }
-  
-  .project-card-theme-warning {
-    @apply bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500 dark:border-yellow-400;
-  }
-  
-  .project-card-theme-danger {
-    @apply bg-red-50 dark:bg-red-900/30 border-red-500 dark:border-red-400;
-  }
-  
-  .project-card-theme-info {
-    @apply bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-400;
-  }
-  
-  .project-card-theme-neutral {
-    @apply bg-gray-50 dark:bg-gray-900/50 border-gray-500 dark:border-gray-400;
-  }
-  
-  /* Custom card badges */
-  .project-card-badge {
-    @apply text-xs px-2 py-1 rounded-full inline-flex items-center font-medium;
-  }
-  
-  .project-card-badge-default {
-    @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200;
-  }
-  
-  .project-card-badge-blue {
-    @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
-  }
-  
-  .project-card-badge-green {
-    @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
-  }
-  
-  .project-card-badge-yellow {
-    @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
-  }
-  
-  .project-card-badge-red {
-    @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
-  }
-  
-  .project-card-badge-purple {
-    @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200;
-  }
-  
-  /* Enhanced priority visibility for responsive layouts */
-  .project-card-priority-high {
-    @apply order-first;
-  }
-  
-  .project-card-priority-medium {
-    @apply order-none;
-  }
-  
-  .project-card-priority-low {
-    @apply order-last;
-  }
-  
-  /* Helper class for containing multiple badges */
-  .project-card-badges {
-    @apply flex flex-wrap gap-1 mt-1;
-  }
-  
-  /* Responsive content hiding/showing based on screen size */
-  @media (max-width: 640px) {
-    .project-card-hide-sm {
-      @apply hidden;
-    }
-    
-    .project-card-sm-only {
-      @apply block;
-    }
-  }
-  
-  @media (min-width: 641px) {
-    .project-card-sm-only {
-      @apply hidden;
-    }
-  }
-  
-  /* File and content items */
-  .content-item {
-    @apply flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600;
-  }
-  
-  /* Notification styles */
-  .notification {
-    @apply p-3 rounded-sm shadow-sm mb-2 flex items-center text-sm;
-  }
-  
-  .notification.success {
-    @apply bg-green-100 text-green-800 border-l-4 border-green-500;
-  }
-  
-  .notification.error {
-    @apply bg-red-100 text-red-800 border-l-4 border-red-500;
-  }
-  
-  .notification.info {
-    @apply bg-blue-100 text-blue-800 border-l-4 border-blue-500;
-  }
-  
-  .notification.warning {
-    @apply bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500;
-  }
-}
-
 @layer utilities {
-  /* Scrolling fixes */
-  .min-h-0 {
-    min-height: 0;
-  }
-  
-  .content-overflow {
-    @apply flex-1 min-h-0 overflow-y-auto;
-  }
-
-  /* Smooth scrolling */
-  .scroll-smooth {
-    scroll-behavior: smooth;
-  }
-  
-  /* Dark mode transition */
-  .transition-colors-slow {
-    transition-property: background-color, border-color, color, fill, stroke;
-    transition-duration: 500ms;
-  }
   
   @keyframes countUp {
     from { 
@@ -459,77 +572,6 @@
     to { 
       @apply opacity-100 translate-y-0;
     }
-  }
-  
-  .animate-count-up {
-    animation: countUp 0.3s ease-out;
-  }
-  
-  /* Transition utilities */
-  .transition-sidebar {
-    @apply transition-transform duration-300 ease-in-out;
-    will-change: transform;
-    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  
-  .transition-opacity-custom {
-    transition-property: opacity;
-    transition-duration: 300ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  /* Slide transitions */
-  .transition-slide {
-    transition-property: transform, opacity;
-    transition-duration: 300ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  /* Scale hover effect for cards */
-  .hover-scale {
-    @apply transition-transform duration-200;
-  }
-  
-  .hover-scale:hover {
-    @apply transform scale-[1.02];
-  }
-  
-  /* Focus styles for accessibility */
-  .focus-visible {
-    @apply focus:outline-hidden focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2;
-  }
-  
-  /* Visually hidden content (for screen readers) */
-  .sr-only {
-    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
-  }
-  
-  /* High contrast mode support */
-  @media (forced-colors: active) {
-    .border-transparent {
-      border-color: ButtonText !important;
-    }
-    
-    .bg-primary-500 {
-      background-color: Highlight !important;
-      color: HighlightText !important;
-    }
-  }
-  
-  /* Chat message container */
-  .chat-message-container {
-    @apply h-[calc(var(--vh,1vh)*50)] sm:h-[calc(var(--vh,1vh)*60)] md:h-[calc(var(--vh,1vh)*70)] overflow-y-auto p-4;
-  }
-  
-  /* Draggable zone utilities */
-  .drag-zone {
-    @apply border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 
-           text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 
-           transition-colors;
-  }
-  
-  .drag-zone-active {
-    @apply bg-gray-100 dark:bg-gray-700 border-blue-400;
   }
 }
 
@@ -552,15 +594,6 @@
 /* SVG icon handling */
 svg {
   @apply fill-current stroke-current;
-}
-
-@layer utilities {
-  .container {
-    container-type: inline-size;
-    margin-inline: auto;
-    padding-inline: clamp(1rem, 5cqw, 2rem);
-    width: min(100% - 2rem, 1600px);
-  }
 }
 
 /* Dark mode specific improvements */
