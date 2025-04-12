@@ -27,8 +27,8 @@
   "homepage": "https://github.com/henryperkins/azure_chatapp#readme",
   "devDependencies": {
     "@playwright/test": "^1.51.1",
-    "@tailwindcss/cli": "^4.0.0",
-    "@tailwindcss/postcss": "^4.1.3",
+    "@tailwindcss/cli": "^3.4.1",
+    "@tailwindcss/postcss": "^3.4.1",
     "@types/node": "^22.13.14",
     "autoprefixer": "^10.4.21",
     "daisyui": "^5.0.19",
