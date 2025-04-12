@@ -671,22 +671,58 @@ class ProjectDashboard {
   }
 
   async _waitForDashboardUtils() {
-    if (window.dashboardUtilsReady) return;
+    // First check if the flag is already set
+    if (window.dashboardUtilsReady === true) return;
+
     this.showInitializationProgress("Waiting for dashboard utilities...");
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(
-        () => reject(new Error("Timeout waiting for dashboardUtilsReady")),
-        2000
-      );
-      document.addEventListener(
-        "dashboardUtilsReady",
-        () => {
+
+    // If the flag isn't set, we can try two approaches:
+    // 1. Check for the flag directly with polling
+    // 2. Wait for the event with a timeout
+
+    try {
+      // Approach 1: Check the flag with polling (faster)
+      for (let i = 0; i < 20; i++) { // try for about 1 second (20 * 50ms = 1000ms)
+        if (window.dashboardUtilsReady === true) {
+          console.log("[ProjectDashboard] Found dashboardUtilsReady flag");
+          return; // Exit immediately if the flag is found
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Approach 2: If polling didn't work, wait for the event with a timeout
+      await new Promise((resolve, reject) => {
+        // Set a slightly longer timeout since we already waited 1 second
+        const timeout = setTimeout(
+          () => reject(new Error("Timeout waiting for dashboardUtilsReady")),
+          3000
+        );
+
+        // Listen for the event
+        const handleUtilsReady = () => {
           clearTimeout(timeout);
           resolve();
-        },
-        { once: true }
-      );
-    });
+        };
+
+        document.addEventListener("dashboardUtilsReady", handleUtilsReady, { once: true });
+
+        // Also check the flag one more time
+        if (window.dashboardUtilsReady === true) {
+          clearTimeout(timeout);
+          document.removeEventListener("dashboardUtilsReady", handleUtilsReady);
+          resolve();
+        }
+      });
+    } catch (err) {
+      console.error("[ProjectDashboard] Error waiting for dashboard utils:", err);
+      // If utils are loaded but the event wasn't fired, we can still proceed
+      if (window.dashboardUtilsReady === true ||
+          window.ProjectDashboard && window.ProjectDashboard._initialized) {
+        console.warn("[ProjectDashboard] Proceeding despite event timeout - utils appear to be ready");
+        return;
+      }
+      throw err;
+    }
   }
 
   async _waitForProjectManager() {
@@ -721,24 +757,25 @@ class ProjectDashboard {
  * Initialize the project dashboard with automatic retry if desired.
  * @returns {Promise<ProjectDashboard>}
  */
-async function initProjectDashboard() {
+function initProjectDashboard() {
   const dashboard = new ProjectDashboard();
-  const success = await dashboard.init();
-  if (success) {
-    window.projectDashboard = dashboard;
-    return dashboard;
-  }
-  throw new Error("ProjectDashboard failed to initialize");
+  // Return the Promise so it can be properly chained with .catch()
+  return dashboard.init()
+    .then(success => {
+      if (success) {
+        window.projectDashboard = dashboard;
+        return dashboard;
+      }
+      throw new Error("ProjectDashboard failed to initialize");
+    });
 }
 
 // Register dashboard with central initializer
-window.initProjectDashboard = function () {
+window.initProjectDashboard = initProjectDashboard;
+
+// Add app initializer registration if needed
+if (window.appInitializer && window.appInitializer.register) {
   window.appInitializer.register({
-    init: async () => {
-      const dashboard = new ProjectDashboard();
-      await dashboard.init();
-      window.projectDashboard = dashboard;
-      return dashboard;
-    }
+    init: () => initProjectDashboard()
   });
-};
+}

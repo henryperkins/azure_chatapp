@@ -83,7 +83,10 @@ class CookieSettings:
             return "none" if not self.secure else "lax"
 
         # Default to 'lax' for production which balances security and usability
-        return "lax"  # Must be lowercase to match FastAPI's expected values
+        # Use 'none' in development for easier testing across domains
+        if settings.DEBUG and key in ["access_token", "refresh_token"]:
+            return "none"
+        return "lax"  # Default to lax for production
 
 
 cookie_settings = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
@@ -560,9 +563,13 @@ async def refresh_token(
                 )
 
                 # Blacklist the old refresh token
+                # Convert timestamp to naive datetime
+                exp_datetime = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
+                exp_naive = exp_datetime.replace(tzinfo=None)
+
                 blacklisted = TokenBlacklist(
                     jti=decoded["jti"],
-                    expires=decoded["exp"],
+                    expires=exp_naive,
                     user_id=locked_user.id,
                     token_type="refresh",
                     creation_reason="refresh_rotation",
@@ -622,7 +629,7 @@ async def verify_auth_status(
 
 # -----------------------------------------------------------------------------
 # Testing Utilities
-# -----------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
 @router.get("/debug/auth-log", response_model=dict)
 async def get_auth_debug_info():
     """Returns the current authentication debug info. Not exposed in production."""
@@ -746,10 +753,16 @@ async def logout_user(
     else:
         expires_datetime = datetime.now(timezone.utc) + timedelta(days=1)
 
-    # Blacklist the token
+    # Blacklist the token - convert to naive datetime if necessary
+    if expires_datetime.tzinfo is not None:
+        # Convert timezone-aware datetime to naive datetime in UTC
+        expires_naive = expires_datetime.replace(tzinfo=None)
+    else:
+        expires_naive = expires_datetime
+
     blacklisted_token = TokenBlacklist(
         jti=token_id,
-        expires=expires_datetime,
+        expires=expires_naive,
         user_id=user.id,
         token_type="refresh",
         creation_reason="logout",
