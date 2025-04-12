@@ -3,6 +3,10 @@
  */
 const AUTH_DEBUG = true;
 let sessionExpiredFlag = false;
+// Add a timestamp to track the last verification failure to prevent rapid recursion
+let lastVerifyFailureTime = 0;
+const MIN_RETRY_INTERVAL = 5000; // Minimum ms between verification attempts after failure
+
 let tokenRefreshInProgress = false;
 let lastRefreshAttempt = null;
 let refreshFailCount = 0;
@@ -28,11 +32,41 @@ const AUTH_CONSTANTS = {
 async function getAuthToken(options = {}) {
   const accessToken = getCookie('access_token');
   const refreshToken = getCookie('refresh_token');
-  if (await checkTokenValidity(accessToken)) return accessToken;
-  if (refreshToken && (await checkTokenValidity(refreshToken, { allowRefresh: true }))) {
-    const { success } = await refreshTokens();
-    if (success) return getCookie('access_token');
+  console.debug('[Auth Debug] getAuthToken called:', {
+    accessTokenPresent: !!accessToken,
+    refreshTokenPresent: !!refreshToken
+  });
+
+  // First check if the existing access token is valid
+  if (await checkTokenValidity(accessToken)) {
+    console.debug('[Auth Debug] returning valid access token');
+    return accessToken;
   }
+
+  // If access token is invalid, try to refresh using the refresh token
+  if (refreshToken && (await checkTokenValidity(refreshToken, { allowRefresh: true }))) {
+    console.debug('[Auth Debug] attempting token refresh');
+    const { success } = await refreshTokens();
+    if (success) {
+      console.debug('[Auth Debug] refresh successful, returning new access token');
+      return getCookie('access_token');
+    }
+  }
+
+  console.debug('[Auth Debug] forcing verifyAuthState(true)');
+  await verifyAuthState(true);
+
+  // If after verification we are authenticated, attempt to get the cookie again
+  if (authState.isAuthenticated) {
+    console.debug('[Auth Debug] user became authenticated after forced verify');
+    const newAccessToken = getCookie('access_token');
+    if (newAccessToken) {
+      console.debug('[Auth Debug] returning newly retrieved token after forced verify');
+      return newAccessToken;
+    }
+  }
+
+  console.debug('[Auth Debug] user is not authenticated after forced verify, throwing error');
   throw new Error('Not authenticated');
 }
 
@@ -582,6 +616,13 @@ async function init() {
 }
 
 async function verifyAuthState(bypassCache = false) {
+  // --- BEGIN RECURSION PREVENTION ---
+  if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
+    if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - recent failure detected, wait before retrying.');
+    return authState.isAuthenticated; // Return cached state to avoid triggering more errors immediately
+  }
+  // --- END RECURSION PREVENTION ---
+
   try {
     if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) {
       if (AUTH_DEBUG) console.debug('[Auth] Skipping verification - session recently expired');
@@ -701,8 +742,13 @@ async function verifyAuthState(bypassCache = false) {
         authState.isAuthenticated = response.authenticated;
         authState.username = response.username || null;
         authState.lastVerified = Date.now();
-        if (response.authenticated) broadcastAuth(true, response.username);
-        else broadcastAuth(false);
+        // Reset failure time on success
+        lastVerifyFailureTime = 0;
+        if (response.authenticated) { // Corrected: Use block for if
+          broadcastAuth(true, response.username);
+        } else {
+          broadcastAuth(false); // Corrected: Put else in block
+        }
         return response.authenticated;
       } catch (verifyError) {
         lastError = verifyError;
@@ -729,17 +775,28 @@ async function verifyAuthState(bypassCache = false) {
         errorMsg = 'Authentication check timed out - please try again later';
       } else if (lastError.status === 401) {
         errorMsg = 'Session expired - please login again';
+      } else if (lastError.message?.includes('recursion')) {
+          errorMsg = 'Recursive authentication error detected. Please retry.';
       } else if (lastError.message) {
         errorMsg = lastError.message;
       }
     }
     throw new Error(errorMsg);
   } catch (error) {
-    console.warn('[Auth] Auth verification error:', error);
+    lastVerifyFailureTime = Date.now(); // Set failure timestamp first
+    console.warn('[Auth] Auth verification error:', error); // Log the error
+
+    // Check for critical errors that require state clearing and broadcast
+    if (error.status === 401 || error.message?.includes('expired') || error.message?.includes('Session')) {
+        clearTokenState();
+        broadcastAuth(false); // Ensure UI updates immediately for session expiry
+    }
+    // Ensure state is false on any catch BEFORE returning
     authState.isAuthenticated = false;
-    return false;
+    return false; // Return false to indicate failure (Code after this won't execute)
+
   }
-}
+ }
 
 function setupTokenSync() {
   // Empty function - placeholder for future implementation
@@ -841,6 +898,12 @@ function setupAuthStateMonitoring() {
 }
 
 function broadcastAuth(authenticated, username = null) {
+  // Only broadcast if the state OR username has actually changed
+  if (authState.isAuthenticated === authenticated && authState.username === username) {
+    if (AUTH_DEBUG) console.debug("[Auth] Auth state unchanged, skipping broadcast");
+    return;
+  }
+
   authState.isAuthenticated = authenticated;
   authState.username = username;
   if (window.API_CONFIG) window.API_CONFIG.isAuthenticated = authenticated;
@@ -1052,42 +1115,32 @@ async function loginUser(username, password) {
     // Show loading state before expensive operations
     document.dispatchEvent(new CustomEvent('authLoading', { detail: true }));
 
-    // Move storage operations to microtasks to prevent blocking
-    await new Promise(resolve => {
-      setTimeout(() => {
-        try {
-          // Set cookies in a way that minimizes layout thrashing
-          requestAnimationFrame(() => {
-            const hostname = window.location.hostname;
-            const isSecure = (window.location.protocol === 'https:');
-            const sameSite = isSecure ? 'None' : 'Lax';
-            const secureFlag = isSecure ? 'Secure; ' : '';
+    // Simplify state updates and cookie setting
+    try {
+      const hostname = window.location.hostname;
+      const isSecure = (window.location.protocol === 'https:');
+      const sameSite = isSecure ? 'None' : 'Lax'; // Adjust SameSite based on context
+      const secureFlag = isSecure ? 'Secure; ' : '';
 
-            document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
-            if (response.refresh_token) {
-              document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=${sameSite}`;
-            }
+      // Set Cookies
+      document.cookie = `access_token=${response.access_token}; path=/; max-age=${60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES}; ${secureFlag}SameSite=${sameSite}`;
+      if (response.refresh_token) {
+        document.cookie = `refresh_token=${response.refresh_token}; path=/; max-age=${60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS}; ${secureFlag}SameSite=${sameSite}`;
+      }
 
-            // Batch state updates
-            requestAnimationFrame(() => {
-              authState.isAuthenticated = true;
-              authState.username = response.username || username;
-              authState.lastVerified = Date.now();
-              sessionExpiredFlag = false;
+      // Update Auth State
+      authState.isAuthenticated = true;
+      authState.username = response.username || username;
+      authState.lastVerified = Date.now();
+      sessionExpiredFlag = false;
 
-              // Throttle the broadcast
-              setTimeout(() => {
-                broadcastAuth(true, response.username || username);
-                resolve();
-              }, 50);
-            });
-          });
-        } catch (e) {
-          console.warn('[Auth] Storage operations failed:', e);
-          resolve();
-        }
-      }, 0);
-    });
+      // Broadcast the change immediately
+      broadcastAuth(true, response.username || username);
+
+    } catch (e) {
+      console.error('[Auth] Error setting cookies or updating state:', e);
+      // Decide if this error should prevent login success feedback
+    }
 
     // Backup tokens in idle time
     if ('requestIdleCallback' in window) {

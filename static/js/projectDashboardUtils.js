@@ -187,6 +187,7 @@
 
   // Create a singleton instance
   ProjectDashboard.uiUtils = new UIUtils();
+  window.uiUtilsInstance = ProjectDashboard.uiUtils;
 
   /* =========================================================================
    *  3. ANIMATION UTILS

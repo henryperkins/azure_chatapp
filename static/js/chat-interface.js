@@ -222,7 +222,7 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
       }, 300);
       return;
     }
-    
+
     // Safe auth check with proper error handling
     const checkAuth = async () => {
       try {
@@ -230,10 +230,10 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
         if (!window.auth?.isInitialized) {
           await window.auth.init();
         }
-        
+
         // Wait a small amount to let auth state settle
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         let isAuthenticated = false;
         try {
           // Try to verify auth state with error handling
@@ -251,7 +251,7 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
           if (loginMsg) loginMsg.classList.remove("hidden");
           return Promise.reject(new Error('Not authenticated'));
         }
-        
+
         // If we got here, we should be authenticated, create new conversation
         if (!this.currentChatId) {
           return this.createNewConversation()
@@ -275,7 +275,7 @@ window.ChatInterface.prototype._handleInitialConversation = function () {
         }
       }
     };
-    
+
     // Start auth check process
     checkAuth();
   }
@@ -438,15 +438,15 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       if (!window.auth?.isInitialized) {
         await window.auth.init();
       }
-      
+
       // Wait a moment for auth state to stabilize after login/init
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // Check if the auth module thinks we're authenticated
       if (window.auth.isInitialized && window.auth.authState?.isAuthenticated === false) {
         throw new Error('Not authenticated - please login first');
       }
-      
+
       // Check for direct token first to avoid premature verification/refresh
       let isAuthenticatedViaDirectToken = false;
       if (window.__directAccessToken && window.__recentLoginTimestamp) {
@@ -487,12 +487,12 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       }
     } catch (authError) {
       console.warn("[chat-interface] Authentication failed during createNewConversation:", authError);
-      
+
       // Let auth.js handle the error if available
       if (window.auth && typeof window.auth.handleAuthError === 'function') {
         window.auth.handleAuthError(authError, "creating conversation");
       }
-      
+
       // Notify UI and fail immediately for auth errors
       window.dispatchEvent(new CustomEvent('authStateChanged', {
         detail: {
@@ -509,7 +509,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
     // Only proceed with chat operations if auth succeeded
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 300;
-    
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         // Chat operation logic
@@ -522,11 +522,29 @@ window.ChatInterface.prototype.createNewConversation = async function () {
             const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
             if (timeSinceLogin < 5000) {
               console.debug('[ChatInterface] Explicitly using direct access token for conversation creation');
+              // Check if user is authenticated before attempting to create conversation
+              let isAuthed = await window.auth.isAuthenticated();
+              if (!isAuthed) {
+                console.warn("[ChatInterface] User not authenticated, skipping conversation creation.");
+                return null;
+              }
               conversation = await this.conversationService.createNewConversationWithToken(window.__directAccessToken);
             } else {
+              // Check if user is authenticated before attempting to create conversation
+              let isAuthed = await window.auth.isAuthenticated();
+              if (!isAuthed) {
+                console.warn("[ChatInterface] User not authenticated, skipping conversation creation.");
+                return null;
+              }
               conversation = await this.conversationService.createNewConversation();
             }
           } else {
+            // Check if user is authenticated before attempting to create conversation
+            let isAuthed = await window.auth.isAuthenticated();
+            if (!isAuthed) {
+              console.warn("[ChatInterface] User not authenticated, skipping conversation creation.");
+              return null;
+            }
             conversation = await this.conversationService.createNewConversation();
           }
         }
@@ -552,7 +570,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
         // Update UI
         if (this.container) this.container.classList.remove('hidden');
         document.getElementById("noChatSelectedMessage")?.classList.add('hidden');
-        
+
         return conversation;
       } catch (error) {
         console.warn(`[chat-interface] Conversation creation attempt ${attempt} failed:`, error);

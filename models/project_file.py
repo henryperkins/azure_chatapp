@@ -1,7 +1,7 @@
 """
 project_file.py
 ---------------
-Stores files attached to a Project. 
+Stores files attached to a Project.
 Each record can hold the filename, path, inline content, etc.
 """
 
@@ -69,3 +69,19 @@ class ProjectFile(Base):
         return (
             f"<ProjectFile {self.filename} (#{self.id}) project_id={self.project_id}>"
         )
+
+    def to_dict(self):
+        """Convert the ProjectFile object to a dictionary representation."""
+        return {
+            "id": str(self.id),
+            "project_id": str(self.project_id),
+            "filename": self.filename,
+            "file_path": self.file_path,
+            "file_size": self.file_size,
+            "file_type": self.file_type,
+            "file_hash": self.file_hash,
+            "order_index": self.order_index,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "config": self.config
+        }

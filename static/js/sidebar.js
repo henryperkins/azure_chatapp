@@ -8,7 +8,7 @@
  * - Mobile sidebar toggle and backdrop
  * - Custom instructions saving
  * - Starred conversations management
- * 
+ *
  * Uses auth.js exclusively for authentication
  */
 
@@ -384,25 +384,42 @@ function setupSidebarTabs() {
     const checkAuth = async () => {
       try {
         let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
-        
+
         // Retry with force verify if needed
         if (!isAuthenticated) {
-          console.debug(`[Sidebar] First auth check failed for tab ${tabName}, retrying with forceVerify`);
+          console.debug(`[Sidebar] First auth check failed for tab ${tabName}, scheduling second attempt in 0.5s`);
+          await new Promise(r => setTimeout(r, 500));
           isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
         }
-        
+
+        // If still not authenticated, schedule a final attempt 1s later
+        if (!isAuthenticated) {
+          console.debug(`[Sidebar] Second auth check still failed for tab ${tabName}, scheduling final attempt in 1s`);
+          await new Promise(r => setTimeout(r, 1000));
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+        }
+
         // Only load data if authenticated and tab has a loader
         if (isAuthenticated && tabs[tabName].loader) {
           console.debug(`[Sidebar] Loading data for authenticated tab: ${tabName}`);
           setTimeout(() => tabs[tabName].loader(), 300);
         } else if (!isAuthenticated) {
-          console.warn(`[Sidebar] Not authenticated, skipping data load for tab: ${tabName}`);
+          console.debug(`[Sidebar] User not logged in for tab: ${tabName}. Displaying login prompt.`);
+          // Optionally show a "Please log in" message in the section
+          const tabSection = document.getElementById(tabConfig[tabName]?.sectionId);
+          if (tabSection) {
+            tabSection.innerHTML = `
+              <div class="p-4 text-gray-500 text-sm text-center">
+                Please log in to view this content.
+              </div>
+            `;
+          }
         }
       } catch (err) {
         console.warn("[Sidebar] Auth verification failed:", err);
       }
     };
-    
+
     // Execute auth check
     checkAuth();
   }
@@ -1153,13 +1170,13 @@ function updateAuthDependentUI(authenticated, username = null) {
   // Refresh content if authenticated
   if (authenticated) {
     console.debug('[Sidebar] User is authenticated, refreshing appropriate tab content');
-    
+
     // Force refresh of projects tab since that's what we're debugging
     if (typeof window.loadSidebarProjects === 'function') {
       console.debug('[Sidebar] Forcing refresh of sidebar projects');
       setTimeout(() => window.loadSidebarProjects(), 500);
     }
-    
+
     // Also refresh active tab
     const activeTab = localStorage.getItem('sidebarActiveTab');
     if (activeTab === 'starred' && document.getElementById('starredChatsSection')?.classList.contains('hidden') === false) {

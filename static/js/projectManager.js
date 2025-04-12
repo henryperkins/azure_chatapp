@@ -300,7 +300,7 @@
       console.error("[projectManager] Error loading project files:", err);
       emitEvent("projectFilesLoaded", { files: [] });
       emitEvent("projectFilesError", { error: err });
-      throw err;
+      return [];
     }
   }
 
