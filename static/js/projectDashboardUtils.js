@@ -554,6 +554,29 @@
     dispatchReady();
   }
 
+  // Add a proxy for initProjectDashboard in case it's called before projectDashboard.js loads
+  window.initProjectDashboard = window.initProjectDashboard || function() {
+    console.log('[ProjectDashboard] initProjectDashboard called from projectDashboardUtils.js');
+    // Check if the real function exists in projectDashboard.js
+    if (window.projectDashboard && typeof window.projectDashboard.init === 'function') {
+      return window.projectDashboard.init();
+    } else {
+      console.warn('[ProjectDashboard] projectDashboard.js not loaded yet, dashboard initialization deferred');
+      // Return a promise that will be resolved when projectDashboard is initialized
+      return new Promise((resolve) => {
+        document.addEventListener('projectDashboardInitialized', () => {
+          console.log('[ProjectDashboard] Dashboard initialization completed via event');
+          resolve(window.projectDashboard);
+        }, { once: true });
+      });
+    }
+  };
+
+  // Function to check if dashboard utils are ready
+  window.isProjectDashboardUtilsReady = function() {
+    return true;
+  };
+
   // Attach to global window
   window.ProjectDashboard = ProjectDashboard;
   console.log('[ProjectDashboard] projectDashboardUtils.js loaded successfully');
