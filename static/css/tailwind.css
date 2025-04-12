@@ -49,44 +49,31 @@
     from { opacity: 0 }
     to { opacity: 1 }
   }
-  
-  @keyframes pulse {
-    0%, 100% { opacity: 1 }
-    50% { opacity: 0.5 }
-  }
 }
 
 /* Dark mode variant */
-@custom-variant dark {
-  &:where(.dark, .dark *) {
-    --color-surface-50: 17 24 39;
-    --color-surface-100: 31 41 55;
-    --color-surface-200: 55 65 81;
-    --color-surface-300: 75 85 99;
-    --color-surface-400: 107 114 128;
-    --color-surface-500: 156 163 175;
-    --color-surface-600: 209 213 219;
-    --color-surface-700: 229 231 235;
-    --color-surface-800: 243 244 246;
-    --color-surface-900: 249 250 251;
-  }
+@custom-variant dark (&:where(.dark, .dark *)) {
+  --color-surface-50: 17 24 39;
+  --color-surface-100: 31 41 55;
+  --color-surface-200: 55 65 81;
+  --color-surface-300: 75 85 99;
+  --color-surface-400: 107 114 128;
+  --color-surface-500: 156 163 175;
+  --color-surface-600: 209 213 219;
+  --color-surface-700: 229 231 235;
+  --color-surface-800: 243 244 246;
+  --color-surface-900: 249 250 251;
 }
 
 /* Custom utilities */
-@utility {
-  .card {
-    padding: var(--spacing-card);
-    background-color: var(--color-surface-50);
-    color: var(--color-surface-900);
-    border-radius: 0.5rem;
-    box-shadow: var(--shadow-sm);
-    
-    @variant hover {
-      box-shadow: var(--shadow-md);
-    }
-  }
+@utility card {
+  padding: var(--spacing-card);
+  background-color: var(--color-surface-50);
+  color: var(--color-surface-900);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
   
-  .animate-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  &:hover {
+    box-shadow: var(--shadow-md);
   }
 }
