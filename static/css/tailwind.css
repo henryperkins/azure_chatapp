@@ -1,41 +1,40 @@
 @import "tailwindcss";
 
-/* Custom animations */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --color-primary: oklch(0.62 0.21 254);
+  --color-surface: 255 255 255;
+  --color-on-surface: 0 0 0;
+  --spacing-card: 1.25rem;
+  
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px) }
+    to { opacity: 1; transform: translateY(0) }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
+  
+  @keyframes fadeIn {
+    from { opacity: 0 }
+    to { opacity: 1 }
   }
 }
 
-/* Dark mode styles */
 .dark {
-  --surface-light: 31 41 55;
-  --surface-dark: 3 7 18;
-  --border-dark: 75 85 99;
-  color: rgba(243, 244, 246, 1);
-
-  h1, h2, h3, h4 {
-    color: white;
-  }
-
+  --color-surface: 17 24 39;
+  --color-on-surface: 243 244 246;
+  
   a {
     color: var(--color-blue-400);
+    &:hover {
+      color: var(--color-blue-300);
+    }
   }
-  a:hover {
-    color: var(--color-blue-300);
+}
+
+/* Custom utilities */
+@utility {
+  .card {
+    padding: var(--spacing-card);
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
   }
 }
