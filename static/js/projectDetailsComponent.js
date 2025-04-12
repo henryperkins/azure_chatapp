@@ -132,11 +132,15 @@ export class ProjectDetailsComponent {
     if (this.elements.title) {
       this.elements.title.textContent = project.name || '';
       this.elements.title.classList.add('animate-fade-in');
+      // Ensure proper dark mode text styling
+      this.elements.title.classList.add('text-gray-900', 'dark:text-gray-100');
     }
 
     if (this.elements.description) {
       this.elements.description.textContent = project.description || "No description provided.";
       this.elements.description.classList.add('animate-fade-in');
+      // Ensure proper dark mode text styling
+      this.elements.description.classList.add('text-gray-600', 'dark:text-gray-300');
     }
 
     this.updatePinButton(project.pinned);

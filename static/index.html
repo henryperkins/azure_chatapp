@@ -44,9 +44,9 @@
       </div>
 
       <div class="flex items-center gap-4">
-        <!-- Dark mode toggle -->
-        <button id="darkModeToggle" type="button"
-          class="p-2 rounded-full focus:outline-hidden focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600">
+        <!-- Dark mode toggle with updated classes -->
+        <button id="darkModeToggle" type="button" aria-label="Toggle dark mode"
+          class="dark-mode-toggle focus:outline-hidden focus:ring-2">
           <svg id="darkModeIcon" class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707
@@ -1569,45 +1569,61 @@
     function initDarkModeToggle() {
       const darkModeToggle = document.getElementById('darkModeToggle');
       const darkModeIcon = document.getElementById('darkModeIcon');
+      
+      // Check for system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      
+      // Get saved preference from localStorage
       const savedMode = localStorage.getItem('darkMode');
+      
+      // Determine initial dark mode state
       const isDark = savedMode ? (savedMode === 'true') : prefersDark;
 
+      // Apply initial dark mode state
       applyDarkMode(isDark);
 
+      // Set up the click listener for the dark mode toggle
       darkModeToggle.addEventListener('click', () => {
+        // Toggle dark mode
         const newMode = !document.documentElement.classList.contains('dark');
         applyDarkMode(newMode);
+        
+        // Save preference to localStorage
         localStorage.setItem('darkMode', newMode);
       });
 
+      // Function to apply dark mode state
       function applyDarkMode(enableDark) {
         if (enableDark) {
+          // Enable dark mode
           document.documentElement.classList.add('dark');
-          // Example: swap icon to a "moon"
-          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M20.354 15.354A9 9 0 1111.05
-                                    4.05 7
-                                    7 0 0020.354
-                                    15.354z" />`;
+          
+          // Change icon to moon
+          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                    d="M20.354 15.354A9 9 0 1111.05 4.05 7 7 0 0020.354 15.354z" />`;
+          
+          // Update button ARIA label
+          darkModeToggle.setAttribute('aria-label', 'Switch to light mode');
         } else {
+          // Disable dark mode
           document.documentElement.classList.remove('dark');
-          // Example: swap icon back to "sun"
-          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 3v1m0
-                                    16v1m9-9h-1M4
-                                    12H3m15.364
-                                    6.364l-.707-.707M6.343
-                                    6.343l-.707-.707m12.728
-                                    0l-.707.707M6.343
-                                    17.657l-.707.707M16
-                                    12a4 4
-                                    0 11-8
-                                    0 4 4
-                                    0 018
-                                    0z" />`;
+          
+          // Change icon to sun
+          darkModeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />`;
+          
+          // Update button ARIA label
+          darkModeToggle.setAttribute('aria-label', 'Switch to dark mode');
         }
       }
+      
+      // Listen for system preference changes
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        // Only apply if user hasn't set a preference
+        if (localStorage.getItem('darkMode') === null) {
+          applyDarkMode(e.matches);
+        }
+      });
     }
 
     function setupTabKeyboardNavigation() {

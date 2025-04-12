@@ -62,6 +62,10 @@
   --color-surface-dark: #111827;
   --color-surface-light: #ffffff;
 
+  /* Dark Mode Surface Colors */
+  --color-surface-dark-hover: #1f2937; 
+  --color-surface-light-hover: #f9fafb;
+
   /* Gray scale */
   --color-gray-50: oklch(98.5% 0.002 247.839);
   --color-gray-100: oklch(96.7% 0.003 264.542);
@@ -73,6 +77,16 @@
   --color-gray-700: oklch(37.3% 0.034 259.733);
   --color-gray-800: oklch(27.8% 0.033 256.848);
   --color-gray-900: oklch(21% 0.034 264.665);
+
+  /* Border colors */
+  --color-border: #e5e7eb;
+  --color-border-dark: #374151;
+  --color-border-hover-light: #d1d5db;
+  --color-border-hover-dark: #4b5563;
+
+  /* Skeleton colors */
+  --color-skeleton: #f3f4f6;
+  --color-skeleton-dark: #4b5563;
 
   /* Base colors */
   --color-black: #000;
@@ -117,9 +131,45 @@
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1);
   --shadow-card-hover: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 
+  /* Dark mode shadows */
+  --shadow-dark-xs: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  --shadow-dark-sm: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+
+  /* Z-index layers */
+  --z-index-60: 60;
+  --z-index-70: 70;
+  --z-index-80: 80;
+  --z-index-90: 90;
+  --z-index-100: 100;
+  --z-index-999: 999;
+  --z-index-modal: 1000;
+  --z-index-dropdown: 1010;
+  --z-index-tooltip: 1020;
+  --z-index-notification: 1030;
+
   /* Transitions */
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark mode override for system preference - Used with .dark class */
+.dark {
+  color-scheme: dark;
+
+  /* Surface colors in dark mode */
+  --color-surface: var(--color-surface-dark);
+  --color-surface-hover: var(--color-surface-dark-hover);
+
+  /* Border colors in dark mode */
+  --color-border: var(--color-border-dark);
+  --color-border-hover: var(--color-border-hover-dark);
+
+  /* Skeleton in dark mode */
+  --color-skeleton: var(--color-skeleton-dark);
+
+  /* Shadow adjustments for dark mode */
+  --shadow-xs: var(--shadow-dark-xs);
+  --shadow-sm: var(--shadow-dark-sm);
 }
 
 /* Add custom utilities */
@@ -324,10 +374,72 @@
   }
 }
 
-/* Dark mode configuration */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-surface-50: rgb(17 24 39);
-    --color-surface-900: rgb(249 250 251);
+/* Animation utilities */
+@utility animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@utility animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@utility animate-slide-in {
+  animation: slideIn 0.2s ease-out;
+}
+
+@utility animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Define extra keyframes */
+@keyframes countUp {
+  from {
+    opacity: 0.5;
+    transform: translateY(5px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@utility animate-count-up {
+  animation: countUp 0.5s ease-out;
+}
+
+/* Dark mode toggle button style */
+.dark-mode-toggle {
+  padding: 0.5rem;
+  border-radius: 9999px;
+  transition-property: all;
+  transition-timing-function: var(--default-transition-timing-function);
+  transition-duration: var(--default-transition-duration);
+}
+
+.dark-mode-toggle:hover {
+  background-color: var(--color-gray-200);
+}
+
+.dark .dark-mode-toggle:hover {
+  background-color: var(--color-gray-700);
+}
+
+.dark-mode-toggle:focus {
+  outline: none;
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width, 2px) var(--tw-ring-offset-color, transparent);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--color-gray-400);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
+.dark .dark-mode-toggle:focus {
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--color-gray-600);
 }
