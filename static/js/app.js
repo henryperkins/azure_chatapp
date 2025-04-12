@@ -274,18 +274,22 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
     };
 
     // Body for POST/PUT
-    if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
-      try {
-        // Attempt to retrieve an access token from auth.js
-        const token = await window.auth.getAuthToken();
-        if (token) {
-          requestOptions.headers['Authorization'] = 'Bearer ' + token;
+      if (data && !['GET', 'HEAD', 'DELETE'].includes(method)) {
+        try {
+          // Attempt to retrieve an access token from auth.js
+          const token = await window.auth.getAuthToken();
+          if (token) {
+            requestOptions.headers['Authorization'] = 'Bearer ' + token;
+          }
+        } catch (err) {
+          console.error('[app.js] Unable to retrieve auth token:', err);
+          // Propagate authentication errors rather than continuing without auth
+          if (err.message === 'Not authenticated') {
+            throw new Error('Authentication required. Please log in and try again.');
+          }
         }
-      } catch (err) {
-        console.warn('[app.js] Unable to retrieve auth token:', err);
-      }
 
-      if (data instanceof FormData) {
+        if (data instanceof FormData) {
       } else {
         requestOptions.headers['Content-Type'] = 'application/json';
         requestOptions.body = JSON.stringify(data);
@@ -329,6 +333,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
           }
         }
 
+        // Clone response before consuming its body
+        const responseClone = response.clone();
+
         try {
           // Try to parse response as JSON to handle inconsistent API error formats
           const errorResponse = await response.json();
@@ -350,11 +357,18 @@ async function apiRequest(endpoint, method = 'GET', data = null, retryCount = 0,
           error.data = errorResponse;
           throw error;
         } catch (jsonError) {
-          // Fallback to text if response is not JSON
-          const errorBody = await response.text();
-          const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
-          error.status = response.status;
-          throw error;
+          try {
+            // Fallback to text using the cloned response
+            const errorBody = await responseClone.text();
+            const error = new Error(`API error (${response.status}): ${errorBody || response.statusText}`);
+            error.status = response.status;
+            throw error;
+          } catch (textError) {
+            // If both JSON and text extraction fail, use the status text
+            const error = new Error(`API error (${response.status}): ${response.statusText}`);
+            error.status = response.status;
+            throw error;
+          }
         }
       }
 
