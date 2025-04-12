@@ -891,7 +891,7 @@ async def toggle_project_kb(
 @handle_service_errors("Error retrieving project file list")
 async def get_project_file_list(
     project_id: UUID,
-    user_id: UUID,
+    user_id: int,  # Changed from UUID to int
     db: AsyncSession,
     skip: int = 0,
     limit: int = 100,

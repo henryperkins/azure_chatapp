@@ -693,24 +693,61 @@ async function loadSidebarProjects() {
 
   try {
     return apiRequest(API_ENDPOINTS.PROJECTS)
-      .then(projects => {
+      .then(apiResponse => {
+        // Some servers return an object with projects array, or data array, etc.
+        // Let's unify it by extracting the array from known properties or fallback to the response itself if it's array.
+        let projectsArray = [];
+        if (Array.isArray(apiResponse)) {
+          projectsArray = apiResponse;
+        } else if (Array.isArray(apiResponse?.data)) {
+          projectsArray = apiResponse.data;
+        } else if (Array.isArray(apiResponse?.projects)) {
+          projectsArray = apiResponse.projects;
+        } else {
+          console.warn('[loadSidebarProjects] Unexpected response shape:', apiResponse);
+        }
+
         const container = ELEMENTS.SIDEBAR_PROJECTS || getElement(SELECTORS.SIDEBAR_PROJECTS);
-        if (!container) return;
+        if (!container) {
+          console.warn('[loadSidebarProjects] No sidebar project container found (SIDEBAR_PROJECTS).');
+          return;
+        }
+
+        console.debug('[loadSidebarProjects] Raw response:', apiResponse);
+        console.debug('[loadSidebarProjects] Resolved projects array length:', projectsArray.length);
 
         container.innerHTML = '';
 
-        if (projects?.length > 0) {
-          projects.forEach(project => {
+        if (projectsArray.length > 0) {
+          console.debug('[loadSidebarProjects] Rendering', projectsArray.length, 'projects.');
+          projectsArray.forEach(project => {
             const li = createProjectListItem(project);
             if (li) container.appendChild(li);
           });
+
+          // Also unhide the "projectsSection" if it exists
+          const projectsSection = document.getElementById('projectsSection');
+          if (projectsSection) {
+            projectsSection.classList.remove('hidden');
+          }
+
+          const projectListView = document.getElementById('projectListView');
+          const projectDetailsView = document.getElementById('projectDetailsView');
+          if (projectListView && projectDetailsView) {
+            console.debug('[loadSidebarProjects] Showing projectListView, hiding projectDetailsView');
+            projectListView.classList.remove('hidden');
+            projectDetailsView.classList.add('hidden');
+          } else {
+            console.warn('[loadSidebarProjects] Missing #projectListView or #projectDetailsView elements.');
+          }
         } else {
+          console.warn('[loadSidebarProjects] No projects found, rendering empty state.');
           showEmptyState(container, MESSAGES.NO_PROJECTS, 'py-4');
         }
-        return projects;
+        return projectsArray;
       })
       .catch(error => {
-        console.error('Failed to load sidebar projects:', error);
+        console.error('[loadSidebarProjects] Failed to load sidebar projects:', error);
         throw error;
       });
   } catch (error) {

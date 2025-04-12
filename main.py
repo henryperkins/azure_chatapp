@@ -29,6 +29,11 @@ from pathlib import Path
 from cryptography.utils import CryptographyDeprecationWarning
 from typing import Callable, Awaitable
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -138,7 +143,7 @@ async def startup_handler() -> None:
 
             required_tables = {
                 "project_files": ["config"],
-                "knowledge_bases": ["config"], 
+                "knowledge_bases": ["config"],
                 "messages": ["context_used"],
             }
 
@@ -167,7 +172,7 @@ async def startup_handler() -> None:
         async with get_async_session_context() as session:
             deleted_count = await clean_expired_tokens(session)
             logger.info(f"Cleaned {deleted_count} expired tokens during startup")
-        
+
         # 5. Create default admin user if no users exist
         try:
             await create_default_user()
@@ -199,6 +204,38 @@ async def shutdown_handler() -> None:
         logger.error(f"Error during shutdown: {e}")
     logger.info("Shutdown complete")
 
+
+# -------------------------
+# Initialize Sentry
+# -------------------------
+try:
+    # Setup Sentry with minimal configuration to avoid errors
+    sentry_sdk.init(
+        dsn="https://b03711f63d1160f48dcaeda3edae14ac@o4508070823395328.ingest.us.sentry.io/4509138383863808",
+        # Add data like request headers and IP for users
+        send_default_pii=True,
+        # Enable performance monitoring
+        enable_tracing=True,
+        # Add integrations for comprehensive monitoring
+        integrations=[
+            FastApiIntegration(),
+            StarletteIntegration(),
+            SqlalchemyIntegration(),
+        ],
+        # Set the environment based on application settings
+        environment=settings.ENV,
+        # Sampling rate for performance monitoring
+        traces_sample_rate=0.5,
+        # Basic error sampling
+        sample_rate=1.0,
+    )
+
+    # Send a test event
+    sentry_sdk.capture_message("Sentry initialization successful", level="info")
+
+    logger.info("Sentry SDK initialized successfully")
+except Exception as e:
+    logger.warning(f"Sentry initialization failed: {e}")
 
 # -------------------------
 # Create FastAPI App
@@ -247,7 +284,7 @@ app = FastAPI(
 async def startup_event():
     await startup_handler()
 
-@app.on_event("shutdown") 
+@app.on_event("shutdown")
 async def shutdown_event():
     await shutdown_handler()
 
@@ -415,6 +452,16 @@ if settings.ENV != "production":
                 ),
             },
         }
+
+    @app.get("/sentry-debug")
+    async def trigger_error():
+        """
+        Trigger a test error to verify Sentry error capture.
+        This endpoint will cause a division by zero error which
+        should be reported to the Sentry dashboard.
+        """
+        division_by_zero = 1 / 0
+        return {"status": "This will never be returned"}
 
 
 # ---------------------------

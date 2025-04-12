@@ -146,14 +146,14 @@
 
                 // Use the auth readiness promise to ensure auth is fully initialized
                 window.auth.readyPromise.then(() => {
-                  if (AUTH_DEBUG) console.debug("[Auth] Auth module ready, proceeding with login");
+                  if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Auth module ready, proceeding with login call`);
                   const loginStartTime = Date.now();
 
                   window.auth.login(usernameInput.value, passwordInput.value)
                     .then(() => {
                       const loginDuration = Date.now() - loginStartTime;
                       if (AUTH_DEBUG) {
-                        console.debug(`[Auth] Login successful (took ${loginDuration}ms)`);
+                        console.debug(`[Auth][${timestamp}] Login successful (took ${loginDuration}ms)`);
                         console.debug("[Auth] Redirecting to projects page");
                       }
                       // Redirect to projects page on success
@@ -162,13 +162,14 @@
                     .catch(error => {
                       const loginDuration = Date.now() - loginStartTime;
                       if (AUTH_DEBUG) {
-                        console.debug(`[Auth] Login failed after ${loginDuration}ms:`, error);
+                        console.debug(`[Auth][${timestamp}] Login failed after ${loginDuration}ms:`, error);
                         console.debug("[Auth] Error details:", {
                           message: error.message,
                           status: error.status,
                           timestamp: new Date().toISOString(),
                           requiresAction: true
                         });
+                        console.debug(`[Auth][${timestamp}] Executing .catch block for login promise.`);
                       }
 
                       // Show error message
@@ -177,15 +178,18 @@
                       console.error("[Auth] Login failed:", error);
                     })
                     .finally(() => {
-                      if (AUTH_DEBUG) console.debug("[Auth] Login attempt completed, cleaning up UI state");
+                      if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Login promise settled. Executing .finally block to cleanup UI state.`);
                       // Always clear safety timeout and restore button
                       clearTimeout(safetyTimeout);
-                      submitBtn.disabled = false;
-                      submitBtn.textContent = originalText;
+                      // Explicitly clear innerHTML before setting textContent
+                      submitBtn.innerHTML = ''; // Clear spinner SVG
+                      submitBtn.textContent = originalText; // Restore original text
+                      submitBtn.disabled = false; // Re-enable button
+                      if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Submit button restored. Disabled: ${submitBtn.disabled}, Text: "${submitBtn.textContent}"`);
                     });
                 }).catch(error => {
                   // Either auth module failed to initialize or readyPromise is not supported
-                  console.error("[Auth] Auth readiness check failed:", error);
+                  console.error(`[Auth][${timestamp}] Auth readiness check failed:`, error);
                   clearTimeout(safetyTimeout);
                   submitBtn.disabled = false;
                   submitBtn.textContent = originalText;
@@ -1308,91 +1312,80 @@ window.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Dark Mode Toggle -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const darkModeToggle = document.getElementById('darkModeToggle');
-      const darkModeIcon = document.getElementById('darkModeIcon');
+<!-- Dark Mode Toggle -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    const darkModeIcon = document.getElementById('darkModeIcon');
 
-      // Check for saved preference or system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const savedMode = localStorage.getItem('darkMode');
-      const isDark = savedMode ? savedMode === 'true' : prefersDark;
+    // Check for saved preference or system preference
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const savedMode = localStorage.getItem('darkMode');
+    const isDark = savedMode ? savedMode === 'true' : prefersDark;
 
-      // Apply initial mode
-      if (isDark) {
-        document.documentElement.classList.add('dark');
-        darkModeIcon.setAttribute('stroke', 'currentColor');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+    // Apply initial mode
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      darkModeIcon.setAttribute('stroke', 'currentColor');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
 
-      // Toggle handler
-      darkModeToggle.addEventListener('click', () => {
-        const isDark = document.documentElement.classList.toggle('dark');
-        localStorage.setItem('darkMode', isDark);
+    // Toggle handler
+    darkModeToggle.addEventListener('click', () => {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('darkMode', isDark);
 
-        // Update icon
-        if (isDark) {
-          darkModeIcon.setAttribute('stroke', 'currentColor');
-        } else {
-          darkModeIcon.setAttribute('stroke', 'currentColor');
-        }
-      });
+      // Update icon
+      darkModeIcon.setAttribute('stroke', 'currentColor');
     });
-  </script>
+  });
+</script>
 
-  <!-- Auth Module (loads first for dependencies) -->
-  <script type="module" src="/static/js/auth.js"></script>
+<!-- Module Loading - Core first, then dependencies -->
+<!-- Auth Module (loads first for dependencies) -->
+<script type="module" src="/static/js/auth.js"></script>
+<!-- Project Manager (loads after auth.js) -->
+<script src="/static/js/projectManager.js"></script>
+<!-- Core Configuration & Utilities -->
+<script type="module" src="/static/js/app.js"></script>
+<script type="module" src="/static/js/chat-utils.js"></script>
+<!-- Chat Services (foundational) -->
+<script type="module" src="/static/js/chat-conversations.js"></script>
+<script type="module" src="/static/js/chat-messages.js"></script>
+<!-- UI Components -->
+<script type="module" src="/static/js/chat-ui.js"></script>
+<script type="module" src="/static/js/formatting.js"></script>
+<script type="module" src="/static/js/modelConfig.js"></script>
+<!-- Chat Core (depends on above) -->
+<script type="module" src="/static/js/chat-core.js"></script>
+<script type="module" src="/static/js/chat-interface.js"></script>
+<!-- Core Utilities -->
+<script src="/static/js/projectDashboardUtils.js"></script>
+<script src="/static/js/projectModal.js"></script>
+<!-- Project Utilities -->
+<script src="/static/js/knowledgeBaseState.js"></script>
+<!-- UI Components -->
+<script src="/static/js/projectListComponent.js"></script>
+<script src="/static/js/sidebar.js"></script>
 
-  <!-- Project Manager (loads after auth.js) -->
-  <script src="/static/js/projectManager.js"></script>
-
-  <!-- Core Configuration & Utilities -->
-  <script type="module" src="/static/js/app.js"></script>
-  <script type="module" src="/static/js/chat-utils.js"></script>
-
-  <!-- Chat Services (foundational) -->
-  <script type="module" src="/static/js/chat-conversations.js"></script>
-  <script type="module" src="/static/js/chat-messages.js"></script>
-  <!-- WebSocket functionality removed -->
-
-  <!-- UI Components -->
-  <script type="module" src="/static/js/chat-ui.js"></script>
-  <script type="module" src="/static/js/formatting.js"></script>
-  <script type="module" src="/static/js/modelConfig.js"></script>
-
-  <!-- Chat Core (depends on above) -->
-  <script type="module" src="/static/js/chat-core.js"></script>
-  <script type="module" src="/static/js/chat-interface.js"></script>
-
-  <!-- Core Utilities -->
-  <script src="/static/js/projectDashboardUtils.js"></script>
-  <script src="/static/js/projectModal.js"></script>
-
-  <!-- Project Utilities -->
-  <script src="/static/js/knowledgeBaseState.js"></script>
-
-  <!-- UI Components -->
-  <script src="/static/js/projectListComponent.js"></script>
-  <script src="/static/js/sidebar.js"></script>
-
-  <!-- Error handling -->
-  <script>
-    window.handleScriptError = function(src, error) {
+<!-- Error handling -->
+<script>
+  // Consolidated script error handling
+  (function () {
+    window.handleScriptError = function (src, error) {
       console.error(`Failed to load ${src}:`, error);
       if (window.showNotification) {
         window.showNotification('Failed to load required components', 'error');
       }
     };
 
-    // Track script loading progress
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
       const scripts = document.querySelectorAll('script[src]');
       window.scriptLoading = {
         loaded: 0,
         total: scripts.length,
-        checkComplete: function() {
+        checkComplete: function () {
           this.loaded++;
           if (this.loaded === this.total && window.initializeAllModules) {
             window.initializeAllModules();
@@ -1405,11 +1398,14 @@ window.addEventListener('DOMContentLoaded', function() {
         script.onerror = () => handleScriptError(script.src, new Error('Load failed'));
       });
     });
-  </script>
+  })();
+</script>
 
-  <!-- Authentication Integration Script -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
+<!-- Authentication and UI Integration -->
+<script>
+  // Authentication lifecycle management
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
       // Initialize auth using window.auth async methods
       if (window.auth) {
         console.log("[Auth] Initializing auth module from DOM ready event");
@@ -1420,7 +1416,7 @@ window.addEventListener('DOMContentLoaded', function() {
             console.log("[Auth] Auth initialization result:", result);
 
             // Set up auth state change listener
-            document.addEventListener('authStateChanged', function(e) {
+            document.addEventListener('authStateChanged', function (e) {
               console.log("[Auth] Auth state changed:", e.detail);
               const loginRequiredMessage = document.getElementById('loginRequiredMessage');
               const projectManagerPanel = document.getElementById('projectManagerPanel');
@@ -1429,6 +1425,12 @@ window.addEventListener('DOMContentLoaded', function() {
                 // User is authenticated
                 if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
                 if (projectManagerPanel) projectManagerPanel.classList.remove('hidden');
+                if (window.projectManager) {
+                  window.projectManager.loadProjects('all');
+                  if (!window.projectDashboardInitialized) {
+                    initProjectDashboard().catch(err => console.error("[Auth] ProjectDashboard initialization failed:", err));
+                  }
+                }
               } else {
                 // User is not authenticated
                 if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
@@ -1446,16 +1448,49 @@ window.addEventListener('DOMContentLoaded', function() {
       // Show login button handler
       const showLoginBtn = document.getElementById('showLoginBtn');
       if (showLoginBtn) {
-        showLoginBtn.addEventListener('click', function() {
+        showLoginBtn.addEventListener('click', function () {
           document.getElementById('authButton').click();
         });
       }
     });
-  </script>
+  })();
+</script>
 
-  <!-- Tab Keyboard Navigation Script -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
+<!-- Project List Component Configuration -->
+<script>
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+      // Create ProjectListComponent only once when DOM is ready
+      window.projectListComponent = new ProjectListComponent({
+        elementId: "projectListView",
+        onViewProject: function (projectId) {
+          console.log('[Index] Opening project:', projectId);
+          // Load the project details or switch UI as needed
+          window.projectManager.loadProjectDetails(projectId)
+            .catch(err => console.error('Failed to load project details', err));
+        }
+      });
+
+      // Listen for project data updates
+      document.addEventListener('projectsLoaded', event => {
+        if (!event.detail?.data?.projects) {
+          console.warn('No projects found in event detail');
+          return;
+        }
+        const { projects } = event.detail.data;
+        if (window.projectListComponent) {
+          console.log('[Index] Rendering projects from projectsLoaded event; Count:', projects.length);
+          window.projectListComponent.renderProjects(projects);
+        }
+      });
+    });
+  })();
+</script>
+
+<!-- Tab Keyboard Navigation -->
+<script>
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
       function setupTabKeyboardNavigation() {
         const tabButtons = document.querySelectorAll('[role="tab"]');
 
@@ -1495,13 +1530,16 @@ window.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('dashboardUtilsReady', setupTabKeyboardNavigation);
       }
     });
-  </script>
+  })();
+</script>
 
-  <!-- Simplified Script Loading -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
+<!-- Application Initialization -->
+<script>
+  (function () {
+    // Centralized application initialization
+    document.addEventListener('DOMContentLoaded', function () {
       // Wait for app.js to be ready before loading dependent components
-      document.addEventListener('appJsReady', function() {
+      document.addEventListener('appJsReady', function () {
         console.log('[index.html] appJsReady event received, proceeding with component loading.');
 
         // Now wait for dashboard utilities (if needed, or load directly)
@@ -1516,10 +1554,9 @@ window.addEventListener('DOMContentLoaded', function() {
       function loadProjectComponents() {
         console.log('[index.html] Loading project components...');
         const scripts = [
-          '/static/js/knowledgeBaseComponent.js', // Ensure these don't also need app.js early
-          '/static/js/projectDetailsComponent.js',
-          '/static/js/projectListComponent.js'
-          // projectManager.js is now loaded directly in the HTML before app.js
+          '/static/js/knowledgeBaseComponent.js',
+          '/static/js/projectDetailsComponent.js'
+          // Removed projectListComponent.js as it's already loaded above
         ];
 
         let loadedCount = 0;
@@ -1540,10 +1577,11 @@ window.addEventListener('DOMContentLoaded', function() {
         });
       }
     });
-  </script>
+  })();
 
-  <script>
-    console.log('All scripts loaded');
-  </script>
+  // Final confirmation when all scripts are loaded
+  console.log('All scripts initialized');
+</script>
 </body>
+
 </html>
