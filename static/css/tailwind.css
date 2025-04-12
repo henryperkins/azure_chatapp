@@ -1,59 +1,6 @@
 @import "tailwindcss";
 
-@theme {
-  /* Define your theme variables here */
-  --default-ring-width: 3px;
-  --default-ring-color: var(--color-blue-500);
-}
-
-/* Base Typography */
-@layer base {
-  /* Typography scale */
-  h1 {
-    @apply text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100;
-  }
-
-  h2 {
-    @apply text-xl md:text-2xl font-semibold text-gray-800 dark:text-gray-200;
-  }
-
-  h3 {
-    @apply text-lg md:text-xl font-medium text-gray-800 dark:text-gray-200;
-  }
-
-  /* Consistent paragraph text */
-  p {
-    @apply text-gray-600 dark:text-gray-300 leading-relaxed;
-  }
-
-  /* Small text */
-  .text-small {
-    @apply text-sm text-gray-500 dark:text-gray-400;
-  }
-
-  /* For consistent border colors like v3 */
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
-  }
-}
-
-/* Convert existing @layer components to @utility */
-@utility collapsible-panel {
-  transition-property: all;
-  transition-duration: 300ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-  will-change: max-height;
-}
-
-@utility animate-slide-in {
-  animation: slideIn 0.2s ease-out forwards;
-}
-
+/* Custom animations */
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -65,81 +12,30 @@
   }
 }
 
-/* Modal styles */
-@utility confirm-modal {
-  position: fixed;
-  inset: 0;
-  background-color: rgb(0 0 0 / 50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  z-index: 1050;
-}
-
-@utility confirm-modal-content {
-  background-color: white;
-  border-radius: 0.5rem;
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  max-width: 28rem;
-  width: 100%;
-  padding: 1.5rem;
-  margin: 2rem auto;
-}
-
-@variant dark {
-  .confirm-modal-content {
-    background-color: var(--color-gray-800);
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
-/* Button components */
-@utility btn-primary {
-  padding-left: 1rem;
-  padding-right: 1rem;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-  background-color: var(--color-primary-600);
-  color: white;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  transition-property: color, background-color, border-color;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
-}
+/* Dark mode styles */
+.dark {
+  --surface-light: 31 41 55;
+  --surface-dark: 3 7 18;
+  --border-dark: 75 85 99;
+  color: rgba(243, 244, 246, 1);
 
-@variant hover {
-  .btn-primary {
-    background-color: var(--color-primary-700);
+  h1, h2, h3, h4 {
+    color: white;
   }
-}
 
-@variant focus {
-  .btn-primary {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-    --ring-color: var(--color-primary-500);
-    --ring-opacity: 0.5;
-    box-shadow: 0 0 0 2px var(--ring-color);
+  a {
+    color: var(--color-blue-400);
   }
-}
-
-@variant dark {
-  .btn-primary {
-    background-color: var(--color-primary-500);
-  }
-}
-
-@variant dark {
-  .btn-primary:hover {
-    background-color: var(--color-primary-400);
-  }
-}
-
-@variant dark {
-  .btn-primary:focus {
-    --ring-color: var(--color-primary-400);
+  a:hover {
+    color: var(--color-blue-300);
   }
 }
