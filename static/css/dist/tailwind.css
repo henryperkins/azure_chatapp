@@ -108,8 +108,17 @@
     --color-danger-200: oklch(88.5% 0.062 18.334);
     --color-danger-800: oklch(44.4% 0.177 26.899);
     --color-danger-900: oklch(39.6% 0.141 25.723);
+    --color-surface-dark: #111827;
+    --color-surface-dark-hover: #1f2937;
+    --color-border-dark: #374151;
+    --color-border-hover-dark: #4b5563;
+    --color-skeleton-dark: #4b5563;
     --breakpoint-xs: 320px;
     --breakpoint-3xl: 1920px;
+    --shadow-dark-xs: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+    --shadow-dark-sm: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+    --z-index-modal: 1000;
+    --z-index-dropdown: 1010;
   }
 }
 @layer base {
@@ -346,6 +355,12 @@
   }
   .z-\[99\] {
     z-index: 99;
+  }
+  .z-dropdown {
+    z-index: var(--z-index-dropdown);
+  }
+  .z-modal {
+    z-index: var(--z-index-modal);
   }
   .col-span-3 {
     grid-column: span 3 / span 3;
@@ -671,8 +686,23 @@
   .transform {
     transform: var(--tw-rotate-x) var(--tw-rotate-y) var(--tw-rotate-z) var(--tw-skew-x) var(--tw-skew-y);
   }
+  .animate-count-up {
+    animation: countUp 0.5s ease-out;
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
   .animate-pulse {
     animation: var(--animate-pulse);
+  }
+  .animate-slide-in {
+    animation: slideIn 0.2s ease-out;
+  }
+  .animate-spin {
+    animation: spin 1s linear infinite;
   }
   .animate-spin {
     animation: var(--animate-spin);
@@ -1506,6 +1536,14 @@
       }
     }
   }
+  .hover\:shadow-sm {
+    &:hover {
+      @media (hover: hover) {
+        --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+        box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+      }
+    }
+  }
   .focus\:border-blue-500 {
     &:focus {
       border-color: var(--color-blue-500);
@@ -1531,11 +1569,6 @@
   .focus\:ring-blue-500 {
     &:focus {
       --tw-ring-color: var(--color-blue-500);
-    }
-  }
-  .focus\:ring-gray-400 {
-    &:focus {
-      --tw-ring-color: var(--color-gray-400);
     }
   }
   .focus\:outline-hidden {
@@ -1883,13 +1916,16 @@
       }
     }
   }
-  .dark\:focus\:ring-gray-600 {
-    @media (prefers-color-scheme: dark) {
-      &:focus {
-        --tw-ring-color: var(--color-gray-600);
-      }
-    }
-  }
+}
+.dark {
+  color-scheme: dark;
+  --color-surface: var(--color-surface-dark);
+  --color-surface-hover: var(--color-surface-dark-hover);
+  --color-border: var(--color-border-dark);
+  --color-border-hover: var(--color-border-hover-dark);
+  --color-skeleton: var(--color-skeleton-dark);
+  --shadow-xs: var(--shadow-dark-xs);
+  --shadow-sm: var(--shadow-dark-sm);
 }
 .project-card {
   display: flex;
@@ -2045,11 +2081,45 @@
     transform: translateY(0);
   }
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-surface-50: rgb(17 24 39);
-    --color-surface-900: rgb(249 250 251);
+@keyframes countUp {
+  from {
+    opacity: 0.5;
+    transform: translateY(5px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.dark-mode-toggle {
+  padding: 0.5rem;
+  border-radius: 9999px;
+  transition-property: all;
+  transition-timing-function: var(--default-transition-timing-function);
+  transition-duration: var(--default-transition-duration);
+}
+.dark-mode-toggle:hover {
+  background-color: var(--color-gray-200);
+}
+.dark .dark-mode-toggle:hover {
+  background-color: var(--color-gray-700);
+}
+.dark-mode-toggle:focus {
+  outline: none;
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width, 2px) var(--tw-ring-offset-color, transparent);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--color-gray-400);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+.dark .dark-mode-toggle:focus {
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--color-gray-600);
 }
 @property --tw-translate-x {
   syntax: "*";

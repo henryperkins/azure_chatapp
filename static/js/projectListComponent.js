@@ -275,7 +275,7 @@
 
     _createProjectCard(project) {
       const card = document.createElement('div');
-      card.className = 'project-card bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer';
+      card.className = 'project-card bg-white dark:bg-gray-800 rounded-sm shadow-xs border border-gray-200 dark:border-gray-700 p-4 flex flex-col justify-between hover:shadow-sm transition-shadow cursor-pointer';
       card.dataset.projectId = project.id;
 
       // Add project name, description, etc.
