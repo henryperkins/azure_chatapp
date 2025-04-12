@@ -27,7 +27,6 @@ class KnowledgeBaseComponent {
     // Initialize component
     this._validateEnvironment();
     this._validateDOM();
-    this._injectStyles();
     this._cacheElements();
     this._setupEventListeners();
     this._setupUtilityMethods();
@@ -54,7 +53,8 @@ class KnowledgeBaseComponent {
   _validateDOM() {
     const criticalElements = [
       'knowledgeTab', 'knowledgeBaseActive', 'knowledgeBaseInactive',
-      'knowledgeBaseModelSelect', 'kbStatusText', 'kbStatusBadge'
+      'knowledgeBaseModelSelect', // Now just 'knowledgeBaseModelSelect'
+      'kbStatusBadge' // Using badge now
     ];
 
     const missingElements = criticalElements.filter(id => !document.getElementById(id));
@@ -66,7 +66,9 @@ class KnowledgeBaseComponent {
     const optionalElements = [
       'knowledgeSearchInput', 'runKnowledgeSearchBtn', 'knowledgeResultsList',
       'kbStatusIndicator', 'setupKnowledgeBaseBtn', 'reprocessFilesBtn',
-      'knowledgeFileCount', 'knowledgeFileSize', 'knowledgeResultModal'
+      'knowledgeFileCount', 'knowledgeFileSize', // These are in projectDetails now
+      'knowledgeResultModal', 'knowledgeBaseSettingsModal', // DaisyUI dialogs
+      'knowledgeBaseEnabled' // Toggle switch
     ];
 
     optionalElements.forEach(id => {
@@ -77,86 +79,87 @@ class KnowledgeBaseComponent {
   }
 
   _injectStyles() {
-    const styleId = 'kb-component-styles';
-    if (document.getElementById(styleId)) return;
+    // Remove this function - styles are handled by Tailwind/DaisyUI via app.css
+    // const styleId = 'kb-component-styles';
+    // if (document.getElementById(styleId)) return;
 
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
-      .kb-spinner {
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        border-left-color: #3b82f6;
-        border-radius: 50%;
-        width: 1rem;
-        height: 1rem;
-        animation: kb-spin 1s linear infinite;
-      }
-      @keyframes kb-spin {
-        to { transform: rotate(360deg); }
-      }
-      .kb-result-item {
-        transition: all 0.2s ease;
-        cursor: pointer;
-      }
-      .kb-result-item:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      }
-      .kb-status-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.5rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 500;
-      }
-      .kb-status-active {
-        background-color: #ecfdf5;
-        color: #059669;
-      }
-      .kb-status-inactive {
-        background-color: #fee2e2;
-        color: #dc2626;
-      }
-      .kb-notification {
-        padding: 0.75rem 1rem;
-        margin-bottom: 1rem;
-        border-radius: 0.375rem;
-        border: 1px solid transparent;
-      }
-      .kb-notification.info {
-        color: #0c5460;
-        background-color: #d1ecf1;
-        border-color: #bee5eb;
-      }
-      .kb-notification.warning {
-        color: #856404;
-        background-color: #fff3cd;
-        border-color: #ffeeba;
-      }
-      .kb-notification.error {
-        color: #721c24;
-        background-color: #f8d7da;
-        border-color: #f5c6cb;
-      }
-      .kb-notification.success {
-        color: #155724;
-        background-color: #d4edda;
-        border-color: #c3e6cb;
-      }
-      .kb-line-clamp-3 {
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .kb-disabled-option {
-        opacity: 0.5;
-        cursor: not-allowed;
-        color: #999;
-      }
-    `;
-    document.head.appendChild(style);
+    // const style = document.createElement('style');
+    // style.id = styleId;
+    // style.textContent = `
+    //   .kb-spinner {
+    //     border: 2px solid rgba(0, 0, 0, 0.1);
+    //     border-left-color: #3b82f6;
+    //     border-radius: 50%;
+    //     width: 1rem;
+    //     height: 1rem;
+    //     animation: kb-spin 1s linear infinite;
+    //   }
+    //   @keyframes kb-spin {
+    //     to { transform: rotate(360deg); }
+    //   }
+    //   .kb-result-item {
+    //     transition: all 0.2s ease;
+    //     cursor: pointer;
+    //   }
+    //   .kb-result-item:hover {
+    //     transform: translateY(-1px);
+    //     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    //   }
+    //   .kb-status-badge {
+    //     display: inline-flex;
+    //     align-items: center;
+    //     padding: 0.25rem 0.5rem;
+    //     border-radius: 9999px;
+    //     font-size: 0.75rem;
+    //     font-weight: 500;
+    //   }
+    //   .kb-status-active {
+    //     background-color: #ecfdf5;
+    //     color: #059669;
+    //   }
+    //   .kb-status-inactive {
+    //     background-color: #fee2e2;
+    //     color: #dc2626;
+    //   }
+    //   .kb-notification {
+    //     padding: 0.75rem 1rem;
+    //     margin-bottom: 1rem;
+    //     border-radius: 0.375rem;
+    //     border: 1px solid transparent;
+    //   }
+    //   .kb-notification.info {
+    //     color: #0c5460;
+    //     background-color: #d1ecf1;
+    //     border-color: #bee5eb;
+    //   }
+    //   .kb-notification.warning {
+    //     color: #856404;
+    //     background-color: #fff3cd;
+    //     border-color: #ffeeba;
+    //   }
+    //   .kb-notification.error {
+    //     color: #721c24;
+    //     background-color: #f8d7da;
+    //     border-color: #f5c6cb;
+    //   }
+    //   .kb-notification.success {
+    //     color: #155724;
+    //     background-color: #d4edda;
+    //     border-color: #c3e6cb;
+    //   }
+    //   .kb-line-clamp-3 {
+    //     display: -webkit-box;
+    //     -webkit-line-clamp: 3;
+    //     -webkit-box-orient: vertical;
+    //     overflow: hidden;
+    //   }
+    //   .kb-disabled-option {
+    //     opacity: 0.5;
+    //     cursor: not-allowed;
+    //     color: #999;
+    //   }
+    // `;
+    // document.head.appendChild(style);
   }
 
   _cacheElements() {
@@ -165,40 +168,42 @@ class KnowledgeBaseComponent {
       container: document.getElementById("knowledgeTab"),
       activeSection: document.getElementById("knowledgeBaseActive"),
       inactiveSection: document.getElementById("knowledgeBaseInactive"),
-      statusText: document.getElementById("kbStatusText"),
-      statusBadge: document.getElementById("kbStatusBadge"),
+      // statusText: document.getElementById("kbStatusText"), // Removed, using badge only
+      statusBadge: document.getElementById("kbStatusBadge"), // DaisyUI badge
 
       // Search elements
-      searchInput: document.getElementById("knowledgeSearchInput"),
-      searchButton: document.getElementById("runKnowledgeSearchBtn"),
+      searchInput: document.getElementById("knowledgeSearchInput"), // DaisyUI input
+      searchButton: document.getElementById("runKnowledgeSearchBtn"), // DaisyUI button
       resultsContainer: document.getElementById("knowledgeResultsList"),
       resultsSection: document.getElementById("knowledgeSearchResults"),
       noResultsSection: document.getElementById("knowledgeNoResults"),
-      topKSelect: document.getElementById("knowledgeTopK"),
+      topKSelect: document.getElementById("knowledgeTopK"), // DaisyUI select
 
       // Management elements
-      kbToggle: document.getElementById("knowledgeBaseEnabled"),
-      reprocessButton: document.getElementById("reprocessFilesBtn"),
-      setupButton: document.getElementById("setupKnowledgeBaseBtn"),
+      kbToggle: document.getElementById("knowledgeBaseEnabled"), // DaisyUI toggle
+      reprocessButton: document.getElementById("reprocessFilesBtn"), // DaisyUI button
+      setupButton: document.getElementById("setupKnowledgeBaseBtn"), // DaisyUI button
+      settingsButton: document.getElementById("knowledgeBaseSettingsBtn"), // Added button
 
-      // Info elements
+      // Info elements (Some might be moved to projectDetails stats)
       kbNameDisplay: document.getElementById("knowledgeBaseName"),
+      kbModelDisplay: document.getElementById("knowledgeBaseModelDisplay"), // Added display span
       kbVersionDisplay: document.getElementById("kbVersionDisplay"),
       kbLastUsedDisplay: document.getElementById("kbLastUsedDisplay"),
-      fileCountDisplay: document.getElementById("knowledgeFileCount"),
-      fileSizeDisplay: document.getElementById("knowledgeFileSize"),
+      // fileCountDisplay: document.getElementById("knowledgeFileCount"), // Moved
+      // fileSizeDisplay: document.getElementById("knowledgeFileSize"), // Moved
 
-      // Modal elements
+      // Modal elements (DaisyUI dialogs)
       settingsModal: document.getElementById("knowledgeBaseSettingsModal"),
       settingsForm: document.getElementById("knowledgeBaseForm"),
-      cancelSettingsBtn: document.getElementById("cancelKnowledgeBaseFormBtn"),
-      modelSelect: document.getElementById("knowledgeBaseModelSelect"),
+      cancelSettingsBtn: document.getElementById("cancelKnowledgeBaseFormBtn"), // In form
+      modelSelect: document.getElementById("knowledgeBaseModelSelect"), // DaisyUI select in modal
       resultModal: document.getElementById("knowledgeResultModal"),
       resultTitle: document.getElementById("knowledgeResultTitle"),
       resultSource: document.getElementById("knowledgeResultSource"),
-      resultScore: document.getElementById("knowledgeResultScore"),
+      resultScore: document.getElementById("knowledgeResultScore"), // DaisyUI badge
       resultContent: document.getElementById("knowledgeResultContent"),
-      useInChatBtn: document.getElementById("useInChatBtn")
+      useInChatBtn: document.getElementById("useInChatBtn") // DaisyUI button
     };
 
     // Add accessibility attributes
@@ -208,40 +213,30 @@ class KnowledgeBaseComponent {
     if (this.elements.searchInput) {
       this.elements.searchInput.setAttribute('aria-label', 'Knowledge base search query');
     }
+
+    // Add listener for settings button
+    if (this.elements.settingsButton) {
+       this.elements.settingsButton.addEventListener('click', () => this._showKnowledgeBaseModal());
+    }
   }
 
   _setupUtilityMethods() {
-    // Format bytes for file size display
-    this.formatBytes = (bytes, decimals = 2) => {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const dm = decimals < 0 ? 0 : decimals;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    // Use global uiUtilsInstance if available
+    this.utils = window.uiUtilsInstance || {
+        formatBytes: (bytes = 0, decimals = 2) => { /* Basic fallback */
+            if (bytes === 0) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        },
+        formatDate: (dateString) => { /* Basic fallback */
+            if (!dateString) return ''; try { const d = new Date(dateString); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString(); } catch (e) { return dateString; }
+        },
+        fileIcon: (fileType) => { /* Basic fallback */
+             const icons = { pdf: '📄', doc: '📝', docx: '📝', txt: '📄', csv: '📊', json: '📋', md: '📄' }; return icons[fileType?.toLowerCase()] || '📄';
+        }
     };
-
-    // Simple date formatter
-    this.formatDate = (dateString) => {
-      const date = new Date(dateString);
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-    };
-
-    // File type icons
-    this.fileIcon = (fileType) => {
-      const icons = {
-        pdf: '📄',
-        doc: '📝',
-        docx: '📝',
-        txt: '📝',
-        csv: '📊',
-        json: '🔠',
-        xls: '📊',
-        xlsx: '📊',
-        default: '📁'
-      };
-      return icons[fileType?.toLowerCase()] || icons.default;
-    };
+    // Assign methods directly to this instance for easier access
+    this.formatBytes = this.utils.formatBytes;
+    this.formatDate = this.utils.formatDate;
+    this.fileIcon = this.utils.fileIcon;
   }
 
   _setupEventListeners() {
@@ -259,7 +254,7 @@ class KnowledgeBaseComponent {
       });
     }
 
-    // Knowledge base toggle
+    // Knowledge base toggle (using DaisyUI toggle)
     if (this.elements.kbToggle) {
       this.elements.kbToggle.addEventListener('change', (e) => {
         this.toggleKnowledgeBase(e.target.checked);
@@ -274,31 +269,29 @@ class KnowledgeBaseComponent {
       });
     }
 
-    // Modal interactions
+    // Setup KB button
+    if (this.elements.setupButton) {
+       this.elements.setupButton.addEventListener('click', () => this._showKnowledgeBaseModal());
+    }
+
+    // Modal interactions (using dialog methods)
     if (this.elements.settingsForm) {
       this.elements.settingsForm.addEventListener('submit', (e) => this._handleKnowledgeBaseFormSubmit(e));
     }
 
-    if (this.elements.cancelSettingsBtn) {
-      this.elements.cancelSettingsBtn.addEventListener('click', () => this._hideKnowledgeBaseModal());
-    }
+    // Cancel button inside the dialog form handles closing via method="dialog"
 
-    if (this.elements.settingsModal) {
-      this.elements.settingsModal.addEventListener('click', (event) => {
-        if (event.target === this.elements.settingsModal) this._hideKnowledgeBaseModal();
-      });
-    }
-
-    if (this.elements.resultModal) {
-      this.elements.resultModal.addEventListener('click', (event) => {
-        if (event.target === this.elements.resultModal) this._hideResultDetailModal();
-      });
-    }
+    // Result modal close handled by dialog structure
 
     // Auth state changes
     document.addEventListener('authStateChanged', (e) => {
       this._handleAuthStateChange(e.detail.authenticated);
     });
+
+    // Model selection change in modal
+    if (this.elements.modelSelect) {
+       this.elements.modelSelect.addEventListener('change', () => this._validateSelectedModelDimensions());
+    }
   }
 
   // ======================
@@ -313,34 +306,36 @@ class KnowledgeBaseComponent {
 
     this.state.knowledgeBase = kb;
     const currentProjectId = projectId || kb.project_id || this._getCurrentProjectId();
+    if (this.elements.activeSection) {
+       this.elements.activeSection.dataset.projectId = currentProjectId; // Store project ID
+    }
+
 
     // Update UI elements
     this._updateBasicInfo(kb);
-    this._updateModelSelection(kb.embedding_model);
-    this._updateStatusIndicator(kb.is_active !== false);
-    this._updateKnowledgeBaseStats(kb.stats);
+    this._updateModelSelection(kb.embedding_model); // Update select in modal
+    this._updateStatusIndicator(kb.is_active !== false); // Update badge
+    // this._updateKnowledgeBaseStats(kb.stats); // Stats are now shown in projectDetails
 
     // Show appropriate sections
     this.elements.activeSection?.classList.remove('hidden');
     this.elements.inactiveSection?.classList.add('hidden');
 
+    // Update toggle state
+    if (this.elements.kbToggle) {
+       this.elements.kbToggle.checked = (kb.is_active !== false);
+    }
+
     // Check health if KB is active
     if (kb.is_active !== false && kb.id) {
-      this._loadKnowledgeBaseHealth(kb.id);
+      this._loadKnowledgeBaseHealth(kb.id); // Keep health check
     }
 
     // Show appropriate status alerts
-    if (kb.is_active !== false) {
-      if (kb?.stats?.file_count === 0) {
-        this._showStatusAlert("Knowledge Base is empty - upload files.", "warning");
-      } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0 && kb.stats?.unprocessed_files > 0) {
-        this._showStatusAlert("Files need processing. Click 'Reprocess Files'.", "warning");
-      } else if (kb.stats?.unprocessed_files > 0) {
-        this._showStatusAlert(`${kb.stats.unprocessed_files} file(s) need processing.`, "info");
-      }
-    } else {
-      this._showStatusAlert("Knowledge Base is disabled.", "warning");
-    }
+    this._updateStatusAlerts(kb);
+
+    // Update button states based on KB status
+    this._updateUploadButtonsState();
   }
 
   async searchKnowledgeBase(query) {
@@ -482,10 +477,6 @@ class KnowledgeBaseComponent {
     }
   }
 
-  // ======================
-  // Core Functionality
-  // ======================
-
   async processFiles(projectId, files) {
     const { validFiles, invalidFiles } = this._validateFiles(files);
 
@@ -522,11 +513,16 @@ class KnowledgeBaseComponent {
   // ======================
 
   _updateBasicInfo(kb) {
-    const { kbNameDisplay, kbVersionDisplay, kbLastUsedDisplay } = this.elements;
+    const { kbNameDisplay, kbModelDisplay, kbVersionDisplay, kbLastUsedDisplay } = this.elements;
 
     if (kbNameDisplay) {
       kbNameDisplay.textContent = kb.name || "Project Knowledge Base";
       kbNameDisplay.title = `Knowledge Base Name: ${kb.name || 'Default'}`;
+    }
+
+    if (kbModelDisplay) {
+       kbModelDisplay.textContent = kb.embedding_model || 'Not Set';
+       kbModelDisplay.title = `Embedding Model: ${kb.embedding_model || 'Not Set'}`;
     }
 
     if (kbVersionDisplay) {
@@ -543,7 +539,7 @@ class KnowledgeBaseComponent {
   }
 
   _updateModelSelection(selectedModel) {
-    const modelSelect = this.elements.modelSelect;
+    const modelSelect = this.elements.modelSelect; // The select inside the modal
     if (!modelSelect) return;
 
     modelSelect.innerHTML = '';
@@ -572,52 +568,47 @@ class KnowledgeBaseComponent {
       modelSelect.appendChild(option);
     });
 
-    this._validateSelectedModelDimensions();
+    // Update the display span in the main view
+    if (this.elements.kbModelDisplay) {
+       const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+       this.elements.kbModelDisplay.textContent = selectedOption ? selectedOption.text.split('(')[0].trim() : (selectedModel || 'Not Set');
+       this.elements.kbModelDisplay.title = `Embedding Model: ${selectedOption ? selectedOption.text : (selectedModel || 'Not Set')}`;
+    }
+
+    this._validateSelectedModelDimensions(); // Check warning message
   }
 
   _updateStatusIndicator(isActive) {
-    const { statusText, statusBadge } = this.elements;
+    const { statusBadge } = this.elements;
+    if (!statusBadge) return;
 
-    if (statusText) {
-      statusText.textContent = isActive ? "Active" : "Inactive";
-      statusText.className = isActive
-        ? "text-green-600 font-medium"
-        : "text-red-600 font-medium";
-      statusText.title = isActive
-        ? "Knowledge base enabled."
-        : "Knowledge base disabled.";
-    }
-
-    if (statusBadge) {
-      statusBadge.className = isActive
-        ? "kb-status-badge kb-status-active"
-        : "kb-status-badge kb-status-inactive";
-      statusBadge.innerHTML = isActive
-        ? '<span class="w-2 h-2 rounded-full bg-green-500 mr-1"></span> Active'
-        : '<span class="w-2 h-2 rounded-full bg-red-500 mr-1"></span> Inactive';
-      statusBadge.title = statusText.title;
-    }
+    // Use DaisyUI badge classes
+    statusBadge.className = `badge ${isActive ? 'badge-success' : 'badge-warning'} badge-sm`;
+    statusBadge.textContent = isActive ? "Active" : "Inactive";
+    statusBadge.title = isActive ? "Knowledge base is enabled." : "Knowledge base is disabled.";
   }
 
   _updateKnowledgeBaseStats(stats) {
-    const { fileCountDisplay, fileSizeDisplay } = this.elements;
+     // This function is likely deprecated as stats are shown in projectDetailsComponent
+     console.warn("_updateKnowledgeBaseStats is likely deprecated.");
+     // const { fileCountDisplay, fileSizeDisplay } = this.elements;
 
-    if (fileCountDisplay) {
-      fileCountDisplay.textContent = stats?.file_count ?? 0;
-      fileCountDisplay.title = `Total files: ${stats?.file_count ?? 0}`;
-    }
+     // if (fileCountDisplay) {
+     //   fileCountDisplay.textContent = stats?.file_count ?? 0;
+     //   fileCountDisplay.title = `Total files: ${stats?.file_count ?? 0}`;
+     // }
 
-    if (fileSizeDisplay) {
-      const sizeText = this.formatBytes(stats?.total_size || 0);
-      fileSizeDisplay.textContent = sizeText;
-      fileSizeDisplay.title = `Total size: ${stats?.total_size || 0} bytes`;
-    }
+     // if (fileSizeDisplay) {
+     //   const sizeText = this.formatBytes(stats?.total_size || 0);
+     //   fileSizeDisplay.textContent = sizeText;
+     //   fileSizeDisplay.title = `Total size: ${stats?.total_size || 0} bytes`;
+     // }
 
-    const chunkCountEl = document.getElementById('knowledgeChunkCount');
-    if (chunkCountEl && stats?.chunk_count !== undefined) {
-      chunkCountEl.textContent = stats.chunk_count;
-      chunkCountEl.title = `Total chunks: ${stats.chunk_count}`;
-    }
+     // const chunkCountEl = document.getElementById('knowledgeChunkCount');
+     // if (chunkCountEl && stats?.chunk_count !== undefined) {
+     //   chunkCountEl.textContent = stats.chunk_count;
+     //   chunkCountEl.title = `Total chunks: ${stats.chunk_count}`;
+     // }
   }
 
   _renderSearchResults(results) {
@@ -631,9 +622,16 @@ class KnowledgeBaseComponent {
       return;
     }
 
+    // Use DaisyUI card or list structure for results
     results.forEach(result => {
-      const item = this._createResultItem(result);
+      const item = this._createResultItem(result); // Uses DaisyUI card structure now
       item.addEventListener('click', () => this._showResultDetail(result));
+      item.addEventListener('keydown', (e) => { // Add keyboard accessibility
+         if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            this._showResultDetail(result);
+         }
+      });
       resultsContainer.appendChild(item);
     });
 
@@ -643,157 +641,73 @@ class KnowledgeBaseComponent {
 
   _createResultItem(result) {
     const item = document.createElement('div');
-    item.className = 'kb-result-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-3';
+    // Use DaisyUI card structure
+    item.className = 'card card-compact bg-base-100 shadow-md hover:shadow-lg transition-shadow mb-3 cursor-pointer border border-base-300';
+    item.setAttribute('role', 'button');
+    item.setAttribute('tabindex', '0');
 
-    // Header with source and score
-    const header = document.createElement('div');
-    header.className = 'flex justify-between items-center mb-2';
+    const fileInfo = result.file_info || {};
+    const metadata = result.metadata || {};
+    const filename = fileInfo.filename || metadata.file_name || "Unknown source";
+    const scorePercentage = Math.round((result.score || 0) * 100);
 
-    const sourceInfo = document.createElement('div');
-    sourceInfo.className = 'flex items-center truncate';
-    sourceInfo.innerHTML = `
-      <span class="mr-2">${this.fileIcon(result.file_info?.file_type)}</span>
-      <span class="truncate">${this._formatSourceName(result.file_info?.filename || result.metadata?.file_name)}</span>
+    // Determine badge color based on score
+    let scoreBadgeClass = 'badge-ghost';
+    if (scorePercentage >= 80) scoreBadgeClass = 'badge-success';
+    else if (scorePercentage >= 60) scoreBadgeClass = 'badge-warning';
+
+    item.innerHTML = `
+      <div class="card-body p-3">
+        <div class="card-title text-sm justify-between items-center mb-1">
+          <div class="flex items-center gap-2 truncate">
+             <span class="text-lg">${this.fileIcon(fileInfo.file_type)}</span>
+             <span class="truncate" title="${filename}">${this._formatSourceName(filename)}</span>
+          </div>
+          <div class="badge ${scoreBadgeClass} badge-sm tooltip tooltip-left" data-tip="Relevance: ${scorePercentage}%">${scorePercentage}%</div>
+        </div>
+        <p class="text-xs text-base-content/80 kb-line-clamp-3 mb-2">${result.text || 'No content available.'}</p>
+        <div class="card-actions justify-start text-xs text-base-content/60 gap-2 border-t border-base-content/10 pt-1">
+          ${metadata.chunk_index !== undefined ? `<span>Chunk: ${metadata.chunk_index}</span>` : ''}
+          ${metadata.token_count !== undefined ? `<span>Tokens: ${metadata.token_count}</span>` : ''}
+          ${metadata.processed_at ? `<span class="hidden sm:inline">Processed: ${this.formatDate(metadata.processed_at)}</span>` : ''}
+        </div>
+      </div>
     `;
 
-    const scoreBadge = document.createElement('div');
-    const scorePercentage = Math.round((result.score || 0) * 100);
-    scoreBadge.className = `px-2 py-1 rounded-full text-xs ${
-      scorePercentage >= 80 ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
-      scorePercentage >= 60 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
-      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-    }`;
-    scoreBadge.textContent = `${scorePercentage}%`;
-    scoreBadge.title = `Relevance score: ${scorePercentage}%`;
-
-    header.append(sourceInfo, scoreBadge);
-
-    // Content preview
-    const content = document.createElement('p');
-    content.className = 'text-sm text-gray-600 dark:text-gray-300 kb-line-clamp-3';
-    content.textContent = result.text || 'No content available.';
-
-    // Footer with metadata
-    const metadata = result.metadata || {};
-    const footer = document.createElement('div');
-    footer.className = 'flex justify-start items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700';
-
-    if (metadata.chunk_index !== undefined) {
-      footer.appendChild(this._createMetadataSpan(`Chunk: ${metadata.chunk_index}`));
-    }
-
-    if (metadata.token_count !== undefined) {
-      footer.appendChild(this._createMetadataSpan(`Tokens: ${metadata.token_count}`));
-    }
-
-    if (metadata.processed_at) {
-      footer.appendChild(this._createMetadataSpan(`Processed: ${this.formatDate(metadata.processed_at)}`));
-    }
-
-    item
-      if (scorePercentage >= 80 ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
-      scorePercentage >= 60 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
-      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-    };
-    scoreBadge.textContent = `${scorePercentage}%`;
-    scoreBadge.title = `Relevance score: ${scorePercentage}%`;
-
-    header.append(sourceInfo, scoreBadge);
-
-    // Content preview
-    const content = document.createElement('p');
-    content.className = 'text-sm text-gray-600 dark:text-gray-300 kb-line-clamp-3';
-    content.textContent = result.text || 'No content available.';
-
-    // Footer with metadata
-    const metadata = result.metadata || {};
-    const footer = document.createElement('div');
-    footer.className = 'flex justify-start items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700';
-
-    if (metadata.chunk_index !== undefined) {
-      footer.appendChild(this._createMetadataSpan(`Chunk: ${metadata.chunk_index}`));
-    }
-
-    if (metadata.token_count !== undefined) {
-      footer.appendChild(this._createMetadataSpan(`Tokens: ${metadata.token_count}`));
-    }
-
-    if (metadata.processed_at) {
-      footer.appendChild(this._createMetadataSpan(`Processed: ${this.formatDate(metadata.processed_at)}`));
-    }
-
-    item.append(header, content, footer);
-    item.setAttribute('aria-label', `Result from ${sourceInfo.textContent}, ${scorePercentage}% match`);
+    item.setAttribute('aria-label', `Result from ${filename}, ${scorePercentage}% match`);
     return item;
-  }
-
-  _createMetadataSpan(text) {
-    const span = document.createElement('span');
-    span.textContent = text;
-    return span;
-  }
-
-  // ======================
-  // Utility Methods
-  // ======================
-
-  _getCurrentProjectId() {
-    return this.state.knowledgeBase?.id ||
-           this.elements.activeSection?.dataset?.projectId ||
-           localStorage.getItem('selectedProjectId') ||
-           (window.projectManager?.currentProject?.id || null);
-  }
-
-  _getSelectedTopKValue() {
-    return this.elements.topKSelect ?
-      parseInt(this.elements.topKSelect.value) :
-      5; // Default value
-  }
-
-  _formatSourceName(filename) {
-    if (!filename) return "Unknown source";
-    const maxLength = 25;
-    return filename.length > maxLength ?
-      `${filename.substring(0, maxLength - 3)}...` :
-      filename;
-  }
-
-  _debounce(func, wait) {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-  }
-
-  async _getAuthToken() {
-    if (!window.auth) return null;
-    try {
-      return await window.auth.getAuthToken();
-    } catch (error) {
-      console.error("Failed to get auth token:", error);
-      return null;
-    }
   }
 
   _validateSelectedModelDimensions() {
     const modelSelect = this.elements.modelSelect;
     if (!modelSelect || !modelSelect.parentElement) return;
 
-    const parent = modelSelect.parentElement;
+    const parent = modelSelect.closest('.form-control'); // Find parent form-control
+    if (!parent) return;
+
     let warningDiv = parent.querySelector('.model-error');
     const selectedOption = modelSelect.options[modelSelect.selectedIndex];
 
     if (selectedOption && selectedOption.disabled) {
       if (!warningDiv) {
-        warningDiv = document.createElement('div');
-        warningDiv.className = 'model-error text-red-600 text-xs mt-1';
-        parent.appendChild(warningDiv);
+        // Find the label div to insert the warning after the select
+        const labelDiv = parent.querySelector('.label:last-of-type'); // Target the alt label div
+        if (labelDiv) {
+           warningDiv = document.createElement('span');
+           warningDiv.className = 'label-text-alt text-error model-error'; // Use DaisyUI text color
+           labelDiv.appendChild(warningDiv); // Append to the label div
+        } else {
+           // Fallback: append after select (less ideal layout)
+           warningDiv = document.createElement('div');
+           warningDiv.className = 'text-error text-xs mt-1 model-error';
+           modelSelect.insertAdjacentElement('afterend', warningDiv);
+        }
       }
       warningDiv.textContent = "Changing dimensions requires reprocessing all files!";
       warningDiv.classList.remove('hidden');
     } else if (warningDiv) {
       warningDiv.classList.add('hidden');
+      warningDiv.textContent = ''; // Clear text
     }
   }
 
@@ -802,35 +716,50 @@ class KnowledgeBaseComponent {
   // ======================
 
   _showKnowledgeBaseModal() {
-    if (!this.elements.settingsForm || !this.elements.settingsModal) return;
+    const modal = this.elements.settingsModal;
+    if (!modal || typeof modal.showModal !== 'function') {
+       console.error("KB Settings modal not found or invalid.");
+       return;
+    }
 
-    this.elements.settingsForm.reset();
-    this._updateModelSelection(null);
+    // Reset form and update model selection before showing
+    if (this.elements.settingsForm) this.elements.settingsForm.reset();
+    this._updateModelSelection(this.state.knowledgeBase?.embedding_model || null); // Pass current or null
 
     if (this.state.knowledgeBase) {
       const kb = this.state.knowledgeBase;
-      const nameInput = this.elements.settingsForm.elements['name'];
-      const descInput = this.elements.settingsForm.elements['description'];
+      const nameInput = this.elements.settingsForm?.elements['name'];
+      const descInput = this.elements.settingsForm?.elements['description'];
 
       if (nameInput) nameInput.value = kb.name || '';
       if (descInput) descInput.value = kb.description || '';
-      this._updateModelSelection(kb.embedding_model);
+      // Model selection is handled by _updateModelSelection
     }
 
-    this.elements.settingsModal.classList.remove('hidden');
+    // Store project ID on the form for submission
     const projectId = this._getCurrentProjectId();
-    if (projectId) {
+    if (projectId && this.elements.settingsForm) {
       this.elements.settingsForm.dataset.projectId = projectId;
     }
+
+    modal.showModal(); // Use dialog method
+    this._validateSelectedModelDimensions(); // Re-check warning after showing
   }
 
   _hideKnowledgeBaseModal() {
-    if (this.elements.settingsModal) {
-      this.elements.settingsModal.classList.add('hidden');
+    const modal = this.elements.settingsModal;
+    if (modal && typeof modal.close === 'function') {
+      modal.close(); // Use dialog method
     }
   }
 
   _showResultDetail(result) {
+    const modal = this.elements.resultModal;
+    if (!modal || typeof modal.showModal !== 'function') {
+       console.error("Result detail modal not found or invalid.");
+       return;
+    }
+
     const { resultTitle, resultSource, resultScore, resultContent, useInChatBtn } = this.elements;
     if (!resultTitle || !resultSource || !resultScore || !resultContent) return;
 
@@ -842,7 +771,14 @@ class KnowledgeBaseComponent {
     resultTitle.textContent = `Detail: ${this._formatSourceName(filename)}`;
     resultTitle.title = filename;
     resultSource.textContent = filename;
+
+    // Determine badge color based on score
+    let scoreBadgeClass = 'badge-ghost';
+    if (scorePercentage >= 80) scoreBadgeClass = 'badge-success';
+    else if (scorePercentage >= 60) scoreBadgeClass = 'badge-warning';
+    resultScore.className = `badge ${scoreBadgeClass}`; // Update badge class
     resultScore.textContent = `${scorePercentage}%`;
+
     resultContent.textContent = result.text || 'No content available.';
     resultContent.style.whiteSpace = 'pre-wrap';
 
@@ -853,12 +789,13 @@ class KnowledgeBaseComponent {
       };
     }
 
-    this.elements.resultModal.classList.remove('hidden');
+    modal.showModal(); // Use dialog method
   }
 
   _hideResultDetailModal() {
-    if (this.elements.resultModal) {
-      this.elements.resultModal.classList.add('hidden');
+    const modal = this.elements.resultModal;
+    if (modal && typeof modal.close === 'function') {
+      modal.close(); // Use dialog method
     }
   }
 
@@ -884,23 +821,38 @@ class KnowledgeBaseComponent {
   // ======================
 
   _showStatusAlert(message, type = 'info') {
-    const { statusIndicator } = this.elements;
+    const statusIndicator = this.elements.statusIndicator; // The container div
     if (!statusIndicator) return;
 
-    // Remove existing alerts
-    const existingAlerts = statusIndicator.querySelectorAll('.kb-notification');
-    existingAlerts.forEach(alert => alert.remove());
+    // Remove existing alerts first
+    statusIndicator.innerHTML = '';
+
+    // Use DaisyUI alert component
+    let alertClass = 'alert-info'; // Default
+    if (type === 'success') alertClass = 'alert-success';
+    else if (type === 'warning') alertClass = 'alert-warning';
+    else if (type === 'error') alertClass = 'alert-error';
 
     const alertDiv = document.createElement('div');
-    alertDiv.className = `kb-notification ${type}`;
-    alertDiv.innerHTML = message;
+    alertDiv.className = `alert ${alertClass} shadow-sm text-sm py-2 px-3`; // Compact alert
+    alertDiv.setAttribute('role', 'alert');
 
-    if (['info', 'warning'].includes(type)) {
-      const closeButton = document.createElement('button');
-      closeButton.className = 'ml-2 text-lg leading-none font-semibold';
-      closeButton.innerHTML = '&times;';
-      closeButton.onclick = () => alertDiv.remove();
-      alertDiv.appendChild(closeButton);
+    // Add icon based on type
+    let iconSvg = '';
+    if (type === 'info') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+    else if (type === 'success') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+    else if (type === 'warning') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+    else if (type === 'error') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+
+    alertDiv.innerHTML = `${iconSvg}<span>${message}</span>`;
+
+    // Add close button for non-error alerts
+    if (type !== 'error') {
+        const closeButton = document.createElement('button');
+        closeButton.className = 'btn btn-xs btn-ghost btn-circle';
+        closeButton.innerHTML = '✕';
+        closeButton.onclick = () => alertDiv.remove();
+        alertDiv.appendChild(closeButton);
     }
 
     statusIndicator.appendChild(alertDiv);
@@ -921,9 +873,10 @@ class KnowledgeBaseComponent {
     if (noResultsSection) noResultsSection.classList.add("hidden");
 
     if (resultsContainer) {
+      // Use DaisyUI loading component
       resultsContainer.innerHTML = `
-        <div class="flex justify-center items-center p-4 text-gray-500">
-          <div class="kb-spinner mr-2"></div>
+        <div class="flex justify-center items-center p-4 text-base-content/70">
+          <span class="loading loading-dots loading-md mr-2"></span>
           <span>Searching knowledge base...</span>
         </div>
       `;
@@ -960,11 +913,10 @@ class KnowledgeBaseComponent {
     };
 
     reprocessButton.disabled = true;
+    // Use DaisyUI loading component inside button
     reprocessButton.innerHTML = `
-      <div class="inline-flex items-center">
-        <div class="kb-spinner mr-2"></div>
-        Processing...
-      </div>
+      <span class="loading loading-spinner loading-xs"></span>
+      Processing...
     `;
   }
 
@@ -988,14 +940,12 @@ class KnowledgeBaseComponent {
       this.elements.inactiveSection.classList.remove("hidden");
     }
 
-    this._updateStatusIndicator(false);
+    this._updateStatusIndicator(false); // Update badge
 
-    if (this.elements.statusText) {
-      this.elements.statusText.textContent = "Setup Required";
-    }
+    // Removed statusText update
 
     this._showStatusAlert("Knowledge Base needed. Click 'Setup'.", "info");
-    this._updateUploadButtonsState(false, false);
+    this._updateUploadButtonsState(); // Update button states
   }
 
   // ======================
@@ -1247,8 +1197,11 @@ class KnowledgeBaseComponent {
     if (!form) return;
 
     const formData = new FormData(form);
-    const projectId = form.dataset.projectId;
-    if (!projectId) return;
+    const projectId = form.dataset.projectId; // Get projectId from form dataset
+    if (!projectId) {
+       this._showError("Cannot save settings: Project ID missing.");
+       return;
+    }
 
     const payload = {
       name: formData.get('name'),
@@ -1256,22 +1209,29 @@ class KnowledgeBaseComponent {
       embedding_model: formData.get('embedding_model')
     };
 
-    if (!payload.name || payload.name.trim() === '') return;
-    if (!payload.embedding_model) return;
+    if (!payload.name || payload.name.trim() === '') {
+       this._showError("Knowledge Base name is required.");
+       return;
+    }
+    if (!payload.embedding_model) {
+       this._showError("Embedding model must be selected.");
+       return;
+    }
 
     const submitButton = form.querySelector('button[type="submit"]');
-    const originalButtonText = submitButton?.innerHTML;
+    const originalButtonText = submitButton?.textContent; // Use textContent
 
     if (submitButton) {
       submitButton.disabled = true;
-      submitButton.innerHTML = `<span class="kb-spinner mr-2"></span> Saving...`;
+      // Use DaisyUI loading spinner
+      submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
     }
 
     this._submitKnowledgeBaseForm(projectId, payload)
       .finally(() => {
         if (submitButton) {
           submitButton.disabled = false;
-          submitButton.innerHTML = originalButtonText;
+          submitButton.innerHTML = originalButtonText; // Restore original text
         }
       });
   }
@@ -1279,29 +1239,55 @@ class KnowledgeBaseComponent {
   async _submitKnowledgeBaseForm(projectId, payload) {
     try {
       const token = await this._getAuthToken();
-      const response = await window.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases`,
-        "POST",
-        payload,
-        token
-      );
+      // Determine if creating or updating
+      const method = this.state.knowledgeBase?.id ? "PUT" : "POST";
+      const url = this.state.knowledgeBase?.id
+         ? `/api/knowledge-bases/${this.state.knowledgeBase.id}` // Assuming PUT endpoint exists
+         : `/api/projects/${projectId}/knowledge-bases`; // POST endpoint
 
-      if (response.data?.id) {
+      const response = await window.apiRequest(url, method, payload, token);
+
+      if (response.data?.id || response.success) { // Check for success flag too
         this._hideKnowledgeBaseModal();
+        this._showSuccess("Knowledge Base settings saved.");
 
+        // Refresh project data to get updated KB info
         if (window.projectManager?.loadProjectDetails) {
           const updatedProject = await window.projectManager.loadProjectDetails(projectId);
-          this.renderKnowledgeBaseInfo(updatedProject?.knowledge_base);
+          // The projectLoaded event should trigger renderKnowledgeBaseInfo
         } else {
-          this.renderKnowledgeBaseInfo(response.data);
+           // Manual refresh if manager not available
+           this.renderKnowledgeBaseInfo(response.data || { ...this.state.knowledgeBase, ...payload });
         }
       } else {
-        throw new Error('Invalid response from server');
+        throw new Error(response.message || 'Invalid response from server');
       }
     } catch (error) {
       console.error("KB setup/update failed:", error);
-      this._showError("Failed to save knowledge base settings");
+      this._showError(`Failed to save settings: ${error.message}`);
     }
+  }
+
+  // Add method to update alerts based on KB state
+  _updateStatusAlerts(kb) {
+     const statusIndicator = this.elements.statusIndicator;
+     if (!statusIndicator) return;
+     statusIndicator.innerHTML = ''; // Clear previous alerts
+
+     if (kb.is_active !== false) {
+       if (kb?.stats?.file_count === 0) {
+         this._showStatusAlert("Knowledge Base is empty. Upload files via the 'Files' tab.", "warning");
+       } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0 && kb.stats?.unprocessed_files > 0) {
+         this._showStatusAlert("Files need processing. Click 'Reprocess Files'.", "warning");
+       } else if (kb.stats?.unprocessed_files > 0) {
+         this._showStatusAlert(`${kb.stats.unprocessed_files} file(s) need processing. Reprocessing may be needed.`, "info");
+       } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count > 0) {
+          // Optionally show a success/ready state if desired
+          // this._showStatusAlert("Knowledge Base is active and ready.", "success");
+       }
+     } else {
+       this._showStatusAlert("Knowledge Base is disabled. Enable it to use search.", "warning");
+     }
   }
 }
 

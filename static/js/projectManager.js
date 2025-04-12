@@ -972,6 +972,68 @@
   window.projectManager.initialize = initialize;
 
 
-  console.log('[ProjectManager] projectManager.js loaded');
+  // ===============================
+  // CHAT MANAGER FUNCTIONALITY
+  // ===============================
+
+  window.ChatManager = {
+    /**
+     * Initialize a project chat component
+     * @param {string} containerSelector - The selector for the chat container
+     * @param {Object} options - Configuration options
+     * @returns {Object} The chat interface instance
+     */
+    initializeProjectChat(containerSelector, options = {}) {
+      console.log('[ChatManager] Initializing project chat with selector:', containerSelector);
+
+      if (!window.ChatInterface) {
+        console.error('[ChatManager] ChatInterface not available');
+        throw new Error('ChatInterface not available - chat functionality will be limited');
+      }
+
+      // Configure selectors
+      const chatConfig = {
+        containerSelector: containerSelector,
+        messageContainerSelector: options.messageContainer || '#projectChatMessages',
+        inputSelector: options.inputField || '#projectChatInput',
+        sendButtonSelector: options.sendButton || '#projectChatSendBtn',
+        typingIndicator: options.typingIndicator !== false,
+        readReceipts: options.readReceipts !== false,
+        messageStatus: options.messageStatus !== false
+      };
+
+      // Create or reuse chat interface
+      if (!window.projectChatInterface) {
+        console.log('[ChatManager] Creating new ChatInterface instance');
+        window.projectChatInterface = new window.ChatInterface(chatConfig);
+      } else if (typeof window.projectChatInterface.configureSelectors === 'function') {
+        console.log('[ChatManager] Reconfiguring existing ChatInterface instance');
+        window.projectChatInterface.configureSelectors(chatConfig);
+      } else {
+        console.warn('[ChatManager] Existing chatInterface does not support reconfiguration');
+      }
+
+      // Set up event handlers if provided
+      if (options.onMessageSent && typeof options.onMessageSent === 'function') {
+        window.projectChatInterface.on('messageSent', options.onMessageSent);
+      }
+
+      if (options.onError && typeof options.onError === 'function') {
+        window.projectChatInterface.on('error', options.onError);
+      }
+
+      // Initialize the chat interface
+      if (!window.projectChatInterface.initialized) {
+        console.log('[ChatManager] Initializing ChatInterface');
+        window.projectChatInterface.initialize().catch(err => {
+          console.error('[ChatManager] Failed to initialize chat interface:', err);
+        });
+      }
+
+      return window.projectChatInterface;
+    }
+  };
+
+  console.log('[ProjectManager] projectManager.js loaded with ChatManager');
 
 })(); // End IIFE

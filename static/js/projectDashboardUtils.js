@@ -63,11 +63,14 @@ window.dashboardUtilsReady = true;
   class UIUtils {
     constructor() {
       console.log('[UIUtils] instance created');
-      this.notificationContainer = document.createElement('div');
-      this.notificationContainer.id = 'notificationContainer';
-      // Position & styling for notifications
-      this.notificationContainer.className = 'fixed top-4 right-4 z-50 space-y-2 w-80';
-      document.body.appendChild(this.notificationContainer);
+      this.notificationContainer = document.getElementById('notificationContainer');
+      if (!this.notificationContainer) {
+         this.notificationContainer = document.createElement('div');
+         this.notificationContainer.id = 'notificationContainer';
+         // Use DaisyUI toast container classes
+         this.notificationContainer.className = 'toast toast-top toast-end z-[100]'; // Position top-right
+         document.body.appendChild(this.notificationContainer);
+      }
     }
 
     createElement(tag, options = {}) {
@@ -153,345 +156,267 @@ window.dashboardUtilsReady = true;
     }
 
     /**
-     * Unified notification system
+     * Unified notification system using DaisyUI Alert component within a Toast container
      * @param {string} message
      * @param {string} type - info | success | warning | error
-     * @param {Object} options
+     * @param {Object} options - { timeout: ms, action: 'Action Text', onAction: callback }
      */
     showNotification(message, type = 'info', options = {}) {
-      const notification = document.createElement('div');
-      notification.className = `notification p-4 rounded shadow-lg mb-2 ${
-        type === 'error'
-          ? 'bg-red-100 text-red-800'
-          : type === 'success'
-          ? 'bg-green-100 text-green-800'
-          : type === 'warning'
-          ? 'bg-yellow-100 text-yellow-800'
-          : 'bg-blue-100 text-blue-800'
-      } transition-opacity duration-300`;
+      const alertDiv = document.createElement('div');
+      // Base alert classes + color modifier
+      let alertClass = 'alert-info';
+      if (type === 'success') alertClass = 'alert-success';
+      else if (type === 'warning') alertClass = 'alert-warning';
+      else if (type === 'error') alertClass = 'alert-error';
 
-      notification.textContent = message;
-      this.notificationContainer.appendChild(notification);
+      alertDiv.className = `alert ${alertClass} shadow-md`; // Add shadow
+      alertDiv.setAttribute('role', 'alert');
 
-      setTimeout(() => {
-        notification.classList.add('opacity-0');
-        setTimeout(() => notification.remove(), 300);
-      }, options.timeout || 5000);
+      // Add icon based on type
+      let iconSvg = '';
+      if (type === 'info') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+      else if (type === 'success') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+      else if (type === 'warning') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+      else if (type === 'error') iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
 
-      // Handle action button if specified
+      let contentHTML = `${iconSvg}<span>${message}</span>`;
+
+      // Add action button if specified
       if (options.action && typeof options.onAction === 'function') {
-        console.log(`[UIUtils] Action: ${options.action}`);
+         const actionButton = document.createElement('button');
+         actionButton.className = 'btn btn-sm btn-ghost'; // Simple ghost button
+         actionButton.textContent = options.action;
+         actionButton.onclick = (e) => {
+            e.stopPropagation(); // Prevent toast removal if clicked
+            options.onAction();
+            alertDiv.remove(); // Remove toast after action
+         };
+         // Wrap content and button for layout
+         contentHTML = `<div class="flex-1">${iconSvg}<span>${message}</span></div>`;
+         alertDiv.innerHTML = contentHTML;
+         alertDiv.appendChild(actionButton);
+         alertDiv.classList.add('flex', 'justify-between', 'items-center'); // Adjust layout
+      } else {
+         alertDiv.innerHTML = contentHTML;
       }
-      if (options.secondaryAction && typeof options.onSecondaryAction === 'function') {
-        console.log(`[UIUtils] Secondary Action: ${options.secondaryAction}`);
+
+
+      this.notificationContainer.appendChild(alertDiv);
+
+      // Auto-remove after timeout
+      const timeout = options.timeout === 0 ? Infinity : (options.timeout || 5000); // Allow timeout 0 to persist
+      if (timeout !== Infinity) {
+         setTimeout(() => {
+           // Add fade-out effect (optional)
+           alertDiv.style.transition = 'opacity 0.3s ease-out';
+           alertDiv.style.opacity = '0';
+           setTimeout(() => alertDiv.remove(), 300);
+         }, timeout);
       }
+
+      // Allow manual closing by clicking the toast itself (optional)
+      alertDiv.addEventListener('click', () => {
+         alertDiv.style.transition = 'opacity 0.3s ease-out';
+         alertDiv.style.opacity = '0';
+         setTimeout(() => alertDiv.remove(), 300);
+      });
     }
+
+     /**
+      * Confirmation Modal using DaisyUI Dialog
+      * @param {Object} config - { title, message, confirmText, cancelText, confirmClass, onConfirm, onCancel }
+      * @returns {Promise<boolean>} - Resolves true if confirmed, false otherwise
+      */
+     async confirmAction(config = {}) {
+       return new Promise((resolve) => {
+         const modalId = 'confirmActionModal'; // Use the ID from index.html
+         const modal = document.getElementById(modalId);
+
+         if (!modal || typeof modal.showModal !== 'function') {
+           console.error('[UIUtils] confirmAction: Confirm modal dialog not found or invalid!');
+           resolve(false); // Indicate failure
+           return;
+         }
+
+         // Get elements within the modal
+         const titleEl = modal.querySelector('#confirmActionTitle');
+         const messageEl = modal.querySelector('#confirmActionMessage');
+         const confirmBtn = modal.querySelector('#confirmActionButton');
+         const cancelBtn = modal.querySelector('#cancelActionButton'); // Assumes button inside <form method="dialog">
+
+         if (!titleEl || !messageEl || !confirmBtn || !cancelBtn) {
+            console.error('[UIUtils] confirmAction: Missing elements inside confirm modal!');
+            resolve(false);
+            return;
+         }
+
+         // Update modal content
+         titleEl.textContent = config.title || 'Confirm Action';
+         messageEl.textContent = config.message || 'Are you sure?';
+         confirmBtn.textContent = config.confirmText || 'Confirm';
+         cancelBtn.textContent = config.cancelText || 'Cancel';
+
+         // Apply custom confirm button class (e.g., btn-error, btn-warning)
+         confirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`; // Reset and apply
+
+         // Remove previous listeners to avoid duplicates
+         const oldConfirmHandler = confirmBtn._clickHandler;
+         if (oldConfirmHandler) confirmBtn.removeEventListener('click', oldConfirmHandler);
+         // Cancel button closes dialog via form method="dialog", no listener needed unless onCancel callback exists
+
+         // Define new handlers
+         const handleConfirm = () => {
+           if (typeof config.onConfirm === 'function') config.onConfirm();
+           modal.close();
+           resolve(true);
+         };
+
+         const handleCancel = () => {
+             // This handler is called when the dialog is closed by the cancel button or ESC
+             // Check if the confirm button was the one clicked to trigger close
+             // This check is imperfect but helps differentiate explicit cancel vs confirm->close
+             if (typeof config.onCancel === 'function' && !confirmBtn.contains(document.activeElement)) {
+                 config.onCancel();
+             }
+             resolve(false); // Resolve false on any close other than confirm click
+         };
+
+
+         // Attach new listeners
+         confirmBtn.addEventListener('click', handleConfirm, { once: true }); // Run confirm logic only once
+         confirmBtn._clickHandler = handleConfirm; // Store for potential removal
+
+         // Listen for the dialog's close event for cancellation
+         modal.removeEventListener('close', handleCancel); // Remove previous listener
+         modal.addEventListener('close', handleCancel, { once: true });
+
+
+         // Show the modal
+         modal.showModal();
+       });
+     }
   }
 
-  // Create a singleton instance
+  // Create a singleton instance and assign to global scope
   ProjectDashboard.uiUtils = new UIUtils();
-  window.uiUtilsInstance = ProjectDashboard.uiUtils;
+  window.uiUtilsInstance = ProjectDashboard.uiUtils; // Make it globally accessible
+
 
   /* =========================================================================
-   *  3. ANIMATION UTILS
-   * ========================================================================= */
-  class AnimationUtils {
-    constructor() {
-      console.log('[AnimationUtils] instance created');
-    }
-
-    animateProgress(element, fromPercent, toPercent, duration = 500) {
-      if (!element) return;
-      const start = performance.now();
-      const change = toPercent - fromPercent;
-
-      function update(timestamp) {
-        const elapsed = timestamp - start;
-        const progress = Math.min(elapsed / duration, 1);
-        const currentValue = fromPercent + change * progress;
-        element.style.width = `${currentValue}%`;
-        if (progress < 1) {
-          requestAnimationFrame(update);
-        }
-      }
-      requestAnimationFrame(update);
-    }
-  }
-
-  ProjectDashboard.animationUtils = new AnimationUtils();
-
-  /* =========================================================================
-   *  4. MODAL MANAGER
+   *  4. MODAL MANAGER (Simplified - Relying on Dialog Elements)
    * ========================================================================= */
   class ModalManager {
     constructor() {
-      // Collection of named modals
-      this.modals = {};
-      this.eventHandlers = new Map();
-
-      // Default semantic name -> possible DOM IDs
-      this.modalMappings = {
-        project: ['projectFormModal'],
-        instructions: ['instructionsModal'],
-        delete: ['deleteConfirmModal'],
-        knowledge: ['knowledgeBaseSettingsModal', 'knowledgeSettingsModal'],
-        knowledgeResult: ['knowledgeResultModal'],
-        confirm: ['confirmActionModal', 'deleteConfirmModal']
+      this.modalMappings = { // Map semantic names to actual IDs in index.html
+        project: 'projectFormModal',
+        delete: 'deleteConfirmModal',
+        confirm: 'confirmActionModal',
+        knowledge: 'knowledgeBaseSettingsModal',
+        knowledgeResult: 'knowledgeResultModal',
+        customize: 'cardCustomizationModal'
+        // Add other modals here if needed
       };
-
-      // Register on DOM ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => this.registerAllModals());
-      } else {
-        this.registerAllModals();
-      }
-
-      // Re-check after a short delay to catch dynamically added modals
-      setTimeout(() => this.registerAllModals(), 500);
-
-      console.log('[ModalManager] Initialized');
+      console.log('[ModalManager] Initialized (using dialog elements)');
     }
 
-    registerAllModals() {
-      for (const [key, ids] of Object.entries(this.modalMappings)) {
-        // skip if already registered
-        if (this.modals[key] && document.body.contains(this.modals[key])) continue;
-
-        // check each possible ID
-        for (const id of ids) {
-          const el = document.getElementById(id);
-          if (el) {
-            this.modals[key] = el;
-            console.log(`[ModalManager] Registered: ${key} -> #${id}`);
-            break;
-          }
-        }
-      }
-    }
-
-    registerModal(name, modalOrId) {
-      let element;
-      if (typeof modalOrId === 'string') {
-        element = document.getElementById(modalOrId);
-        if (!element) {
-          console.error(`[ModalManager] Could not find modal with ID '${modalOrId}'`);
-          return false;
-        }
-      } else if (modalOrId instanceof HTMLElement) {
-        element = modalOrId;
-      } else {
-        console.error(`[ModalManager] Invalid modal type for '${name}'`);
+    /**
+     * Shows a modal dialog.
+     * @param {string} modalName - Semantic name (e.g., 'project', 'delete')
+     * @param {Object} options - Optional: { updateContent: (modalElement) => {} }
+     * @returns {boolean} - True if modal was found and shown, false otherwise.
+     */
+    show(modalName, options = {}) {
+      const modalId = this.modalMappings[modalName];
+      if (!modalId) {
+        console.error(`[ModalManager] No ID mapping found for modal name: '${modalName}'`);
         return false;
       }
-      this.modals[name] = element;
-      console.log(`[ModalManager] Custom modal registered: ${name}`);
-      return true;
-    }
 
-    show(modalId, options = {}) {
-      console.log(`[ModalManager] Attempting to show modal: ${modalId}`);
-      let modalEl = this.modals[modalId];
-
-      if (!modalEl) {
-        // fallback: direct getElementById
-        modalEl = document.getElementById(modalId)
-          || document.getElementById(`${modalId}Modal`)
-          || document.getElementById(`${modalId}SettingsModal`);
-        if (modalEl) {
-          this.modals[modalId] = modalEl; // auto-register
-          console.log(`[ModalManager] Auto-registered modal: ${modalId}`);
-        } else {
-          console.error(`[ModalManager] No modal found for '${modalId}'`);
-          return false;
-        }
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl || typeof modalEl.showModal !== 'function') {
+        console.error(`[ModalManager] Dialog element not found or invalid for ID: '${modalId}'`);
+        return false;
       }
 
-      // update content if needed
+      console.log(`[ModalManager] Showing modal: ${modalName} (#${modalId})`);
+
+      // Update content if needed before showing
       if (typeof options.updateContent === 'function') {
-        options.updateContent(modalEl);
-      }
-
-      modalEl.classList.add('confirm-modal');
-      modalEl.classList.remove('hidden');
-
-      this._setupModalEvents(modalEl, modalId);
-      return true;
-    }
-
-    hide(modalId) {
-      console.log(`[ModalManager] Hiding modal: ${modalId}`);
-      let modalEl = this.modals[modalId];
-      if (!modalEl) {
-        // fallback attempts
-        modalEl = document.getElementById(modalId)
-          || document.getElementById(`${modalId}Modal`)
-          || document.getElementById(`${modalId}SettingsModal`);
-        if (!modalEl) {
-          console.warn(`[ModalManager] Cannot find modal to hide: '${modalId}'`);
-          return false;
+        try {
+           options.updateContent(modalEl);
+        } catch (err) {
+           console.error(`[ModalManager] Error during updateContent for ${modalName}:`, err);
         }
       }
-      modalEl.classList.remove('confirm-modal');
-      modalEl.classList.add('hidden');
-      this._cleanupModalEvents(modalEl, modalId);
+
+      modalEl.showModal();
       return true;
     }
 
-    static closeActiveModal() {
-      const activeModals = document.querySelectorAll('.confirm-modal:not(.hidden)');
-      if (activeModals.length === 0) return false;
-      activeModals.forEach(el => {
-        el.classList.remove('confirm-modal');
-        el.classList.add('hidden');
-      });
+    /**
+     * Hides a modal dialog.
+     * @param {string} modalName - Semantic name (e.g., 'project', 'delete')
+     * @returns {boolean} - True if modal was found and closed, false otherwise.
+     */
+    hide(modalName) {
+      const modalId = this.modalMappings[modalName];
+      if (!modalId) {
+        console.error(`[ModalManager] No ID mapping found for modal name: '${modalName}'`);
+        return false;
+      }
+
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl || typeof modalEl.close !== 'function') {
+        // Don't error if already closed or not found, just warn
+        console.warn(`[ModalManager] Dialog element not found or invalid for hiding: '${modalId}'`);
+        return false;
+      }
+
+      console.log(`[ModalManager] Hiding modal: ${modalName} (#${modalId})`);
+      modalEl.close();
       return true;
     }
 
+    // Static method remains useful for simple confirmations
     static confirmAction(config = {}) {
-      return new Promise((resolve) => {
-        const manager = ProjectDashboard.modalManager;
-        let modal = manager?.modals.confirm
-          || document.getElementById('deleteConfirmModal')
-          || document.getElementById('confirmActionModal');
-
-        if (!modal) {
-          console.error('[ModalManager] confirmAction: No confirm modal found!');
-          resolve(false);
-          return;
-        }
-
-        // Set modal content
-        modal.innerHTML = `
-          <div class="confirm-modal-content">
-            <h3 class="confirm-modal-header">${config.title || 'Confirm Action'}</h3>
-            <div class="confirm-modal-body">
-              ${config.message || 'Are you sure?'}
-            </div>
-            <div class="confirm-modal-footer">
-              <button id="cancelActionBtn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors dark:text-gray-300 dark:hover:bg-gray-700">
-                ${config.cancelText || 'Cancel'}
-              </button>
-              <button id="confirmActionBtn" class="px-4 py-2 bg-red-600 text-white rounded-sm hover:bg-red-700 transition-colors ${
-                config.confirmClass || ''
-              }">
-                ${config.confirmText || 'Confirm'}
-              </button>
-            </div>
-          </div>
-        `;
-
-        const confirmBtn = modal.querySelector('#confirmActionBtn');
-        const cancelBtn = modal.querySelector('#cancelActionBtn');
-
-        const handleConfirm = () => {
-          if (typeof config.onConfirm === 'function') config.onConfirm();
-          manager?.hide('confirm') || modal.classList.add('hidden');
-          cleanup();
-          resolve(true);
-        };
-
-        const handleCancel = () => {
-          if (typeof config.onCancel === 'function') config.onCancel();
-          manager?.hide('confirm') || modal.classList.add('hidden');
-          cleanup();
-          resolve(false);
-        };
-
-        function cleanup() {
-          confirmBtn.removeEventListener('click', handleConfirm);
-          cancelBtn.removeEventListener('click', handleCancel);
-        }
-
-        confirmBtn.addEventListener('click', handleConfirm);
-        cancelBtn.addEventListener('click', handleCancel);
-
-        // Show modal
-        manager?.show('confirm') || modal.classList.remove('hidden');
-      });
+       // Delegate to the UIUtils instance method
+       if (window.uiUtilsInstance?.confirmAction) {
+          return window.uiUtilsInstance.confirmAction(config);
+       } else {
+          console.error("[ModalManager] UIUtils.confirmAction not available.");
+          return Promise.resolve(false); // Fallback: auto-cancel
+       }
     }
 
-    _setupModalEvents(modal, modalId) {
-      // ESC key
-      const handleKeydown = (e) => {
-        if (e.key === 'Escape') {
-          this.hide(modalId);
-        }
-      };
-      document.addEventListener('keydown', handleKeydown);
-      this.eventHandlers.set(`${modalId}_keydown`, handleKeydown);
-
-      // close button
-      const closeButtons = modal.querySelectorAll('[id^="close"], .modal-close, .close-btn');
-      closeButtons.forEach(btn => {
-        const clickHandler = () => this.hide(modalId);
-        btn._clickHandler = clickHandler;
-        btn.addEventListener('click', clickHandler);
-      });
-
-      // backdrop click
-      if (modal.classList.contains('modal-with-backdrop')) {
-        const backdropClickHandler = (e) => {
-          if (e.target === modal) {
-            this.hide(modalId);
-          }
-        };
-        modal.addEventListener('click', backdropClickHandler);
-        this.eventHandlers.set(`${modalId}_backdrop`, backdropClickHandler);
-      }
-    }
-
-    _cleanupModalEvents(modal, modalId) {
-      const keydownHandler = this.eventHandlers.get(`${modalId}_keydown`);
-      if (keydownHandler) {
-        document.removeEventListener('keydown', keydownHandler);
-        this.eventHandlers.delete(`${modalId}_keydown`);
-      }
-
-      const backdropHandler = this.eventHandlers.get(`${modalId}_backdrop`);
-      if (backdropHandler) {
-        modal.removeEventListener('click', backdropHandler);
-        this.eventHandlers.delete(`${modalId}_backdrop`);
-      }
-
-      // close button
-      const closeButtons = modal.querySelectorAll('[id^="close"], .modal-close, .close-btn');
-      closeButtons.forEach(btn => {
-        if (btn._clickHandler) {
-          btn.removeEventListener('click', btn._clickHandler);
-          delete btn._clickHandler;
-        }
-      });
-    }
+     // Check if available (useful for conditional logic elsewhere)
+     static isAvailable() {
+        return true; // Always available when using dialog elements
+     }
   }
 
+  // Instantiate and assign to global scope
   ProjectDashboard.ModalManager = ModalManager;
   ProjectDashboard.modalManager = new ModalManager();
-
-  // Create global references to ensure consistent access
   window.modalManager = ProjectDashboard.modalManager;
-  window.ModalManager = ModalManager;
+  window.ModalManager = ModalManager; // Keep static access if needed
 
-  // Create a global showNotification function
+
+  // Create a global showNotification function pointing to the UIUtils method
   window.showNotification = function(message, type = 'info', options = {}) {
-    if (ProjectDashboard.uiUtils) {
-      ProjectDashboard.uiUtils.showNotification(message, type, options);
+    if (window.uiUtilsInstance) {
+      window.uiUtilsInstance.showNotification(message, type, options);
     } else {
+      // Fallback if utils aren't ready (shouldn't happen with correct init order)
       console.log(`[${type.toUpperCase()}] ${message}`);
     }
   };
 
   /* =========================================================================
-   *  5. NOTIFICATION & ERROR HANDLING
+   *  5. NOTIFICATION & ERROR HANDLING (Updated for DaisyUI)
    * ========================================================================= */
 
-  // Attach any enhanced notifications to ProjectDashboard
-  ProjectDashboard.showNotification = function (message, type = 'info', options = {}) {
-    if (ProjectDashboard.uiUtils) {
-      ProjectDashboard.uiUtils.showNotification(message, type, options);
-    } else {
-      console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-  };
+  // Attach the UIUtils notification function directly
+  ProjectDashboard.showNotification = window.showNotification;
 
   // Enhanced global error handling
   window.addEventListener('error', function (evt) {
@@ -499,12 +424,7 @@ window.dashboardUtilsReady = true;
     const errorMessage = error?.message || evt.message || 'Unknown error';
 
     console.error('[GlobalError]', errorMessage, error?.stack || '');
-    // If using auth.js "notify" or this file's showNotification:
-    if (typeof notify === 'function') {
-      notify(`An error occurred: ${errorMessage}`, 'error');
-    } else {
-      ProjectDashboard.showNotification(`An error occurred: ${errorMessage}`, 'error');
-    }
+    window.showNotification(`An error occurred: ${errorMessage}`, 'error');
   });
 
   // Unhandled promise rejections
@@ -552,22 +472,14 @@ window.dashboardUtilsReady = true;
 
       // Provide user feedback
       const message = "Authentication required. Please log in and try again.";
-      if (typeof notify === 'function') {
-        notify(message, 'error');
-      } else {
-        ProjectDashboard.showNotification(message, 'error');
-      }
+      window.showNotification(message, 'error', { timeout: 7000 }); // Longer timeout for auth errors
       evt.preventDefault();
       return;
     }
 
     // For non-auth errors, just log and display
     console.error('[UnhandledRejection]', errorMessage, errorStack);
-    if (typeof notify === 'function') {
-      notify(errorMessage, 'error');
-    } else {
-      ProjectDashboard.showNotification(errorMessage, 'error');
-    }
+    window.showNotification(`Unhandled error: ${errorMessage}`, 'error');
     evt.preventDefault();
   });
 
@@ -575,14 +487,14 @@ window.dashboardUtilsReady = true;
    *  6. HELPER FUNCTIONS (SHOW/HIDE VIEWS, ETC.)
    * ========================================================================= */
   ProjectDashboard.showProjectsView = function () {
-    console.log('[ProjectDashboardUtils] Executing showProjectsView'); // Add log
+    console.log('[ProjectDashboardUtils] Executing showProjectsView');
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
 
     if (listView) {
       listView.classList.remove('hidden');
       // Ensure flex-1 is added if needed for layout when visible
-      listView.classList.add('flex-1');
+      // listView.classList.add('flex-1'); // Handled by parent drawer-content
       console.log('[ProjectDashboardUtils] projectListView made visible');
     } else {
       console.warn('[ProjectDashboardUtils] projectListView not found');
@@ -595,14 +507,11 @@ window.dashboardUtilsReady = true;
       console.warn('[ProjectDashboardUtils] projectDetailsView not found');
     }
 
-    // Also potentially hide the main chat UI if switching back to projects view
-    const chatUI = document.getElementById('chatUI');
-    const noChatSelectedMessage = document.getElementById('noChatSelectedMessage');
-    if (chatUI) chatUI.classList.add('hidden');
-    if (noChatSelectedMessage) noChatSelectedMessage.classList.remove('hidden'); // Show placeholder
-
-     // Update URL
-     window.history.pushState({}, '', '/?view=projects');
+    // Update URL without triggering popstate
+    const currentUrl = new URL(window.location);
+    currentUrl.searchParams.delete('project');
+    currentUrl.searchParams.delete('chatId'); // Clear chat ID too
+    window.history.pushState({}, '', currentUrl.pathname + currentUrl.search); // Update state
   };
 
   // Provide a global reference if needed:
@@ -621,7 +530,7 @@ window.dashboardUtilsReady = true;
     console.log('[ProjectDashboard] dashboardUtilsReady event dispatched');
   }
 
-  // Add event listeners for project detail buttons
+  // Add event listeners for project detail buttons (using DaisyUI structure)
   function setupProjectDetailButtonListeners() {
     const backBtn = document.getElementById('backToProjectsBtn');
     if (backBtn) {
@@ -633,11 +542,28 @@ window.dashboardUtilsReady = true;
     const editBtn = document.getElementById('editProjectBtn');
     if (editBtn) {
       editBtn.addEventListener('click', () => {
-        const currentProjectId = window.projectManager?.currentProject()?.id;
-        if (currentProjectId && window.projectModal?.show) {
-          window.projectModal.show(currentProjectId); // Assuming projectModal handles editing
+        const currentProjectId = window.projectManager?.currentProject?.id;
+        if (currentProjectId && window.modalManager) {
+           // Show the project modal and pass data via updateContent
+           window.modalManager.show('project', {
+              updateContent: async (modalEl) => {
+                 const project = await window.projectManager?.getProjectById(currentProjectId);
+                 const form = modalEl.querySelector('#projectForm');
+                 const title = modalEl.querySelector('#projectModalTitle');
+                 if (form && project) {
+                    form.querySelector('#projectIdInput').value = project.id;
+                    form.querySelector('#projectNameInput').value = project.name || '';
+                    form.querySelector('#projectDescInput').value = project.description || '';
+                    form.querySelector('#projectGoalsInput').value = project.goals || '';
+                    form.querySelector('#projectMaxTokensInput').value = project.max_tokens || '';
+                    if (title) title.textContent = 'Edit Project';
+                 } else if (title) {
+                    title.textContent = 'Edit Project (Error loading data)';
+                 }
+              }
+           });
         } else {
-          console.warn('Cannot edit project: No current project ID or projectModal not available.');
+          console.warn('Cannot edit project: No current project ID or modalManager not available.');
           ProjectDashboard.showNotification('Could not open edit project form.', 'warning');
         }
       });
@@ -646,13 +572,13 @@ window.dashboardUtilsReady = true;
     const pinBtn = document.getElementById('pinProjectBtn');
     if (pinBtn) {
       pinBtn.addEventListener('click', async () => {
-        const currentProjectId = window.projectManager?.currentProject()?.id;
+        const currentProjectId = window.projectManager?.currentProject?.id;
         if (currentProjectId && window.projectManager?.togglePinProject) {
           try {
-            await window.projectManager.togglePinProject(currentProjectId);
-            ProjectDashboard.showNotification('Project pin status toggled.', 'success');
-            // Optionally refresh project details or list
-            window.projectManager.loadProjectDetails(currentProjectId);
+            const updatedProject = await window.projectManager.togglePinProject(currentProjectId);
+            ProjectDashboard.showNotification(`Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}.`, 'success');
+            // Update button state directly
+            ProjectDashboard.uiUtils.getElement('projectDetailsView')._componentInstance?.updatePinButton(updatedProject.pinned); // Assuming instance is stored
             window.projectManager.loadProjects(); // Refresh list in background
           } catch (error) {
             console.error('Failed to toggle pin:', error);
@@ -667,21 +593,20 @@ window.dashboardUtilsReady = true;
     const archiveBtn = document.getElementById('archiveProjectBtn');
     if (archiveBtn) {
       archiveBtn.addEventListener('click', async () => {
-        const currentProject = window.projectManager?.currentProject();
-        if (currentProject?.id && window.projectManager?.toggleArchiveProject) {
-           const confirmArchive = await ProjectDashboard.modalManager.confirmAction({
+        const currentProject = window.projectManager?.currentProject;
+        if (currentProject?.id && window.projectManager?.toggleArchiveProject && window.modalManager) {
+           const confirmArchive = await window.modalManager.confirmAction({
               title: currentProject.archived ? 'Unarchive Project?' : 'Archive Project?',
-              message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} this project? ${currentProject.archived ? '' : 'Archived projects are hidden by default.'}`,
+              message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} "${currentProject.name}"? ${currentProject.archived ? '' : 'Archived projects are hidden by default.'}`,
               confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
-              confirmClass: currentProject.archived ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700',
+              confirmClass: currentProject.archived ? 'btn-success' : 'btn-warning', // Use appropriate colors
            });
 
            if (confirmArchive) {
              try {
                await window.projectManager.toggleArchiveProject(currentProject.id);
                ProjectDashboard.showNotification(`Project ${currentProject.archived ? 'unarchived' : 'archived'}.`, 'success');
-               // Go back to project list after archiving/unarchiving
-               ProjectDashboard.showProjectsView();
+               ProjectDashboard.showProjectsView(); // Go back to list
                window.projectManager.loadProjects(); // Refresh list
              } catch (error) {
                console.error('Failed to toggle archive:', error);
@@ -689,12 +614,11 @@ window.dashboardUtilsReady = true;
              }
            }
         } else {
-          console.warn('Cannot toggle archive: No current project ID or toggleArchiveProject function.');
+          console.warn('Cannot toggle archive: Missing project, function, or modal manager.');
         }
       });
     }
   }
-
 
   // Ensure the ready flag is set immediately and the event is dispatched
   if (document.readyState === 'loading') {

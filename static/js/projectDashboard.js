@@ -176,29 +176,43 @@ class ProjectDashboard {
         throw new Error("projectManager not initialized");
       }
 
-      // Show loading state
-      const listContainer = document.getElementById("projectList");
+      // Show loading state using DaisyUI spinner within the list container
+      const listContainer = document.getElementById("projectList"); // Target the grid container
+      const noProjectsMsg = document.getElementById("noProjectsMessage");
+
       if (listContainer) {
-        listContainer.innerHTML = `
-          <div class="text-center p-8">
-            <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <p class="mt-2 text-gray-600">Loading projects...</p>
-          </div>`;
+         listContainer.innerHTML = `
+           <div class="col-span-full text-center p-8"> {/* Span across all columns */}
+             <span class="loading loading-spinner loading-lg text-primary"></span>
+             <p class="mt-2 text-base-content/70">Loading projects...</p>
+           </div>`;
       }
+       if (noProjectsMsg) noProjectsMsg.classList.add('hidden'); // Hide no projects message
 
       const response = await window.projectManager.loadProjects(filter);
+      // The projectsLoaded event will trigger rendering
       return response;
     } catch (error) {
       console.error("[ProjectDashboard] loadProjects failed:", error);
+      // Render error state in the list container
+      const listContainer = document.getElementById("projectList");
+      if (listContainer) {
+         listContainer.innerHTML = `
+            <div class="col-span-full text-center p-8">
+               <div class="alert alert-error">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span>Error loading projects: ${error.message}</span>
+               </div>
+            </div>
+         `;
+      }
+      // Dispatch event anyway for potential listeners
       document.dispatchEvent(
         new CustomEvent("projectsLoaded", {
-          detail: { error: true, message: error.message }
+          detail: { error: true, message: error.message, projects: [] } // Send empty projects array
         })
       );
-      throw error;
+      throw error; // Re-throw if needed upstream
     }
   }
 
@@ -217,6 +231,7 @@ class ProjectDashboard {
   async handleProjectFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
+    const modalDialog = form.closest('dialog'); // Get the parent dialog
 
     const projectId = form.querySelector("#projectIdInput")?.value;
     const isEditing = !!projectId;
@@ -236,51 +251,81 @@ class ProjectDashboard {
       return;
     }
 
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalButtonText = submitButton?.textContent;
+
+    if (submitButton) {
+       submitButton.disabled = true;
+       submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
+    }
+
+
     try {
       await window.projectManager.createOrUpdateProject(projectId, formData);
       this.showNotification(isEditing ? "Project updated" : "Project created", "success");
-      this.modalManager?.hide("project");
-      this.loadProjects();
+
+      // Close the DaisyUI dialog
+      if (modalDialog && typeof modalDialog.close === 'function') {
+         modalDialog.close();
+      } else {
+         // Fallback if modal manager was used differently
+         this.modalManager?.hide("project");
+      }
+
+      this.loadProjects(); // Refresh list
     } catch (err) {
       console.error("[ProjectDashboard] Error saving project:", err);
-      this.showNotification("Failed to save project", "error");
+      this.showNotification(`Failed to save project: ${err.message || 'Unknown error'}`, "error");
+      // Optionally display error within the modal
+      const errorDiv = form.querySelector('.modal-error-display'); // Add an element for this
+      if (errorDiv) {
+         errorDiv.textContent = `Error: ${err.message || 'Unknown error'}`;
+         errorDiv.classList.remove('hidden');
+      }
+    } finally {
+       if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.innerHTML = originalButtonText; // Restore text
+       }
     }
   }
 
   handleProjectsLoaded(event) {
-    const { data } = event.detail;
-    let projects = [];
-    let hasError = false;
-    let originalCount = 0;
-    let filter = "all";
+    const { data, error, message } = event.detail || {}; // Destructure detail
+    let projects = data?.projects || (Array.isArray(event.detail) ? event.detail : []); // Handle different event structures
+    let hasError = !!error;
+    let originalCount = data?.count || projects.length;
+    let filter = data?.filter?.type || "all";
 
-    if (data?.projects) {
-      projects = data.projects;
-      originalCount = data.count || projects.length;
-      filter = data.filter?.type || "all";
-    } else if (Array.isArray(event.detail)) {
-      // Fallback if detail itself is an array
-      projects = event.detail;
-      originalCount = projects.length;
-    }
+    // Clear loading state explicitly if it wasn't cleared by loadProjects error handling
+    const listContainer = document.getElementById("projectList");
+    const loadingIndicator = listContainer?.querySelector('.loading-spinner');
+    if (loadingIndicator) listContainer.innerHTML = ''; // Clear loading indicator
 
-    hasError = data?.error || false;
+
+    // Render projects using the component
     this.components.projectList?.renderProjects(projects);
 
     // Show/hide "no projects" message
     const noProjectsMsg = document.getElementById("noProjectsMessage");
     if (noProjectsMsg) {
-      noProjectsMsg.classList.toggle("hidden", projects.length > 0 || hasError);
+      const showNoProjects = projects.length === 0 && !hasError;
+      noProjectsMsg.classList.toggle("hidden", !showNoProjects);
 
-      if (hasError) {
-        noProjectsMsg.textContent = "Error loading projects";
-        noProjectsMsg.classList.add("text-red-600");
-      } else if (projects.length === 0 && originalCount > 0) {
-        noProjectsMsg.textContent = `No ${filter} projects found`;
-        noProjectsMsg.classList.remove("text-red-600");
-      } else if (projects.length === 0) {
-        noProjectsMsg.textContent = `No ${filter} projects found`;
-        noProjectsMsg.classList.remove("text-red-600");
+      if (showNoProjects) {
+         if (originalCount > 0) { // Filter applied, but no results
+           noProjectsMsg.textContent = `No projects found for filter: '${filter}'`;
+         } else { // No projects exist at all
+           noProjectsMsg.textContent = `No projects created yet. Click 'Create Project' to start.`;
+         }
+         noProjectsMsg.classList.remove("text-error"); // Ensure not red
+      }
+
+      // Handle error display (redundant if loadProjects handles it, but safe)
+      if (hasError && projects.length === 0) {
+         noProjectsMsg.textContent = `Error loading projects: ${message || 'Unknown error'}`;
+         noProjectsMsg.classList.add("text-error");
+         noProjectsMsg.classList.remove("hidden");
       }
     }
   }
@@ -369,30 +414,19 @@ class ProjectDashboard {
     if (!el) {
       el = document.createElement("div");
       el.id = "dashboardInitProgress";
-      el.className =
-        "fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded shadow-md z-50 flex items-center";
+      // Use DaisyUI alert styling
+      el.className = "alert alert-info shadow-md fixed top-4 right-4 z-[100] w-auto max-w-xs";
       document.body.appendChild(el);
     }
 
-    // Only update if message changed to prevent unnecessary DOM updates
     const currentMessage = el.querySelector('span')?.textContent;
     if (currentMessage !== message) {
+      // Use DaisyUI loading spinner
       el.innerHTML = `
-        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-          fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10"
-            stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
-              5.291A7.962 7.962 0 014 12H0c0 3.042
-              1.135 5.824 3 7.938l3-2.647z">
-          </path>
-        </svg>
+        <span class="loading loading-spinner loading-sm"></span>
         <span>${message || "Initializing dashboard..."}</span>
       `;
     }
-
-    // Ensure it's visible
     el.style.display = 'flex';
   }
 
@@ -405,45 +439,30 @@ class ProjectDashboard {
 
   _handleCriticalError(error) {
     console.error("[ProjectDashboard] Critical error:", error);
-    this.showNotification("Application failed to initialize", "error");
-    const containerEl = document.querySelector("#projectListView");
-    if (containerEl) {
-      containerEl.innerHTML = `
-        <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
-          <div class="flex">
-            <div class="flex-shrink-0">
-              <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 9v2m0 4h.01m-6.938
-                  4h13.856c1.54 0 2.502-1.667 1.732-3L13.732
-                  4c-.77-1.333-2.694-1.333-3.464 0L3.34
-                  16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div class="ml-3">
-              <h3 class="text-sm leading-5 font-medium text-red-800">
-                Dashboard initialization failed
-              </h3>
-              <div class="mt-1 text-sm leading-5 text-red-700">
-                ${error.message || "Unknown error occurred"}. Try refreshing the page.
-              </div>
-              <div class="mt-4">
-                <button type="button" onclick="window.location.reload()"
-                  class="inline-flex items-center px-3 py-2 border
-                  border-transparent text-sm leading-4 font-medium
-                  rounded-md text-red-700 bg-red-100 hover:bg-red-200
-                  focus:outline-none focus:border-red-300
-                  focus:shadow-outline-red active:bg-red-200
-                  transition ease-in-out duration-150">
-                  Refresh Page
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
+    // Use DaisyUI alert for error display
+    const containerEl = document.querySelector("#projectListView") || document.body; // Fallback to body
+    const errorElId = 'dashboardCriticalError';
+    let errorEl = document.getElementById(errorElId);
+
+    if (!errorEl) {
+       errorEl = document.createElement('div');
+       errorEl.id = errorElId;
+       // Use DaisyUI alert error style
+       errorEl.className = 'alert alert-error shadow-lg m-4';
+       containerEl.prepend(errorEl); // Prepend to make it visible
+    }
+
+    errorEl.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      <div>
+        <h3 class="font-bold">Dashboard Initialization Failed!</h3>
+        <div class="text-xs">${error.message || "Unknown error occurred"}. Try refreshing the page.</div>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="window.location.reload()">Refresh</button>
+    `;
+    // Ensure the container holding the error is visible
+    if (containerEl && containerEl.id === 'projectListView') {
+       containerEl.classList.remove('hidden');
     }
   }
 
@@ -525,18 +544,40 @@ class ProjectDashboard {
       throw new Error("projectManager is required but not available");
     }
 
-    // Create fallback DOM elements if needed
-    const projectListEl = document.getElementById("projectList");
-    if (!projectListEl) {
-      const container = document.createElement("div");
-      container.id = "projectList";
-      document.querySelector("#projectListView")?.appendChild(container);
+    // Ensure essential containers exist
+    let projectListView = document.getElementById("projectListView");
+    if (!projectListView) {
+       projectListView = document.createElement('main');
+       projectListView.id = "projectListView";
+       projectListView.className = "flex-1 overflow-y-auto p-4 lg:p-6"; // Add classes
+       document.querySelector('.drawer-content')?.appendChild(projectListView); // Append to drawer content
     }
+    let projectListGrid = document.getElementById("projectList");
+    if (!projectListGrid) {
+       projectListGrid = document.createElement('div');
+       projectListGrid.id = "projectList";
+       projectListGrid.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+       projectListView.appendChild(projectListGrid); // Append grid to list view
+    }
+     let noProjectsMessage = document.getElementById("noProjectsMessage");
+     if (!noProjectsMessage) {
+        noProjectsMessage = document.createElement('div');
+        noProjectsMessage.id = "noProjectsMessage";
+        noProjectsMessage.className = "text-center py-10 text-base-content/70 hidden";
+        projectListView.appendChild(noProjectsMessage);
+     }
+
 
     // Ensure project details view is hidden by default
     const projectDetailsView = document.getElementById("projectDetailsView");
     if (projectDetailsView) {
       projectDetailsView.classList.add("hidden");
+    } else {
+       // Create details view if missing (basic structure)
+       const detailsContainer = document.createElement('section');
+       detailsContainer.id = "projectDetailsView";
+       detailsContainer.className = "flex-1 flex flex-col overflow-hidden hidden";
+       document.querySelector('.drawer-content')?.appendChild(detailsContainer);
     }
 
     this.showInitializationProgress("Loading components...");
@@ -546,14 +587,22 @@ class ProjectDashboard {
 
     // Create component instances
     this.components.projectList = new window.ProjectListComponent({
-      elementId: "projectList",
+      elementId: "projectList", // Target the grid container
       onViewProject: this.handleViewProject.bind(this)
     });
-    this.components.projectDetails = new window.ProjectDetailsComponent({
-      onBack: this.handleBackToList.bind(this)
+    // Ensure ProjectDetailsComponent is available (might be module)
+    const DetailsComponent = window.ProjectDetailsComponent || (await import('./projectDetailsComponent.js')).ProjectDetailsComponent;
+    this.components.projectDetails = new DetailsComponent({
+      onBack: this.handleBackToList.bind(this),
+      utils: window.uiUtilsInstance, // Pass utils
+      projectManager: window.projectManager,
+      auth: window.auth,
+      notification: this.showNotification
     });
     if (typeof window.KnowledgeBaseComponent === "function") {
-      this.components.knowledgeBase = new window.KnowledgeBaseComponent();
+      this.components.knowledgeBase = new window.KnowledgeBaseComponent({
+         // Pass options if needed
+      });
     }
 
     // Hide spinner after we have components
@@ -616,58 +665,37 @@ class ProjectDashboard {
       this.handleProjectNotFound.bind(this)
     );
 
-    // Handle project form
-    document.getElementById("projectForm")?.addEventListener(
-      "submit",
-      this.handleProjectFormSubmit.bind(this)
-    );
+    // Handle project form submission (using DaisyUI dialog)
+    const projectForm = document.getElementById("projectForm");
+    if (projectForm) {
+       projectForm.addEventListener("submit", this.handleProjectFormSubmit.bind(this));
+    } else {
+       console.warn("Project form not found for event listener.");
+    }
 
-    // File upload button logic
-    let fileInputClicked = false;
-    document.getElementById("uploadFileBtn")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (fileInputClicked) return;
-      fileInputClicked = true;
-      setTimeout(() => {
-        fileInputClicked = false;
-      }, 500);
-
-      document.getElementById("fileInput")?.click();
-    });
-
-    // File input change
-    document.getElementById("fileInput")?.addEventListener("change", async (e) => {
-      if (!e.target.files?.length) return;
-      const projectId = this.state.currentProject?.id;
-      if (projectId) {
-        try {
-          await this.components.projectDetails.uploadFiles(projectId, e.target.files);
-          window.projectManager.loadProjectStats(projectId);
-        } catch (error) {
-          if (error === "Knowledge base not configured") {
-            this.showNotification(
-              "Set up a knowledge base before uploading files. Click 'Setup KB' in project details.",
-              "warning"
-            );
-          } else {
-            console.error("[ProjectDashboard] File upload failed:", error);
-            this.showNotification(`File upload failed: ${error}`, "error");
-          }
-        }
-      }
-    });
+    // File upload button trigger (already handled in projectDetailsComponent)
+    // const uploadBtnTrigger = document.getElementById("uploadFileBtnTrigger");
+    // const fileInput = document.getElementById("fileInput");
+    // if (uploadBtnTrigger && fileInput) {
+    //    uploadBtnTrigger.addEventListener("click", () => fileInput.click());
+    //    fileInput.addEventListener("change", async (e) => {
+    //       // ... (file upload logic - now likely in projectDetailsComponent) ...
+    //    });
+    // }
 
     // Browser back/forward nav
-    window.addEventListener("popstate", () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const projectId = urlParams.get("project");
-      if (projectId && this.state.currentView !== "details") {
-        this.showProjectDetails(projectId);
-      } else if (!projectId && this.state.currentView !== "list") {
-        this.showProjectList();
-      }
+    window.addEventListener("popstate", (event) => {
+       // Add state check to prevent loops if pushState was used without actual nav
+       if (event.state !== null) {
+          this.processUrlParams(); // Re-process URL on popstate
+       }
     });
+
+    // Listen for KB settings button click (handled in knowledgeBaseComponent)
+    // document.getElementById('knowledgeBaseSettingsBtn')?.addEventListener('click', () => { ... });
+
+    // Listen for Setup KB button click (handled in knowledgeBaseComponent)
+    // document.getElementById('setupKnowledgeBaseBtn')?.addEventListener('click', () => { ... });
   }
 
   async _waitForDashboardUtils() {

@@ -100,19 +100,27 @@
       this.elementId = options.elementId;
       this.onViewProject = options.onViewProject;
 
+      // Define themes based on DaisyUI color semantics
       this.availableThemes = [
-        { id: 'default', name: 'Default' },
-        { id: 'primary', name: 'Primary' },
-        { id: 'success', name: 'Success' },
-        { id: 'warning', name: 'Warning' },
-        { id: 'danger', name: 'Danger' }
+        { id: 'default', name: 'Default' }, // Uses base-100/base-content
+        { id: 'primary', name: 'Primary' }, // Uses primary/primary-content
+        { id: 'secondary', name: 'Secondary' }, // Uses secondary/secondary-content
+        { id: 'accent', name: 'Accent' }, // Uses accent/accent-content
+        { id: 'neutral', name: 'Neutral' } // Uses neutral/neutral-content
       ];
 
+      // Define badge styles using DaisyUI badge colors/styles
       this.badgeStyles = [
-        { id: 'default', name: 'Default' },
-        { id: 'blue', name: 'Blue' },
-        { id: 'green', name: 'Green' },
-        { id: 'red', name: 'Red' }
+        { id: 'badge-neutral', name: 'Neutral' },
+        { id: 'badge-primary', name: 'Primary' },
+        { id: 'badge-secondary', name: 'Secondary' },
+        { id: 'badge-accent', name: 'Accent' },
+        { id: 'badge-info', name: 'Info' },
+        { id: 'badge-success', name: 'Success' },
+        { id: 'badge-warning', name: 'Warning' },
+        { id: 'badge-error', name: 'Error' },
+        { id: 'badge-ghost', name: 'Ghost' },
+        { id: 'badge-outline', name: 'Outline' }
       ];
     }
 
@@ -128,10 +136,21 @@
     _createFallbackContainer() {
       this.element = document.createElement('div');
       this.element.id = this.elementId;
-      this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3';
+      // Use Tailwind grid classes
+      this.element.className = 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
       const listView = document.getElementById('projectListView');
-      if (listView) listView.appendChild(this.element);
+      if (listView) {
+         // Ensure the container for the grid exists
+         const gridContainer = listView.querySelector('#projectList');
+         if (gridContainer) {
+            gridContainer.appendChild(this.element); // Append to the grid container
+         } else {
+            listView.appendChild(this.element); // Fallback: append directly to listView
+         }
+      } else {
+         document.body.appendChild(this.element); // Absolute fallback
+      }
     }
 
     _bindEvents() {
@@ -152,7 +171,8 @@
 
       if (listView) {
         listView.classList.toggle('hidden', !show);
-        listView.classList.toggle('flex-1', show); // Ensure layout class is toggled correctly
+        // Ensure layout class is toggled correctly - flex-1 might be handled by parent
+        // listView.classList.toggle('flex-1', show);
         console.log(`[ProjectListComponent] Toggled projectListView visibility: ${show ? 'visible' : 'hidden'}`);
       } else {
         console.warn('[ProjectListComponent] projectListView element not found for visibility toggle.');
@@ -240,22 +260,33 @@
     }
 
     _performDOMUpdate(filteredProjects) {
-      if (!this.element) return;
+      if (!this.element) {
+         // Attempt to re-acquire the element if it was missing
+         this._setupDOMReferences();
+         if (!this.element) {
+            console.error("[ProjectListComponent] Cannot perform DOM update, element not found.");
+            return;
+         }
+      }
 
-      this.element.innerHTML = "";
+      this.element.innerHTML = ""; // Clear the grid container
 
       if (filteredProjects.length === 0) {
         this._showEmptyState();
         return;
       }
 
+      // Hide empty state message if projects exist
+      if (this.messageEl) this.messageEl.classList.add("hidden");
+
+      const fragment = document.createDocumentFragment();
       filteredProjects.forEach(project => {
         const card = this._createProjectCard(project);
         if (card) {
-          this.element.appendChild(card);
+          fragment.appendChild(card);
         }
       });
-      if (this.messageEl) this.messageEl.classList.add("hidden");
+      this.element.appendChild(fragment); // Append all cards at once
     }
 
     _showEmptyState() {
@@ -275,20 +306,54 @@
 
     _createProjectCard(project) {
       const card = document.createElement('div');
-      card.className = 'project-card bg-white dark:bg-gray-800 rounded-sm shadow-xs border border-gray-200 dark:border-gray-700 p-4 flex flex-col justify-between hover:shadow-sm transition-shadow cursor-pointer';
-      card.dataset.projectId = project.id;
+      // Use DaisyUI card component classes
+      const theme = this.state.cardCustomization.theme || 'default';
+      const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
+      const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
 
-      // Add project name, description, etc.
-      card.innerHTML = `
-        <div>
-          <h3 class="text-lg font-semibold mb-2 truncate">${project.name || 'Unnamed Project'}</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">${project.description || 'No description'}</p>
-        </div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-auto pt-2 border-t border-gray-200 dark:border-gray-600">
-          <span>Updated: ${new Date(project.updated_at).toLocaleDateString()}</span>
-          ${project.pinned ? '<span class="ml-2">📌</span>' : ''}
+      card.className = `card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-base-300`;
+      card.dataset.projectId = project.id;
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0'); // Make card focusable
+
+      // Add project name, description, etc. using card-body
+      let cardContent = `
+        <div class="card-body p-4">
+          <h3 class="card-title text-lg truncate mb-1">${project.name || 'Unnamed Project'}</h3>
+      `;
+
+      if (this.state.cardCustomization.showDescription) {
+         cardContent += `<p class="text-sm text-base-content/80 mb-3 line-clamp-2">${project.description || 'No description'}</p>`;
+      }
+
+      // Optional: Add badges if enabled and available
+      if (this.state.cardCustomization.showBadges && project.badges && project.badges.length > 0) {
+         cardContent += `<div class="card-actions justify-start mb-2 flex-wrap gap-1">`;
+         project.badges.forEach(badge => {
+            const badgeStyle = badge.style || this.state.cardCustomization.defaultBadgeStyle || 'badge-neutral';
+            cardContent += `<span class="badge ${badgeStyle} badge-sm">${badge.icon ? badge.icon + ' ' : ''}${badge.text}</span>`;
+         });
+         cardContent += `</div>`;
+      }
+
+      cardContent += `
+          <div class="card-actions justify-end mt-auto pt-2 border-t border-base-content/10 text-xs text-base-content/70">
+            ${this.state.cardCustomization.showDate ? `<span>Updated: ${new Date(project.updated_at).toLocaleDateString()}</span>` : ''}
+            ${project.pinned ? '<span class="ml-2 tooltip tooltip-left" data-tip="Pinned">📌</span>' : ''}
+            ${project.archived ? '<span class="ml-2 tooltip tooltip-left" data-tip="Archived">📦</span>' : ''}
+          </div>
         </div>
       `;
+
+      card.innerHTML = cardContent;
+
+      // Add event listeners for keyboard interaction
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          this._handleCardClick(project.id);
+        }
+      });
 
       return card;
     }
@@ -305,76 +370,36 @@
     }
 
     _showAddBadgeDialog(projectId) {
-      const project = this.state.projects.find(p => p.id === projectId);
-      if (!project) return;
-
-      const currentTheme = project.theme || 'default';
-
-      const formHtml = `
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-1">Badge Text</label>
-          <input type="text" id="projectBadgeText" class="w-full px-3 py-2 border rounded-sm" placeholder="e.g., In Progress">
-        </div>
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-1">Icon (Optional)</label>
-          <input type="text" id="projectBadgeIcon" class="w-full px-3 py-2 border rounded-sm" placeholder="Emoji e.g., 🚀">
-        </div>
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-1">Badge Style</label>
-          <select id="projectBadgeStyle" class="w-full px-3 py-2 border rounded-sm">
-            ${this.badgeStyles.map(style =>
-        `<option value="${style.id}">${style.name}</option>`
-      ).join('')}
-          </select>
-        </div>
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-1">Card Theme</label>
-          <select id="projectCardTheme" class="w-full px-3 py-2 border rounded-sm">
-            ${this.availableThemes.map(theme =>
-        `<option value="${theme.id}" ${currentTheme === theme.id ? 'selected' : ''}>${theme.name}</option>`
-      ).join('')}
-          </select>
-        </div>
-      `;
-
-      this._showModal({
-        title: "Customize Project Card",
-        content: formHtml,
-        confirmText: "Save Changes",
-        onConfirm: () => this._saveCardCustomizations(projectId)
-      });
+      // This function seems deprecated by the customization modal.
+      // If needed, it should be updated to use DaisyUI modal.
+      console.warn("_showAddBadgeDialog is likely deprecated, use customization modal.");
+      this._showCustomizationModal(); // Show the main customization modal instead
     }
 
     _saveCardCustomizations(projectId) {
-      const project = this.state.projects.find(p => p.id === projectId);
-      if (!project) return;
-
-      const text = document.getElementById('projectBadgeText').value.trim();
-      const icon = document.getElementById('projectBadgeIcon').value.trim();
-      const style = document.getElementById('projectBadgeStyle').value;
-      const theme = document.getElementById('projectCardTheme').value;
-
-      project.theme = theme;
-
-      if (text) {
-        this.addProjectBadge(projectId, {
-          text,
-          style,
-          icon: icon || null
-        });
-      }
-
-      this._showNotification('Project card customized', 'success');
+      // This function seems deprecated by the customization modal apply function.
+      console.warn("_saveCardCustomizations is likely deprecated.");
+      // Logic might need merging into _applyCardCustomization if specific per-project customization is still desired.
     }
 
     _confirmDelete(project) {
-      this._showModal({
-        title: "Delete Project",
-        content: `Are you sure you want to delete "${project.name}"?`,
-        confirmText: "Delete",
-        confirmClass: "bg-red-600",
-        onConfirm: () => this._deleteProject(project.id)
-      });
+      // Use the global modalManager if available
+      if (window.modalManager && window.modalManager.confirmAction) {
+         window.modalManager.confirmAction({
+            title: "Delete Project",
+            message: `Are you sure you want to delete "${project.name}"? This action cannot be undone.`,
+            confirmText: "Delete",
+            confirmClass: "btn-error", // Use DaisyUI button class
+            onConfirm: () => this._deleteProject(project.id)
+         });
+      } else {
+         // Fallback to native confirm
+         if (confirm(`Delete Project
+
+Are you sure you want to delete "${project.name}"?`)) {
+           this._deleteProject(project.id);
+         }
+      }
     }
 
     _deleteProject(projectId) {
@@ -395,17 +420,20 @@
     }
 
     _showModal({ title, content, confirmText, confirmClass, onConfirm }) {
-      if (window.modalManager) {
-        window.modalManager.show('confirm', {
-          title,
-          message: content,
-          confirmText,
-          confirmClass,
-          onConfirm
+      // Use the global modalManager if available
+      if (window.modalManager && window.modalManager.confirmAction) {
+        window.modalManager.confirmAction({
+          title: title,
+          message: content, // Assuming content is simple text or basic HTML
+          confirmText: confirmText || "Confirm",
+          confirmClass: confirmClass || "btn-primary", // Use DaisyUI button classes
+          onConfirm: onConfirm
         });
       } else {
         // Fallback to native confirm
-        if (confirm(`${title}\n\n${content}`)) {
+        if (confirm(`${title}
+
+${content}`)) {
           onConfirm();
         }
       }
@@ -433,35 +461,38 @@
     _showLoadingState() {
       if (!this.element) return;
 
-      this.element.classList.add('opacity-50');
-      this.element.style.pointerEvents = 'none';
+      this.element.classList.add('opacity-50', 'pointer-events-none');
 
-      if (!this.element.querySelector('.loading-spinner')) {
-        const spinner = document.createElement('div');
-        spinner.className = 'loading-spinner absolute inset-0 flex items-center justify-center';
-        spinner.innerHTML = `
-          <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
+      // Use DaisyUI loading component
+      if (!this.element.querySelector('.loading-spinner-overlay')) {
+        const spinnerOverlay = document.createElement('div');
+        spinnerOverlay.className = 'loading-spinner-overlay absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-50 z-10';
+        spinnerOverlay.innerHTML = `
+          <span class="loading loading-spinner loading-lg text-primary"></span>
         `;
-        this.element.appendChild(spinner);
+        // Prepend to ensure it's behind potential modals but above content
+        this.element.style.position = 'relative'; // Ensure parent is positioned
+        this.element.prepend(spinnerOverlay);
       }
     }
 
     _hideLoadingState() {
       if (!this.element) return;
 
-      this.element.classList.remove('opacity-50');
-      this.element.style.pointerEvents = '';
+      this.element.classList.remove('opacity-50', 'pointer-events-none');
+      this.element.style.position = ''; // Reset position if set
 
-      const spinner = this.element.querySelector('.loading-spinner');
-      if (spinner) spinner.remove();
+      const spinnerOverlay = this.element.querySelector('.loading-spinner-overlay');
+      if (spinnerOverlay) spinnerOverlay.remove();
     }
 
     _bindFilterEvents() {
-      const buttons = document.querySelectorAll('.project-filter-btn');
-      if (!buttons.length) return;
+      // Use the specific class for filter tabs
+      const buttons = document.querySelectorAll('.project-filter-tabs .project-filter-btn');
+      if (!buttons.length) {
+         console.warn("No project filter buttons found with '.project-filter-tabs .project-filter-btn'");
+         return;
+      }
 
       const initialFilter = this._getInitialFilter();
       this.state.filter = initialFilter;
@@ -484,8 +515,9 @@
     _setInitialActiveButton(buttons, filter) {
       buttons.forEach(btn => {
         const isActive = btn.dataset.filter === filter;
-        btn.classList.toggle('project-tab-btn-active', isActive);
-        btn.setAttribute('aria-selected', isActive);
+        // Use DaisyUI tab active class
+        btn.classList.toggle('tab-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
     }
 
@@ -508,18 +540,30 @@
 
       allButtons.forEach(btn => {
         const isActive = btn === button;
-        btn.classList.toggle('project-tab-btn-active', isActive);
-        btn.setAttribute('aria-selected', isActive);
+        // Use DaisyUI tab active class
+        btn.classList.toggle('tab-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 
       this.state.filter = filter;
       this._updateURL(filter);
 
-      window.projectManager.loadProjects(filter)
-        .catch(err => {
-          console.error('Filter failed:', err);
-          this._renderErrorState('Filter operation failed');
-        });
+      // Ensure projectManager exists before calling
+      if (window.projectManager?.loadProjects) {
+         window.projectManager.loadProjects(filter)
+           .catch(err => {
+             console.error('Filter failed:', err);
+             this._renderErrorState('Filter operation failed');
+           })
+           .finally(() => {
+              // Ensure loading state is hidden even on error
+              this._hideLoadingState();
+           });
+      } else {
+         console.error("projectManager not available for filtering");
+         this._renderErrorState('System error: Cannot filter projects');
+         this._hideLoadingState();
+      }
     }
 
     _updateURL(filter) {
@@ -538,174 +582,154 @@
 
         allButtons.forEach(btn => {
           const isActive = btn.dataset.filter === newFilter;
-          btn.classList.toggle('project-tab-btn-active', isActive);
-          btn.setAttribute('aria-selected', isActive);
+          // Use DaisyUI tab active class
+          btn.classList.toggle('tab-active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
 
-        window.projectManager.loadProjects(newFilter)
-          .catch(err => {
-            console.error('Navigation load failed:', err);
-            this._renderErrorState('Failed to load projects');
-          });
+        // Ensure projectManager exists
+        if (window.projectManager?.loadProjects) {
+           window.projectManager.loadProjects(newFilter)
+             .catch(err => {
+               console.error('Navigation load failed:', err);
+               this._renderErrorState('Failed to load projects');
+             })
+             .finally(() => {
+                this._hideLoadingState();
+             });
+        } else {
+           console.error("projectManager not available for popstate navigation");
+           this._renderErrorState('System error: Cannot load projects');
+           this._hideLoadingState();
+        }
       }
     }
 
     _bindCreateProjectButton() {
       const button = document.getElementById('createProjectBtn');
       if (!button) {
-        console.error('Create button not found');
+        console.warn('Create project button (createProjectBtn) not found');
         return;
       }
 
       button.addEventListener('click', () => {
-        if (!window.projectModal) {
-          window.projectModal = new ProjectModal();
-        }
-        window.projectModal.openModal();
+         // Use the global modal manager
+         if (window.modalManager) {
+            window.modalManager.show('project', {
+               updateContent: (modalEl) => {
+                  // Reset form for creation
+                  const form = modalEl.querySelector('#projectForm');
+                  const title = modalEl.querySelector('#projectModalTitle');
+                  if (form) form.reset();
+                  if (title) title.textContent = 'Create Project';
+                  const projectIdInput = modalEl.querySelector('#projectIdInput');
+                  if (projectIdInput) projectIdInput.value = '';
+               }
+            });
+         } else {
+            console.error("Modal manager not available to show project form.");
+            // Fallback or error message
+            alert("Cannot open project form.");
+         }
       });
     }
 
     _initializeCustomizationUI() {
-      const header = document.querySelector('#projectListView .mb-4');
-      if (!header || document.getElementById('customizeCardsBtn')) return;
+      // Find the button added in index.html
+      const button = document.getElementById('customizeCardsBtn');
+      if (!button) {
+         console.warn("Customize cards button (customizeCardsBtn) not found.");
+         return;
+      }
 
-      const button = document.createElement('button');
-      button.id = 'customizeCardsBtn';
-      button.className = 'ml-2 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 px-2 py-1 rounded text-sm flex items-center';
-      button.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 001.066-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-        Customize Cards
-      `;
+      // Make it visible and add listener
+      button.classList.remove('hidden');
       button.addEventListener('click', () => this._showCustomizationModal());
 
-      const actionContainer = header.querySelector('div:last-child');
-      if (actionContainer) {
-        actionContainer.insertBefore(button, actionContainer.firstChild);
-      } else {
-        header.appendChild(button);
-      }
+      // Modal creation should happen regardless of button presence
+      this._createCustomizationModal();
     }
 
     _createCustomizationModal() {
-      if (document.getElementById('cardCustomizationModal')) return;
+      // Use the existing modal structure in index.html
+      const modal = document.getElementById('cardCustomizationModal');
+      if (!modal) {
+         console.error("Card customization modal element not found in HTML.");
+         return; // Don't create dynamically if it's expected in HTML
+      }
 
-      const modal = document.createElement('div');
-      modal.id = 'cardCustomizationModal';
-      modal.className = 'hidden fixed inset-0 bg-black bg-opacity-50 z-modal flex items-center justify-center';
-      modal.setAttribute('aria-modal', 'true');
+      // Add listeners to buttons within the existing modal
+      const closeBtn = modal.querySelector('#closeCustomizationBtn');
+      const applyBtn = modal.querySelector('#applyCustomizationBtn');
+      const resetBtn = modal.querySelector('#resetCustomizationBtn');
 
-      modal.innerHTML = `
-        <div class="bg-white dark:bg-gray-800 rounded-md p-6 max-w-md w-full">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-semibold">Customize Project Cards</h3>
-            <button id="closeCustomizationBtn" class="text-gray-500 hover:text-gray-700">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+      closeBtn?.addEventListener('click', () => this._hideCustomizationModal());
+      applyBtn?.addEventListener('click', () => this._applyCardCustomization());
+      resetBtn?.addEventListener('click', () => this._resetCardCustomization());
 
-          <div class="mb-4">
-            <label class="block text-sm font-medium mb-1">Card Theme</label>
-            <select id="cardThemeSelect" class="w-full px-3 py-2 border rounded-sm">
-              ${this.availableThemes.map(theme =>
-        `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`
-      ).join('')}
-            </select>
-          </div>
-
-          <div class="mb-4">
-            <label class="block text-sm font-medium mb-1">Display Options</label>
-            <div class="grid grid-cols-2 gap-2">
-              <label class="flex items-center text-sm">
-                <input type="checkbox" class="mr-2" id="showDescriptionCheckbox" ${this.state.cardCustomization.showDescription ? 'checked' : ''}>
-                Description
-              </label>
-              <label class="flex items-center text-sm">
-                <input type="checkbox" class="mr-2" id="showTokensCheckbox" ${this.state.cardCustomization.showTokens ? 'checked' : ''}>
-                Token Usage
-              </label>
-              <label class="flex items-center text-sm">
-                <input type="checkbox" class="mr-2" id="showDateCheckbox" ${this.state.cardCustomization.showDate ? 'checked' : ''}>
-                Creation Date
-              </label>
-              <label class="flex items-center text-sm">
-                <input type="checkbox" class="mr-2" id="showBadgesCheckbox" ${this.state.cardCustomization.showBadges ? 'checked' : ''}>
-                Show Badges
-              </label>
-            </div>
-          </div>
-
-          <div class="mb-4">
-            <label class="block text-sm font-medium mb-1">Default Badge Style</label>
-            <select id="defaultBadgeStyleSelect" class="w-full px-3 py-2 border rounded-sm">
-              ${this.badgeStyles.map(style =>
-        `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`
-      ).join('')}
-            </select>
-          </div>
-
-          <div class="flex justify-end gap-2 mt-6">
-            <button id="resetCustomizationBtn" class="px-4 py-2 border rounded-sm">
-              Reset
-            </button>
-            <button id="applyCustomizationBtn" class="px-4 py-2 bg-blue-600 text-white rounded-sm">
-              Apply
-            </button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(modal);
-
-      document.getElementById('closeCustomizationBtn').addEventListener('click', () =>
-        this._hideCustomizationModal()
-      );
-
-      document.getElementById('applyCustomizationBtn').addEventListener('click', () =>
-        this._applyCardCustomization()
-      );
-
-      document.getElementById('resetCustomizationBtn').addEventListener('click', () =>
-        this._resetCardCustomization()
-      );
+      // Populate selects if not already done
+      this._populateCustomizationSelects();
     }
+
+     _populateCustomizationSelects() {
+        const themeSelect = document.getElementById('cardThemeSelect');
+        const badgeStyleSelect = document.getElementById('defaultBadgeStyleSelect');
+
+        if (themeSelect && themeSelect.options.length === 0) {
+            themeSelect.innerHTML = this.availableThemes.map(theme =>
+                `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`
+            ).join('');
+        }
+
+        if (badgeStyleSelect && badgeStyleSelect.options.length === 0) {
+            badgeStyleSelect.innerHTML = this.badgeStyles.map(style =>
+                `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`
+            ).join('');
+        }
+     }
+
 
     _showCustomizationModal() {
       const modal = document.getElementById('cardCustomizationModal');
-      if (!modal) return;
+      if (!modal || typeof modal.showModal !== 'function') {
+         console.error("Cannot show customization modal.");
+         return;
+      }
 
+      // Ensure selects are populated before setting values
+      this._populateCustomizationSelects();
+
+      // Set current values from state
       document.getElementById('cardThemeSelect').value = this.state.cardCustomization.theme;
       document.getElementById('showDescriptionCheckbox').checked = this.state.cardCustomization.showDescription;
-      document.getElementById('showTokensCheckbox').checked = this.state.cardCustomization.showTokens;
+      // document.getElementById('showTokensCheckbox').checked = this.state.cardCustomization.showTokens; // Removed? Add back if needed
       document.getElementById('showDateCheckbox').checked = this.state.cardCustomization.showDate;
       document.getElementById('showBadgesCheckbox').checked = this.state.cardCustomization.showBadges;
       document.getElementById('defaultBadgeStyleSelect').value = this.state.cardCustomization.defaultBadgeStyle;
 
-      modal.classList.remove('hidden');
+      modal.showModal(); // Use dialog's showModal method
     }
 
     _hideCustomizationModal() {
       const modal = document.getElementById('cardCustomizationModal');
-      if (modal) modal.classList.add('hidden');
+      if (modal && typeof modal.close === 'function') {
+         modal.close(); // Use dialog's close method
+      }
     }
 
     _applyCardCustomization() {
       this.state.cardCustomization = {
         theme: document.getElementById('cardThemeSelect').value,
         showDescription: document.getElementById('showDescriptionCheckbox').checked,
-        showTokens: document.getElementById('showTokensCheckbox').checked,
+        // showTokens: document.getElementById('showTokensCheckbox').checked, // Removed?
         showDate: document.getElementById('showDateCheckbox').checked,
         showBadges: document.getElementById('showBadgesCheckbox').checked,
         defaultBadgeStyle: document.getElementById('defaultBadgeStyleSelect').value,
-        globalBadges: this.state.cardCustomization.globalBadges || []
+        globalBadges: this.state.cardCustomization.globalBadges || [] // Preserve global badges if they exist
       };
 
       this._saveCardCustomization();
-      this.renderProjects(this.state.projects);
+      this.renderProjects(this.state.projects); // Re-render cards with new settings
       this._hideCustomizationModal();
 
       this._showNotification('Customization applied', 'success');
@@ -760,55 +784,97 @@
     _bindProjectCardEvents() {
       if (!this.element) return;
 
+      // Use event delegation on the container element
       this.element.addEventListener('click', (event) => {
-        const projectCard = event.target.closest('.project-card'); // Assuming project cards have this class
+        const projectCard = event.target.closest('.card[data-project-id]'); // Target DaisyUI card
         if (!projectCard) return;
 
         const projectId = projectCard.dataset.projectId;
         if (!projectId) return;
 
-        // Check if a specific action button within the card was clicked
-        const viewButton = event.target.closest('[data-action="view-project"]');
-        const pinButton = event.target.closest('[data-action="pin-project"]');
-        const archiveButton = event.target.closest('[data-action="archive-project"]');
-        const editButton = event.target.closest('[data-action="edit-project"]');
+        this._handleCardClick(projectId, event);
+      });
+    }
 
-        if (viewButton || !event.target.closest('button, a')) { // Treat click on card itself as view
+    // Helper function to handle card click logic
+    _handleCardClick(projectId, event = null) {
+        // Check if a specific action button *within* the card was clicked
+        // These buttons are currently not defined in the card structure,
+        // but this logic remains if they are added later.
+        const viewButton = event?.target.closest('[data-action="view-project"]');
+        const pinButton = event?.target.closest('[data-action="pin-project"]');
+        const archiveButton = event?.target.closest('[data-action="archive-project"]');
+        const editButton = event?.target.closest('[data-action="edit-project"]');
+        const deleteButton = event?.target.closest('[data-action="delete-project"]'); // Added delete
+
+        // Determine if the click was on the card itself (not an internal button/link)
+        const isCardClick = !event?.target.closest('button, a, .tooltip'); // Ignore clicks on buttons, links, or tooltips within the card
+
+        if (viewButton || isCardClick) {
+          // Default action: View Project
           if (this.onViewProject && typeof this.onViewProject === 'function') {
-            event.preventDefault();
+            event?.preventDefault();
             this.onViewProject(projectId);
-          } else if (window.projectManager && window.projectManager.loadProjectDetails) {
-             event.preventDefault();
-             // Hide list view, show details view (can be handled by listener for projectLoaded event)
-             this._toggleListViewVisibility(false);
+          } else if (window.projectManager?.loadProjectDetails) {
+             event?.preventDefault();
+             // Let the main dashboard handle view switching
+             // this._toggleListViewVisibility(false); // Don't hide here
              window.projectManager.loadProjectDetails(projectId);
           }
         } else if (pinButton) {
-           event.preventDefault();
-           if (window.projectManager && window.projectManager.togglePinProject) {
+           event?.preventDefault();
+           if (window.projectManager?.togglePinProject) {
              window.projectManager.togglePinProject(projectId).then(() => {
-               // Optionally refresh just this card or the list
-               this._loadProjectsThroughManager(); // Reload all for simplicity
-             }).catch(err => console.error('Error pinning project:', err));
+               this._showNotification('Project pin toggled', 'success');
+               this._loadProjectsThroughManager(); // Reload list
+             }).catch(err => {
+                console.error('Error pinning project:', err);
+                this._showNotification('Error pinning project', 'error');
+             });
            }
         } else if (archiveButton) {
-           event.preventDefault();
-           if (window.projectManager && window.projectManager.toggleArchiveProject) {
+           event?.preventDefault();
+           if (window.projectManager?.toggleArchiveProject) {
              window.projectManager.toggleArchiveProject(projectId).then(() => {
-                this._loadProjectsThroughManager(); // Reload all
-             }).catch(err => console.error('Error archiving project:', err));
+                this._showNotification('Project archive status toggled', 'success');
+                this._loadProjectsThroughManager(); // Reload list
+             }).catch(err => {
+                console.error('Error archiving project:', err);
+                this._showNotification('Error archiving project', 'error');
+             });
            }
         } else if (editButton) {
-            event.preventDefault();
-            // Assuming a modal or form is shown by projectModal.js or similar
-            if (window.ProjectModal && typeof window.ProjectModal.showEditForm === 'function') {
-                window.ProjectModal.showEditForm(projectId);
+            event?.preventDefault();
+            if (window.modalManager) {
+               window.modalManager.show('project', {
+                  updateContent: async (modalEl) => {
+                     // Fetch project data to pre-fill form
+                     const project = this.state.projects.find(p => p.id === projectId) || await window.projectManager?.getProjectById(projectId);
+                     const form = modalEl.querySelector('#projectForm');
+                     const title = modalEl.querySelector('#projectModalTitle');
+                     if (form && project) {
+                        form.querySelector('#projectIdInput').value = project.id;
+                        form.querySelector('#projectNameInput').value = project.name || '';
+                        form.querySelector('#projectDescInput').value = project.description || '';
+                        form.querySelector('#projectGoalsInput').value = project.goals || '';
+                        form.querySelector('#projectMaxTokensInput').value = project.max_tokens || '';
+                        if (title) title.textContent = 'Edit Project';
+                     } else if (title) {
+                        title.textContent = 'Edit Project (Error loading data)';
+                     }
+                  }
+               });
             } else {
-                console.warn('Edit project function not found');
+                console.warn('Edit project function/modal not found');
+                this._showNotification('Cannot open edit form', 'warning');
+            }
+        } else if (deleteButton) {
+            event?.preventDefault();
+            const project = this.state.projects.find(p => p.id === projectId);
+            if (project) {
+               this._confirmDelete(project);
             }
         }
-        // Add more actions as needed (e.g., delete)
-      });
     }
   }
 

@@ -55,6 +55,8 @@ export class ProjectDetailsComponent {
       const el = document.querySelector(selector);
       if (required && !el) {
         console.error(`Required element not found: ${selector}`);
+        // Optionally throw an error for critical elements
+        // throw new Error(`Critical element missing: ${selector}`);
       }
       return el;
     };
@@ -63,24 +65,53 @@ export class ProjectDetailsComponent {
       container: getElement("#projectDetailsView", true),
       title: getElement("#projectTitle"),
       description: getElement("#projectDescription"),
+      // Stat elements
       tokenUsage: getElement("#tokenUsage"),
       maxTokens: getElement("#maxTokens"),
-      tokenPercentage: getElement("#tokenPercentage"),
-      tokenProgressBar: getElement("#tokenProgressBar"),
-      filesList: getElement("#projectFilesList", true),
+      // tokenPercentage: getElement("#tokenPercentage"), // Replaced by radial progress
+      tokenPercentageDisplay: getElement("#tokenPercentageDisplay"), // DaisyUI radial progress
+      tokenProgressBar: getElement("#tokenProgressBar"), // DaisyUI progress bar
+      conversationCount: getElement("#conversationCount"),
+      totalMessages: getElement("#totalMessages"),
+      // Lists
+      filesList: getElement("#projectFilesList", true), // Container for virtual scroll items
       conversationsList: getElement("#projectConversationsList"),
       artifactsList: getElement("#projectArtifactsList"),
+      // File Upload
       uploadProgress: getElement("#filesUploadProgress"),
-      progressBar: getElement("#fileProgressBar"),
+      progressBar: getElement("#fileProgressBar"), // DaisyUI progress bar
       uploadStatus: getElement("#uploadStatus"),
+      uploadBtnTrigger: getElement("#uploadFileBtnTrigger"), // The visible button
+      fileInput: getElement("#fileInput"), // The hidden file input
+      // Buttons
       pinBtn: getElement("#pinProjectBtn"),
+      editBtn: getElement("#editProjectBtn"), // Added
+      archiveBtn: getElement("#archiveProjectBtn"), // Added
       backBtn: getElement("#backToProjectsBtn", true),
+      // Drag & Drop
       dragZone: getElement("#dragDropZone", true),
+      // Loading States (using DaisyUI loading component)
       loadingStates: {
         files: getElement("#filesLoading"),
-        search: getElement("#knowledgeSearchLoading"),
-        conversations: getElement("#conversationsLoading")
-      }
+        // search: getElement("#knowledgeSearchLoading"), // Handled by knowledgeBaseComponent
+        conversations: getElement("#conversationsLoading"),
+        artifacts: getElement("#artifactsLoading") // Added
+      },
+      // Tabs
+      tabContainer: getElement('.tabs[role="tablist"]'), // Container for tabs
+      tabContents: { // Map tab names to content divs
+          files: getElement('#filesTab'),
+          knowledge: getElement('#knowledgeTab'),
+          conversations: getElement('#conversationsTab'),
+          artifacts: getElement('#artifactsTab'),
+          chat: getElement('#chatTab')
+      },
+      // Chat elements
+      chatContainer: getElement('#projectChatContainer'),
+      chatMessages: getElement('#projectChatMessages'),
+      chatInput: getElement('#projectChatInput'),
+      chatSendBtn: getElement('#projectChatSendBtn'),
+      chatTypingIndicator: getElement('#projectChatTyping')
     };
   }
 
@@ -91,40 +122,45 @@ export class ProjectDetailsComponent {
 
     // Listen for the custom event and bind the handler
     document.addEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
+    document.addEventListener("projectArtifactsLoaded", this.handleArtifactsLoaded.bind(this)); // Added
 
-    // Hook up tab buttons to trigger switchTab whenever clicked
-    console.log('[Debug][bindEvents] Starting...');
-
-    const tabs = document.querySelectorAll('.project-tab-btn');
-    console.log(`[Debug][bindEvents] Found ${tabs.length} elements with class '.project-tab-btn'.`);
-
-    if (tabs.length === 0) {
-        console.warn('[Debug][bindEvents] No tab buttons found! Event listeners cannot be attached.');
-        // Optionally, try again after a short delay if elements might load late
-        // setTimeout(() => this.bindEvents(), 500); // Be careful with recursive calls
-        return; // Stop if no buttons found
-    }
-
-    tabs.forEach(btn => {
-        console.log(`[Debug][bindEvents] Attaching handler to tab button:`, btn);
-        // Check if listener already exists to prevent duplicates if bindEvents is called multiple times
-        if (!btn.dataset.listenerAttached) {
-            btn.addEventListener('click', () => {
-                console.log(`[Debug] Tab clicked: ${btn.dataset.tab}`);
-                const tabName = btn.dataset.tab;
-                if (tabName) {
-                  this.switchTab(tabName);
+    // Hook up tab buttons using event delegation on the container
+    console.log('[Debug][bindEvents] Starting tab binding...');
+    if (this.elements.tabContainer) {
+        console.log('[Debug][bindEvents] Found tab container:', this.elements.tabContainer);
+        // Check if listener already exists
+        if (!this.elements.tabContainer.dataset.listenerAttached) {
+            this.elements.tabContainer.addEventListener('click', (event) => {
+                const tabButton = event.target.closest('.project-tab-btn[role="tab"]');
+                if (tabButton) {
+                    console.log(`[Debug] Tab clicked: ${tabButton.dataset.tab}`);
+                    const tabName = tabButton.dataset.tab;
+                    if (tabName) {
+                        this.switchTab(tabName);
+                    } else {
+                        console.warn('[Debug] Clicked tab button missing data-tab attribute:', tabButton);
+                    }
                 } else {
-                  console.warn('[Debug] Clicked tab button missing data-tab attribute:', btn);
+                    // console.log('[Debug] Click was not on a tab button.');
                 }
             });
-            btn.dataset.listenerAttached = 'true'; // Mark as attached
-            console.log(`[Debug][bindEvents] Listener attached to ${btn.dataset.tab}`);
+            this.elements.tabContainer.dataset.listenerAttached = 'true'; // Mark as attached
+            console.log('[Debug][bindEvents] Listener attached to tab container.');
         } else {
-            console.log(`[Debug][bindEvents] Listener already attached to ${btn.dataset.tab}, skipping.`);
+            console.log('[Debug][bindEvents] Listener already attached to tab container, skipping.');
         }
-    });
-    console.log('[Debug][bindEvents] Finished attaching listeners.'); // <-- Added log
+    } else {
+        console.warn('[Debug][bindEvents] Tab container not found! Event listeners cannot be attached.');
+    }
+    console.log('[Debug][bindEvents] Finished tab binding.');
+
+    // Bind file upload trigger
+    if (this.elements.uploadBtnTrigger && this.elements.fileInput) {
+       this.elements.uploadBtnTrigger.addEventListener('click', () => this.elements.fileInput.click());
+       this.elements.fileInput.addEventListener('change', this.handleFileSelection.bind(this));
+    }
+
+    // Bind other buttons if needed (pin, edit, archive are handled in projectDashboardUtils.js)
   }
 
   /* -------------------- Lifecycle Methods -------------------- */
@@ -147,6 +183,7 @@ export class ProjectDetailsComponent {
   destroy() {
     // Clean up event listeners
     document.removeEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
+    document.removeEventListener("projectArtifactsLoaded", this.handleArtifactsLoaded.bind(this)); // Added
     if (this.elements.filesList) {
       this.elements.filesList.removeEventListener('scroll', this.scrollHandler);
     }
@@ -161,9 +198,26 @@ export class ProjectDetailsComponent {
   handleConversationsLoaded(event) {
     console.log('[Debug][handleConversationsLoaded] Event received:', event);
     // Extract conversations array from event.detail
-    const conversations = event.detail;
+    const conversations = event.detail?.conversations || event.detail?.data?.conversations || (Array.isArray(event.detail) ? event.detail : []);
     this.renderConversations(conversations);
+
+    // Update conversation count in stats
+    if (this.elements.conversationCount) {
+       this.elements.conversationCount.textContent = conversations.length;
+    }
+    // Calculate total messages
+    const totalMessages = conversations.reduce((sum, conv) => sum + (conv.message_count || 0), 0);
+     if (this.elements.totalMessages) {
+       this.elements.totalMessages.textContent = `${totalMessages} messages`;
+     }
   }
+
+   // Handle the projectArtifactsLoaded event
+   handleArtifactsLoaded(event) {
+     console.log('[Debug][handleArtifactsLoaded] Event received:', event);
+     const artifacts = event.detail?.artifacts || event.detail?.data?.artifacts || (Array.isArray(event.detail) ? event.detail : []);
+     this.renderArtifacts(artifacts);
+   }
 
   /* -------------------- Core Rendering Methods -------------------- */
 
@@ -193,7 +247,23 @@ export class ProjectDetailsComponent {
       this.elements.description.classList.add('text-gray-600', 'dark:text-gray-300');
     }
 
+    // Update stats immediately if available in project object
+    if (project.stats) {
+       this.renderStats(project.stats);
+    }
+    if (project.conversations) {
+        this.renderConversations(project.conversations);
+    }
+    if (project.files) {
+        this.renderFiles(project.files);
+    }
+    if (project.artifacts) {
+        this.renderArtifacts(project.artifacts);
+    }
+
+
     this.updatePinButton(project.pinned);
+    this.updateArchiveButton(project.archived); // Added
 
     setTimeout(() => {
       this.elements.container.classList.remove('opacity-0');
@@ -206,14 +276,25 @@ export class ProjectDetailsComponent {
 
   updatePinButton(pinned) {
     if (!this.elements.pinBtn) return;
-
     const svg = this.elements.pinBtn.querySelector("svg");
     if (svg) {
-      svg.classList.toggle('[fill:none]', !pinned);
-      svg.classList.toggle('[fill:currentColor]', pinned);
+      // Toggle fill based on DaisyUI theme colors potentially
+      svg.setAttribute('fill', pinned ? 'currentColor' : 'none');
     }
-    this.elements.pinBtn.classList.toggle('text-yellow-600', pinned);
+    // Use DaisyUI tooltip
+    this.elements.pinBtn.classList.toggle('text-warning', pinned); // Use warning color for pinned
+    this.elements.pinBtn.dataset.tip = pinned ? 'Unpin project' : 'Pin project';
+    this.elements.pinBtn.classList.add('tooltip', 'tooltip-bottom');
   }
+
+  updateArchiveButton(archived) {
+     if (!this.elements.archiveBtn) return;
+     this.elements.archiveBtn.classList.toggle('text-warning', archived); // Use warning color for archived
+     this.elements.archiveBtn.dataset.tip = archived ? 'Unarchive project' : 'Archive project';
+     this.elements.archiveBtn.classList.add('tooltip', 'tooltip-bottom');
+     // Update icon? (Optional)
+  }
+
 
   renderStats(stats) {
     if (!stats || typeof stats !== 'object') {
@@ -221,182 +302,190 @@ export class ProjectDetailsComponent {
       return;
     }
 
-    const { tokenUsage, maxTokens, tokenPercentage, tokenProgressBar } = this.elements;
-    const formatNumber = this.utils?.formatNumber || (n => n.toString());
+    // Use uiUtilsInstance for formatting if available
+    const formatNumber = this.utils?.formatNumber || (n => n?.toString() || '0');
 
-    if (tokenUsage) {
-      tokenUsage.textContent = formatNumber(stats.token_usage || 0);
-      tokenUsage.classList.add('animate-count-up');
+    if (this.elements.tokenUsage) {
+      this.elements.tokenUsage.textContent = formatNumber(stats.token_usage);
+      // Optional: Add animation class if defined in CSS
+      // this.elements.tokenUsage.classList.add('animate-count-up');
     }
 
-    if (maxTokens) {
-      maxTokens.textContent = formatNumber(stats.max_tokens || 0);
+    if (this.elements.maxTokens) {
+      this.elements.maxTokens.textContent = formatNumber(stats.max_tokens);
     }
 
     const usage = stats.token_usage || 0;
-    const maxT = stats.max_tokens || 1;
-    const pct = Math.min(100, (usage / maxT) * 100).toFixed(1);
+    const maxT = stats.max_tokens || 1; // Avoid division by zero
+    const pct = maxT > 0 ? Math.min(100, (usage / maxT) * 100).toFixed(0) : 0; // Use integer for radial
 
-    if (tokenPercentage) {
-      tokenPercentage.textContent = `${pct}%`;
-      tokenPercentage.classList.add('animate-count-up');
+    // Update DaisyUI radial progress
+    if (this.elements.tokenPercentageDisplay) {
+      this.elements.tokenPercentageDisplay.style.setProperty('--value', pct);
+      this.elements.tokenPercentageDisplay.textContent = `${pct}%`;
+      // Optional: Add animation class
+      // this.elements.tokenPercentageDisplay.classList.add('animate-count-up');
     }
 
-    this.animateProgressBar(tokenProgressBar, pct);
+    // Update DaisyUI progress bar
+    if (this.elements.tokenProgressBar) {
+       this.elements.tokenProgressBar.value = pct;
+       // Add color classes based on percentage
+       this.elements.tokenProgressBar.classList.remove('progress-success', 'progress-warning', 'progress-error', 'progress-primary');
+       if (pct > 90) {
+          this.elements.tokenProgressBar.classList.add('progress-error');
+       } else if (pct > 75) {
+          this.elements.tokenProgressBar.classList.add('progress-warning');
+       } else {
+          this.elements.tokenProgressBar.classList.add('progress-primary'); // Default or success
+       }
+    }
+
+     // Update file stats
+     if (this.elements.fileCountDisplay) { // Renamed element ID in HTML
+        this.elements.fileCountDisplay.textContent = formatNumber(stats.file_count);
+     }
+     if (this.elements.fileSizeDisplay) { // Renamed element ID in HTML
+        this.elements.fileSizeDisplay.textContent = this.utils?.formatBytes(stats.total_size || 0) || `${stats.total_size || 0} Bytes`;
+     }
+
+     // Update conversation stats (might be updated in handleConversationsLoaded too)
+     if (this.elements.conversationCount) {
+        this.elements.conversationCount.textContent = formatNumber(stats.conversation_count);
+     }
+     if (this.elements.totalMessages) {
+        this.elements.totalMessages.textContent = `${formatNumber(stats.total_messages)} messages`;
+     }
   }
 
   /* -------------------- File Management Methods -------------------- */
 
   renderFiles(files = []) {
-    if (!this.elements.filesList) return;
+    // ... (showLoading) ...
 
-    this.showLoading('files');
+    // Use the container meant for virtual scrolling items
+    const listContainer = this.elements.filesList;
+    if (!listContainer) {
+       console.error("Files list container (#projectFilesList) not found.");
+       this.hideLoading('files');
+       return;
+    }
 
     requestAnimationFrame(() => {
       if (!files || files.length === 0) {
-        this.renderEmptyFilesState();
+        this.renderEmptyFilesState(listContainer); // Pass container
       } else {
-        this.setupVirtualScroll(files);
+        // For simplicity, let's render directly without virtual scroll first
+        // this.setupVirtualScroll(files, listContainer);
+        this.renderAllFilesDirectly(files, listContainer);
       }
       this.hideLoading('files');
     });
   }
 
-  renderEmptyFilesState() {
-    if (!this.elements.filesList) return;
-
-    this.elements.filesList.innerHTML = `
-      <div class="text-base-content/70 text-center py-8 animate-fade-in">
+  renderEmptyFilesState(container) { // Accept container element
+    if (!container) return;
+    container.innerHTML = `
+      <div class="text-base-content/70 text-center py-8">
         <svg class="w-12 h-12 mx-auto opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
         </svg>
-        <p class="mt-2">No files uploaded yet</p>
-        <button id="uploadFileBtn" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-colors">
-          Upload Files
-        </button>
+        <p class="mt-2">No files uploaded yet.</p>
+        <p class="text-sm mt-1">Drag & drop files or use the upload button.</p>
+        {/* Button is now outside the list */}
       </div>
     `;
   }
 
-  setupVirtualScroll(files) {
-    if (!this.elements.filesList) return;
-
-    this.elements.filesList.innerHTML = "";
-
-    // Handle initial zero height case
-    if (this.elements.filesList.clientHeight === 0) {
-      setTimeout(() => this.setupVirtualScroll(files), 100);
-      return;
-    }
-
-    const containerHeight = this.elements.filesList.clientHeight;
-    const itemHeight = 72;
-    const visibleCount = Math.ceil(containerHeight / itemHeight) + 2;
-
-    this.virtualScroll = {
-      startIndex: 0,
-      endIndex: Math.min(visibleCount, files.length),
-      itemHeight,
-      files
-    };
-
-    this.updateVisibleFiles();
-    this.elements.filesList.addEventListener('scroll', this.scrollHandler);
-  }
-
-  updateVisibleFiles() {
-    if (!this.virtualScroll || !this.elements.filesList) return;
-
-    const { startIndex, endIndex, files, itemHeight } = this.virtualScroll;
-    const fragment = document.createDocumentFragment();
-
-    for (let i = startIndex; i < endIndex; i++) {
-      if (files[i]) {
-        const fileItem = this.createFileItem(files[i]);
-        fileItem.style.position = 'absolute';
-        fileItem.style.top = `${i * itemHeight}px`;
+  // Simple rendering without virtual scroll
+  renderAllFilesDirectly(files, container) {
+     if (!container) return;
+     container.innerHTML = ''; // Clear previous content
+     const fragment = document.createDocumentFragment();
+     files.forEach(file => {
+        const fileItem = this.createFileItem(file);
         fragment.appendChild(fileItem);
-      }
-    }
-
-    this.elements.filesList.innerHTML = '';
-    this.elements.filesList.appendChild(fragment);
-    this.elements.filesList.style.height = `${files.length * itemHeight}px`;
+     });
+     container.appendChild(fragment);
   }
+
+
+  // ... (setupVirtualScroll, updateVisibleFiles - keep if needed, but ensure container is passed) ...
 
   createFileItem(file) {
     if (!file || !this.utils) return document.createElement('div');
 
+    // Use standard div, styled with Tailwind/DaisyUI
     const item = this.utils.createElement("div", {
-      className: "content-item relative transition-all duration-200 hover:bg-base-200 rounded-sm",
+      className: "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-md shadow-sm hover:bg-base-200 transition-colors",
       "data-file-id": file.id
     });
 
     const infoDiv = this.utils.createElement("div", {
-      className: "flex items-center gap-3 p-3"
+      className: "flex items-center gap-3 min-w-0 flex-1" // Allow shrinking
     });
 
+    // Use DaisyUI fileIcon util
     const icon = this.utils.createElement("span", {
-      className: `text-xl ${file.file_type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`
+      className: `text-xl ${file.file_type === 'pdf' ? 'text-error' : 'text-primary'}` // Example colors
     });
-
-    icon.innerHTML = this.getFileIcon(file.file_type);
+    icon.innerHTML = this.utils.fileIcon(file.file_type); // Use util
 
     const detailDiv = this.utils.createElement("div", {
-      className: "flex flex-col min-w-0 flex-1"
+      className: "flex flex-col min-w-0 flex-1" // Allow shrinking
     });
 
     detailDiv.appendChild(this.utils.createElement("div", {
-      className: "font-medium truncate text-gray-800 dark:text-gray-200",
+      className: "font-medium truncate", // Rely on base text color
       textContent: file.filename
     }));
 
     const sizeDate = this.utils.createElement("div", {
-      className: "text-xs text-gray-500 dark:text-gray-400",
+      className: "text-xs text-base-content/70", // Use secondary text color
       textContent: `${this.utils.formatBytes(file.file_size)} · ${this.utils.formatDate(file.created_at)}`
     });
     detailDiv.appendChild(sizeDate);
 
+    // Add processing badge using DaisyUI badge component
     const statusBadge = this.createProcessingBadge(file.metadata?.search_processing || {});
     detailDiv.appendChild(statusBadge);
 
     infoDiv.appendChild(icon);
     infoDiv.appendChild(detailDiv);
-    item.appendChild(infoDiv);
 
-    const actions = this.utils.createElement("div", { className: "flex gap-1 pe-2" });
+    // Action buttons using DaisyUI btn component
+    const actions = this.utils.createElement("div", { className: "flex gap-1" });
     actions.appendChild(this.createActionButton({
-      icon: "trash",
-      color: "red",
+      icon: "trash", // Keep icon name simple
+      colorClass: "btn-error", // DaisyUI color class
       action: () => this.confirmDeleteFile(file),
       tooltip: "Delete file"
     }));
 
     actions.appendChild(this.createActionButton({
-      icon: "download",
-      color: "blue",
+      icon: "download", // Keep icon name simple
+      colorClass: "btn-info", // DaisyUI color class
       action: () => this.downloadFile(file),
       tooltip: "Download file"
     }));
 
+    item.appendChild(infoDiv);
     item.appendChild(actions);
     return item;
   }
 
-  getFileIcon(fileType) {
-    const iconMap = {
-      pdf: `<path d="M10 8v8m4-8v4m0 4v-4m4 0h-4m-8-4h4m8 0h-4"/>`,
-      txt: `<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>`,
-      md: `<path d="M12 6v12m-3-3l3 3 3-3M3 6h18M3 12h18M3 18h18"/>`,
-      default: `<path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>`
-    };
-
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      ${iconMap[fileType] || iconMap.default}
-    </svg>`;
-  }
-
   /* -------------------- File Upload Methods -------------------- */
+
+   // Handle file selection from the hidden input
+   handleFileSelection(event) {
+      const files = event.target.files;
+      if (files && files.length > 0 && this.state.currentProject?.id) {
+         this.uploadFiles(this.state.currentProject.id, files);
+      }
+      // Reset input value to allow selecting the same file again
+      event.target.value = null;
+   }
+
 
   async uploadFiles(projectId, files) {
     try {
@@ -406,9 +495,13 @@ export class ProjectDetailsComponent {
         return;
       }
 
-      this.showLoading('files');
+      // Show progress bar section
+      if (this.elements.uploadProgress) {
+         this.elements.uploadProgress.classList.remove('hidden');
+      }
+      this.showLoading('files'); // Show spinner in list area
       this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-      this.updateUploadProgress();
+      this.updateUploadProgress(); // Initialize progress bar UI
 
       const { validFiles, invalidFiles } = this.validateFiles(files);
       this.handleInvalidFiles(invalidFiles);
@@ -421,12 +514,10 @@ export class ProjectDetailsComponent {
         await Promise.all(batch.map(file => this.processFile(projectId, file)));
       }
 
-      await this.refreshProjectData(projectId);
+      // No finally block needed here, hideLoading is called within processFile or error handling
     } catch (error) {
       console.error('Upload failed:', error);
       this.notification?.('File upload failed', 'error');
-    } finally {
-      this.hideLoading('files');
     }
   }
 
@@ -439,7 +530,8 @@ export class ProjectDetailsComponent {
       const response = await this.projectManager.uploadFile(projectId, file);
 
       this.fileUploadStatus.completed++;
-      this.updateUploadProgress();
+      // Don't hide loading spinner here, wait for all files
+      this.updateUploadProgress(); // Update progress bar
 
       if (this.notification) {
         this.notification(`${file.name} uploaded successfully`, 'success');
@@ -451,11 +543,18 @@ export class ProjectDetailsComponent {
     } catch (error) {
       console.error(`Upload error for ${file.name}:`, error);
       this.fileUploadStatus.failed++;
-      this.fileUploadStatus.completed++;
-      this.updateUploadProgress();
+      this.fileUploadStatus.completed++; // Count failed as completed for progress bar
+      this.updateUploadProgress(); // Update progress bar
 
       const errorMessage = this.formatUploadErrorMessage(error, file.name);
       this.notification?.(`Failed to upload ${file.name}: ${errorMessage}`, 'error');
+    } finally {
+       // Check if all files (including failed) are processed
+       if (this.fileUploadStatus.completed === this.fileUploadStatus.total) {
+          this.hideLoading('files'); // Hide spinner only when all are done
+          // Hide progress bar after a delay (handled in updateUploadProgress)
+          await this.refreshProjectData(projectId); // Refresh data once at the end
+       }
     }
   }
 
@@ -493,14 +592,37 @@ export class ProjectDetailsComponent {
   confirmDeleteFile(file) {
     if (!file?.id || !this.state.currentProject?.id) return;
 
-    const confirmed = confirm(`Delete ${file.filename}? This cannot be undone.`);
-    if (confirmed && this.projectManager?.deleteFile) {
-      this.projectManager.deleteFile(this.state.currentProject.id, file.id)
-        .then(() => this.refreshProjectData(this.state.currentProject.id))
-        .catch(err => {
-          console.error('Delete failed:', err);
-          this.notification?.('Failed to delete file', 'error');
-        });
+    // Use global modal manager
+    if (this.utils?.confirmAction) { // Assuming confirmAction is moved to utils
+       this.utils.confirmAction({
+          title: "Delete File",
+          message: `Are you sure you want to delete "${file.filename}"? This cannot be undone.`,
+          confirmText: "Delete",
+          confirmClass: "btn-error", // DaisyUI class
+          onConfirm: () => {
+             if (this.projectManager?.deleteFile) {
+               this.projectManager.deleteFile(this.state.currentProject.id, file.id)
+                 .then(() => {
+                    this.notification?.('File deleted successfully', 'success');
+                    this.refreshProjectData(this.state.currentProject.id);
+                 })
+                 .catch(err => {
+                   console.error('Delete failed:', err);
+                   this.notification?.('Failed to delete file', 'error');
+                 });
+             }
+          }
+       });
+    } else { // Fallback
+       const confirmed = confirm(`Delete ${file.filename}? This cannot be undone.`);
+       if (confirmed && this.projectManager?.deleteFile) {
+         this.projectManager.deleteFile(this.state.currentProject.id, file.id)
+           .then(() => this.refreshProjectData(this.state.currentProject.id))
+           .catch(err => {
+             console.error('Delete failed:', err);
+             this.notification?.('Failed to delete file', 'error');
+           });
+       }
     }
   }
 
@@ -528,54 +650,40 @@ export class ProjectDetailsComponent {
       return;
     }
 
-    // --- Simplified Hide/Show Logic ---
-
-    // 1. Hide all content panels directly
-    document.querySelectorAll('.project-tab-content').forEach(content => {
-      if (!content.classList.contains('hidden')) {
-        content.classList.add('hidden');
-        console.log(`[Debug] Hid content panel: ${content.id}`);
-      }
+    // --- Hide/Show Content Panels ---
+    Object.values(this.elements.tabContents).forEach(content => {
+        if (content) content.classList.add('hidden');
     });
 
-    // 2. Show the target content panel directly
-    const newTabContent = document.getElementById(`${tabName}Tab`);
+    const newTabContent = this.elements.tabContents[tabName];
     if (newTabContent) {
-      newTabContent.classList.remove('hidden');
-      console.log(`[Debug] Showed content panel: ${newTabContent.id}`);
+        newTabContent.classList.remove('hidden');
+        console.log(`[Debug] Showed content panel for: ${tabName}`);
     } else {
-      console.error(`[Debug] Target tab content panel not found for ID: ${tabName}Tab`);
+        console.error(`[Debug] Target tab content panel not found for: ${tabName}`);
     }
 
     // --- Update Button States ---
-
-    // 1. Deactivate all tab buttons
-    document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-      tabBtn.classList.remove('active', 'text-blue-600', 'dark:text-blue-400', 'border-blue-600');
-      // Add back default/inactive styles if they were removed by 'active'
-      tabBtn.classList.add('text-gray-500', 'dark:text-gray-400', 'border-transparent', 'hover:text-gray-700', 'dark:hover:text-gray-300', 'hover:border-gray-300');
-      tabBtn.setAttribute('aria-selected', 'false');
-      tabBtn.setAttribute('tabindex', '-1'); // Make inactive tabs not focusable by default Tab key
-    });
-
-    // 2. Activate the clicked tab button
-    const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
-    if (activeTabBtn) {
-      // Remove default/inactive styles before adding active ones
-      activeTabBtn.classList.remove('text-gray-500', 'dark:text-gray-400', 'border-transparent', 'hover:text-gray-700', 'dark:hover:text-gray-300', 'hover:border-gray-300');
-      // Add active styles
-      activeTabBtn.classList.add('active', 'text-blue-600', 'dark:text-blue-400', 'border-blue-600');
-      activeTabBtn.setAttribute('aria-selected', 'true');
-      activeTabBtn.setAttribute('tabindex', '0'); // Make active tab focusable
-      console.log(`[Debug] Activated tab button for: ${tabName}`);
+    const tabButtons = this.elements.tabContainer?.querySelectorAll('.project-tab-btn[role="tab"]');
+    if (tabButtons) {
+        tabButtons.forEach(tabBtn => {
+            const isTargetTab = tabBtn.dataset.tab === tabName;
+            tabBtn.classList.toggle('tab-active', isTargetTab); // Use DaisyUI active class
+            tabBtn.setAttribute('aria-selected', isTargetTab ? 'true' : 'false');
+        });
+        console.log(`[Debug] Updated tab button states for: ${tabName}`);
     } else {
-      console.warn(`[Debug] Could not find tab button for data-tab: ${tabName}`);
+        console.warn(`[Debug] Could not find tab buttons to update state.`);
     }
 
     // Update component state
     this.state.activeTab = tabName;
     console.log(`[Debug] Updated state.activeTab to: ${tabName}`);
+
+    // Load data if switching to a tab that needs it (optional, depends on flow)
+    // Example: if (tabName === 'conversations' && !this.conversationsLoaded) this.loadConversations();
   }
+
 
   /* -------------------- Drag & Drop Methods -------------------- */
 
@@ -586,125 +694,127 @@ export class ProjectDetailsComponent {
       return;
     }
 
-    ['dragenter', 'dragover', 'dragleave'].forEach(event => {
-      this.elements.dragZone.addEventListener(event, this.handleDragEvent);
-      console.log(`[Debug] Added ${event} listener to drag zone`);
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+       // Use a single handler and check type inside
+       this.elements.dragZone.removeEventListener(event, this.handleDragEvent); // Remove previous if any
+       this.elements.dragZone.addEventListener(event, this.handleDragEvent);
+       console.log(`[Debug] Added ${event} listener to drag zone`);
     });
 
-    // Add drop event with specific handler
-    this.elements.dragZone.addEventListener('drop', this.handleDrop);
-    console.log('[Debug] Added drop listener to drag zone');
-
-    // Add click handler for file upload button if present
-    const uploadBtn = document.getElementById('uploadFileBtn');
-    if (uploadBtn) {
-      uploadBtn.addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.multiple = true;
-        input.accept = this.fileConstants.allowedExtensions.join(',');
-        input.onchange = (e) => {
-          if (e.target.files.length > 0 && this.state.currentProject?.id) {
-            this.uploadFiles(this.state.currentProject.id, e.target.files);
-          }
-        };
-        input.click();
-      });
-      console.log('[Debug] Added click listener to upload button');
-    }
+    // Click handler for the zone itself to trigger file input
+    this.elements.dragZone.addEventListener('click', () => {
+       if (this.elements.fileInput) {
+          this.elements.fileInput.click();
+       }
+    });
+    console.log('[Debug] Added click listener to drag zone');
   }
 
   handleDragEvent(e) {
     e.preventDefault();
     e.stopPropagation();
     console.log(`[Debug] Drag event: ${e.type}`);
-    if (this.elements.dragZone) {
-      const isActive = ['dragenter', 'dragover'].includes(e.type);
-      this.elements.dragZone.classList.toggle('drag-zone-active', isActive);
-      console.log(`[Debug] Drag zone active: ${isActive}`);
+
+    if (!this.elements.dragZone) return;
+
+    switch (e.type) {
+      case 'dragenter':
+      case 'dragover':
+        this.elements.dragZone.classList.add('drag-zone-active', 'border-primary'); // Add DaisyUI color
+        this.elements.dragZone.classList.remove('border-base-content/30');
+        break;
+      case 'dragleave':
+      case 'drop':
+        this.elements.dragZone.classList.remove('drag-zone-active', 'border-primary');
+        this.elements.dragZone.classList.add('border-base-content/30');
+        break;
+    }
+
+    // Handle drop separately
+    if (e.type === 'drop') {
+      this.handleDrop(e);
     }
   }
 
   async handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    // Prevention is already done in handleDragEvent
     console.log('[Debug] Drop event triggered');
 
-    // Remove active styling
-    if (this.elements.dragZone) {
-      this.elements.dragZone.classList.remove('drag-zone-active');
-    }
-
-    const files = e.dataTransfer.files;
-    console.log(`[Debug] Files dropped: ${files.length}`);
+    const files = e.dataTransfer?.files;
+    console.log(`[Debug] Files dropped: ${files?.length || 0}`);
 
     const projectId = this.state.currentProject?.id;
     if (!projectId) {
       console.error('[Debug] No current project ID available');
+      this.notification?.('Cannot upload: No project selected.', 'error');
       return;
     }
 
-    if (files.length > 0) {
+    if (files && files.length > 0) {
       try {
         console.log(`[Debug] Attempting to upload ${files.length} files to project ${projectId}`);
         await this.uploadFiles(projectId, files);
       } catch (error) {
         console.error('[Debug] Error uploading files:', error);
+        this.notification?.(`File upload failed: ${error.message || 'Unknown error'}`, 'error');
       }
+    } else {
+       console.log('[Debug] No files found in drop event.');
     }
   }
+
 
   /* -------------------- Chat Interface Methods -------------------- */
 
   initChatInterface() {
-    // First attempt: Use ChatManager if available (preferred approach)
+    // Use selectors matching the updated HTML
+    const chatOptions = {
+        containerSelector: '#projectChatContainer', // Main container for chat UI
+        messageContainerSelector: '#projectChatMessages',
+        inputSelector: '#projectChatInput',
+        sendButtonSelector: '#projectChatSendBtn',
+        typingIndicatorSelector: '#projectChatTyping', // Optional typing indicator element
+        onMessageSent: this.handleMessageSent.bind(this),
+        onError: this.handleChatError.bind(this),
+        // Add projectId or other context needed by ChatManager/ChatInterface
+        getProjectId: () => this.state.currentProject?.id
+    };
+
+    // Prefer ChatManager if available
     if (window.ChatManager && typeof window.ChatManager.initializeProjectChat === 'function') {
-      try {
-        console.log('[ProjectDetailsView] Using ChatManager to initialize chat');
-        window.ChatManager.initializeProjectChat('#projectChatUI', {
-          messageContainer: '#projectChatMessages',
-          inputField: '#projectChatInput',
-          sendButton: '#projectChatSendBtn',
-          onMessageSent: this.handleMessageSent.bind(this),
-          onError: this.handleChatError.bind(this)
-        });
-        return;
-      } catch (err) {
-        console.error('[ProjectDetailsView] Could not find ChatManager.initializeProjectChat.', err);
-      }
+        try {
+            console.log('[ProjectDetailsView] Using ChatManager to initialize chat');
+            // Assuming ChatManager handles the ChatInterface instance internally
+            window.ChatManager.initializeProjectChat(chatOptions);
+            // Store reference if needed, e.g., for loading conversations later
+            // this.chatInstance = window.ChatManager.getChatInstance('#projectChatContainer');
+            return;
+        } catch (err) {
+            console.error('[ProjectDetailsView] Error initializing chat via ChatManager:', err);
+            // Fallback to direct ChatInterface if manager fails
+        }
     }
 
     // Fallback: Use ChatInterface directly
-    if (typeof window.ChatInterface !== 'function') {
-      console.warn('[ProjectDetailsView] ChatInterface not available - chat functionality will be limited');
-      return;
-    }
-
-    if (!window.projectChatInterface) {
-      try {
-        console.log('[ProjectDetailsView] Using direct ChatInterface');
-        window.projectChatInterface = new window.ChatInterface({
-          containerSelector: '#projectChatUI',
-          messageContainerSelector: '#projectChatMessages',
-          inputSelector: '#projectChatInput',
-          sendButtonSelector: '#projectChatSendBtn',
-          typingIndicator: true,
-          readReceipts: true,
-          messageStatus: true
-        });
-
-        window.projectChatInterface.on('messageSent', (data) => {
-          this.handleMessageSent(data);
-        });
-
-        window.projectChatInterface.on('error', (err) => {
-          this.handleChatError(err);
-        });
-
-        window.projectChatInterface.initialize();
-      } catch (err) {
-        console.error('[ProjectDetailsView] Failed to initialize chat interface:', err);
-      }
+    if (typeof window.ChatInterface === 'function') {
+        if (!window.projectChatInterface) { // Avoid re-initializing
+            try {
+                console.log('[ProjectDetailsView] Using direct ChatInterface');
+                window.projectChatInterface = new window.ChatInterface(chatOptions);
+                // Assuming ChatInterface has an initialize method
+                window.projectChatInterface.initialize();
+                this.chatInstance = window.projectChatInterface; // Store reference
+            } catch (err) {
+                console.error('[ProjectDetailsView] Failed to initialize direct ChatInterface:', err);
+            }
+        } else {
+             this.chatInstance = window.projectChatInterface; // Use existing instance
+        }
+    } else {
+        console.warn('[ProjectDetailsView] ChatInterface or ChatManager not available - chat functionality disabled.');
+        // Optionally hide the chat tab/button
+        const chatTabButton = this.elements.tabContainer?.querySelector('[data-tab="chat"]');
+        if (chatTabButton) chatTabButton.classList.add('hidden');
     }
   }
 
@@ -732,33 +842,31 @@ export class ProjectDetailsComponent {
     try {
       localStorage.setItem("selectedProjectId", this.state.currentProject.id);
 
-      const chatContainer = document.getElementById('projectChatContainer');
-      if (chatContainer) {
-        chatContainer.classList.remove('hidden', 'opacity-0');
-        chatContainer.classList.add('block', 'opacity-100');
-        chatContainer.scrollIntoView({ behavior: 'smooth' });
+      // Switch to chat tab first
+      this.switchTab('chat');
+
+      // Ensure chat instance is available
+      const chatInstance = this.chatInstance || window.projectChatInterface || window.ChatManager?.getChatInstance?.('#projectChatContainer');
+      if (!chatInstance) {
+         throw new Error('Chat system not ready');
       }
 
-      if (!window.projectChatInterface) {
-        this.notification?.('Chat system not ready', 'error');
-        return;
-      }
+      this.showLoading('conversations'); // Or a dedicated chat loading state
 
-      this.showLoading('conversations');
+      // Assuming chat instance has a loadConversation method
+      const success = await chatInstance.loadConversation(conversation.id);
 
-      if (!window.projectChatInterface.initialized) {
-        await window.projectChatInterface.initialize();
-      }
-
-      window.projectChatInterface.setTargetContainer('#projectChatMessages');
-      const success = await window.projectChatInterface.loadConversation(conversation.id);
-
-      if (!success) throw new Error('Failed to load conversation');
+      if (!success) throw new Error('Failed to load conversation via chat instance');
 
       // Update URL history
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set('chatId', conversation.id);
+      // Ensure project ID is also in URL if switching tabs
+      if (!newUrl.searchParams.has('project')) {
+         newUrl.searchParams.set('project', this.state.currentProject.id);
+      }
       window.history.pushState({}, "", newUrl);
+
     } catch (err) {
       console.error('Error loading conversation:', err);
       this.notification?.(
@@ -770,44 +878,22 @@ export class ProjectDetailsComponent {
     }
   }
 
-  renderConversations(data = []) {
+  renderConversations(conversations = []) { // Default to empty array
     if (!this.elements.conversationsList) return;
 
     this.showLoading('conversations');
 
-    // Extract conversations array from different possible data formats
-    let conversations = [];
+    // No need to extract, assume input is already the array
+    console.log(`[Debug][renderConversations] Rendering ${conversations.length} conversations`);
 
-    if (data && data.target && data.detail) {
-      // This is an event object - extract conversations from detail
-      if (Array.isArray(data.detail)) {
-        conversations = data.detail;
-        console.log(`[Debug][renderConversations] Extracted ${conversations.length} conversations from event.detail`);
-      } else if (data.detail && Array.isArray(data.detail.conversations)) {
-        conversations = data.detail.conversations;
-        console.log(`[Debug][renderConversations] Extracted ${conversations.length} conversations from event.detail.conversations`);
-      } else {
-        console.warn('[Debug][renderConversations] Could not extract conversations from event:', data);
-      }
-    } else if (Array.isArray(data)) {
-      // Direct array input
-      conversations = data;
-      console.log(`[Debug][renderConversations] Using direct array input with ${conversations.length} conversations`);
-    } else if (data && Array.isArray(data.conversations)) {
-      // Object with conversations property
-      conversations = data.conversations;
-      console.log(`[Debug][renderConversations] Extracted ${conversations.length} conversations from data.conversations`);
-    }
-
-    // Render based on extracted conversations
-    if (!conversations || conversations.length === 0) {
+    if (conversations.length === 0) {
       this.elements.conversationsList.innerHTML = `
-        <div class="text-gray-500 text-center py-8">
+        <div class="text-base-content/70 text-center py-8">
           <p>No conversations yet</p>
+          <button class="btn btn-sm btn-outline mt-2" onclick="projectDetails.switchTab('chat')">Start Chatting</button>
         </div>
       `;
     } else {
-      console.log(`[Debug][renderConversations] Rendering ${conversations.length} conversations`);
       this.elements.conversationsList.innerHTML = conversations
         .map(conv => this.createConversationItem(conv))
         .join('');
@@ -817,39 +903,99 @@ export class ProjectDetailsComponent {
   }
 
   createConversationItem(conversation) {
-    return `
-      <div class="conversation-item p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-           onclick="projectDetails.handleConversationClick(${JSON.stringify(conversation).replace(/"/g, '&quot;')})">
-        <h4 class="font-medium truncate">${conversation.title || 'Untitled conversation'}</h4>
-        <p class="text-sm text-gray-500 truncate">
+    // Use more semantic HTML and DaisyUI classes if applicable
+    const item = document.createElement('div');
+    item.className = "p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors";
+    item.setAttribute('role', 'button');
+    item.setAttribute('tabindex', '0');
+    item.onclick = () => this.handleConversationClick(conversation);
+    item.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') this.handleConversationClick(conversation); };
+
+    item.innerHTML = `
+        <h4 class="font-medium truncate mb-1">${conversation.title || 'Untitled conversation'}</h4>
+        <p class="text-sm text-base-content/70 truncate">
           ${conversation.last_message || 'No messages yet'}
         </p>
-        <div class="flex justify-between mt-1 text-xs text-gray-400">
+        <div class="flex justify-between mt-1 text-xs text-base-content/60">
           <span>${this.utils?.formatDate(conversation.updated_at) || conversation.updated_at}</span>
-          <span>${conversation.message_count || 0} messages</span>
+          <span class="badge badge-ghost badge-sm">${conversation.message_count || 0} messages</span>
         </div>
-      </div>
     `;
+    return item.outerHTML; // Return as string for innerHTML joining
   }
+
+   renderArtifacts(artifacts = []) {
+      const container = this.elements.artifactsList;
+      if (!container) return;
+
+      this.showLoading('artifacts');
+
+      if (artifacts.length === 0) {
+         container.innerHTML = `
+           <div class="text-base-content/70 text-center py-8">
+             <p>No artifacts generated yet.</p>
+           </div>
+         `;
+      } else {
+         container.innerHTML = artifacts.map(artifact => this.createArtifactItem(artifact)).join('');
+      }
+
+      this.hideLoading('artifacts');
+   }
+
+   createArtifactItem(artifact) {
+      // Example structure - adjust based on artifact properties
+      return `
+         <div class="p-3 border-b border-base-300 hover:bg-base-200 transition-colors">
+           <div class="flex justify-between items-center">
+              <h4 class="font-medium truncate">${artifact.name || 'Untitled Artifact'}</h4>
+              <span class="text-xs text-base-content/60">${this.utils?.formatDate(artifact.created_at)}</span>
+           </div>
+           <p class="text-sm text-base-content/70 truncate mt-1">${artifact.description || artifact.type || 'No description'}</p>
+           <div class="mt-2 flex gap-2">
+              <button class="btn btn-xs btn-outline" onclick="projectDetails.downloadArtifact('${artifact.id}')">Download</button>
+              {/* Add other actions as needed */}
+           </div>
+         </div>
+      `;
+   }
+
+   async downloadArtifact(artifactId) {
+      if (!artifactId || !this.state.currentProject?.id || !this.projectManager?.downloadArtifact) return;
+      try {
+         this.showLoading('artifacts');
+         await this.projectManager.downloadArtifact(this.state.currentProject.id, artifactId);
+         // Notification handled by download function potentially
+      } catch (err) {
+         console.error("Artifact download error:", err);
+         this.notification?.('Artifact download failed', 'error');
+      } finally {
+         this.hideLoading('artifacts');
+      }
+   }
+
 
   /* -------------------- Utility Methods -------------------- */
 
-  createActionButton({ icon, color, action, tooltip }) {
+  createActionButton({ icon, colorClass, action, tooltip }) {
     if (!this.utils) return document.createElement('div');
 
+    // Use DaisyUI button classes
     const button = this.utils.createElement("button", {
-      className: `p-1.5 rounded-sm text-${color}-600 hover:text-${color}-800 hover:bg-${color}-50 dark:hover:bg-${color}-900/20 transition-colors`,
+      // Base classes + specific color + size
+      className: `btn btn-ghost btn-square btn-sm ${colorClass || ''} tooltip tooltip-left`,
       onclick: action,
-      "aria-label": tooltip
+      "data-tip": tooltip // Use data-tip for DaisyUI tooltip
     });
 
     const iconMap = {
-      trash: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>',
-      download: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>'
+      trash: '<path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H7.862a2.25 2.25 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>',
+      download: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />'
+      // Add other icons if needed
     };
 
     button.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
         ${iconMap[icon] || ''}
       </svg>
     `;
@@ -858,35 +1004,26 @@ export class ProjectDetailsComponent {
 
   createProcessingBadge(processing = {}) {
     const statusMappings = {
-      'success': {
-        class: "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300",
-        text: "Ready for Search",
-        icon: "✓"
-      },
-      'error': {
-        class: "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300",
-        text: processing.error ? `Error: ${processing.error.substring(0, 25)}...` : 'Processing Failed',
-        icon: "⚠"
-      },
-      'pending': {
-        class: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300",
-        text: "Processing...",
-        icon: "⏳"
-      },
-      'default': {
-        class: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-        text: "Not Processed",
-        icon: "•"
-      }
+      'success': { class: "badge-success", text: "Ready", icon: "✓" },
+      'error': { class: "badge-error", text: processing.error ? `Error` : 'Failed', icon: "⚠" },
+      'pending': { class: "badge-warning", text: "Processing...", icon: "⏳" },
+      'default': { class: "badge-ghost", text: "Not Processed", icon: "•" }
     };
 
     const status = processing.status || 'default';
     const mapping = statusMappings[status] || statusMappings.default;
 
+    // Use DaisyUI badge component
     const badge = document.createElement('div');
-    badge.className = `processing-status text-xs px-2 py-1 rounded-full ${mapping.class} mt-1 flex items-center gap-1 w-fit`;
+    // Add size modifier, e.g., badge-sm
+    badge.className = `badge ${mapping.class} badge-sm gap-1 mt-1`;
     badge.innerHTML = `<span>${mapping.icon}</span> ${mapping.text}`;
+    // Use tooltip for detailed error message
     badge.title = processing.error || mapping.text;
+    if (processing.error) {
+       badge.classList.add('tooltip');
+       badge.dataset.tip = processing.error;
+    }
 
     return badge;
   }
@@ -916,19 +1053,40 @@ export class ProjectDetailsComponent {
 
   async refreshProjectData(projectId) {
     if (!projectId || !this.projectManager) {
-      console.warn('Cannot refresh project data - no valid project ID');
+      console.warn('Cannot refresh project data - no valid project ID or manager');
       return;
     }
 
+    console.log(`[ProjectDetails] Refreshing data for project ${projectId}`);
+    // Show loading states for relevant sections
+    this.showLoading('files');
+    this.showLoading('conversations');
+    this.showLoading('artifacts');
+    // KB loading is handled internally by its component
+
     try {
-      await Promise.all([
+      // Fetch data concurrently
+      const promises = [
         this.projectManager.loadProjectFiles(projectId),
         this.projectManager.loadProjectStats(projectId),
         this.projectManager.loadProjectConversations(projectId),
         this.projectManager.loadProjectArtifacts(projectId)
-      ]);
+        // KB details are usually loaded via projectLoaded or statsLoaded events
+      ];
+
+      // Wait for all essential data to load
+      await Promise.all(promises);
+      console.log(`[ProjectDetails] Finished refreshing data for project ${projectId}`);
+
     } catch (err) {
       console.error("Error refreshing project data:", err);
+      this.notification?.('Failed to refresh project data', 'error');
+      // Optionally hide loading states on error, or show error messages in sections
+    } finally {
+       // Hide loading states - events might also hide them, but this is a fallback
+       this.hideLoading('files');
+       this.hideLoading('conversations');
+       this.hideLoading('artifacts');
     }
   }
 
@@ -945,6 +1103,9 @@ export class ProjectDetailsComponent {
   showLoading(type) {
     if (this.elements.loadingStates?.[type]) {
       this.elements.loadingStates[type].classList.remove('hidden');
+      // Ensure parent container doesn't hide the loading state
+      const parent = this.elements.loadingStates[type].closest('.project-tab-content');
+      // parent?.classList.remove('hidden'); // This might show wrong tab, handle visibility separately
     }
   }
 
@@ -954,51 +1115,53 @@ export class ProjectDetailsComponent {
     }
   }
 
-  animateProgressBar(progressBar, percentage) {
-    if (!progressBar || percentage === undefined) return;
-
-    progressBar.style.width = "0%";
-    progressBar.classList.add('transition-all', 'duration-500', 'ease-out');
-
-    requestAnimationFrame(() => {
-      progressBar.style.width = `${Math.min(100, percentage)}%`;
-    });
-  }
+  // animateProgressBar removed, using direct value setting for DaisyUI progress
 
   updateUploadProgress() {
     const { completed, failed, total } = this.fileUploadStatus;
-    if (total === 0) return;
+    const progressContainer = this.elements.uploadProgress;
+    const progressBar = this.elements.progressBar;
+    const statusText = this.elements.uploadStatus;
 
-    const percentage = Math.round((completed / total) * 100);
-    this.animateProgressBar(this.elements.progressBar, percentage);
+    if (total === 0 || !progressContainer || !progressBar || !statusText) return;
 
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent =
-        `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    // Update DaisyUI progress bar value
+    progressBar.value = percentage;
+    progressBar.classList.remove('progress-success', 'progress-warning', 'progress-error', 'progress-info');
+    if (failed > 0 && completed === total) {
+       progressBar.classList.add('progress-error');
+    } else if (failed > 0) {
+       progressBar.classList.add('progress-warning');
+    } else if (completed === total) {
+       progressBar.classList.add('progress-success');
+    } else {
+       progressBar.classList.add('progress-info'); // Default during upload
     }
 
-    if (completed === total) {
-      setTimeout(() => {
-        if (this.elements.uploadProgress) {
-          this.elements.uploadProgress.classList.add("opacity-0");
-          setTimeout(() => {
-            this.elements.uploadProgress.classList.add("hidden");
-            this.elements.uploadProgress.classList.remove("opacity-0");
-          }, 300);
-        }
 
-        if (this.notification) {
-          if (failed === 0) {
-            this.notification("Files uploaded successfully", "success");
-          } else {
-            this.notification(
-              `${failed} file(s) failed to upload`,
-              "error",
-              { timeout: 5000 }
-            );
-          }
-        }
-      }, 1000);
+    statusText.textContent =
+      `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
+
+    // Show/Hide logic
+    if (completed < total) {
+       progressContainer.classList.remove("hidden", "opacity-0");
+    } else { // Upload finished (success or fail)
+      setTimeout(() => {
+        progressContainer.classList.add("opacity-0");
+        setTimeout(() => {
+          progressContainer.classList.add("hidden");
+          progressContainer.classList.remove("opacity-0"); // Reset opacity for next time
+          // Reset progress bar value after hiding
+          progressBar.value = 0;
+          progressBar.classList.remove('progress-success', 'progress-warning', 'progress-error');
+          progressBar.classList.add('progress-info');
+          statusText.textContent = ''; // Clear status text
+        }, 300); // Match transition duration
+
+        // Final notification handled elsewhere (e.g., in processFile)
+      }, 1500); // Keep visible for a bit longer after completion
     }
   }
 
@@ -1023,5 +1186,8 @@ export class ProjectDetailsComponent {
   }
 }
 
- // Global instantiation moved to index.html's DOMContentLoaded handler
- // to ensure DOM elements are ready.
+// Export class if using modules
+// export { ProjectDetailsComponent };
+
+// Make it globally available if not using modules
+window.ProjectDetailsComponent = ProjectDetailsComponent;
