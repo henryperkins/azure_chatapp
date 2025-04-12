@@ -5,7 +5,7 @@
 
 /* Import Tailwind CSS - new v4 syntax */
 @import "tailwindcss";
-
+@plugin "daisyui";
 /* Theme configuration using CSS variables via @theme instead of JavaScript */
 @theme {
   /* Colors */
@@ -63,7 +63,7 @@
   --color-surface-light: #ffffff;
 
   /* Dark Mode Surface Colors */
-  --color-surface-dark-hover: #1f2937; 
+  --color-surface-dark-hover: #1f2937;
   --color-surface-light-hover: #f9fafb;
 
   /* Gray scale */
@@ -283,6 +283,7 @@
   background-color: color-mix(in oklab, var(--color-primary-900) 20%, transparent);
 }
 
+/* Update these utility definitions */
 @utility progress-outer {
   height: calc(var(--spacing) * 2);
   overflow: hidden;
