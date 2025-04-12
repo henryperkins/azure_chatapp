@@ -1,12 +1,45 @@
 @import "tailwindcss";
 
 @theme {
+  /* Font families */
   --font-sans: "Inter", system-ui, sans-serif;
-  --color-primary: oklch(0.62 0.21 254);
-  --color-surface: 255 255 255;
-  --color-on-surface: 0 0 0;
-  --spacing-card: 1.25rem;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   
+  /* Color palette using oklch */
+  --color-primary-50: oklch(0.98 0.03 254);
+  --color-primary-100: oklch(0.95 0.06 254);
+  --color-primary-200: oklch(0.90 0.12 254);
+  --color-primary-300: oklch(0.82 0.18 254);
+  --color-primary-400: oklch(0.74 0.20 254);
+  --color-primary-500: oklch(0.62 0.21 254);
+  --color-primary-600: oklch(0.53 0.20 254);
+  --color-primary-700: oklch(0.45 0.18 254);
+  --color-primary-800: oklch(0.35 0.15 254);
+  --color-primary-900: oklch(0.25 0.12 254);
+  
+  /* Surface colors */
+  --color-surface-50: 249 250 251;
+  --color-surface-100: 243 244 246;
+  --color-surface-200: 229 231 235;
+  --color-surface-300: 209 213 219;
+  --color-surface-400: 156 163 175;
+  --color-surface-500: 107 114 128;
+  --color-surface-600: 75 85 99;
+  --color-surface-700: 55 65 81;
+  --color-surface-800: 31 41 55;
+  --color-surface-900: 17 24 39;
+  
+  /* Spacing */
+  --spacing-card: 1.25rem;
+  --spacing-section: 2rem;
+  
+  /* Shadows */
+  --shadow-xs: 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  
+  /* Animations */
   @keyframes slideIn {
     from { opacity: 0; transform: translateY(-10px) }
     to { opacity: 1; transform: translateY(0) }
@@ -16,25 +49,42 @@
     from { opacity: 0 }
     to { opacity: 1 }
   }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1 }
+    50% { opacity: 0.5 }
+  }
 }
 
+/* Dark mode variant */
 @custom-variant dark (&:where(.dark, .dark *)) {
-  --color-surface: 17 24 39;
-  --color-on-surface: 243 244 246;
-  
-  a {
-    color: var(--color-blue-400);
-    &:hover {
-      color: var(--color-blue-300);
-    }
-  }
+  --color-surface-50: 17 24 39;
+  --color-surface-100: 31 41 55;
+  --color-surface-200: 55 65 81;
+  --color-surface-300: 75 85 99;
+  --color-surface-400: 107 114 128;
+  --color-surface-500: 156 163 175;
+  --color-surface-600: 209 213 219;
+  --color-surface-700: 229 231 235;
+  --color-surface-800: 243 244 246;
+  --color-surface-900: 249 250 251;
 }
 
 /* Custom utilities */
 @utility {
   .card {
     padding: var(--spacing-card);
-    background-color: var(--color-surface);
-    color: var(--color-on-surface);
+    background-color: var(--color-surface-50);
+    color: var(--color-surface-900);
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-sm);
+    
+    @variant hover {
+      box-shadow: var(--shadow-md);
+    }
+  }
+  
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
