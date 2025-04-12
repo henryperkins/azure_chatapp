@@ -1,6 +1,5 @@
-import tailwindcss from 'tailwindcss'
-
 /** @type {import('tailwindcss').Config} */
+const colors = require('tailwindcss/colors')
 module.exports = {
   darkMode: { 
     algorithm: 'mediaQuery',
