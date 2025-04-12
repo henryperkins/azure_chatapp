@@ -4,8 +4,10 @@
  */
 export class ProjectDetailsComponent {
   constructor(options = {}) {
+    console.log('[Debug][Constructor] ProjectDetailsComponent constructor started.'); // <-- Added log
     // Validate required options
     if (!options.onBack || typeof options.onBack !== 'function') {
+      console.error('[Debug][Constructor] Missing required onBack callback.'); // <-- Added log
       throw new Error('onBack callback function is required');
     }
 
@@ -35,10 +37,15 @@ export class ProjectDetailsComponent {
     this.handleDrop = this.handleDrop.bind(this);
 
     // Setup component
+    console.log('[Debug][Constructor] Calling initElements...'); // <-- Added log
     this.initElements();
+    console.log('[Debug][Constructor] Calling bindEvents...'); // <-- Added log
     this.bindEvents();
+    console.log('[Debug][Constructor] Calling setupDragDropHandlers...'); // <-- Added log
     this.setupDragDropHandlers();
+    console.log('[Debug][Constructor] Calling initChatInterface...'); // <-- Added log
     this.initChatInterface();
+    console.log('[Debug][Constructor] ProjectDetailsComponent constructor finished.'); // <-- Added log
   }
 
   /* -------------------- DOM Initialization Methods -------------------- */
@@ -82,7 +89,42 @@ export class ProjectDetailsComponent {
       this.elements.backBtn.addEventListener('click', this.onBack);
     }
 
-    document.addEventListener("projectConversationsLoaded", this.boundRenderConversations);
+    // Listen for the custom event and bind the handler
+    document.addEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
+
+    // Hook up tab buttons to trigger switchTab whenever clicked
+    console.log('[Debug][bindEvents] Starting...');
+
+    const tabs = document.querySelectorAll('.project-tab-btn');
+    console.log(`[Debug][bindEvents] Found ${tabs.length} elements with class '.project-tab-btn'.`);
+
+    if (tabs.length === 0) {
+        console.warn('[Debug][bindEvents] No tab buttons found! Event listeners cannot be attached.');
+        // Optionally, try again after a short delay if elements might load late
+        // setTimeout(() => this.bindEvents(), 500); // Be careful with recursive calls
+        return; // Stop if no buttons found
+    }
+
+    tabs.forEach(btn => {
+        console.log(`[Debug][bindEvents] Attaching handler to tab button:`, btn);
+        // Check if listener already exists to prevent duplicates if bindEvents is called multiple times
+        if (!btn.dataset.listenerAttached) {
+            btn.addEventListener('click', () => {
+                console.log(`[Debug] Tab clicked: ${btn.dataset.tab}`);
+                const tabName = btn.dataset.tab;
+                if (tabName) {
+                  this.switchTab(tabName);
+                } else {
+                  console.warn('[Debug] Clicked tab button missing data-tab attribute:', btn);
+                }
+            });
+            btn.dataset.listenerAttached = 'true'; // Mark as attached
+            console.log(`[Debug][bindEvents] Listener attached to ${btn.dataset.tab}`);
+        } else {
+            console.log(`[Debug][bindEvents] Listener already attached to ${btn.dataset.tab}, skipping.`);
+        }
+    });
+    console.log('[Debug][bindEvents] Finished attaching listeners.'); // <-- Added log
   }
 
   /* -------------------- Lifecycle Methods -------------------- */
@@ -104,7 +146,7 @@ export class ProjectDetailsComponent {
 
   destroy() {
     // Clean up event listeners
-    document.removeEventListener("projectConversationsLoaded", this.boundRenderConversations);
+    document.removeEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
     if (this.elements.filesList) {
       this.elements.filesList.removeEventListener('scroll', this.scrollHandler);
     }
@@ -113,6 +155,14 @@ export class ProjectDetailsComponent {
         this.elements.dragZone.removeEventListener(event, this.handleDragEvent);
       });
     }
+  }
+
+  // Handle the projectConversationsLoaded event
+  handleConversationsLoaded(event) {
+    console.log('[Debug][handleConversationsLoaded] Event received:', event);
+    // Extract conversations array from event.detail
+    const conversations = event.detail;
+    this.renderConversations(conversations);
   }
 
   /* -------------------- Core Rendering Methods -------------------- */
@@ -472,74 +522,134 @@ export class ProjectDetailsComponent {
   }
 
   switchTab(tabName) {
-    if (!tabName || this.state.activeTab === tabName) return;
-
-    // Transition out current tab
-    const currentTab = document.querySelector(`.project-tab-content:not(.hidden)`);
-    if (currentTab) {
-      currentTab.classList.add('opacity-0');
-      setTimeout(() => {
-        currentTab.classList.add('hidden');
-        currentTab.classList.remove('opacity-0');
-      }, 150);
+    console.log(`[Debug] Attempting to switch to tab: ${tabName}`);
+    if (!tabName || this.state.activeTab === tabName) {
+      console.log(`[Debug] Tab switch aborted: No tab name or already active (${this.state.activeTab})`);
+      return;
     }
 
-    // Transition in new tab
-    const newTab = document.getElementById(`${tabName}Tab`);
-    if (newTab) {
-      newTab.classList.remove('hidden');
-      newTab.classList.add('opacity-0');
-      setTimeout(() => {
-        newTab.classList.remove('opacity-0');
-      }, 50);
-    }
+    // --- Simplified Hide/Show Logic ---
 
-    // Update tab buttons
-    document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
-      tabBtn.classList.remove('active', 'text-blue-600', 'dark:text-blue-400');
-      tabBtn.setAttribute('aria-selected', 'false');
+    // 1. Hide all content panels directly
+    document.querySelectorAll('.project-tab-content').forEach(content => {
+      if (!content.classList.contains('hidden')) {
+        content.classList.add('hidden');
+        console.log(`[Debug] Hid content panel: ${content.id}`);
+      }
     });
 
-    const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
-    if (activeTabBtn) {
-      activeTabBtn.classList.add('active', 'text-blue-600', 'dark:text-blue-400');
-      activeTabBtn.setAttribute('aria-selected', 'true');
+    // 2. Show the target content panel directly
+    const newTabContent = document.getElementById(`${tabName}Tab`);
+    if (newTabContent) {
+      newTabContent.classList.remove('hidden');
+      console.log(`[Debug] Showed content panel: ${newTabContent.id}`);
+    } else {
+      console.error(`[Debug] Target tab content panel not found for ID: ${tabName}Tab`);
     }
 
+    // --- Update Button States ---
+
+    // 1. Deactivate all tab buttons
+    document.querySelectorAll('.project-tab-btn').forEach(tabBtn => {
+      tabBtn.classList.remove('active', 'text-blue-600', 'dark:text-blue-400', 'border-blue-600');
+      // Add back default/inactive styles if they were removed by 'active'
+      tabBtn.classList.add('text-gray-500', 'dark:text-gray-400', 'border-transparent', 'hover:text-gray-700', 'dark:hover:text-gray-300', 'hover:border-gray-300');
+      tabBtn.setAttribute('aria-selected', 'false');
+      tabBtn.setAttribute('tabindex', '-1'); // Make inactive tabs not focusable by default Tab key
+    });
+
+    // 2. Activate the clicked tab button
+    const activeTabBtn = document.querySelector(`.project-tab-btn[data-tab="${tabName}"]`);
+    if (activeTabBtn) {
+      // Remove default/inactive styles before adding active ones
+      activeTabBtn.classList.remove('text-gray-500', 'dark:text-gray-400', 'border-transparent', 'hover:text-gray-700', 'dark:hover:text-gray-300', 'hover:border-gray-300');
+      // Add active styles
+      activeTabBtn.classList.add('active', 'text-blue-600', 'dark:text-blue-400', 'border-blue-600');
+      activeTabBtn.setAttribute('aria-selected', 'true');
+      activeTabBtn.setAttribute('tabindex', '0'); // Make active tab focusable
+      console.log(`[Debug] Activated tab button for: ${tabName}`);
+    } else {
+      console.warn(`[Debug] Could not find tab button for data-tab: ${tabName}`);
+    }
+
+    // Update component state
     this.state.activeTab = tabName;
+    console.log(`[Debug] Updated state.activeTab to: ${tabName}`);
   }
 
   /* -------------------- Drag & Drop Methods -------------------- */
 
   setupDragDropHandlers() {
-    if (!this.elements.dragZone) return;
+    console.log('[Debug] Setting up drag and drop handlers');
+    if (!this.elements.dragZone) {
+      console.warn('[Debug] Drag zone element not found');
+      return;
+    }
 
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+    ['dragenter', 'dragover', 'dragleave'].forEach(event => {
       this.elements.dragZone.addEventListener(event, this.handleDragEvent);
+      console.log(`[Debug] Added ${event} listener to drag zone`);
     });
 
+    // Add drop event with specific handler
     this.elements.dragZone.addEventListener('drop', this.handleDrop);
+    console.log('[Debug] Added drop listener to drag zone');
+
+    // Add click handler for file upload button if present
+    const uploadBtn = document.getElementById('uploadFileBtn');
+    if (uploadBtn) {
+      uploadBtn.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = this.fileConstants.allowedExtensions.join(',');
+        input.onchange = (e) => {
+          if (e.target.files.length > 0 && this.state.currentProject?.id) {
+            this.uploadFiles(this.state.currentProject.id, e.target.files);
+          }
+        };
+        input.click();
+      });
+      console.log('[Debug] Added click listener to upload button');
+    }
   }
 
   handleDragEvent(e) {
     e.preventDefault();
     e.stopPropagation();
+    console.log(`[Debug] Drag event: ${e.type}`);
     if (this.elements.dragZone) {
-      this.elements.dragZone.classList.toggle('drag-zone-active',
-        ['dragenter', 'dragover'].includes(e.type));
+      const isActive = ['dragenter', 'dragover'].includes(e.type);
+      this.elements.dragZone.classList.toggle('drag-zone-active', isActive);
+      console.log(`[Debug] Drag zone active: ${isActive}`);
     }
   }
 
   async handleDrop(e) {
-    this.handleDragEvent(e);
-    const files = e.dataTransfer.files;
-    const projectId = this.state.currentProject?.id;
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Debug] Drop event triggered');
 
-    if (projectId && files.length > 0) {
+    // Remove active styling
+    if (this.elements.dragZone) {
+      this.elements.dragZone.classList.remove('drag-zone-active');
+    }
+
+    const files = e.dataTransfer.files;
+    console.log(`[Debug] Files dropped: ${files.length}`);
+
+    const projectId = this.state.currentProject?.id;
+    if (!projectId) {
+      console.error('[Debug] No current project ID available');
+      return;
+    }
+
+    if (files.length > 0) {
       try {
+        console.log(`[Debug] Attempting to upload ${files.length} files to project ${projectId}`);
         await this.uploadFiles(projectId, files);
       } catch (error) {
-        console.error('Error uploading files:', error);
+        console.error('[Debug] Error uploading files:', error);
       }
     }
   }
@@ -547,13 +657,32 @@ export class ProjectDetailsComponent {
   /* -------------------- Chat Interface Methods -------------------- */
 
   initChatInterface() {
+    // First attempt: Use ChatManager if available (preferred approach)
+    if (window.ChatManager && typeof window.ChatManager.initializeProjectChat === 'function') {
+      try {
+        console.log('[ProjectDetailsView] Using ChatManager to initialize chat');
+        window.ChatManager.initializeProjectChat('#projectChatUI', {
+          messageContainer: '#projectChatMessages',
+          inputField: '#projectChatInput',
+          sendButton: '#projectChatSendBtn',
+          onMessageSent: this.handleMessageSent.bind(this),
+          onError: this.handleChatError.bind(this)
+        });
+        return;
+      } catch (err) {
+        console.error('[ProjectDetailsView] Could not find ChatManager.initializeProjectChat.', err);
+      }
+    }
+
+    // Fallback: Use ChatInterface directly
     if (typeof window.ChatInterface !== 'function') {
-      console.warn('ChatInterface not available - chat functionality will be limited');
+      console.warn('[ProjectDetailsView] ChatInterface not available - chat functionality will be limited');
       return;
     }
 
     if (!window.projectChatInterface) {
       try {
+        console.log('[ProjectDetailsView] Using direct ChatInterface');
         window.projectChatInterface = new window.ChatInterface({
           containerSelector: '#projectChatUI',
           messageContainerSelector: '#projectChatMessages',
@@ -574,7 +703,7 @@ export class ProjectDetailsComponent {
 
         window.projectChatInterface.initialize();
       } catch (err) {
-        console.error('Failed to initialize chat interface:', err);
+        console.error('[ProjectDetailsView] Failed to initialize chat interface:', err);
       }
     }
   }
@@ -641,11 +770,36 @@ export class ProjectDetailsComponent {
     }
   }
 
-  renderConversations(conversations = []) {
+  renderConversations(data = []) {
     if (!this.elements.conversationsList) return;
 
     this.showLoading('conversations');
 
+    // Extract conversations array from different possible data formats
+    let conversations = [];
+
+    if (data && data.target && data.detail) {
+      // This is an event object - extract conversations from detail
+      if (Array.isArray(data.detail)) {
+        conversations = data.detail;
+        console.log(`[Debug][renderConversations] Extracted ${conversations.length} conversations from event.detail`);
+      } else if (data.detail && Array.isArray(data.detail.conversations)) {
+        conversations = data.detail.conversations;
+        console.log(`[Debug][renderConversations] Extracted ${conversations.length} conversations from event.detail.conversations`);
+      } else {
+        console.warn('[Debug][renderConversations] Could not extract conversations from event:', data);
+      }
+    } else if (Array.isArray(data)) {
+      // Direct array input
+      conversations = data;
+      console.log(`[Debug][renderConversations] Using direct array input with ${conversations.length} conversations`);
+    } else if (data && Array.isArray(data.conversations)) {
+      // Object with conversations property
+      conversations = data.conversations;
+      console.log(`[Debug][renderConversations] Extracted ${conversations.length} conversations from data.conversations`);
+    }
+
+    // Render based on extracted conversations
     if (!conversations || conversations.length === 0) {
       this.elements.conversationsList.innerHTML = `
         <div class="text-gray-500 text-center py-8">
@@ -653,6 +807,7 @@ export class ProjectDetailsComponent {
         </div>
       `;
     } else {
+      console.log(`[Debug][renderConversations] Rendering ${conversations.length} conversations`);
       this.elements.conversationsList.innerHTML = conversations
         .map(conv => this.createConversationItem(conv))
         .join('');
@@ -868,11 +1023,5 @@ export class ProjectDetailsComponent {
   }
 }
 
- // Global reference for event handlers (simplified integration)
-window.projectDetails = new ProjectDetailsComponent({
-  onBack: () => console.log('Back button clicked'),
-  utils: window.uiUtilsInstance,
-  projectManager: window.projectManager,
-  auth: window.auth,
-  notification: window.showNotification
-});
+ // Global instantiation moved to index.html's DOMContentLoaded handler
+ // to ensure DOM elements are ready.
