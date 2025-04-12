@@ -20,7 +20,6 @@
   "devDependencies": {
     "@playwright/test": "^1.51.1",
     "@types/node": "^22.13.14",
-    "autoprefixer": "^10.4.16",
     "postcss": "^8.4.35",
     "postcss-cli": "^10.1.0",
     "tailwindcss": "^4.1.3"
