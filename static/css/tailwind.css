@@ -52,7 +52,8 @@
 }
 
 /* Dark mode variant */
-@custom-variant dark (&:where(.dark, .dark *)) {
+@custom-variant dark {
+  &:where(.dark, .dark *) {
   --color-surface-50: 17 24 39;
   --color-surface-100: 31 41 55;
   --color-surface-200: 55 65 81;
@@ -63,6 +64,7 @@
   --color-surface-700: 229 231 235;
   --color-surface-800: 243 244 246;
   --color-surface-900: 249 250 251;
+  }
 }
 
 /* Custom utilities */
