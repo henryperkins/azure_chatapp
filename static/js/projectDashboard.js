@@ -85,17 +85,28 @@ class ProjectDashboard {
         return false;
       }
 
+      // Stagger initialization steps to prevent blocking
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       // Wait for dashboard utilities
       await this._waitForDashboardUtils();
 
-      // Wait for projectManager
-      await this._waitForProjectManager();
+      // Wait for projectManager with timeout
+      await Promise.race([
+        this._waitForProjectManager(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('ProjectManager timeout')), 5000)
+        )
+      ]);
 
       // Ensure document is ready
       await this._waitForDocument();
 
-      // Complete initialization steps
-      await this._completeInitialization();
+      // Complete initialization steps in chunks
+      await new Promise(resolve => requestAnimationFrame(async () => {
+        await this._completeInitialization();
+        resolve();
+      }));
 
       console.log("[ProjectDashboard] Initialized successfully.");
       this.hideInitializationProgress();
@@ -164,6 +175,20 @@ class ProjectDashboard {
       if (!window.projectManager) {
         throw new Error("projectManager not initialized");
       }
+
+      // Show loading state
+      const listContainer = document.getElementById("projectList");
+      if (listContainer) {
+        listContainer.innerHTML = `
+          <div class="text-center p-8">
+            <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-gray-600">Loading projects...</p>
+          </div>`;
+      }
+
       const response = await window.projectManager.loadProjects(filter);
       return response;
     } catch (error) {
@@ -348,19 +373,27 @@ class ProjectDashboard {
         "fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded shadow-md z-50 flex items-center";
       document.body.appendChild(el);
     }
-    el.innerHTML = `
-      <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-        fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10"
-          stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
-            5.291A7.962 7.962 0 014 12H0c0 3.042
-            1.135 5.824 3 7.938l3-2.647z">
-        </path>
-      </svg>
-      <span>${message || "Initializing dashboard..."}</span>
-    `;
+
+    // Only update if message changed to prevent unnecessary DOM updates
+    const currentMessage = el.querySelector('span')?.textContent;
+    if (currentMessage !== message) {
+      el.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg"
+          fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10"
+            stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
+              5.291A7.962 7.962 0 014 12H0c0 3.042
+              1.135 5.824 3 7.938l3-2.647z">
+          </path>
+        </svg>
+        <span>${message || "Initializing dashboard..."}</span>
+      `;
+    }
+
+    // Ensure it's visible
+    el.style.display = 'flex';
   }
 
   hideInitializationProgress() {

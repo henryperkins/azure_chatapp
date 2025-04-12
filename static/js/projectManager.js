@@ -40,20 +40,33 @@
     const validFilters = ["all", "pinned", "archived", "active"];
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
+    // Show loading state immediately
+    emitEvent("projectsLoading", { filter: cleanFilter });
+
     try {
       // Use auth.js to check authentication with retry
       let isAuthenticated = false;
       try {
-        isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
-        // If cookie-based auth fails, try one more time with forceVerify
+        // First check with minimal delay
+        isAuthenticated = await Promise.race([
+          window.auth.isAuthenticated({ forceVerify: false }),
+          new Promise(resolve => setTimeout(() => resolve(false), 500))
+        ]);
+
+        // If first check fails or times out, try with forceVerify
         if (!isAuthenticated) {
-          console.debug('[ProjectManager] First auth check failed, retrying with forceVerify');
+          console.debug('[ProjectManager] First auth check failed/timeout, retrying with forceVerify');
           isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
         }
       } catch (authError) {
         console.warn('[ProjectManager] Auth check error:', authError);
+        emitEvent("projectsLoadError", {
+          error: authError,
+          filter: cleanFilter
+        });
+        return [];
       }
-      
+
       if (!isAuthenticated) {
         console.warn('[ProjectManager] Not authenticated, returning empty projects list');
         // Not authenticated, dispatch an empty list
@@ -136,7 +149,7 @@
       if (!projectId || typeof projectId !== 'string') {
         throw new Error('Invalid project ID');
       }
-      
+
       // Simple UUID format check
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId)) {
         throw new Error('Malformed project ID');

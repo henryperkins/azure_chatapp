@@ -21,6 +21,7 @@ import config
 from services.vector_db import VectorDB, get_vector_db
 from services.file_storage import get_file_storage
 from models.project import Project
+from models.project_file import ProjectFile
 from models.knowledge_base import KnowledgeBase
 from utils.db_utils import save_model
 
@@ -28,12 +29,12 @@ logger = logging.getLogger(__name__)
 
 class KBConfig:
     """Centralized configuration for knowledge base service"""
-    
+
     @staticmethod
     def get() -> Dict[str, Any]:
         """
         Get all configuration values with defaults.
-        
+
         Returns:
             Dictionary containing:
             - max_file_bytes: Maximum allowed file size in bytes
@@ -61,12 +62,12 @@ class KBConfig:
 
 class StorageManager:
     """Handles all file storage operations with consistent configuration"""
-    
+
     @staticmethod
     def get() -> Any:
         """
         Get configured file storage instance.
-        
+
         Returns:
             Initialized file storage adapter
         """
@@ -79,12 +80,12 @@ class StorageManager:
     async def save_file(contents: bytes, path: str, project_id: UUID) -> str:
         """
         Save file contents to storage.
-        
+
         Args:
             contents: File bytes
             path: Relative storage path
             project_id: Associated project ID
-            
+
         Returns:
             Full storage path
         """
@@ -95,10 +96,10 @@ class StorageManager:
     async def delete_file(path: str) -> bool:
         """
         Delete file from storage.
-        
+
         Args:
             path: File path to delete
-            
+
         Returns:
             True if deletion succeeded
         """
@@ -108,7 +109,7 @@ class StorageManager:
 
 class VectorDBManager:
     """Manages VectorDB instances and operations with consistent configuration"""
-    
+
     @staticmethod
     async def get_for_project(
         project_id: UUID,
@@ -117,22 +118,22 @@ class VectorDBManager:
     ) -> VectorDB:
         """
         Get or create VectorDB instance for a project.
-        
+
         Args:
             project_id: Project UUID
             model_name: Optional embedding model override
             db: Optional database session for model lookup
-            
+
         Returns:
             Initialized VectorDB instance
         """
         config = KBConfig.get()
-        
+
         # Get model name from knowledge base if not specified
         if model_name is None and db is not None:
             kb = await VectorDBManager._get_knowledge_base(project_id, db)
             model_name = kb.embedding_model if kb else None
-            
+
         return await get_vector_db(
             model_name=model_name or config["default_embedding_model"],
             storage_path=os.path.join(
@@ -149,11 +150,11 @@ class VectorDBManager:
     ) -> Optional[KnowledgeBase]:
         """
         Helper to get knowledge base for a project.
-        
+
         Args:
             project_id: Project UUID
             db: Database session
-            
+
         Returns:
             KnowledgeBase instance or None
         """
@@ -165,7 +166,7 @@ class VectorDBManager:
 
 class TokenManager:
     """Handles token counting and project limits"""
-    
+
     @staticmethod
     async def update_usage(
         project: Project,
@@ -174,7 +175,7 @@ class TokenManager:
     ) -> None:
         """
         Update project token count.
-        
+
         Args:
             project: Project instance
             delta: Token count change (positive or negative)
@@ -190,11 +191,11 @@ class TokenManager:
     ) -> bool:
         """
         Check if project can accommodate more tokens.
-        
+
         Args:
             project: Project instance
             additional_tokens: Tokens to be added
-            
+
         Returns:
             True if within limits
         """
@@ -205,7 +206,7 @@ class TokenManager:
 
 class MetadataHelper:
     """Utilities for handling file and search metadata"""
-    
+
     @staticmethod
     def extract_file_metadata(
         file_record: ProjectFile,
@@ -213,11 +214,11 @@ class MetadataHelper:
     ) -> Dict[str, Any]:
         """
         Extract standardized metadata from file record.
-        
+
         Args:
             file_record: ProjectFile instance
             include_token_count: Whether to include token info
-            
+
         Returns:
             Dictionary of file metadata
         """
@@ -225,7 +226,7 @@ class MetadataHelper:
             "filename": file_record.filename,
             "file_type": file_record.file_type,
             "file_size": file_record.file_size,
-            "created_at": file_record.created_at.isoformat() 
+            "created_at": file_record.created_at.isoformat()
                          if file_record.created_at else None,
         }
 
@@ -241,10 +242,10 @@ class MetadataHelper:
     async def expand_query(original_query: str) -> str:
         """
         Basic query expansion with synonyms.
-        
+
         Args:
             original_query: Search query string
-            
+
         Returns:
             Expanded query string
         """
