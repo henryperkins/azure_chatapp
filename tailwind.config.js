@@ -3,8 +3,9 @@ export default {
   // Change from 'class' to 'data-theme' for DaisyUI compatibility
   darkMode: ['class', '[data-theme="dark"]'],
   content: [
-    './static/**/*.js',
-    './static/*.html'
+    './static/js/**/*.js',
+    './static/**/*.html',
+    './templates/**/*.html'
   ],
   theme: {
     extend: {
