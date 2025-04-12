@@ -5,7 +5,7 @@
 
 /* Import Tailwind CSS - new v4 syntax */
 @import "tailwindcss";
-@plugin "daisyui";
+@import "daisyui";
 /* Theme configuration using CSS variables via @theme instead of JavaScript */
 @theme {
   /* Colors */
