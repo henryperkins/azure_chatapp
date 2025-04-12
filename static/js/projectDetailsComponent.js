@@ -456,7 +456,7 @@ a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
       const status = processing.status || 'default';
       const mapping = statusMappings[status] || statusMappings.default;
       const badge = document.createElement('div');
-      badge.className = `processing-status text-xs px-2 py-1 rounded ${mapping.class} mt-1 flex items-center`;
+      badge.className = `processing-status text-xs px-2 py-1 rounded-sm ${mapping.class} mt-1 flex items-center`;
       badge.innerHTML = `<span class="mr-1">${mapping.icon}</span> ${mapping.text}`;
       badge.title = processing.error || mapping.text;
       return badge;
@@ -465,7 +465,7 @@ a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     _renderConversationItem(conversation) {
       const utils = window.uiUtilsInstance;
       const convoEl = utils.createElement("div", {
-        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
+        className: "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-sm mb-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer",
         onclick: async (e) => this._handleConversationClick(e, conversation)
       });
       const infoDiv = utils.createElement("div", { className: "flex items-center" });

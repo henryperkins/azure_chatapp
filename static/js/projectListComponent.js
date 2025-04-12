@@ -331,7 +331,7 @@
       modal.setAttribute('role', 'dialog');
 
       modal.innerHTML = `
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+        <div class="bg-white dark:bg-gray-800 rounded-md p-6 max-w-md w-full">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-semibold">Customize Project Cards</h3>
             <button id="closeCustomizationBtn" class="text-gray-500 hover:text-gray-700">
@@ -412,7 +412,7 @@
               <input type="text" id="badgeEmojiInput" placeholder="Optional emoji (e.g., 🚀, 🔥)"
                      class="w-24 px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
               <div class="flex-1"></div>
-              <button id="addBadgeBtn" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2">
+              <button id="addBadgeBtn" class="px-3 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 ml-2">
                 Add Badge
               </button>
             </div>
@@ -423,11 +423,11 @@
 
           <div class="flex justify-end gap-2 mt-6">
             <button id="resetCustomizationBtn"
-                    class="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+                    class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50">
               Reset to Default
             </button>
             <button id="applyCustomizationBtn"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
               Apply Changes
             </button>
           </div>
@@ -934,7 +934,7 @@ const actions = window.uiUtilsInstance.createElement("div", { className: "flex g
           </div>
           <div class="mb-4">
             <label class="block text-sm font-medium mb-1">Badge Style</label>
-            <select id="projectBadgeStyle" class="w-full px-3 py-2 border rounded">
+            <select id="projectBadgeStyle" class="w-full px-3 py-2 border rounded-sm">
               ${this.badgeStyles.map(style =>
           `<option value="${style.id}">${style.name}</option>`
         ).join('')}
@@ -942,7 +942,7 @@ const actions = window.uiUtilsInstance.createElement("div", { className: "flex g
           </div>
           <div class="mb-4">
             <label class="block text-sm font-medium mb-1">Card Theme</label>
-            <select id="projectCardTheme" class="w-full px-3 py-2 border rounded">
+            <select id="projectCardTheme" class="w-full px-3 py-2 border rounded-sm">
               ${this.availableThemes.map(theme =>
           `<option value="${theme.id}" ${currentTheme === theme.id ? 'selected' : ''}>${theme.name}</option>`
         ).join('')}
