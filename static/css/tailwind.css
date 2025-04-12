@@ -4,9 +4,9 @@
  */
 
 /* Variant definitions */
-@custom-media --dark (prefers-color-scheme: dark);
-@custom-media --motion-safe (prefers-reduced-motion: no-preference);
-@custom-media --motion-reduce (prefers-reduced-motion: reduce);
+@custom-selector :--dark [data-theme="dark"];
+@custom-selector :--motion-safe (prefers-reduced-motion: no-preference);
+@custom-selector :--motion-reduce (prefers-reduced-motion: reduce);
 
 /* Import Tailwind CSS - new v4 syntax */
 @import "tailwindcss";
