@@ -3,6 +3,11 @@
  * Main CSS file with Tailwind CSS v4 configuration
  */
 
+/* Variant definitions */
+@custom-variant dark (&:where([data-theme=dark] *));
+@custom-variant motion-safe (&@media (prefers-reduced-motion: no-preference));
+@custom-variant motion-reduce (&@media (prefers-reduced-motion: reduce));
+
 /* Import Tailwind CSS - new v4 syntax */
 @import "tailwindcss";
 @import "daisyui";
@@ -173,16 +178,19 @@
 }
 
 /* Add custom utilities */
-.project-card {
-  @apply flex flex-col rounded-sm border border-base-200 bg-base-100 p-4 shadow-xs transition-all duration-200;
-}
-
-.project-card:hover {
-  @apply shadow-sm;
-}
-
-.dark .project-card {
-  @apply border-base-300 bg-base-200;
+@layer components {
+  .project-card {
+    @apply flex flex-col rounded-sm border border-base-200 bg-base-100 p-4 shadow-xs;
+    transition: all var(--default-transition-duration) var(--default-transition-timing-function);
+    
+    @variant hover {
+      @apply shadow-sm;
+    }
+    
+    @variant dark {
+      @apply border-base-300 bg-base-200;
+    }
+  }
 }
 
 .project-card-pinned {
@@ -347,10 +355,18 @@
 /* Animation utilities */
 @utility animate-spin {
   animation: spin 1s linear infinite;
+  
+  @variant motion-reduce {
+    animation-duration: 3s;
+  }
 }
 
 @utility animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  
+  @variant motion-reduce {
+    animation-iteration-count: 1;
+  }
 }
 
 @utility animate-slide-in {

@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "description": "Azure OpenAI Chat Application",
   "scripts": {
-    "build:css": "tailwindcss -i ./static/css/app.css -o ./static/css/dist/app.css",
-    "dev:css": "tailwindcss -i ./static/css/app.css -o ./static/css/dist/app.css -w",
+    "build:css": "postcss ./static/css/app.css -o ./static/css/dist/app.css",
+    "dev:css": "postcss ./static/css/app.css -o ./static/css/dist/app.css -w",
     "prebuild": "npm run build:css",
-    "lint:css": "stylelint './static/css/**/*.css'"
+    "lint:css": "stylelint './static/css/**/*.css' --custom-syntax postcss-lit"
   },
   "repository": {
     "type": "git",
