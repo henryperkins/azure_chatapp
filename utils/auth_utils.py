@@ -136,7 +136,7 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
     # Log active token counts by type
     token_count_query = (
-        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))
+        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))  # pylint: disable=not-callable
         .where(TokenBlacklist.expires >= now)
         .group_by(TokenBlacklist.token_type)
     )
