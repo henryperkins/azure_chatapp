@@ -5,41 +5,6 @@
 
 // Define UIComponents as a constructor function attached to window
 window.UIComponents = function(options = {}) {
-  // -------------------------------------------------
-  const consolidatedStyle = document.createElement('style');
-  consolidatedStyle.id = "chatUiConsolidatedStyle";
-  consolidatedStyle.textContent = `
-    .chatMessageBlock {
-      margin-bottom: 1rem;
-      padding: 1rem;
-      border-radius: 4px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    }
-    .chatUserMessage {
-      background-color: #ebf8ff;
-      color: #2b6cb0;
-    }
-    .chatAssistantMessage {
-      background-color: #f0fff4;
-      color: #276749;
-    }
-    .chatSystemMessage {
-      background-color: #f9fafb;
-      color: #4b5563;
-      font-size: 0.875rem;
-    }
-    .chatThinkingIndicator {
-      margin-bottom: 0.5rem;
-      padding: 0.5rem;
-      border-radius: 0.25rem;
-      background-color: #f9fafb;
-      color: #4b5563;
-      display: flex;
-      align-items: center;
-    }
-  `;
-  document.head.appendChild(consolidatedStyle);
-  // -------------------------------------------------
   // Store selectors at instance level
   this.messageContainerSelector = options.messageContainerSelector || '#projectChatMessages';
   this.inputSelector = options.inputSelector || '#projectChatInput';
@@ -73,7 +38,7 @@ window.UIComponents = function(options = {}) {
     addThinking: function() {
       const thinkingDiv = document.createElement('div');
       thinkingDiv.id = this.thinkingId;
-      thinkingDiv.className = 'chatThinkingIndicator';
+      thinkingDiv.className = 'mb-2 p-2 rounded bg-gray-50 text-gray-600 flex items-center';
       thinkingDiv.innerHTML = `
         <div class="animate-pulse flex space-x-2">
           <div class="w-2 h-2 bg-gray-400 rounded-full"></div>
@@ -140,12 +105,12 @@ window.UIComponents = function(options = {}) {
         }
         // Create message container
         const msgDiv = document.createElement('div');
-        msgDiv.className = `chatMessageBlock ${
+        msgDiv.className = `mb-4 p-4 rounded shadow-sm ${
           role === 'assistant'
-            ? 'chatAssistantMessage'
-            : (role === 'system'
-                ? 'chatSystemMessage'
-                : 'chatUserMessage')
+            ? 'bg-green-50 text-green-800'
+            : role === 'system'
+              ? 'bg-gray-50 text-gray-600 text-sm'
+              : 'bg-blue-50 text-blue-900'
         }`;
         if (id) msgDiv.id = id;
         
