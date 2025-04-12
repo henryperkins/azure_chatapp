@@ -36,7 +36,7 @@ from models.user import User
 from models.conversation import Conversation
 from services.vector_db import VectorDB, process_file_for_search, get_vector_db
 from utils.file_validation import FileValidator, sanitize_filename
-from utils.db_utils import get_all_by_condition, get_by_id, save_model
+from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class StorageManager:
     """Handles all file storage operations"""
     @staticmethod
     def get() -> Any:
-        from services.file_storage import get_file_storage
+        from services.file_storage import get_file_storage  # pylint: disable=import-outside-toplevel
         return get_file_storage({
             "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
             "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
@@ -290,9 +290,9 @@ async def upload_file_to_project(
     if background_tasks:
         background_tasks.add_task(
             process_single_file_for_search,
-            file_id=project_file.id,
-            project_id=project_id,
-            knowledge_base_id=kb.id,
+            file_id=UUID(str(project_file.id)),
+            project_id=UUID(str(project_id)),
+            knowledge_base_id=UUID(str(kb.id)),
             db=db
         )
 
@@ -449,7 +449,7 @@ async def _validate_user_and_project(
 ) -> Project:
     """Validate user access to project"""
     if user_id is not None:
-        from services.project_service import validate_project_access
+        from services.project_service import validate_project_access  # pylint: disable=import-outside-toplevel
         user = await get_by_id(db, User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -492,14 +492,14 @@ async def _estimate_file_tokens(
     project: Project
 ) -> Dict[str, Any]:
     """Estimate token count for file"""
-    from services.text_extraction import get_text_extractor
+    from services.text_extraction import get_text_extractor  # pylint: disable=import-outside-toplevel
     text_extractor = get_text_extractor()
 
     try:
         content_to_process = (
             contents if len(contents) <= KBConfig.get()["stream_threshold"] else file.file
         )
-        tok_count, tok_metadata = await text_extractor.estimate_token_count(  # type: ignore
+        tok_count, tok_metadata = await text_extractor.estimate_token_count(  # type: ignore # pylint: disable=E1101
             content_to_process,
             filename
         )
@@ -733,14 +733,14 @@ async def get_project_files_stats(
     """
     # Get total file count
     total_files = await db.scalar(
-        select(func.count(ProjectFile.id))
+        select(func.count(ProjectFile.id))  # pylint: disable=not-callable
         .where(ProjectFile.project_id == project_id)
     )
 
     # Get processed files count and total tokens
     processed_result = await db.execute(
         select(
-            func.count(ProjectFile.id),
+            func.count(ProjectFile.id),  # pylint: disable=not-callable
             func.sum(ProjectFile.config["token_count"].as_integer())
         )
         .where(
@@ -752,7 +752,7 @@ async def get_project_files_stats(
 
     # Get failed files count
     failed_files = await db.scalar(
-        select(func.count(ProjectFile.id))
+        select(func.count(ProjectFile.id))  # pylint: disable=not-callable
         .where(
             ProjectFile.project_id == project_id,
             ProjectFile.config["search_processing"]["status"].as_string() == "error"
@@ -888,6 +888,7 @@ async def toggle_project_kb(
         "knowledge_base_id": str(kb.id),
     }
 
+@handle_service_errors("Error retrieving project file list")
 async def get_project_file_list(
     project_id: UUID,
     user_id: UUID,
@@ -895,7 +896,7 @@ async def get_project_file_list(
     skip: int = 0,
     limit: int = 100,
     file_type: Optional[str] = None,
-):
+) -> Dict[str, Any]:
     """
     Retrieve a list of files for a specific project with pagination and optional filtering.
 
@@ -910,33 +911,28 @@ async def get_project_file_list(
     Returns:
         Dictionary containing the list of files and pagination metadata
     """
-    from services.project_service import validate_project_access
-    from models.file import File
-    from sqlalchemy import select, func
-
     # Validate user has access to the project
-    await validate_project_access(project_id, user_id, db)
+    from services.project_service import validate_project_access  # pylint: disable=import-outside-toplevel
+    user = await get_by_id(db, User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    # Build query for files associated with this project
-    query = select(File).where(File.project_id == project_id)
+    await validate_project_access(project_id, user, db)
 
-    # Apply file type filter if specified
+    query = select(ProjectFile).where(ProjectFile.project_id == project_id)
+
     if file_type:
-        query = query.where(File.file_type == file_type)
+        query = query.where(ProjectFile.file_type == file_type)
 
-    # Get total count (for pagination)
-    count_query = select(func.count()).select_from(query.subquery())
+    count_query = select(func.count("*")).select_from(query.subquery())  # pylint: disable=not-callable
     total = await db.execute(count_query)
     total_count = total.scalar() or 0
 
-    # Apply pagination
-    query = query.offset(skip).limit(limit).order_by(File.created_at.desc())
+    query = query.offset(skip).limit(limit).order_by(ProjectFile.created_at.desc())
 
-    # Execute query
     result = await db.execute(query)
     files = result.scalars().all()
 
-    # Format response
     return {
         "files": [file.to_dict() for file in files],
         "pagination": {

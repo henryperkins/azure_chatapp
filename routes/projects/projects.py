@@ -162,7 +162,7 @@ async def create_project(
 
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
-        # If the project was created but knowledge base creation failed, 
+        # If the project was created but knowledge base creation failed,
         # try to clean up the project to avoid orphaned projects without knowledge bases
         project_variable = locals().get('project')
         if project_variable and hasattr(project_variable, 'id') and project_variable.id:
@@ -172,15 +172,15 @@ async def create_project(
                 logger.info(f"Rolled back project {project_variable.id} due to knowledge base creation failure")
             except Exception as cleanup_error:
                 logger.error(f"Failed to clean up project after KB creation error: {str(cleanup_error)}")
-        
-        raise HTTPException(500, f"Project creation failed: {str(e)}")
+
+        raise HTTPException(500, f"Project creation failed: {str(e)}") from e
 
 
 @router.get("/", response_model=Dict)
 async def list_projects(
     request: Request,
     # 1) Validate filter as an enum of allowed values
-    filter: ProjectFilter = Query(ProjectFilter.all, description="Filter for projects"),
+    filter_param: ProjectFilter = Query(ProjectFilter.all, description="Filter for projects"),
     # 2) Validate skip & limit
     skip: int = Query(0, ge=0, description="Pagination start index"),
     limit: int = Query(
@@ -200,7 +200,7 @@ async def list_projects(
         logger.error("No current user found in list_projects")
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    conditions = [Project.user_id == current_user.id]
+    # conditions = [Project.user_id == current_user.id]  # unused variable removed
 
     try:
         # Get all projects first
@@ -214,24 +214,25 @@ async def list_projects(
         )
 
         # Apply filter logic after retrieval
-        if filter == ProjectFilter.pinned:
+        if filter_param == ProjectFilter.pinned:
             projects = [p for p in projects if p.pinned]
-        elif filter == ProjectFilter.archived:
+        elif filter_param == ProjectFilter.archived:
             projects = [p for p in projects if p.archived]
-        elif filter == ProjectFilter.active:
+        elif filter_param == ProjectFilter.active:
             projects = [p for p in projects if not p.archived]
     except ValueError as ve:
         # If there's some reason your DB code raises ValueError for invalid conditions
         logger.error(f"Validation error listing projects: {str(ve)}")
         raise HTTPException(
-            status_code=422, detail=f"Invalid request parameters: {str(ve)}"
-        )
+            status_code=422,
+            detail=f"Invalid request parameters: {str(ve)}"
+        ) from ve
     except Exception as e:
         logger.error(f"Unexpected error listing projects: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="An unexpected error occurred while retrieving projects",
-        )
+        ) from e
 
     logger.info(f"Retrieved {len(projects)} projects for user {current_user.id}")
     serialized_projects = [serialize_project(project) for project in projects]
@@ -240,7 +241,7 @@ async def list_projects(
         "projects": serialized_projects,
         "count": len(serialized_projects),
         "filter": {
-            "type": filter.value,
+            "type": filter_param.value,
             "applied": {
                 "archived": (filter == ProjectFilter.archived),
                 "pinned": (filter == ProjectFilter.pinned),
@@ -258,7 +259,7 @@ async def list_projects(
         "projects": serialized_projects,
         "count": len(serialized_projects),
         "filter": {
-            "type": filter.value,
+            "type": filter_param.value,
             "applied": {
                 "archived": (filter == ProjectFilter.archived),
                 "pinned": (filter == ProjectFilter.pinned),
@@ -404,7 +405,7 @@ async def delete_project(
         logger.error(f"Error deleting project: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to delete project: {str(e)}"
-        )
+        ) from e
 
 
 # ============================
@@ -485,7 +486,8 @@ async def get_project_stats(
 
     # Get file count and size
     files_result = await db.execute(
-        select(func.count(), func.sum(ProjectFile.file_size)).where(
+        select(func.count("*"), func.sum(ProjectFile.file_size))  # pylint: disable=not-callable
+        .where(
             ProjectFile.project_id == project_id
         )
     )
@@ -506,7 +508,7 @@ async def get_project_stats(
             # Get processed files count
             # Get processed files count using safer query
             processed_count = await db.scalar(
-                select(func.count(ProjectFile.id)).where(
+                select(func.count("*")).where(  # pylint: disable=not-callable
                     ProjectFile.project_id == project_id,
                     text(
                         "project_files.config->'search_processing'->>'success' = 'true'"
@@ -695,5 +697,6 @@ async def create_project_knowledge_base(
     except Exception as e:
         logger.error(f"Error creating knowledge base for project: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to create knowledge base: {str(e)}"
-        )
+            status_code=500,
+            detail=f"Failed to create knowledge base: {str(e)}"
+        ) from e
