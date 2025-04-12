@@ -174,31 +174,15 @@
 
 /* Add custom utilities */
 .project-card {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-sm);
-  border-style: var(--tw-border-style);
-  border-width: 1px;
-  border-color: var(--color-gray-200);
-  background-color: var(--color-white);
-  padding: calc(var(--spacing) * 4);
-  --tw-shadow: 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
-  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-  transition-property: all;
-  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-  transition-duration: var(--tw-duration, var(--default-transition-duration));
-  --tw-duration: 200ms;
-  transition-duration: 200ms;
+  @apply flex flex-col rounded-sm border border-base-200 bg-base-100 p-4 shadow-xs transition-all duration-200;
 }
 
 .project-card:hover {
-  --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
-  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  @apply shadow-sm;
 }
 
 .dark .project-card {
-  border-color: var(--color-gray-700);
-  background-color: var(--color-gray-800);
+  @apply border-base-300 bg-base-200;
 }
 
 .project-card-pinned {
@@ -220,13 +204,11 @@
 }
 
 .project-card-theme-primary {
-  border-color: var(--color-primary-200);
-  background-color: var(--color-primary-50);
+  @apply border-primary/20 bg-primary/10;
 }
 
 .dark .project-card-theme-primary {
-  border-color: var(--color-primary-800);
-  background-color: color-mix(in oklab, var(--color-primary-900) 30%, transparent);
+  @apply border-primary/30 bg-primary/20;
 }
 
 .project-card-theme-success {
@@ -260,45 +242,32 @@
 }
 
 .drag-zone {
-  border-radius: var(--radius-lg);
-  border-style: var(--tw-border-style);
-  border-width: 2px;
-  --tw-border-style: dashed;
-  border-style: dashed;
-  border-color: var(--color-gray-300);
-  padding: calc(var(--spacing) * 6);
-  text-align: center;
+  @apply rounded-lg border-2 border-dashed border-base-300 p-6 text-center;
 }
 
 .dark .drag-zone {
-  border-color: var(--color-gray-700);
+  @apply border-base-700;
 }
 
 .drag-zone-active {
-  border-color: var(--color-primary-500);
-  background-color: color-mix(in oklab, var(--color-primary-50) 50%, transparent);
+  @apply border-primary bg-primary/10;
 }
 
 .dark .drag-zone-active {
-  background-color: color-mix(in oklab, var(--color-primary-900) 20%, transparent);
+  @apply bg-primary/20;
 }
 
 /* Update these utility definitions */
 @utility progress-outer {
-  height: calc(var(--spacing) * 2);
-  overflow: hidden;
-  border-radius: calc(infinity * 1px);
-  background-color: var(--color-gray-200);
-
+  @apply h-2 overflow-hidden rounded-full bg-base-200;
+  
   @variant dark {
-    background-color: var(--color-gray-700);
+    @apply bg-base-700;
   }
 }
 
 @utility progress-inner {
-  height: 100%;
-  border-radius: calc(infinity * 1px);
-  background-color: var(--color-primary-600);
+  @apply h-full rounded-full bg-primary;
 }
 
 @utility tab-heading {
