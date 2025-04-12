@@ -1,16 +1,26 @@
-@import "tailwindcss";
-@plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
-  logs: false; /* Disable DaisyUI logs in console */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Header and footer text sizing */
+header {
+  font-size: 0.875rem; /* 14px */
 }
 
-/* Add any custom base styles or utilities here */
-/* Example: Keep existing transition */
+header h1 {
+  font-size: 1.25rem; /* 20px */
+}
+
+#userStatus {
+  font-size: 0.875rem; /* 14px */
+}
+
+/* Project list transition effects */
 #projectListView {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-/* Add custom styles needed beyond DaisyUI/Tailwind */
+/* Line clamping utilities */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -25,68 +35,32 @@
   overflow: hidden;
 }
 
-/* Style for drag zone */
-.drag-zone-active {
-  @apply ring-2 ring-primary ring-offset-2;
+/* Custom project card styles */
+.project-card {
+  @apply flex flex-col rounded-md border border-base-300 bg-base-100 p-4 shadow-sm transition-all duration-200;
 }
 
-/* Ensure dropdown animation works */
-.animate-slide-in {
-  animation: slide-in 0.2s ease-out forwards;
+.project-card:hover {
+  @apply shadow-md;
 }
 
-@keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Project card themes */
+.project-card-theme-default {
+  @apply bg-base-100 text-base-content;
 }
 
-/* Style for virtual scroll container */
-#projectFilesList {
-  position: relative;
-  overflow-y: auto;
-  height: 400px; /* Adjust as needed */
+.project-card-theme-primary {
+  @apply bg-primary/10 border-primary/20 text-primary-content;
 }
 
-/* Style for individual file items in virtual scroll */
-.content-item {
-  position: absolute;
-  width: 100%;
-  left: 0;
+.project-card-theme-secondary {
+  @apply bg-secondary/10 border-secondary/20 text-secondary-content;
 }
 
-/* Fix for potential DaisyUI modal backdrop issue */
-dialog.modal::backdrop {
-  background-color: rgba(0, 0, 0, 0.5);
-  animation: modal-pop 0.2s ease-out;
+.project-card-theme-accent {
+  @apply bg-accent/10 border-accent/20 text-accent-content;
 }
 
-/* Ensure DaisyUI dropdown content has appropriate z-index */
-.dropdown-content {
-  z-index: 50; /* Ensure dropdowns appear above other content */
-}
-
-/* Custom spinner if needed, or rely on DaisyUI loading */
-.kb-spinner {
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-left-color: hsl(var(--p)); /* Use primary color */
-  border-radius: 50%;
-  width: 1rem;
-  height: 1rem;
-  animation: kb-spin 1s linear infinite;
-}
-@keyframes kb-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Style for disabled options in select */
-.kb-disabled-option {
-  opacity: 0.5;
-  cursor: not-allowed;
-  color: hsl(var(--nc) / 0.6);
+.project-card-theme-neutral {
+  @apply bg-neutral/10 border-neutral/20 text-neutral-content;
 }
