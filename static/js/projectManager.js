@@ -1,4 +1,4 @@
-/**
+  /**
  * projectManager.js
  * ------------------
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
@@ -138,9 +138,8 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
-      // FORCE AUTHENTICATION to true - bypass all checks
-      // This is a critical fix for the authentication issue
-      let isAuthenticated = true;
+      // Get fresh auth token for each request
+      const token = await window.auth.getAuthToken();
 
       // Log the authentication state for debugging
       console.log('[ProjectManager] FORCED authentication to true for loadProjects');
@@ -165,7 +164,12 @@
       params.append("limit", "100");
 
       const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
-      const response = await window.apiRequest(endpoint, "GET");
+      const token = await window.auth.getAuthToken();
+      const response = await window.apiRequest(endpoint, "GET", null, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
       // Standardize response format
       let projects = [];
@@ -389,7 +393,12 @@
       await requireAuth();
       // Use direct endpoint construction instead of API_ENDPOINTS lookup
       const endpoint = `/api/projects/${projectId}/conversations`;
-      const response = await window.apiRequest(endpoint, "GET");
+      const token = await window.auth.getAuthToken();
+      const response = await window.apiRequest(endpoint, "GET", null, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       let conversations = [];
 
       if (response.data?.conversations) {

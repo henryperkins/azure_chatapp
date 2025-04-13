@@ -150,6 +150,11 @@ function updateBackdrop(show) {
  * Initialize the sidebar toggle functionality
  */
 function initializeSidebarToggle() {
+  // Clear existing references to prevent memory leaks
+  if (sidebar) {
+    sidebar.removeEventListener('transitionend', handleTransitionEnd);
+  }
+
   sidebar = document.getElementById('mainSidebar');
   toggleBtn = document.getElementById('navToggleBtn');
   closeBtn = document.getElementById('closeSidebarBtn');
@@ -158,6 +163,12 @@ function initializeSidebarToggle() {
     console.warn('Sidebar element not found in DOM');
     return false;
   }
+
+  // Add transition end handler
+  function handleTransitionEnd() {
+    isAnimating = false;
+  }
+  sidebar.addEventListener('transitionend', handleTransitionEnd);
 
   // Ensure closeBtn exists or create fallback
   if (!closeBtn && sidebar) {
@@ -203,17 +214,25 @@ function initializeSidebarToggle() {
  * Set up edge swipe and toggle button for mobile
  */
 function setupMobileToggle() {
+  // Clear existing touch handlers
+  trackedListeners.forEach(({type}) => {
+    if (type === 'touchstart' || type === 'touchend') {
+      document.removeEventListener(type, handler);
+    }
+  });
+
   // Setup touch gestures for mobile
   let touchStartX = 0;
   const threshold = 30; // Minimum horizontal swipe distance
 
-  // Track touch start position
-  trackListener(document, 'touchstart', (e) => {
+  // Track touch start position with proper passive handling
+  const touchStartHandler = (e) => {
     touchStartX = e.touches[0].clientX;
-  }, { passive: true });
+  };
+  trackListener(document, 'touchstart', touchStartHandler, { passive: true });
 
-  // Handle edge swipe to open
-  trackListener(document, 'touchend', (e) => {
+  // Handle edge swipe to open/close
+  const touchEndHandler = (e) => {
     const touchEndX = e.changedTouches[0].clientX;
     const deltaX = touchEndX - touchStartX;
 
@@ -226,7 +245,8 @@ function setupMobileToggle() {
       toggleSidebar(false);
       e.preventDefault();
     }
-  });
+  };
+  trackListener(document, 'touchend', touchEndHandler, { passive: false });
 
   // Handle toggle button click
   if (toggleBtn) {
@@ -1110,8 +1130,27 @@ window.sidebar = {
   toggle: toggleSidebar
 };
 
-// Initialize on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', initializeSidebar);
+// Initialize on DOMContentLoaded with proper state tracking
+let sidebarInitialized = false;
+
+function safeInitializeSidebar() {
+  if (sidebarInitialized) return;
+  try {
+    sidebarInitialized = initializeSidebar();
+  } catch (err) {
+    console.error('Sidebar initialization failed:', err);
+    // Retry initialization after delay
+    setTimeout(safeInitializeSidebar, 1000);
+  }
+}
+
+// Track initialization state to prevent duplicate handlers
+document.addEventListener('DOMContentLoaded', safeInitializeSidebar);
+
+// Also initialize when auth is ready if not already initialized
+document.addEventListener('authReady', () => {
+  if (!sidebarInitialized) safeInitializeSidebar();
+});
 
 // Listen for auth state changes from auth.js
 document.addEventListener('authStateChanged', (e) => {

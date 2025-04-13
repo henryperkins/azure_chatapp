@@ -134,23 +134,34 @@ window.ChatInterface.prototype._setupSelectors = function (options) {
  * @returns {Promise} Promise that resolves when message is sent
  */
 window.ChatInterface.prototype._handleSendMessage = function (messageText) {
-  // Ensure auth is initialized before sending
-  if (!window.auth?.isInitialized) {
-    Logger.info('Initializing auth before sending message');
-    window.auth.init().catch(err => {
-      Logger.error('Auth initialization failed:', err);
-    });
-  }
+  // First create the message object with timestamp
+  const messageObj = {
+    role: 'user',
+    content: messageText,
+    timestamp: new Date().toISOString(),
+    sender: window.auth?.getCurrentUser()?.id || 'unknown'
+  };
 
-  // Wait for auth initialization to complete
+  // Immediately render the sent message in UI
+  this.ui.messageList.appendMessage(
+    messageObj.role,
+    messageObj.content,
+    messageObj.timestamp
+  );
+
+  // Then proceed with sending to backend
   return new Promise((resolve, reject) => {
     const checkInitialized = () => {
       if (window.auth?.isInitialized) {
         Logger.info('Auth initialized, sending message');
-        // Implement message sending logic
-        Logger.info("Sending message:", messageText);
-        this.messageService.sendMessage({ role: "user", content: messageText });
-        resolve();
+        this.messageService.sendMessage(messageObj)
+          .then(resolve)
+          .catch(err => {
+            Logger.error('Message send failed:', err);
+            // Optionally remove the message from UI if send fails
+            this.ui.messageList.removeLastMessage();
+            reject(err);
+          });
       } else {
         setTimeout(checkInitialized, 50);
       }
@@ -286,7 +297,7 @@ window.ChatInterface.prototype._checkDependencies = function () {
  */
   window.ChatInterface.prototype._handleInitialConversation = async function () {
     const MAX_AUTH_WAIT_ATTEMPTS = 5;
-    
+
     // First check if we have a conversation ID to load
     if (this.currentChatId) {
       Logger.info(`Initial conversation: Loading existing chat ID: ${this.currentChatId}`);
@@ -316,7 +327,7 @@ window.ChatInterface.prototype._checkDependencies = function () {
       }
       return Promise.resolve(false);
     }
-    
+
     // Wait for auth if it's still initializing with a timeout
     let waitAttempt = 0;
     while (window.__authInitializing && waitAttempt < MAX_AUTH_WAIT_ATTEMPTS) {
@@ -324,7 +335,7 @@ window.ChatInterface.prototype._checkDependencies = function () {
       await new Promise(resolve => setTimeout(resolve, 300));
       waitAttempt++;
     }
-    
+
     // Give up waiting if it takes too long
     if (window.__authInitializing) {
       Logger.warn('Auth initialization is taking too long, proceeding anyway');
@@ -334,14 +345,14 @@ window.ChatInterface.prototype._checkDependencies = function () {
       // Try to check authentication status
       let isAuthenticated = false;
       let authError = null;
-      
+
       try {
         Logger.info('Verifying authentication before creating conversation');
         isAuthenticated = await this._verifyAuthentication();
       } catch (verifyError) {
         authError = verifyError;
         Logger.warn('Authentication verification error:', verifyError);
-        
+
         // Fall back to checking auth state directly as a last resort
         if (window.auth?.authState?.isAuthenticated) {
           Logger.info('Verification failed but auth state indicates user is authenticated, proceeding');
@@ -381,7 +392,7 @@ window.ChatInterface.prototype._checkDependencies = function () {
       }
   } catch (error) {
     Logger.warn('Error in initial conversation setup:', error);
-    
+
     // Show login required message for auth errors with better UI feedback
     if (error.message?.includes('auth') || error.message?.includes('Not authenticated') ||
         error.message?.includes('verification') || error.message?.includes('expired')) {
@@ -391,7 +402,7 @@ window.ChatInterface.prototype._checkDependencies = function () {
         // Hide the chat UI if it exists
         document.getElementById("chatUI")?.classList.add("hidden");
       }
-      
+
       // Also show a notification about authentication issues
       this.notificationFunction?.('Please log in to use chat features', 'warning');
     }
@@ -443,7 +454,7 @@ window.ChatInterface.prototype._verifyAuthentication = async function (options =
     // Check cookies as a fallback verification method
     const accessToken = document.cookie.match(/access_token=([^;]+)/);
     const refreshToken = document.cookie.match(/refresh_token=([^;]+)/);
-    
+
     if (accessToken || refreshToken) {
       Logger.debug('Found authentication cookies, continuing with verification');
     } else {
@@ -468,14 +479,14 @@ window.ChatInterface.prototype._verifyAuthentication = async function (options =
       } catch (err) {
         verificationError = err;
         Logger.warn(`Attempt ${attempt} verification error:`, err);
-        
+
         // If the error suggests the user *is* authenticated despite the error, trust that
         if (window.auth?.authState?.isAuthenticated) {
           Logger.warn('Verification threw error, but authState is true. Proceeding as authenticated.');
           isAuthenticated = true;
           verificationError = null; // Clear error as we are overriding
         }
-        
+
         // Also check alternative authentication indicators
         if (window.__directAccessToken || accessToken) {
           Logger.warn('Verification error, but tokens present. Proceeding with caution.');
@@ -722,7 +733,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
  */
 window.ChatInterface.prototype._performAuthCheck = async function () {
   const logPrefix = '[AuthCheck]';
-  
+
   try {
     if (CONFIG.AUTH_DEBUG) {
       Logger.debug(`${logPrefix} Starting auth check with multiple verification methods`);
@@ -763,7 +774,7 @@ window.ChatInterface.prototype._performAuthCheck = async function () {
     if (window.__directAccessToken && window.__recentLoginTimestamp) {
       const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
       const maxTokenAge = 25 * 60 * 1000; // 25 minutes in milliseconds
-      
+
       if (timeSinceLogin < maxTokenAge) {
         if (CONFIG.AUTH_DEBUG) {
           Logger.debug(`${logPrefix} Using direct token from memory (age: ${(timeSinceLogin/1000).toFixed(1)}s)`);
@@ -774,10 +785,10 @@ window.ChatInterface.prototype._performAuthCheck = async function () {
           if (CONFIG.AUTH_DEBUG) {
             Logger.debug(`${logPrefix} Setting missing access_token cookie from memory`);
           }
-          
+
           const maxAge = 60 * 25; // 25 minutes in seconds
           document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; Secure; SameSite=Strict`;
-          
+
           // Also set refresh token if available
           if (window.__directRefreshToken) {
             document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24}; Secure; SameSite=Strict`;
@@ -796,12 +807,12 @@ window.ChatInterface.prototype._performAuthCheck = async function () {
     // Check 4: Check for authentication cookies
     const accessToken = document.cookie.match(/access_token=([^;]+)/);
     const refreshToken = document.cookie.match(/refresh_token=([^;]+)/);
-    
+
     if (accessToken || refreshToken) {
       if (CONFIG.AUTH_DEBUG) {
         Logger.debug(`${logPrefix} Authentication cookies found, proceeding with token check`);
       }
-      
+
       // Check 5: Try getAuthToken as final verification
       try {
         await window.auth.getAuthToken();
@@ -811,7 +822,7 @@ window.ChatInterface.prototype._performAuthCheck = async function () {
         return { isAuthenticated: true };
       } catch (tokenError) {
         Logger.warn(`${logPrefix} Token retrieval failed:`, tokenError);
-        
+
         // If cookies exist but token verification failed, check if it's just a verification error
         if (!tokenError.message?.includes('verification')) {
           return {
@@ -819,7 +830,7 @@ window.ChatInterface.prototype._performAuthCheck = async function () {
             errorMessage: tokenError.message || 'Token verification failed'
           };
         }
-        
+
         // If there's an access token cookie but verification failed, trust the cookie
         // This is a fallback case where verification failed but cookies suggest authentication
         if (accessToken) {
@@ -859,10 +870,10 @@ window.ChatInterface.prototype._createConversationWithRetry = async function () 
   const projectId = localStorage.getItem("selectedProjectId");
   if (!projectId) {
     Logger.error("No project is currently selected. Please select a project before creating a conversation.");
-    
+
     // Show a user-friendly notification
     this.notificationFunction("Please select a project before creating a conversation", "warning");
-    
+
     // Update UI to guide the user
     const noChatMsg = document.getElementById("noChatSelectedMessage");
     if (noChatMsg) {
@@ -873,7 +884,7 @@ window.ChatInterface.prototype._createConversationWithRetry = async function () 
         msgContent.textContent = 'Please select a project before creating a conversation.';
       }
     }
-    
+
     throw new Error("No project is currently selected. Please select a project before creating a conversation.");
   }
 
@@ -901,13 +912,13 @@ window.ChatInterface.prototype._createConversationWithRetry = async function () 
             Logger.warn("User not authenticated, skipping conversation creation.");
             return null;
           }
-          
+
           // Always check for project ID again just to be sure
           const currentProjectId = localStorage.getItem("selectedProjectId");
           if (!currentProjectId) {
             throw new Error("Project selection required for conversation creation");
           }
-          
+
           conversation = await this.conversationService.createNewConversation();
         }
       }
@@ -1031,11 +1042,16 @@ window.ChatInterface.prototype._handleConversationLoaded = function (conversatio
  * @param {Object} message - The received message
  */
 window.ChatInterface.prototype._handleMessageReceived = function (message) {
+  // Skip if this is our own sent message (already shown)
+  if (message.role === 'user' && message.sender === window.auth?.getCurrentUser()?.id) {
+    return;
+  }
+
   this.ui.messageList.removeThinking();
   this.ui.messageList.appendMessage(
     message.role,
     message.content,
-    null,
+    message.timestamp,
     message.thinking,
     message.redacted_thinking,
     message.metadata
