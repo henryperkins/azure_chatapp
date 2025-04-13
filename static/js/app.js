@@ -642,14 +642,49 @@ async function handleNavigationChange() {
 
   if (view === 'projects') {
     console.log('[handleNavigationChange] View=projects detected, showing projects.');
+
+    // Hide chat UI and show project views
+    const chatUI = document.getElementById('chatUI');
+    const noChatMsg = document.getElementById('noChatSelectedMessage');
+    const loginMsg = document.getElementById('loginRequiredMessage');
+
+    if (chatUI) chatUI.classList.add('hidden');
+    if (noChatMsg) noChatMsg.classList.add('hidden');
+    if (loginMsg) loginMsg.classList.add('hidden');
+
+    // Show project list view instead
     if (window.ProjectDashboard?.showProjectsView) {
       window.ProjectDashboard.showProjectsView();
     } else {
       const listView = document.getElementById('projectListView');
       const detailsView = document.getElementById('projectDetailsView');
-      if (listView) listView.classList.remove('hidden');
+      if (listView) {
+        listView.classList.remove('hidden');
+        console.log('[handleNavigationChange] projectListView made visible');
+      }
       if (detailsView) detailsView.classList.add('hidden');
     }
+
+    // Make project manager panel visible
+    const projectManagerPanel = document.getElementById('projectManagerPanel');
+    if (projectManagerPanel) {
+      projectManagerPanel.classList.remove('hidden');
+      console.log('[handleNavigationChange] projectManagerPanel made visible');
+    }
+
+    // Ensure projects are loaded by triggering refresh
+    setTimeout(() => {
+      if (window.projectListComponent) {
+        console.log('[handleNavigationChange] Triggering project list refresh');
+        window.projectListComponent.renderProjects({forceRefresh: true});
+      } else if (window.projectManager?.loadProjects) {
+        console.log('[handleNavigationChange] Using projectManager to load projects');
+        window.projectManager.loadProjects('all').catch(err =>
+          console.error('[handleNavigationChange] Project loading error:', err)
+        );
+      }
+    }, 100);
+
     return;
   }
 
@@ -1118,6 +1153,30 @@ async function initializeAllModules() {
 
     // Handle initial navigation
     await handleNavigationChange();
+
+    // --- NEW: Explicitly initialize main chat if needed ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const view = urlParams.get('view');
+    const chatId = urlParams.get('chatId');
+
+    // Only initialize main chat if we are authenticated AND not in project view AND no specific chat is loaded yet
+    if (API_CONFIG.isAuthenticated && view !== 'projects' && !chatId) {
+        console.log("[initializeAllModules] Initializing main ChatManager as view is not projects and no chatId is present.");
+        if (window.ChatManager?.initializeChat) {
+            try {
+                await window.ChatManager.initializeChat(); // Initialize the main chat interface
+                console.log("[initializeAllModules] Main ChatManager initialized.");
+            } catch (chatInitError) {
+                console.error("[initializeAllModules] Failed to initialize main ChatManager:", chatInitError);
+                // Optionally show an error to the user
+            }
+        } else {
+            console.warn("[initializeAllModules] ChatManager.initializeChat not found.");
+        }
+    } else {
+         console.log("[initializeAllModules] Skipping main ChatManager initialization (view:", view, "chatId:", chatId, "auth:", API_CONFIG.isAuthenticated, ")");
+    }
+    // --- END NEW ---
 
     setPhase(AppPhase.COMPLETE);
     console.log("[initializeAllModules] All modules initialized successfully");

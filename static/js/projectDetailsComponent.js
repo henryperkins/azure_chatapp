@@ -708,9 +708,9 @@ export class ProjectDetailsComponent {
       } catch (err) {
         console.error('[ProjectDetailsView] Error initializing chat via ChatManager:', err);
       }
-    } else if (window.ChatInterface?.configureSelectors) {
+    } else if (window.chatInterface?.configureSelectors) {
       debugLog('[ProjectDetailsView] Using chatInterface.configureSelectors fallback');
-      window.ChatInterface.configureSelectors(chatOptions);
+      window.chatInterface.configureSelectors(chatOptions);
       return;
     }
 

@@ -193,7 +193,59 @@
      * Primary initialization entry point.
      */
     initializeChat: async function () {
-      console.log('Initializing chat system...');
+      console.log('[ChatManager] initializeChat called.'); // Add log
+
+      // --- NEW: Wait for auth module readiness ---
+      if (!window.auth || !window.auth.isReady) {
+        console.log('[ChatManager] Auth module not ready, waiting for authReady event...');
+        await new Promise((resolve) => {
+          // Check immediately in case it became ready while waiting
+          if (window.auth?.isReady) {
+            console.log('[ChatManager] Auth became ready while checking.');
+            resolve();
+          } else {
+            const listener = () => {
+               console.log('[ChatManager] Received authReady event.');
+               resolve();
+            };
+            document.addEventListener('authReady', listener, { once: true });
+            // Safety timeout in case event never fires
+            setTimeout(() => {
+               console.warn('[ChatManager] Timeout waiting for authReady event.');
+               document.removeEventListener('authReady', listener); // Clean up listener
+               resolve(); // Resolve anyway to avoid blocking indefinitely
+            }, 5000); // 5-second timeout
+          }
+        });
+        console.log('[ChatManager] Auth module is now ready.');
+      } else {
+         console.log('[ChatManager] Auth module was already ready.');
+      }
+      // --- END NEW ---
+
+      console.log('Initializing chat system...'); // Moved log
+
+      // --- NEW: Final Auth Check ---
+      console.log('[ChatManager] Performing final authentication check before initializing ChatInterface...');
+      try {
+        const isFinallyAuthenticated = await window.auth.isAuthenticated({ forceVerify: true }); // Force server check
+        if (!isFinallyAuthenticated) {
+          console.error('[ChatManager] Final authentication check failed. Aborting chat initialization.');
+          // Optionally, trigger UI update to show login required
+          const loginMsg = document.getElementById("loginRequiredMessage");
+          if (loginMsg) loginMsg.classList.remove("hidden");
+          const chatUI = document.getElementById(SELECTORS.mainChatUI) || document.getElementById(SELECTORS.projectChatUI);
+          if (chatUI) chatUI.classList.add('hidden');
+          throw new Error('User not authenticated after final check.'); // Prevent further initialization
+        }
+        console.log('[ChatManager] Final authentication check successful.');
+      } catch (authError) {
+         console.error('[ChatManager] Error during final authentication check:', authError);
+         // Handle error appropriately, maybe show login prompt
+         throw authError; // Re-throw to stop initialization
+      }
+      // --- END FINAL AUTH CHECK ---
+
       try {
         // 1) Load dependencies (only once).
         await this.ensureModulesLoaded();
@@ -375,6 +427,60 @@
       return this.chatInterface._handleSendMessage(userMsg);
     },
 
+    /**
+     * Initialize a project chat component
+     * @param {string} containerSelector - The selector for the chat container
+     * @param {Object} options - Configuration options
+     * @returns {Object} The chat interface instance
+     */
+    initializeProjectChat: function(containerSelector, options = {}) {
+      console.log('[ChatManager] Initializing project chat with selector:', containerSelector);
+
+      if (!window.ChatInterface) {
+        console.error('[ChatManager] ChatInterface not available');
+        throw new Error('ChatInterface not available - chat functionality will be limited');
+      }
+
+      // Configure selectors
+      const chatConfig = {
+        containerSelector: containerSelector,
+        messageContainerSelector: options.messageContainer || '#projectChatMessages',
+        inputSelector: options.inputField || '#projectChatInput',
+        sendButtonSelector: options.sendButton || '#projectChatSendBtn',
+        typingIndicator: options.typingIndicator !== false,
+        readReceipts: options.readReceipts !== false,
+        messageStatus: options.messageStatus !== false
+      };
+
+      // Create or reuse chat interface
+      if (!window.projectChatInterface) {
+        console.log('[ChatManager] Creating new ChatInterface instance');
+        window.projectChatInterface = new window.ChatInterface(chatConfig);
+      } else if (typeof window.projectChatInterface.configureSelectors === 'function') {
+        console.log('[ChatManager] Reconfiguring existing ChatInterface instance');
+        window.projectChatInterface.configureSelectors(chatConfig);
+      } else {
+        console.warn('[ChatManager] Existing chatInterface does not support reconfiguration');
+      }
+
+      // Set up event handlers if provided
+      if (options.onMessageSent && typeof options.onMessageSent === 'function') {
+        window.projectChatInterface.on('messageSent', options.onMessageSent);
+      }
+      if (options.onError && typeof options.onError === 'function') {
+        window.projectChatInterface.on('error', options.onError);
+      }
+
+      // Initialize the chat interface (if not already)
+      if (!window.projectChatInterface.initialized) {
+        console.log('[ChatManager] Initializing ChatInterface');
+        window.projectChatInterface.initialize().catch(err => {
+          console.error('[ChatManager] Failed to initialize chat interface:', err);
+        });
+      }
+
+      return window.projectChatInterface;
+    }
   };
 
   // ---------------------------
