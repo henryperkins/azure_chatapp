@@ -28,6 +28,10 @@ function setPhase(phase) {
 // ---------------------------------------------------------------------
 // GLOBAL APP CONFIG & CONSTANTS
 // ---------------------------------------------------------------------
+// Add initialization tracking
+window.__appStartTime = Date.now();
+window.__appInitializing = true;
+
 const API_CONFIG = {
   _baseUrl: '',
   get baseUrl() {
@@ -612,14 +616,19 @@ function createConversationListItem(item) {
 
 // Load conversation list
 async function loadConversationList() {
-  if (!await ensureAuthenticated()) {
-    console.log("[loadConversationList] Not authenticated");
-    return [];
-  }
-  if (API_CONFIG.authCheckInProgress) {
-    console.log("[loadConversationList] Auth check in progress, deferring");
-    return [];
-  }
+    try {
+      if (!await ensureAuthenticated()) {
+        console.log("[loadConversationList] Not authenticated");
+        return [];
+      }
+      if (API_CONFIG.authCheckInProgress) {
+        console.log("[loadConversationList] Auth check in progress, deferring");
+        return [];
+      }
+    } catch (err) {
+      console.error("[loadConversationList] Authentication check error:", err);
+      return [];  // Return empty array instead of failing
+    }
 
   let projectId = localStorage.getItem("selectedProjectId");
 
@@ -728,17 +737,18 @@ async function handleNavigationChange() {
     if (loginMsg) loginMsg.classList.add('hidden');
 
     // Show project list view instead
-    if (window.ProjectDashboard?.showProjectsView) {
-      window.ProjectDashboard.showProjectsView();
-    } else {
-      const listView = document.getElementById('projectListView');
-      const detailsView = document.getElementById('projectDetailsView');
-      if (listView) {
-        listView.classList.remove('hidden');
-        console.log('[handleNavigationChange] projectListView made visible');
+      if (window.ProjectDashboard?.showProjectsView) {
+        window.ProjectDashboard.showProjectsView();
+      } else {
+        const listView = document.getElementById('projectListView');
+        const detailsView = document.getElementById('projectDetailsView');
+        if (listView) {
+          listView.classList.remove('hidden');
+          listView.style.display = 'flex'; // Ensure display is set to flex
+          console.log('[handleNavigationChange] projectListView made visible');
+        }
+        if (detailsView) detailsView.classList.add('hidden');
       }
-      if (detailsView) detailsView.classList.add('hidden');
-    }
 
     // Make project manager panel visible
     const projectManagerPanel = document.getElementById('projectManagerPanel');
@@ -953,6 +963,21 @@ function setupDarkModeToggle() {
 function setupEventListeners() {
   document.addEventListener('authStateChanged', handleAuthStateChange);
   document.addEventListener('keydown', handleKeyDown);
+  // Add listener for project authentication errors
+  document.addEventListener('projectAuthError', () => {
+    console.log('[App] Received projectAuthError event, showing login UI');
+    // Handle auth errors from project manager
+    if (window.auth?.handleAuthError) {
+      window.auth.handleAuthError(new Error('Session expired or not authenticated'));
+    }
+    // Show login required message
+    const loginMsg = document.getElementById('loginRequiredMessage');
+    if (loginMsg) loginMsg.classList.remove('hidden');
+
+    // Hide project details view if visible
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    if (projectDetailsView) projectDetailsView.classList.add('hidden');
+  });
 
   window.addEventListener('orientationchange', () => {
     window.dispatchEvent(new Event('resize'));

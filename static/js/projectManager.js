@@ -116,6 +116,8 @@
       throw new Error("Not authenticated - please login first");
     } catch (err) {
       console.warn("[projectManager] Authentication required error:", err.message);
+      // Emit projectAuthError event for UI to react
+      emitEvent('projectAuthError', { reason: 'auth_required', error: err });
       throw new Error("Authentication failed - please login again");
     }
   }
@@ -161,10 +163,13 @@
       params.append("limit", "100");
 
       const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
-      const token = await window.auth.getAuthToken();
+
+      // During initialization, request the token with graceful option
+      const token = await window.auth.getAuthToken({ gracefulInit: true });
+
       const response = await window.apiRequest(endpoint, "GET", null, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': token ? `Bearer ${token}` : ''
         }
       });
 
@@ -235,10 +240,17 @@
       currentProject = null;
       emitEvent("projectDetailsLoading", { projectId });
 
-      // Check auth
-      await requireAuth();
-
-      const token = await window.auth.getAuthToken();
+      // Use gracefulInit when checking auth to avoid hard errors during initialization
+      let token;
+      try {
+        // Check auth with graceful option first
+        token = await window.auth.getAuthToken({ gracefulInit: true });
+      } catch (authError) {
+        console.warn("[projectManager] Auth error in loadProjectDetails:", authError.message);
+        // Emit projectAuthError event for UI to react
+        emitEvent('projectAuthError', { reason: 'project_details', error: authError });
+        throw new Error('Authentication required to view project details');
+      }
       const response = await window.apiRequest(projectEndpoint, "GET", null, {
         headers: {
           'Authorization': `Bearer ${token}`

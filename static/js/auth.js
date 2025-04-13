@@ -320,21 +320,73 @@ async function refreshTokens() {
 
 /** Force or retrieve a valid access token. */
 async function getAuthToken(options = {}) {
-  const accessToken = getCookie('access_token');
-  if (await checkTokenValidity(accessToken)) return accessToken;
+  // Allow graceful initialization if explicitly requested
+  const gracefulInit = options.gracefulInit === true;
+  const allowEmpty = options.allowEmpty === true || gracefulInit === true;
 
-  const refreshTokenVal = getCookie('refresh_token');
-  if (refreshTokenVal && await checkTokenValidity(refreshTokenVal, { allowRefresh: true })) {
-    const { success, token } = await refreshTokens();
-    if (success) return getCookie('access_token');
+  // Log to help debug authentication issues
+  if (AUTH_DEBUG) {
+    console.debug('[Auth] getAuthToken called with options:', options);
   }
 
-  await verifyAuthState(true);
-  if (authState.isAuthenticated) {
-    const newTok = getCookie('access_token');
-    if (newTok) return newTok;
+  // During app initialization, return silently if we're in grace period
+  if (gracefulInit && window.__appInitializing && Date.now() - window.__appStartTime < 3000) {
+    console.debug('[Auth] Graceful init: returning empty token during startup');
+    return '';
   }
-  throw new Error('Not authenticated');
+
+  try {
+    // First check if we have a valid access token in cookie
+    const accessToken = getCookie('access_token');
+    if (accessToken && await checkTokenValidity(accessToken)) {
+      if (AUTH_DEBUG) console.debug('[Auth] Found valid access_token cookie');
+      return accessToken;
+    }
+
+    // If not, try to refresh using refresh token
+    const refreshTokenVal = getCookie('refresh_token');
+    if (refreshTokenVal && await checkTokenValidity(refreshTokenVal, { allowRefresh: true })) {
+      try {
+        const { success, token } = await refreshTokens();
+        if (success) {
+          const newToken = getCookie('access_token');
+          if (newToken) {
+            if (AUTH_DEBUG) console.debug('[Auth] Successfully refreshed token');
+            return newToken;
+          }
+        }
+      } catch (refreshErr) {
+        if (AUTH_DEBUG) console.debug('[Auth] Token refresh failed:', refreshErr);
+        // Continue with verification if refresh fails
+      }
+    }
+
+    // Last resort: verify auth state directly
+    try {
+      await verifyAuthState(true);
+      if (authState.isAuthenticated) {
+        const newTok = getCookie('access_token');
+        if (newTok) return newTok;
+      }
+    } catch (verifyErr) {
+      if (AUTH_DEBUG) console.debug('[Auth] Auth verification failed:', verifyErr);
+      // Fall through to final return/throw
+    }
+
+    // If we're in graceful mode or allowEmpty, return empty string instead of throwing
+    if (allowEmpty) {
+      console.debug('[Auth] Returning empty token after auth checks (allowEmpty mode)');
+      return '';
+    }
+
+    throw new Error('Not authenticated');
+  } catch (err) {
+    if (allowEmpty) {
+      if (AUTH_DEBUG) console.debug('[Auth] Error caught but allowEmpty=true, returning empty token:', err);
+      return '';
+    }
+    throw err;
+  }
 }
 
 /**
