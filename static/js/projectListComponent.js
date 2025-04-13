@@ -996,8 +996,27 @@ ${content}`)) {
   // Ensure global instance is saved when created
   const originalProjectListComponent = window.ProjectListComponent;
   window.ProjectListComponent = function(options) {
+    // Ensure we have valid required options
+    if (!options || !options.elementId) {
+      console.error("[ProjectListComponent] Missing required elementId option");
+      options = options || {};
+      options.elementId = options.elementId || "projectList"; // Fall back to default ID
+    }
+
     const instance = new originalProjectListComponent(options);
     window.projectListComponent = instance;
+
+    // Attach a mechanism to allow explicit refresh from outside
+    instance.forceRender = function(projects) {
+      if (Array.isArray(projects) && projects.length > 0) {
+        console.log("[ProjectListComponent] Force rendering projects:", projects.length);
+        instance.renderProjects(projects);
+      } else {
+        console.log("[ProjectListComponent] Force refresh with existing projects");
+        instance.renderProjects({forceRefresh: true});
+      }
+    };
+
     return instance;
   };
 })();

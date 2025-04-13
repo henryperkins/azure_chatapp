@@ -1034,34 +1034,57 @@ function handleAuthStateChange(e) {
   handleAppUpdateAuthUI(authenticated, username);
   API_CONFIG.isAuthenticated = authenticated;
 
-  if (authenticated) {
-    if (stateChanged) {
-      console.log("[AuthStateChange] User authenticated, loading initial data...");
-      loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-      loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+    if (authenticated) {
+      if (stateChanged) {
+        console.log("[AuthStateChange] User authenticated, loading initial data...");
 
-      // Initialize project list view if available
-      if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
-        console.log("[AuthStateChange] Rendering project list view after authentication");
-        if (window.projectManager?.loadProjects) {
+        // First, ensure projects are loaded and the list is displayed
+        try {
+          console.log("[AuthStateChange] Loading project list first");
+          // Make sure project list view is visible
+          const projectListView = document.getElementById('projectListView');
+          if (projectListView) {
+            projectListView.classList.remove('hidden');
+            console.log("[AuthStateChange] Made project list view visible");
+          }
+
+          // Always ensure project list is forced to render
+          if (window.projectListComponent && typeof window.projectListComponent.forceRender === 'function') {
+            console.log("[AuthStateChange] Explicitly forcing project list rendering");
+            window.projectListComponent.forceRender();
+          } else if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
+            console.log("[AuthStateChange] Using standard render for project list");
+            window.projectListComponent.renderProjects({forceRefresh: true});
+          }
+
+          // Force view=projects if we're on the homepage
+          if (!window.location.search) {
+            window.history.pushState({}, '', '/?view=projects');
+            console.log("[AuthStateChange] Redirected to projects view");
+          }
+
+          // Load projects with the project manager
+          if (window.projectManager?.loadProjects) {
             window.projectManager.loadProjects('all')
-              .then(projects => {
-                // Force view=projects if we're on the homepage
-                if (!window.location.search) {
-                  window.history.pushState({}, '', '/?view=projects');
-                }
-                // Make sure project list view is visible
-                const projectListView = document.getElementById('projectListView');
-                if (projectListView) projectListView.classList.remove('hidden');
+              .then(response => {
+                console.log("[AuthStateChange] Projects loaded:", response?.data?.projects?.length || "unknown count");
 
-                // Ensure project list component is rendered after login
-                if (window.projectListComponent) {
-                  window.projectListComponent.renderProjects({forceRefresh: true});
-                }
+                // After projects load, force render again to ensure visibility
+                setTimeout(() => {
+                  if (window.projectListComponent?.forceRender) {
+                    window.projectListComponent.forceRender();
+                  }
+                }, 500); // Small delay to ensure DOM is ready
               })
               .catch(err => console.warn("Failed to load projects:", err));
+          }
+
+          // Still load other components as before
+          loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+          loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+        } catch (err) {
+          console.error("[AuthStateChange] Error during project initialization:", err);
         }
-      }
 
       // Check chatId once
       const urlParams = new URLSearchParams(window.location.search);
@@ -1142,7 +1165,7 @@ window.DEBUG_MODE = window.DEBUG_MODE || false;
 
 async function initializeApplication() {
   setPhase(AppPhase.BOOT);
-  
+
   // Check for missing debug auth file
   if (DEBUG_MODE && typeof window.loadDebugAuth === 'undefined') {
     console.warn('login-debug.js not found - debug auth features disabled');
