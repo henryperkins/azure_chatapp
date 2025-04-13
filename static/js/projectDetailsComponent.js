@@ -60,7 +60,7 @@ export class ProjectDetailsComponent {
     this.initElements();
     this.bindEvents();
     this.setupDragDropHandlers();
-    this.initChatInterface();
+    // Chat will be initialized after project is loaded
   }
 
   /* ------------------------------------------------------------------
@@ -215,6 +215,9 @@ export class ProjectDetailsComponent {
     }
 
     this.state.currentProject = project;
+
+    // Initialize chat interface once we have a project ID
+    this.initChatInterface();
 
     // Quick fade-out
     if (this.elements.container) {
@@ -689,6 +692,15 @@ export class ProjectDetailsComponent {
    * Chat Interface
    * ------------------------------------------------------------------ */
   initChatInterface() {
+    // Verify we have a project ID before proceeding
+    if (!this.state.currentProject?.id) {
+      console.warn('[ProjectDetailsView] Could not find project ID to initialize chat.');
+      return;
+    }
+
+    // Store the project ID in localStorage for persistence
+    localStorage.setItem("selectedProjectId", this.state.currentProject.id);
+
     const chatOptions = {
       containerSelector: '#projectChatContainer',
       messageContainerSelector: '#projectChatMessages',

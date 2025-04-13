@@ -316,7 +316,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         if (window.auth?.isInitialized) {
           try {
             const token = await window.auth.getAuthToken().catch(err => {
-              console.warn('[apiRequest] Auth token retrieval failed:', err.message);
+              console.debug('[apiRequest] Continuing with cookie session (no valid bearer token).');
               return null;
             });
             if (token) {
@@ -1027,6 +1027,29 @@ function handleAuthStateChange(e) {
       console.log("[AuthStateChange] User authenticated, loading initial data...");
       loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
       loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+
+      // Initialize project list view if available
+      if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
+        console.log("[AuthStateChange] Rendering project list view after authentication");
+        if (window.projectManager?.loadProjects) {
+            window.projectManager.loadProjects('all')
+              .then(projects => {
+                // Force view=projects if we're on the homepage
+                if (!window.location.search) {
+                  window.history.pushState({}, '', '/?view=projects');
+                }
+                // Make sure project list view is visible
+                const projectListView = document.getElementById('projectListView');
+                if (projectListView) projectListView.classList.remove('hidden');
+
+                // Ensure project list component is rendered after login
+                if (window.projectListComponent) {
+                  window.projectListComponent.renderProjects({forceRefresh: true});
+                }
+              })
+              .catch(err => console.warn("Failed to load projects:", err));
+        }
+      }
 
       // Check chatId once
       const urlParams = new URLSearchParams(window.location.search);

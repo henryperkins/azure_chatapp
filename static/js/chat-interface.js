@@ -7,7 +7,7 @@
 // Configuration for logging levels
 const CONFIG = {
   LOG_LEVEL: 'error', // 'debug', 'info', 'warn', 'error', or 'none'
-  AUTH_DEBUG: false,   // Explicitly disabled by default
+  AUTH_DEBUG: true,    // Enable auth debugging to match auth.js
   MAX_AUTH_RETRIES: 3,
   AUTH_RETRY_DELAY: 300
 };
@@ -285,28 +285,62 @@ window.ChatInterface.prototype._checkDependencies = function () {
  * @returns {Promise} Promise that resolves when initial conversation is ready
  */
 window.ChatInterface.prototype._handleInitialConversation = async function () {
+  const MAX_AUTH_WAIT_ATTEMPTS = 5;
+  
+  // First check if we have a conversation ID to load
   if (this.currentChatId) {
-    // Load existing conversation if ID is in URL
+    Logger.info(`Initial conversation: Loading existing chat ID: ${this.currentChatId}`);
     return this.loadConversation(this.currentChatId);
   }
-
-  // Check if auth is still initializing
-  if (window.__authInitializing) {
-    Logger.info('Auth is initializing, waiting before creating conversation');
+  
+  // Wait for auth if it's still initializing with a timeout
+  let waitAttempt = 0;
+  while (window.__authInitializing && waitAttempt < MAX_AUTH_WAIT_ATTEMPTS) {
+    Logger.info(`Auth is initializing, waiting before creating conversation (attempt ${waitAttempt + 1}/${MAX_AUTH_WAIT_ATTEMPTS})`);
     await new Promise(resolve => setTimeout(resolve, 300));
-    return this._handleInitialConversation();
+    waitAttempt++;
+  }
+  
+  // Give up waiting if it takes too long
+  if (window.__authInitializing) {
+    Logger.warn('Auth initialization is taking too long, proceeding anyway');
   }
 
   try {
-    const isAuthenticated = await this._verifyAuthentication();
-
-    if (!isAuthenticated) {
-      // Show login required message
-      const loginMsg = document.getElementById("loginRequiredMessage");
-      if (loginMsg) loginMsg.classList.remove("hidden");
-      return Promise.reject(new Error('Not authenticated'));
+    // Try to check authentication status
+    let isAuthenticated = false;
+    let authError = null;
+    
+    try {
+      Logger.info('Verifying authentication before creating conversation');
+      isAuthenticated = await this._verifyAuthentication();
+    } catch (verifyError) {
+      authError = verifyError;
+      Logger.warn('Authentication verification error:', verifyError);
+      
+      // Fall back to checking auth state directly as a last resort
+      if (window.auth?.authState?.isAuthenticated) {
+        Logger.info('Verification failed but auth state indicates user is authenticated, proceeding');
+        isAuthenticated = true;
+      }
     }
 
+    if (!isAuthenticated) {
+      // Show login required message with more details about the error
+      const loginMsg = document.getElementById("loginRequiredMessage");
+      if (loginMsg) {
+        loginMsg.classList.remove("hidden");
+        // If there's an error message element inside loginRequiredMessage, update it
+        const errorElement = loginMsg.querySelector('.error-details');
+        if (errorElement && authError) {
+          errorElement.textContent = `Error: ${authError.message || 'Authentication required'}`;
+        }
+      }
+      Logger.info('User is not authenticated, showing login message');
+      return Promise.reject(new Error(authError?.message || 'Not authenticated'));
+    }
+
+    Logger.info('User is authenticated, creating new conversation');
     // If we got here, we should be authenticated, create new conversation
     if (!this.currentChatId) {
       return this.createNewConversation()
@@ -323,10 +357,19 @@ window.ChatInterface.prototype._handleInitialConversation = async function () {
     }
   } catch (error) {
     Logger.warn('Error in initial conversation setup:', error);
-    // Show login required message for auth errors
-    if (error.message?.includes('auth') || error.message?.includes('Not authenticated')) {
+    
+    // Show login required message for auth errors with better UI feedback
+    if (error.message?.includes('auth') || error.message?.includes('Not authenticated') ||
+        error.message?.includes('verification') || error.message?.includes('expired')) {
       const loginMsg = document.getElementById("loginRequiredMessage");
-      if (loginMsg) loginMsg.classList.remove("hidden");
+      if (loginMsg) {
+        loginMsg.classList.remove("hidden");
+        // Hide the chat UI if it exists
+        document.getElementById("chatUI")?.classList.add("hidden");
+      }
+      
+      // Also show a notification about authentication issues
+      this.notificationFunction?.('Please log in to use chat features', 'warning');
     }
     return Promise.reject(error);
   }
@@ -344,14 +387,43 @@ window.ChatInterface.prototype._verifyAuthentication = async function (options =
   const INITIAL_DELAY = 150; // Start with a slightly longer delay
 
   try {
-    // First make sure auth is initialized
-    if (!window.auth?.isInitialized) {
+    // First make sure auth is initialized - with more robust check and error handling
+    if (!window.auth || typeof window.auth.init !== 'function') {
+      Logger.error('Auth module is missing or incomplete. Check script loading order.');
+      return false;
+    }
+
+    if (!window.auth.isInitialized) {
       Logger.info('Auth not initialized, calling init...');
-      await window.auth.init();
-      Logger.info('Auth init completed.');
+      try {
+        await window.auth.init();
+        Logger.info('Auth init completed.');
+      } catch (initErr) {
+        Logger.warn('Auth initialization error:', initErr);
+        // Continue anyway - we'll try verification with current state
+      }
     } else {
-       // If already initialized, wait briefly for state stabilization
-       await new Promise(resolve => setTimeout(resolve, 50));
+      // If already initialized, wait briefly for state stabilization
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Use directly exposed token if available (higher priority)
+    if (window.__directAccessToken && window.__recentLoginTimestamp) {
+      const tokenAge = Date.now() - window.__recentLoginTimestamp;
+      if (tokenAge < 300000) { // 5 minutes
+        Logger.info('Using recently acquired direct token');
+        return true;
+      }
+    }
+
+    // Check cookies as a fallback verification method
+    const accessToken = document.cookie.match(/access_token=([^;]+)/);
+    const refreshToken = document.cookie.match(/refresh_token=([^;]+)/);
+    
+    if (accessToken || refreshToken) {
+      Logger.debug('Found authentication cookies, continuing with verification');
+    } else {
+      Logger.warn('No authentication cookies found');
     }
 
     for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
@@ -360,23 +432,30 @@ window.ChatInterface.prototype._verifyAuthentication = async function (options =
       let verificationError = null;
 
       try {
-        // Use the auth module's state if available and seems valid
-        if (window.auth?.authState?.isAuthenticated && (Date.now() - window.auth.authState.lastVerified < 5000)) {
-           Logger.debug('Using recently verified auth state');
-           isAuthenticated = true;
+        // First check auth state directly (most reliable)
+        if (window.auth?.authState?.isAuthenticated && (Date.now() - window.auth.authState.lastVerified < 10000)) {
+          Logger.debug('Using recently verified auth state');
+          isAuthenticated = true;
         } else {
-           // Otherwise, perform the check
-           isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+          // Otherwise, perform the check with the auth module
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: attempt === MAX_VERIFY_ATTEMPTS });
         }
 
       } catch (err) {
         verificationError = err;
         Logger.warn(`Attempt ${attempt} verification error:`, err);
+        
         // If the error suggests the user *is* authenticated despite the error, trust that
         if (window.auth?.authState?.isAuthenticated) {
-           Logger.warn('Verification threw error, but authState is true. Proceeding as authenticated.');
-           isAuthenticated = true;
-           verificationError = null; // Clear error as we are overriding
+          Logger.warn('Verification threw error, but authState is true. Proceeding as authenticated.');
+          isAuthenticated = true;
+          verificationError = null; // Clear error as we are overriding
+        }
+        
+        // Also check alternative authentication indicators
+        if (window.__directAccessToken || accessToken) {
+          Logger.warn('Verification error, but tokens present. Proceeding with caution.');
+          isAuthenticated = true;
         }
       }
 
@@ -618,68 +697,129 @@ window.ChatInterface.prototype.createNewConversation = async function () {
  * @returns {Promise<Object>} Authentication result object
  */
 window.ChatInterface.prototype._performAuthCheck = async function () {
+  const logPrefix = '[AuthCheck]';
+  
   try {
-    // Initialize auth if needed
-    if (!window.auth?.isInitialized) {
-      await window.auth.init();
+    if (CONFIG.AUTH_DEBUG) {
+      Logger.debug(`${logPrefix} Starting auth check with multiple verification methods`);
     }
 
-    // Wait for auth state to stabilize
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Check 1: Initialize auth if needed
+    if (!window.auth?.isInitialized) {
+      Logger.info(`${logPrefix} Auth not initialized, initializing...`);
+      try {
+        await window.auth.init();
+        Logger.info(`${logPrefix} Auth initialization completed`);
+      } catch (initError) {
+        Logger.warn(`${logPrefix} Auth initialization error:`, initError);
+        // Continue anyway - we'll try other verification methods
+      }
+    }
 
-    // Check auth state
-    if (window.auth.isInitialized && window.auth.authState?.isAuthenticated === false) {
+    // Give auth state a moment to stabilize
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Check 2: Check auth state directly (fastest method)
+    if (window.auth?.isInitialized && window.auth.authState?.isAuthenticated === true) {
+      if (CONFIG.AUTH_DEBUG) {
+        Logger.debug(`${logPrefix} Auth state indicates user is authenticated`);
+      }
+      return { isAuthenticated: true };
+    } else if (window.auth?.isInitialized && window.auth.authState?.isAuthenticated === false) {
+      if (CONFIG.AUTH_DEBUG) {
+        Logger.debug(`${logPrefix} Auth state explicitly indicates user is NOT authenticated`);
+      }
       return {
         isAuthenticated: false,
         errorMessage: 'Not authenticated - please login first'
       };
     }
 
-    // Check for direct token first
-    let isAuthenticatedViaDirectToken = false;
+    // Check 3: Check for direct token in memory
     if (window.__directAccessToken && window.__recentLoginTimestamp) {
       const timeSinceLogin = Date.now() - window.__recentLoginTimestamp;
-      if (timeSinceLogin < 5000) {
+      const maxTokenAge = 25 * 60 * 1000; // 25 minutes in milliseconds
+      
+      if (timeSinceLogin < maxTokenAge) {
         if (CONFIG.AUTH_DEBUG) {
-          Logger.debug(`Using direct token for initial auth check (${timeSinceLogin}ms since login)`);
+          Logger.debug(`${logPrefix} Using direct token from memory (age: ${(timeSinceLogin/1000).toFixed(1)}s)`);
         }
-        isAuthenticatedViaDirectToken = true;
+        // Ensure the token is also set as a cookie if not already
+        const existingCookie = document.cookie.match(/access_token=([^;]+)/);
+        if (!existingCookie && window.__directAccessToken) {
+          if (CONFIG.AUTH_DEBUG) {
+            Logger.debug(`${logPrefix} Setting missing access_token cookie from memory`);
+          }
+          
+          const maxAge = 60 * 25; // 25 minutes in seconds
+          document.cookie = `access_token=${window.__directAccessToken}; path=/; max-age=${maxAge}; Secure; SameSite=Strict`;
+          
+          // Also set refresh token if available
+          if (window.__directRefreshToken) {
+            document.cookie = `refresh_token=${window.__directRefreshToken}; path=/; max-age=${60 * 60 * 24}; Secure; SameSite=Strict`;
+          }
+        }
+        return { isAuthenticated: true };
       } else {
-        // Clear the cached token after the grace period
+        // Clear the cached token after exceeding the max age
         if (CONFIG.AUTH_DEBUG) {
-          Logger.debug(`Direct token grace period expired (${timeSinceLogin}ms since login)`);
+          Logger.debug(`${logPrefix} Direct token expired (age: ${(timeSinceLogin/1000).toFixed(1)}s > ${maxTokenAge/1000}s max)`);
         }
-        window.__directAccessToken = null; // Clear expired direct token
+        window.__directAccessToken = null;
       }
     }
 
-    // If not authenticated via direct token, proceed with standard check
-    if (!isAuthenticatedViaDirectToken) {
+    // Check 4: Check for authentication cookies
+    const accessToken = document.cookie.match(/access_token=([^;]+)/);
+    const refreshToken = document.cookie.match(/refresh_token=([^;]+)/);
+    
+    if (accessToken || refreshToken) {
       if (CONFIG.AUTH_DEBUG) {
-        Logger.debug('Direct token not available or expired, proceeding with getAuthToken check.');
+        Logger.debug(`${logPrefix} Authentication cookies found, proceeding with token check`);
       }
-
+      
+      // Check 5: Try getAuthToken as final verification
       try {
         await window.auth.getAuthToken();
+        if (CONFIG.AUTH_DEBUG) {
+          Logger.debug(`${logPrefix} Token verification successful`);
+        }
+        return { isAuthenticated: true };
       } catch (tokenError) {
-        Logger.warn("Token retrieval failed:", tokenError);
-        // Only return error if this isn't just a verification error
+        Logger.warn(`${logPrefix} Token retrieval failed:`, tokenError);
+        
+        // If cookies exist but token verification failed, check if it's just a verification error
         if (!tokenError.message?.includes('verification')) {
-          return { isAuthenticated: false, errorMessage: tokenError.message };
+          return {
+            isAuthenticated: false,
+            errorMessage: tokenError.message || 'Token verification failed'
+          };
         }
-        // If it's just a verification error, check authState
-        if (!window.auth.authState?.isAuthenticated) {
-          return { isAuthenticated: false, errorMessage: 'Authentication failed after token check' };
+        
+        // If there's an access token cookie but verification failed, trust the cookie
+        // This is a fallback case where verification failed but cookies suggest authentication
+        if (accessToken) {
+          Logger.warn(`${logPrefix} Verification failed but access token cookie exists - proceeding with caution`);
+          return { isAuthenticated: true };
         }
+      }
+    } else {
+      if (CONFIG.AUTH_DEBUG) {
+        Logger.debug(`${logPrefix} No authentication cookies found`);
       }
     }
 
-    return { isAuthenticated: true };
-  } catch (error) {
-    Logger.warn("Authentication check failed:", error);
+    // If we got here, we've exhausted all verification methods
+    Logger.warn(`${logPrefix} All verification methods failed to confirm authentication`);
     return {
       isAuthenticated: false,
-      errorMessage: error.message || 'Authentication check failed',
+      errorMessage: 'Authentication verification failed - please try logging in again'
+    };
+  } catch (error) {
+    Logger.warn(`${logPrefix} Unexpected error during authentication check:`, error);
+    return {
+      isAuthenticated: false,
+      errorMessage: error.message || 'Authentication check failed with an unexpected error',
       error
     };
   }
