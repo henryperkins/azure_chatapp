@@ -138,11 +138,8 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
-      // Get fresh auth token for each request
-      const token = await window.auth.getAuthToken();
-
       // Log the authentication state for debugging
-      console.log('[ProjectManager] FORCED authentication to true for loadProjects');
+      console.log('[ProjectManager] Getting auth token for loadProjects');
 
       // This is a fallback check if needed (won't change isAuthenticated)
       try {
@@ -241,7 +238,12 @@
       // Check auth
       await requireAuth();
 
-      const response = await window.apiRequest(projectEndpoint, "GET");
+      const token = await window.auth.getAuthToken();
+      const response = await window.apiRequest(projectEndpoint, "GET", null, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       let projectData = null;
 
       // Standardize response parsing
@@ -330,7 +332,12 @@
     try {
       await requireAuth();
 
-      const response = await window.apiRequest(`/api/projects/${projectId}/stats`, "GET");
+      const token = await window.auth.getAuthToken();
+      const response = await window.apiRequest(`/api/projects/${projectId}/stats`, "GET", null, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const stats = response.data || {};
 
       // Ensure basic fields
@@ -370,7 +377,12 @@
   async function loadProjectFiles(projectId) {
     try {
       await requireAuth();
-      const response = await window.apiRequest(`/api/projects/${projectId}/files`, "GET");
+      const token = await window.auth.getAuthToken();
+      const response = await window.apiRequest(`/api/projects/${projectId}/files`, "GET", null, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const files = response.data?.files || response.data || [];
       emitEvent("projectFilesLoaded", { projectId, files });
       return files;
@@ -430,7 +442,12 @@
   async function loadProjectArtifacts(projectId) {
     try {
       await requireAuth();
-      const response = await window.apiRequest(`/api/projects/${projectId}/artifacts`, "GET");
+      const token = await window.auth.getAuthToken();
+      const response = await window.apiRequest(`/api/projects/${projectId}/artifacts`, "GET", null, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const artifacts = response.data?.artifacts || response.data || [];
       emitEvent("projectArtifactsLoaded", { projectId, artifacts });
       return artifacts;

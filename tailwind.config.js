@@ -1,4 +1,4 @@
-module.exports = {
+uvicomodule.exports = {
   content: [
     "./static/**/*.{html,js}",
     "./templates/**/*.html"
