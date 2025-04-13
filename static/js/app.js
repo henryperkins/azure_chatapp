@@ -89,8 +89,8 @@ const API_ENDPOINTS = {
   AUTH_VERIFY: '/api/auth/verify/',
   PROJECTS: '/api/projects/',
   PROJECT_DETAILS: '/api/projects/{projectId}/',
-  CONVERSATIONS: '/api/chat/conversations/',
-  PROJECT_CONVERSATIONS: '/api/chat/projects/{projectId}/conversations/',
+  // Removed unused endpoint
+  PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
   PROJECT_FILES: '/api/projects/{projectId}/files/'
 };
 
@@ -611,7 +611,15 @@ async function loadConversationList() {
     return [];
   }
 
-  return apiRequest(API_ENDPOINTS.CONVERSATIONS)
+  const projectId = localStorage.getItem("selectedProjectId");
+  if (!projectId) {
+    console.warn("[loadConversationList] No project selected, skipping conversation load");
+    renderConversationList({ data: { conversations: [] } });
+    return [];
+  }
+
+  const url = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
+  return apiRequest(url)
     .then(data => {
       renderConversationList(data);
       return data;

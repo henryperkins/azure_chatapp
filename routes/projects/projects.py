@@ -1,8 +1,8 @@
 """
 projects.py
 ---------
-Core project management routes with CRUD operations,
-statistics, and project-level actions.
+Project management routes - focused solely on project CRUD operations
+and metadata, without knowledge base implementation details.
 """
 
 import logging
@@ -12,7 +12,14 @@ import os
 import shutil
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
+from fastapi import (
+    APIRouter, 
+    Depends, 
+    HTTPException, 
+    status, 
+    Request, 
+    Query
+)
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, text
@@ -31,51 +38,7 @@ from services import knowledgebase_service
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
-from services.vector_db import (
-    get_vector_db,
-    process_file_for_search,
-    VECTOR_DB_STORAGE_PATH,
-    DEFAULT_CHUNK_SIZE,
-    DEFAULT_CHUNK_OVERLAP,
-)
 from services.file_storage import get_file_storage
-
-logger = logging.getLogger(__name__)
-router = APIRouter()
-
-# Temporary debug endpoint - remove after testing
-@router.get("/test/{project_id}", include_in_schema=False)
-async def test_project_exists(
-    project_id: UUID,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Temporary endpoint to test project existence"""
-    try:
-        project = await validate_project_access(
-            project_id,
-            user=User(id=0),  # Dummy user
-            db=db,
-            skip_ownership_check=True
-        )
-        return {
-            "exists": True,
-            "id": str(project.id),
-            "name": project.name,
-            "archived": project.archived,
-            "user_id": project.user_id
-        }
-    except HTTPException as e:
-        return {
-            "exists": False,
-            "error": e.detail,
-            "status_code": e.status_code
-        }
-    except Exception as e:
-        return {
-            "exists": False,
-            "error": str(e),
-            "status_code": 500
-        }
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -84,16 +47,16 @@ router = APIRouter()
 # Pydantic Schemas
 # ============================
 
-
 class ProjectCreate(BaseModel):
+    """Schema for creating a new project"""
     name: str = Field(..., min_length=1, max_length=200)
     goals: Optional[str] = Field(None, max_length=1000)
     description: Optional[str] = Field(None, max_length=2000)
     custom_instructions: Optional[str] = Field(None, max_length=5000)
     max_tokens: int = Field(default=200000, ge=50000, le=500000)
 
-
 class ProjectUpdate(BaseModel):
+    """Schema for updating a project"""
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     goals: Optional[str] = Field(None, max_length=1000)
@@ -104,18 +67,16 @@ class ProjectUpdate(BaseModel):
     extra_data: Optional[dict]
     max_tokens: Optional[int] = Field(default=None, ge=50000, le=500000)
 
-
 class ProjectFilter(str, Enum):
+    """Filter options for listing projects"""
     all = "all"
     pinned = "pinned"
     archived = "archived"
     active = "active"
 
-
 # ============================
-# Project CRUD Operations
+# Core Project CRUD
 # ============================
-
 
 @router.post("/", response_model=Dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
@@ -123,87 +84,38 @@ async def create_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    Create new project with automatic knowledge base creation.
-    A knowledge base will be automatically created for each new project.
-    """
+    """Create a new project"""
     try:
-        # Create project using db utility
         project = Project(
             **project_data.dict(),
             user_id=current_user.id,
         )
         await save_model(db, project)
-        logger.info(
-            f"Project created successfully: {project.id} for user {current_user.id}"
-        )
-
-        # Auto-create knowledge base for the project (CRITICAL - NOT OPTIONAL)
-        # Convert to string and back to UUID to satisfy type checking
-        project_id_str = str(project.id)
-        kb = await knowledgebase_service.create_knowledge_base(
-            name=f"{project.name} Knowledge Base",
-            project_id=UUID(project_id_str),
-            description="Automatically created knowledge base",
-            embedding_model=None,  # Use default model
-            db=db,
-        )
-        logger.info(f"Auto-created knowledge base {kb.id} for project {project.id}")
-
-        # Refresh the project to include the KB relationship
-        await db.refresh(project)
-
-        # Serialize project for response
-        serialized_project = serialize_project(project)
-
+        
+        logger.info(f"Created project {project.id} for user {current_user.id}")
+        
         return await create_standard_response(
-            serialized_project, "Project created successfully with knowledge base"
+            serialize_project(project),
+            "Project created successfully"
         )
-
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
-        # If the project was created but knowledge base creation failed,
-        # try to clean up the project to avoid orphaned projects without knowledge bases
-        project_variable = locals().get('project')
-        if project_variable and hasattr(project_variable, 'id') and project_variable.id:
-            try:
-                await db.delete(project_variable)
-                await db.commit()
-                logger.info(f"Rolled back project {project_variable.id} due to knowledge base creation failure")
-            except Exception as cleanup_error:
-                logger.error(f"Failed to clean up project after KB creation error: {str(cleanup_error)}")
-
-        raise HTTPException(500, f"Project creation failed: {str(e)}") from e
-
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Project creation failed: {str(e)}"
+        ) from e
 
 @router.get("/", response_model=Dict)
 async def list_projects(
     request: Request,
-    # 1) Validate filter as an enum of allowed values
-    filter_param: ProjectFilter = Query(ProjectFilter.all, description="Filter for projects"),
-    # 2) Validate skip & limit
-    skip: int = Query(0, ge=0, description="Pagination start index"),
-    limit: int = Query(
-        100, ge=1, le=500, description="Maximum number of projects to return"
-    ),
+    filter_param: ProjectFilter = Query(ProjectFilter.all, description="Filter type"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    List all projects owned by the current user with optional filtering by pinned/archived/active.
-    Pagination is controlled via skip/limit.
-    """
-    logger.info(f"Listing projects for user {current_user.id} with filter: {filter}")
-    logger.debug(f"Request headers: {request.headers}")
-
-    if not current_user:
-        logger.error("No current user found in list_projects")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    # conditions = [Project.user_id == current_user.id]  # unused variable removed
-
+    """List projects with filtering"""
     try:
-        # Get all projects first
         projects = await get_all_by_condition(
             db,
             Project,
@@ -213,60 +125,30 @@ async def list_projects(
             order_by=Project.created_at.desc(),
         )
 
-        # Apply filter logic after retrieval
+        # Apply filters
         if filter_param == ProjectFilter.pinned:
             projects = [p for p in projects if p.pinned]
         elif filter_param == ProjectFilter.archived:
             projects = [p for p in projects if p.archived]
         elif filter_param == ProjectFilter.active:
             projects = [p for p in projects if not p.archived]
-    except ValueError as ve:
-        # If there's some reason your DB code raises ValueError for invalid conditions
-        logger.error(f"Validation error listing projects: {str(ve)}")
-        raise HTTPException(
-            status_code=422,
-            detail=f"Invalid request parameters: {str(ve)}"
-        ) from ve
+
+        serialized = [serialize_project(p) for p in projects]
+        
+        return {
+            "projects": serialized,
+            "count": len(serialized),
+            "filter": {
+                "type": filter_param.value,
+                "applied": {
+                    "archived": filter_param == ProjectFilter.archived,
+                    "pinned": filter_param == ProjectFilter.pinned,
+                }
+            }
+        }
     except Exception as e:
-        logger.error(f"Unexpected error listing projects: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="An unexpected error occurred while retrieving projects",
-        ) from e
-
-    logger.info(f"Retrieved {len(projects)} projects for user {current_user.id}")
-    serialized_projects = [serialize_project(project) for project in projects]
-
-    response_data = {
-        "projects": serialized_projects,
-        "count": len(serialized_projects),
-        "filter": {
-            "type": filter_param.value,
-            "applied": {
-                "archived": (filter == ProjectFilter.archived),
-                "pinned": (filter == ProjectFilter.pinned),
-            },
-        },
-    }
-
-    logger.debug(f"Prepared response data: {response_data}")
-
-    if not isinstance(response_data["projects"], list):
-        logger.error("Invalid projects data format in response")
-        raise HTTPException(500, "Internal server error: invalid data format")
-
-    return {
-        "projects": serialized_projects,
-        "count": len(serialized_projects),
-        "filter": {
-            "type": filter_param.value,
-            "applied": {
-                "archived": (filter == ProjectFilter.archived),
-                "pinned": (filter == ProjectFilter.pinned),
-            },
-        },
-    }
-
+        logger.error(f"Failed to list projects: {str(e)}")
+        raise HTTPException(500, "Failed to retrieve projects") from e
 
 @router.get("/{project_id}/", response_model=Dict)
 async def get_project(
@@ -274,17 +156,9 @@ async def get_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    Retrieves details for a single project. Must belong to the user.
-    """
-    # Use the enhanced validation function
+    """Get a single project"""
     project = await validate_project_access(project_id, current_user, db)
-
-    # Serialize project to dict for JSON response
-    serialized_project = serialize_project(project)
-
-    return await create_standard_response(serialized_project)
-
+    return await create_standard_response(serialize_project(project))
 
 @router.patch("/{project_id}/", response_model=Dict)
 async def update_project(
@@ -294,25 +168,20 @@ async def update_project(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Update project details"""
-    # Verify project ownership
     project = await validate_project_access(project_id, current_user, db)
 
-    update_dict = update_data.dict(exclude_unset=True)
-    if "max_tokens" in update_dict and update_dict["max_tokens"] < project.token_usage:
-        raise HTTPException(400, "New token limit below current usage")
+    updates = update_data.dict(exclude_unset=True)
+    if "max_tokens" in updates and updates["max_tokens"] < project.token_usage:
+        raise HTTPException(400, "Token limit below current usage")
 
-    for key, value in update_dict.items():
+    for key, value in updates.items():
         setattr(project, key, value)
 
     await save_model(db, project)
-
-    # Serialize project for response
-    serialized_project = serialize_project(project)
-
     return await create_standard_response(
-        serialized_project, "Project updated successfully"
+        serialize_project(project),
+        "Project updated successfully"
     )
-
 
 @router.delete("/{project_id}/", response_model=Dict)
 async def delete_project(
@@ -320,98 +189,44 @@ async def delete_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Delete a project and all associated resources, including knowledge base, vector data, and files"""
+    """Delete project and associated resources"""
     try:
-        # Verify project ownership
         project = await validate_project_access(project_id, current_user, db)
-
-        # Store knowledge base ID before deletion if it exists
-        knowledge_base_id = project.knowledge_base_id
-
-        # Get storage service for file deletion
-        storage_config = {
+        storage = get_file_storage({
             "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
             "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-        }
-        storage = get_file_storage(storage_config)
+        })
 
-        # 1. Delete all files first (both from storage and database)
-        try:
-            # Get all files for this project
-            files_query = select(ProjectFile).where(
-                ProjectFile.project_id == project_id
-            )
-            files_result = await db.execute(files_query)
-            files = files_result.scalars().all()
-
-            # Delete each file from storage
-            for file in files:
-                try:
-                    await storage.delete_file(file.file_path)
-                except Exception as file_err:
-                    logger.warning(
-                        f"Failed to delete file {file.id} from storage: {str(file_err)}"
-                    )
-
-            logger.info(
-                f"Deleted {len(files)} files from storage for project {project_id}"
-            )
-        except Exception as files_err:
-            logger.error(f"Error deleting project files: {str(files_err)}")
-
-        # 2. Delete vector data if knowledge base exists
-        if knowledge_base_id:
+        # Delete files
+        files = await get_all_by_condition(
+            db,
+            ProjectFile,
+            ProjectFile.project_id == project_id
+        )
+        for file in files:
             try:
-                # Get the knowledge base to find the embedding model
-                kb = await db.get(KnowledgeBase, knowledge_base_id)
-                if kb:
-                    embedding_model = kb.embedding_model or "all-MiniLM-L6-v2"
+                await storage.delete_file(file.file_path)
+            except Exception as file_err:
+                logger.warning(f"Failed to delete file {file.id}: {file_err}")
 
-                    # Initialize vector DB
-                    vector_db = await get_vector_db(
-                        model_name=embedding_model,
-                        storage_path=os.path.join(
-                            VECTOR_DB_STORAGE_PATH, str(project_id)
-                        ),
-                        load_existing=True,
-                    )
-
-                    # Delete all vectors with this project ID
-                    await vector_db.delete_by_filter({"project_id": str(project_id)})
-                    logger.info(f"Deleted vector data for project {project_id}")
-            except Exception as vector_err:
-                logger.error(f"Error deleting vector data: {str(vector_err)}")
-
-        # 3. Delete the project (this will cascade delete knowledge base and other DB records)
+        # Delete project (knowledge base will cascade)
         await db.delete(project)
         await db.commit()
 
-        # 4. Clean up vector DB storage directory
-        try:
-            vector_dir = os.path.join(VECTOR_DB_STORAGE_PATH, str(project_id))
-            if os.path.exists(vector_dir):
-                shutil.rmtree(vector_dir, ignore_errors=True)
-                logger.info(
-                    f"Deleted vector storage directory for project {project_id}"
-                )
-        except Exception as dir_err:
-            logger.error(f"Error cleaning up vector storage directory: {str(dir_err)}")
-
         return await create_standard_response(
             {"id": str(project_id)},
-            "Project and all associated resources deleted successfully",
+            "Project deleted successfully"
         )
     except Exception as e:
-        logger.error(f"Error deleting project: {str(e)}")
+        logger.error(f"Project deletion failed: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to delete project: {str(e)}"
+            status_code=500,
+            detail=f"Failed to delete project: {str(e)}"
         ) from e
-
 
 # ============================
 # Project Actions
 # ============================
-
 
 @router.patch("/{project_id}/archive")
 async def toggle_archive_project(
@@ -419,26 +234,18 @@ async def toggle_archive_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    Toggle archive status of a project.
-    Cannot have pinned and archived simultaneously.
-    """
+    """Toggle archive status"""
     project = await validate_project_access(project_id, current_user, db)
-
-    # Toggle archived status
+    
     project.archived = not project.archived
-
-    # If archiving, also remove pin
     if project.archived and project.pinned:
         project.pinned = False
 
     await save_model(db, project)
-
     return await create_standard_response(
         serialize_project(project),
-        message=f"Project {'archived' if project.archived else 'unarchived'} successfully",
+        f"Project {'archived' if project.archived else 'unarchived'}"
     )
-
 
 @router.post("/{project_id}/pin")
 async def toggle_pin_project(
@@ -446,23 +253,22 @@ async def toggle_pin_project(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    Pin or unpin a project for quick access.
-    Cannot pin archived projects.
-    """
+    """Toggle pin status"""
     project = await validate_project_access(project_id, current_user, db)
-
+    
     if project.archived and not project.pinned:
-        raise HTTPException(status_code=400, detail="Cannot pin an archived project")
+        raise HTTPException(400, "Cannot pin archived projects")
 
     project.pinned = not project.pinned
     await save_model(db, project)
-
     return await create_standard_response(
         serialize_project(project),
-        message=f"Project {'pinned' if project.pinned else 'unpinned'} successfully",
+        f"Project {'pinned' if project.pinned else 'unpinned'}"
     )
 
+# ============================
+# Project Stats
+# ============================
 
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
@@ -470,9 +276,7 @@ async def get_project_stats(
     current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    Get statistics for a project including token usage, file count, and knowledge base info.
-    """
+    """Get project statistics"""
     project = await validate_project_access(project_id, current_user, db)
 
     # Get conversation count
@@ -482,221 +286,51 @@ async def get_project_stats(
         Conversation.project_id == project_id,
         Conversation.is_deleted.is_(False),
     )
-    conversation_count = len(conversations)
-
-    # Get file count and size
+    
+    # Get file statistics
     files_result = await db.execute(
-        select(func.count("*"), func.sum(ProjectFile.file_size))  # pylint: disable=not-callable
-        .where(
-            ProjectFile.project_id == project_id
-        )
+        select(
+            func.count(ProjectFile.id),
+            func.sum(ProjectFile.file_size)
+        ).where(ProjectFile.project_id == project_id)
     )
-    files_row = files_result.first()
-    file_count = files_row[0] if files_row else 0
-    total_file_size = files_row[1] if files_row else 0
-
+    file_count, total_size = files_result.first() or (0, 0)
+    
     # Get artifact count
     artifacts = await get_all_by_condition(
         db, Artifact, Artifact.project_id == project_id
     )
-    artifact_count = len(artifacts)
-
-    # Get knowledge base information
-    knowledge_base_info = None
+    
+    # KB information (simplified)
+    kb_info = None
     if project.knowledge_base_id:
-        try:
-            # Get processed files count
-            # Get processed files count using safer query
-            processed_count = await db.scalar(
-                select(func.count("*")).where(  # pylint: disable=not-callable
-                    ProjectFile.project_id == project_id,
-                    text(
-                        "project_files.config->'search_processing'->>'success' = 'true'"
-                    ),
-                )
-            )
-
-            knowledge_base_info = {
-                "id": str(project.knowledge_base_id),
-                "name": project.knowledge_base.name if project.knowledge_base else None,
-                "embedding_model": (
-                    project.knowledge_base.embedding_model
-                    if project.knowledge_base
-                    else None
-                ),
-                "is_active": (
-                    project.knowledge_base.is_active
-                    if project.knowledge_base
-                    else False
-                ),
-                "indexed_files": processed_count or 0,
-                "pending_files": file_count - (processed_count or 0),
-            }
-        except Exception as e:
-            logger.error(f"Error getting knowledge base info: {str(e)}")
-            knowledge_base_info = {
-                "id": str(project.knowledge_base_id),
-                "error": "Could not retrieve full knowledge base information",
-            }
-
-    usage_percentage = (
-        (project.token_usage / project.max_tokens) * 100
-        if project.max_tokens > 0
-        else 0
-    )
-
-    logger.info(
-        f"Returning stats for project {project_id}: {conversation_count} conversations, {file_count} files"
-    )
-    return await create_standard_response(
-        {
-            "token_usage": project.token_usage,
-            "max_tokens": project.max_tokens,
-            "usage_percentage": usage_percentage,
-            "conversation_count": conversation_count,
-            "file_count": file_count,
-            "total_file_size": total_file_size,
-            "artifact_count": artifact_count,
-            "knowledge_base": knowledge_base_info,
+        kb_info = {
+            "id": str(project.knowledge_base_id),
+            "is_active": False,
+            "indexed_files": 0
         }
-    )
-
-
-class KnowledgeBaseCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
-    embedding_model: Optional[str] = Field(None, description="Embedding model to use")
-    process_existing_files: bool = Field(
-        True, description="Process existing files for search"
-    )
-
-
-@router.post("/{project_id}/knowledge-base", response_model=Dict)
-async def create_project_knowledge_base(
-    project_id: UUID,
-    kb_data: KnowledgeBaseCreateRequest,
-    current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-):
-    """Create a knowledge base for a specific project and optionally process existing files."""
-    # Validate project access
-    project = await validate_project_access(project_id, current_user, db)
-
-    # Check if project already has a knowledge base
-    if project.knowledge_base_id:
-        raise HTTPException(
-            status_code=400, detail="Project already has an associated knowledge base"
-        )
-
-    try:
-        # Create knowledge base
-        kb = await knowledgebase_service.create_knowledge_base(
-            name=kb_data.name,
-            project_id=project_id,
-            description=kb_data.description,
-            embedding_model=kb_data.embedding_model,
-            db=db,
-        )
-
-        # Associate with project
-        project.knowledge_base_id = cast(Optional[UUID], kb.id)
-        await db.commit()
-
-        # Process existing files if requested
-        files = {"files": []}  # Default empty files dict
-        processed_files = 0
-        if kb_data.process_existing_files:
-            # Get files
-            # Direct query to get project files since list_project_files was removed from knowledgebase_service
-            project_files = await get_all_by_condition(
-                db,
-                ProjectFile,
-                ProjectFile.project_id == project_id,
-                order_by=ProjectFile.created_at.desc(),
-            )
-
-            files = {
-                "files": [
-                    {
-                        "id": str(file.id),
-                        "filename": file.filename,
-                        "file_type": file.file_type,
-                        "file_size": file.file_size,
-                        "created_at": (
-                            file.created_at.isoformat() if file.created_at else None
-                        ),
-                    }
-                    for file in project_files
-                ]
-            }
-            for file in files.get("files", []):
-                try:
-                    # Get file record
-                    file_query = select(ProjectFile).where(
-                        ProjectFile.id == UUID(str(file["id"])),
+        try:
+            kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+            if kb:
+                kb_info["is_active"] = kb.is_active
+                # Get processed files count
+                processed = await db.scalar(
+                    select(func.count(ProjectFile.id)).where(
                         ProjectFile.project_id == project_id,
+                        ProjectFile.processed_for_search == True  # noqa
                     )
-                    file_result = await db.execute(file_query)
-                    file_record = file_result.scalars().first()
+                )
+                kb_info["indexed_files"] = processed or 0
+        except Exception as e:
+            kb_info["error"] = str(e)
 
-                    if file_record:
-                        # Process file for search
-                        model_name = kb.embedding_model or "all-MiniLM-L6-v2"
-                        if kb.embedding_model is None:
-                            logger.info(
-                                f"Using default embedding model for project {project_id}"
-                            )
-                        vector_db = await get_vector_db(
-                            model_name=model_name,
-                            storage_path=os.path.join(
-                                VECTOR_DB_STORAGE_PATH, str(project_id)
-                            ),
-                            load_existing=True,
-                        )
-
-                        # Get file content
-                        storage_config = {
-                            "storage_type": getattr(
-                                config, "FILE_STORAGE_TYPE", "local"
-                            ),
-                            "local_path": getattr(
-                                config, "LOCAL_UPLOADS_DIR", "./uploads"
-                            ),
-                        }
-                        storage = get_file_storage(storage_config)
-                        file_content = await storage.get_file(file_record.file_path)
-
-                        # Process the file
-                        await process_file_for_search(
-                            project_file=file_record,
-                            vector_db=vector_db,
-                            file_content=file_content,
-                            chunk_size=DEFAULT_CHUNK_SIZE,
-                            chunk_overlap=DEFAULT_CHUNK_OVERLAP,
-                        )
-                        processed_files += 1
-
-                except Exception as e:
-                    logger.error(f"Error processing file {file['id']}: {str(e)}")
-
-        return await create_standard_response(
-            {
-                "knowledge_base_id": str(kb.id),
-                "name": kb.name,
-                "project_id": str(project_id),
-                "processed_files": processed_files,
-                **(
-                    {"total_files": len(files["files"])}
-                    if kb_data.process_existing_files
-                    else {}
-                ),
-            },
-            "Knowledge base created and associated with project successfully",
-        )
-
-    except Exception as e:
-        logger.error(f"Error creating knowledge base for project: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create knowledge base: {str(e)}"
-        ) from e
+    return {
+        "token_usage": project.token_usage,
+        "max_tokens": project.max_tokens,
+        "usage_percentage": project.token_usage / project.max_tokens * 100,
+        "conversation_count": len(conversations),
+        "file_count": file_count,
+        "total_file_size": total_size or 0,
+        "artifact_count": len(artifacts),
+        "knowledge_base": kb_info
+    }

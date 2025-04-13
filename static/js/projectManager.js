@@ -38,6 +38,34 @@
    * @returns {Promise<boolean>} - Auth status
    */
   async function checkAuthenticationWithTimeout(timeout = 1000) {
+    // Make sure window.auth exists and is ready
+    if (!window.auth) {
+      console.warn("[projectManager] Auth module not available");
+      return false;
+    }
+    
+    // If auth is not ready yet, wait for readiness with a timeout
+    if (!window.auth.isReady) {
+      try {
+        await Promise.race([
+          new Promise(resolve => {
+            const checkReady = () => {
+              if (window.auth.isReady) {
+                resolve();
+              } else {
+                setTimeout(checkReady, 100);
+              }
+            };
+            checkReady();
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Auth readiness timed out")), timeout))
+        ]);
+      } catch (err) {
+        console.warn("[projectManager] Auth readiness timed out:", err.message);
+        return false;
+      }
+    }
+    
     try {
       // First attempt: quick check
       return await Promise.race([
@@ -46,8 +74,13 @@
       ]);
     } catch (err) {
       console.warn("[projectManager] Auth check timeout/error:", err.message);
-      // Second attempt: force verify
-      return window.auth.isAuthenticated({ forceVerify: true });
+      try {
+        // Second attempt: force verify
+        return await window.auth.isAuthenticated({ forceVerify: true });
+      } catch (forceErr) {
+        console.warn("[projectManager] Force verify also failed:", forceErr.message);
+        return false;
+      }
     }
   }
 
@@ -56,9 +89,25 @@
    * @throws {Error}
    */
   async function requireAuth() {
-    const isAuthenticated = await checkAuthenticationWithTimeout();
-    if (!isAuthenticated) {
+    try {
+      // Try with increased timeout first
+      const isAuthenticated = await checkAuthenticationWithTimeout(3000);
+      if (isAuthenticated) {
+        return;
+      }
+      
+      // If first attempt fails but auth is ready, try once more with force verify
+      if (window.auth?.isReady) {
+        const retryResult = await window.auth.isAuthenticated({ forceVerify: true });
+        if (retryResult) {
+          return;
+        }
+      }
+      
       throw new Error("Not authenticated - please login first");
+    } catch (err) {
+      console.warn("[projectManager] Authentication required error:", err.message);
+      throw new Error("Authentication failed - please login again");
     }
   }
 
@@ -80,8 +129,23 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
-      // Check authentication
-      const isAuthenticated = await checkAuthenticationWithTimeout();
+      // Check authentication with increased timeout
+      let isAuthenticated = false;
+      try {
+        isAuthenticated = await checkAuthenticationWithTimeout(3000);
+      } catch (authError) {
+        console.warn('[ProjectManager] Auth check error:', authError.message);
+        // Try one more time with force verify if auth module is ready
+        if (window.auth?.isReady) {
+          try {
+            isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+          } catch (retryError) {
+            console.warn('[ProjectManager] Force verify also failed:', retryError.message);
+            isAuthenticated = false;
+          }
+        }
+      }
+      
       if (!isAuthenticated) {
         console.warn('[ProjectManager] Not authenticated, returning empty projects list');
         emitEvent("projectsLoaded", {
@@ -849,9 +913,26 @@
   async function initialize() {
     console.log("[projectManager] Initializing...");
 
-    // Attempt a quick auth check (non-blocking errors are caught)
+    // Wait for auth module to be ready before checking
+    if (window.auth && !window.auth.isReady) {
+      console.log("[projectManager] Waiting for auth module to be ready...");
+      await new Promise(resolve => {
+        const checkAuth = () => {
+          if (window.auth.isReady) {
+            resolve();
+          } else {
+            setTimeout(checkAuth, 100);
+          }
+        };
+        checkAuth();
+        // Fallback timeout in case isReady never becomes true
+        setTimeout(resolve, 2000);
+      });
+    }
+
+    // Attempt a quick auth check with longer timeout (non-blocking errors are caught)
     try {
-      const isAuthenticated = await checkAuthenticationWithTimeout(500);
+      const isAuthenticated = await checkAuthenticationWithTimeout(2000);
       console.log("[projectManager] Authenticated:", isAuthenticated);
     } catch (err) {
       console.warn("[projectManager] Initialization auth check failed:", err.message);
