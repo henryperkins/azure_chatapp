@@ -1359,6 +1359,12 @@
     import { ProjectDetailsComponent } from '/static/js/projectDetailsComponent.js'; // Import the class
     import '/static/js/sidebar.js';
 
+    // Load the debug utility last after everything else is loaded
+    const debugScript = document.createElement('script');
+    debugScript.src = '/static/js/debug-project.js';
+    debugScript.onload = () => console.log('Debug utilities loaded');
+    document.head.appendChild(debugScript);
+
     // Centralized initialization after the DOM is ready
     document.addEventListener('DOMContentLoaded', async () => {
       console.log('[index.html] Document loaded, initializing application...');
@@ -1590,15 +1596,15 @@
           const targetElement = mutation.target;
           if (!targetElement.classList.contains('hidden')) {
             console.log('[ProjectDetailsView] View became visible');
-            
+
             // Get the project ID from either the local storage or the element's data attribute
             const projectId = localStorage.getItem('selectedProjectId') ||
                              document.getElementById('projectTitle')?.dataset.projectId;
-            
+
             // Only attempt to initialize chat if we have a valid project ID
             if (projectId) {
               console.log(`[ProjectDetailsView] Found project ID: ${projectId}, configuring chat.`);
-              
+
               // Attempt to configure the chat interface specifically for this view
               if (window.chatInterface && typeof window.chatInterface.configureSelectors === 'function') {
                 window.chatInterface.configureSelectors({

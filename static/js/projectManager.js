@@ -9,6 +9,15 @@
 
 (function () {
   /* ===========================
+     API ENDPOINTS
+     =========================== */
+  // Define API endpoints configuration
+  const API_ENDPOINTS = {
+    PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
+    PROJECT_FILES: '/api/projects/{projectId}/files/'
+  };
+
+  /* ===========================
      STATE MANAGEMENT
      =========================== */
   // Store the current project in memory for convenience
@@ -43,7 +52,7 @@
       console.warn("[projectManager] Auth module not available");
       return false;
     }
-    
+
     // If auth is not ready yet, wait for readiness with a timeout
     if (!window.auth.isReady) {
       try {
@@ -65,7 +74,7 @@
         return false;
       }
     }
-    
+
     try {
       // First attempt: quick check
       return await Promise.race([
@@ -95,7 +104,7 @@
       if (isAuthenticated) {
         return;
       }
-      
+
       // If first attempt fails but auth is ready, try once more with force verify
       if (window.auth?.isReady) {
         const retryResult = await window.auth.isAuthenticated({ forceVerify: true });
@@ -103,7 +112,7 @@
           return;
         }
       }
-      
+
       throw new Error("Not authenticated - please login first");
     } catch (err) {
       console.warn("[projectManager] Authentication required error:", err.message);
@@ -145,7 +154,7 @@
           }
         }
       }
-      
+
       if (!isAuthenticated) {
         console.warn('[ProjectManager] Not authenticated, returning empty projects list');
         emitEvent("projectsLoaded", {
@@ -645,7 +654,7 @@
       const endpoint = API_ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
       const response = await window.apiRequest(
         endpoint,
-        "POST", 
+        "POST",
         formData
       );
 
@@ -759,7 +768,7 @@
 
       const response = await window.apiRequest(
         `/api/projects/${projectId}/conversations`,
-        "POST", 
+        "POST",
         payload
       );
 
@@ -841,7 +850,8 @@
    */
   async function loadKnowledgeBaseDetails(knowledgeBaseId) {
     try {
-      const kbData = await window.apiRequest(`/api/projects/${currentProject?.id}/knowledge-base`, "GET");
+      // Use the correct endpoint that exists in the API
+      const kbData = await window.apiRequest(`/api/knowledge-bases/${knowledgeBaseId}`, "GET");
       // Attach to currentProject if relevant
       if (currentProject) {
         currentProject.knowledge_base = kbData.data || kbData;
@@ -954,14 +964,19 @@
   /* ===============================
      CHAT MANAGER FUNCTIONALITY
      =============================== */
-  window.ChatManager = {
-    /**
-     * Initialize a project chat component
-     * @param {string} containerSelector - The selector for the chat container
-     * @param {Object} options - Configuration options
-     * @returns {Object} The chat interface instance
-     */
-    initializeProjectChat(containerSelector, options = {}) {
+  // Instead of overwriting the ChatManager object defined in chat-core.js,
+  // extend it if it exists, or create a minimal version with only what's needed
+  if (!window.ChatManager) {
+    console.log('[ProjectManager] Creating new ChatManager object');
+    window.ChatManager = {};
+  } else {
+    console.log('[ProjectManager] Found existing ChatManager, preserving functionality');
+  }
+
+  // Add the project-specific chat initialization function to ChatManager
+  // (but don't overwrite if it already exists)
+  if (!window.ChatManager.initializeProjectChat) {
+    window.ChatManager.initializeProjectChat = function(containerSelector, options = {}) {
       console.log('[ChatManager] Initializing project chat with selector:', containerSelector);
 
       if (!window.ChatInterface) {
@@ -1008,8 +1023,10 @@
       }
 
       return window.projectChatInterface;
-    }
-  };
+    };
+  } else {
+    console.log('[ProjectManager] ChatManager.initializeProjectChat already exists, not overwriting');
+  }
 
   /* ===============================
      FINAL EXPORTS

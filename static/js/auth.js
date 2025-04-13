@@ -38,7 +38,7 @@ const AUTH_CONSTANTS = {
 
 /** Returns the cookie value by name or null if missing. */
 function getCookie(name) {
-  const c = `; ${document.cookie}`.split(`; ${name}=`); 
+  const c = `; ${document.cookie}`.split(`; ${name}=`);
   if (c.length === 2) return c.pop().split(';').shift();
   return null;
 }
@@ -48,7 +48,7 @@ function setAuthCookie(name, value, maxAgeSeconds) {
   const secure = location.protocol === 'https:' ? 'Secure; ' : '';
   const sameSite = 'SameSite=Strict';
   const path = '/;';
-  
+
   if (!value) {
     // Clear cookie
     document.cookie = `${name}=; path=${path} expires=Thu, 01 Jan 1970 00:00:00 GMT; ${secure}${sameSite}`;
@@ -339,7 +339,7 @@ async function getAuthToken(options = {}) {
 
 /**
  * Master function to verify the user's auth state with the server.
- * If tokens are present but invalid, tries refresh. 
+ * If tokens are present but invalid, tries refresh.
  * If forced, calls `/api/auth/verify` up to MAX_VERIFY_ATTEMPTS.
  */
 async function verifyAuthState(bypassCache = false) {
@@ -350,7 +350,7 @@ async function verifyAuthState(bypassCache = false) {
   if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) return false;
   if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) sessionExpiredFlag = false;
 
-  if (!bypassCache && authState.lastVerified && 
+  if (!bypassCache && authState.lastVerified &&
       (Date.now() - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION)) {
     return authState.isAuthenticated;
   }
@@ -428,7 +428,7 @@ async function verifyAuthState(bypassCache = false) {
  * ---------------------------------- */
 
 function broadcastAuth(authenticated, username = null) {
-  const changed = (authState.isAuthenticated !== authenticated) || 
+  const changed = (authState.isAuthenticated !== authenticated) ||
                   (authState.username !== username);
   authState.isAuthenticated = authenticated;
   authState.username = username;
@@ -497,6 +497,37 @@ async function loginUser(username, password) {
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
+
+    // Prepare for post-login steps
+    const postLoginTasks = async () => {
+      try {
+        // Ensure we have a selected project after login
+        const selectedProjectId = localStorage.getItem('selectedProjectId');
+        if (!selectedProjectId && window.projectManager?.loadProjects) {
+          console.log("[Auth] No project selected, loading first available project after login");
+          const response = await window.projectManager.loadProjects('all');
+          if (response?.data?.projects?.length > 0) {
+            const firstProject = response.data.projects[0];
+            localStorage.setItem('selectedProjectId', firstProject.id);
+            console.log(`[Auth] Selected first project after login: ${firstProject.id} (${firstProject.name})`);
+
+            // Force render project list if component exists
+            if (window.projectListComponent?.forceRender) {
+              setTimeout(() => {
+                console.log("[Auth] Forcing project list render after selection");
+                window.projectListComponent.forceRender();
+              }, 300);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[Auth] Error in post-login tasks:", err);
+      }
+    };
+
+    // Run post-login tasks but don't block the login response
+    setTimeout(() => postLoginTasks(), 100);
+
     broadcastAuth(true, authState.username);
 
     return { ...response, success: true };
@@ -709,12 +740,12 @@ async function init() {
         console.warn("[Auth] Initial verification failed:", error);
       }
     }
-    
+
     // Set initialization flags
     window.auth.isInitialized = true;
     window.auth.isReady = true;
     console.log("[Auth] Module initialized");
-    
+
     // Dispatch authReady event for components waiting on auth
     document.dispatchEvent(new CustomEvent('authReady', {
       detail: {
@@ -722,12 +753,12 @@ async function init() {
         username: authState.username
       }
     }));
-    
+
     return true;
   } catch (error) {
     console.error("[Auth] Initialization failed:", error);
     if (!authState.isAuthenticated) broadcastAuth(false);
-    
+
     // Even on failure, dispatch the event to unblock waiting components
     document.dispatchEvent(new CustomEvent('authReady', {
       detail: {
@@ -735,7 +766,7 @@ async function init() {
         error: error.message
       }
     }));
-    
+
     return false;
   } finally {
     if (window.API_CONFIG) window.API_CONFIG.authCheckInProgress = false;
