@@ -320,9 +320,9 @@
    * @returns {Promise<Array>}
    */
   async function loadProjectConversations(projectId) {
-    const endpoint = `/api/chat/projects/${projectId}/conversations`;
     try {
       await requireAuth();
+      const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
       const response = await window.apiRequest(endpoint, "GET");
       let conversations = [];
 
