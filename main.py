@@ -42,7 +42,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
 from fastapi.exceptions import RequestValidationError
-from starlette.routing import WebSocketRoute
 from starlette.datastructures import URL
 
 # Lifespan import removed - using event handlers instead
@@ -51,7 +50,6 @@ from starlette.datastructures import URL
 # Import your routes
 # -------------------------
 from routes.unified_conversations import router as unified_conversations_router
-from routes import unified_conversations  # for direct WebSocketRoute reference
 from auth import router as auth_router, create_default_user
 from routes.projects.projects import router as projects_router
 from routes.knowledge_base_routes import router as knowledge_base_router
@@ -459,7 +457,9 @@ if settings.ENV != "production":
         This endpoint will cause a division by zero error which
         should be reported to the Sentry dashboard.
         """
-        division_by_zero = 1 / 0
+        # Explicitly raise an exception for Sentry testing
+        raise ZeroDivisionError("Test error for Sentry")
+        # The following line is unreachable, kept for documentation
         return {"status": "This will never be returned"}
 
 

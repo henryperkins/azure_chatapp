@@ -1589,35 +1589,42 @@
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
           const targetElement = mutation.target;
           if (!targetElement.classList.contains('hidden')) {
-            console.log('[ProjectDetailsView] View became visible, attempting to configure chat.');
-            // Attempt to configure the chat interface specifically for this view
-            if (window.chatInterface && typeof window.chatInterface.configureSelectors === 'function') {
-              window.chatInterface.configureSelectors({
-                container: "#projectChatUI",
-                messages: "#projectChatMessages",
-                input: "#projectChatInput",
-                sendButton: "#projectChatSendBtn" // Use 'sendButton' as per chat-ui.js logs
-              });
-              console.log('[ProjectDetailsView] Chat selectors configured.');
-            } else if (window.ChatManager && typeof window.ChatManager.initializeProjectChat === 'function') {
-              // Alternative: Use a dedicated manager if available
-              const projectId = document.getElementById('projectTitle')?.dataset.projectId; // Assuming projectId is stored somewhere accessible
-              if (projectId) {
-                window.ChatManager.initializeProjectChat(projectId, {
+            console.log('[ProjectDetailsView] View became visible');
+            
+            // Get the project ID from either the local storage or the element's data attribute
+            const projectId = localStorage.getItem('selectedProjectId') ||
+                             document.getElementById('projectTitle')?.dataset.projectId;
+            
+            // Only attempt to initialize chat if we have a valid project ID
+            if (projectId) {
+              console.log(`[ProjectDetailsView] Found project ID: ${projectId}, configuring chat.`);
+              
+              // Attempt to configure the chat interface specifically for this view
+              if (window.chatInterface && typeof window.chatInterface.configureSelectors === 'function') {
+                window.chatInterface.configureSelectors({
                   container: "#projectChatUI",
                   messages: "#projectChatMessages",
                   input: "#projectChatInput",
-                  sendBtn: "#projectChatSendBtn" // Use 'sendBtn' if ChatManager expects this
+                  sendButton: "#projectChatSendBtn",
+                  getProjectId: () => projectId
+                });
+                console.log('[ProjectDetailsView] Chat selectors configured.');
+              } else if (window.ChatManager && typeof window.ChatManager.initializeProjectChat === 'function') {
+                // Alternative: Use a dedicated manager if available
+                window.ChatManager.initializeProjectChat('#projectChatContainer', {
+                  messageContainer: "#projectChatMessages",
+                  inputField: "#projectChatInput",
+                  sendButton: "#projectChatSendBtn",
+                  getProjectId: () => projectId
                 });
                 console.log('[ProjectDetailsView] ChatManager initialized project chat.');
               } else {
-                console.warn('[ProjectDetailsView] Could not find project ID to initialize chat.');
+                console.warn('[ProjectDetailsView] Could not find chatInterface.configureSelectors or ChatManager.initializeProjectChat.');
               }
             } else {
-              console.warn('[ProjectDetailsView] Could not find chatInterface.configureSelectors or ChatManager.initializeProjectChat.');
+              // Don't try to initialize chat without a project ID
+              console.log('[ProjectDetailsView] No project ID available, skipping chat initialization.');
             }
-            // Optional: Disconnect observer if configuration should only happen once per view load
-            // projectDetailsObserver.disconnect();
           }
         }
       }
