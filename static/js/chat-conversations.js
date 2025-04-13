@@ -312,9 +312,10 @@ window.ConversationService = class ConversationService {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const url = projectId
-          ? `/api/projects/${projectId}/conversations`
-          : `/api/chat/conversations`;
+        if(!projectId){
+          throw new Error("No project is currently selected. Please select a project before creating a conversation.");
+        }
+        const url = `/api/projects/${projectId}/conversations`;
 
         const data = await apiRequest(url, "POST", {
           title: defaultTitle,

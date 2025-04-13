@@ -131,6 +131,27 @@
       if (!this.element) {
         this._createFallbackContainer();
       }
+
+      // Double-check that our elements are set up correctly
+      if (!this.element) {
+        console.error("[ProjectListComponent] Failed to find or create the element with ID:", this.elementId);
+      }
+
+      // Ensure the messageEl is available
+      if (!this.messageEl) {
+        this.messageEl = document.querySelector("#noProjectsMessage") ||
+                         document.createElement('div');
+        if (this.messageEl.id !== "noProjectsMessage") {
+          this.messageEl.id = "noProjectsMessage";
+          this.messageEl.className = "hidden text-center py-8 text-gray-500";
+          const listView = document.getElementById('projectListView');
+          if (listView) {
+            listView.appendChild(this.messageEl);
+          } else {
+            document.body.appendChild(this.messageEl);
+          }
+        }
+      }
     }
 
     _createFallbackContainer() {

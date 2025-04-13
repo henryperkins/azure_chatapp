@@ -225,6 +225,15 @@
 
       console.log('Initializing chat system...'); // Moved log
 
+      // --- NEW: Project Check ---
+      const projectId = localStorage.getItem("selectedProjectId");
+      if (!projectId) {
+        console.warn('[ChatManager] No project selected, will initialize without creating conversation');
+      } else {
+        console.log(`[ChatManager] Found selected project: ${projectId}`);
+      }
+      // --- END PROJECT CHECK ---
+
       // --- NEW: Final Auth Check ---
       console.log('[ChatManager] Performing final authentication check before initializing ChatInterface...');
       try {

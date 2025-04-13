@@ -284,77 +284,101 @@ window.ChatInterface.prototype._checkDependencies = function () {
  * @private
  * @returns {Promise} Promise that resolves when initial conversation is ready
  */
-window.ChatInterface.prototype._handleInitialConversation = async function () {
-  const MAX_AUTH_WAIT_ATTEMPTS = 5;
-  
-  // First check if we have a conversation ID to load
-  if (this.currentChatId) {
-    Logger.info(`Initial conversation: Loading existing chat ID: ${this.currentChatId}`);
-    return this.loadConversation(this.currentChatId);
-  }
-  
-  // Wait for auth if it's still initializing with a timeout
-  let waitAttempt = 0;
-  while (window.__authInitializing && waitAttempt < MAX_AUTH_WAIT_ATTEMPTS) {
-    Logger.info(`Auth is initializing, waiting before creating conversation (attempt ${waitAttempt + 1}/${MAX_AUTH_WAIT_ATTEMPTS})`);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    waitAttempt++;
-  }
-  
-  // Give up waiting if it takes too long
-  if (window.__authInitializing) {
-    Logger.warn('Auth initialization is taking too long, proceeding anyway');
-  }
-
-  try {
-    // Try to check authentication status
-    let isAuthenticated = false;
-    let authError = null;
+  window.ChatInterface.prototype._handleInitialConversation = async function () {
+    const MAX_AUTH_WAIT_ATTEMPTS = 5;
     
-    try {
-      Logger.info('Verifying authentication before creating conversation');
-      isAuthenticated = await this._verifyAuthentication();
-    } catch (verifyError) {
-      authError = verifyError;
-      Logger.warn('Authentication verification error:', verifyError);
-      
-      // Fall back to checking auth state directly as a last resort
-      if (window.auth?.authState?.isAuthenticated) {
-        Logger.info('Verification failed but auth state indicates user is authenticated, proceeding');
-        isAuthenticated = true;
-      }
+    // First check if we have a conversation ID to load
+    if (this.currentChatId) {
+      Logger.info(`Initial conversation: Loading existing chat ID: ${this.currentChatId}`);
+      return this.loadConversation(this.currentChatId);
     }
 
-    if (!isAuthenticated) {
-      // Show login required message with more details about the error
-      const loginMsg = document.getElementById("loginRequiredMessage");
-      if (loginMsg) {
-        loginMsg.classList.remove("hidden");
-        // If there's an error message element inside loginRequiredMessage, update it
-        const errorElement = loginMsg.querySelector('.error-details');
-        if (errorElement && authError) {
-          errorElement.textContent = `Error: ${authError.message || 'Authentication required'}`;
+    // Check if a project is selected
+    const projectId = localStorage.getItem("selectedProjectId");
+    if (!projectId) {
+      Logger.warn('No project is currently selected, skipping conversation creation');
+      const noChatMsg = document.getElementById("noChatSelectedMessage");
+      if (noChatMsg) {
+        noChatMsg.classList.remove("hidden");
+        // Update message to indicate a project selection is needed
+        const msgContent = noChatMsg.querySelector('.content-message');
+        if (msgContent) {
+          msgContent.textContent = 'Please select a project before creating a conversation.';
         }
       }
-      Logger.info('User is not authenticated, showing login message');
-      return Promise.reject(new Error(authError?.message || 'Not authenticated'));
+      const projectsBtn = document.querySelector('.sidebar-action-btn[data-action="projects"]');
+      if (projectsBtn) {
+        Logger.info('Highlighting the projects button to guide the user');
+        projectsBtn.classList.add('animate-pulse', 'bg-blue-50', 'dark:bg-blue-900/20');
+        setTimeout(() => {
+          projectsBtn.classList.remove('animate-pulse', 'bg-blue-50', 'dark:bg-blue-900/20');
+        }, 5000);
+      }
+      return Promise.resolve(false);
+    }
+    
+    // Wait for auth if it's still initializing with a timeout
+    let waitAttempt = 0;
+    while (window.__authInitializing && waitAttempt < MAX_AUTH_WAIT_ATTEMPTS) {
+      Logger.info(`Auth is initializing, waiting before creating conversation (attempt ${waitAttempt + 1}/${MAX_AUTH_WAIT_ATTEMPTS})`);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      waitAttempt++;
+    }
+    
+    // Give up waiting if it takes too long
+    if (window.__authInitializing) {
+      Logger.warn('Auth initialization is taking too long, proceeding anyway');
     }
 
-    Logger.info('User is authenticated, creating new conversation');
-    // If we got here, we should be authenticated, create new conversation
-    if (!this.currentChatId) {
-      return this.createNewConversation()
-        .catch(error => {
-          // Use ChatUtils error handler if available
-          if (window.ChatUtils?.handleError) {
-            window.ChatUtils.handleError('Creating new conversation', error, this.notificationFunction);
-          } else {
-            Logger.error('Error creating conversation:', error);
-            this.notificationFunction?.('Failed to create conversation: ' + error.message, 'error');
+    try {
+      // Try to check authentication status
+      let isAuthenticated = false;
+      let authError = null;
+      
+      try {
+        Logger.info('Verifying authentication before creating conversation');
+        isAuthenticated = await this._verifyAuthentication();
+      } catch (verifyError) {
+        authError = verifyError;
+        Logger.warn('Authentication verification error:', verifyError);
+        
+        // Fall back to checking auth state directly as a last resort
+        if (window.auth?.authState?.isAuthenticated) {
+          Logger.info('Verification failed but auth state indicates user is authenticated, proceeding');
+          isAuthenticated = true;
+        }
+      }
+
+      if (!isAuthenticated) {
+        // Show login required message with more details about the error
+        const loginMsg = document.getElementById("loginRequiredMessage");
+        if (loginMsg) {
+          loginMsg.classList.remove("hidden");
+          // If there's an error message element inside loginRequiredMessage, update it
+          const errorElement = loginMsg.querySelector('.error-details');
+          if (errorElement && authError) {
+            errorElement.textContent = `Error: ${authError.message || 'Authentication required'}`;
           }
-          throw error;
-        });
-    }
+        }
+        Logger.info('User is not authenticated, showing login message');
+        return Promise.reject(new Error(authError?.message || 'Not authenticated'));
+      }
+
+      Logger.info('User is authenticated, creating new conversation');
+      // If we got here, we should be authenticated, create new conversation
+      if (!this.currentChatId) {
+        return this.createNewConversation()
+          .catch(error => {
+            // Use ChatUtils error handler if available
+            if (window.ChatUtils?.handleError) {
+              window.ChatUtils.handleError('Creating new conversation', error, this.notificationFunction);
+            } else {
+              Logger.error('Error creating conversation:', error);
+              this.notificationFunction?.('Failed to create conversation: ' + error.message, 'error');
+            }
+            throw error;
+          });
+      }
   } catch (error) {
     Logger.warn('Error in initial conversation setup:', error);
     
@@ -831,6 +855,28 @@ window.ChatInterface.prototype._performAuthCheck = async function () {
  * @returns {Promise<Object>} The created conversation
  */
 window.ChatInterface.prototype._createConversationWithRetry = async function () {
+  // Check for a selected project first
+  const projectId = localStorage.getItem("selectedProjectId");
+  if (!projectId) {
+    Logger.error("No project is currently selected. Please select a project before creating a conversation.");
+    
+    // Show a user-friendly notification
+    this.notificationFunction("Please select a project before creating a conversation", "warning");
+    
+    // Update UI to guide the user
+    const noChatMsg = document.getElementById("noChatSelectedMessage");
+    if (noChatMsg) {
+      noChatMsg.classList.remove("hidden");
+      // Update message to indicate a project selection is needed
+      const msgContent = noChatMsg.querySelector('.content-message');
+      if (msgContent) {
+        msgContent.textContent = 'Please select a project before creating a conversation.';
+      }
+    }
+    
+    throw new Error("No project is currently selected. Please select a project before creating a conversation.");
+  }
+
   for (let attempt = 1; attempt <= CONFIG.MAX_AUTH_RETRIES; attempt++) {
     try {
       let conversation;
@@ -855,6 +901,13 @@ window.ChatInterface.prototype._createConversationWithRetry = async function () 
             Logger.warn("User not authenticated, skipping conversation creation.");
             return null;
           }
+          
+          // Always check for project ID again just to be sure
+          const currentProjectId = localStorage.getItem("selectedProjectId");
+          if (!currentProjectId) {
+            throw new Error("Project selection required for conversation creation");
+          }
+          
           conversation = await this.conversationService.createNewConversation();
         }
       }

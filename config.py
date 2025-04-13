@@ -53,6 +53,11 @@ class Settings:
     # Use "put.photo" in production, empty string otherwise for local dev
     COOKIE_DOMAIN: str = "put.photo" if ENV == "production" else ""
 
+    # Allowed hosts - security setting for host header validation
+    ALLOWED_HOSTS: list[str] = (
+        ["put.photo"] if ENV == "production" 
+        else ["localhost", "127.0.0.1", "0.0.0.0"]
+    )
 
     # --- Unified Model Configurations ---
 
