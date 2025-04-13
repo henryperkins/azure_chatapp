@@ -340,30 +340,70 @@ window.ChatInterface.prototype._handleInitialConversation = async function () {
  * @returns {Promise<boolean>} Promise resolving to authentication state
  */
 window.ChatInterface.prototype._verifyAuthentication = async function (options = {}) {
+  const MAX_VERIFY_ATTEMPTS = 3;
+  const INITIAL_DELAY = 150; // Start with a slightly longer delay
+
   try {
     // First make sure auth is initialized
     if (!window.auth?.isInitialized) {
+      Logger.info('Auth not initialized, calling init...');
       await window.auth.init();
+      Logger.info('Auth init completed.');
+    } else {
+       // If already initialized, wait briefly for state stabilization
+       await new Promise(resolve => setTimeout(resolve, 50));
     }
 
-    // Wait a small amount to let auth state settle
-    await new Promise(resolve => setTimeout(resolve, 100));
+    for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
+      Logger.debug(`Verification attempt ${attempt}/${MAX_VERIFY_ATTEMPTS}`);
+      let isAuthenticated = false;
+      let verificationError = null;
 
-    let isAuthenticated = false;
-    try {
-      // Try to verify auth state with error handling
-      isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
-    } catch (verifyError) {
-      Logger.warn('Auth verification error:', verifyError);
-      if (window.auth.authState?.isAuthenticated) {
-        isAuthenticated = true;
+      try {
+        // Use the auth module's state if available and seems valid
+        if (window.auth?.authState?.isAuthenticated && (Date.now() - window.auth.authState.lastVerified < 5000)) {
+           Logger.debug('Using recently verified auth state');
+           isAuthenticated = true;
+        } else {
+           // Otherwise, perform the check
+           isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        }
+
+      } catch (err) {
+        verificationError = err;
+        Logger.warn(`Attempt ${attempt} verification error:`, err);
+        // If the error suggests the user *is* authenticated despite the error, trust that
+        if (window.auth?.authState?.isAuthenticated) {
+           Logger.warn('Verification threw error, but authState is true. Proceeding as authenticated.');
+           isAuthenticated = true;
+           verificationError = null; // Clear error as we are overriding
+        }
+      }
+
+      if (isAuthenticated) {
+        Logger.info(`Verification successful on attempt ${attempt}`);
+        return true; // Exit loop on success
+      }
+
+      // If verification failed and it's not the last attempt, wait and retry
+      if (attempt < MAX_VERIFY_ATTEMPTS) {
+        const delay = INITIAL_DELAY * Math.pow(2, attempt - 1);
+        Logger.info(`Verification failed on attempt ${attempt}, retrying after ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        // Last attempt failed
+        Logger.error('All verification attempts failed.', verificationError);
+        // Throw the last encountered error or a generic one
+        throw verificationError || new Error('Authentication verification failed after multiple attempts.');
       }
     }
+    // Should not be reached if logic is correct, but return false as a fallback
+    return false;
 
-    return isAuthenticated;
   } catch (error) {
     Logger.error('Authentication verification failed:', error);
-    return false;
+    // Propagate the error to be handled by the caller (_handleInitialConversation)
+    throw error; // Re-throw the error
   }
 };
 

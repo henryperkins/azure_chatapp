@@ -1474,9 +1474,12 @@ function setupUIListeners() {
 
       // Instead of directly calling renderProjects, redirect to the projects page
       // which will properly load the projects through normal initialization
-      window.location.href = '/?view=projects';
+      // Explicitly redirect to project view and force a page reload to ensure
+      // all components initialize properly after login
+      console.log('[Auth] Login successful, redirecting to projects view');
+      window.location.href = '/?view=projects&fresh=true';
 
-      // In case the redirect doesn't happen immediately, show visual feedback
+      // In case the redirect doesn't happen immediately show visual feedback
       this.closest('#authDropdown')?.classList.remove('animate-slide-in');
     } catch (error) {
       // Standardize error for logging
@@ -1616,6 +1619,156 @@ function setupUIListeners() {
       }
     }
   });
+
+  // --- NEW: Add Login Form Submit Handler ---
+  loginForm?.addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const usernameInput = document.getElementById('login-username');
+    const passwordInput = document.getElementById('login-password');
+    const submitBtn = document.getElementById('loginSubmitBtn'); // Use the button ID from index.html
+    const errorMsg = document.getElementById('login-error');
+
+    // Create logging context with safe user information
+    const logContext = {
+      username: formData.get("username"),
+      timestamp: Date.now(),
+      userAgent: navigator.userAgent,
+      formId: 'loginForm',
+      requestId: Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
+    };
+
+    // Get submit button state
+    const originalText = submitBtn?.textContent || 'Log In'; // Default text
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto text-white" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    }
+    if (errorMsg) errorMsg.classList.add('hidden');
+
+
+    // Validate input fields
+    if (!formData.get("username")?.trim()) {
+      logFormIssue('EMPTY_CREDENTIALS', { ...logContext, field: 'username' });
+      notify("Username is required", "error");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
+      if (errorMsg) {
+         errorMsg.textContent = "Username is required";
+         errorMsg.classList.remove('hidden');
+      }
+      return;
+    }
+    if (!formData.get("password")) {
+       logFormIssue('EMPTY_CREDENTIALS', { ...logContext, field: 'password' });
+       notify("Password is required", "error");
+       if (submitBtn) {
+         submitBtn.disabled = false;
+         submitBtn.textContent = originalText;
+       }
+       if (errorMsg) {
+          errorMsg.textContent = "Password is required";
+          errorMsg.classList.remove('hidden');
+       }
+       return;
+    }
+
+
+    if (AUTH_DEBUG) {
+      console.debug('[Auth] Form submission started via auth.js listener', {
+        ...logContext,
+        inputValid: true
+      });
+    }
+
+    // Set a safety timeout to re-enable the form if something goes wrong
+    const safetyTimeout = setTimeout(() => {
+      logFormIssue('TIMEOUT', {
+        ...logContext,
+        duration: Date.now() - logContext.timestamp,
+        message: "Login request timed out - no response received"
+      });
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
+      if (errorMsg) {
+         errorMsg.textContent = "Login request timed out. Please try again.";
+         errorMsg.classList.remove('hidden');
+      }
+    }, 10000);  // 10 second safety timeout
+
+    try {
+      if (window.__loginInProgress) {
+        logFormIssue('CONCURRENT_LOGIN', {
+          ...logContext,
+          message: "Another login attempt already in progress"
+        });
+        // Optionally notify user or just let the other attempt finish
+      }
+
+      // Call the loginUser function from auth.js
+      await loginUser(formData.get("username"), formData.get("password"));
+
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Login successful via auth.js listener', {
+          ...logContext,
+          duration: Date.now() - logContext.timestamp,
+          status: 'SUCCESS'
+        });
+      }
+
+      // Login successful - authStateChanged event will handle UI updates
+      // Close the dropdown manually
+      const authDropdown = document.getElementById('authDropdown');
+      if (authDropdown) {
+        authDropdown.classList.add('hidden');
+        authDropdown.classList.remove('animate-slide-in');
+      }
+
+    } catch (error) {
+      // Standardize error for logging
+      const standardError = window.auth.standardizeError(error, 'login_form_listener');
+
+      logFormIssue(
+        standardError.code === 'SESSION_EXPIRED' ? 'SESSION_EXPIRED' :
+        error.status === 429 ? 'RATE_LIMIT' : 'LOGIN_FAILURE',
+        {
+          ...logContext,
+          status: error.status,
+          message: error.message,
+          code: standardError.code,
+          duration: Date.now() - logContext.timestamp
+        }
+      );
+
+      notify(error.message || "Login failed", "error");
+      if (errorMsg) {
+         errorMsg.textContent = error.message || "Login failed";
+         errorMsg.classList.remove('hidden');
+      }
+    } finally {
+      // Clear the safety timeout since we've reached the finally block
+      clearTimeout(safetyTimeout);
+
+      // Re-enable the form
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText; // Restore original text/content
+      }
+
+      if (AUTH_DEBUG) {
+        console.debug('[Auth] Form submission completed via auth.js listener', {
+          requestId: logContext.requestId,
+          totalDuration: Date.now() - logContext.timestamp
+        });
+      }
+    }
+  });
+  // --- END NEW ---
+
   document.getElementById("logoutBtn")?.addEventListener("click", logout);
 }
 
@@ -1689,7 +1842,7 @@ function handleAuthError(error, context = '') {
   return false;
 }
 
-// Show a standardized session expired modal
+// Show a standardized session expired Modal
 function showSessionExpiredModal() {
   if (window.showNotification) {
     window.showNotification("Your session has expired. Please log in again.", "error");

@@ -21,6 +21,9 @@
 
   <!-- CSRF token with dynamic injection pattern -->
   <meta name="csrf-token" content="" id="csrfToken" />
+
+  <!-- Login debugging script -->
+  <script src="/static/js/login-debug.js" defer></script>
 </head>
 
 <body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
@@ -81,140 +84,15 @@
                   class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm">
               </div>
               <div id="login-error" class="text-red-500 text-xs mb-2 hidden"></div>
-              <button type="button" id="loginSubmitBtn" onclick="submitLoginForm()"
+              <!-- Removed onclick, changed type to submit -->
+              <button type="submit" id="loginSubmitBtn"
                 class="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-colors">
                 Log In
               </button>
             </form>
 
-            <script>
-              function submitLoginForm() {
-                const AUTH_DEBUG = window.AUTH_DEBUG || true;
-                const timestamp = new Date().toISOString();
+            <!-- Removed inline script block -->
 
-                // Get form elements
-                const usernameInput = document.getElementById('login-username');
-                const passwordInput = document.getElementById('login-password');
-                const submitBtn = document.getElementById('loginSubmitBtn');
-                const errorMsg = document.getElementById('login-error');
-
-                if (AUTH_DEBUG) {
-                  console.debug(`[Auth][${timestamp}] Login form submission initiated`);
-                  console.debug("[Auth] Form state:", {
-                    hasUsername: !!usernameInput?.value,
-                    usernameLength: usernameInput?.value?.trim()?.length || 0,
-                    hasPassword: !!passwordInput?.value,
-                    passwordLength: passwordInput?.value?.length || 0
-                  });
-                }
-
-                // Validate inputs
-                if (!usernameInput.value.trim()) {
-                  if (AUTH_DEBUG) console.debug("[Auth] Validation failed: Username is required");
-                  errorMsg.textContent = "Username is required";
-                  errorMsg.classList.remove('hidden');
-                  return;
-                }
-                if (!passwordInput.value) {
-                  if (AUTH_DEBUG) console.debug("[Auth] Validation failed: Password is required");
-                  errorMsg.textContent = "Password is required";
-                  errorMsg.classList.remove('hidden');
-                  return;
-                }
-
-                if (AUTH_DEBUG) console.debug("[Auth] Input validation passed, proceeding with form submission");
-
-                // Show loading state
-                const originalText = submitBtn.textContent;
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = `<svg class="animate-spin h-3 w-3 mx-auto text-white" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10"
-                          stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373
-                        0 0 5.373 0 12h4zm2 5.291A7.962
-                        7.962 0 014 12H0c0 3.042
-                        1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>`;
-                errorMsg.classList.add('hidden');
-
-                if (AUTH_DEBUG) console.debug("[Auth] Login form UI updated to loading state");
-
-                // Set a safety timeout
-                const safetyTimeout = setTimeout(() => {
-                  console.warn('[Auth] Login safety timeout triggered after 10 seconds');
-                  submitBtn.disabled = false;
-                  submitBtn.textContent = originalText;
-                  errorMsg.textContent = "Login request timed out. Please try again.";
-                  errorMsg.classList.remove('hidden');
-                }, 10000);
-
-                // Wait for auth module to be ready before attempting login
-                if (!window.auth) {
-                  errorMsg.textContent = "Authentication system not available";
-                  errorMsg.classList.remove('hidden');
-                  submitBtn.disabled = false;
-                  submitBtn.textContent = originalText;
-                  clearTimeout(safetyTimeout);
-                  console.error("[Auth] Authentication system not available - window.auth is undefined");
-                  return;
-                }
-
-                // Use the auth readiness promise to ensure auth is fully initialized
-                window.auth.readyPromise.then(() => {
-                  if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Auth module ready, proceeding with login call`);
-                  const loginStartTime = Date.now();
-
-                  window.auth.login(usernameInput.value, passwordInput.value)
-                    .then(() => {
-                      const loginDuration = Date.now() - loginStartTime;
-                      if (AUTH_DEBUG) {
-                        console.debug(`[Auth][${timestamp}] Login successful (took ${loginDuration}ms)`);
-                        console.debug("[Auth] Redirecting to projects page");
-                      }
-                      // Redirect to projects page on success
-                      window.location.href = '/?view=projects';
-                    })
-                    .catch(error => {
-                      const loginDuration = Date.now() - loginStartTime;
-                      if (AUTH_DEBUG) {
-                        console.debug(`[Auth][${timestamp}] Login failed after ${loginDuration}ms:`, error);
-                        console.debug("[Auth] Error details:", {
-                          message: error.message,
-                          status: error.status,
-                          timestamp: new Date().toISOString(),
-                          requiresAction: true
-                        });
-                        console.debug(`[Auth][${timestamp}] Executing .catch block for login promise.`);
-                      }
-
-                      // Show error message
-                      errorMsg.textContent = error.message || "Login failed";
-                      errorMsg.classList.remove('hidden');
-                      console.error("[Auth] Login failed:", error);
-                    })
-                    .finally(() => {
-                      if (AUTH_DEBUG) console.debug(`[Auth][${timestamp}] Login promise settled. Executing .finally block to cleanup UI state.`);
-                      // Always clear safety timeout and restore button
-                      clearTimeout(safetyTimeout);
-                      submitBtn.innerHTML = '';
-                      submitBtn.textContent = originalText;
-                      submitBtn.disabled = false;
-                      if (AUTH_DEBUG) {
-                        console.debug(`[Auth][${timestamp}] Submit button restored. Disabled: ${submitBtn.disabled}, Text: "${submitBtn.textContent}"`);
-                      }
-                    });
-                }).catch(error => {
-                  // Either auth module failed to initialize or readyPromise is not supported
-                  console.error(`[Auth][${timestamp}] Auth readiness check failed:`, error);
-                  clearTimeout(safetyTimeout);
-                  submitBtn.disabled = false;
-                  submitBtn.textContent = originalText;
-                  errorMsg.textContent = "Authentication system error: " + (error.message || "unknown error");
-                  errorMsg.classList.remove('hidden');
-                });
-              }
-            </script>
             <form id="registerForm" class="hidden">
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" placeholder="Username"

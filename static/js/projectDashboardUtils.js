@@ -345,9 +345,16 @@
       }
 
       const modalEl = document.getElementById(modalId);
-      if (!modalEl || typeof modalEl.showModal !== 'function') {
-        console.error(`[ModalManager] Dialog element not found or .showModal() not available for ID: '${modalId}'`);
+      if (!modalEl) {
+        console.error(`[ModalManager] Dialog element not found for ID: '${modalId}'`);
         return false;
+      }
+      if (typeof modalEl.showModal !== 'function') {
+        console.warn(`[ModalManager] .showModal() not available for ID: '${modalId}', falling back to display-based modal handling`);
+        modalEl.classList.remove('hidden');
+        modalEl.style.display = 'block';
+      } else {
+        modalEl.showModal();
       }
 
       console.log(`[ModalManager] Showing modal: ${modalName} (#${modalId})`);

@@ -618,7 +618,7 @@ ${content}`)) {
              })
              .finally(() => {
                 this._hideLoadingState();
-             });
+             }); f
         } else {
            console.error("projectManager not available for popstate navigation");
            this._renderErrorState('System error: Cannot load projects');
@@ -948,4 +948,15 @@ ${content}`)) {
 
   // Export to global scope
   window.ProjectListComponent = ProjectListComponent;
+
+  // Removed the authStateChanged listener from here.
+  // Project loading after authentication is now handled centrally in app.js.
+
+  // Ensure global instance is saved when created
+  const originalProjectListComponent = window.ProjectListComponent;
+  window.ProjectListComponent = function(options) {
+    const instance = new originalProjectListComponent(options);
+    window.projectListComponent = instance;
+    return instance;
+  };
 })();
