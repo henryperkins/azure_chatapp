@@ -222,10 +222,19 @@
     // Make container visible and hide login required message
     if (container) {
       container.classList.remove("hidden");
-      container.style.display = ""; // Clear any display:none that might be set
-      console.log("[ProjectListComponent] Made projectListView visible");
+      container.style.display = "flex"; // Use flex for proper display
+      container.style.flexDirection = "column"; // Stack children vertically
+      console.log("[ProjectListComponent] Made projectListView visible with flex display");
     } else {
       console.warn("[ProjectListComponent] Failed to find projectListView container");
+    }
+
+    // Check if projectManagerPanel is visible
+    const projectManagerPanel = document.getElementById("projectManagerPanel");
+    if (projectManagerPanel) {
+      projectManagerPanel.classList.remove("hidden");
+      projectManagerPanel.style.display = "flex";
+      console.log("[ProjectListComponent] Made projectManagerPanel visible");
     }
 
     // Hide login message if it exists

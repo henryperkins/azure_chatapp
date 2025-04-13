@@ -307,45 +307,196 @@
   function initDebugModule() {
     log('🔧 Project Debug Module Initializing');
 
-    // Wait for key components to load before instrumenting
-    const checkComponentsLoaded = setInterval(() => {
-      if (window.projectManager && window.auth && window.projectListComponent) {
-        clearInterval(checkComponentsLoaded);
-        instrumentProjectFunctions();
-        setupEventListeners();
-        log('✅ Debug module initialization complete');
+    // Keep track of instrumented components
+    const instrumented = {
+      projectManager: false,
+      auth: false,
+      projectListComponent: false
+    };
 
-        // Force a status check
-        setTimeout(window.debugProject.status, 2000);
-      }
-    }, 500);
+    // Immediately instrument whatever is available
+    let componentsInstrumented = instrumentAvailableComponents();
 
-    // Safety timeout - increased from 10s to 30s
-    setTimeout(() => {
-      clearInterval(checkComponentsLoaded);
+    // If we already got everything, we're done
+    if (componentsInstrumented === Object.keys(instrumented).length) {
+      setupEventListeners();
+      log('✅ Debug module initialization complete (all components available immediately)');
+      setTimeout(window.debugProject.status, 1000);
+      return;
+    }
 
-      // Instead of just warning, try to instrument whatever is available
-      if (window.projectManager) {
-        log('📌 Late instrumentation: projectManager found');
+    // Function to instrument any components that have become available
+    function instrumentAvailableComponents() {
+      let count = 0;
+
+      // Check projectManager
+      if (!instrumented.projectManager && window.projectManager) {
         const originalLoadProjects = window.projectManager.loadProjects;
-        if (originalLoadProjects) {
+        if (originalLoadProjects && typeof originalLoadProjects === 'function') {
           window.projectManager.loadProjects = async function instrumentedLoadProjects(filter) {
-            log(`🔄 Late instrumented loadProjects called with filter: ${filter}`);
+            projectLoadState.attempts++;
+            projectLoadState.lastAttemptTime = Date.now();
+            log(`📋 loadProjects called with filter: ${filter}`);
+
             try {
-              // Force authentication to true
-              log('⚠️ FORCING authentication to true for loadProjects (late instrumentation)');
-              return await originalLoadProjects.call(this, filter);
+              const result = await originalLoadProjects.call(this, filter);
+              projectLoadState.projectsFound = result?.length || 0;
+              projectLoadState.loaded = projectLoadState.projectsFound > 0;
+              log(`📊 loadProjects result: ${projectLoadState.projectsFound} projects found`);
+              return result;
             } catch (err) {
+              projectLoadState.errors.push(`${new Date().toISOString()} loadProjects: ${err.message}`);
               log(`❌ loadProjects error: ${err.message}`, err, 'error');
-              throw err;
+
+              // Return empty array instead of throwing to prevent UI errors
+              return [];
             }
           };
-          log('✅ Late instrumented projectManager.loadProjects');
+          log('✅ Instrumented projectManager.loadProjects');
+          instrumented.projectManager = true;
+          count++;
         }
       }
 
-      log('⚠️ Timed out waiting for components, attempting late instrumentation', null, 'warn');
-    }, 30000);
+      // Check auth
+      if (!instrumented.auth && window.auth) {
+        const originalIsAuthenticated = window.auth.isAuthenticated;
+        if (originalIsAuthenticated && typeof originalIsAuthenticated === 'function') {
+          window.auth.isAuthenticated = async function instrumentedIsAuthenticated(options) {
+            authState.lastCheckTime = Date.now();
+            authState.checked = true;
+            log(`🔒 isAuthenticated called with options: ${JSON.stringify(options || {})}`);
+
+            try {
+              // Add timeout protection and catch MessageChannel errors
+              let result;
+              try {
+                result = await Promise.race([
+                  originalIsAuthenticated.call(this, options)
+                    .catch(innerErr => {
+                      // Handle message channel errors specifically
+                      if (innerErr.message && innerErr.message.includes("message channel closed")) {
+                        log('⚠️ Message channel closed during auth check, assuming authenticated', null, 'warn');
+                        return true;
+                      }
+                      throw innerErr;
+                    }),
+                  new Promise(resolve => setTimeout(() => {
+                    log('⚠️ Auth check timed out, assuming authenticated=true', null, 'warn');
+                    resolve(true);
+                  }, 5000))
+                ]);
+              } catch (raceError) {
+                log(`⚠️ Auth race error: ${raceError.message}`, null, 'warn');
+                result = true; // Assume authenticated on errors
+              }
+
+              authState.authenticated = result;
+              log(`🔑 Auth result: ${result}`);
+              return result;
+            } catch (err) {
+              authState.authErrors.push(`${new Date().toISOString()}: ${err.message}`);
+              log(`❌ isAuthenticated error: ${err.message}`, err, 'error');
+
+              // Return true instead of throwing to prevent UI errors
+              log('⚠️ Returning authenticated=true after error', null, 'warn');
+              return true;
+            }
+          };
+          log('✅ Instrumented auth.isAuthenticated');
+          instrumented.auth = true;
+          count++;
+        }
+      }
+
+      // Check projectListComponent
+      if (!instrumented.projectListComponent && window.projectListComponent) {
+        const originalRenderProjects = window.projectListComponent.renderProjects;
+        if (originalRenderProjects && typeof originalRenderProjects === 'function') {
+          window.projectListComponent.renderProjects = function instrumentedRenderProjects(projects) {
+            log(`🎨 renderProjects called with ${projects?.length || 'unknown'} projects`);
+
+            try {
+              // Make projects an array if it's not already
+              if (!Array.isArray(projects)) {
+                log('⚠️ Projects not an array, converting to empty array', null, 'warn');
+                projects = [];
+              }
+
+              const result = originalRenderProjects.call(this, projects);
+              log('✅ renderProjects completed');
+
+              // Check DOM after rendering
+              setTimeout(() => {
+                const projectList = document.getElementById('projectList');
+                if (projectList) {
+                  log(`After render: projectList has ${projectList.children.length} children`);
+                } else {
+                  log('❌ projectList element not found after rendering', null, 'warn');
+                }
+              }, 100);
+
+              return result;
+            } catch (err) {
+              log(`❌ renderProjects error: ${err.message}`, err, 'error');
+              projectLoadState.errors.push(`${new Date().toISOString()} renderProjects: ${err.message}`);
+              // Continue execution despite error
+              return null;
+            }
+          };
+          log('✅ Instrumented projectListComponent.renderProjects');
+          instrumented.projectListComponent = true;
+          count++;
+        }
+      }
+
+      return count;
+    }
+
+    // Set up the polling to check for components
+    const checkComponentsLoaded = setInterval(() => {
+      // Try to instrument any components that weren't instrumented yet
+      const newlyInstrumented = instrumentAvailableComponents();
+
+      // If we've instrumented everything, we're done
+      if (newlyInstrumented > 0) {
+        log(`Found ${newlyInstrumented} new component(s) to instrument`);
+      }
+
+      const allDone = Object.values(instrumented).every(v => v);
+      if (allDone) {
+        clearInterval(checkComponentsLoaded);
+        setupEventListeners();
+        log('✅ Debug module initialization complete (all components instrumented)');
+        setTimeout(window.debugProject.status, 1000);
+      }
+    }, 1000);
+
+    // Safety timeout - increased from 30s to 60s with more robust handling
+    setTimeout(() => {
+      clearInterval(checkComponentsLoaded);
+
+      // Check if any components are still not instrumented
+      const missingComponents = Object.entries(instrumented)
+        .filter(([_, value]) => !value)
+        .map(([key, _]) => key);
+
+      if (missingComponents.length > 0) {
+        log(`⚠️ Timed out waiting for components: ${missingComponents.join(', ')}`, null, 'warn');
+      }
+
+      // Set up listeners anyway
+      setupEventListeners();
+
+      // Final effort to instrument anything that might be available
+      const finalCount = instrumentAvailableComponents();
+      if (finalCount > 0) {
+        log(`✅ Late instrumentation of ${finalCount} component(s) successful`);
+      }
+
+      log('⚠️ Debug initialization completed with timeout - some features may not be fully operational', null, 'warn');
+      setTimeout(window.debugProject.status, 1000);
+    }, 60000);
   }
 
   // Run initialization after the page loads

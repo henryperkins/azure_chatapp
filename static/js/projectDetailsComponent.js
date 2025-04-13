@@ -210,7 +210,8 @@ export class ProjectDetailsComponent {
    * ------------------------------------------------------------------ */
   renderProject(project) {
     if (!project || typeof project !== 'object') {
-      console.error('Invalid project data');
+      console.error('Invalid project data - authentication may be required');
+      this._renderAuthRequiredMessage();
       return;
     }
 
@@ -915,6 +916,60 @@ export class ProjectDetailsComponent {
       badge.dataset.tip = processing.error;
     }
     return badge;
+  }
+
+  _renderAuthRequiredMessage() {
+    if (!this.elements.container) return;
+
+    // Clear existing content
+    if (this.elements.title) this.elements.title.textContent = '';
+    if (this.elements.description) this.elements.description.textContent = '';
+
+    // Create authentication required message
+    const authMessage = document.createElement('div');
+    authMessage.className = 'flex flex-col items-center justify-center p-8 text-center';
+    authMessage.innerHTML = `
+      <div class="text-error mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v3m0-3h2m-2 0H9m3-3V8m0 0V5m0 3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h3 class="text-xl font-bold mb-2">Authentication Required</h3>
+      <p class="mb-4">Please log in to view project details.</p>
+      <button id="loginPromptBtn" class="btn btn-primary">Log In</button>
+    `;
+
+    // Add login button click handler
+    const loginBtn = authMessage.querySelector('#loginPromptBtn');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', () => {
+        // Redirect to login or show login modal if available
+        if (window.showLoginModal && typeof window.showLoginModal === 'function') {
+          window.showLoginModal();
+        } else {
+          this.notification?.('Please log in to continue', 'info');
+          // Optional: can redirect to login page if needed
+        }
+      });
+    }
+
+    // Append to container
+    const tabContent = this.elements.tabContents.files;
+    if (tabContent) {
+      tabContent.innerHTML = '';
+      tabContent.appendChild(authMessage);
+      // Switch to files tab to show the message
+      this.switchTab('files');
+    } else if (this.elements.container) {
+      // Fallback if tab content not found
+      this.elements.container.innerHTML = '';
+      this.elements.container.appendChild(authMessage);
+    }
+
+    // Hide loading indicators
+    Object.keys(this.elements.loadingStates || {}).forEach(key => {
+      this.hideLoading(key);
+    });
   }
 
   formatUploadErrorMessage(error) {
