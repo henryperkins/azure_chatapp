@@ -47,11 +47,13 @@ function getCookie(name) {
 function setAuthCookie(name, value, maxAgeSeconds) {
   const secure = location.protocol === 'https:' ? 'Secure; ' : '';
   const sameSite = 'SameSite=Strict';
+  const path = '/;';
+  
   if (!value) {
     // Clear cookie
-    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; ${secure}${sameSite}`;
+    document.cookie = `${name}=; path=${path} expires=Thu, 01 Jan 1970 00:00:00 GMT; ${secure}${sameSite}`;
   } else {
-    document.cookie = `${name}=${value}; path=/; max-age=${maxAgeSeconds}; ${secure}${sameSite}`;
+    document.cookie = `${name}=${value}; path=${path} max-age=${maxAgeSeconds}; ${secure}${sameSite}`;
   }
 }
 

@@ -86,10 +86,12 @@ const MESSAGES = {
 };
 
 const API_ENDPOINTS = {
-  AUTH_VERIFY: '/api/auth/verify',
-  PROJECTS: '/api/projects',
-  CONVERSATIONS: '/api/chat/conversations',
-  PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations'
+  AUTH_VERIFY: '/api/auth/verify/',
+  PROJECTS: '/api/projects/',
+  PROJECT_DETAILS: '/api/projects/{projectId}/',
+  CONVERSATIONS: '/api/chat/conversations/',
+  PROJECT_CONVERSATIONS: '/api/chat/projects/{projectId}/conversations/',
+  PROJECT_FILES: '/api/projects/{projectId}/files/'
 };
 
 const Notifications = {
@@ -296,6 +298,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
       console.log(`[apiRequest] ${uppercaseMethod} -> ${finalUrl} (timeout=${timeoutMs}ms)`);
 
       // Prepare request options
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
       const requestOptions = {
         method: uppercaseMethod,
         headers: {
@@ -303,7 +306,8 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
           'Cache-Control': 'no-cache',
           Pragma: 'no-cache',
           'X-Forwarded-Host': window.location.host,
-          'X-Request-Domain': window.location.hostname
+          'X-Request-Domain': window.location.hostname,
+          'X-CSRF-Token': csrfToken || ''
         },
         cache: 'no-store',
         redirect: 'follow',
