@@ -90,7 +90,7 @@ const API_ENDPOINTS = {
   PROJECTS: '/api/projects/',
   PROJECT_DETAILS: '/api/projects/{projectId}/',
   // Removed unused endpoint
-  PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
+  PROJECT_CONVERSATIONS: '/api/projects/{project_id}/conversations',
   PROJECT_FILES: '/api/projects/{projectId}/files/'
 };
 
@@ -177,6 +177,16 @@ function clearAuthState() {
 // ---------------------------------------------------------------------
 // UTILITY FUNCTIONS
 // ---------------------------------------------------------------------
+
+function isValidUUID(uuid) {
+  try {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return typeof uuid === 'string' && regex.test(uuid);
+  } catch (e) {
+    console.error('[isValidUUID] Validation error:', e);
+    return false;
+  }
+}
 
 function getElement(selector) {
   return document.querySelector(selector);
@@ -611,21 +621,74 @@ async function loadConversationList() {
     return [];
   }
 
-  const projectId = localStorage.getItem("selectedProjectId");
+  let projectId = localStorage.getItem("selectedProjectId");
+
+  // If no project is selected, try to select the first available one
+  if (!projectId && window.projectManager?.loadProjects) {
+    try {
+      console.log("[loadConversationList] No project selected, attempting to select first project");
+      const projects = await window.projectManager.loadProjects("all");
+      if (projects && projects.length > 0) {
+        const firstProject = projects[0];
+        projectId = firstProject.id;
+        localStorage.setItem("selectedProjectId", projectId);
+        console.log(`[loadConversationList] Auto-selected project: ${projectId}`);
+      } else {
+        console.warn("[loadConversationList] No projects found to select");
+        renderConversationList({ data: { conversations: [] } });
+        return [];
+      }
+    } catch (err) {
+      console.error("[loadConversationList] Error auto-selecting project:", err);
+      renderConversationList({ data: { conversations: [] } });
+      return [];
+    }
+  }
+
   if (!projectId) {
-    console.warn("[loadConversationList] No project selected, skipping conversation load");
+    console.warn("[loadConversationList] No project could be selected, skipping conversation load");
     renderConversationList({ data: { conversations: [] } });
     return [];
   }
 
-  const url = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
+  if (!projectId || !isValidUUID(projectId)) {
+    console.error('[loadConversationList] Invalid project ID:', projectId);
+    renderConversationList({ data: { conversations: [] } });
+    return [];
+  }
+
+  console.debug('[loadConversationList] Loading conversations for project:', projectId);
+  const url = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{project_id}', projectId);
   return apiRequest(url)
     .then(data => {
       renderConversationList(data);
       return data;
     })
     .catch(err => {
+      if (err.status === 404) {
+        console.warn(`[loadConversationList] Project ${projectId} not found or has no conversations endpoint`);
+        // Clear invalid project ID from localStorage
+        localStorage.removeItem("selectedProjectId");
+
+        // Try to select a different project
+        if (window.projectManager?.loadProjects) {
+          console.log("[loadConversationList] Attempting to select a valid project after 404");
+          window.projectManager.loadProjects("all")
+            .then(projects => {
+              if (projects && projects.length > 0) {
+                const validProject = projects[0];
+                localStorage.setItem("selectedProjectId", validProject.id);
+                console.log(`[loadConversationList] Selected alternative project: ${validProject.id}`);
+                // Don't recurse immediately as this could cause an infinite loop
+                setTimeout(() => loadConversationList(), 500);
+              }
+            })
+            .catch(newErr => console.error("[loadConversationList] Failed to load valid projects:", newErr));
+        }
+      }
+
       handleAPIError('loading conversation list', err);
+      renderConversationList({ data: { conversations: [] } });
       return [];
     });
 }
