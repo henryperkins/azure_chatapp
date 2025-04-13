@@ -1356,6 +1356,7 @@ window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
 window.loadProjects = loadProjects;
 window.loadProjectList = loadProjects; // Alias for loadProjects
+window.isValidUUID = isValidUUID;
 
 // Central Initialization Controller
 window.appInitializer = {
