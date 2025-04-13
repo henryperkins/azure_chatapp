@@ -578,9 +578,10 @@
     formData.append("project_id", projectId);
 
     try {
+      const endpoint = API_ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
       const response = await window.apiRequest(
-        `/api/projects/${projectId}/files`,
-        "POST",
+        endpoint,
+        "POST", 
         formData
       );
 
