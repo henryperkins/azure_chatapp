@@ -290,7 +290,17 @@
          }
       }
 
-      this.element.innerHTML = ""; // Clear the grid container
+      console.log(`[ProjectListComponent] Updating DOM with ${filteredProjects.length} projects`);
+
+      // Clear with a safety check
+      try {
+        this.element.innerHTML = ""; // Clear the grid container
+      } catch (err) {
+        console.error("[ProjectListComponent] Error clearing element:", err);
+        // Try one more time to get the element
+        this._createFallbackContainer();
+        if (!this.element) return;
+      }
 
       if (filteredProjects.length === 0) {
         this._showEmptyState();
@@ -298,7 +308,11 @@
       }
 
       // Hide empty state message if projects exist
-      if (this.messageEl) this.messageEl.classList.add("hidden");
+      if (this.messageEl) {
+        this.messageEl.classList.add("hidden");
+      } else {
+        console.warn("[ProjectListComponent] messageEl not found for empty state");
+      }
 
       const fragment = document.createDocumentFragment();
       filteredProjects.forEach(project => {
@@ -307,7 +321,13 @@
           fragment.appendChild(card);
         }
       });
-      this.element.appendChild(fragment); // Append all cards at once
+
+      try {
+        this.element.appendChild(fragment); // Append all cards at once
+        console.log(`[ProjectListComponent] Successfully rendered ${filteredProjects.length} project cards`);
+      } catch (err) {
+        console.error("[ProjectListComponent] Error appending project cards:", err);
+      }
     }
 
     _showEmptyState() {
