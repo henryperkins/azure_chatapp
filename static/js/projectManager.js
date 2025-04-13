@@ -648,7 +648,7 @@
    */
   async function deleteProjectConversation(projectId, conversationId) {
     await requireAuth();
-    await window.apiRequest(`/api/chat/projects/${projectId}/conversations/${conversationId}`, "DELETE");
+    await window.apiRequest(`/api/projects/${projectId}/conversations/${conversationId}`, "DELETE");
     return Promise.all([
       loadProjectStats(projectId),
       loadProjectConversations(projectId)
@@ -694,8 +694,8 @@
       console.debug('[ProjectManager] Conversation payload:', payload);
 
       const response = await window.apiRequest(
-        `/api/chat/projects/${projectId}/conversations`,
-        "POST",
+        `/api/projects/${projectId}/conversations`,
+        "POST", 
         payload
       );
 
@@ -737,7 +737,7 @@
     try {
       console.debug(`[ProjectManager] Linking conversation ${conversationId} to KB ${kbId}`);
       await window.apiRequest(
-        `/api/knowledge-bases/${kbId}/conversations/${conversationId}`,
+        `/api/projects/${currentProject?.id}/knowledge-base/conversations/${conversationId}`,
         "PUT",
         { association_type: "primary" }
       );
@@ -777,7 +777,7 @@
    */
   async function loadKnowledgeBaseDetails(knowledgeBaseId) {
     try {
-      const kbData = await window.apiRequest(`/api/knowledge-bases/${knowledgeBaseId}`, "GET");
+      const kbData = await window.apiRequest(`/api/projects/${currentProject?.id}/knowledge-base`, "GET");
       // Attach to currentProject if relevant
       if (currentProject) {
         currentProject.knowledge_base = kbData.data || kbData;
