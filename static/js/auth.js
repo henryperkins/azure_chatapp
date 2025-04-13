@@ -525,8 +525,27 @@ async function loginUser(username, password) {
       }
     };
 
-    // Run post-login tasks but don't block the login response
-    setTimeout(() => postLoginTasks(), 100);
+    // Run post-login tasks immediately instead of delaying
+    postLoginTasks();
+
+    // Ensure project list is displayed immediately
+    const projectListView = document.getElementById('projectListView');
+    const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+    if (projectListView) projectListView.classList.remove('hidden');
+    if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+
+    // Immediately load projects
+    if (window.projectManager?.loadProjects) {
+      console.log("[Auth] Loading projects immediately after successful login");
+      window.projectManager.loadProjects('all')
+        .then(projects => {
+          if (window.projectListComponent?.renderProjects) {
+            console.log(`[Auth] Rendering ${projects?.length || 0} projects after login`);
+            window.projectListComponent.renderProjects(projects);
+          }
+        })
+        .catch(err => console.error("[Auth] Error loading projects after login:", err));
+    }
 
     broadcastAuth(true, authState.username);
 

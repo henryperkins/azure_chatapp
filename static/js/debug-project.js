@@ -320,11 +320,32 @@
       }
     }, 500);
 
-    // Safety timeout
+    // Safety timeout - increased from 10s to 30s
     setTimeout(() => {
       clearInterval(checkComponentsLoaded);
-      log('⚠️ Timed out waiting for components, partial instrumentation may have occurred', null, 'warn');
-    }, 10000);
+
+      // Instead of just warning, try to instrument whatever is available
+      if (window.projectManager) {
+        log('📌 Late instrumentation: projectManager found');
+        const originalLoadProjects = window.projectManager.loadProjects;
+        if (originalLoadProjects) {
+          window.projectManager.loadProjects = async function instrumentedLoadProjects(filter) {
+            log(`🔄 Late instrumented loadProjects called with filter: ${filter}`);
+            try {
+              // Force authentication to true
+              log('⚠️ FORCING authentication to true for loadProjects (late instrumentation)');
+              return await originalLoadProjects.call(this, filter);
+            } catch (err) {
+              log(`❌ loadProjects error: ${err.message}`, err, 'error');
+              throw err;
+            }
+          };
+          log('✅ Late instrumented projectManager.loadProjects');
+        }
+      }
+
+      log('⚠️ Timed out waiting for components, attempting late instrumentation', null, 'warn');
+    }, 30000);
   }
 
   // Run initialization after the page loads

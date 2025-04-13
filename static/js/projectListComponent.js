@@ -213,10 +213,32 @@
       // }
     }
 
-    _ensureContainerVisibility() {
-      const container = document.getElementById("projectListView");
-      if (container) container.classList.remove("hidden");
+  _ensureContainerVisibility() {
+    const container = document.getElementById("projectListView");
+    const loginRequiredMessage = document.getElementById("loginRequiredMessage");
+
+    console.log("[ProjectListComponent] Ensuring project list visibility");
+
+    // Make container visible and hide login required message
+    if (container) {
+      container.classList.remove("hidden");
+      container.style.display = ""; // Clear any display:none that might be set
+      console.log("[ProjectListComponent] Made projectListView visible");
+    } else {
+      console.warn("[ProjectListComponent] Failed to find projectListView container");
     }
+
+    // Hide login message if it exists
+    if (loginRequiredMessage) {
+      loginRequiredMessage.classList.add("hidden");
+      console.log("[ProjectListComponent] Hide login required message");
+    }
+
+    // Make project list element visible too
+    if (this.element) {
+      this.element.style.display = "grid"; // Ensure grid display
+    }
+  }
 
     _shouldLoadProjectsDirectly(eventOrProjects) {
       return eventOrProjects?.forceRefresh ||

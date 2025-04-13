@@ -56,7 +56,7 @@ class ConversationCreate(BaseModel):
         ..., min_length=1, max_length=100, description="User-friendly title"
     )
     model_id: str = Field(
-        "claude-3-sonnet-20240229", 
+        "claude-3-sonnet-20240229",
         description="Model deployment ID (Claude, GPT, etc.)"
     )
 
@@ -83,7 +83,7 @@ class MessageCreate(BaseModel):
 # --------------------------------------------------------------------------
 # Create Conversation
 # --------------------------------------------------------------------------
-@router.post("/projects/{project_id}/conversations", response_model=dict)
+@router.post("/{project_id}/conversations", response_model=dict)
 async def create_conversation(
     project_id: UUID,
     conversation_data: ConversationCreate,
@@ -98,7 +98,7 @@ async def create_conversation(
     try:
         # Validate project access first
         await validate_project_access(project_id, current_user, db)
-        
+
         # Create the conversation
         conv = await conv_service.create_conversation(
             user_id=current_user.id,
@@ -111,7 +111,7 @@ async def create_conversation(
             f"Created conversation '{conversation_data.title}' in project {project_id} "
             f"for user {current_user.id} with model {conversation_data.model_id}"
         )
-        
+
         return await create_standard_response(
             serialize_conversation(conv), "Conversation created successfully"
         )
@@ -128,7 +128,7 @@ async def create_conversation(
 # --------------------------------------------------------------------------
 # List Conversations
 # --------------------------------------------------------------------------
-@router.get("/projects/{project_id}/conversations", response_model=dict)
+@router.get("/{project_id}/conversations", response_model=dict)
 async def list_project_conversations(
     project_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -143,7 +143,7 @@ async def list_project_conversations(
     """
     # Validate project access first
     await validate_project_access(project_id, current_user, db)
-    
+
     # Get conversations from service
     conversations = await conv_service.list_conversations(
         user_id=current_user.id,
@@ -153,7 +153,7 @@ async def list_project_conversations(
     )
 
     logger.info(f"Retrieved {len(conversations)} conversations for project {project_id}")
-    
+
     return await create_standard_response({
         "conversations": [serialize_conversation(conv) for conv in conversations],
         "count": len(conversations),
@@ -164,7 +164,7 @@ async def list_project_conversations(
 # --------------------------------------------------------------------------
 # Get Conversation
 # --------------------------------------------------------------------------
-@router.get("/projects/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.get("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def get_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -180,7 +180,7 @@ async def get_project_conversation(
     try:
         # Get conversation directly
         conversation = await db.get(Conversation, conversation_id)
-        
+
         # Validate conversation
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -195,7 +195,7 @@ async def get_project_conversation(
             )
 
         logger.info(f"Retrieved conversation {conversation_id} from project {project_id}")
-        
+
         return await create_standard_response(serialize_conversation(conversation))
     except HTTPException:
         # Re-raise HTTP exceptions directly
@@ -208,7 +208,7 @@ async def get_project_conversation(
 # --------------------------------------------------------------------------
 # Update Conversation
 # --------------------------------------------------------------------------
-@router.patch("/projects/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.patch("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def update_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -249,7 +249,7 @@ async def update_project_conversation(
     logger.info(f"Updated conversation {conversation_id} in project {project_id}")
 
     return await create_standard_response(
-        serialize_conversation(conversation), 
+        serialize_conversation(conversation),
         "Conversation updated successfully"
     )
 
@@ -257,7 +257,7 @@ async def update_project_conversation(
 # --------------------------------------------------------------------------
 # Delete/Restore Conversation
 # --------------------------------------------------------------------------
-@router.delete("/projects/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -275,16 +275,16 @@ async def delete_project_conversation(
         user_id=current_user.id,
         project_id=project_id,
     )
-    
+
     logger.info(f"Deleted conversation {conversation_id} from project {project_id}")
-    
+
     return await create_standard_response(
-        {"conversation_id": str(deleted_id)}, 
+        {"conversation_id": str(deleted_id)},
         "Conversation deleted successfully"
     )
 
 
-@router.post("/projects/{project_id}/conversations/{conversation_id}/restore", response_model=dict)
+@router.post("/{project_id}/conversations/{conversation_id}/restore", response_model=dict)
 async def restore_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -302,7 +302,7 @@ async def restore_project_conversation(
         cast(BinaryExpression[bool], Conversation.project_id == project.id),
         cast(BinaryExpression[bool], Conversation.is_deleted.is_(True)),
     ]
-    
+
     conversation = await validate_resource_access(
         conversation_id,
         Conversation,
@@ -318,9 +318,9 @@ async def restore_project_conversation(
     await save_model(db, conversation)
 
     logger.info(f"Restored conversation {conversation_id} in project {project_id}")
-    
+
     return await create_standard_response(
-        {"id": str(conversation.id)}, 
+        {"id": str(conversation.id)},
         "Conversation restored successfully"
     )
 
@@ -328,7 +328,7 @@ async def restore_project_conversation(
 # --------------------------------------------------------------------------
 # List Conversation Messages
 # --------------------------------------------------------------------------
-@router.get("/projects/{project_id}/conversations/{conversation_id}/messages", response_model=dict)
+@router.get("/{project_id}/conversations/{conversation_id}/messages", response_model=dict)
 async def list_project_conversation_messages(
     project_id: UUID,
     conversation_id: UUID,
@@ -343,7 +343,7 @@ async def list_project_conversation_messages(
     """
     # Validate project access
     await validate_project_access(project_id, current_user, db)
-    
+
     # Set filters to validate conversation belongs to this project and is not deleted
     filters_to_use = [
         cast(BinaryExpression[bool], Conversation.project_id == project_id),
@@ -371,7 +371,7 @@ async def list_project_conversation_messages(
     )
 
     logger.info(f"Retrieved {len(messages)} messages from conversation {conversation_id}")
-    
+
     return await create_standard_response({
         "messages": [serialize_message(msg) for msg in messages],
         "metadata": {
@@ -429,9 +429,9 @@ async def create_project_conversation_message(
         )
 
         logger.info(f"Created message in conversation {conversation_id}, project {project_id}")
-        
+
         return await create_standard_response(
-            response, 
+            response,
             "Message created successfully"
         )
     except HTTPException:
@@ -443,7 +443,7 @@ async def create_project_conversation_message(
             status_code=500, detail=f"Failed to create message: {str(e)}"
         ) from e
 # --------------------------------------------------------------------------
-# Additional Conversation Features 
+# Additional Conversation Features
 # --------------------------------------------------------------------------
 @router.post(
     "/projects/{project_id}/conversations/{conversation_id}/title-suggestion",
@@ -462,7 +462,7 @@ async def suggest_conversation_title(
     """
     # Validate project access
     await validate_project_access(project_id, current_user, db)
-    
+
     try:
         # Set filters to validate conversation belongs to this project and is not deleted
         filters_to_use = [
@@ -479,7 +479,7 @@ async def suggest_conversation_title(
             "Conversation",
             additional_filters=filters_to_use,
         )
-        
+
         # Get conversation messages
         messages = await get_all_by_condition(
             db,
@@ -488,22 +488,22 @@ async def suggest_conversation_title(
             order_by=Message.created_at.asc(),
             limit=10,  # Only use first few messages for title generation
         )
-        
+
         if not messages:
             return await create_standard_response(
                 {"title": conversation.title, "generated": False},
                 "No messages to generate title from"
             )
-        
+
         # Use conversation service to generate title
         suggested_title = await conv_service.generate_conversation_title(
             conversation_id=conversation_id,
             messages=[serialize_message(msg) for msg in messages],
             model_id=conversation.model_id,
         )
-        
+
         logger.info(f"Generated title suggestion for conversation {conversation_id}: {suggested_title}")
-        
+
         return await create_standard_response(
             {"title": suggested_title, "original_title": conversation.title, "generated": True},
             "Title suggestion generated"
@@ -513,13 +513,13 @@ async def suggest_conversation_title(
     except Exception as e:
         logger.error(f"Failed to generate title suggestion: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Failed to generate title suggestion: {str(e)}"
         ) from e
 
 
 @router.post(
-    "/projects/{project_id}/conversations/{conversation_id}/summarize", 
+    "/projects/{project_id}/conversations/{conversation_id}/summarize",
     response_model=dict
 )
 async def summarize_conversation(
@@ -536,7 +536,7 @@ async def summarize_conversation(
     """
     # Validate project access
     await validate_project_access(project_id, current_user, db)
-    
+
     try:
         # Set filters to validate conversation belongs to this project and is not deleted
         filters_to_use = [
@@ -553,7 +553,7 @@ async def summarize_conversation(
             "Conversation",
             additional_filters=filters_to_use,
         )
-        
+
         # Get conversation messages
         messages = await get_all_by_condition(
             db,
@@ -561,13 +561,13 @@ async def summarize_conversation(
             Message.conversation_id == conversation.id,
             order_by=Message.created_at.asc(),
         )
-        
+
         if not messages:
             return await create_standard_response(
                 {"summary": "No messages in conversation", "message_count": 0},
                 "No messages to summarize"
             )
-        
+
         # Use conversation service to generate summary
         summary = await conv_service.generate_conversation_summary(
             conversation_id=conversation_id,
@@ -575,9 +575,9 @@ async def summarize_conversation(
             model_id=conversation.model_id,
             max_length=max_length,
         )
-        
+
         logger.info(f"Generated summary for conversation {conversation_id}")
-        
+
         return await create_standard_response(
             {
                 "summary": summary,
@@ -591,7 +591,7 @@ async def summarize_conversation(
     except Exception as e:
         logger.error(f"Failed to generate conversation summary: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Failed to generate conversation summary: {str(e)}"
         ) from e
 
@@ -604,7 +604,7 @@ class BatchConversationIds(BaseModel):
     conversation_ids: list[UUID] = Field(..., min_items=1, max_items=100)
 
 
-@router.post("/projects/{project_id}/conversations/batch-delete", response_model=dict)
+@router.post("/{project_id}/conversations/batch-delete", response_model=dict)
 async def batch_delete_conversations(
     project_id: UUID,
     batch_data: BatchConversationIds,
@@ -618,11 +618,11 @@ async def batch_delete_conversations(
     """
     # Validate project access
     await validate_project_access(project_id, current_user, db)
-    
+
     try:
         deleted_ids = []
         failed_ids = []
-        
+
         for conversation_id in batch_data.conversation_ids:
             try:
                 # Use service to delete each conversation
@@ -635,9 +635,9 @@ async def batch_delete_conversations(
             except Exception as e:
                 logger.warning(f"Failed to delete conversation {conversation_id}: {str(e)}")
                 failed_ids.append(str(conversation_id))
-        
+
         logger.info(f"Batch deleted {len(deleted_ids)} conversations in project {project_id}")
-        
+
         return await create_standard_response(
             {
                 "deleted": deleted_ids,
@@ -662,9 +662,9 @@ class ConversationSearchQuery(BaseModel):
     """Model for searching conversations."""
     query: str = Field(..., min_length=1, max_length=200)
     include_messages: bool = Field(True, description="Whether to search in message content")
-    
 
-@router.post("/projects/{project_id}/conversations/search", response_model=dict)
+
+@router.post("/{project_id}/conversations/search", response_model=dict)
 async def search_project_conversations(
     project_id: UUID,
     search_query: ConversationSearchQuery,
@@ -680,7 +680,7 @@ async def search_project_conversations(
     """
     # Validate project access
     await validate_project_access(project_id, current_user, db)
-    
+
     try:
         # Use service to perform search
         search_results = await conv_service.search_conversations(
@@ -691,9 +691,9 @@ async def search_project_conversations(
             skip=skip,
             limit=limit,
         )
-        
+
         logger.info(f"Search for '{search_query.query}' returned {len(search_results['conversations'])} results")
-        
+
         return await create_standard_response({
             "conversations": [serialize_conversation(conv) for conv in search_results["conversations"]],
             "total": search_results["total"],
@@ -703,6 +703,6 @@ async def search_project_conversations(
     except Exception as e:
         logger.error(f"Conversation search failed: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Search operation failed: {str(e)}"
         ) from e

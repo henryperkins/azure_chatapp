@@ -69,7 +69,7 @@ app = FastAPI(
             "description": "Project management operations"
         },
         {
-            "name": "knowledge-bases", 
+            "name": "knowledge-bases",
             "description": "Knowledge base operations"
         },
         {
@@ -107,7 +107,7 @@ async def startup_event():
         logger.critical(f"Startup failed: {str(e)}")
         raise
 
-@app.on_event("shutdown") 
+@app.on_event("shutdown")
 async def shutdown_event():
     """Clean up resources on shutdown"""
     try:
@@ -230,7 +230,7 @@ app.include_router(
 # Conversation routes
 app.include_router(
     conversations_router,
-    prefix="/api/conversations",
+    prefix="/api/projects",
     tags=["conversations"]
 )
 
