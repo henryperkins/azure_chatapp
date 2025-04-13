@@ -1102,8 +1102,16 @@ function setupNavigationTracking() {
 
 // Central Initialization
 
+// Global debug flag - set this based on your environment
+window.DEBUG_MODE = window.DEBUG_MODE || false;
+
 async function initializeApplication() {
   setPhase(AppPhase.BOOT);
+  
+  // Check for missing debug auth file
+  if (DEBUG_MODE && typeof window.loadDebugAuth === 'undefined') {
+    console.warn('login-debug.js not found - debug auth features disabled');
+  }
 
   // Wait for DOM readiness
   if (document.readyState !== 'loading') {
