@@ -525,13 +525,33 @@ async function verifyAuthState(bypassCache = false) {
 
 function broadcastAuth(authenticated, username = null) {
   const changed = (authState.isAuthenticated !== authenticated) ||
-                  (authState.username !== username);
+    (authState.username !== username);
   authState.isAuthenticated = authenticated;
   authState.username = username;
-  if (!changed) return;
-  document.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated, username }}));
-  window.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated, username }}));
+
+  // Always update UI even if state hasn't changed to ensure sync
   updateAuthUI(authenticated, username);
+
+  // Create a more detailed event payload with timestamp
+  const detail = {
+    authenticated,
+    username,
+    timestamp: Date.now(),
+    source: 'authStateChanged'
+  };
+
+  // Dispatch on both document and window for wider reach
+  document.dispatchEvent(new CustomEvent("authStateChanged", { detail }));
+  window.dispatchEvent(new CustomEvent("authStateChanged", { detail }));
+
+  // Force a project reload if authenticated to ensure fresh data
+  if (authenticated && window.projectManager?.loadProjects) {
+    console.log("[Auth] Broadcasting auth state triggered project reload");
+    setTimeout(() => {
+      window.projectManager.loadProjects('all')
+        .catch(err => console.error("[Auth] Error loading projects after auth broadcast:", err));
+    }, 50);
+  }
 }
 
 function updateAuthUI(authenticated, username = null) {
@@ -594,6 +614,27 @@ async function loginUser(username, password) {
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
 
+    // Ensure tokens are properly synced to sessionStorage
+    syncTokensToSessionStorage('store');
+
+    // Wait for auth state to be fully propagated before proceeding
+    await new Promise(resolve => {
+      // Broadcast auth state change first
+      broadcastAuth(true, authState.username);
+
+      // Small delay to ensure event listeners complete processing
+      setTimeout(resolve, 100);
+    });
+
+    // Dispatch explicit event for components to react to successful authentication
+    document.dispatchEvent(new CustomEvent('authStateConfirmed', {
+      detail: {
+        isAuthenticated: true,
+        username: authState.username,
+        timestamp: Date.now()
+      }
+    }));
+
     // Prepare for post-login steps
     const postLoginTasks = async () => {
       try {
@@ -630,20 +671,36 @@ async function loginUser(username, password) {
     if (projectListView) projectListView.classList.remove('hidden');
     if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
 
+    // More aggressive UI updates after login success
+    const projectListGrid = document.getElementById('projectList');
+    if (projectListGrid && projectListGrid.classList.contains('hidden')) {
+      projectListGrid.classList.remove('hidden');
+    }
+
+    // Important: Force dashboard initialization if needed
+    if (window.projectDashboard && typeof window.projectDashboard.init === 'function') {
+      console.log("[Auth] Reinitializing project dashboard after login");
+      setTimeout(() => {
+        window.projectDashboard.init().catch(err => {
+          console.error("[Auth] Error reinitializing dashboard:", err);
+        });
+      }, 100);
+    }
+
     // Immediately load projects
     if (window.projectManager?.loadProjects) {
       console.log("[Auth] Loading projects immediately after successful login");
-      window.projectManager.loadProjects('all')
-        .then(projects => {
-          if (window.projectListComponent?.renderProjects) {
-            console.log(`[Auth] Rendering ${projects?.length || 0} projects after login`);
-            window.projectListComponent.renderProjects(projects);
-          }
-        })
-        .catch(err => console.error("[Auth] Error loading projects after login:", err));
+      setTimeout(() => {
+        window.projectManager.loadProjects('all')
+          .then(projects => {
+            if (window.projectListComponent?.renderProjects) {
+              console.log(`[Auth] Rendering ${projects?.length || 0} projects after login`);
+              window.projectListComponent.renderProjects(projects);
+            }
+          })
+          .catch(err => console.error("[Auth] Error loading projects after login:", err));
+      }, 50);  // Reduced delay for more responsive feeling
     }
-
-    broadcastAuth(true, authState.username);
 
     return { ...response, success: true };
   } catch (error) {
@@ -767,37 +824,44 @@ function setupUIListeners() {
       }
     });
   }
-  if (registerForm) {
-    registerForm.addEventListener("submit", async e => {
-      e.preventDefault();
-      const data = new FormData(registerForm);
-      try {
-        await handleRegister(data);
-      } catch {}
-    });
-  }
-
-  document.getElementById("logoutBtn")?.addEventListener("click", logout);
 }
 
 /* ----------------------------------
- *  Initialization & Monitoring
+ *  ADDITION #1: Register Form Event Listener
  * ---------------------------------- */
+if (document.getElementById("registerForm")) {
+  const registerForm = document.getElementById("registerForm");
+  registerForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    const data = new FormData(registerForm);
+    try {
+      await handleRegister(data);
+    } catch { }
+  });
+}
 
+/* ----------------------------------
+ *  ADDITION #2: Logout Button Listener
+ * ---------------------------------- */
+document.getElementById("logoutBtn")?.addEventListener("click", logout);
+
+/* ----------------------------------
+ *  ADDITION #3: Monitoring & Initialization
+ * ---------------------------------- */
 function setupAuthStateMonitoring() {
   setTimeout(() => {
-    verifyAuthState(false).catch(() => {});
+    verifyAuthState(false).catch(() => { });
   }, 300);
 
   // Periodic verify every 3x normal interval to reduce server load
   const intervalMs = AUTH_CONSTANTS.VERIFICATION_INTERVAL * 3;
   const authCheck = setInterval(() => {
-    if (!sessionExpiredFlag) verifyAuthState(false).catch(() => {});
+    if (!sessionExpiredFlag) verifyAuthState(false).catch(() => { });
   }, intervalMs);
 
   window.addEventListener('focus', () => {
     if (!window.__verifyingOnFocus &&
-        (!authState.lastVerified || Date.now() - authState.lastVerified > 300000)) {
+      (!authState.lastVerified || Date.now() - authState.lastVerified > 300000)) {
       window.__verifyingOnFocus = true;
       setTimeout(() => {
         verifyAuthState(false).finally(() => {
@@ -899,7 +963,7 @@ function handleAuthError(error, context = '') {
 }
 
 /* ----------------------------------
- *  Export / Window Attach
+ *  ADDITION #4: Export / Window Attach
  * ---------------------------------- */
 window.auth = window.auth || {};
 Object.assign(window.auth, {
