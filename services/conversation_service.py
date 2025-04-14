@@ -747,100 +747,100 @@ async def get_conversation_service(
     return ConversationService(db)
 
 
-    async def generate_conversation_title(
+async def generate_conversation_title(
         self,
         conversation_id: UUID,
         messages: List[Dict[str, Any]],
         model_id: str
     ) -> str:
-        """
-        Generate a suggested title for the conversation by calling AI with a prompt.
-        """
-        from utils.ai_response import generate_ai_response
-        system_prompt = (
-            "You are an expert at summarizing. "
-            "Please provide a short and descriptive title (no more than a few words) "
-            "that captures the essence of the conversation. "
-            "Output only the title without extra commentary."
-        )
-        temp_messages = [{"role": "system", "content": system_prompt}]
-        for msg in messages:
-            temp_messages.append({"role": msg["role"], "content": msg["content"]})
-        temp_messages.append(
-            {
-                "role": "user",
-                "content": "Please provide a short title for the conversation above."
-            }
-        )
+    """
+    Generate a suggested title for the conversation by calling AI with a prompt.
+    """
+    from utils.ai_response import generate_ai_response
+    system_prompt = (
+        "You are an expert at summarizing. "
+        "Please provide a short and descriptive title (no more than a few words) "
+        "that captures the essence of the conversation. "
+        "Output only the title without extra commentary."
+    )
+    temp_messages = [{"role": "system", "content": system_prompt}]
+    for msg in messages:
+        temp_messages.append({"role": msg["role"], "content": msg["content"]})
+    temp_messages.append(
+        {
+            "role": "user",
+            "content": "Please provide a short title for the conversation above."
+        }
+    )
 
-        try:
-            assistant_msg_obj = await generate_ai_response(
-                conversation_id=conversation_id,
-                messages=temp_messages,
-                model_id=model_id,
-                db=self.db,
-                enable_markdown_formatting=False
-            )
-            if assistant_msg_obj and assistant_msg_obj.content:
-                return assistant_msg_obj.content.strip()
-            else:
-                return "Untitled Conversation"
-        except Exception as e:
-            logger.exception(f"Error generating conversation title: {e}")
+    try:
+        assistant_msg_obj = await generate_ai_response(
+            conversation_id=conversation_id,
+            messages=temp_messages,
+            model_id=model_id,
+            db=self.db,
+            enable_markdown_formatting=False
+        )
+        if assistant_msg_obj and assistant_msg_obj.content:
+            return assistant_msg_obj.content.strip()
+        else:
             return "Untitled Conversation"
+    except Exception as e:
+        logger.exception(f"Error generating conversation title: {e}")
+        return "Untitled Conversation"
 
-    async def generate_conversation_summary(
+async def generate_conversation_summary(
         self,
         conversation_id: UUID,
         messages: List[Dict[str, Any]],
         model_id: str,
         max_length: int = 200
     ) -> str:
-        """
-        Generate a summary for the conversation by calling AI with a summary prompt.
-        """
-        from utils.ai_response import generate_ai_response
-        system_prompt = (
-            "You are an expert at summarizing. "
-            f"Provide a concise summary no longer than {max_length} characters. "
-            "Do not include extraneous text."
-        )
-        temp_messages = [{"role": "system", "content": system_prompt}]
-        for msg in messages:
-            temp_messages.append({"role": msg["role"], "content": msg["content"]})
-        temp_messages.append(
-            {
-                "role": "user",
-                "content": f"Please summarize this conversation in <= {max_length} characters."
-            }
-        )
+    """
+    Generate a summary for the conversation by calling AI with a summary prompt.
+    """
+    from utils.ai_response import generate_ai_response
+    system_prompt = (
+        "You are an expert at summarizing. "
+        f"Provide a concise summary no longer than {max_length} characters. "
+        "Do not include extraneous text."
+    )
+    temp_messages = [{"role": "system", "content": system_prompt}]
+    for msg in messages:
+        temp_messages.append({"role": msg["role"], "content": msg["content"]})
+    temp_messages.append(
+        {
+            "role": "user",
+            "content": f"Please summarize this conversation in <= {max_length} characters."
+        }
+    )
 
-        try:
-            assistant_msg_obj = await generate_ai_response(
-                conversation_id=conversation_id,
-                messages=temp_messages,
-                model_id=model_id,
-                db=self.db,
-                enable_markdown_formatting=False
-            )
-            if assistant_msg_obj and assistant_msg_obj.content:
-                summary_text = assistant_msg_obj.content.strip()
-                return summary_text[:max_length]
-            else:
-                return "No summary available."
-        except Exception as e:
-            logger.exception(f"Error generating conversation summary: {e}")
+    try:
+        assistant_msg_obj = await generate_ai_response(
+            conversation_id=conversation_id,
+            messages=temp_messages,
+            model_id=model_id,
+            db=self.db,
+            enable_markdown_formatting=False
+        )
+        if assistant_msg_obj and assistant_msg_obj.content:
+            summary_text = assistant_msg_obj.content.strip()
+            return summary_text[:max_length]
+        else:
             return "No summary available."
+    except Exception as e:
+        logger.exception(f"Error generating conversation summary: {e}")
+        return "No summary available."
 
 async def search_conversations(
-    self,
-    project_id: UUID,
-    user_id: int,
-    query: str,
-    include_messages: bool,
-    skip: int,
-    limit: int
-) -> Dict[str, Any]:
+        self,
+        project_id: UUID,
+        user_id: int,
+        query: str,
+        include_messages: bool,
+        skip: int,
+        limit: int
+    ) -> Dict[str, Any]:
     """
     Search for conversations by title and optionally in message content.
     Returns a dict with keys: 'conversations', 'total', 'highlighted_messages' (empty).
