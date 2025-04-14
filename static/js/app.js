@@ -1186,7 +1186,12 @@ function handleAuthStateChange(e) {
           });
         }
       } else {
-        console.log("[AuthStateChange] Already authenticated, skipping redundant data load.");
+        console.log("[AuthStateChange] Already authenticated, forcing UI refresh anyway.");
+        loadInitialProjects().catch(err => {
+          console.error("[AuthStateChange] Error forcing initial projects:", err);
+        });
+        loadConversationList().catch(err => console.warn("Failed forcing conversation load:", err));
+        loadSidebarProjects().catch(err => console.warn("Failed forcing sidebar load:", err));
       }
   } else {
     const conversationArea = ELEMENTS.CONVERSATION_AREA || getElement(SELECTORS.CONVERSATION_AREA);
@@ -1414,15 +1419,6 @@ window.appInitializer = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  // On page load, verify if access_token cookie exists and is valid
-  const hasAccessToken = document.cookie.includes('access_token=');
-  if (hasAccessToken) {
-    console.log("[Auth] Found access token cookie, loading initial projects");
-    loadInitialProjects().catch(err => {
-      console.warn("[Auth] Error loading initial projects:", err);
-    });
-  }
-
   window.appInitializer.initialize().catch(error => {
     console.error("[DOMContentLoaded] App init error:", error);
     alert("Failed to initialize. Please refresh the page.");
@@ -1431,6 +1427,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // Additional setup tasks
   console.log('[app.js] Dispatching appJsReady event');
   document.dispatchEvent(new CustomEvent('appJsReady'));
+});
+
+// Listen for 'authReady' event so we can handle pre-verified sessions
+document.addEventListener('authReady', (evt) => {
+  if (evt.detail.authenticated) {
+    console.log("[app.js] 'authReady' => user is authenticated. Forcing initial load of projects and conversation list.");
+    loadInitialProjects().catch(err => {
+      console.error("[app.js] Error in forced loadInitialProjects after authReady:", err);
+    });
+    loadConversationList().catch(err => {
+      console.error("[app.js] Error in forced loadConversationList after authReady:", err);
+    });
+  } else {
+    console.log("[app.js] 'authReady' => user not authenticated. Display login message if needed.");
+    const loginMsg = document.getElementById('loginRequiredMessage');
+    if (loginMsg) loginMsg.classList.remove('hidden');
+  }
 });
 
 document.addEventListener('projectSelected', (event) => {
