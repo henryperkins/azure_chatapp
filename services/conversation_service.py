@@ -1,29 +1,29 @@
-# MODIFIED: conversation_service.py
-# Reason: Validate model parameters, pass parameters down to _generate_ai_response.
+# conversation_service.py
+# -----------------------
+# Provides a ConversationService class for managing conversation data
+# and AI-related operations, including parameter validation and
+# generating AI responses.
 
 import logging
-from typing import Dict, List, Optional, Any, Tuple, Union, cast
+from typing import Dict, List, Optional, Any, Union
 from uuid import UUID
 from datetime import datetime
 
-from fastapi import Depends, HTTPException, WebSocket
+from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from sqlalchemy.orm import joinedload
+from sqlalchemy import select, and_, func, or_
+from sqlalchemy.orm import joinedload, aliased
+from sqlalchemy.orm.attributes import flag_modified
 
-# Use centralized settings
-from config import settings, Settings
+from config import settings
 from db import get_async_session
 from models.conversation import Conversation
 from models.message import Message
 from models.project import Project
-
-# Use generate_ai_response from ai_response module directly
 from utils.ai_response import generate_ai_response, get_model_config
-from utils.ai_helper import augment_with_knowledge
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
-from utils.message_handlers import update_project_token_usage  # Import needed function
+
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +92,7 @@ def validate_model_and_params(model_id: str, params: Dict[str, Any]) -> None:
                     f"Thinking budget ({thinking_budget}) is below minimum ({min_budget}) for {model_id}.",
                     400,
                 )
-        # Further validation (e.g., budget vs max_tokens) might happen in the API call layer
-
-    # Add validation for other parameters like temperature range, max_tokens limits etc. if needed
+    # Additional validations (temperature, max_tokens, etc.) can be added here.
 
 
 class ConversationService:
@@ -109,7 +107,6 @@ class ConversationService:
         include_deleted: bool = False,
     ) -> Conversation:
         """Centralized conversation access validation."""
-        # (Keep existing implementation)
         filters = [Conversation.id == conversation_id, Conversation.user_id == user_id]
 
         if not include_deleted:
@@ -122,7 +119,7 @@ class ConversationService:
             try:
                 pid = UUID(str(project_id))
             except ValueError:
-                raise ConversationError("Invalid project ID format", 400)
+                raise ConversationError("Invalid project ID format", 400) from None
 
             filters.append(Conversation.project_id == pid)
             # Eager load project only when project_id is specified
@@ -131,15 +128,13 @@ class ConversationService:
             result = await self.db.execute(query.where(and_(*filters)))
             conv = result.scalar_one_or_none()
 
-            # Check if found conversation actually belongs to the project
-            # This check might be redundant if the filter works correctly, but adds safety
+            # Double-check project mismatch
             if conv and conv.project_id != pid:
                 logger.error(
-                    f"Conversation {conversation_id} found but project mismatch: expected {pid}, got {conv.project_id}"
+                    f"Conversation {conversation_id} found but project mismatch: "
+                    f"expected {pid}, got {conv.project_id}"
                 )
-                # Treat as not found or access denied
                 conv = None
-
         else:
             # Standalone conversation: project_id must be NULL
             filters.append(Conversation.project_id.is_(None))
@@ -157,21 +152,15 @@ class ConversationService:
         if project_id and conv.project:
             if conv.project.user_id != user_id:
                 logger.error(
-                    f"Project access denied for project {project_id} linked to conversation {conversation_id}. User: {user_id}"
+                    f"Project access denied for project {project_id} linked to conversation {conversation_id}. "
+                    f"User: {user_id}"
                 )
                 raise ConversationError("Project access denied", 403)
-        elif project_id and not conv.project:
-            # Should not happen if eager loading worked and project_id matched filter
-            logger.error(
-                f"Conversation {conversation_id} linked to project {project_id}, but project data could not be loaded."
-            )
-            raise ConversationError("Internal error loading project data", 500)
 
         return conv
 
     async def _validate_project_access(self, project_id: UUID, user_id: int) -> Project:
         """Validate project ownership."""
-        # (Keep existing implementation)
         project = await self.db.get(Project, project_id)
         if not project:
             raise ConversationError("Project not found", 404)
@@ -188,53 +177,32 @@ class ConversationService:
         title: str,
         model_id: str,
         project_id: Optional[UUID] = None,
-        use_knowledge_base: bool = False,  # This parameter will be ignored for project conversations
-        # Allow passing initial AI settings
+        use_knowledge_base: bool = False,
         ai_settings: Optional[Dict[str, Any]] = None,
     ) -> Conversation:
         """Create new conversation with validation and optional AI settings."""
         try:
             validate_model_and_params(model_id, ai_settings or {})
         except ConversationError as e:
-            # Re-raise validation errors as HTTPException for the endpoint
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
-        # Create base conversation object
         conv = Conversation(
             user_id=user_id,
             title=title.strip(),
             model_id=model_id,
             project_id=project_id,
-            use_knowledge_base=False,  # Default to False, will set correctly below
-            # Store initial AI settings if provided
+            use_knowledge_base=False,
             extra_data={"ai_settings": ai_settings} if ai_settings else None,
         )
 
-        # For project conversations, automatically use KB if it exists
+        # Auto-enable KB if the project has one
         if project_id:
-            project = await self._validate_project_access(
-                project_id, user_id
-            )  # Raises on failure
-            if project and project.knowledge_base_id:
-                logger.info(
-                    f"Project {project_id} has KB, automatically enabling for conversation {conv.id}."
-                )
+            project = await self._validate_project_access(project_id, user_id)
+            if project.knowledge_base_id:
                 conv.use_knowledge_base = True
-                from typing import cast
-                conv.knowledge_base_id = project.knowledge_base_id or None  # type: ignore
-                # The use_knowledge_base parameter is ignored for project conversations
+                conv.knowledge_base_id = project.knowledge_base_id  # type: ignore
         else:
-            # For standalone conversations, honor the parameter
             conv.use_knowledge_base = use_knowledge_base
-
-        # Verify project assignment before saving (redundant if _validate_project_access works)
-        if project_id and conv.project_id != project_id:
-            logger.error(
-                f"Project ID mismatch during conversation creation: conv.project_id={conv.project_id}, expected={project_id}"
-            )
-            raise ConversationError(
-                "Internal error: Conversation project assignment failed", 500
-            )
 
         await save_model(self.db, conv)
         logger.info(
@@ -249,7 +217,6 @@ class ConversationService:
         project_id: Optional[UUID] = None,
     ) -> Dict:
         """Get single conversation with validation."""
-        # (Keep existing implementation, _validate handles errors)
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
@@ -263,7 +230,6 @@ class ConversationService:
         limit: int = 100,
     ) -> List[Conversation]:
         """List conversations with pagination."""
-        # (Keep existing implementation)
         filters = [Conversation.user_id == user_id, Conversation.is_deleted.is_(False)]
 
         if project_id is not None:
@@ -288,7 +254,6 @@ class ConversationService:
         title: Optional[str] = None,
         model_id: Optional[str] = None,
         use_knowledge_base: Optional[bool] = None,
-        # Allow updating AI settings
         ai_settings: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """Update conversation attributes."""
@@ -297,16 +262,15 @@ class ConversationService:
         )
 
         updated = False
-        if title is not None and conv.title != title.strip():
+        if title is not None and title.strip() != conv.title:
             conv.title = title.strip()
             updated = True
-        if model_id is not None and conv.model_id != model_id:
+        if model_id is not None and model_id != conv.model_id:
             try:
-                # Validate the new model before assigning
                 validate_model_and_params(
                     model_id,
                     (
-                        ai_settings or conv.extra_data.get("ai_settings", {})
+                        (ai_settings or conv.extra_data.get("ai_settings", {}))
                         if conv.extra_data
                         else {}
                     ),
@@ -316,37 +280,35 @@ class ConversationService:
             except ConversationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
-        # Handle use_knowledge_base toggle - but only for non-project conversations
+        # Only for standalone conversations if toggling KB
         if (
             use_knowledge_base is not None
             and conv.use_knowledge_base != use_knowledge_base
         ):
-            # If this is a project conversation, don't allow disabling KB if project has one
             if conv.project_id:
-                project = await self._validate_project_access(UUID(str(conv.project_id)), user_id)
+                project = await self._validate_project_access(
+                    UUID(str(conv.project_id)), user_id
+                )
                 if project.knowledge_base_id and not use_knowledge_base:
-                    logger.warning(f"Attempt to disable KB for project conversation {conv.id} ignored")
-                    # Ignore the attempt to disable KB for project conversations
+                    logger.warning(
+                        f"Attempt to disable KB for project conversation {conv.id} is ignored."
+                    )
                 elif project.knowledge_base_id:
-                    # Allow enabling it if project has KB (though this should already be enabled)
                     conv.use_knowledge_base = True
-                    conv.knowledge_base_id = project.knowledge_base_id or None  # type: ignore
+                    conv.knowledge_base_id = project.knowledge_base_id  # type: ignore
                     updated = True
-                elif not project.knowledge_base_id:
-                    # If project has no KB, we can't enable it
+                else:
+                    # If project has no KB, we cannot enable it
                     if use_knowledge_base:
                         raise ConversationError(
                             "Cannot enable knowledge base: Project has no associated knowledge base.",
                             400,
                         )
             else:
-                # For standalone conversations, allow toggling
                 conv.use_knowledge_base = use_knowledge_base
                 updated = True
 
-        # Update AI settings (merge or replace)
         if ai_settings is not None:
-            # Validate new settings against the current/new model
             current_model_id = model_id or conv.model_id
             if not current_model_id:
                 raise ConversationError("Model ID is required", 400)
@@ -357,13 +319,10 @@ class ConversationService:
 
             if conv.extra_data is None:
                 conv.extra_data = {}
-            # Merge new settings, overwriting existing keys
             conv.extra_data["ai_settings"] = {
                 **conv.extra_data.get("ai_settings", {}),
                 **ai_settings,
             }
-            # Important: Ensure extra_data is marked as modified for SQLAlchemy JSON mutation tracking
-            from sqlalchemy.orm.attributes import flag_modified
 
             flag_modified(conv, "extra_data")
             updated = True
@@ -385,47 +344,37 @@ class ConversationService:
         project_id: Optional[UUID] = None,
     ) -> UUID:
         """Soft delete conversation."""
-        # (Keep existing implementation, _validate handles errors)
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
         if conv.is_deleted:
             logger.warning(f"Conversation {conversation_id} is already deleted.")
-            # Return ID even if already deleted? Or raise error? Returning ID is idempotent.
             return UUID(str(conv.id))
 
         conv.is_deleted = True
         conv.deleted_at = datetime.utcnow()
         await save_model(self.db, conv)
         logger.info(f"Conversation {conversation_id} soft-deleted by user {user_id}.")
-        if conv.id is None:  # Should not happen after save
-            raise ConversationError(
-                "Failed to retrieve conversation ID after delete operation", 500
-            )
         return UUID(str(conv.id))
 
     async def restore_conversation(
         self,
         conversation_id: UUID,
         user_id: int,
-        project_id: Optional[UUID] = None,  # Project ID is necessary context here
+        project_id: Optional[UUID] = None,
     ) -> Dict:
-        """Restore soft-deleted conversation."""
+        """Restore a previously soft-deleted conversation."""
         if not project_id:
-            # Standalone conversations usually aren't soft-deleted/restorable in this design
             raise ConversationError(
                 "Restore operation typically applies to project conversations.", 400
             )
 
-        # Validate access including deleted conversations within the project
+        # Validate access including possibly deleted conversations
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id, include_deleted=True
         )
         if not conv.is_deleted:
-            logger.warning(
-                f"Conversation {conversation_id} is not deleted, cannot restore."
-            )
-            # Return current state? Or raise error? Let's return current state.
+            logger.warning(f"Conversation {conversation_id} is not deleted.")
             return serialize_conversation(conv)
 
         conv.is_deleted = False
@@ -442,8 +391,8 @@ class ConversationService:
         skip: int = 0,
         limit: int = 100,
     ) -> List[Dict]:
-        """List messages in conversation."""
-        # (Keep existing implementation, _validate handles errors)
+        """List messages in a conversation."""
+        # Validate conversation
         await self._validate_conversation_access(conversation_id, user_id, project_id)
 
         messages = await get_all_by_condition(
@@ -463,7 +412,6 @@ class ConversationService:
         content: str,
         role: str = "user",
         project_id: Optional[UUID] = None,
-        # AI generation parameters
         image_data: Optional[Union[str, List[str]]] = None,
         vision_detail: Optional[str] = "auto",
         enable_thinking: Optional[bool] = None,
@@ -471,40 +419,32 @@ class ConversationService:
         reasoning_effort: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        # Add other params as needed
     ) -> Dict:
-        """Create user message and trigger AI response generation."""
+        """Create a new message in the conversation and, if role=user, generate AI response."""
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
 
-        # 1. Create and save the user message
         user_message = await self._create_user_message(
             conversation_id, content, role, image_data
         )
         response = {"user_message": serialize_message(user_message)}
 
-        # 2. Generate AI response if the created message was from the 'user'
+        # Only auto-generate AI response for user messages
         if user_message.role == "user":
             if not conv.model_id:
                 raise ConversationError(
                     "Cannot generate AI response: No model configured for conversation",
-                    400
+                    400,
                 )
             try:
-                # Prepare message history for AI
-                # Pass include_system_prompt=True if you have a default system prompt defined elsewhere
                 message_history = await self._get_conversation_context(
-                    conversation_id,
-                    include_system_prompt=True,  # Or False depending on design
+                    conversation_id, include_system_prompt=True
                 )
-
-                # Get AI settings from conversation or use defaults/passed params
                 ai_settings = (
                     conv.extra_data.get("ai_settings", {}) if conv.extra_data else {}
                 )
 
-                # Prioritize parameters passed directly to create_message, then conv settings, then defaults
                 final_enable_thinking = (
                     enable_thinking
                     if enable_thinking is not None
@@ -536,60 +476,62 @@ class ConversationService:
                     else ai_settings.get("max_tokens")
                 )
 
-                # Call the centralized generate_ai_response function
+                # Validate final parameters with the model
+                params_for_validation = {
+                    "image_data": image_data,
+                    "vision_detail": final_vision_detail,
+                    "enable_thinking": final_enable_thinking,
+                    "thinking_budget": final_thinking_budget,
+                    "reasoning_effort": final_reasoning_effort,
+                }
+                # We can also pass temperature, max_tokens if needed in the config
+                if final_temperature is not None:
+                    params_for_validation["temperature"] = final_temperature
+                if final_max_tokens is not None:
+                    params_for_validation["max_tokens"] = final_max_tokens
+
+                validate_model_and_params(conv.model_id, params_for_validation)
+
                 assistant_msg_obj = await generate_ai_response(
                     conversation_id=conversation_id,
                     messages=message_history,
                     model_id=str(conv.model_id),
                     db=self.db,
-                    # Pass validated & prioritized parameters
-                    image_data=image_data,  # Image data comes from the user input directly
+                    image_data=image_data,
                     vision_detail=final_vision_detail,
                     enable_thinking=final_enable_thinking,
                     thinking_budget=final_thinking_budget,
                     reasoning_effort=final_reasoning_effort,
                     temperature=final_temperature,
                     max_tokens=final_max_tokens,
-                    # Pass enable_markdown_formatting if needed, e.g., from ai_settings
                     enable_markdown_formatting=ai_settings.get(
                         "enable_markdown_formatting", False
                     ),
                 )
 
                 if assistant_msg_obj:
-                    # Serialize the Message object including metadata
                     serialized_assistant_msg = serialize_message(assistant_msg_obj)
-
-                    # Add thinking/redacted thinking to the top level for convenience if present
-                    if (
-                        hasattr(assistant_msg_obj, "thinking")
-                        and assistant_msg_obj.thinking
-                    ):
+                    # Attach thinking or redacted_thinking if present
+                    if hasattr(assistant_msg_obj, "thinking"):
                         serialized_assistant_msg["thinking"] = (
                             assistant_msg_obj.thinking
                         )
-                    if (
-                        hasattr(assistant_msg_obj, "redacted_thinking")
-                        and assistant_msg_obj.redacted_thinking
-                    ):
+                    if hasattr(assistant_msg_obj, "redacted_thinking"):
                         serialized_assistant_msg["redacted_thinking"] = (
                             assistant_msg_obj.redacted_thinking
                         )
-
                     response["assistant_message"] = serialized_assistant_msg
                 else:
-                    # Handle case where generate_ai_response returned None (error occurred)
                     logger.error(
-                        f"AI response generation failed for conversation {conversation_id}"
+                        f"AI response generation returned None for conversation {conversation_id}"
                     )
                     response["assistant_error"] = {
                         "message": "Failed to generate AI response."
                     }
-
             except HTTPException as http_exc:
-                # Catch HTTP exceptions raised during generation (e.g., model API errors)
                 logger.error(
-                    f"HTTP error during AI generation for conv {conversation_id}: {http_exc.status_code} - {http_exc.detail}"
+                    f"HTTP error during AI generation for conv {conversation_id}: "
+                    f"{http_exc.status_code} - {http_exc.detail}"
                 )
                 response["assistant_error"] = {
                     "message": http_exc.detail,
@@ -612,18 +554,15 @@ class ConversationService:
         role: str,
         image_data: Optional[Union[str, List[str]]] = None,
     ) -> Message:
-        """Create and save a user message, handling image data."""
-        if role != "user":  # This internal helper is specifically for user messages
-            logger.warning(f"Attempted to use _create_user_message with role '{role}'")
-            # Or raise error depending on desired strictness
-            # For now, allow but log
-
+        """Create and save a message, handling image data if present."""
         extra_data = {}
-        # Validate and store image data if provided
         if image_data:
-            # Basic format check - more robust validation could be added
             images_to_store = []
-            image_list = [image_data] if isinstance(image_data, str) else image_data
+            if isinstance(image_data, str):
+                image_list = [image_data]
+            else:
+                image_list = image_data
+
             for idx, img in enumerate(image_list):
                 if isinstance(img, str) and img.startswith("data:image"):
                     parts = img.split(";")
@@ -631,33 +570,23 @@ class ConversationService:
                         images_to_store.append(
                             {"index": idx, "format": parts[0].split(":")[1]}
                         )
-                        # Store only metadata, not the full base64 in DB extra_data?
-                        # Or store the full base64 if needed for recall? Let's store it for now.
-                        # Consider size limits if storing full base64 in JSONB.
-                        # extra_data[f"image_{idx}_data"] = img # Example: store full data
                     else:
                         logger.warning(
-                            f"Invalid image data URL format detected for image {idx}. Skipping."
+                            f"Invalid image data URL format for image {idx}."
                         )
                 else:
                     logger.warning(
-                        f"Invalid image data type or format for image {idx}: {type(img)}. Skipping."
+                        f"Invalid image data type or format for image {idx}: {type(img)}"
                     )
 
-            # Store the image data itself separately or pass it directly to AI call?
-            # Storing it in the message object extra_data might be large.
-            # Let's assume image_data is passed transiently and not stored long-term in extra_data.
-            # We'll just log that an image was present.
             if images_to_store:
                 extra_data["image_count"] = len(images_to_store)
                 extra_data["image_formats"] = [img["format"] for img in images_to_store]
-                logger.info(f"User message includes {len(images_to_store)} image(s).")
+                logger.info(f"User message includes {len(images_to_store)} images.")
 
         message = Message(
             conversation_id=conversation_id,
-            content=(
-                content.strip() if content else ""
-            ),  # Ensure content is string and handle None
+            content=content.strip() if content else "",
             role=role,
             extra_data=extra_data if extra_data else None,
         )
@@ -667,26 +596,21 @@ class ConversationService:
         )
         return message
 
-    # Removed _generate_ai_response as logic is now in ai_response.generate_ai_response
-
     async def _get_conversation_context(
         self, conversation_id: UUID, include_system_prompt: bool = False
     ) -> List[Dict[str, Any]]:
-        """Get formatted message history for AI context, handling potential image data."""
+        """Get formatted message history for AI context."""
         messages = await get_all_by_condition(
             self.db,
             Message,
             Message.conversation_id == conversation_id,
             order_by=Message.created_at.asc(),
-            # Add a reasonable limit to prevent loading excessively long histories
-            # The AI model itself has token limits, so loading everything might be wasteful
-            limit=100,  # Example limit, adjust as needed
+            limit=100,  # limit to avoid extremely long histories
         )
 
-        context: List[Dict[str, Any]] = []
+        context = []
         if include_system_prompt:
-            # TODO: Get system prompt from conversation settings or a global default
-            system_prompt = "You are a helpful assistant."  # Placeholder
+            system_prompt = "You are a helpful assistant."
             conv = await self.db.get(Conversation, conversation_id)
             if (
                 conv
@@ -697,226 +621,173 @@ class ConversationService:
             context.append({"role": "system", "content": system_prompt})
 
         for msg in messages:
-            message_dict: Dict[str, Any] = {"role": msg.role}
-            # Handle potential image data stored in extra_data (if design requires it)
-            # Current design passes image_data transiently, so check msg.content format
-            if (
-                msg.role == "user"
-                and msg.extra_data
-                and "image_count" in msg.extra_data
-            ):
-                # If user message had images, format for multimodal models
-                # This assumes the image data itself isn't stored in extra_data,
-                # but passed transiently during the create_message call.
-                # The context needs to represent the *intent* including images.
-                # How to reconstruct this? Maybe store image references?
-                # For now, we'll just pass the text content.
-                # The actual image data needs to be passed separately to the AI call.
-                message_dict["content"] = msg.content
-                logger.debug(
-                    f"User message {msg.id} originally included images, adding text content to context."
-                )
-            else:
-                message_dict["content"] = msg.content
-
-            # Skip empty messages?
-            if message_dict["content"]:
-                context.append(message_dict)
+            message_dict = {"role": msg.role, "content": msg.content}
+            # Additional logic for images could go here, but currently we only pass text
+            context.append(message_dict)
 
         return context
 
-    # WebSocket message handling removed - using HTTP only
-
-
-# Middleware for custom exceptions (Keep as is)
-async def conversation_exception_handler(request, call_next):
-    try:
-        return await call_next(request)
-    except ConversationError as exc:
-        # Use standard HTTPException for FastAPI compatibility
-        raise HTTPException(status_code=exc.status_code, detail=exc.message)
-
-
-# Service instance factory (Keep as is)
-async def get_conversation_service(
-    db: AsyncSession = Depends(get_async_session),
-) -> ConversationService:
-    """
-    Provide a fully-capable ConversationService instance with extended methods.
-    """
-    return ConversationService(db)
-
-
-async def generate_conversation_title(
-        self,
-        conversation_id: UUID,
-        messages: List[Dict[str, Any]],
-        model_id: str
+    async def generate_conversation_title(
+        self, conversation_id: UUID, messages: List[Dict[str, Any]], model_id: str
     ) -> str:
-    """
-    Generate a suggested title for the conversation by calling AI with a prompt.
-    """
-    from utils.ai_response import generate_ai_response
-    system_prompt = (
-        "You are an expert at summarizing. "
-        "Please provide a short and descriptive title (no more than a few words) "
-        "that captures the essence of the conversation. "
-        "Output only the title without extra commentary."
-    )
-    temp_messages = [{"role": "system", "content": system_prompt}]
-    for msg in messages:
-        temp_messages.append({"role": msg["role"], "content": msg["content"]})
-    temp_messages.append(
-        {
-            "role": "user",
-            "content": "Please provide a short title for the conversation above."
-        }
-    )
-
-    try:
-        assistant_msg_obj = await generate_ai_response(
-            conversation_id=conversation_id,
-            messages=temp_messages,
-            model_id=model_id,
-            db=self.db,
-            enable_markdown_formatting=False
+        """
+        Generate a suggested title for the conversation by calling AI with a prompt.
+        """
+        system_prompt = (
+            "You are an expert at summarizing. "
+            "Please provide a short and descriptive title (no more than a few words) "
+            "that captures the essence of the conversation. "
+            "Output only the title without extra commentary."
         )
-        if assistant_msg_obj and assistant_msg_obj.content:
-            return assistant_msg_obj.content.strip()
-        else:
-            return "Untitled Conversation"
-    except Exception as e:
-        logger.exception(f"Error generating conversation title: {e}")
-        return "Untitled Conversation"
+        temp_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            temp_messages.append({"role": msg["role"], "content": msg["content"]})
+        temp_messages.append(
+            {
+                "role": "user",
+                "content": "Please provide a short title for the conversation above.",
+            }
+        )
 
-async def generate_conversation_summary(
+        try:
+            assistant_msg_obj = await generate_ai_response(
+                conversation_id=conversation_id,
+                messages=temp_messages,
+                model_id=model_id,
+                db=self.db,
+                enable_markdown_formatting=False,
+            )
+            if assistant_msg_obj and assistant_msg_obj.content:
+                return assistant_msg_obj.content.strip()
+            else:
+                return "Untitled Conversation"
+        except Exception as e:
+            logger.exception(f"Error generating conversation title: {e}")
+            return "Untitled Conversation"
+
+    async def generate_conversation_summary(
         self,
         conversation_id: UUID,
         messages: List[Dict[str, Any]],
         model_id: str,
-        max_length: int = 200
+        max_length: int = 200,
     ) -> str:
-    """
-    Generate a summary for the conversation by calling AI with a summary prompt.
-    """
-    from utils.ai_response import generate_ai_response
-    system_prompt = (
-        "You are an expert at summarizing. "
-        f"Provide a concise summary no longer than {max_length} characters. "
-        "Do not include extraneous text."
-    )
-    temp_messages = [{"role": "system", "content": system_prompt}]
-    for msg in messages:
-        temp_messages.append({"role": msg["role"], "content": msg["content"]})
-    temp_messages.append(
-        {
-            "role": "user",
-            "content": f"Please summarize this conversation in <= {max_length} characters."
-        }
-    )
-
-    try:
-        assistant_msg_obj = await generate_ai_response(
-            conversation_id=conversation_id,
-            messages=temp_messages,
-            model_id=model_id,
-            db=self.db,
-            enable_markdown_formatting=False
+        """
+        Generate a summary for the conversation by calling AI with a summary prompt.
+        """
+        system_prompt = (
+            "You are an expert at summarizing. "
+            f"Provide a concise summary no longer than {max_length} characters. "
+            "Do not include extraneous text."
         )
-        if assistant_msg_obj and assistant_msg_obj.content:
-            summary_text = assistant_msg_obj.content.strip()
-            return summary_text[:max_length]
-        else:
-            return "No summary available."
-    except Exception as e:
-        logger.exception(f"Error generating conversation summary: {e}")
-        return "No summary available."
+        temp_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            temp_messages.append({"role": msg["role"], "content": msg["content"]})
+        temp_messages.append(
+            {
+                "role": "user",
+                "content": f"Please summarize this conversation in <= {max_length} characters.",
+            }
+        )
 
-async def search_conversations(
+        try:
+            assistant_msg_obj = await generate_ai_response(
+                conversation_id=conversation_id,
+                messages=temp_messages,
+                model_id=model_id,
+                db=self.db,
+                enable_markdown_formatting=False,
+            )
+            if assistant_msg_obj and assistant_msg_obj.content:
+                summary_text = assistant_msg_obj.content.strip()
+                return summary_text[:max_length]
+            else:
+                return "No summary available."
+        except Exception as e:
+            logger.exception(f"Error generating conversation summary: {e}")
+            return "No summary available."
+
+    async def search_conversations(
         self,
         project_id: UUID,
         user_id: int,
         query: str,
         include_messages: bool,
         skip: int,
-        limit: int
+        limit: int,
     ) -> Dict[str, Any]:
-    """
-    Search for conversations by title and optionally in message content.
-    Returns a dict with keys: 'conversations', 'total', 'highlighted_messages' (empty).
-    """
-    from sqlalchemy import or_
-    from sqlalchemy.orm import aliased
-    from models.conversation import Conversation
-    from models.message import Message
-    q_str = f"%{query}%"
+        """
+        Search for conversations by title and optionally by message content.
+        Returns a dict with keys: 'conversations', 'total', 'highlighted_messages'.
+        """
 
-    base_filters = [
-        Conversation.user_id == user_id,
-        Conversation.is_deleted.is_(False),
-        Conversation.project_id == project_id,
-    ]
+        q_str = f"%{query}%"
+        base_filters = [
+            Conversation.user_id == user_id,
+            Conversation.is_deleted.is_(False),
+            Conversation.project_id == project_id,
+        ]
 
-    # We'll do a subquery or a join
-    # For counting and retrieving distinct conversations
-    # We'll join with messages only if include_messages is True
-    if include_messages:
-        # We'll do a join to search message content as well
-        # and do an OR: conversation.title ilike or message.content ilike
-        from sqlalchemy import select, func
-        from sqlalchemy.sql import and_
+        if include_messages:
+            c_alias = aliased(Conversation)
+            m_alias = aliased(Message)
 
-        c_alias = aliased(Conversation)
-        m_alias = aliased(Message)
-
-        join_stmt = select(c_alias).join(
-            m_alias, m_alias.conversation_id == c_alias.id, isouter=True
-        ).where(
-            and_(
-                *base_filters,
-                or_(
-                    c_alias.title.ilike(q_str),
-                    m_alias.content.ilike(q_str)
+            join_stmt = (
+                select(c_alias)
+                .join(m_alias, m_alias.conversation_id == c_alias.id, isouter=True)
+                .where(
+                    and_(
+                        *base_filters,
+                        or_(c_alias.title.ilike(q_str), m_alias.content.ilike(q_str)),
+                    )
                 )
+                .distinct()
+                .order_by(c_alias.created_at.desc())
             )
-        ).distinct().order_by(c_alias.created_at.desc())
-
-        total_query = select(func.count('*')).select_from(
-            join_stmt.order_by(None).subquery()
-        )
-
-        result_count = await self.db.execute(total_query)
-        total = result_count.scalar() or 0
-
-        join_stmt = join_stmt.offset(skip).limit(limit)
-        result = await self.db.execute(join_stmt)
-        conversations = result.scalars().all()
-
-    else:
-        # Search only in conversation titles
-        from sqlalchemy import select, func
-        from sqlalchemy.sql import and_
-
-        search_filter = or_(Conversation.title.ilike(q_str))
-        query_stmt = select(Conversation).where(
-            and_(
-                *base_filters,
-                search_filter
+            total_query = select(func.count("*")).select_from(
+                join_stmt.order_by(None).subquery()
             )
-        ).order_by(Conversation.created_at.desc())
 
-        # count
-        count_stmt = select(func.count('*')).select_from(query_stmt.order_by(None).subquery())
-        result_count = await self.db.execute(count_stmt)
-        total = result_count.scalar() or 0
+            result_count = await self.db.execute(total_query)
+            total = result_count.scalar() or 0
 
-        # fetch
-        query_stmt = query_stmt.offset(skip).limit(limit)
-        result = await self.db.execute(query_stmt)
-        conversations = result.scalars().all()
+            join_stmt = join_stmt.offset(skip).limit(limit)
+            result = await self.db.execute(join_stmt)
+            conversations = result.scalars().all()
+        else:
 
-    return {
-        "conversations": conversations,
-        "total": total,
-        "highlighted_messages": {}
-    }
+            search_filter = or_(Conversation.title.ilike(q_str))
+            query_stmt = (
+                select(Conversation)
+                .where(and_(*base_filters, search_filter))
+                .order_by(Conversation.created_at.desc())
+            )
+            count_stmt = select(func.count("*")).select_from(
+                query_stmt.order_by(None).subquery()
+            )
+            result_count = await self.db.execute(count_stmt)
+            total = result_count.scalar() or 0
+
+            query_stmt = query_stmt.offset(skip).limit(limit)
+            result = await self.db.execute(query_stmt)
+            conversations = result.scalars().all()
+
+        return {
+            "conversations": conversations,
+            "total": total,
+            "highlighted_messages": {},
+        }
+
+
+async def conversation_exception_handler(request, call_next):
+    try:
+        return await call_next(request)
+    except ConversationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+async def get_conversation_service(
+    db: AsyncSession = Depends(get_async_session),
+) -> ConversationService:
+    """Provide a fully-capable ConversationService instance."""
+    return ConversationService(db)

@@ -179,6 +179,14 @@
       this._bindCreateProjectButton();
       // Add event delegation for project card clicks
       this._bindProjectCardEvents();
+
+      // Listen for 'authReady' event so we can force-refresh projects if user is authenticated.
+      document.addEventListener('authReady', (evt) => {
+        if (evt.detail.authenticated) {
+          console.log("[ProjectListComponent] 'authReady' -> user is authenticated. Forcing project refresh.");
+          this.renderProjects({ forceRefresh: true });
+        }
+      });
     }
 
     _setupCustomization() {
