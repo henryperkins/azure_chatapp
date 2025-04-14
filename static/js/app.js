@@ -122,6 +122,24 @@ class APIError extends Error {
 // AUTHENTICATION FUNCTIONS
 // ---------------------------------------------------------------------
 
+function handleAuthModalPositioning() {
+  const authBtn = document.getElementById("authButton");
+  const authDropdown = document.getElementById("authDropdown");
+
+  if (!authBtn || !authDropdown || authDropdown.classList.contains('hidden')) {
+    return; // Don't adjust if elements not found or dropdown is hidden
+  }
+
+  // Adjust positioning based on viewport
+  if (window.innerWidth < 768) { // md breakpoint
+    const btnRect = authBtn.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    authDropdown.style.right = `${windowWidth - btnRect.right}px`;
+  } else {
+    authDropdown.style.right = ''; // Reset inline style
+  }
+}
+
 /**
  * Ensures user is authenticated (cookie-based).
  * Incorporates authCheckInProgress to avoid race conditions.
@@ -1002,13 +1020,8 @@ function setupEventListeners() {
       const isHidden = authDropdown.classList.contains('hidden');
       authDropdown.classList.toggle("hidden", !isHidden);
 
-      // Adjust position on mobile
-      if (window.innerWidth < 768) {
-        const btnRect = authBtn.getBoundingClientRect();
-        authDropdown.style.right = `${window.innerWidth - btnRect.right}px`;
-      } else {
-        authDropdown.style.right = '';
-      }
+      // Call the new positioning helper
+      handleAuthModalPositioning();
     });
 
     // Close dropdown when clicking outside
