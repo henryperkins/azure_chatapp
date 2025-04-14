@@ -162,7 +162,7 @@ class ProjectDashboard {
     if (projectId) {
       this.showProjectDetails(projectId);
     } else {
-      this.showProjectList();
+      window.showProjectsView();
     }
   }
 
