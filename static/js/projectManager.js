@@ -1135,7 +1135,7 @@
     prepareFileUploads,
     uploadFile,
     uploadFileWithRetry,
-```````````````````    deleteFile,
+    deleteFile,
 
     // Conversations & Artifacts
     createConversation,
