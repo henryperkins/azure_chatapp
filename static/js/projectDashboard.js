@@ -137,15 +137,7 @@ class ProjectDashboard {
   /* ===========================
      VIEW MANAGEMENT
      =========================== */
-  showProjectList() {
-    this.state.currentView = "list";
-    this.components.projectList?.show();
-    this.components.projectDetails?.hide();
-    window.history.pushState({}, "", "/");
-    this.loadProjects().catch(err => {
-      console.error("[ProjectDashboard] showProjectList load error:", err);
-    });
-  }
+  // Project list view is now handled by showProjectsView() in projectDashboardUtils.js
 
   async showProjectDetails(projectId) {
     this.state.currentView = "details";
@@ -173,96 +165,7 @@ class ProjectDashboard {
     }
   }
 
-  async loadProjects(filter = "all") {
-    try {
-      if (!window.projectManager) {
-        throw new Error("projectManager not initialized");
-      }
-
-      // NEW: Check authentication first
-      let isAuthenticated = false;
-      try {
-        if (window.auth?.isAuthenticated) {
-          isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
-        }
-      } catch (err) {
-        console.warn("[ProjectDashboard] Auth check failed in loadProjects:", err);
-      }
-
-      if (!isAuthenticated) {
-        // Show login required
-        const listContainer = document.getElementById("projectList");
-        const loginRequiredMessage = document.getElementById("loginRequiredMessage");
-        const noProjectsMsg = document.getElementById("noProjectsMessage");
-
-        if (listContainer) {
-          listContainer.innerHTML = '';
-        }
-
-        if (loginRequiredMessage) {
-          loginRequiredMessage.classList.remove("hidden");
-        }
-
-        if (noProjectsMsg) {
-          noProjectsMsg.classList.add('hidden');
-        }
-
-        // Dispatch empty projects event for listeners
-        document.dispatchEvent(
-          new CustomEvent("projectsLoaded", {
-            detail: {
-              data: {
-                projects: [],
-                count: 0,
-                filter: { type: filter },
-                authRequired: true
-              }
-            }
-          })
-        );
-
-        return [];
-      }
-
-      // Show loading state using DaisyUI spinner within the list container
-      const listContainer = document.getElementById("projectList");
-      const noProjectsMsg = document.getElementById("noProjectsMessage");
-
-      if (listContainer) {
-         listContainer.innerHTML = `
-           <div class="col-span-full text-center p-8">
-             <span class="loading loading-spinner loading-lg text-primary"></span>
-             <p class="mt-2 text-base-content/70">Loading projects...</p>
-           </div>`;
-      }
-      if (noProjectsMsg) noProjectsMsg.classList.add('hidden'); // Hide no projects message
-
-      const response = await window.projectManager.loadProjects(filter);
-      // The projectsLoaded event will trigger rendering
-      return response;
-    } catch (error) {
-      console.error("[ProjectDashboard] loadProjects failed:", error);
-      // Render error state in the list container
-      const listContainer = document.getElementById("projectList");
-      if (listContainer) {
-         listContainer.innerHTML = `
-            <div class="col-span-full text-center p-8">
-               <div class="alert alert-error">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <span>Error loading projects: ${error.message}</span>
-               </div>
-            </div>
-         `;
-      }
-      // Dispatch event anyway for potential listeners
-      document.dispatchEvent(
-        new CustomEvent("projectsLoaded", {
-          detail: { error: true, message: error.message, projects: [] } // Send empty projects array
-        })
-      );
-      throw error; // Re-throw if needed upstream
-    }
-  }
+  // Projects loading is now handled directly by projectManager.loadProjects()
 
   /* ===========================
      EVENT HANDLERS
@@ -990,25 +893,6 @@ class ProjectDashboard {
   }
 }
 
-/**
- * Initialize the project dashboard with automatic retry if desired.
- * @returns {Promise<ProjectDashboard>}
- */
-function initProjectDashboard() {
-  const dashboard = new ProjectDashboard();
-  // Return the Promise so it can be properly chained with .catch()
-  return dashboard.init()
-    .then(success => {
-      if (success) {
-        window.projectDashboard = dashboard;
-        return dashboard;
-      }
-      throw new Error("ProjectDashboard failed to initialize");
-    });
-}
-
-// Register dashboard with central initializer
-window.initProjectDashboard = initProjectDashboard;
 
 // Add app initializer registration if needed
 if (window.appInitializer && window.appInitializer.register) {
