@@ -865,38 +865,6 @@ function handleAPIError(context, error) {
 // PROJECT LOADING FUNCTIONS
 // ---------------------------------------------------------------------
 
-async function loadProjects(filter = 'all') {
-  if (!await ensureAuthenticated()) {
-    document.dispatchEvent(new CustomEvent("projectsLoaded", {
-      detail: {
-        data: {
-          projects: [],
-          count: 0,
-          filter: { type: filter },
-          error: true,
-          message: "Authentication required"
-        }
-      }
-    }));
-    const loginMsg = document.getElementById('loginRequiredMessage');
-    if (loginMsg) loginMsg.classList.remove('hidden');
-    return [];
-  }
-
-  try {
-    if (!window.projectManager) {
-      throw new Error("projectManager not initialized");
-    }
-    const response = await window.projectManager.loadProjects(filter);
-    return response;
-  } catch (error) {
-    console.error("[ProjectDashboard] loadProjects failed:", error);
-    document.dispatchEvent(new CustomEvent("projectsLoaded", {
-      detail: { error: true, message: error.message }
-    }));
-    throw error;
-  }
-}
 
 // In app.js
 async function loadInitialProjects(retryOnFailure = true) {
