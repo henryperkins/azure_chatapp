@@ -26,7 +26,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import BinaryExpression
-from sqlalchemy.sql import ColumnElement  # Add this import
+from sqlalchemy.sql import ColumnElement
 
 from db import get_async_session_context
 from models.user import User
@@ -34,20 +34,17 @@ from utils.auth_utils import clean_expired_tokens
 
 logger = logging.getLogger(__name__)
 
-
 # Base protocol for models with common attributes
 class BaseModelProtocol(Protocol):
     id: Any
     user_id: Any
     archived: bool = False
 
-
 # Type variable for generic database models
 T = TypeVar("T", bound=BaseModelProtocol)
 
 # Global flag to manage concurrent runs of scheduled tasks
 _task_running = False
-
 
 async def run_periodic_task(
     interval_seconds: int,
@@ -93,7 +90,6 @@ async def run_periodic_task(
     finally:
         _task_running = False
 
-
 async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
     """
     Schedules the token cleanup task to run periodically.
@@ -110,7 +106,6 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
         )
     )
     logger.info(f"Scheduled token cleanup to run every {interval_minutes} minutes")
-
 
 async def save_model(db: AsyncSession, model_instance: Any) -> Optional[Any]:
     """
@@ -135,11 +130,10 @@ async def save_model(db: AsyncSession, model_instance: Any) -> Optional[Any]:
         await db.rollback()
         return None
 
-
 async def get_all_by_condition(
     db: AsyncSession,
     model_class: Type[T],
-    *where_clauses: Union[BinaryExpression, ColumnElement],  # Change this type
+    *where_clauses: Union[BinaryExpression, ColumnElement],
     order_by: Optional[Any] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
@@ -174,12 +168,8 @@ async def get_all_by_condition(
     if limit is not None:
         query = query.limit(limit)
 
-    try:
-        result = await db.execute(query)
-        return list(result.scalars().all())
-    finally:
-        await db.close()
-
+    result = await db.execute(query)
+    return list(result.scalars().all())
 
 async def validate_resource_access(
     resource_id: UUID,
@@ -259,7 +249,6 @@ async def validate_resource_access(
 
     logger.debug(f"Access granted to {resource_name} {resource_id}")
     return resource
-
 
 async def get_by_id(
     db: AsyncSession, model_class: Type[T], model_id: Union[UUID, int]

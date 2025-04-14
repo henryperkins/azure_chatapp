@@ -7,9 +7,7 @@ Provides endpoints for creating, listing, retrieving and deleting artifacts.
 
 import logging
 from uuid import UUID
-from typing import Optional, List, Dict, Any
-from types import SimpleNamespace
-from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, status, HTTPException
 from pydantic import BaseModel, Field
@@ -70,15 +68,15 @@ async def create_artifact(
         return await create_standard_response(
             serialized_artifact, "Artifact created successfully"
         )
-    except HTTPException as e:
-        # Re-raise HTTP exceptions
+    except HTTPException as e:  # pylint: disable=unused-variable
+        # Re-raise HTTP exceptions (e is used in the raise statement)
         raise
-    except Exception as e:
-        logger.error(f"Error creating artifact: {str(e)}")
+    except Exception as _e:
+        logger.error("Error creating artifact", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create artifact: {str(e)}",
-        )
+            detail="Failed to create artifact",
+        ) from _e
 
 
 @router.get("", response_model=dict)
@@ -116,14 +114,14 @@ async def list_artifacts(
                 "project_id": str(project_id),
             }
         )
-    except HTTPException as e:
+    except HTTPException as e:  # pylint: disable=unused-variable
         raise
-    except Exception as e:
-        logger.error(f"Error listing artifacts: {str(e)}")
+    except Exception as _e:
+        logger.error("Error listing artifacts", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list artifacts: {str(e)}",
-        )
+            detail="Failed to list artifacts",
+        ) from _e
 
 
 @router.get("/{artifact_id}", response_model=dict)
@@ -144,14 +142,14 @@ async def get_artifact(
 
         serialized_artifact = serialize_artifact(artifact)
         return await create_standard_response(serialized_artifact)
-    except HTTPException as e:
+    except HTTPException as e:  # pylint: disable=unused-variable
         raise
-    except Exception as e:
-        logger.error(f"Error retrieving artifact: {str(e)}")
+    except Exception as _e:
+        logger.error("Error retrieving artifact", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve artifact: {str(e)}",
-        )
+            detail="Failed to retrieve artifact",
+        ) from _e
 
 
 @router.put("/{artifact_id}", response_model=dict)
@@ -176,14 +174,14 @@ async def update_artifact(
         return await create_standard_response(
             serialized_artifact, message="Artifact updated successfully"
         )
-    except HTTPException as e:
+    except HTTPException as e:  # pylint: disable=unused-variable
         raise
-    except Exception as e:
-        logger.error(f"Error updating artifact: {str(e)}")
+    except Exception as _e:
+        logger.error("Error updating artifact", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update artifact: {str(e)}",
-        )
+            detail="Failed to update artifact",
+        ) from _e
 
 
 @router.delete("/{artifact_id}", response_model=dict)
@@ -205,14 +203,14 @@ async def delete_artifact(
         return await create_standard_response(
             result, message=result.get("message", "Artifact deleted successfully")
         )
-    except HTTPException as e:
+    except HTTPException as e:  # pylint: disable=unused-variable
         raise
-    except Exception as e:
-        logger.error(f"Error deleting artifact: {str(e)}")
+    except Exception as _e:
+        logger.error("Error deleting artifact", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete artifact: {str(e)}",
-        )
+            detail="Failed to delete artifact",
+        ) from _e
 
 
 @router.get("/{artifact_id}/export", response_model=dict)
@@ -236,14 +234,14 @@ async def export_artifact(
         return await create_standard_response(
             export_data, message=f"Artifact exported as {export_format} successfully"
         )
-    except HTTPException as e:
+    except HTTPException as e:  # pylint: disable=unused-variable
         raise
-    except Exception as e:
-        logger.error(f"Error exporting artifact: {str(e)}")
+    except Exception as _e:
+        logger.error("Error exporting artifact", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to export artifact: {str(e)}",
-        )
+            detail="Failed to export artifact",
+        ) from _e
 
 
 @router.get("/stats", response_model=dict)
@@ -261,11 +259,11 @@ async def get_artifact_stats(
         )
 
         return await create_standard_response(stats)
-    except HTTPException as e:
+    except HTTPException as e:  # pylint: disable=unused-variable
         raise
-    except Exception as e:
-        logger.error(f"Error retrieving artifact statistics: {str(e)}")
+    except Exception as _e:
+        logger.error("Error retrieving artifact statistics", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve artifact statistics: {str(e)}",
-        )
+            detail="Failed to retrieve artifact statistics",
+        ) from _e
