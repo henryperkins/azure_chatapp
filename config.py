@@ -56,7 +56,7 @@ class Settings:
     # Allowed hosts - security setting for host header validation
     ALLOWED_HOSTS: list[str] = (
         ["put.photo"] if ENV == "production" 
-        else ["localhost", "127.0.0.1", "0.0.0.0"]
+        else ["localhost", "127.0.0.1", "0.0.0.0", "put.photo"]
     )
 
     # --- Unified Model Configurations ---
