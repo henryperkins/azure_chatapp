@@ -243,10 +243,13 @@ if settings.ENV == "development":
     async def debug_routes():
         """List all registered routes (development only)"""
         routes = []
+        from fastapi.routing import APIRoute
+
         for route in app.routes:
-            routes.append({
-                "path": route.path,
-                "name": route.name,
-                "methods": list(route.methods)
-            })
+            if isinstance(route, APIRoute):
+                routes.append({
+                    "path": route.path,
+                    "name": route.name,
+                    "methods": list(route.methods)
+                })
         return routes

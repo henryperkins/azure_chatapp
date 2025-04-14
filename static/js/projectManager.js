@@ -93,32 +93,58 @@
     }
   }
 
+  // Auth verification cache
+  let __authVerified = false;
+  let __authVerifiedTime = 0;
+
+  /**
+   * Get auth token with retry logic
+   * @returns {Promise<string>} - Auth token
+   */
+  async function getAuthWithRetry() {
+    try {
+      return await window.auth.getAuthToken();
+    } catch (err) {
+      // If token retrieval fails, force auth verification
+      const isAuth = await window.auth.isAuthenticated({forceVerify: true});
+      if (isAuth) {
+        return await window.auth.getAuthToken();
+      }
+      throw err;
+    }
+  }
+
   /**
    * Helper that throws if not authenticated
    * @throws {Error}
    */
   async function requireAuth() {
+    // Check cache first to avoid redundant checks
+    if (__authVerified && Date.now() - __authVerifiedTime < 5000) {
+      return true;
+    }
+
     try {
-      // Try with increased timeout first
-      const isAuthenticated = await checkAuthenticationWithTimeout(3000);
+      const isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
       if (isAuthenticated) {
-        return;
+        __authVerified = true;
+        __authVerifiedTime = Date.now();
+        return true;
       }
 
-      // If first attempt fails but auth is ready, try once more with force verify
-      if (window.auth?.isReady) {
-        const retryResult = await window.auth.isAuthenticated({ forceVerify: true });
-        if (retryResult) {
-          return;
-        }
+      // One more try with force verify
+      const retryResult = await window.auth.isAuthenticated({forceVerify: true});
+      if (retryResult) {
+        __authVerified = true;
+        __authVerifiedTime = Date.now();
+        return true;
       }
 
       throw new Error("Not authenticated - please login first");
     } catch (err) {
-      console.warn("[projectManager] Authentication required error:", err.message);
-      // Emit projectAuthError event for UI to react
-      emitEvent('projectAuthError', { reason: 'auth_required', error: err });
-      throw new Error("Authentication failed - please login again");
+      __authVerified = false;
+      emitEvent('projectAuthError', {reason: 'auth_required', error: err});
+      throw err;
     }
   }
 
@@ -292,8 +318,14 @@
             }
           }
         } catch (kbError) {
-          console.warn(`[ProjectManager] Failed to load KB details (${currentProject.knowledge_base_id}):`, kbError);
-          currentProject.knowledge_base = null;
+          if (kbError.status === 404) {
+            console.warn(`[ProjectManager] Knowledge base not found: ${currentProject.knowledge_base_id}`);
+            // Clear the invalid KB ID from the current project
+            currentProject.knowledge_base_id = null;
+            currentProject.knowledge_base = null;
+          } else {
+            console.error(`[ProjectManager] Failed to load KB details (${currentProject.knowledge_base_id}):`, kbError);
+          }
         }
       }
 
