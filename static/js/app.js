@@ -937,21 +937,6 @@ function showModal(type, options = {}) {
   return false;
 }
 
-function setupDarkModeToggle() {
-  const darkModeToggleBtn = document.getElementById('darkModeToggleBtn');
-  if (!darkModeToggleBtn) return;
-
-  const savedMode = localStorage.getItem('darkMode');
-  if (savedMode) {
-    document.documentElement.classList.toggle('dark', savedMode === 'true');
-  }
-
-  darkModeToggleBtn.addEventListener('click', () => {
-    const isDark = document.documentElement.classList.toggle('dark');
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    localStorage.setItem('darkMode', isDark.toString());
-  });
-}
 
 function setupEventListeners() {
   // Add auth dropdown mobile handling
@@ -1129,7 +1114,6 @@ function setupEventListeners() {
     }
   });
 
-  setupDarkModeToggle();
   setupNavigationTracking();
   console.log("[setupEventListeners] Registered all event listeners");
 }
