@@ -990,6 +990,46 @@ function setupDarkModeToggle() {
 }
 
 function setupEventListeners() {
+  // Add auth dropdown mobile handling
+  const authBtn = document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  
+  if (authBtn && authDropdown) {
+    authBtn.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const isHidden = authDropdown.classList.contains('hidden');
+      authDropdown.classList.toggle("hidden", !isHidden);
+
+      // Adjust position on mobile
+      if (window.innerWidth < 768) {
+        const btnRect = authBtn.getBoundingClientRect();
+        authDropdown.style.right = `${window.innerWidth - btnRect.right}px`;
+      } else {
+        authDropdown.style.right = '';
+      }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener("click", e => {
+      if (!authDropdown.classList.contains('hidden') &&
+          !e.target.closest("#authContainer") &&
+          !e.target.closest("#authDropdown")) {
+        authDropdown.classList.add("hidden");
+      }
+    });
+
+    // Handle touch events on mobile
+    document.addEventListener("touchstart", e => {
+      if (!authDropdown.classList.contains('hidden') &&
+          !e.target.closest("#authContainer") &&
+          !e.target.closest("#authDropdown")) {
+        authDropdown.classList.add("hidden");
+      }
+    }, { passive: true });
+  }
+
   document.addEventListener('authStateChanged', handleAuthStateChange);
   document.addEventListener('keydown', handleKeyDown);
   // Add listener for project authentication errors
