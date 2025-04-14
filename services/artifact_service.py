@@ -274,7 +274,9 @@ async def list_artifacts(
 
     additional_filter = and_(*filters) if filters else None
 
-    # Use shared pagination function and return SQLAlchemy objects directly
+    from utils.serializers import serialize_artifact
+
+    # Use shared pagination function with the proper artifact serializer
     return await get_paginated_resources(
         db=db,
         model_class=Artifact,
@@ -284,6 +286,7 @@ async def list_artifacts(
         skip=skip,
         limit=limit,
         additional_filters=additional_filter,
+        serializer_func=serialize_artifact,
     )
 
 
@@ -460,7 +463,7 @@ async def export_artifact(
         # Markdown export
         md_content = f"""# {artifact.name}
 
-*Type: {artifact.content_type}*  
+*Type: {artifact.content_type}*
 *Created: {artifact.created_at.isoformat()}*
 
 ```

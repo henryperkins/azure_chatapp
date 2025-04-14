@@ -9,16 +9,18 @@ import logging
 from uuid import UUID
 from typing import Optional, List, Dict, Any
 from types import SimpleNamespace
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import services.artifact_service
+from services import artifact_service
 from db import get_async_session
 from models.user import User
 from utils.auth_utils import get_current_user_and_token
 from utils.response_utils import create_standard_response
+from utils.serializers import serialize_artifact
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,16 +55,30 @@ async def create_artifact(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Create a new artifact for the project."""
-    artifact = await services.artifact_service.create_artifact(
-        db=db,
-        project_id=project_id,
-        name=artifact_data.name,
-        content_type=artifact_data.content_type,
-        content=artifact_data.content,
-        conversation_id=artifact_data.conversation_id,
-        user_id=current_user.id,
-    )
-    return await create_standard_response(artifact, "Artifact created successfully")
+    try:
+        artifact = await artifact_service.create_artifact(
+            db=db,
+            project_id=project_id,
+            name=artifact_data.name,
+            content_type=artifact_data.content_type,
+            content=artifact_data.content,
+            conversation_id=artifact_data.conversation_id,
+            user_id=current_user.id,
+        )
+
+        serialized_artifact = serialize_artifact(artifact)
+        return await create_standard_response(
+            serialized_artifact, "Artifact created successfully"
+        )
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error creating artifact: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create artifact: {str(e)}",
+        )
 
 
 @router.get("", response_model=dict)
@@ -72,51 +88,42 @@ async def list_artifacts(
     db: AsyncSession = Depends(get_async_session),
     conversation_id: Optional[UUID] = None,
     content_type: Optional[str] = None,
+    search_term: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_desc: bool = True,
     skip: int = 0,
     limit: int = 100,
 ):
     """List all artifacts for a project with optional filtering."""
-    # The service returns a list of dictionaries.
-    artifacts_data: List[Dict[str, Any]] = (
-        await services.artifact_service.list_artifacts(
+    try:
+        artifacts = await artifact_service.list_artifacts(
             project_id=project_id,
             db=db,
             conversation_id=conversation_id,
             content_type=content_type,
+            search_term=search_term,
+            sort_by=sort_by,
+            sort_desc=sort_desc,
             skip=skip,
             limit=limit,
             user_id=current_user.id,
         )
-    )
 
-    # Convert dictionaries to objects so that dot notation works.
-    artifacts = [SimpleNamespace(**art) for art in artifacts_data]
-
-    return await create_standard_response(
-        {
-            "artifacts": [
-                {
-                    "id": str(art.id),
-                    "project_id": str(art.project_id),
-                    "conversation_id": (
-                        str(art.conversation_id) if art.conversation_id else None
-                    ),
-                    "name": art.name,
-                    "content_type": art.content_type,
-                    "created_at": art.created_at.isoformat(),
-                    "metadata": art.metadata,  # Adjust this key if needed (e.g., extra_data)
-                    "content_preview": (
-                        art.content[:150] + "..."
-                        if len(art.content) > 150
-                        else art.content
-                    ),
-                }
-                for art in artifacts
-            ],
-            "count": len(artifacts),
-            "project_id": str(project_id),
-        }
-    )
+        return await create_standard_response(
+            {
+                "artifacts": artifacts,
+                "count": len(artifacts),
+                "project_id": str(project_id),
+            }
+        )
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing artifacts: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list artifacts: {str(e)}",
+        )
 
 
 @router.get("/{artifact_id}", response_model=dict)
@@ -127,10 +134,56 @@ async def get_artifact(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get a specific artifact by ID."""
-    artifact = await services.artifact_service.get_artifact(
-        db=db, artifact_id=artifact_id, project_id=project_id, user_id=current_user.id
-    )
-    return await create_standard_response(artifact)
+    try:
+        artifact = await artifact_service.get_artifact(
+            db=db,
+            artifact_id=artifact_id,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+
+        serialized_artifact = serialize_artifact(artifact)
+        return await create_standard_response(serialized_artifact)
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving artifact: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve artifact: {str(e)}",
+        )
+
+
+@router.put("/{artifact_id}", response_model=dict)
+async def update_artifact(
+    project_id: UUID,
+    artifact_id: UUID,
+    update_data: dict,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Update an artifact by ID."""
+    try:
+        artifact = await artifact_service.update_artifact(
+            db=db,
+            artifact_id=artifact_id,
+            project_id=project_id,
+            update_data=update_data,
+            user_id=current_user.id,
+        )
+
+        serialized_artifact = serialize_artifact(artifact)
+        return await create_standard_response(
+            serialized_artifact, message="Artifact updated successfully"
+        )
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating artifact: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update artifact: {str(e)}",
+        )
 
 
 @router.delete("/{artifact_id}", response_model=dict)
@@ -141,7 +194,78 @@ async def delete_artifact(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Delete an artifact by ID."""
-    result = await services.artifact_service.delete_artifact(
-        db=db, artifact_id=artifact_id, project_id=project_id, user_id=current_user.id
-    )
-    return await create_standard_response(result)
+    try:
+        result = await artifact_service.delete_artifact(
+            db=db,
+            artifact_id=artifact_id,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+
+        return await create_standard_response(
+            result, message=result.get("message", "Artifact deleted successfully")
+        )
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting artifact: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete artifact: {str(e)}",
+        )
+
+
+@router.get("/{artifact_id}/export", response_model=dict)
+async def export_artifact(
+    project_id: UUID,
+    artifact_id: UUID,
+    export_format: str = "text",
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Export an artifact in various formats."""
+    try:
+        export_data = await artifact_service.export_artifact(
+            db=db,
+            artifact_id=artifact_id,
+            project_id=project_id,
+            export_format=export_format,
+            user_id=current_user.id,
+        )
+
+        return await create_standard_response(
+            export_data, message=f"Artifact exported as {export_format} successfully"
+        )
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting artifact: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export artifact: {str(e)}",
+        )
+
+
+@router.get("/stats", response_model=dict)
+async def get_artifact_stats(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Get statistics about artifacts in the project."""
+    try:
+        stats = await artifact_service.get_artifact_stats(
+            project_id=project_id,
+            db=db,
+            user_id=current_user.id,
+        )
+
+        return await create_standard_response(stats)
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving artifact statistics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve artifact statistics: {str(e)}",
+        )

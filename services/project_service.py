@@ -319,10 +319,25 @@ async def get_paginated_resources(
     skip: int = 0,
     limit: int = 100,
     additional_filters: Optional[Any] = None,
+    serializer_func=None,
 ) -> List[Dict[str, Any]]:
     """
     Generic method to retrieve items for a given project,
     sorted & paginated. We assume the model has a project_id field.
+
+    Args:
+        db: SQLAlchemy async session
+        model_class: SQLAlchemy model class to query
+        project_id: UUID of the project
+        sort_by: Field to sort by
+        sort_desc: True for descending order
+        skip: Number of items to skip
+        limit: Maximum number of items to return
+        additional_filters: Additional SQLAlchemy filters to apply
+        serializer_func: Function to serialize each item. If None, returns raw ORM objects.
+
+    Returns:
+        List of serialized items (if serializer_func is provided) or raw ORM objects
     """
     query = select(model_class).where(model_class.project_id == project_id)
 
@@ -341,6 +356,9 @@ async def get_paginated_resources(
     result = await db.execute(query)
     items = result.scalars().all()
 
-    from utils.serializers import serialize_list, serialize_project
+    if serializer_func:
+        from utils.serializers import serialize_list
+        return serialize_list(items, serializer_func)
 
-    return serialize_list(items, serialize_project)
+    # Return raw items if no serializer provided
+    return list(items)
