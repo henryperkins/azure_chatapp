@@ -7,7 +7,7 @@
 
 (function() {
   // Set to false to disable debug output
-  const DEBUG_ENABLED = true;
+  const DEBUG_ENABLED = false;
   const PREFIX = '[ProjectDebug]';
 
   // State tracking
@@ -339,6 +339,11 @@
             log(`📋 loadProjects called with filter: ${filter}`);
 
             try {
+              // Skip load if user isn't authenticated
+              if (!authState.authenticated && authState.checked) {
+                log("🔒 User not yet authenticated, skipping loadProjects", null, "warn");
+                return [];
+              }
               const result = await originalLoadProjects.call(this, filter);
               projectLoadState.projectsFound = result?.length || 0;
               projectLoadState.loaded = projectLoadState.projectsFound > 0;
@@ -347,11 +352,10 @@
             } catch (err) {
               projectLoadState.errors.push(`${new Date().toISOString()} loadProjects: ${err.message}`);
               log(`❌ loadProjects error: ${err.message}`, err, 'error');
-
-              // Return empty array instead of throwing to prevent UI errors
               return [];
             }
-          };
+            };
+          // Removed the extra brace that caused TypeScript parse errors
           log('✅ Instrumented projectManager.loadProjects');
           instrumented.projectManager = true;
           count++;
@@ -384,7 +388,7 @@
                   new Promise((_, reject) => setTimeout(() => {
                     log('⚠️ Auth check timed out, assuming authenticated=false', null, 'warn');
                     reject(new Error('Auth check timeout')); // Reject instead of resolving with true
-                  }, 5000))
+                  }, 15000)) // Increased timeout from 5s to 15s to allow more time for auth check
                 ]);
               } catch (raceError) {
                 log(`⚠️ Auth race error: ${raceError.message}`, null, 'warn');
@@ -398,9 +402,8 @@
               authState.authErrors.push(`${new Date().toISOString()}: ${err.message}`);
               log(`❌ isAuthenticated error: ${err.message}`, err, 'error');
 
-              // Return true instead of throwing to prevent UI errors
-              log('⚠️ Returning authenticated=true after error', null, 'warn');
-              return true;
+              // Instead of forcibly returning true, we rethrow to let the calling code handle it
+              throw err;
             }
           };
           log('✅ Instrumented auth.isAuthenticated');
@@ -417,9 +420,10 @@
             log(`🎨 renderProjects called with ${projects?.length || 'unknown'} projects`);
 
             try {
-              // Make projects an array if it's not already
+              // Additional logging to help diagnose data issues
               if (!Array.isArray(projects)) {
-                log('⚠️ Projects not an array, converting to empty array', null, 'warn');
+                log(`⚠️ Projects not an array. typeof projects = ${typeof projects}`, projects, 'warn');
+                log('⚠️ Converting projects to empty array. Potential data source issue.', null, 'warn');
                 projects = [];
               }
 
