@@ -17,6 +17,11 @@
     PROJECT_FILES: '/api/projects/{projectId}/files/'
   };
 
+  // Debug flag for controlling auth token logging
+  const DEBUG = false; // Set to true only during development
+  const AUTH_LOG_INTERVAL = 5000; // Minimum ms between auth logs for the same operation
+  let lastAuthLogTimestamps = {}; // Track last log time by operation
+
   /* ===========================
      STATE MANAGEMENT
      =========================== */
@@ -102,6 +107,15 @@
    * @returns {Promise<string>} - Auth token
    */
   async function getAuthWithRetry() {
+    const logKey = 'getAuthWithRetry';
+    const now = Date.now();
+
+    if (DEBUG && (!lastAuthLogTimestamps[logKey] ||
+               (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
+      console.debug('[ProjectManager] Attempting auth token retrieval');
+      lastAuthLogTimestamps[logKey] = now;
+    }
+
     try {
       return await window.auth.getAuthToken();
     } catch (err) {
@@ -166,20 +180,22 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
-      // Log the authentication state for debugging
-      console.log('[ProjectManager] Getting auth token for loadProjects');
+      // Throttled logging with operation key to prevent spam
+      const logKey = `loadProjects-${cleanFilter}`;
+      const now = Date.now();
 
-      // This is a fallback check if needed (won't change isAuthenticated)
-      try {
-        // Check for access_token cookie as the most reliable indicator
-        const hasAccessToken = document.cookie.includes('access_token=');
-        if (hasAccessToken) {
-          console.log('[ProjectManager] Access token cookie found, confirming auth');
-        } else {
-          console.log('[ProjectManager] No access token cookie found, but proceeding anyway');
+      if (DEBUG && (!lastAuthLogTimestamps[logKey] ||
+                 (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
+        console.log('[ProjectManager] Getting auth token for loadProjects');
+        lastAuthLogTimestamps[logKey] = now;
+
+        // Only check cookies in debug mode and with throttling
+        try {
+          const hasAccessToken = document.cookie.includes('access_token=');
+          console.log(`[ProjectManager] Access token cookie ${hasAccessToken ? 'found' : 'not found'}`);
+        } catch (err) {
+          console.warn('[ProjectManager] Cookie check error:', err.message);
         }
-      } catch (err) {
-        console.warn('[ProjectManager] Cookie check error:', err.message);
       }
 
       // Build query params
@@ -1119,7 +1135,7 @@
     prepareFileUploads,
     uploadFile,
     uploadFileWithRetry,
-    deleteFile,
+```````````````````    deleteFile,
 
     // Conversations & Artifacts
     createConversation,
