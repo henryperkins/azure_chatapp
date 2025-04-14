@@ -5,7 +5,6 @@ Routes for managing conversations within projects.
 Focuses only on project-based conversations to reduce complexity.
 """
 
-import json
 import logging
 from typing import cast
 from uuid import UUID
@@ -17,8 +16,7 @@ from fastapi import (
     Depends,
     HTTPException,
     status,
-    Query,
-    Request,
+    Query
 )
 from pydantic import BaseModel, Field
 
@@ -27,7 +25,6 @@ from db import get_async_session
 
 # Models
 from models.user import User
-from models.project import Project
 from models.conversation import Conversation
 from models.message import Message
 
@@ -262,7 +259,6 @@ async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
@@ -395,7 +391,6 @@ async def create_project_conversation_message(
     conversation_id: UUID,
     new_msg: MessageCreate,
     current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """
@@ -423,7 +418,7 @@ async def create_project_conversation_message(
             vision_detail=new_msg.vision_detail,
             enable_thinking=new_msg.enable_thinking,
             thinking_budget=new_msg.thinking_budget,
-            reasoning_effort=new_msg.reasoning_effort,
+            reasoning_effort=str(new_msg.reasoning_effort) if new_msg.reasoning_effort is not None else None,
             temperature=new_msg.temperature,
             max_tokens=new_msg.max_tokens,
         )

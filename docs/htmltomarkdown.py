@@ -317,21 +317,23 @@ class HTMLToMarkdownConverter:
             if text:
                 result.append(f"{text}\n\n")
 
-        # Extract lists
+        # Extract lists (unordered)
         for ul in soup.find_all("ul"):
-            if isinstance(ul, Tag):  # Ensure 'ul' is a Tag before accessing 'find_all'
+            if isinstance(ul, Tag):
                 for li in ul.find_all("li", recursive=False):
                     text = li.get_text(strip=True)
                     if text:
                         result.append(f"* {text}\n")
                 result.append("\n")
 
+        # Extract lists (ordered)
         for ol in soup.find_all("ol"):
-            for i, li in enumerate(ol.find_all("li", recursive=False), 1):
-                text = li.get_text(strip=True)
-                if text:
-                    result.append(f"{i}. {text}\n")
-            result.append("\n")
+            if isinstance(ol, Tag):
+                for i, li in enumerate(ol.find_all("li", recursive=False), 1):
+                    text = li.get_text(strip=True)
+                    if text:
+                        result.append(f"{i}. {text}\n")
+                result.append("\n")
 
         # Extract pre/code blocks
         for pre in soup.find_all("pre"):

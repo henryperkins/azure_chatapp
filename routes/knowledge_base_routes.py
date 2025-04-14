@@ -124,7 +124,8 @@ async def create_project_knowledge_base(
         )
 
         # Associate with project
-        project.knowledge_base_id = str(kb.id)
+        import uuid
+        project.knowledge_base_id = uuid.UUID(str(kb["id"]))
         await db.commit()
 
         result = {
@@ -489,8 +490,8 @@ async def reindex_knowledge_base(
                 # Delete existing vectors
                 vector_db = await initialize_project_vector_db(
                     project_id=project_id,
-                    model_name=kb.get("embedding_model", "all-MiniLM-L6-v2")
-                    )
+                    embedding_model=kb.get("embedding_model", "all-MiniLM-L6-v2")
+                )
                 await vector_db.delete_by_filter({"project_id": str(project_id)})
 
         # Process all files
