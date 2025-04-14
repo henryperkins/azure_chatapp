@@ -177,7 +177,7 @@ class ProjectDashboard {
   }
 
   handleBackToList() {
-    this.showProjectList();
+    window.showProjectsView();
   }
 
   async handleProjectFormSubmit(e) {
@@ -224,7 +224,7 @@ class ProjectDashboard {
          this.modalManager?.hide("project");
       }
 
-      this.loadProjects(); // Refresh list
+      window.projectManager.loadProjects('all'); // Refresh list
     } catch (err) {
       console.error("[ProjectDashboard] Error saving project:", err);
       this.showNotification(`Failed to save project: ${err.message || 'Unknown error'}`, "error");
