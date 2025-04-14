@@ -107,7 +107,7 @@ async def create_project_knowledge_base(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         if project.knowledge_base_id:
             raise HTTPException(
                 status_code=400,
@@ -124,7 +124,7 @@ async def create_project_knowledge_base(
         )
 
         # Associate with project
-        project.knowledge_base_id = str(kb.id)  # Ensure string conversion
+        project.knowledge_base_id = str(kb.id)
         await db.commit()
 
         result = {
@@ -144,8 +144,8 @@ async def create_project_knowledge_base(
             file_stats = await get_project_files_stats(project_id, db)
             result["file_stats"] = file_stats
             background_tasks.add_task(
-                process_files_for_project, 
-                project_id=project_id, 
+                process_files_for_project,
+                project_id=project_id,
                 db=db
             )
 
@@ -170,11 +170,10 @@ async def get_project_knowledge_bases(
     try:
         # Validate project access
         await validate_project_access(project_id, current_user, db)
-        
+
         # Get knowledge bases for project
         kbs = await list_knowledge_bases(
             db=db,
-            project_id=project_id,
             active_only=True
         )
 
@@ -202,11 +201,11 @@ async def get_project_knowledge_base(
     try:
         # Validate project access
         await validate_project_access(project_id, current_user, db)
-        
+
         # Get knowledge base
         kb = await get_knowledge_base(knowledge_base_id=kb_id, db=db)
-        
-        if not kb or str(kb.project_id) != str(project_id):
+
+        if not kb or str(kb["project_id"]) != str(project_id):
             raise HTTPException(
                 status_code=404,
                 detail="Knowledge base not found for this project"
@@ -235,10 +234,10 @@ async def update_knowledge_base(
     try:
         # Validate project access
         await validate_project_access(project_id, current_user, db)
-        
+
         # Convert to dict for service
         update_dict = update_data.dict(exclude_unset=True)
-        
+
         # Update using service
         kb = await kb_service_update_kb(
             knowledge_base_id=kb_id,
@@ -246,7 +245,7 @@ async def update_knowledge_base(
             db=db
         )
 
-        if not kb or str(kb.project_id) != str(project_id):
+        if not kb or str(kb["project_id"]) != str(project_id):
             raise HTTPException(
                 status_code=404,
                 detail="Knowledge base not found for this project"
@@ -277,10 +276,10 @@ async def delete_knowledge_base(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         # Get KB to verify it belongs to project
         kb = await get_knowledge_base(knowledge_base_id=kb_id, db=db)
-        if not kb or str(kb.project_id) != str(project_id):
+        if not kb or str(kb["project_id"]) != str(project_id):
             raise HTTPException(
                 status_code=404,
                 detail="Knowledge base not found for this project"
@@ -326,7 +325,7 @@ async def get_knowledge_base_status(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         if not project.knowledge_base_id:
             raise HTTPException(
                 status_code=404,
@@ -377,7 +376,7 @@ async def search_project_knowledge(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         if not project.knowledge_base_id:
             raise HTTPException(
                 status_code=400,
@@ -426,7 +425,7 @@ async def upload_knowledge_base_file(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         if not project.knowledge_base_id:
             raise HTTPException(
                 status_code=400,
@@ -472,7 +471,7 @@ async def reindex_knowledge_base(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         if not project.knowledge_base_id:
             raise HTTPException(
                 status_code=400,
@@ -485,13 +484,13 @@ async def reindex_knowledge_base(
                 knowledge_base_id=project.knowledge_base_id,
                 db=db
             )
-            
+
             if kb:
                 # Delete existing vectors
                 vector_db = await initialize_project_vector_db(
                     project_id=project_id,
-                    embedding_model=kb.embedding_model or "all-MiniLM-L6-v2"
-                )
+                    model_name=kb.get("embedding_model", "all-MiniLM-L6-v2")
+                    )
                 await vector_db.delete_by_filter({"project_id": str(project_id)})
 
         # Process all files
@@ -528,7 +527,7 @@ async def delete_knowledge_base_file(
     try:
         # Validate project access
         await validate_project_access(project_id, current_user, db)
-        
+
         result = await delete_project_file(
             project_id=project_id,
             file_id=file_id,
@@ -568,7 +567,7 @@ async def toggle_knowledge_base(
     try:
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        
+
         if not project.knowledge_base_id:
             raise HTTPException(
                 status_code=400,

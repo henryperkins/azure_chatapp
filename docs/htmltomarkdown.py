@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Enhanced HTML to Markdown Converter with Smart File Splitting
+Enhanced HTML to Markdown Converter
 
-Incorporates:
-- Intelligent splitting of large HTML files
-- Parallel processing with robust timeouts
-- Cross-platform memory usage checks via psutil
-- Fallback parsing and simplified conversions
-- REPL and custom [code] tag handling
+Features:
+- Smart content extraction focusing on main article/documentation content
+- Removal of scripts, styles, and non-content elements
+- Better handling of code blocks and pre-formatted text
+- Support for various document structures including documentation sites
 """
 
 import os
@@ -25,7 +24,6 @@ from pathlib import Path
 import psutil
 import html2text
 from bs4 import BeautifulSoup
-from bs4.filter import SoupStrainer
 from bs4.element import Tag, NavigableString
 from tqdm import tqdm
 
@@ -36,18 +34,11 @@ from concurrent.futures import (
     as_completed,
 )
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("html2markdown")
-
-
-class TimeoutError(Exception):
-    """Custom TimeoutError for clarity (used in fallback logic if needed)."""
-
-    pass
 
 
 class HTMLToMarkdownConverter:
@@ -60,310 +51,346 @@ class HTMLToMarkdownConverter:
         # Configure the converter with sensible defaults
         self.converter.ignore_links = False
         self.converter.bypass_tables = False
-        self.converter.unicode_snob = (
-            True  # Use Unicode characters instead of ASCII approximations
-        )
+        self.converter.unicode_snob = True  # Use Unicode characters instead of ASCII
         self.converter.body_width = 0  # No wrapping
         self.converter.protect_links = True
         self.converter.wrap_links = False
         self.converter.inline_links = True
-        self.converter.mark_code = True
+        self.converter.mark_code = True  # Important for code blocks
         self.converter.escape_snob = True
         self.converter.images_to_alt = False
 
         # Processing settings from options
         self.chunk_size = self.options.pop("chunk_size", 100000)
-        self.timeout = self.options.pop("timeout", 120)  # slightly increased default
+        self.timeout = self.options.pop("timeout", 120)
         self.fallback_mode = self.options.pop("fallback_mode", True)
         self.max_processing_time = self.options.pop("max_processing_time", 30)
         self.parallel_processing = self.options.pop("parallel_processing", True)
         self.max_workers = self.options.pop("max_workers", 2)
-
-        # Memory limit (1GB default)
         self.memory_limit = self.options.pop("memory_limit", 1024 * 1024 * 1024)
-
-        # Smart splitting options
-        self.max_output_size = self.options.pop("max_output_size", 100 * 1024)  # 100KB
+        self.max_output_size = self.options.pop("max_output_size", 100 * 1024)
         self.split_output = self.options.pop("split_output", True)
         self.create_index = self.options.pop("create_index", True)
-
-        # Section identifier tags (not strictly used here, but kept for completeness)
-        self.section_identifier_tags = self.options.pop(
-            "section_identifier_tags",
-            ["h1", "h2", "h3", "section", "article", "div.chapter", "div.section"],
-        )
-
-        # Code block settings
         self.code_lang = self.options.pop("code_lang", "python")
         self.preserve_repl_prompts = self.options.pop("preserve_repl_prompts", True)
 
-        # Apply any custom options directly to the html2text converter if they exist
+        # Apply any custom options to the html2text converter
         for key, value in self.options.items():
             if hasattr(self.converter, key):
                 setattr(self.converter, key, value)
 
-    def _check_memory_usage(self):
-        """Check current memory usage (cross-platform) and raise exception if over limit."""
-        process = psutil.Process(os.getpid())
-        memory_usage = process.memory_info().rss  # RSS in bytes
-
-        if memory_usage > 0.8 * self.memory_limit:
-            logger.warning(f"High memory usage: {memory_usage / (1024 * 1024):.1f}MB")
-
-        if memory_usage > self.memory_limit:
-            raise MemoryError(
-                f"Memory limit exceeded: {memory_usage / (1024 * 1024):.1f}MB"
-            )
-
-        return memory_usage
-
-    def _process_fallback_chunk(self, chunk):
-        """
-        Fallback: Minimal but robust preprocessing on an HTML chunk using BeautifulSoup.
-        Replaces [code]...[/code] with <pre><code> tags.
-        """
-        soup = BeautifulSoup(chunk, "html.parser")
-
-        # Find raw text nodes that contain [code]...[/code]
-        code_pattern = re.compile(r"\[code\].*?\[/code\]", re.DOTALL)
-        for text_node in soup.find_all(string=code_pattern):
-            match = code_pattern.search(text_node)
-            if match:
-                code_content = match.group(0)
-                # Extract just the inside of [code] tags
-                inner_match = re.search(
-                    r"\[code\](.*?)\[/code\]", code_content, re.DOTALL
-                )
-                if inner_match:
-                    code_text = inner_match.group(1)
-                else:
-                    code_text = ""
-
-                # Create a <pre><code> structure
-                pre_tag = soup.new_tag("pre")
-                code_tag = soup.new_tag(
-                    "code", **{"class": f"language-{self.code_lang}"}
-                )
-                code_tag.string = code_text
-                pre_tag.append(code_tag)
-
-                # Replace the text node with the new <pre><code> tag
-                new_text = str(pre_tag)
-                text_node.replace_with(BeautifulSoup(new_text, "html.parser"))
-
-        # Simple spacing adjustments for certain block tags
-        for block_tag in [
-            "h1",
-            "h2",
-            "h3",
-            "h4",
-            "h5",
-            "h6",
-            "p",
-            "div",
-            "pre",
-            "table",
-        ]:
-            for t in soup.find_all(block_tag):
-                if t.next_sibling:
-                    t.insert_after("\n")
-
-        return str(soup)
-
-    def _preprocess_html_fallback(self, html_content):
-        """
-        Fallback preprocessing when standard parsing fails or times out.
-        Breaks content into mid-size chunks to keep memory usage low.
-        """
-        logger.info("Using fallback HTML preprocessing method")
-
-        # Process in ~250 KB chunks if content is very large
-        chunk_size = 250000
-        result_parts = []
-
-        for i in range(0, len(html_content), chunk_size):
-            chunk = html_content[i : i + chunk_size]
-            result_parts.append(self._process_fallback_chunk(chunk))
-            self._check_memory_usage()
-
-        return "".join(result_parts)
-
-    def _preprocess_html_impl(self, html_content, use_strainer=False):
-        """
-        Core implementation of HTML preprocessing. If use_strainer=True, uses a SoupStrainer
-        approach to handle large files in a memory-efficient manner.
-        """
-        # Basic replacement of custom code blocks
-        # We'll rely mainly on fallback if time or memory is an issue.
-        # Here, we do minimal transformations:
+    def _extract_main_content(self, html_content):
+        """Extract only the main content area from HTML."""
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # Example: handle 'pre' blocks, code blocks
+        # Try to identify main content in priority order
+        main_content = None
+        for selector in [
+            'div[role="main"]',  # Common in documentation
+            'div[itemprop="articleBody"]',
+            "article",
+            "main",
+            ".document",  # Common in Sphinx docs
+            "#content",
+            ".content",
+            "div.rst-content",  # Common in ReadTheDocs
+            "div.wy-nav-content",  # Another ReadTheDocs common class
+        ]:
+            content = soup.select_one(selector)
+            if content:
+                main_content = content
+                logger.info(f"Main content found with selector: {selector}")
+                break
+
+        # If no main content found, use body as fallback
+        if not main_content:
+            main_content = soup.body or soup
+            logger.info("No specific content container found, using body")
+
+        # Return the raw content as a string
+        return str(main_content)
+
+    def _remove_non_content_elements(self, soup):
+        """Remove scripts, styles, and other non-content elements."""
+        if not soup:
+            return soup
+
+        # Remove script tags
+        for script in soup.find_all("script"):
+            script.decompose()
+
+        # Remove style tags
+        for style in soup.find_all("style"):
+            style.decompose()
+
+        # Remove other non-content elements
+        for element in soup.find_all(["noscript", "iframe", "meta", "link", "head"]):
+            element.decompose()
+
+        # Remove nav elements (often contain menus)
+        for nav in soup.find_all(["nav", "aside"]):
+            nav.decompose()
+
+        # Remove hidden elements
+        for element in soup.find_all(
+            style=lambda value: value and "display:none" in value
+        ):
+            element.decompose()
+
+        for element in soup.find_all(hidden=True):
+            element.decompose()
+
+        # Remove comments
+        for comment in soup.find_all(
+            string=lambda text: isinstance(text, NavigableString)
+            and str(text).strip().startswith("<!--")
+        ):
+            comment.extract()
+
+        return soup
+
+    def _prepare_code_blocks(self, soup):
+        """Prepare code blocks for markdown conversion - don't add markdown markers yet."""
+        if not soup:
+            return soup
+
+        # Process all pre and code elements
         for pre in soup.find_all("pre"):
-            # If code child is present
-            if pre.code:
-                # ensure 'language' class is present
-                classes = pre.get("class", [])
-                if not any(cls.startswith("language-") for cls in classes):
-                    classes.append(f"language-{self.code_lang}")
-                pre["class"] = classes
+            # If there's a code element inside pre
+            code_element = pre.find("code")
+            if code_element:
+                # Try to determine language from class
+                language = self.code_lang
 
-        # Return processed HTML as string
-        return str(soup)
+                # Look for language class in either pre or code
+                for element in [pre, code_element]:
+                    classes = element.get("class", [])
+                    for cls in classes:
+                        if isinstance(cls, str) and (
+                            cls.startswith("language-") or cls.startswith("lang-")
+                        ):
+                            language = cls.split("-", 1)[1]
+                            break
+                        elif isinstance(cls, str) and cls in [
+                            "python",
+                            "javascript",
+                            "java",
+                            "cpp",
+                            "html",
+                            "css",
+                            "bash",
+                            "sh",
+                        ]:
+                            language = cls
+                            break
 
-    def _preprocess_html_safe(self, html_content, use_strainer=False):
-        """
-        Safely preprocess HTML. If any exception occurs, fallback is used.
-        Also checks memory usage periodically.
-        """
-        start_time = time.time()
-        try:
-            # Attempt standard
-            processed = self._preprocess_html_impl(html_content, use_strainer)
-            logger.info(
-                f"Preprocessing completed in {time.time() - start_time:.2f} seconds"
-            )
-            return processed
-        except Exception as e:
-            logger.warning(f"Error during preprocessing: {e}, using fallback method")
-            return self._preprocess_html_fallback(html_content)
+                # Clean up the code text
+                code_text = code_element.get_text()
+                code_text = self._clean_code_text(code_text)
 
-    def _handle_code_text(self, text):
-        """
-        Process code block content, handling REPL prompts if needed.
-        """
+                # Add data attribute for language instead of markdown markers
+                pre["data-code-language"] = language
+
+                # Replace with just the clean text - html2text will handle the code block markers
+                if code_element:
+                    code_element.clear()
+                    code_element.append(code_text)
+                else:
+                    pre.clear()
+                    pre.append(code_text)
+
+                # Keep or add class to help html2text identify as code
+                pre["class"] = "highlight"
+            else:
+                # Handle pre without code element
+                pre_text = pre.get_text()
+                pre_text = self._clean_code_text(pre_text)
+
+                # Just clean the content without adding markers
+                pre.clear()
+                pre.append(pre_text)
+                pre["class"] = "highlight"
+
+        return soup
+
+    def _clean_code_text(self, text):
+        """Clean up code text for better formatting."""
+        if not text:
+            return ""
+
+        # Normalize line endings
+        text = re.sub(r"\r\n", "\n", text)
+
+        # Remove excess blank lines at start and end
+        text = text.strip()
+
+        # Handle REPL prompts if needed
         if not self.preserve_repl_prompts:
-            # Remove >>> and ... prompts
-            text = re.sub(r"^(>>>|\.\.\.)\s?", "", text, flags=re.MULTILINE)
-        # Remove trailing spaces
-        text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
+            text = re.sub(r"^(>>>|\.\.\.) ", "", text, flags=re.MULTILINE)
+
         return text
 
+    def _preprocess_html_content(self, html_content):
+        """Main preprocessing function that integrates all cleaning steps."""
+        try:
+            # Parse the HTML
+            soup = BeautifulSoup(html_content, "html.parser")
+
+            # Extract the main content - returns a string
+            main_content_html = self._extract_main_content(html_content)
+
+            # Parse the main content into a new soup
+            main_soup = BeautifulSoup(main_content_html, "html.parser")
+
+            # Remove non-content elements
+            main_soup = self._remove_non_content_elements(main_soup)
+
+            # Prepare code blocks for markdown conversion
+            main_soup = self._prepare_code_blocks(main_soup)
+
+            return str(main_soup)
+
+        except Exception as e:
+            logger.error(f"Error preprocessing HTML: {e}", exc_info=True)
+            return self._preprocess_html_fallback(html_content)
+
+    def _preprocess_html_fallback(self, html_content):
+        """Fallback preprocessing when standard parsing fails or times out."""
+        logger.info("Using fallback HTML preprocessing method")
+
+        try:
+            # Try a simpler approach - just remove scripts and extract body
+            soup = BeautifulSoup(html_content, "html.parser")
+
+            # Remove all scripts, styles, and meta tags
+            for tag in soup.find_all(["script", "style", "meta", "link", "noscript"]):
+                tag.decompose()
+
+            # Just get the body if available
+            body = soup.body or soup
+
+            return str(body)
+        except Exception as e:
+            logger.error(f"Fallback processing failed: {e}", exc_info=True)
+
+            # Ultra fallback - just strip all tags
+            text = re.sub(r"<[^>]*>", " ", html_content)
+            text = re.sub(r"\s+", " ", text).strip()
+
+            return f"<html><body><p>{text}</p></body></html>"
+
+    def _direct_html_to_markdown(self, html_content):
+        """Direct conversion from HTML to Markdown."""
+        try:
+            # Use html2text for the conversion
+            return self.converter.handle(html_content)
+        except Exception as e:
+            logger.error(
+                f"Error in direct HTML to Markdown conversion: {e}", exc_info=True
+            )
+            return self._simplified_direct_conversion(html_content)
+
     def _simplified_direct_conversion(self, html_content):
-        """
-        Ultra-simplified conversion for very large or problematic HTML content.
-        This uses minimal logic to extract headings, paragraphs, and code blocks.
-        """
+        """Ultra-simplified conversion for problematic HTML content."""
         logger.info("Using ultra-simplified direct conversion")
 
         soup = BeautifulSoup(html_content, "html.parser")
         result = []
 
-        # Grab headings (h1-h3 for brevity), paragraphs, pre blocks
-        for tag in soup.find_all(["h1", "h2", "h3", "p", "pre"]):
-            text = tag.get_text(strip=True)
-            if not text:
-                continue
+        # Extract basic content elements
+        for tag_name, heading_level in [
+            ("h1", 1),
+            ("h2", 2),
+            ("h3", 3),
+            ("h4", 4),
+            ("h5", 5),
+            ("h6", 6),
+        ]:
+            for tag in soup.find_all(tag_name):
+                text = tag.get_text(strip=True)
+                if text:
+                    result.append(f"{'#' * heading_level} {text}\n\n")
 
-            if tag.name.startswith("h"):
-                level = int(tag.name[1]) if tag.name[1].isdigit() else 1
-                result.append(f"{'#' * level} {text}\n\n")
-            elif tag.name == "p":
+        # Extract paragraphs
+        for p in soup.find_all("p"):
+            text = p.get_text(strip=True)
+            if text:
                 result.append(f"{text}\n\n")
-            elif tag.name == "pre":
-                # If there's a <code> child, get that text
-                code_text = text
+
+        # Extract lists
+        for ul in soup.find_all("ul"):
+            for li in ul.find_all("li", recursive=False):
+                text = li.get_text(strip=True)
+                if text:
+                    result.append(f"* {text}\n")
+            result.append("\n")
+
+        for ol in soup.find_all("ol"):
+            for i, li in enumerate(ol.find_all("li", recursive=False), 1):
+                text = li.get_text(strip=True)
+                if text:
+                    result.append(f"{i}. {text}\n")
+            result.append("\n")
+
+        # Extract pre/code blocks
+        for pre in soup.find_all("pre"):
+            code_text = pre.get_text(strip=True)
+            if code_text:
                 result.append(f"```{self.code_lang}\n{code_text}\n```\n\n")
 
         return "".join(result)
 
-    def _direct_html_to_markdown(self, html_content):
-        """
-        Convert HTML to Markdown directly, bypassing html2text, capturing
-        code blocks, headings, paragraphs, etc. This is used if fallback_mode is True
-        or if standard conversion fails.
-        """
-        logger.info("Using direct HTML to Markdown conversion")
-
-        # For extremely large content, skip details
-        if len(html_content) > 500000:  # ~500KB
-            return self._simplified_direct_conversion(html_content)
-
-        try:
-            # Attempt a moderate approach with a full parse
-            soup = BeautifulSoup(html_content, "html.parser")
-            markdown_lines = []
-
-            # Extract headings
-            for level in range(1, 7):
-                for heading in soup.find_all(f"h{level}"):
-                    text = heading.get_text().strip()
-                    if text:
-                        markdown_lines.append(f"{'#'*level} {text}\n\n")
-
-            # Extract paragraphs
-            for p in soup.find_all("p"):
-                text = p.get_text().strip()
-                if text:
-                    markdown_lines.append(f"{text}\n\n")
-
-            # Extract code blocks
-            for pre in soup.find_all("pre"):
-                if pre.code:
-                    code_text = pre.code.get_text()
-                    code_text = self._handle_code_text(code_text)
-                    lang = self.code_lang
-                    for cls in pre.get("class", []):
-                        if cls.startswith("language-"):
-                            lang = cls[9:]
-                            break
-                    markdown_lines.append(f"```{lang}\n{code_text}\n```\n\n")
-                else:
-                    code_text = pre.get_text()
-                    code_text = self._handle_code_text(code_text)
-                    markdown_lines.append(f"```{self.code_lang}\n{code_text}\n```\n\n")
-
-            # Extract lists
-            for ul in soup.find_all("ul"):
-                for li in ul.find_all("li", recursive=False):
-                    text = li.get_text().strip()
-                    if text:
-                        markdown_lines.append(f"* {text}\n")
-                markdown_lines.append("\n")
-
-            for ol in soup.find_all("ol"):
-                for i, li in enumerate(ol.find_all("li", recursive=False), 1):
-                    text = li.get_text().strip()
-                    if text:
-                        markdown_lines.append(f"{i}. {text}\n")
-                markdown_lines.append("\n")
-
-            markdown = "".join(markdown_lines)
-            markdown = re.sub(r"\n{3,}", "\n\n", markdown)
-            return markdown
-
-        except Exception as e:
-            logger.warning(
-                f"Error in direct conversion: {e}, using simplified approach"
-            )
-            return self._simplified_direct_conversion(html_content)
-
     def _postprocess_markdown(self, markdown_content):
-        """
-        Clean up the Markdown after conversion with special handling for code blocks.
-        """
-        # Replace ~~~ with ```
-        markdown_content = re.sub(r"~~~+", "```", markdown_content)
+        """Clean up the Markdown after conversion."""
+        if not markdown_content:
+            return ""
 
-        # Fix code blocks with missing language
+        # Fix double code blocks - this is the key fix
+        # Replace ```language\n```language\n with just ```language\n
         markdown_content = re.sub(
-            r"```\s*\n", f"```{self.code_lang}\n", markdown_content
+            r"```(\w+)\s*\n```\1\s*\n", r"```\1\n", markdown_content
         )
+
+        # Also fix ```\n```language\n pattern
+        markdown_content = re.sub(
+            r"```\s*\n```(\w+)\s*\n", r"```\1\n", markdown_content
+        )
+
+        # Fix empty code blocks
+        markdown_content = re.sub(r"```(\w+)\s*\n\s*```", "", markdown_content)
 
         # Remove excessive blank lines
         markdown_content = re.sub(r"\n{3,}", "\n\n", markdown_content)
 
-        # Fix heading spacing
+        # Fix spacing around headings
         markdown_content = re.sub(r"([^\n])(\n#{1,6}\s)", r"\1\n\2", markdown_content)
+
+        # Fix list formatting
+        markdown_content = re.sub(r"(?<=\n)[\*\+\-]\s+", "* ", markdown_content)
+
+        # Fix blockquote formatting
+        markdown_content = re.sub(r"(?<=\n)>\s+", "> ", markdown_content)
+
+        # Fix link formatting
+        markdown_content = re.sub(r"\]\s*\(", "](", markdown_content)
+
+        # Ensure blank line after code blocks
+        markdown_content = re.sub(r"```\n([^`])", "```\n\n\\1", markdown_content)
 
         return markdown_content
 
     def _fix_code_blocks(self, markdown):
-        """
-        Additional post-processing for code blocks and especially REPL blocks.
-        """
+        """Additional post-processing for code blocks - now with fixes for double code blocks."""
+        # First fix double code blocks - common pattern in converted documents
+        markdown = re.sub(r"```(\w*)\s*\n```\1?\s*\n", r"```\1\n", markdown)
 
-        # 1) Convert leftover [code] blocks to triple backticks
+        # Fix code block fences that might have been mangled
+        markdown = re.sub(r"~~~+", "```", markdown)
+
+        # Ensure code blocks have proper language tag if missing
+        markdown = re.sub(r"```\s*\n", f"```{self.code_lang}\n", markdown)
+
+        # Fix custom code block formats
         def code_block_sub(match):
             content = match.group(1).strip()
             return f"```{self.code_lang}\n{content}\n```"
@@ -372,382 +399,43 @@ class HTMLToMarkdownConverter:
             r"\[code\](.*?)\[/code\]", code_block_sub, markdown, flags=re.DOTALL
         )
 
-        # 2) Format REPL blocks
-        #    Example: if there's a triple-backtick code block that starts with >>>, handle carefully
+        # Fix potential REPL blocks
         def repl_format(m):
             code = m.group(1).strip()
             code = re.sub(r"\n{2,}", "\n", code)
             return f"```python\n{code}\n```"
 
         markdown = re.sub(
-            r"```.*?\n((?:>>>|\.\.\.).*?)\n```", repl_format, markdown, flags=re.DOTALL
+            r"```.*?\n((?:>>>|\.\.\.)[^\n]*(?:\n(?:>>>|\.\.\.).*?)*)\n```",
+            repl_format,
+            markdown,
+            flags=re.DOTALL,
         )
 
         return markdown
 
     def convert_html_to_markdown_safe(self, html_content):
-        """
-        Safely convert HTML to Markdown with fallback. For large content,
-        uses chunking + parallel if needed.
-        """
-        # If content is large, we do chunk-based processing
-        if len(html_content) > self.chunk_size:
-            logger.info("Large HTML detected; splitting and processing in chunks.")
-            chunks = self._chunk_html(html_content)
-            if self.parallel_processing and len(chunks) > 1 and self.max_workers > 1:
-                return self._process_chunks_parallel(chunks)
-            else:
-                return self._process_chunks_sequential(chunks)
-        else:
-            # For smaller content, do straightforward processing
-            preprocessed = self._preprocess_html_safe(html_content, use_strainer=False)
-            if self.fallback_mode:
-                md = self._direct_html_to_markdown(preprocessed)
-            else:
-                md = self.converter.handle(preprocessed)
-            return self._postprocess_markdown(md)
-
-    def _process_chunk_wrapper(self, i, chunk):
-        """
-        Function to run in the worker process. No local signal usage.
-        We'll rely on future timeouts from concurrent.futures.
-        """
+        """The main method to convert HTML to Markdown with robust error handling."""
         try:
-            preprocessed = self._preprocess_html_safe(chunk, use_strainer=True)
-            if self.fallback_mode:
-                md = self._direct_html_to_markdown(preprocessed)
-            else:
-                md = self.converter.handle(preprocessed)
-            return self._postprocess_markdown(md)
+            # Step 1: Preprocess HTML content
+            preprocessed = self._preprocess_html_content(html_content)
+
+            # Step 2: Convert to Markdown
+            markdown = self._direct_html_to_markdown(preprocessed)
+
+            # Step 3: Postprocess Markdown
+            markdown = self._postprocess_markdown(markdown)
+            markdown = self._fix_code_blocks(markdown)
+
+            return markdown
+
         except Exception as e:
-            logger.warning(f"Chunk {i+1} error: {e}; using fallback.")
-            return self._simplified_direct_conversion(chunk)
-
-    def _process_chunks_parallel(self, chunks):
-        """
-        Process chunked HTML in parallel using concurrent.futures with timeouts.
-        """
-        logger.info(f"Using parallel processing with {self.max_workers} workers")
-        results = [""] * len(chunks)
-
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            future_map = {
-                executor.submit(self._process_chunk_wrapper, i, chunk): i
-                for i, chunk in enumerate(chunks)
-            }
-
-            for future in tqdm(
-                as_completed(future_map), total=len(chunks), desc="Processing Chunks"
-            ):
-                i = future_map[future]
-                try:
-                    # Use self.timeout as chunk processing timeout
-                    results[i] = future.result(timeout=self.timeout)
-                except FuturesTimeoutError:
-                    logger.warning(f"Chunk {i+1} timed out; using simplified fallback.")
-                    results[i] = self._simplified_direct_conversion(chunks[i])
-                except Exception as e:
-                    logger.warning(f"Error in chunk {i+1}: {e}; using fallback.")
-                    results[i] = self._simplified_direct_conversion(chunks[i])
-
-        combined = "\n\n".join(results)
-        return self._postprocess_markdown(combined)
-
-    def _process_chunks_sequential(self, chunks):
-        """
-        Process chunked HTML sequentially, with a progress bar and fallback on errors.
-        """
-        logger.info("Using sequential processing for chunks.")
-        results = []
-        for i, chunk in enumerate(tqdm(chunks, desc="Processing Chunks")):
-            try:
-                # We can do a simple time-based check if needed, but here we skip alarm usage
-                processed = self._process_chunk_wrapper(i, chunk)
-                results.append(processed)
-                gc.collect()
-            except Exception as e:
-                logger.warning(f"Error in chunk {i+1}: {e}; using fallback.")
-                results.append(self._simplified_direct_conversion(chunk))
-        combined = "\n\n".join(results)
-        return self._postprocess_markdown(combined)
-
-    def _optimize_chunk_size(self, html_content):
-        """
-        Dynamically determine an optimal chunk size based on HTML complexity.
-        """
-        complexity_score = 1.0
-        sample_size = min(len(html_content), 200000)
-        sample = html_content[:sample_size]
-
-        code_blocks = len(
-            re.findall(r"<pre|<code|\[code\]", sample, flags=re.IGNORECASE)
-        )
-        tables = len(re.findall(r"<table", sample, flags=re.IGNORECASE))
-        deep_nesting = len(
-            re.findall(r"<div[^>]*>.*<div[^>]*>.*<div", sample, re.DOTALL)
-        )
-
-        # Scale up if we only used a sample
-        if sample_size < len(html_content):
-            scale_factor = len(html_content) / sample_size
-            code_blocks = int(code_blocks * scale_factor)
-            tables = int(tables * scale_factor)
-            deep_nesting = int(deep_nesting * scale_factor)
-
-        # Adjust complexity
-        if code_blocks > 10:
-            complexity_score += code_blocks * 0.01
-        if tables > 5:
-            complexity_score += tables * 0.05
-        if deep_nesting > 10:
-            complexity_score += deep_nesting * 0.05
-
-        adjusted_size = int(self.chunk_size / (complexity_score * 1.5))
-        logger.info(
-            f"Complexity score: {complexity_score:.2f}, adjusted chunk size: {adjusted_size / 1024:.1f}KB"
-        )
-        if complexity_score > 10:
-            adjusted_size = min(
-                adjusted_size, 50000
-            )  # 50KB max for very complex content
-
-        return max(adjusted_size, 20000)
-
-    def _chunk_html(self, html_content):
-        """
-        Split large HTML content into manageable chunks at logical boundaries.
-        Uses dynamic chunk sizing based on content complexity.
-        """
-        chunk_size = self._optimize_chunk_size(html_content)
-        chunks = []
-        total_size = len(html_content)
-        processed_size = 0
-        split_points = [
-            "</main>",
-            "</article>",
-            "</section>",
-            "</div>",
-            "</h1>",
-            "</h2>",
-            "</h3>",
-            "</pre>",
-            "</table>",
-            "</p>",
-            "<br",
-            "</li>",
-        ]
-
-        remaining = html_content
-
-        with tqdm(total=100, desc="Chunking HTML") as pbar:
-            while len(remaining) > chunk_size:
-                best_pos = -1
-                best_tag = None
-
-                # narrower search window
-                search_start = max(0, chunk_size - 10000)
-                search_end = min(len(remaining), chunk_size + 2000)
-
-                for sp in split_points:
-                    pos = remaining.find(sp, search_start, search_end)
-                    if pos != -1 and (best_pos == -1 or pos < best_pos):
-                        best_pos = pos + len(sp)
-                        best_tag = sp
-
-                # if no best_pos found near chunk_size, widen search
-                if best_pos == -1:
-                    # try a fallback
-                    pos_space = remaining.rfind(" ", chunk_size - 2000, chunk_size)
-                    if pos_space != -1:
-                        best_pos = pos_space + 1
-                        best_tag = "space"
-                    else:
-                        best_pos = chunk_size
-                        best_tag = "forced"
-
-                chunk = remaining[:best_pos]
-                chunks.append(chunk)
-                remaining = remaining[best_pos:]
-
-                processed_size += len(chunk)
-                progress = int((processed_size / total_size) * 100)
-                pbar.update(progress - pbar.n)
-
-                logger.debug(
-                    f"Split at {best_pos} ({best_tag}), chunk size ~ {len(chunk)/1024:.1f}KB"
-                )
-
-            if remaining:
-                chunks.append(remaining)
-                pbar.update(100 - pbar.n)
-
-        logger.info(f"Split HTML into {len(chunks)} chunks for processing.")
-        return chunks
-
-    def convert_html_to_markdown_impl(self, html_content):
-        """
-        Core (non-safe) method to convert HTML to Markdown.
-        You normally call convert_html_to_markdown_safe for safe usage.
-        """
-        # 1) Preprocess
-        preprocessed_html = self._preprocess_html_safe(html_content, use_strainer=False)
-
-        # 2) Convert
-        if self.fallback_mode:
-            md = self._direct_html_to_markdown(preprocessed_html)
-        else:
-            md = self.converter.handle(preprocessed_html)
-
-        # 3) Postprocess
-        md = self._postprocess_markdown(md)
-        return md
-
-    def _make_safe_filename(self, text):
-        """Generate a safe filename from text by removing invalid characters."""
-        safe = re.sub(r'[\\/*?:"<>|]', "", text)
-        safe = re.sub(r"[\s\t\n]+", "-", safe)
-        safe = re.sub(r"-+", "-", safe)
-        safe = safe.strip("-")
-
-        if not safe or len(safe) < 3:
-            hash_val = hashlib.md5(text.encode()).hexdigest()[:8]
-            return f"section-{hash_val}"
-
-        return safe
-
-    def _split_markdown_into_files(self, markdown_content, base_filename, output_dir):
-        """
-        Split a large markdown file into multiple smaller files based on the
-        maximum file size. Also creates an index file.
-        """
-        logger.info("Splitting markdown content into multiple files")
-
-        if not self.split_output:
-            # Single-file output
-            output_path = Path(output_dir) / f"{base_filename}.md"
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(markdown_content)
-            return [str(output_path)]
-
-        # We do a naive approach: split on section headings or size threshold
-        lines = markdown_content.split("\n")
-        markdown_sections = []
-        current_section = {
-            "title": "Introduction",
-            "content": [],
-            "level": 0,
-            "size": 0,
-        }
-
-        def section_size(content_list):
-            return sum(len(ln) + 1 for ln in content_list)
-
-        heading_pattern = re.compile(r"^(#{1,6})\s+(.+)$")
-
-        # Break into sections
-        for line in lines:
-            match = heading_pattern.match(line)
-            if match:
-                # Save existing section
-                if current_section["content"]:
-                    current_section["size"] = section_size(current_section["content"])
-                    markdown_sections.append(current_section)
-
-                # Create a new section
-                level = len(match.group(1))
-                title = match.group(2).strip()
-                current_section = {
-                    "title": title,
-                    "content": [line],
-                    "level": level,
-                    "size": len(line) + 1,
-                }
-            else:
-                current_section["content"].append(line)
-
-        # Save the last section
-        if current_section["content"]:
-            current_section["size"] = section_size(current_section["content"])
-            markdown_sections.append(current_section)
-
-        # Now group sections into files
-        output_files = []
-        current_file = {"sections": [], "size": 0, "filename": ""}
-
-        for section in markdown_sections:
-            sec_size = section["size"]
-            # If adding this section crosses threshold, close off current_file
-            if current_file["sections"] and (
-                current_file["size"] + sec_size > self.max_output_size
-            ):
-                first_sec = current_file["sections"][0]
-                first_title = (
-                    first_sec["title"]
-                    if isinstance(first_sec.get("title"), str)
-                    else "section"
-                )
-                safe_title = self._make_safe_filename(first_title[:40])
-                current_file["filename"] = (
-                    f"{base_filename}-{len(output_files)+1}-{safe_title}.md"
-                )
-                output_files.append(current_file)
-
-                current_file = {"sections": [section], "size": sec_size, "filename": ""}
-            else:
-                current_file["sections"].append(section)
-                current_file["size"] += sec_size
-
-        if current_file["sections"]:
-            leftover_sec = current_file["sections"][0]
-            leftover_title = (
-                leftover_sec["title"]
-                if isinstance(leftover_sec.get("title"), str)
-                else "section"
-            )
-            safe_title = self._make_safe_filename(leftover_title[:40])
-            current_file["filename"] = (
-                f"{base_filename}-{len(output_files)+1}-{safe_title}.md"
-            )
-            output_files.append(current_file)
-
-        # Write actual files
-        written_files = []
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-        for file_info in output_files:
-            output_path = Path(output_dir) / file_info["filename"]
-            content = "\n".join(
-                line for sec in file_info["sections"] for line in sec["content"]
-            )
-
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            written_files.append(str(output_path))
-            logger.info(f"Wrote {output_path} ({file_info['size']/1024:.1f}KB)")
-
-        # Create an index file if needed
-        if self.create_index:
-            index_path = Path(output_dir) / f"{base_filename}-index.md"
-            with open(index_path, "w", encoding="utf-8") as f:
-                f.write(f"# {base_filename} - Table of Contents\n\n")
-                for i, file_info in enumerate(output_files, 1):
-                    f.write(
-                        f"## File {i}: [{file_info['filename']}]({file_info['filename']})\n\n"
-                    )
-                    for sec in file_info["sections"]:
-                        indent = "  " * (sec["level"] - 1) if sec["level"] > 0 else ""
-                        f.write(f"{indent}- {sec['title']}\n")
-                    f.write("\n")
-            written_files.insert(0, str(index_path))
-            logger.info(f"Created index file: {index_path}")
-
-        return written_files
+            logger.error(f"Error in HTML to Markdown conversion: {e}", exc_info=True)
+            # Final fallback - ultra simplified conversion
+            return self._simplified_direct_conversion(html_content)
 
     def convert_file(self, input_file, output_file=None):
-        """
-        Convert a single HTML file to Markdown. If the file is large and splitting is on,
-        multiple .md files may be created. Returns a tuple (success, message).
-        """
+        """Convert a single HTML file to Markdown."""
         input_path = Path(input_file)
 
         # Default output path
@@ -766,37 +454,24 @@ class HTMLToMarkdownConverter:
             file_size = input_path.stat().st_size
             logger.info(f"Processing file: {input_path} ({file_size/1024:.0f}KB)")
 
-            with open(input_path, "r", encoding="utf-8") as f:
+            with open(input_path, "r", encoding="utf-8", errors="replace") as f:
                 html_content = f.read()
 
             # Convert
             markdown_content = self.convert_html_to_markdown_safe(html_content)
-            # Additional code-block fixes
-            markdown_content = self._fix_code_blocks(markdown_content)
 
-            if self.split_output and file_size > 200 * 1024:
-                # Large file - do a final split into multiple files
-                files_created = self._split_markdown_into_files(
-                    markdown_content, base_filename, output_dir
-                )
-                return True, ", ".join(files_created)
-            else:
-                # Single output
-                final_path = Path(output_dir) / f"{base_filename}.md"
-                with open(final_path, "w", encoding="utf-8") as f:
-                    f.write(markdown_content)
-                return True, str(final_path)
+            # Write output
+            final_path = Path(output_dir) / f"{base_filename}.md"
+            with open(final_path, "w", encoding="utf-8") as f:
+                f.write(markdown_content)
+            return True, str(final_path)
 
         except Exception as e:
             logger.error(f"Error converting {input_path}: {str(e)}", exc_info=True)
             return False, str(e)
 
     def process_files(self, input_path, output_dir=None):
-        """
-        If input_path is a directory, convert all .html files in it recursively.
-        Otherwise, convert a single HTML file.
-        Returns a list of (file_path, success, message).
-        """
+        """Process multiple files or directories."""
         input_path = Path(input_path)
         results = []
 
@@ -807,6 +482,8 @@ class HTMLToMarkdownConverter:
                 if output_dir:
                     rel_path = file_path.relative_to(input_path)
                     out_file = Path(output_dir) / rel_path.with_suffix(".md")
+                    # Ensure output directory exists
+                    out_file.parent.mkdir(parents=True, exist_ok=True)
                 else:
                     out_file = None
 
@@ -830,7 +507,7 @@ class HTMLToMarkdownConverter:
 def main():
     """Main function to handle command-line usage."""
     parser = argparse.ArgumentParser(
-        description="Convert HTML files to Markdown with smart splitting."
+        description="Convert HTML files to Markdown with smart content extraction."
     )
     parser.add_argument("input", help="HTML file or directory to convert")
     parser.add_argument("output", nargs="?", help="Output directory for Markdown files")
@@ -868,58 +545,7 @@ def main():
         help="Remove >>> prompts.",
     )
 
-    # Performance/robustness
-    perf_group = parser.add_argument_group("Performance Options")
-    perf_group.add_argument(
-        "--chunk-size",
-        type=int,
-        default=100000,
-        help="Base chunk size in bytes (default=100KB).",
-    )
-    perf_group.add_argument(
-        "--timeout",
-        type=int,
-        default=120,
-        help="Timeout in seconds per chunk (default=120).",
-    )
-    perf_group.add_argument(
-        "--no-fallback",
-        action="store_false",
-        dest="fallback_mode",
-        help="Disable fallback mode.",
-    )
-    perf_group.add_argument(
-        "--no-parallel",
-        action="store_false",
-        dest="parallel_processing",
-        help="Disable parallel processing.",
-    )
-    perf_group.add_argument(
-        "--workers", type=int, default=2, help="Number of parallel workers (default=2)."
-    )
-
-    # Splitting options
-    split_group = parser.add_argument_group("Smart Splitting")
-    split_group.add_argument(
-        "--no-split",
-        action="store_false",
-        dest="split_output",
-        help="Disable splitting.",
-    )
-    split_group.add_argument(
-        "--max-file-size",
-        type=int,
-        default=100 * 1024,
-        help="Max size in bytes per split file (default=100KB).",
-    )
-    split_group.add_argument(
-        "--no-index",
-        action="store_false",
-        dest="create_index",
-        help="Disable index file creation.",
-    )
-
-    # Logging
+    # Debugging
     debug_group = parser.add_argument_group("Debugging")
     debug_group.add_argument(
         "--debug", action="store_true", help="Enable debug logging."
@@ -940,14 +566,6 @@ def main():
         "unicode_snob": args.unicode,
         "inline_links": args.inline_links,
         "mark_code": args.mark_code,
-        "chunk_size": args.chunk_size,
-        "timeout": args.timeout,
-        "fallback_mode": args.fallback_mode,
-        "parallel_processing": args.parallel_processing,
-        "max_workers": args.workers,
-        "split_output": args.split_output,
-        "max_output_size": args.max_file_size,
-        "create_index": args.create_index,
         "code_lang": args.code_lang,
         "preserve_repl_prompts": args.preserve_repl_prompts,
     }

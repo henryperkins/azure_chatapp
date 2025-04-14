@@ -374,21 +374,21 @@
                 result = await Promise.race([
                   originalIsAuthenticated.call(this, options)
                     .catch(innerErr => {
-                      // Handle message channel errors specifically
+                      // Handle message channel errors but don't assume auth status
                       if (innerErr.message && innerErr.message.includes("message channel closed")) {
-                        log('⚠️ Message channel closed during auth check, assuming authenticated', null, 'warn');
-                        return true;
+                        log('⚠️ Message channel closed during auth check', null, 'warn');
+                        return false; // Return false instead of true
                       }
                       throw innerErr;
                     }),
-                  new Promise(resolve => setTimeout(() => {
-                    log('⚠️ Auth check timed out, assuming authenticated=true', null, 'warn');
-                    resolve(true);
+                  new Promise((_, reject) => setTimeout(() => {
+                    log('⚠️ Auth check timed out, assuming authenticated=false', null, 'warn');
+                    reject(new Error('Auth check timeout')); // Reject instead of resolving with true
                   }, 5000))
                 ]);
               } catch (raceError) {
                 log(`⚠️ Auth race error: ${raceError.message}`, null, 'warn');
-                result = true; // Assume authenticated on errors
+                result = false; // Return false on errors instead of true
               }
 
               authState.authenticated = result;

@@ -10,6 +10,11 @@ let tokenRefreshInProgress = false;
 let lastRefreshAttempt = null;
 let refreshFailCount = 0;
 
+// Auth caching
+let authResultCache = null;
+let authCacheTime = 0;
+const AUTH_CACHE_TTL = 30000; // 30 seconds
+
 // Config
 const MIN_RETRY_INTERVAL = 5000; // ms between verification attempts after failure
 const MAX_REFRESH_RETRIES = 3;
@@ -402,9 +407,14 @@ async function verifyAuthState(bypassCache = false) {
   if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) return false;
   if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) sessionExpiredFlag = false;
 
-  if (!bypassCache && authState.lastVerified &&
-      (Date.now() - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION)) {
-    return authState.isAuthenticated;
+  // Check both the new cache and the existing verification cache
+  if (!bypassCache) {
+    if (authResultCache !== null && Date.now() - authCacheTime < AUTH_CACHE_TTL) {
+      return authResultCache;
+    }
+    if (authState.lastVerified && Date.now() - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION) {
+      return authState.isAuthenticated;
+    }
   }
 
   let accessToken = getCookie('access_token');
@@ -873,9 +883,19 @@ Object.assign(window.auth, {
   handleAuthError,
   isInitialized: false,
   isAuthenticated: async (opts = {}) => {
+    const now = Date.now();
+    if (authResultCache !== null && now - authCacheTime < AUTH_CACHE_TTL && !opts.forceVerify) {
+      return authResultCache;
+    }
+
     try {
-      return await verifyAuthState(opts.forceVerify || false);
-    } catch {
+      const result = await verifyAuthState(opts.forceVerify || false);
+      authResultCache = result;
+      authCacheTime = now;
+      return result;
+    } catch (err) {
+      authResultCache = false;
+      authCacheTime = now;
       return false;
     }
   }

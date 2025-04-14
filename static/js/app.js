@@ -865,6 +865,35 @@ async function loadProjects(filter = 'all') {
   }
 }
 
+// In app.js
+async function loadInitialProjects(retryOnFailure = true) {
+  try {
+    const isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
+    if (!isAuthenticated) {
+      console.log("[App] Not authenticated, showing login prompt");
+      document.getElementById('loginRequiredMessage')?.classList.remove('hidden');
+      return;
+    }
+
+    if (window.projectManager?.loadProjects) {
+      const projects = await window.projectManager.loadProjects('all');
+      console.log(`[App] Loaded ${projects.length} projects`);
+
+      // Ensure project list is rendered
+      if (window.projectListComponent?.renderProjects) {
+        window.projectListComponent.renderProjects(projects);
+      }
+    }
+  } catch (err) {
+    console.error("[App] Error loading initial projects:", err);
+    if (retryOnFailure) {
+      console.log("[App] Retrying project load after auth verification");
+      await window.auth.isAuthenticated({forceVerify: true});
+      loadInitialProjects(false);
+    }
+  }
+}
+
 async function loadSidebarProjects() {
   if (!await ensureAuthenticated()) {
     console.log("[loadSidebarProjects] Not authenticated");
@@ -1126,65 +1155,39 @@ function handleAuthStateChange(e) {
       if (stateChanged) {
         console.log("[AuthStateChange] User authenticated, loading initial data...");
 
-        // First, ensure projects are loaded and the list is displayed
-        try {
-          console.log("[AuthStateChange] Loading project list first");
-          // Make sure project list view is visible
-          const projectListView = document.getElementById('projectListView');
-          if (projectListView) {
-            projectListView.classList.remove('hidden');
-            console.log("[AuthStateChange] Made project list view visible");
-          }
-
-          // Always ensure project list is forced to render
-          if (window.projectListComponent && typeof window.projectListComponent.forceRender === 'function') {
-            console.log("[AuthStateChange] Explicitly forcing project list rendering");
-            window.projectListComponent.forceRender();
-          } else if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
-            console.log("[AuthStateChange] Using standard render for project list");
-            window.projectListComponent.renderProjects({forceRefresh: true});
-          }
-
-          // Force view=projects if we're on the homepage
-          if (!window.location.search) {
-            window.history.pushState({}, '', '/?view=projects');
-            console.log("[AuthStateChange] Redirected to projects view");
-          }
-
-          // Load projects with the project manager
-          if (window.projectManager?.loadProjects) {
-            window.projectManager.loadProjects('all')
-              .then(response => {
-                console.log("[AuthStateChange] Projects loaded:", response?.data?.projects?.length || "unknown count");
-
-                // After projects load, force render again to ensure visibility
-                setTimeout(() => {
-                  if (window.projectListComponent?.forceRender) {
-                    window.projectListComponent.forceRender();
-                  }
-                }, 500); // Small delay to ensure DOM is ready
-              })
-              .catch(err => console.warn("Failed to load projects:", err));
-          }
-
-          // Still load other components as before
-          loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-          loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
-        } catch (err) {
-          console.error("[AuthStateChange] Error during project initialization:", err);
+        // Make sure project list view is visible
+        const projectListView = document.getElementById('projectListView');
+        if (projectListView) {
+          projectListView.classList.remove('hidden');
+          console.log("[AuthStateChange] Made project list view visible");
         }
 
-      // Check chatId once
-      const urlParams = new URLSearchParams(window.location.search);
-      const chatId = urlParams.get('chatId');
-      if (chatId && typeof window.loadConversation === 'function') {
-        window.loadConversation(chatId).catch(err => {
-          console.warn("Failed to load conversation:", err);
+        // Force view=projects if we're on the homepage
+        if (!window.location.search) {
+          window.history.pushState({}, '', '/?view=projects');
+          console.log("[AuthStateChange] Redirected to projects view");
+        }
+
+        // Use our new robust project loading sequence
+        loadInitialProjects().catch(err => {
+          console.error("[AuthStateChange] Error loading initial projects:", err);
         });
+
+        // Still load other components as before
+        loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+        loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+
+        // Check chatId once
+        const urlParams = new URLSearchParams(window.location.search);
+        const chatId = urlParams.get('chatId');
+        if (chatId && typeof window.loadConversation === 'function') {
+          window.loadConversation(chatId).catch(err => {
+            console.warn("Failed to load conversation:", err);
+          });
+        }
+      } else {
+        console.log("[AuthStateChange] Already authenticated, skipping redundant data load.");
       }
-    } else {
-      console.log("[AuthStateChange] Already authenticated, skipping redundant data load.");
-    }
   } else {
     const conversationArea = ELEMENTS.CONVERSATION_AREA || getElement(SELECTORS.CONVERSATION_AREA);
     if (conversationArea) conversationArea.innerHTML = '';
@@ -1411,6 +1414,15 @@ window.appInitializer = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  // On page load, verify if access_token cookie exists and is valid
+  const hasAccessToken = document.cookie.includes('access_token=');
+  if (hasAccessToken) {
+    console.log("[Auth] Found access token cookie, loading initial projects");
+    loadInitialProjects().catch(err => {
+      console.warn("[Auth] Error loading initial projects:", err);
+    });
+  }
+
   window.appInitializer.initialize().catch(error => {
     console.error("[DOMContentLoaded] App init error:", error);
     alert("Failed to initialize. Please refresh the page.");
