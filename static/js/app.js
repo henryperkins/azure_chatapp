@@ -132,11 +132,26 @@ function handleAuthModalPositioning() {
 
   // Adjust positioning based on viewport
   if (window.innerWidth < 768) { // md breakpoint
-    const btnRect = authBtn.getBoundingClientRect();
-    const windowWidth = window.innerWidth;
-    authDropdown.style.right = `${windowWidth - btnRect.right}px`;
+    // Center the dropdown on mobile devices
+    // The CSS in auth-mobile-fix.css handles most positioning
+    // but we still need to ensure it's visible within the viewport
+
+    // Clear any right positioning that might interfere with our centered approach
+    authDropdown.style.right = '';
+
+    // Ensure the dropdown is fully visible within viewport heights
+    const viewportHeight = window.innerHeight;
+    const dropdownRect = authDropdown.getBoundingClientRect();
+
+    // If dropdown would extend beyond viewport, adjust top position
+    if (dropdownRect.bottom > viewportHeight) {
+      const newTopPosition = Math.max(10, viewportHeight - dropdownRect.height - 10);
+      authDropdown.style.top = `${newTopPosition}px`;
+    }
   } else {
-    authDropdown.style.right = ''; // Reset inline style
+    // Reset all inline styles for desktop view
+    authDropdown.style.right = '';
+    authDropdown.style.top = '';
   }
 }
 
@@ -1011,17 +1026,29 @@ function setupEventListeners() {
   // Add auth dropdown mobile handling
   const authBtn = document.getElementById('authButton');
   const authDropdown = document.getElementById('authDropdown');
-  
+
   if (authBtn && authDropdown) {
     authBtn.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
-      
-      const isHidden = authDropdown.classList.contains('hidden');
-      authDropdown.classList.toggle("hidden", !isHidden);
 
-      // Call the new positioning helper
-      handleAuthModalPositioning();
+      // If not authenticated, attempt to show the login modal.
+      if (!API_CONFIG.isAuthenticated) {
+        if (window.modalManager?.show) {
+          console.log('[authBtn] User not authenticated, showing "login" modal.');
+          window.modalManager.show('login', {});
+        } else {
+          console.warn('[authBtn] modalManager not found; fallback to authDropdown');
+          const isHidden = authDropdown.classList.contains('hidden');
+          authDropdown.classList.toggle("hidden", !isHidden);
+          handleAuthModalPositioning();
+        }
+      } else {
+        // If authenticated, toggle dropdown as before
+        const isHidden = authDropdown.classList.contains('hidden');
+        authDropdown.classList.toggle("hidden", !isHidden);
+        handleAuthModalPositioning();
+      }
     });
 
     // Close dropdown when clicking outside
@@ -1033,7 +1060,7 @@ function setupEventListeners() {
       }
     });
 
-    // Handle touch events on mobile
+    // Handle touch events on mobile with improved target detection
     document.addEventListener("touchstart", e => {
       if (!authDropdown.classList.contains('hidden') &&
           !e.target.closest("#authContainer") &&
@@ -1041,6 +1068,13 @@ function setupEventListeners() {
         authDropdown.classList.add("hidden");
       }
     }, { passive: true });
+
+    // Add window resize handler to reposition dropdown when screen size changes
+    window.addEventListener('resize', () => {
+      if (!authDropdown.classList.contains('hidden')) {
+        handleAuthModalPositioning();
+      }
+    });
   }
 
   document.addEventListener('authStateChanged', handleAuthStateChange);
