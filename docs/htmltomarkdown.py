@@ -319,11 +319,12 @@ class HTMLToMarkdownConverter:
 
         # Extract lists
         for ul in soup.find_all("ul"):
-            for li in ul.find_all("li", recursive=False):
-                text = li.get_text(strip=True)
-                if text:
-                    result.append(f"* {text}\n")
-            result.append("\n")
+            if isinstance(ul, Tag):  # Ensure 'ul' is a Tag before accessing 'find_all'
+                for li in ul.find_all("li", recursive=False):
+                    text = li.get_text(strip=True)
+                    if text:
+                        result.append(f"* {text}\n")
+                result.append("\n")
 
         for ol in soup.find_all("ol"):
             for i, li in enumerate(ol.find_all("li", recursive=False), 1):
@@ -401,12 +402,16 @@ class HTMLToMarkdownConverter:
 
         # Fix potential REPL blocks
         def repl_format(m):
-            code = m.group(1).strip()
+            code = m.group(2).strip()
             code = re.sub(r"\n{2,}", "\n", code)
-            return f"```python\n{code}\n```"
+            # Don't force Python - preserve the original language tag if it exists
+            lang = m.group(1) if m.group(1) else "python"
+            return f"```{lang}\n{code}\n```"
 
+        # Improved pattern that better handles REPL blocks - detects any code blocks
+        # that contain at least one line starting with >>> or ...
         markdown = re.sub(
-            r"```.*?\n((?:>>>|\.\.\.)[^\n]*(?:\n(?:>>>|\.\.\.).*?)*)\n```",
+            r"```(.*?)\n(.*?(?:^|\n)(?:>>>|\.\.\.)[^\n]*.*?)\n```",
             repl_format,
             markdown,
             flags=re.DOTALL,

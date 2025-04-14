@@ -271,14 +271,23 @@
     _extractProjects(eventOrProjects) {
       let projects = [];
 
+      // Handle different input types and ensure we have an array
       if (Array.isArray(eventOrProjects)) {
         projects = eventOrProjects;
       } else if (eventOrProjects instanceof Event) {
         projects = eventOrProjects.detail?.data?.projects || [];
       } else if (eventOrProjects?.data?.projects) {
-        projects = eventOrProjects.data.projects;
+        projects = Array.isArray(eventOrProjects.data.projects) ?
+                   eventOrProjects.data.projects : [];
       } else if (eventOrProjects?.projects) {
-        projects = eventOrProjects.projects;
+        projects = Array.isArray(eventOrProjects.projects) ?
+                   eventOrProjects.projects : [];
+      }
+
+      // Log warning if we got an invalid projects structure
+      if (!Array.isArray(projects)) {
+        console.warn("Projects data is not an array, using empty array instead", eventOrProjects);
+        projects = [];
       }
 
       return projects.map(p => p.to_dict ? p.to_dict() : p);

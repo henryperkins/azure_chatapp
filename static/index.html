@@ -1359,11 +1359,17 @@
     import { ProjectDetailsComponent } from '/static/js/projectDetailsComponent.js'; // Import the class
     import '/static/js/sidebar.js';
 
-    // Load the debug utility last after everything else is loaded
+    // Load the debug utility after everything else
     const debugScript = document.createElement('script');
     debugScript.src = '/static/js/debug-project.js';
     debugScript.onload = () => console.log('Debug utilities loaded');
     document.head.appendChild(debugScript);
+
+    // Load our notification handler to fix <hide-notification> message errors
+    const notificationHandlerScript = document.createElement('script');
+    notificationHandlerScript.src = '/static/js/notification-handler.js';
+    notificationHandlerScript.onload = () => console.log('Notification handler loaded');
+    document.head.appendChild(notificationHandlerScript);
 
     // Centralized initialization after the DOM is ready
     document.addEventListener('DOMContentLoaded', async () => {

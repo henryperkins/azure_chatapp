@@ -11,9 +11,7 @@ let lastRefreshAttempt = null;
 let refreshFailCount = 0;
 
 // Auth caching
-let authResultCache = null;
-let authCacheTime = 0;
-const AUTH_CACHE_TTL = 30000; // 30 seconds
+
 
 // Config
 const MIN_RETRY_INTERVAL = 5000; // ms between verification attempts after failure
@@ -167,31 +165,55 @@ function showSessionExpiredModal() {
 }
 
 /** Single function that either sets or gets tokens from sessionStorage. */
-function syncTokensToSessionStorage(mode = 'store') {
-  try {
-    if (mode === 'store') {
-      if (window.__directAccessToken) {
-        sessionStorage.setItem('_auth_token_backup', window.__directAccessToken);
-        sessionStorage.setItem('_auth_refresh_backup', window.__directRefreshToken || '');
-        sessionStorage.setItem('_auth_timestamp', String(window.__recentLoginTimestamp || Date.now()));
-        sessionStorage.setItem('_auth_username', window.__lastUsername || '');
-      }
+function syncTokensToSessionStorage(action = 'get') {
+  if (action === 'store') {
+    // Store tokens from cookies to sessionStorage
+    const accessToken = getCookie('access_token');
+    const refreshToken = getCookie('refresh_token');
+
+    if (accessToken) {
+      sessionStorage.setItem('access_token', accessToken);
     } else {
-      const token = sessionStorage.getItem('_auth_token_backup');
-      const ts = sessionStorage.getItem('_auth_timestamp');
-      if (token && ts) {
-        window.__directAccessToken = token;
-        window.__directRefreshToken = sessionStorage.getItem('_auth_refresh_backup') || null;
-        window.__recentLoginTimestamp = parseInt(ts, 10) || Date.now();
-        window.__lastUsername = sessionStorage.getItem('_auth_username') || null;
-        return true;
-      }
+      sessionStorage.removeItem('access_token');
     }
-  } catch (err) {
-    if (AUTH_DEBUG) console.warn('[Auth] SessionStorage sync error:', err);
+
+    if (refreshToken) {
+      sessionStorage.setItem('refresh_token', refreshToken);
+    } else {
+      sessionStorage.removeItem('refresh_token');
+    }
+
+    if (authState.username) {
+      sessionStorage.setItem('username', authState.username);
+    }
+
+    return true;
+  } else {
+    // Retrieve tokens from sessionStorage and set as cookies if found
+    const accessToken = sessionStorage.getItem('access_token');
+    const refreshToken = sessionStorage.getItem('refresh_token');
+    const username = sessionStorage.getItem('username');
+
+    let restored = false;
+
+    if (accessToken && !getCookie('access_token')) {
+      setAuthCookie('access_token', accessToken, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
+      restored = true;
+    }
+
+    if (refreshToken && !getCookie('refresh_token')) {
+      setAuthCookie('refresh_token', refreshToken, 60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS);
+      restored = true;
+    }
+
+    if (username) {
+      window.__lastUsername = username;
+    }
+
+    return restored;
   }
-  return false;
 }
+
 
 /* ----------------------------------
  *  Core HTTP Functions
@@ -325,11 +347,28 @@ async function refreshTokens() {
 
 /** Force or retrieve a valid access token. */
 async function getAuthToken(options = {}) {
+  // If token refresh is already in progress, wait for it
+  if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
+    try {
+      await window.__tokenRefreshPromise;
+      const validToken = getCookie('access_token');
+      // Check if the newly refreshed token is valid
+      if (validToken && await checkTokenValidity(validToken)) {
+        return validToken;
+      }
+      // If still invalid but allowEmpty is true, return empty string
+      if (options.allowEmpty) return '';
+      throw new Error('Token refresh did not yield a valid token');
+    } catch (err) {
+      if (options.allowEmpty) return '';
+      throw err;
+    }
+  }
+
   // Allow graceful initialization if explicitly requested
   const gracefulInit = options.gracefulInit === true;
   const allowEmpty = options.allowEmpty === true || gracefulInit === true;
 
-  // Log to help debug authentication issues
   if (AUTH_DEBUG) {
     console.debug('[Auth] getAuthToken called with options:', options);
   }
@@ -409,12 +448,7 @@ async function verifyAuthState(bypassCache = false) {
 
   // Check both the new cache and the existing verification cache
   if (!bypassCache) {
-    if (authResultCache !== null && Date.now() - authCacheTime < AUTH_CACHE_TTL) {
-      return authResultCache;
-    }
-    if (authState.lastVerified && Date.now() - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION) {
-      return authState.isAuthenticated;
-    }
+
   }
 
   let accessToken = getCookie('access_token');
@@ -776,9 +810,8 @@ function setupAuthStateMonitoring() {
   // Sync tokens to sessionStorage every 30s
   setInterval(() => syncTokensToSessionStorage('store'), 30000);
 
-  // Before unload, store tokens
+  // Before unload, remove references to sessionStorage sync
   window.addEventListener('beforeunload', () => {
-    syncTokensToSessionStorage('store');
     clearInterval(authCheck);
   });
 }
@@ -883,19 +916,10 @@ Object.assign(window.auth, {
   handleAuthError,
   isInitialized: false,
   isAuthenticated: async (opts = {}) => {
-    const now = Date.now();
-    if (authResultCache !== null && now - authCacheTime < AUTH_CACHE_TTL && !opts.forceVerify) {
-      return authResultCache;
-    }
-
     try {
-      const result = await verifyAuthState(opts.forceVerify || false);
-      authResultCache = result;
-      authCacheTime = now;
-      return result;
-    } catch (err) {
-      authResultCache = false;
-      authCacheTime = now;
+      // Rely solely on verifyAuthState and lastVerified logic
+      return await verifyAuthState(opts.forceVerify || false);
+    } catch {
       return false;
     }
   }

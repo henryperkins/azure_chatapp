@@ -349,14 +349,6 @@
         console.error(`[ModalManager] Dialog element not found for ID: '${modalId}'`);
         return false;
       }
-      if (typeof modalEl.showModal !== 'function') {
-        console.warn(`[ModalManager] .showModal() not available for ID: '${modalId}', falling back to display-based modal handling`);
-        modalEl.classList.remove('hidden');
-        modalEl.style.display = 'block';
-      } else {
-        modalEl.showModal();
-      }
-
       console.log(`[ModalManager] Showing modal: ${modalName} (#${modalId})`);
 
       // If provided, update content before showing
@@ -368,7 +360,14 @@
         }
       }
 
-      modalEl.showModal();
+      // Show the modal using the appropriate method
+      if (typeof modalEl.showModal !== 'function') {
+        console.warn(`[ModalManager] .showModal() not available for ID: '${modalId}', falling back to display-based modal handling`);
+        modalEl.classList.remove('hidden');
+        modalEl.style.display = 'block';
+      } else {
+        modalEl.showModal();
+      }
       return true;
     }
 
