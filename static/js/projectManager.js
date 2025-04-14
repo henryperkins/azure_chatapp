@@ -1030,10 +1030,9 @@
     // Listen for auth changes
     document.addEventListener('authStateChanged', (event) => {
       const isAuthenticated = event.detail?.authenticated;
-      console.log(`[projectManager] Auth state changed: ${isAuthenticated ? 'authenticated' : 'logged out'}`);
       if (!isAuthenticated) {
-        currentProject = null; // Clear current project on logout
-        emitEvent("authExpired", { message: event.detail.error || "Authentication expired" });
+        currentProject = null; // Only clear project manager state
+        emitEvent("authExpired", { message: "Authentication expired" });
       }
     });
 

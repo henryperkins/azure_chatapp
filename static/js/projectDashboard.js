@@ -858,28 +858,16 @@ class ProjectDashboard {
   // NEW: Handle auth state changes
   _handleAuthStateChange(event) {
     const isAuthenticated = event.detail?.authenticated || false;
-
-    if (isAuthenticated) {
-      console.log("[ProjectDashboard] Auth state changed to authenticated");
-
-      // If we were showing the project list, reload projects
-      if (this.state.currentView === "list") {
-        // Delay slightly to allow auth propagation
-        setTimeout(() => {
-          this.loadProjects().catch(err => {
-            console.error("[ProjectDashboard] Failed to load projects after auth change:", err);
-          });
-        }, 300);
-      }
-      // If we were showing project details, reload the current project
-      else if (this.state.currentView === "details" && this.state.currentProject?.id) {
-        setTimeout(() => {
-          this.showProjectDetails(this.state.currentProject.id);
-        }, 300);
-      }
-    } else {
-      // If logging out, always return to list view (which will show login required)
-      this.showProjectList();
+    
+    if (isAuthenticated && this.state.currentView === "list") {
+      // Only handle project list reloading for dashboard
+      setTimeout(() => {
+        this.loadProjects().catch(err => {
+          console.error("[ProjectDashboard] Failed to load projects after auth change:", err);
+        });
+      }, 300);
+    } else if (!isAuthenticated) {
+      this.showProjectList(); // Only handle dashboard view state
     }
   }
 
