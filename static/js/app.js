@@ -1160,6 +1160,20 @@ function handleAuthStateChange(e) {
         if (projectListView) {
           projectListView.classList.remove('hidden');
           console.log("[AuthStateChange] Made project list view visible");
+
+          // Ensure login message is hidden
+          const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+          if (loginRequiredMessage) {
+            loginRequiredMessage.classList.add('hidden');
+            console.log("[AuthStateChange] Hidden login required message");
+          }
+        }
+
+        // Make project manager panel visible
+        const projectManagerPanel = document.getElementById('projectManagerPanel');
+        if (projectManagerPanel && projectManagerPanel.classList.contains('hidden')) {
+          projectManagerPanel.classList.remove('hidden');
+          console.log("[AuthStateChange] Made project manager panel visible");
         }
 
         // Force view=projects if we're on the homepage

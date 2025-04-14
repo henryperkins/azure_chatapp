@@ -85,6 +85,9 @@ class ProjectDashboard {
         return false;
       }
 
+      // Wait for authentication (new step)
+      await this._waitForAuthentication();
+
       // Stagger initialization steps to prevent blocking
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -176,18 +179,63 @@ class ProjectDashboard {
         throw new Error("projectManager not initialized");
       }
 
+      // NEW: Check authentication first
+      let isAuthenticated = false;
+      try {
+        if (window.auth?.isAuthenticated) {
+          isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
+        }
+      } catch (err) {
+        console.warn("[ProjectDashboard] Auth check failed in loadProjects:", err);
+      }
+
+      if (!isAuthenticated) {
+        // Show login required
+        const listContainer = document.getElementById("projectList");
+        const loginRequiredMessage = document.getElementById("loginRequiredMessage");
+        const noProjectsMsg = document.getElementById("noProjectsMessage");
+
+        if (listContainer) {
+          listContainer.innerHTML = '';
+        }
+
+        if (loginRequiredMessage) {
+          loginRequiredMessage.classList.remove("hidden");
+        }
+
+        if (noProjectsMsg) {
+          noProjectsMsg.classList.add('hidden');
+        }
+
+        // Dispatch empty projects event for listeners
+        document.dispatchEvent(
+          new CustomEvent("projectsLoaded", {
+            detail: {
+              data: {
+                projects: [],
+                count: 0,
+                filter: { type: filter },
+                authRequired: true
+              }
+            }
+          })
+        );
+
+        return [];
+      }
+
       // Show loading state using DaisyUI spinner within the list container
-      const listContainer = document.getElementById("projectList"); // Target the grid container
+      const listContainer = document.getElementById("projectList");
       const noProjectsMsg = document.getElementById("noProjectsMessage");
 
       if (listContainer) {
          listContainer.innerHTML = `
-           <div class="col-span-full text-center p-8"> {/* Span across all columns */}
+           <div class="col-span-full text-center p-8">
              <span class="loading loading-spinner loading-lg text-primary"></span>
              <p class="mt-2 text-base-content/70">Loading projects...</p>
            </div>`;
       }
-       if (noProjectsMsg) noProjectsMsg.classList.add('hidden'); // Hide no projects message
+      if (noProjectsMsg) noProjectsMsg.classList.add('hidden'); // Hide no projects message
 
       const response = await window.projectManager.loadProjects(filter);
       // The projectsLoaded event will trigger rendering
@@ -544,66 +592,16 @@ class ProjectDashboard {
       throw new Error("projectManager is required but not available");
     }
 
-    // Ensure essential containers exist
-    let projectListView = document.getElementById("projectListView");
-    if (!projectListView) {
-       projectListView = document.createElement('main');
-       projectListView.id = "projectListView";
-       projectListView.className = "flex-1 overflow-y-auto p-4 lg:p-6"; // Add classes
-       document.querySelector('.drawer-content')?.appendChild(projectListView); // Append to drawer content
-    }
-    let projectListGrid = document.getElementById("projectList");
-    if (!projectListGrid) {
-       projectListGrid = document.createElement('div');
-       projectListGrid.id = "projectList";
-       projectListGrid.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-       projectListView.appendChild(projectListGrid); // Append grid to list view
-    }
-     let noProjectsMessage = document.getElementById("noProjectsMessage");
-     if (!noProjectsMessage) {
-        noProjectsMessage = document.createElement('div');
-        noProjectsMessage.id = "noProjectsMessage";
-        noProjectsMessage.className = "text-center py-10 text-base-content/70 hidden";
-        projectListView.appendChild(noProjectsMessage);
-     }
-
-
-    // Ensure project details view is hidden by default
-    const projectDetailsView = document.getElementById("projectDetailsView");
-    if (projectDetailsView) {
-      projectDetailsView.classList.add("hidden");
-    } else {
-       // Create details view if missing (basic structure)
-       const detailsContainer = document.createElement('section');
-       detailsContainer.id = "projectDetailsView";
-       detailsContainer.className = "flex-1 flex flex-col overflow-hidden hidden";
-       document.querySelector('.drawer-content')?.appendChild(detailsContainer);
-    }
+    // Ensure essential containers exist with improved visibility handling
+    this._ensureContainersExist();
 
     this.showInitializationProgress("Loading components...");
 
     // Ensure fallback components if the real ones aren't there
     this.ensureFallbackComponents();
 
-    // Create component instances
-    this.components.projectList = new window.ProjectListComponent({
-      elementId: "projectList", // Target the grid container
-      onViewProject: this.handleViewProject.bind(this)
-    });
-    // Ensure ProjectDetailsComponent is available (might be module)
-    const DetailsComponent = window.ProjectDetailsComponent || (await import('./projectDetailsComponent.js')).ProjectDetailsComponent;
-    this.components.projectDetails = new DetailsComponent({
-      onBack: this.handleBackToList.bind(this),
-      utils: window.uiUtilsInstance, // Pass utils
-      projectManager: window.projectManager,
-      auth: window.auth,
-      notification: this.showNotification
-    });
-    if (typeof window.KnowledgeBaseComponent === "function") {
-      this.components.knowledgeBase = new window.KnowledgeBaseComponent({
-         // Pass options if needed
-      });
-    }
+    // Create components with retries
+    await this._createComponentsWithRetry();
 
     // Hide spinner after we have components
     this.hideInitializationProgress();
@@ -620,20 +618,166 @@ class ProjectDashboard {
       window.modalManager = new window.ModalManager();
     }
 
-    // Process URL
-    this.processUrlParams();
+    // Process URL with auth check
+    await this._processUrlWithAuthCheck();
+  }
 
-    // Project context is maintained via URL params and in-memory state
+  _ensureContainersExist() {
+    // Check authentication state first
+    const isAuthenticated = window.auth?.isAuthenticated ? true : false;
 
-    // Initial project load
-    setTimeout(() => {
-      this.loadProjects().catch(err => {
-        console.error("[ProjectDashboard] Initial project load failed:", err);
+    let projectListView = document.getElementById("projectListView");
+    if (!projectListView) {
+       projectListView = document.createElement('main');
+       projectListView.id = "projectListView";
+       projectListView.className = "flex-1 overflow-y-auto p-4 lg:p-6";
+       document.querySelector('.drawer-content')?.appendChild(projectListView);
+    }
+
+    // Set visibility based on auth state
+    projectListView.classList.toggle('hidden', !isAuthenticated);
+
+    let projectListGrid = document.getElementById("projectList");
+    if (!projectListGrid) {
+       projectListGrid = document.createElement('div');
+       projectListGrid.id = "projectList";
+       projectListGrid.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+       projectListView.appendChild(projectListGrid);
+    }
+
+    let noProjectsMessage = document.getElementById("noProjectsMessage");
+    if (!noProjectsMessage) {
+       noProjectsMessage = document.createElement('div');
+       noProjectsMessage.id = "noProjectsMessage";
+       noProjectsMessage.className = "text-center py-10 text-base-content/70 hidden";
+       projectListView.appendChild(noProjectsMessage);
+    }
+
+    // Add login message if not authenticated
+    let loginRequiredMessage = document.getElementById("loginRequiredMessage");
+    if (!loginRequiredMessage) {
+       loginRequiredMessage = document.createElement('div');
+       loginRequiredMessage.id = "loginRequiredMessage";
+       loginRequiredMessage.className = "text-center py-10 text-base-content/70";
+       loginRequiredMessage.innerHTML = "Please log in to view your projects";
+       projectListView.appendChild(loginRequiredMessage);
+    }
+    loginRequiredMessage.classList.toggle('hidden', isAuthenticated);
+
+    // Ensure project details view is hidden by default
+    const projectDetailsView = document.getElementById("projectDetailsView");
+    if (projectDetailsView) {
+      projectDetailsView.classList.add("hidden");
+    } else {
+       // Create details view if missing (basic structure)
+       const detailsContainer = document.createElement('section');
+       detailsContainer.id = "projectDetailsView";
+       detailsContainer.className = "flex-1 flex flex-col overflow-hidden hidden";
+       document.querySelector('.drawer-content')?.appendChild(detailsContainer);
+    }
+  }
+
+  async _createComponentsWithRetry(attempts = 0) {
+    const maxAttempts = 3;
+
+    try {
+      // Create component instances
+      this.components.projectList = new window.ProjectListComponent({
+        elementId: "projectList",
+        onViewProject: this.handleViewProject.bind(this)
       });
-    }, 100);
+
+      // Check if ProjectDetailsComponent is available directly or as a module
+      let DetailsComponent;
+      if (window.ProjectDetailsComponent) {
+        DetailsComponent = window.ProjectDetailsComponent;
+      } else {
+        try {
+          DetailsComponent = (await import('./projectDetailsComponent.js')).ProjectDetailsComponent;
+        } catch (err) {
+          console.warn("[ProjectDashboard] Could not import ProjectDetailsComponent:", err);
+          if (!window.ProjectDetailsComponent) {
+            throw new Error("ProjectDetailsComponent not available");
+          }
+          DetailsComponent = window.ProjectDetailsComponent;
+        }
+      }
+
+      this.components.projectDetails = new DetailsComponent({
+        onBack: this.handleBackToList.bind(this),
+        utils: window.uiUtilsInstance || window.UIUtils, // Try both variants
+        projectManager: window.projectManager,
+        auth: window.auth,
+        notification: this.showNotification
+      });
+
+      if (typeof window.KnowledgeBaseComponent === "function") {
+        this.components.knowledgeBase = new window.KnowledgeBaseComponent({
+           // Pass options if needed
+        });
+      }
+    } catch (err) {
+      console.error(`[ProjectDashboard] Component creation attempt ${attempts+1} failed:`, err);
+
+      if (attempts < maxAttempts) {
+        // Wait with exponential backoff
+        const delay = Math.pow(2, attempts) * 300;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this._createComponentsWithRetry(attempts + 1);
+      }
+
+      // If we've tried enough, use fallbacks
+      console.warn("[ProjectDashboard] Using fallback components after repeated failures");
+      this.ensureFallbackComponents();
+
+      // Create with fallbacks
+      if (!this.components.projectList) {
+        this.components.projectList = new window.ProjectListComponent({
+          elementId: "projectList",
+          onViewProject: this.handleViewProject.bind(this)
+        });
+      }
+
+      if (!this.components.projectDetails) {
+        this.components.projectDetails = new window.ProjectDetailsComponent({
+          onBack: this.handleBackToList.bind(this),
+        });
+      }
+    }
+  }
+
+  async _processUrlWithAuthCheck() {
+    // Check authentication before handling URL
+    let isAuthenticated = false;
+
+    try {
+      if (window.auth?.isAuthenticated) {
+        isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
+      }
+    } catch (err) {
+      console.warn("[ProjectDashboard] Auth check failed:", err);
+    }
+
+    if (isAuthenticated) {
+      this.processUrlParams();
+
+      // Initial project load with delay to avoid race conditions
+      setTimeout(() => {
+        this.loadProjects().catch(err => {
+          console.error("[ProjectDashboard] Initial project load failed:", err);
+        });
+      }, 100);
+    } else {
+      // Show login required state instead of processing URL
+      this.showProjectList(); // This will show login required if auth check fails
+    }
   }
 
   registerEventListeners() {
+    // NEW: Listen for authentication events
+    document.addEventListener("authStateChanged", this._handleAuthStateChange.bind(this));
+    document.addEventListener("authStateConfirmed", this._handleAuthStateChange.bind(this));
+
     // Listen for project-related events from projectManager
     document.addEventListener(
       "projectsLoaded",
@@ -691,7 +835,7 @@ class ProjectDashboard {
        }
     });
 
-    // Listen for KB settings button click (handled in knowledgeBaseComponent)
+    //Listenfor KB settings button click (handled in knowledgeBaseComponent)
     // document.getElementById('knowledgeBaseSettingsBtn')?.addEventListener('click', () => { ... });
 
     // Listen for Setup KB button click (handled in knowledgeBaseComponent)
@@ -768,6 +912,71 @@ class ProjectDashboard {
         reject(new Error("Timeout waiting for ProjectManager"));
       }, 2000);
     });
+  }
+
+  async _waitForAuthentication() {
+    this.showInitializationProgress("Checking authentication state...");
+
+    // First check if we already have auth info
+    if (window.auth?.isAuthenticated) {
+      try {
+        const authenticated = await window.auth.isAuthenticated({forceVerify: false});
+        if (authenticated) {
+          console.log("[ProjectDashboard] User is authenticated, proceeding with initialization");
+          return true;
+        }
+      } catch (err) {
+        console.warn("[ProjectDashboard] Auth check error:", err);
+      }
+    }
+
+    // If not authenticated, wait a bit for possible login
+    return new Promise((resolve) => {
+      const authListener = (event) => {
+        if (event.detail?.authenticated) {
+          document.removeEventListener("authStateChanged", authListener);
+          console.log("[ProjectDashboard] Auth state changed to authenticated");
+          resolve(true);
+        }
+      };
+
+      document.addEventListener("authStateChanged", authListener);
+
+      // Set a timeout to resolve anyway after 3 seconds
+      setTimeout(() => {
+        document.removeEventListener("authStateChanged", authListener);
+        console.log("[ProjectDashboard] Proceeding without authentication");
+        resolve(false);
+      }, 3000);
+    });
+  }
+
+  // NEW: Handle auth state changes
+  _handleAuthStateChange(event) {
+    const isAuthenticated = event.detail?.authenticated || false;
+
+    if (isAuthenticated) {
+      console.log("[ProjectDashboard] Auth state changed to authenticated");
+
+      // If we were showing the project list, reload projects
+      if (this.state.currentView === "list") {
+        // Delay slightly to allow auth propagation
+        setTimeout(() => {
+          this.loadProjects().catch(err => {
+            console.error("[ProjectDashboard] Failed to load projects after auth change:", err);
+          });
+        }, 300);
+      }
+      // If we were showing project details, reload the current project
+      else if (this.state.currentView === "details" && this.state.currentProject?.id) {
+        setTimeout(() => {
+          this.showProjectDetails(this.state.currentProject.id);
+        }, 300);
+      }
+    } else {
+      // If logging out, always return to list view (which will show login required)
+      this.showProjectList();
+    }
   }
 
   async _waitForDocument() {
