@@ -150,7 +150,8 @@ class ProjectDashboard {
     } catch (error) {
       console.error("[ProjectDashboard] Failed to load project details:", error);
       this.showNotification("Failed to load project", "error");
-      this.showProjectList();
+      this.components.projectDetails?.hide();
+      window.showProjectsView();
     }
   }
 

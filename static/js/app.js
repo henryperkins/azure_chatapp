@@ -161,39 +161,6 @@ function handleAuthModalPositioning() {
  * @param {Object} options - Configuration options
  * @returns {Promise<boolean>} Whether user is authenticated
  */
-async function ensureAuthenticated(options = {}) {
-  // If there's an in-progress auth check, wait for it to complete
-  if (API_CONFIG.authCheckInProgress) {
-    console.debug('[ensureAuthenticated] Waiting for existing auth check to finish...');
-    return new Promise((resolve) => {
-      const listener = (e) => {
-        document.removeEventListener('authChecked', listener);
-        resolve(e.detail.authenticated);
-      };
-      document.addEventListener('authChecked', listener);
-    });
-  }
-
-  API_CONFIG.authCheckInProgress = true;
-  try {
-    if (!window.auth?.isAuthenticated) {
-      console.warn('[ensureAuthenticated] auth.js not available or missing isAuthenticated');
-      return false;
-    }
-
-    const isAuth = await window.auth.isAuthenticated(options);
-    document.dispatchEvent(new CustomEvent('authChecked', { detail: { authenticated: isAuth } }));
-    return isAuth;
-  } catch (error) {
-    console.error('[ensureAuthenticated] Authentication check failed:', error);
-    if (window.auth?.handleAuthError) {
-      window.auth.handleAuthError(error, 'Authentication check');
-    }
-    return false;
-  } finally {
-    API_CONFIG.authCheckInProgress = false;
-  }
-}
 
 /**
  * Clears authentication state across the app
@@ -650,7 +617,7 @@ function createConversationListItem(item) {
 // Load conversation list
 async function loadConversationList() {
     try {
-      if (!await ensureAuthenticated()) {
+      if (!await window.auth.isAuthenticated({forceVerify: false})) {
         console.log("[loadConversationList] Not authenticated");
         return [];
       }
@@ -820,16 +787,12 @@ async function handleNavigationChange() {
   if (chatId) {
     console.log(`[handleNavigationChange] ChatId=${chatId}, loading conversation.`);
     setChatUIVisibility(true);
-    if (typeof window.loadConversation === 'function') {
-      window.loadConversation(chatId).catch(err => {
+    window.ChatManager.loadConversation(chatId)
+      .catch(err => {
         handleAPIError('loading conversation', err);
         setChatUIVisibility(false);
         window.history.replaceState({}, '', '/');
       });
-    } else {
-      console.warn('[handleNavigationChange] No loadConversation function found.');
-      setChatUIVisibility(false);
-    }
   } else {
     console.log('[handleNavigationChange] No chatId, showing empty state.');
     setChatUIVisibility(false);
@@ -1456,8 +1419,6 @@ window.getBaseUrl = getBaseUrl;
 window.ensureAuthenticated = ensureAuthenticated;
 window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
-window.loadProjects = loadProjects;
-window.loadProjectList = loadProjects; // Alias for loadProjects
 window.isValidUUID = isValidUUID;
 
 // Central Initialization Controller
