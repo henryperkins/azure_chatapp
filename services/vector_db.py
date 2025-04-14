@@ -575,7 +575,7 @@ class VectorDB:
 
     async def get_stats(self) -> Dict[str, Any]:
         """Get basic statistics about the vector database.
-        
+
         Returns:
             Dictionary containing:
             - index_size: Number of vectors in index
@@ -940,14 +940,16 @@ async def get_vector_db(
 async def initialize_project_vector_db(
     project_id: UUID,
     storage_root: str = VECTOR_DB_STORAGE_PATH,
+    embedding_model: Optional[str] = None
 ) -> VectorDB:
     """
     Initializes a VectorDB for a project, loading from disk if an index file is present.
     This function resolves the 'initialize_project_vector_db' undefined error.
+    Allows overriding the default embedding model if provided.
     """
     path = os.path.join(storage_root, str(project_id), "index.json")
-    # Use a default model name; this could be improved to dynamically look up project config
-    model_name = "all-MiniLM-L6-v2"
+    # Use a default model name unless an embedding_model is explicitly provided
+    model_name = embedding_model or "all-MiniLM-L6-v2"
     vdb = VectorDB(embedding_model=model_name, use_faiss=True, storage_path=path)
     await vdb.load_from_disk()
     return vdb

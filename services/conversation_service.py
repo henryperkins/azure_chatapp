@@ -315,7 +315,7 @@ class ConversationService:
                 updated = True
             except ConversationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
-            
+
         # Handle use_knowledge_base toggle - but only for non-project conversations
         if (
             use_knowledge_base is not None
@@ -741,7 +741,182 @@ async def conversation_exception_handler(request, call_next):
 async def get_conversation_service(
     db: AsyncSession = Depends(get_async_session),
 ) -> ConversationService:
-    # Removed try-except block here - let exceptions propagate to FastAPI handler or middleware
-    # The middleware 'conversation_exception_handler' should catch ConversationError
-    # Other exceptions will be caught by FastAPI's default handlers.
+    """
+    Provide a fully-capable ConversationService instance with extended methods.
+    """
     return ConversationService(db)
+
+
+    async def generate_conversation_title(
+        self,
+        conversation_id: UUID,
+        messages: List[Dict[str, Any]],
+        model_id: str
+    ) -> str:
+        """
+        Generate a suggested title for the conversation by calling AI with a prompt.
+        """
+        from utils.ai_response import generate_ai_response
+        system_prompt = (
+            "You are an expert at summarizing. "
+            "Please provide a short and descriptive title (no more than a few words) "
+            "that captures the essence of the conversation. "
+            "Output only the title without extra commentary."
+        )
+        temp_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            temp_messages.append({"role": msg["role"], "content": msg["content"]})
+        temp_messages.append(
+            {
+                "role": "user",
+                "content": "Please provide a short title for the conversation above."
+            }
+        )
+
+        try:
+            assistant_msg_obj = await generate_ai_response(
+                conversation_id=conversation_id,
+                messages=temp_messages,
+                model_id=model_id,
+                db=self.db,
+                enable_markdown_formatting=False
+            )
+            if assistant_msg_obj and assistant_msg_obj.content:
+                return assistant_msg_obj.content.strip()
+            else:
+                return "Untitled Conversation"
+        except Exception as e:
+            logger.exception(f"Error generating conversation title: {e}")
+            return "Untitled Conversation"
+
+    async def generate_conversation_summary(
+        self,
+        conversation_id: UUID,
+        messages: List[Dict[str, Any]],
+        model_id: str,
+        max_length: int = 200
+    ) -> str:
+        """
+        Generate a summary for the conversation by calling AI with a summary prompt.
+        """
+        from utils.ai_response import generate_ai_response
+        system_prompt = (
+            "You are an expert at summarizing. "
+            f"Provide a concise summary no longer than {max_length} characters. "
+            "Do not include extraneous text."
+        )
+        temp_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            temp_messages.append({"role": msg["role"], "content": msg["content"]})
+        temp_messages.append(
+            {
+                "role": "user",
+                "content": f"Please summarize this conversation in <= {max_length} characters."
+            }
+        )
+
+        try:
+            assistant_msg_obj = await generate_ai_response(
+                conversation_id=conversation_id,
+                messages=temp_messages,
+                model_id=model_id,
+                db=self.db,
+                enable_markdown_formatting=False
+            )
+            if assistant_msg_obj and assistant_msg_obj.content:
+                summary_text = assistant_msg_obj.content.strip()
+                return summary_text[:max_length]
+            else:
+                return "No summary available."
+        except Exception as e:
+            logger.exception(f"Error generating conversation summary: {e}")
+            return "No summary available."
+
+async def search_conversations(
+    self,
+    project_id: UUID,
+    user_id: int,
+    query: str,
+    include_messages: bool,
+    skip: int,
+    limit: int
+) -> Dict[str, Any]:
+    """
+    Search for conversations by title and optionally in message content.
+    Returns a dict with keys: 'conversations', 'total', 'highlighted_messages' (empty).
+    """
+    from sqlalchemy import or_
+    from sqlalchemy.orm import aliased
+    from models.conversation import Conversation
+    from models.message import Message
+    q_str = f"%{query}%"
+
+    base_filters = [
+        Conversation.user_id == user_id,
+        Conversation.is_deleted.is_(False),
+        Conversation.project_id == project_id,
+    ]
+
+    # We'll do a subquery or a join
+    # For counting and retrieving distinct conversations
+    # We'll join with messages only if include_messages is True
+    if include_messages:
+        # We'll do a join to search message content as well
+        # and do an OR: conversation.title ilike or message.content ilike
+        from sqlalchemy import select, func
+        from sqlalchemy.sql import and_
+
+        c_alias = aliased(Conversation)
+        m_alias = aliased(Message)
+
+        join_stmt = select(c_alias).join(
+            m_alias, m_alias.conversation_id == c_alias.id, isouter=True
+        ).where(
+            and_(
+                *base_filters,
+                or_(
+                    c_alias.title.ilike(q_str),
+                    m_alias.content.ilike(q_str)
+                )
+            )
+        ).distinct().order_by(c_alias.created_at.desc())
+
+        total_query = select(func.count('*')).select_from(
+            join_stmt.order_by(None).subquery()
+        )
+
+        result_count = await self.db.execute(total_query)
+        total = result_count.scalar() or 0
+
+        join_stmt = join_stmt.offset(skip).limit(limit)
+        result = await self.db.execute(join_stmt)
+        conversations = result.scalars().all()
+
+    else:
+        # Search only in conversation titles
+        from sqlalchemy import select, func
+        from sqlalchemy.sql import and_
+
+        search_filter = or_(Conversation.title.ilike(q_str))
+        query_stmt = select(Conversation).where(
+            and_(
+                *base_filters,
+                search_filter
+            )
+        ).order_by(Conversation.created_at.desc())
+
+        # count
+        count_stmt = select(func.count('*')).select_from(query_stmt.order_by(None).subquery())
+        result_count = await self.db.execute(count_stmt)
+        total = result_count.scalar() or 0
+
+        # fetch
+        query_stmt = query_stmt.offset(skip).limit(limit)
+        result = await self.db.execute(query_stmt)
+        conversations = result.scalars().all()
+
+    return {
+        "conversations": conversations,
+        "total": total,
+        "highlighted_messages": {}
+    }
