@@ -329,8 +329,7 @@
         confirm: 'confirmActionModal',
         knowledge: 'knowledgeBaseSettingsModal',
         knowledgeResult: 'knowledgeResultModal',
-        customize: 'cardCustomizationModal',
-        login: 'loginModal'
+        customize: 'cardCustomizationModal'
       };
       console.log('[ModalManager] Initialized.');
     }
