@@ -2,6 +2,20 @@
  * sidebar.js
  * ---------
  * Handles core sidebar UI functionality:
+
+/**
+ * Simple utility for consistent event binding.
+ * @param {Element} element
+ * @param {string} eventType
+ * @param {Function} handler
+ * @param {Object} [options={}]
+ */
+function trackListener(element, eventType, handler, options = {}) {
+  if (!element) return;
+  element.addEventListener(eventType, handler, options);
+}
+
+/**
  * - Tab switching between Recent, Starred, and Projects
  * - Starred conversations management
  * - Core sidebar state management
@@ -60,7 +74,7 @@ window.toggleSidebar = function (forceState) {
   updateSidebarState();
 
   // Mark animation as complete after transition
-  sidebar.addEventListener('transitionend', () => {
+  trackListener(sidebar, 'transitionend', () => {
     isAnimating = false;
   }, { once: true });
 };

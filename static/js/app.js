@@ -4,18 +4,16 @@
  * Relies on auth.js for session cookies and integrates with chat system modules.
  */
 
-// Use debounce from eventHandlers if available
+/**
+ * Replace local fallback with eventHandlers-based approach.
+ * If eventHandlers is missing, do nothing special (no fallback).
+ */
 function debounce(func, wait) {
-  if (window.eventHandlers?.debounce) {
-    return window.eventHandlers.debounce(func, wait);
+  if (!window.eventHandlers?.debounce) {
+    console.warn("[app.js] eventHandlers.debounce not found. Debounce calls will just run func immediately.");
+    return func;
   }
-
-  // Fallback implementation
-  let timeout;
-  return function executedFunction(...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
-  };
+  return window.eventHandlers.debounce(func, wait);
 }
 
 // PHASE-BASED INITIALIZATION

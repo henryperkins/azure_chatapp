@@ -9,21 +9,15 @@ const auth = window.auth;
 
 // Use centralized event handling instead of duplicate implementation
 function trackListener(element, type, handler, options = {}) {
-  if (window.eventHandlers?.trackListener) {
-    return window.eventHandlers.trackListener(element, type, handler, options);
+  if (!window.eventHandlers?.trackListener) {
+    console.warn("[modelConfig] EventHandlers not available; skipping trackListener");
+    return;
   }
-  // Fallback implementation if eventHandlers not available
-  if (!element) return;
-  element.addEventListener(type, handler, options);
+  window.eventHandlers.trackListener(element, type, handler, options);
 }
 
-function cleanupListeners() {
-  if (window.eventHandlers?.cleanupListeners) {
-    return window.eventHandlers.cleanupListeners();
-  }
-  // No fallback needed as this is called after initialization
-  console.warn("Event handlers module not available for cleanup");
-}
+// Remove local cleanupListeners in favor of global eventHandlers version
+// If needed, we can call window.eventHandlers.cleanupListeners() externally.
 
 /**
  * Central state object for model configuration
