@@ -1,7 +1,7 @@
 /**
  * Authentication module for handling user sessions, tokens, and auth state
  */
-const AUTH_DEBUG = true;
+const AUTH_DEBUG = false;
 
 // Session & Retry Flags
 let sessionExpiredFlag = false;
