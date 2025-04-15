@@ -203,67 +203,6 @@ class ProjectDashboard {
     window.showProjectsView();
   }
 
-  async handleProjectFormSubmit(e) {
-    e.preventDefault();
-    const form = e.target;
-    const modalDialog = form.closest('dialog'); // Get the parent dialog
-
-    const projectId = form.querySelector("#projectIdInput")?.value;
-    const isEditing = !!projectId;
-
-    const formData = {
-      name: form.querySelector("#projectNameInput")?.value.trim(),
-      description: form.querySelector("#projectDescInput")?.value.trim(),
-      goals: form.querySelector("#projectGoalsInput")?.value.trim(),
-      max_tokens: parseInt(
-        form.querySelector("#projectMaxTokensInput")?.value,
-        10
-      )
-    };
-
-    if (!formData.name) {
-      this.showNotification("Project name is required", "error");
-      return;
-    }
-
-    const submitButton = form.querySelector('button[type="submit"]');
-    const originalButtonText = submitButton?.textContent;
-
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
-    }
-
-    try {
-      await window.projectManager.createOrUpdateProject(projectId, formData);
-      this.showNotification(isEditing ? "Project updated" : "Project created", "success");
-
-      // Close the DaisyUI dialog
-      if (modalDialog && typeof modalDialog.close === 'function') {
-        modalDialog.close();
-      } else {
-        // Fallback if modal manager was used differently
-        this.modalManager?.hide("project");
-      }
-
-      window.projectManager.loadProjects('all'); // Refresh list
-    } catch (err) {
-      console.error("[ProjectDashboard] Error saving project:", err);
-      this.showNotification(`Failed to save project: ${err.message || 'Unknown error'}`, "error");
-      // Optionally display error within the modal
-      const errorDiv = form.querySelector('.modal-error-display'); // Add an element for this
-      if (errorDiv) {
-        errorDiv.textContent = `Error: ${err.message || 'Unknown error'}`;
-        errorDiv.classList.remove('hidden');
-      }
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.innerHTML = originalButtonText; // Restore text
-      }
-    }
-  }
-
   handleProjectsLoaded(event) {
     const { data, error, message } = event.detail || {}; // Destructure detail
     let projects = data?.projects || (Array.isArray(event.detail) ? event.detail : []); // Handle different event structures
@@ -416,7 +355,6 @@ class ProjectDashboard {
     const containerEl = document.querySelector("#projectListView") || document.body; // Fallback to body
     const errorElId = 'dashboardCriticalError';
     let errorEl = document.getElementById(errorElId);
-
     if (!errorEl) {
       errorEl = document.createElement('div');
       errorEl.id = errorElId;
@@ -424,7 +362,6 @@ class ProjectDashboard {
       errorEl.className = 'alert alert-error shadow-lg m-4';
       containerEl.prepend(errorEl); // Prepend to make it visible
     }
-
     errorEl.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       <div>
@@ -707,48 +644,18 @@ class ProjectDashboard {
   }
 
   registerEventListeners() {
-    // NEW: Listen for authentication events
+    // Listen for authentication events
     document.addEventListener("authStateChanged", this._handleAuthStateChange.bind(this));
     document.addEventListener("authStateConfirmed", this._handleAuthStateChange.bind(this));
 
     // Listen for project-related events from projectManager
-    document.addEventListener(
-      "projectsLoaded",
-      this.handleProjectsLoaded.bind(this)
-    );
-    document.addEventListener(
-      "projectLoaded",
-      this.handleProjectLoaded.bind(this)
-    );
-    document.addEventListener(
-      "projectStatsLoaded",
-      this.handleProjectStatsLoaded.bind(this)
-    );
-    document.addEventListener(
-      "projectFilesLoaded",
-      this.handleFilesLoaded.bind(this)
-    );
-    document.addEventListener(
-      "projectConversationsLoaded",
-      this.handleConversationsLoaded.bind(this)
-    );
-    document.addEventListener(
-      "projectArtifactsLoaded",
-      this.handleArtifactsLoaded.bind(this)
-    );
-
-    document.addEventListener(
-      "projectNotFound",
-      this.handleProjectNotFound.bind(this)
-    );
-
-    // Handle project form submission (using DaisyUI dialog)
-    const projectForm = document.getElementById("projectForm");
-    if (projectForm) {
-      projectForm.addEventListener("submit", this.handleProjectFormSubmit.bind(this));
-    } else {
-      console.warn("Project form not found for event listener.");
-    }
+    document.addEventListener("projectsLoaded", this.handleProjectsLoaded.bind(this));
+    document.addEventListener("projectLoaded", this.handleProjectLoaded.bind(this));
+    document.addEventListener("projectStatsLoaded", this.handleProjectStatsLoaded.bind(this));
+    document.addEventListener("projectFilesLoaded", this.handleFilesLoaded.bind(this));
+    document.addEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
+    document.addEventListener("projectArtifactsLoaded", this.handleArtifactsLoaded.bind(this));
+    document.addEventListener("projectNotFound", this.handleProjectNotFound.bind(this));
 
     // Browser back/forward nav
     window.addEventListener("popstate", (event) => {

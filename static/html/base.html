@@ -25,10 +25,7 @@
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
 
-  <!--
-    Top Navbar
-    -------------------------------------------------------------------------
-  -->
+  <!-- Top Navbar -->
   <header role="banner" class="bg-base-100 shadow-xs border-b border-base-200">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -124,10 +121,7 @@
     </div>
   </header>
 
-  <!--
-    Main Container
-    -------------------------------------------------------------------------
-  -->
+  <!-- Main Container -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Enhanced Sidebar with improved accessibility attributes -->
     <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-base-100 shadow-lg md:shadow-none
@@ -243,21 +237,6 @@
               </svg>
               New Project
             </button>
-            <script>
-              window.addEventListener('DOMContentLoaded', function () {
-                const link = document.getElementById('manageProjectsLink');
-                if (link) {
-                  link.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    if (window.showProjectsView) {
-                      window.showProjectsView();
-                    } else {
-                      console.error('showProjectsView is not defined yet.');
-                    }
-                  });
-                }
-              });
-            </script>
           </div>
 
           <!-- Projects search input -->
@@ -460,6 +439,8 @@
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
   <!-- Core JavaScript Dependencies -->
   <script type="module" src="/static/js/auth.js"></script>
+  <script type="module" src="/static/js/uiRenderer.js"></script>
+  <script type="module" src="/static/js/eventHandler.js"></script>
 
   <!-- Application Framework -->
   <script type="module" src="/static/js/app.js"></script>
@@ -503,11 +484,7 @@
       fetch('modals.html').then(response => response.text()).then(html => {
         document.getElementById('modalsContainer').innerHTML = html;
         document.getElementById('modalsContainer').classList.remove('hidden');
-
-        // Initialize projectModal after modals are loaded
-        if (window.initProjectModal) {
-          window.initProjectModal();
-        }
+        if (window.initProjectModal) window.initProjectModal();
       }).catch(err => console.error('Failed to load modals.html:', err));
 
       // Load chat UI
@@ -523,45 +500,6 @@
           console.log("App initialization complete");
         } catch (err) {
           console.error("App initialization failed:", err);
-        }
-      }
-    });
-
-    // Add global event handler for project filter buttons
-    document.addEventListener('click', function (e) {
-      if (e.target.matches('.project-filter-btn') || e.target.closest('.project-filter-btn')) {
-        const button = e.target.matches('.project-filter-btn') ? e.target : e.target.closest('.project-filter-btn');
-        const filter = button.dataset.filter || 'all';
-
-        // Update UI
-        document.querySelectorAll('.project-filter-btn').forEach(btn => {
-          const span = btn.querySelector('span span:last-child');
-          if (btn === button) {
-            btn.setAttribute('aria-current', 'page');
-            btn.classList.remove('text-gray-500', 'dark:text-gray-400');
-            btn.classList.add('text-blue-600', 'dark:text-blue-400');
-            if (span) {
-              span.classList.remove('bg-transparent');
-              span.classList.add('bg-blue-600');
-            }
-          } else {
-            btn.removeAttribute('aria-current');
-            btn.classList.add('text-gray-500', 'dark:text-gray-400');
-            btn.classList.remove('text-blue-600', 'dark:text-blue-400');
-            if (span) {
-              span.classList.add('bg-transparent');
-              span.classList.remove('bg-blue-600');
-            }
-          }
-        });
-
-        // Load projects with the selected filter
-        if (window.projectManager && typeof window.projectManager.loadProjects === 'function') {
-          window.projectManager.loadProjects(filter).catch(err => {
-            console.error('Error loading projects with filter:', filter, err);
-          });
-        } else {
-          console.warn('projectManager.loadProjects is not available yet.');
         }
       }
     });
