@@ -1066,7 +1066,7 @@
       const chatConfig = {
         containerSelector: containerSelector,
         messageContainerSelector: options.messageContainer || '#projectChatMessages',
-        inputSelector: options.inputField || '#projectChatInput',
+        inputSelector: options.inputField || '#chatUIInput',
         sendButtonSelector: options.sendButton || '#projectChatSendBtn',
         typingIndicator: options.typingIndicator !== false,
         readReceipts: options.readReceipts !== false,

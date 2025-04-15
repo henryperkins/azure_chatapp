@@ -7,15 +7,15 @@
 window.UIComponents = function(options = {}) {
   // Store selectors at instance level
   this.messageContainerSelector = options.messageContainerSelector || '#projectChatMessages';
-  this.inputSelector = options.inputSelector || '#projectChatInput';
+  this.inputSelector = options.inputSelector || '#chatUIInput';
   this.sendButtonSelector = options.sendButtonSelector || '#projectChatSendBtn';
-  
+
   console.log('UIComponents initialized with selectors:', {
     messageContainer: this.messageContainerSelector,
     input: this.inputSelector,
     sendButton: this.sendButtonSelector
   });
-  
+
   // Message list component for rendering messages
   this.messageList = {
     container: document.querySelector(this.messageContainerSelector),
@@ -94,11 +94,11 @@ window.UIComponents = function(options = {}) {
         if (!container?.appendChild || typeof container.appendChild !== 'function') {
           throw new Error('Chat container is not a valid DOM element');
         }
-        
+
         // Handle null/undefined content
         const safeContent = content || '';
         const contentLength = safeContent.length;
-        
+
         console.log(`[UI] Appending ${role} message (${contentLength} chars)`);
         if (contentLength > 50) {
           console.debug('Message preview:', safeContent.substring(0, 50) + '...');
@@ -113,7 +113,7 @@ window.UIComponents = function(options = {}) {
               : 'bg-blue-50 text-blue-900'
         }`;
         if (id) msgDiv.id = id;
-        
+
         // Add data attributes for message metadata
         if (metadata) {
           msgDiv.dataset.thinking = metadata.thinking || '';
@@ -138,7 +138,7 @@ window.UIComponents = function(options = {}) {
         // Add main content
         const contentDiv = document.createElement('div');
         contentDiv.className = 'prose max-w-none';
-        
+
         // Handle potential JSON responses
         let processedContent = content;
         try {
@@ -148,7 +148,7 @@ window.UIComponents = function(options = {}) {
             const parsed = JSON.parse(content);
             if (parsed.answer || parsed.content || parsed.message) {
               processedContent = parsed.answer || parsed.content || parsed.message;
-              
+
               // Extract thinking if available
               if (!thinking && parsed.thinking) {
                 thinking = parsed.thinking;
@@ -159,7 +159,7 @@ window.UIComponents = function(options = {}) {
           // Not JSON, use as is
           console.log('Content is not JSON, using as is');
         }
-        
+
         // Ensure newlines are preserved and apply formatting
         // Use window.formatText from formatting.js
         try {
@@ -173,7 +173,7 @@ window.UIComponents = function(options = {}) {
           console.error('Error formatting message content:', err);
           contentDiv.textContent = processedContent; // Fallback to plain text
         }
-        
+
         msgDiv.appendChild(contentDiv);
 
         // Add copy buttons to code blocks
@@ -226,7 +226,7 @@ window.UIComponents = function(options = {}) {
             `;
             msgDiv.appendChild(redactedContainer);
           }
-      
+
           // Handle regular thinking blocks
           if (thinking) {
             const container = this._createThinkingContainer(thinking, false, metadata);
@@ -242,12 +242,12 @@ window.UIComponents = function(options = {}) {
         return null;
       }
     },
-    
+
     // Helper to create thinking blocks
     _createThinkingContainer: function(thinking, redacted, metadata) {
       const container = document.createElement('div');
       container.className = 'mt-3 border-t border-gray-200 pt-2';
-      
+
       // Add model metadata indicator if available
       if (metadata && (metadata.model || metadata.tokens)) {
         const metaIndicator = document.createElement('div');
@@ -270,7 +270,7 @@ window.UIComponents = function(options = {}) {
         </svg>
         ${thinking ? 'Show detailed reasoning' : 'Show safety notice'}
       `;
-        
+
       // Add tooltip explaining thinking blocks
       toggle.title = thinking
         ? "Claude's step-by-step reasoning process"
@@ -340,32 +340,32 @@ window.UIComponents = function(options = {}) {
 
     showAIErrorMessage: function(message, suggestedAction) {
       if (!this.container) return null;
-      
+
       // Remove thinking indicator if present
       this.removeThinking();
-      
+
       // Create an error message element
       const errorDiv = document.createElement('div');
       errorDiv.className = 'mb-4 p-4 rounded-lg shadow-sm bg-yellow-50 text-yellow-800 border border-yellow-200';
-      
+
       // Add header with error icon
       const header = document.createElement('div');
       header.className = 'flex items-center mb-2';
       header.innerHTML = `
         <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
         <span class="font-medium">Claude couldn't generate a response</span>
       `;
       errorDiv.appendChild(header);
-      
+
       // Add error message
       const messageDiv = document.createElement('div');
       messageDiv.className = 'mb-2';
       messageDiv.textContent = message;
       errorDiv.appendChild(messageDiv);
-      
+
       // Add suggested action if provided
       if (suggestedAction) {
         const actionDiv = document.createElement('div');
@@ -373,11 +373,11 @@ window.UIComponents = function(options = {}) {
         actionDiv.textContent = `Suggestion: ${suggestedAction}`;
         errorDiv.appendChild(actionDiv);
       }
-      
+
       // Add retry button
       const buttonDiv = document.createElement('div');
       buttonDiv.className = 'mt-3 flex justify-end';
-      
+
       const retryButton = document.createElement('button');
       retryButton.className = 'px-3 py-1 text-sm bg-yellow-200 hover:bg-yellow-300 text-yellow-900 rounded transition-colors';
       retryButton.textContent = 'Try Again';
@@ -387,14 +387,14 @@ window.UIComponents = function(options = {}) {
         // Trigger regenerate event
         document.dispatchEvent(new CustomEvent('regenerateChat'));
       };
-      
+
       buttonDiv.appendChild(retryButton);
       errorDiv.appendChild(buttonDiv);
-      
+
       // Add to container
       this.container.appendChild(errorDiv);
       this.container.scrollTop = this.container.scrollHeight;
-      
+
       return errorDiv;
     }
   };
@@ -429,12 +429,13 @@ window.UIComponents = function(options = {}) {
         // Try common input selectors
         const possibleInputs = [
           '#chatInput',
+          '#chatUIInput',
           '#projectChatInput',
           'input[placeholder*="message" i]',
           '.chat-input',
           'input[type="text"]'
         ];
-        
+
         for (const selector of possibleInputs) {
           const element = document.querySelector(selector);
           if (element) {
@@ -457,10 +458,10 @@ window.UIComponents = function(options = {}) {
           // Look for a button near the input
           this.element ? this.element.nextElementSibling : null
         ];
-        
+
         for (const selector of possibleButtons) {
           if (!selector) continue; // Skip null entries
-          
+
           // Handle DOM element directly
           if (selector instanceof Element) {
             if (selector.tagName === 'BUTTON') {
@@ -470,7 +471,7 @@ window.UIComponents = function(options = {}) {
             }
             continue;
           }
-          
+
           // Handle selector strings
           const element = document.querySelector(selector);
           if (element) {
@@ -479,10 +480,10 @@ window.UIComponents = function(options = {}) {
             break;
           }
         }
-        
+
         // Last resort - look for any button in the chat container
         if (!this.button) {
-          const chatContainer = document.querySelector('#projectChatUI') || 
+          const chatContainer = document.querySelector('#projectChatUI') ||
                                document.querySelector('#chatUI');
           if (chatContainer) {
             const containerButton = chatContainer.querySelector('button');
@@ -497,40 +498,40 @@ window.UIComponents = function(options = {}) {
       // Log final element status
       console.log('Final input element:', this.element);
       console.log('Final button element:', this.button);
-      
+
       // Set up event listeners if elements were found
       if (this.element) {
         // Use safer event listener removal and re-attachment
         const keyupHandler = (e) => {
           if (e.key === "Enter") this._send();
         };
-        
+
         this.element.removeEventListener("keyup", keyupHandler);
         this.element.addEventListener("keyup", keyupHandler);
       } else {
         console.error('Could not find input element for chat');
       }
-      
+
       if (this.button) {
         // Create a new click handler
         const clickHandler = () => {
           console.log('Send button clicked');
           this._send();
         };
-        
+
         // Remove any existing listeners to prevent duplicates
         const newButton = this.button.cloneNode(true);
         if (this.button.parentNode) {
           this.button.parentNode.replaceChild(newButton, this.button);
         }
         this.button = newButton;
-        
+
         // Add the click event listener
         this.button.addEventListener("click", clickHandler);
       } else {
         console.error('Could not find send button for chat');
       }
-      
+
       // Check for model configuration events
       if (!this._hasModelConfigListener) {
         document.addEventListener('modelConfigChanged', (e) => {

@@ -8,7 +8,7 @@ import logging
 import os
 from typing import Callable, Awaitable
 from fastapi import FastAPI, Request, HTTPException, Response
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -137,15 +137,38 @@ if settings.ENV == "production":
         return response
 
 # ========================
-# Static Files
+# Static Files and HTML Templates
 # ========================
 
+# Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Serve main frontend application from the HTML directory
 @app.get("/", include_in_schema=False)
 async def serve_frontend():
-    """Serve the frontend application"""
-    return FileResponse("static/index.html")
+    """Serve the main frontend application using the new HTML structure"""
+    return FileResponse("static/html/base.html")
+
+# Routes for individual HTML components
+@app.get("/project_list.html", include_in_schema=False)
+async def serve_project_list():
+    """Serve the project list component"""
+    return FileResponse("static/html/project_list.html")
+
+@app.get("/project_details.html", include_in_schema=False)
+async def serve_project_details():
+    """Serve the project details component"""
+    return FileResponse("static/html/project_details.html")
+
+@app.get("/modals.html", include_in_schema=False)
+async def serve_modals():
+    """Serve the modals component"""
+    return FileResponse("static/html/modals.html")
+
+@app.get("/chat_ui.html", include_in_schema=False)
+async def serve_chat_ui():
+    """Serve the chat UI component"""
+    return FileResponse("static/html/chat_ui.html")
 
 # ========================
 # Health Check

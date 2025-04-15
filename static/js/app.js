@@ -178,6 +178,70 @@ function clearAuthState() {
   }
 }
 
+/**
+ * Ensures user is authenticated, with option to force server verification
+ * @param {Object} [options] - Optional configuration
+ * @param {boolean} [options.forceVerify=false] - Whether to force server verification
+ * @returns {Promise<boolean>} Promise resolving to authentication status
+ */
+function ensureAuthenticated(options = {}) {
+  const { forceVerify = false } = options;
+
+  // Return cached auth state if available and not forcing verification
+  if (API_CONFIG.isAuthenticated && !forceVerify && !API_CONFIG.authCheckInProgress) {
+    return Promise.resolve(true);
+  }
+
+  // Prevent concurrent auth checks
+  if (API_CONFIG.authCheckInProgress) {
+    return new Promise((resolve) => {
+      const listener = (e) => {
+        document.removeEventListener('authStateChanged', listener);
+        resolve(API_CONFIG.isAuthenticated);
+      };
+      document.addEventListener('authStateChanged', listener);
+    });
+  }
+
+  API_CONFIG.authCheckInProgress = true;
+
+  // Use auth.js if available
+  if (window.auth?.isAuthenticated) {
+    return window.auth.isAuthenticated(options)
+      .then(isAuth => {
+        API_CONFIG.isAuthenticated = isAuth;
+        API_CONFIG.authCheckInProgress = false;
+        return isAuth;
+      })
+      .catch(err => {
+        console.error('[ensureAuthenticated] Auth check failed:', err);
+        API_CONFIG.isAuthenticated = false;
+        API_CONFIG.authCheckInProgress = false;
+        return false;
+      });
+  }
+
+  // Fallback implementation
+  return apiRequest(API_ENDPOINTS.AUTH_VERIFY)
+    .then(() => {
+      API_CONFIG.isAuthenticated = true;
+      API_CONFIG.authCheckInProgress = false;
+      document.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: { authenticated: true }
+      }));
+      return true;
+    })
+    .catch(err => {
+      console.error('[ensureAuthenticated] Auth verification failed:', err);
+      API_CONFIG.isAuthenticated = false;
+      API_CONFIG.authCheckInProgress = false;
+      document.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: { authenticated: false }
+      }));
+      return false;
+    });
+}
+
 // ---------------------------------------------------------------------
 // UTILITY FUNCTIONS
 // ---------------------------------------------------------------------
