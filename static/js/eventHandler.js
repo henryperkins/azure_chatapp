@@ -7,20 +7,6 @@
 const trackedListeners = new Set();
 
 /**
- * Utility to debounce functions for performance optimization
- * @param {Function} func - Function to debounce
- * @param {number} wait - Wait time in milliseconds
- * @returns {Function} - Debounced function
- */
-function debounce(func, wait) {
-    let timeout;
-    return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-}
-
-/**
  * Track a listener for future cleanup
  * @param {Element|null} element - Element to attach listener to
  * @param {string} type - Event type (e.g., 'click', 'keydown')
@@ -661,7 +647,6 @@ window.eventHandlers = {
     init: setupEventListeners,
     trackListener: trackListener,
     cleanupListeners: cleanupListeners,
-    debounce: debounce,
     handleProjectFormSubmit: handleProjectFormSubmit,
     handleNewConversationClick: handleNewConversationClick,
     setupCollapsibleSection: setupCollapsibleSection,
