@@ -465,37 +465,6 @@
   <div id="conversationArea" class="hidden"></div>
   <div id="chatTitle" class="hidden">Chat Title</div>
   <button id="newConversationBtn" class="hidden">New Conversation</button>
-  <!-- Login Modal -->
-  <dialog id="loginModal" class="modal dark:bg-gray-800">
-    <form id="loginModalForm" method="dialog" class="modal-box dark:bg-gray-800">
-      <h3 class="text-xl font-semibold mb-4">Login</h3>
-      <div class="flex flex-col gap-2 mb-2">
-        <label for="modal-login-username" class="text-sm">Username</label>
-        <input type="text" name="username" id="modal-login-username" placeholder="Username"
-               class="px-2 py-1 text-sm border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm"
-               autocomplete="username" autocorrect="off" autocapitalize="none">
-
-        <label for="modal-login-password" class="text-sm">Password</label>
-        <input type="password" name="password" id="modal-login-password" placeholder="Password"
-               class="px-2 py-1 text-sm border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm"
-               autocomplete="current-password">
-
-        <div id="login-error-modal" class="text-red-500 text-xs hidden"></div>
-      </div>
-
-      <div class="flex justify-end gap-2 mt-4">
-        <button type="submit" id="loginDialogSubmitBtn"
-                class="px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">
-          Log In
-        </button>
-        <button type="button"
-                class="px-4 py-2 border border-gray-300 rounded-sm text-gray-700 hover:bg-gray-50"
-                onclick="document.getElementById('loginModal').close();">
-          Cancel
-        </button>
-      </div>
-    </form>
-  </dialog>
 <!-- Core JavaScript Dependencies -->
 <script type="module" src="/static/js/auth.js"></script>
 
