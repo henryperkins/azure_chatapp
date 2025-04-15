@@ -765,13 +765,11 @@ export class ProjectDetailsComponent {
    * Chat Interface
    * ------------------------------------------------------------------ */
   initChatInterface() {
-    // Verify we have a project ID before proceeding
     if (!this.state.currentProject?.id) {
-      console.warn('[ProjectDetailsView] Could not find project ID to initialize chat.');
+      console.warn('[ProjectDetailsView] No project ID to initialize chat.');
       return;
     }
 
-    // Store the project ID in localStorage for persistence
     localStorage.setItem("selectedProjectId", this.state.currentProject.id);
 
     const chatOptions = {
@@ -785,40 +783,73 @@ export class ProjectDetailsComponent {
       getProjectId: () => this.state.currentProject?.id
     };
 
-    if (window.ChatManager?.initializeProjectChat) {
-      try {
-        debugLog('[ProjectDetailsView] Using ChatManager to init chat');
-        window.ChatManager.initializeProjectChat('#projectChatContainer', chatOptions);
-        return;
-      } catch (err) {
-        console.error('[ProjectDetailsView] Error initializing chat via ChatManager:', err);
-      }
-    } else if (window.chatInterface?.configureSelectors) {
-      debugLog('[ProjectDetailsView] Using chatInterface.configureSelectors fallback');
-      window.chatInterface.configureSelectors(chatOptions);
-      return;
-    }
-
-    if (typeof window.ChatInterface === 'function') {
-      if (!window.projectChatInterface) {
+    // Use a centralized factory approach with maximum safety
+    const initializeChatSystem = async () => {
+      // Priority 1: ChatManager API
+      if (window.ChatManager?.initializeProjectChat) {
         try {
-          debugLog('[ProjectDetailsView] Using direct ChatInterface');
-          window.projectChatInterface = new window.ChatInterface(chatOptions);
-          window.projectChatInterface.initialize();
-          this.chatInstance = window.projectChatInterface;
+          console.log('[ProjectDetailsView] Using ChatManager.initializeProjectChat');
+          return window.ChatManager.initializeProjectChat('#projectChatContainer', chatOptions);
         } catch (err) {
-          console.error('[ProjectDetailsView] Failed to initialize ChatInterface:', err);
+          console.warn('[ProjectDetailsView] ChatManager initialization failed:', err);
         }
-      } else {
-        this.chatInstance = window.projectChatInterface;
       }
-    } else {
-      console.debug('[ProjectDetailsView] ChatInterface/ChatManager not available - chat disabled.');
-      const chatTabButton = this.elements.tabContainer?.querySelector('[data-tab="chat"]');
-      if (chatTabButton) {
-        chatTabButton.classList.add('hidden');
+
+      // Priority 2: Existing chat interface
+      if (window.chatInterface?.configureSelectors) {
+        try {
+          console.log('[ProjectDetailsView] Using existing chatInterface');
+          // Ensure configureSelectors is called correctly
+          window.chatInterface.configureSelectors(chatOptions);
+          // Re-initialize if needed or return the configured instance
+          if (!window.chatInterface.initialized) {
+             await window.chatInterface.initialize();
+          }
+          return window.chatInterface;
+        } catch (err) {
+          console.warn('[ProjectDetailsView] chatInterface configuration failed:', err);
+        }
       }
-    }
+
+      // Priority 3: Create new instance
+      if (typeof window.ChatInterface === 'function') {
+        try {
+          console.log('[ProjectDetailsView] Creating new ChatInterface instance');
+          const instance = new window.ChatInterface(chatOptions);
+          await instance.initialize();
+          window.projectChatInterface = instance; // Assign to global if needed
+          return instance;
+        } catch (err) {
+          console.warn('[ProjectDetailsView] ChatInterface instantiation failed:', err);
+        }
+      }
+
+      return null; // Return null if all methods fail
+    };
+
+    // Try to initialize and store the result
+    initializeChatSystem()
+      .then(instance => {
+        this.chatInstance = instance;
+        if (!instance) {
+          console.warn('[ProjectDetailsView] All chat initialization methods failed');
+          // Optionally disable chat tab/button if initialization fails completely
+          const chatTabButton = this.elements.tabContainer?.querySelector('[data-tab="chat"]');
+          if (chatTabButton) {
+            chatTabButton.classList.add('hidden'); // Or 'tab-disabled'
+          }
+        } else {
+           console.log('[ProjectDetailsView] Chat initialized successfully.');
+        }
+      })
+      .catch(err => {
+        console.error('[ProjectDetailsView] Fatal error in chat initialization:', err);
+        // Optionally disable chat tab/button on fatal error
+        const chatTabButton = this.elements.tabContainer?.querySelector('[data-tab="chat"]');
+        if (chatTabButton) {
+           chatTabButton.classList.add('hidden'); // Or 'tab-disabled'
+        }
+      });
   }
 
   handleMessageSent(data) {
