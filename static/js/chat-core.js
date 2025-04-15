@@ -29,17 +29,17 @@
       .copy-code-btn:hover{background:#f5f5f5}
     `,
     // Container IDs (these can be switched if the user is in "project" context)
-    mainChatContainerId: 'chatContainer',
-    mainChatUI: 'chatUI',
-    mainMessages: 'conversationArea',
-    mainInput: 'chatInput',
-    mainSendBtn: 'sendBtn',
+    mainChatContainerId: 'globalChatContainer',
+    mainChatUI: 'globalChatUI',
+    mainMessages: 'globalChatMessages',
+    mainInput: 'globalChatInput',
+    mainSendBtn: 'globalChatSendBtn',
 
-    projectChatContainerId: 'projectChatContainer',
-    projectChatUI: 'projectChatUI',
-    projectMessages: 'projectChatMessages',
-    projectInput: 'projectChatInput',
-    projectSendBtn: 'projectChatSendBtn'
+    projectChatContainerId: 'globalChatContainer',
+    projectChatUI: 'globalChatUI',
+    projectMessages: 'globalChatMessages',
+    projectInput: 'globalChatInput',
+    projectSendBtn: 'globalChatSendBtn'
   };
 
   // ---------------------------

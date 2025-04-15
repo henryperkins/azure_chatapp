@@ -68,7 +68,7 @@ const SELECTORS = {
   AUTH_STATUS: '#authStatus',
   USER_MENU: '#userMenu',
   AUTH_BUTTON: '#authButton',
-  CHAT_UI: '#chatUI',
+  CHAT_UI: '#globalChatUI',
   NO_CHAT_SELECTED_MESSAGE: '#noChatSelectedMessage',
   LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
   PROJECT_MANAGER_PANEL: '#projectManagerPanel',

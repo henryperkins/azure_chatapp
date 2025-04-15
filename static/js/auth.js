@@ -472,8 +472,25 @@ async function verifyAuthState(forceVerify = false) {
   let lastError;
   for (let i = 1; i <= attempts; i++) {
     try {
+      // Check CSRF token first - moved earlier in the flow
+      const csrfToken = getCSRFToken();
+      if (!csrfToken) {
+        if (AUTH_DEBUG) console.warn(`[Auth][${operationId}] CSRF token missing for verification`);
+        // Don't fail immediately, attempt to refresh first
+        if (i === attempts) {
+          throw new Error('CSRF token missing for verification');
+        }
+        // Wait before retry
+        await new Promise(r => setTimeout(r, 500));
+        continue;
+      }
+
       const res = await Promise.race([
-        apiRequest('/api/auth/verify', 'GET'),
+        apiRequest('/api/auth/verify', 'GET', null, {
+          headers: {
+            'X-CSRF-Token': csrfToken
+          }
+        }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`verify timeout (attempt ${i})`)), AUTH_CONSTANTS.VERIFY_TIMEOUT + i * 1000)
         )
@@ -499,15 +516,54 @@ async function verifyAuthState(forceVerify = false) {
       // --- Handle 401 Unauthorized ---
       if (err.status === 401 || err.message?.includes('expired')) {
         if (AUTH_DEBUG) {
-          console.debug(`[Auth][${operationId}] Received 401/Expired, clearing state.`);
+          console.debug(`[Auth][${operationId}] Received 401/Expired, attempting token refresh before clearing state.`);
           console.debug('Access token:', getCookie('access_token') ? 'present' : 'missing');
           console.debug('Refresh token:', getCookie('refresh_token') ? 'present' : 'missing');
           console.debug('CSRF token:', document.querySelector('meta[name="csrf-token"]')?.content ? 'present' : 'missing');
         }
+
+        // First attempt token refresh before clearing state
+        try {
+          const refreshToken = getCookie('refresh_token');
+          if (!refreshToken) {
+            if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] No refresh token available, clearing state.`);
+            sessionExpiredFlag = Date.now();
+            clearTokenState();
+            return false;
+          }
+
+          // Check if refresh token is still valid
+          const isRefreshValid = await checkTokenValidity(refreshToken, { allowRefresh: true }).catch(() => false);
+          if (!isRefreshValid) {
+            if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Refresh token invalid, clearing state.`);
+            sessionExpiredFlag = Date.now();
+            clearTokenState();
+            return false;
+          }
+
+          // Attempt refresh with short timeout
+          const refreshResult = await Promise.race([
+            refreshTokens(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 2000))
+          ]).catch(refreshErr => {
+            if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Token refresh failed:`, refreshErr);
+            return null;
+          });
+
+          if (refreshResult?.success) {
+            if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Token refresh successful, retrying verification.`);
+            // Short delay before retrying verification
+            await new Promise(r => setTimeout(r, 500));
+            continue;
+          }
+        } catch (refreshErr) {
+          if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Error during refresh attempt:`, refreshErr);
+        }
+
+        // If we get here, refresh failed or wasn't attempted
         sessionExpiredFlag = Date.now();
-        clearTokenState(); // Clears state and broadcasts false
-        // No need to throw 'Session expired' here, just return false as the state is now cleared.
-        return false; // Explicitly return false after clearing state
+        clearTokenState();
+        return false;
       }
 
       // --- Handle other errors (timeout, server error) ---

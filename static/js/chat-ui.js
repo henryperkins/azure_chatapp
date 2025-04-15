@@ -6,9 +6,9 @@
 // Define UIComponents as a constructor function attached to window
 window.UIComponents = function(options = {}) {
   // Store selectors at instance level
-  this.messageContainerSelector = options.messageContainerSelector || '#projectChatMessages';
+  this.messageContainerSelector = options.messageContainerSelector || '#globalChatMessages';
   this.inputSelector = options.inputSelector || '#chatUIInput';
-  this.sendButtonSelector = options.sendButtonSelector || '#projectChatSendBtn';
+  this.sendButtonSelector = options.sendButtonSelector || '#globalChatSendBtn';
 
   console.log('UIComponents initialized with selectors:', {
     messageContainer: this.messageContainerSelector,
@@ -418,6 +418,12 @@ window.UIComponents = function(options = {}) {
     },
 
     init: function() {
+      // Only initialize if chat container exists and is needed
+      const chatContainer = document.getElementById('chatUIContainer');
+      if (!chatContainer || chatContainer.dataset.requiresChat !== 'true') {
+        return;
+      }
+
       // More robust element finding logic
       // First try with the provided selectors
       this.element = document.querySelector(this.inputSelector);

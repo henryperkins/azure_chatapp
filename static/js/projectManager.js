@@ -335,6 +335,17 @@
 
       currentProject = projectData;
 
+      // Set component visibility flags
+      const chatContainer = document.getElementById('globalChatContainer');
+      const kbContainer = document.getElementById('knowledgeBaseContainer');
+
+      if (chatContainer) {
+        chatContainer.dataset.requiresChat = this.currentView === 'chat';
+      }
+      if (kbContainer) {
+        kbContainer.dataset.requiresKb = currentProject.knowledge_base?.is_active === true;
+      }
+
       // Clean any 'null' string for knowledge_base_id
       if (currentProject.knowledge_base_id === "null") {
         currentProject.knowledge_base_id = null;

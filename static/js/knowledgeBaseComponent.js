@@ -51,15 +51,22 @@ class KnowledgeBaseComponent {
   }
 
   _validateDOM() {
+    // Only validate if KB container exists and is needed
+    const kbContainer = document.getElementById('knowledgeBaseContainer');
+    if (!kbContainer || kbContainer.dataset.requiresKb !== 'true') {
+      return;
+    }
+
     const criticalElements = [
       'knowledgeTab', 'knowledgeBaseActive', 'knowledgeBaseInactive',
-      'knowledgeBaseModelSelect', // Now just 'knowledgeBaseModelSelect'
-      'kbStatusBadge' // Using badge now
+      'knowledgeBaseModelSelect',
+      'kbStatusBadge'
     ];
 
     const missingElements = criticalElements.filter(id => !document.getElementById(id));
     if (missingElements.length > 0) {
-      throw new Error(`Missing critical elements: ${missingElements.join(', ')}`);
+      console.warn(`Knowledge Base disabled - missing elements: ${missingElements.join(', ')}`);
+      return;
     }
 
     // Warn about optional elements
