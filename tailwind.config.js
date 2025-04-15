@@ -1,7 +1,9 @@
 // Tailwind CSS Configuration
 // Adding daisyUI plugin for the base-200 and related classes.
 
-module.exports = {
+import daisyui from 'daisyui';
+
+export default {
   content: [
     "./static/**/*.html",
     "./static/**/*.js"
@@ -19,7 +21,7 @@ module.exports = {
     }
   },
   plugins: [
-    require('daisyui')
+    daisyui
   ],
   daisyui: {
     themes: ["light", "dark"]
