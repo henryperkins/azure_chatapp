@@ -872,24 +872,13 @@ export class ProjectDetailsComponent {
     }
 
     // Update tab button states
-    const tabButtons = document.querySelectorAll('.project-tab-btn[role="tab"]');
-    if (tabButtons) {
-      tabButtons.forEach(btn => {
-        const active = btn.dataset.tab === tabName;
-        btn.classList.toggle('tab-active', active);
-        btn.setAttribute('aria-selected', active ? 'true' : 'false');
-        btn.tabIndex = active ? 0 : -1;
-
-        // Also add/remove the border and text color classes
-        if (active) {
-          btn.classList.add('text-blue-600', 'border-blue-600');
-          btn.classList.remove('text-gray-500', 'border-transparent');
-        } else {
-          btn.classList.remove('text-blue-600', 'border-blue-600');
-          btn.classList.add('text-gray-500', 'border-transparent');
-        }
-      });
-    }
+    const tabButtons = document.querySelectorAll('.tab[role="tab"]');
+    tabButtons.forEach(btn => {
+      const active = btn.dataset.tab === tabName;
+      btn.classList.toggle('tab-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
+    });
 
     this.state.activeTab = tabName;
 

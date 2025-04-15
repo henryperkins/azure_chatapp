@@ -77,67 +77,51 @@
 </div>
 
 <!-- Project stats panel -->
-<div id="projectStats" class="bg-base-200 p-2 sm:p-4 rounded-box mb-4 sm:mb-6 shadow-xs"
-  data-testid="project-stats">
-  <div class="mb-2 sm:mb-4">
-    <div class="flex justify-between mb-1">
-      <span class="text-xs sm:text-sm font-medium">Token Usage: <span id="tokenUsage"
-          class="font-bold">0</span> / <span id="maxTokens">200,000</span></span>
-      <span id="tokenPercentage" class="text-xs sm:text-sm">0%</span>
-    </div>
-    <div class="progress-outer overflow-hidden">
-      <div id="tokenProgressBar" class="progress-inner" style="width: 0%"></div>
-    </div>
+<div id="projectStats" class="stats shadow mb-4 sm:mb-6" data-testid="project-stats">
+  <div class="stat">
+    <div class="stat-title">Token Usage</div>
+    <div class="stat-value"><span id="tokenUsage">0</span> / <span id="maxTokens">200,000</span></div>
+    <div class="stat-desc"><span id="tokenPercentage">0%</span></div>
+    <progress id="tokenProgressBar" class="progress progress-primary w-full" value="0" max="100"></progress>
   </div>
-  <div class="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-    <div class="stat bg-base-100 shadow-xs hover:shadow-md transition-shadow">
-      <div id="conversationCount" class="stat-value text-sm sm:text-lg transition-all duration-300">0
-      </div>
-      <div class="stat-desc">Conversations</div>
-    </div>
-    <div class="stat bg-base-100 shadow-xs hover:shadow-md transition-shadow">
-      <div id="fileCount" class="stat-value text-sm sm:text-lg transition-all duration-300">0</div>
-      <div class="stat-desc">Files</div>
-    </div>
-    <div class="stat bg-base-100 shadow-xs hover:shadow-md transition-shadow">
-      <div id="artifactCount" class="stat-value text-sm sm:text-lg transition-all duration-300">0</div>
-      <div class="stat-desc">Artifacts</div>
-    </div>
+  <div class="stat">
+    <div class="stat-title">Conversations</div>
+    <div class="stat-value" id="conversationCount">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Files</div>
+    <div class="stat-value" id="fileCount">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Artifacts</div>
+    <div class="stat-value" id="artifactCount">0</div>
   </div>
 </div>
 
 <!-- Tab navigation -->
-<div class="mb-6 border-b border-base-200 overflow-x-auto">
-  <div class="flex whitespace-nowrap min-w-full -mb-px" role="tablist">
-    <button id="detailsTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 active text-primary border-primary"
-      role="tab" aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
-      Details
-    </button>
-    <button id="filesTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
-      role="tab" aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
-      Files
-    </button>
-    <button id="conversationsTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
-      role="tab" aria-selected="false" aria-controls="conversationsTab" tabindex="-1"
-      data-tab="conversations">
-      <span class="hidden xs:inline">Conversations</span>
-      <span class="xs:hidden">Convos</span>
-    </button>
-    <button id="artifactsTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
-      role="tab" aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
-      Artifacts
-    </button>
-    <button id="knowledgeTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
-      role="tab" aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
-      <span class="hidden xs:inline">Knowledge Base</span>
-      <span class="xs:hidden">KB</span>
-    </button>
-  </div>
+<div class="tabs mb-6" role="tablist">
+  <button id="detailsTabBtn" class="tab tab-bordered tab-active project-tab-btn" role="tab"
+    aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
+    Details
+  </button>
+  <button id="filesTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
+    Files
+  </button>
+  <button id="conversationsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
+    <span class="hidden xs:inline">Conversations</span>
+    <span class="xs:hidden">Convos</span>
+  </button>
+  <button id="artifactsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
+    Artifacts
+  </button>
+  <button id="knowledgeTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
+    <span class="hidden xs:inline">Knowledge Base</span>
+    <span class="xs:hidden">KB</span>
+  </button>
 </div>
 
 <!-- Tab content -->
@@ -212,10 +196,7 @@
           Files are indexed in Knowledge Base for AI search
         </div>
       </div>
-      <div class="w-full bg-base-300 rounded-full h-2.5">
-        <div id="fileProgressBar" class="bg-success h-2.5 rounded-full transition-all duration-300"
-          style="width: 0%"></div>
-      </div>
+      <progress id="fileProgressBar" class="progress progress-success w-full" value="0" max="100"></progress>
       <p id="uploadStatus" class="text-xs text-base-content/60 mt-1">Uploading...</p>
       <div id="supportedFileTypes" class="text-xs text-base-content/60 mt-2">
         Supported: .txt, .md, .csv, .json, .pdf, .doc, .docx, .py, .js, .html, .css (Max 30MB)
