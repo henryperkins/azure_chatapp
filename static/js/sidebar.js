@@ -16,6 +16,25 @@ let toggleBtn = null;
 let closeBtn = null;
 let isAnimating = false;
 
+// Tab configuration - centralized here for use by other modules
+const sidebarTabConfig = {
+  recent: {
+    buttonId: 'recentChatsTab',
+    sectionId: 'recentChatsSection',
+    loader: () => window.loadConversationList?.(),
+  },
+  starred: {
+    buttonId: 'starredChatsTab',
+    sectionId: 'starredChatsSection',
+    loader: loadStarredConversations,
+  },
+  projects: {
+    buttonId: 'projectsTab',
+    sectionId: 'projectsSection',
+    loader: () => window.loadSidebarProjects?.(),
+  },
+};
+
 /**
  * Toggle sidebar open/closed state
  * @param {boolean} [forceState] Optional state to force
@@ -173,28 +192,10 @@ function initializeSidebarToggle() {
  * @returns {void}
  */
 function setupSidebarTabs() {
-  const tabConfig = {
-    recent: {
-      buttonId: 'recentChatsTab',
-      sectionId: 'recentChatsSection',
-      loader: () => window.loadConversationList?.(),
-    },
-    starred: {
-      buttonId: 'starredChatsTab',
-      sectionId: 'starredChatsSection',
-      loader: loadStarredConversations,
-    },
-    projects: {
-      buttonId: 'projectsTab',
-      sectionId: 'projectsSection',
-      loader: () => window.loadSidebarProjects?.(),
-    },
-  };
-
   const tabs = {};
 
   // Initialize tab elements with proper error handling
-  Object.entries(tabConfig).forEach(([name, config]) => {
+  Object.entries(sidebarTabConfig).forEach(([name, config]) => {
     try {
       const button = document.getElementById(config.buttonId);
       const content = document.getElementById(config.sectionId);
@@ -233,73 +234,51 @@ function setupSidebarTabs() {
     localStorage.setItem('sidebarActiveTab', activeTab);
   }
 
-  // Helper function to activate a tab
-  function activateTab(tabName) {
-    if (!tabs[tabName]) return;
-
-    // Save preference
-    localStorage.setItem('sidebarActiveTab', tabName);
-
-    // Update UI for all tabs
-    Object.entries(tabs).forEach(([tab, elements]) => {
-      const isActive = tab === tabName;
-
-      if (elements.button) {
-        elements.button.setAttribute('aria-selected', isActive);
-        elements.button.classList.toggle('project-tab-btn-active', isActive);
-        elements.button.classList.toggle('text-gray-500', !isActive);
-      }
-
-      if (elements.content) {
-        elements.content.classList.toggle('hidden', !isActive);
-      }
-    });
-
-    // Check auth status before loading data
-    const checkAuth = async () => {
-      try {
-        let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
-
-        // Retry with force verify if needed
-        if (!isAuthenticated) {
-          console.debug(`[Sidebar] First auth check failed for tab ${tabName}, scheduling second attempt in 0.5s`);
-          await new Promise(r => setTimeout(r, 500));
-          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
-        }
-
-        // If still not authenticated, schedule a final attempt 1s later
-        if (!isAuthenticated) {
-          console.debug(`[Sidebar] Second auth check still failed for tab ${tabName}, scheduling final attempt in 1s`);
-          await new Promise(r => setTimeout(r, 1000));
-          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
-        }
-
-        // Only load data if authenticated and tab has a loader
-        if (isAuthenticated && tabs[tabName].loader) {
-          console.debug(`[Sidebar] Loading data for authenticated tab: ${tabName}`);
-          setTimeout(() => tabs[tabName].loader(), 300);
-        } else if (!isAuthenticated) {
-          console.debug(`[Sidebar] User not logged in for tab: ${tabName}. Displaying login prompt.`);
-          const tabSection = document.getElementById(tabConfig[tabName]?.sectionId);
-          if (tabSection) {
-            tabSection.innerHTML = `
-              <div class="p-4 text-gray-500 text-sm text-center">
-                Please log in to view this content.
-              </div>
-            `;
-          }
-        }
-      } catch (err) {
-        console.warn('[Sidebar] Auth verification failed:', err);
-      }
-    };
-
-    // Execute auth check
-    checkAuth();
-  }
-
   // Activate the initial tab
   activateTab(activeTab);
+}
+
+/**
+ * Activate a specific sidebar tab by name
+ * @param {string} tabName - The name of the tab to activate
+ * @returns {void}
+ */
+function activateTab(tabName) {
+  if (!sidebarTabConfig[tabName]) return;
+
+  // Save preference
+  localStorage.setItem('sidebarActiveTab', tabName);
+
+  // Update UI for all tabs
+  Object.entries(sidebarTabConfig).forEach(([tab, config]) => {
+    const isActive = tab === tabName;
+    const button = document.getElementById(config.buttonId);
+    const content = document.getElementById(config.sectionId);
+
+    if (button) {
+      button.setAttribute('aria-selected', isActive);
+      button.classList.toggle('project-tab-btn-active', isActive);
+      button.classList.toggle('text-gray-500', !isActive);
+    }
+
+    if (content) {
+      content.classList.toggle('hidden', !isActive);
+    }
+  });
+
+  // Load data for the tab if authenticated
+  const checkAuth = async () => {
+    try {
+      let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      if (isAuthenticated && sidebarTabConfig[tabName].loader) {
+        setTimeout(() => sidebarTabConfig[tabName].loader(), 300);
+      }
+    } catch (err) {
+      console.warn('[Sidebar] Auth verification failed:', err);
+    }
+  };
+
+  checkAuth();
 }
 
 /**
@@ -696,7 +675,7 @@ document.addEventListener('conversationDeleted', (e) => {
 // Expose re-initialization function
 window.reinitializeSidebar = initializeSidebar;
 
-// Expose key functions globally
+// Export sidebar functionality for use by eventHandler.js
 window.sidebar = {
   toggleStarConversation,
   isConversationStarred,
@@ -706,6 +685,9 @@ window.sidebar = {
   toggle: window.toggleSidebar,
   isOpen,
   isAnimating,
+  activateTab, // Added for external use
+  tabConfig: sidebarTabConfig, // Expose configuration
+  updateSidebarState // Added for external use
 };
 
 // Initialize on DOMContentLoaded with proper state tracking

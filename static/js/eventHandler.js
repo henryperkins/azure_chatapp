@@ -182,7 +182,7 @@ function setupSidebarToggle() {
     }
     trackListener(sidebar, 'transitionend', handleTransitionEnd);
 
-    // Track close button click
+    // Track close button click - no duplicate logic
     if (closeBtn) {
         trackListener(closeBtn, 'click', () => {
             if (window.toggleSidebar) {
@@ -273,67 +273,26 @@ function setupSidebarToggle() {
  * @returns {void}
  */
 function setupSidebarTabs() {
-    const tabConfig = {
-        recent: {
-            buttonId: 'recentChatsTab',
-            sectionId: 'recentChatsSection',
-            loader: () => window.loadConversationList?.(),
-        },
-        starred: {
-            buttonId: 'starredChatsTab',
-            sectionId: 'starredChatsSection',
-            loader: () => window.sidebar?.loadStarredConversations?.(),
-        },
-        projects: {
-            buttonId: 'projectsTab',
-            sectionId: 'projectsSection',
-            loader: () => window.loadSidebarProjects?.(),
-        },
-    };
+    // Use sidebar.js tab configuration if available
+    // Removed duplicate definition, now references window.sidebar
+    if (window.sidebar && typeof window.sidebar.setupTabs === 'function') {
+        // Use sidebar's own setup if available
+        window.sidebar.setupTabs();
+        return;
+    }
 
-    // Set up event listeners for each tab
-    Object.entries(tabConfig).forEach(([name, config]) => {
-        const button = document.getElementById(config.buttonId);
+    // Fallback binding of tab click events if needed
+    const tabIds = ['recentChatsTab', 'starredChatsTab', 'projectsTab'];
+    tabIds.forEach(id => {
+        const button = document.getElementById(id);
         if (button) {
-            // Add keyboard navigation
-            trackListener(button, 'keydown', (e) => {
-                if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    // Navigation logic can be handled by sidebar.js if available
-                    if (window.sidebar && typeof window.sidebar.activateTab === 'function') {
-                        // Call sidebar.js tab activation logic if it exists
-                        // This assumes sidebar.js exposes activateTab globally or via window.sidebar
-                        // Otherwise, handle navigation here (placeholder for now)
-                    }
-                }
-            });
-
-            // Add click handler
             trackListener(button, 'click', () => {
-                // Save active tab
-                localStorage.setItem('sidebarActiveTab', name);
-                // Let sidebar.js handle the actual tab activation if available
+                const tabName = id.replace('Tab', '').replace('Chats', '');
+                localStorage.setItem('sidebarActiveTab', tabName);
+
+                // Let sidebar.js handle the tab activation
                 if (window.sidebar && typeof window.sidebar.activateTab === 'function') {
-                    window.sidebar.activateTab(name);
-                } else {
-                    // Fallback to basic tab activation if sidebar.js logic is not available
-                    Object.entries(tabConfig).forEach(([tabName, tabData]) => {
-                        const isActive = tabName === name;
-                        const tabButton = document.getElementById(tabData.buttonId);
-                        const tabContent = document.getElementById(tabData.sectionId);
-                        if (tabButton) {
-                            tabButton.setAttribute('aria-selected', isActive);
-                            tabButton.classList.toggle('project-tab-btn-active', isActive);
-                            tabButton.classList.toggle('text-gray-500', !isActive);
-                        }
-                        if (tabContent) {
-                            tabContent.classList.toggle('hidden', !isActive);
-                        }
-                    });
-                    // Trigger loader if available
-                    if (config.loader) {
-                        setTimeout(config.loader, 300);
-                    }
+                    window.sidebar.activateTab(tabName);
                 }
             });
         }
@@ -341,13 +300,14 @@ function setupSidebarTabs() {
 }
 
 /**
- * Set up search functionality for conversations and projects with debouncing
+ * Set up search functionality for conversations and projects
  * @returns {void}
  */
 function setupSearch() {
     const chatSearchInput = document.getElementById('chatSearchInput');
     if (chatSearchInput) {
         trackListener(chatSearchInput, 'input', debounce((e) => {
+            // Use sidebar.js implementation
             window.sidebar?.searchSidebarConversations?.(e.target.value);
         }, 300));
     }
@@ -355,16 +315,8 @@ function setupSearch() {
     const projectSearchInput = document.getElementById('sidebarProjectSearch');
     if (projectSearchInput) {
         trackListener(projectSearchInput, 'input', debounce((e) => {
-            if (window.sidebar?.searchSidebarProjects) {
-                window.sidebar.searchSidebarProjects(e.target.value);
-            } else {
-                const searchTerm = e.target.value.toLowerCase();
-                const projectItems = document.querySelectorAll('#sidebarProjects li');
-                projectItems.forEach(item => {
-                    const projectName = item.textContent.toLowerCase();
-                    item.style.display = projectName.includes(searchTerm) ? '' : 'none';
-                });
-            }
+            // Use sidebar.js implementation without fallback
+            window.sidebar?.searchSidebarProjects?.(e.target.value);
         }, 300));
     }
 }
@@ -709,6 +661,7 @@ window.eventHandlers = {
     init: setupEventListeners,
     trackListener: trackListener,
     cleanupListeners: cleanupListeners,
+    debounce: debounce,
     handleProjectFormSubmit: handleProjectFormSubmit,
     handleNewConversationClick: handleNewConversationClick,
     setupCollapsibleSection: setupCollapsibleSection,

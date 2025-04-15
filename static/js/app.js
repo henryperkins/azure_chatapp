@@ -4,6 +4,20 @@
  * Relies on auth.js for session cookies and integrates with chat system modules.
  */
 
+// Use debounce from eventHandlers if available
+function debounce(func, wait) {
+  if (window.eventHandlers?.debounce) {
+    return window.eventHandlers.debounce(func, wait);
+  }
+
+  // Fallback implementation
+  let timeout;
+  return function executedFunction(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
 // PHASE-BASED INITIALIZATION
 const AppPhase = {
   BOOT: 'boot',
@@ -121,10 +135,11 @@ function clearAuthState() {
 }
 
 function ensureAuthenticated(options = {}) {
-  if (!window.ChatUtils) {
-    console.warn('[ensureAuthenticated] ChatUtils module unavailable, assuming not authenticated');
-    return Promise.resolve(false);
+  if (window.auth?.verifyAuthState) {
+    return window.auth.verifyAuthState(options.forceVerify);
   }
+
+  // Fallback if auth.js not initialized
   API_CONFIG.authCheckInProgress = true;
   return window.ChatUtils.isAuthenticated(options).then(isAuth => {
     API_CONFIG.isAuthenticated = isAuth;
@@ -252,14 +267,6 @@ function getBaseUrl() {
 }
 
 // DATA LOADING & RENDERING
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
-  };
-}
-
 let currentlyLoadingProjectId = null;
 const DEBOUNCE_DELAY = 300;
 const debouncedLoadProject = debounce(async (projectId) => {
@@ -535,33 +542,33 @@ async function initApp() {
   setupEventListeners();
   if (window.auth?.init) await window.auth.init();
   setPhase(AppPhase.AUTH_CHECKED);
-      // Initialize chat system early to ensure readiness
-      if (window.ChatManager?.initializeChat) {
-        try {
-          await window.ChatManager.initializeChat();
-          log("[initApp] Chat system initialized successfully");
-        } catch (err) {
-          console.error("[initApp] Chat system initialization failed:", err);
-          window.ChatUtils.handleError('Chat system initialization', err);
-        }
-      }
+  // Initialize chat system early to ensure readiness
+  if (window.ChatManager?.initializeChat) {
+    try {
+      await window.ChatManager.initializeChat();
+      log("[initApp] Chat system initialized successfully");
+    } catch (err) {
+      console.error("[initApp] Chat system initialization failed:", err);
+      window.ChatUtils.handleError('Chat system initialization', err);
+    }
+  }
 
-      // Initialize ProjectDashboard if available
-      if (window.ProjectDashboard) {
-        try {
-          log("[initApp] Initializing ProjectDashboard...");
-          const dashboard = new window.ProjectDashboard();
-          await dashboard.init();
-          log("[initApp] ProjectDashboard initialized successfully");
-          window.projectDashboard = dashboard;
-          document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
-        } catch (err) {
-          console.error("[initApp] ProjectDashboard initialization failed:", err);
-          window.ChatUtils.handleError('ProjectDashboard initialization', err);
-        }
-      }
+  // Initialize ProjectDashboard if available
+  if (window.ProjectDashboard) {
+    try {
+      log("[initApp] Initializing ProjectDashboard...");
+      const dashboard = new window.ProjectDashboard();
+      await dashboard.init();
+      log("[initApp] ProjectDashboard initialized successfully");
+      window.projectDashboard = dashboard;
+      document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+    } catch (err) {
+      console.error("[initApp] ProjectDashboard initialization failed:", err);
+      window.ChatUtils.handleError('ProjectDashboard initialization', err);
+    }
+  }
 
-      await handleNavigationChange();
+  await handleNavigationChange();
   setPhase(AppPhase.COMPLETE);
   log("[initApp] Application initialized");
   return true;
