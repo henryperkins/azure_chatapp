@@ -1,5 +1,4 @@
 /* Main Tailwind CSS file with proper configuration for Azure OpenAI Chat */
-@config "../../tailwind.config.js";
 @import "tailwindcss";
 
 /* Custom component styles that align with the HTML structure */
