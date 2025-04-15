@@ -7,6 +7,20 @@
 const trackedListeners = new Set();
 
 /**
+ * Debounce function to limit the rate at which a function is executed.
+ * @param {Function} func - The function to debounce.
+ * @param {number} wait - The delay in milliseconds.
+ * @returns {Function} - A debounced version of the input function.
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+/**
  * Track a listener for future cleanup
  * @param {Element|null} element - Element to attach listener to
  * @param {string} type - Event type (e.g., 'click', 'keydown')
@@ -653,4 +667,5 @@ window.eventHandlers = {
     setupCollapsibleSections: setupCollapsibleSections,
     setupPinningSidebar: setupPinningSidebar,
     setupCustomInstructions: setupCustomInstructions,
+    debounce, // Export debounce function
 };
