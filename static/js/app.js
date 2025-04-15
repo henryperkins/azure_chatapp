@@ -1012,17 +1012,12 @@ function setupEventListeners() {
       e.preventDefault();
       e.stopPropagation();
 
-      // If not authenticated, attempt to show the login modal.
+      // Always use the dropdown login form
       if (!API_CONFIG.isAuthenticated) {
-        if (window.modalManager?.show) {
-          console.log('[authBtn] User not authenticated, showing "login" modal.');
-          window.modalManager.show('login', {});
-        } else {
-          console.warn('[authBtn] modalManager not found; fallback to authDropdown');
-          const isHidden = authDropdown.classList.contains('hidden');
-          authDropdown.classList.toggle("hidden", !isHidden);
-          handleAuthModalPositioning();
-        }
+        console.log('[authBtn] User not authenticated, toggling dropdown login form');
+        const isHidden = authDropdown.classList.contains('hidden');
+        authDropdown.classList.toggle("hidden", !isHidden);
+        handleAuthModalPositioning();
       } else {
         // If authenticated, toggle dropdown as before
         const isHidden = authDropdown.classList.contains('hidden');
