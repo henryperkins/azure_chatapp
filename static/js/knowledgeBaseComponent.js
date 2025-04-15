@@ -21,16 +21,46 @@ class KnowledgeBaseComponent {
       fileProcessingQueue: [],
       activeProcesses: 0,
       lastHealthCheck: null,
-      authState: null
+      authState: null,
+      isInitialized: false // Added initialization flag
     };
 
-    // Initialize component
+    // Basic setup - moved from initialize
     this._validateEnvironment();
-    this._validateDOM();
-    this._cacheElements();
-    this._setupEventListeners();
-    this._setupUtilityMethods();
+    this._setupUtilityMethods(); // Setup utilities early
+    this._cacheElements(); // Cache elements early
+    this._setupEventListeners(); // Setup listeners early
   }
+
+  // NEW: Initialize method for lazy loading/rendering
+  async initialize(isVisible = false, kbData = null, projectId = null) {
+    if (this.state.isInitialized && !isVisible) {
+        // If already initialized but now hidden, just hide sections
+        this.elements.activeSection?.classList.add('hidden');
+        this.elements.inactiveSection?.classList.add('hidden');
+        return;
+    }
+
+    this.state.isInitialized = true;
+
+    // Validate DOM elements needed for rendering if visible
+    if (isVisible) {
+        this._validateDOM(); // Validate DOM elements needed for rendering
+    }
+
+    // Load initial data if provided
+    if (kbData) {
+        await this.renderKnowledgeBaseInfo(kbData, projectId);
+    } else {
+        // Ensure correct sections are hidden if no data
+        this.elements.activeSection?.classList.add('hidden');
+        this.elements.inactiveSection?.classList.add('hidden');
+    }
+
+    // Toggle visibility based on the flag
+    this.elements.container?.classList.toggle('hidden', !isVisible);
+  }
+
 
   // ======================
   // Initialization Methods
@@ -306,6 +336,9 @@ class KnowledgeBaseComponent {
   // ======================
 
   async renderKnowledgeBaseInfo(kb, projectId = null) {
+    // Ensure component is considered initialized when rendering info
+    this.state.isInitialized = true;
+
     if (!kb) {
       this._showInactiveState();
       return;

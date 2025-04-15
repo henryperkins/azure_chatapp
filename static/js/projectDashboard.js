@@ -66,6 +66,12 @@ class ProjectDashboard {
     // Use the unified modal manager (with a bit more explicit grouping to avoid confusion)
     this.modalManager = window.modalManager ||
       (window.ModalManager?.isAvailable?.() ? window.ModalManager : null);
+
+    /**
+     * Flag to prevent duplicate auth change handling
+     * @private
+     */
+    this._handlingAuthChange = false;
   }
 
   /**
@@ -468,7 +474,7 @@ class ProjectDashboard {
     // Hide spinner after we have components
     this.hideInitializationProgress();
 
-    // Mark dashboard as initialized
+    // Mark dashboard as initialized BEFORE processing URL
     window.projectDashboardInitialized = true;
     document.dispatchEvent(new CustomEvent("projectDashboardInitialized"));
 
@@ -480,8 +486,12 @@ class ProjectDashboard {
       window.modalManager = new window.ModalManager();
     }
 
-    // Process URL with auth check
+    // Process URL with auth check AFTER basic setup
     await this._processUrlWithAuthCheck();
+
+    // Mark app initialization as complete AFTER URL processing
+    window.__appInitializing = false;
+    console.log("[ProjectDashboard] App initialization flag set to false.");
   }
 
   _ensureContainersExist() {
@@ -541,68 +551,90 @@ class ProjectDashboard {
 
   async _createComponentsWithRetry(attempts = 0) {
     const maxAttempts = 3;
+    const waitTimeout = 5000; // 5 seconds timeout for waiting for components
 
     try {
-      // Create component instances
+      // Helper function to wait for a component constructor
+      const waitForComponent = async (componentName) => {
+        if (typeof window[componentName] === "function") return; // Already available
+
+        console.log(`[ProjectDashboard] Waiting for ${componentName} to be defined...`);
+        await new Promise((resolve, reject) => {
+          let checks = 0;
+          const interval = setInterval(() => {
+            if (typeof window[componentName] === "function") {
+              clearInterval(interval);
+              resolve();
+            } else if (++checks * 100 >= waitTimeout) {
+              clearInterval(interval);
+              reject(new Error(`${componentName} not available after ${waitTimeout / 1000}s`));
+            }
+          }, 100);
+        }).catch(err => {
+          console.warn(`${componentName} wait failed:`, err);
+          throw err; // Re-throw to be caught by the outer try-catch
+        });
+      };
+
+      // Wait for essential components
+      await Promise.all([
+        waitForComponent('ProjectListComponent'),
+        waitForComponent('ProjectDetailsComponent')
+        // KnowledgeBaseComponent is optional, no need to wait strictly
+      ]);
+
+      // Create component instances now that constructors are available
       this.components.projectList = new window.ProjectListComponent({
         elementId: "projectList",
         onViewProject: this.handleViewProject.bind(this)
       });
 
-      // Check if ProjectDetailsComponent is available directly or as a module
-      let DetailsComponent;
-      if (window.ProjectDetailsComponent) {
-        DetailsComponent = window.ProjectDetailsComponent;
-      } else {
-        try {
-          DetailsComponent = (await import('./projectDetailsComponent.js')).ProjectDetailsComponent;
-        } catch (err) {
-          console.warn("[ProjectDashboard] Could not import ProjectDetailsComponent:", err);
-          if (!window.ProjectDetailsComponent) {
-            throw new Error("ProjectDetailsComponent not available");
-          }
-          DetailsComponent = window.ProjectDetailsComponent;
-        }
-      }
-
-      this.components.projectDetails = new DetailsComponent({
+      this.components.projectDetails = new window.ProjectDetailsComponent({
         onBack: this.handleBackToList.bind(this),
-        utils: window.uiUtilsInstance || window.UIUtils, // Try both variants
+        utils: window.uiUtilsInstance || window.UIUtils,
         projectManager: window.projectManager,
         auth: window.auth,
         notification: this.showNotification
       });
 
-      if (typeof window.KnowledgeBaseComponent === "function") {
-        this.components.knowledgeBase = new window.KnowledgeBaseComponent({
-          // Pass options if needed
-        });
+      // Conditionally initialize KnowledgeBaseComponent
+      const kbContainer = document.getElementById('knowledgeBaseContainer');
+      const shouldInitKB = kbContainer && kbContainer.dataset.requiresKb === 'true' && this.state.currentView === 'details' && this.state.currentProject?.knowledge_base_id;
+
+      if (shouldInitKB && typeof window.KnowledgeBaseComponent === "function") {
+        console.log("[ProjectDashboard] Initializing KnowledgeBaseComponent.");
+        this.components.knowledgeBase = new window.KnowledgeBaseComponent({});
+      } else {
+        console.log(`[ProjectDashboard] Skipping KnowledgeBaseComponent initialization.`);
+        this.components.knowledgeBase = null;
       }
+
     } catch (err) {
       console.error(`[ProjectDashboard] Component creation attempt ${attempts + 1} failed:`, err);
 
       if (attempts < maxAttempts) {
-        // Wait with exponential backoff
-        const delay = Math.pow(2, attempts) * 300;
+        const delay = 100 * Math.pow(2, attempts);
         await new Promise(resolve => setTimeout(resolve, delay));
         return this._createComponentsWithRetry(attempts + 1);
       }
 
-      // If we've tried enough, use fallbacks
       console.warn("[ProjectDashboard] Using fallback components after repeated failures");
-      this.ensureFallbackComponents();
+      this.ensureFallbackComponents(); // Ensure fallbacks are created if retries fail
 
-      // Create with fallbacks
+      // Re-create with fallbacks if necessary
       if (!this.components.projectList) {
         this.components.projectList = new window.ProjectListComponent({
           elementId: "projectList",
           onViewProject: this.handleViewProject.bind(this)
         });
       }
-
       if (!this.components.projectDetails) {
         this.components.projectDetails = new window.ProjectDetailsComponent({
           onBack: this.handleBackToList.bind(this),
+          utils: window.uiUtilsInstance || window.UIUtils,
+          projectManager: window.projectManager,
+          auth: window.auth,
+          notification: this.showNotification
         });
       }
     }
@@ -680,11 +712,11 @@ class ProjectDashboard {
     console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady flag not set, starting wait...`);
 
     try {
-      // Combined approach with shorter timeout (matches projectDashboardUtils.js changes)
+      // Increased timeout to 10s (from 5s)
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(
-          () => reject(new Error("Timeout (5s) waiting for dashboardUtilsReady")),
-          5000
+          () => reject(new Error("Timeout (10s) waiting for dashboardUtilsReady")),
+          10000 // Increased timeout
         );
 
         // Check flag periodically while waiting for event
@@ -692,7 +724,7 @@ class ProjectDashboard {
           if (window.dashboardUtilsReady === true) {
             clearTimeout(timeout);
             clearInterval(checkInterval);
-            document.removeEventListener("dashboardUtilsReady", handleUtilsReady);
+            document.removeEventListener("dashboardUtilsReady", handleUtilsReady); // Ensure listener removed
             resolve();
           }
         }, 100);
@@ -715,7 +747,7 @@ class ProjectDashboard {
         console.warn(`[ProjectDashboard][${waitId}] Proceeding despite timeout - utils appear to be ready`);
         return;
       }
-      throw err;
+      throw err; // Re-throw if utils are definitely not ready
     }
   }
 
@@ -813,34 +845,75 @@ class ProjectDashboard {
     });
   }
 
-  // NEW: Handle auth state changes
+  // NEW: Handle auth state changes (modified)
   _handleAuthStateChange(event) {
     const isAuthenticated = event.detail?.authenticated || false;
+    const stateChanged = isAuthenticated !== (this.state.lastAuthState ?? !isAuthenticated); // Compare with previous state
 
-    if (isAuthenticated && this.state.currentView === "list") {
-      // Only handle project list reloading for dashboard
-      setTimeout(() => {
-        // Correctly call projectManager to load projects
-        if (window.projectManager?.loadProjects) {
-          window.projectManager.loadProjects('all').catch(err => {
+    // Prevent duplicate handling if already processing
+    if (this._handlingAuthChange) {
+      console.log("[ProjectDashboard] Auth change handling already in progress, skipping.");
+      return;
+    }
+    this._handlingAuthChange = true;
+    this.state.lastAuthState = isAuthenticated; // Store current state
+
+    console.log(`[ProjectDashboard] Auth state changed. Authenticated: ${isAuthenticated}, State Changed: ${stateChanged}`);
+
+    // Update UI visibility based on auth state
+    const loginRequiredMsg = document.getElementById("loginRequiredMessage");
+    const projectPanel = document.getElementById("projectManagerPanel"); // Assuming this is the main container for projects
+    if (loginRequiredMsg) loginRequiredMsg.classList.toggle('hidden', isAuthenticated);
+    if (projectPanel) projectPanel.classList.toggle('hidden', !isAuthenticated);
+
+
+    if (isAuthenticated) {
+      // If the state actually changed to authenticated, refresh necessary data
+      if (stateChanged) {
+        console.log("[ProjectDashboard] Auth state changed to authenticated. Refreshing project list.");
+        // Use promise chain instead of setTimeout
+        this._ensureProjectManager()
+          .then(() => window.projectManager.loadProjects('all'))
+          .catch(err => {
             console.error("[ProjectDashboard] Failed to load projects after auth change:", err);
+          })
+          .finally(() => {
+            this._handlingAuthChange = false;
+            // Process URL params again after auth and project load attempt
+            this.processUrlParams();
           });
-        } else {
-          console.warn("[ProjectDashboard] projectManager not available to reload projects on auth change.");
-        }
-      }, 300);
-    } else if (!isAuthenticated) {
-      // Correctly call the global function to show the project list view
-      if (typeof window.showProjectsView === 'function') {
-        window.showProjectsView();
       } else {
-        console.warn("[ProjectDashboard] showProjectsView function not available.");
-        // Fallback: try manipulating elements directly if needed, though less ideal
-        const listView = document.getElementById('projectListView');
-        const detailsView = document.getElementById('projectDetailsView');
-        if (listView) listView.classList.remove('hidden');
-        if (detailsView) detailsView.classList.add('hidden');
+        console.log("[ProjectDashboard] Auth state confirmed as authenticated. Ensuring view is correct.");
+        // Ensure the correct view is displayed even if auth state didn't strictly change
+        this.processUrlParams();
+        this._handlingAuthChange = false;
       }
+    } else {
+      // User is not authenticated, ensure project list/details are hidden and login prompt is shown
+      console.log("[ProjectDashboard] Auth state changed to not authenticated. Showing project list view (which handles login prompt).");
+      this.showProjectList(); // This should handle showing the login message via _ensureContainersExist
+      this._handlingAuthChange = false;
+    }
+  }
+
+  // Helper to ensure projectManager is available (simple check)
+  async _ensureProjectManager() {
+    if (window.projectManager) {
+      return Promise.resolve();
+    } else {
+      // Wait a short period for projectManager to potentially become available
+      return new Promise((resolve, reject) => {
+        let checks = 0;
+        const interval = setInterval(() => {
+          if (window.projectManager) {
+            clearInterval(interval);
+            resolve();
+          } else if (++checks > 20) { // Wait up to 2 seconds
+            clearInterval(interval);
+            reject(new Error("projectManager not available after wait"));
+          }
+        }, 100);
+      });
     }
   }
 

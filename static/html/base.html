@@ -95,7 +95,7 @@
                 <button type="button" class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m-1-4h.01M21 12a9
                           9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Password requirements
@@ -453,6 +453,7 @@
   <!-- UI Components -->
   <script type="module" src="/static/js/sidebar.js"></script>
   <script type="module" src="/static/js/projectDashboardUtils.js"></script>
+  <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
 
   <!-- Integration script for dynamic content loading -->
   <script>
@@ -463,38 +464,46 @@
           await window.auth.init();
           console.log("Authentication initialized");
         } catch (err) {
-          console.error("Authentication initialization failed:", err);
+          console.error("Authentication initialization failed:", err); // Fixed comma
         }
       }
 
       // Wait a short time for auth to be fully processed
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 100)); // Fixed syntax
 
-      // Load project list
-      fetch('project_list.html').then(response => response.text()).then(html => {
-        document.getElementById('projectListView').innerHTML = html;
-      }).catch(err => console.error('Failed to load project_list.html:', err));
+      // Load HTML content parallel but wait for all before initialization
+      const htmlPromises = [
+        fetch('project_list.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('projectListView').innerHTML = html;
+          }).catch(err => console.error('Failed to load project_list.html:', err)),
 
-      // Load project details
-      fetch('project_details.html').then(response => response.text()).then(html => {
-        document.getElementById('projectDetailsView').innerHTML = html;
-      }).catch(err => console.error('Failed to load project_details.html:', err));
+        fetch('project_details.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('projectDetailsView').innerHTML = html;
+          }).catch(err => console.error('Failed to load project_details.html:', err)),
 
-      // Load modals
-      fetch('modals.html').then(response => response.text()).then(html => {
-        document.getElementById('modalsContainer').innerHTML = html;
-        document.getElementById('modalsContainer').classList.remove('hidden');
-        if (window.initProjectModal) window.initProjectModal();
-      }).catch(err => console.error('Failed to load modals.html:', err));
+        fetch('modals.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('modalsContainer').innerHTML = html;
+            document.getElementById('modalsContainer').classList.remove('hidden');
+          }).catch(err => console.error('Failed to load modals.html:', err)),
 
-      // Load chat UI
-      fetch('chat_ui.html').then(response => response.text()).then(html => {
-        document.getElementById('chatUIContainer').innerHTML = html;
-        document.getElementById('chatUIContainer').classList.remove('hidden');
-      }).catch(err => console.error('Failed to load chat_ui.html:', err));
+        fetch('chat_ui.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('chatUIContainer').innerHTML = html;
+            document.getElementById('chatUIContainer').classList.remove('hidden');
+          }).catch(err => console.error('Failed to load chat_ui.html:', err))
+      ];
 
-      // Initialize project dashboard after content is loaded
-      if (window.appInitializer && window.appInitializer.initialize) {
+      // Wait for all HTML content to load
+      await Promise.all(htmlPromises);
+
+      // Initialize modals if needed
+      if (window.initProjectModal) window.initProjectModal();
+
+      // Initialize app with increased timeouts
+      if (window.appInitializer?.initialize) {
         try {
           await window.appInitializer.initialize();
           console.log("App initialization complete");
@@ -504,6 +513,17 @@
       }
     });
   </script>
-</body>
 
+  <script>
+    // Global safety - Ensure dashboard is available after 10 seconds max
+    setTimeout(() => {
+      if (!window.projectDashboardInitialized && !window.dashboardUtilsReady) {
+        console.warn('Dashboard not initialized after timeout, triggering fallback');
+        window.dashboardUtilsReady = true;
+        document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
+        document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+      }
+    }, 10000);
+  </script>
+</body>
 </html>

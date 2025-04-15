@@ -5,8 +5,8 @@ import daisyui from 'daisyui';
 
 export default {
   content: [
-    "./static/**/*.html",
-    "./static/**/*.js"
+    "./static/html/*.html",
+    "./static/js/*.js"
   ],
   theme: {
     extend: {

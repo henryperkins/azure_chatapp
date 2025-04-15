@@ -326,24 +326,54 @@
       this.modalMappings = {
         project: 'projectFormModal',
         delete: 'deleteConfirmModal',
-        confirm: 'confirmActionModal',
+        confirm: 'confirmActionModal', // Assuming a generic confirm modal exists
         knowledge: 'knowledgeBaseSettingsModal',
         knowledgeResult: 'knowledgeResultModal',
-        customize: 'cardCustomizationModal'
+        instructions: 'instructionsModal',
+        contentView: 'contentViewModal'
+        // Add other modal name -> ID mappings here
       };
-      console.log('[ModalManager] Initialized.');
+      this.activeModal = null;
+      console.log("[ModalManager] Initialized.");
+
+      // Add listeners for dialog close events (e.g., pressing ESC)
+      Object.values(this.modalMappings).forEach(modalId => {
+        const modalEl = document.getElementById(modalId);
+        if (modalEl && typeof modalEl.addEventListener === 'function') {
+          modalEl.addEventListener('close', () => {
+            if (this.activeModal === modalId) {
+              console.log(`[ModalManager] Dialog ${modalId} closed via native event.`);
+              this.activeModal = null;
+              // Ensure body overflow is reset if needed, though dialog should handle this
+              document.body.style.overflow = '';
+            }
+          });
+        }
+      });
     }
 
     /**
-     * Shows a modal, ensuring only one is visible at a time.
+     * Checks if the ModalManager is available and ready.
+     * @returns {boolean} True if available.
+     */
+    static isAvailable() {
+      return typeof ModalManager !== 'undefined';
+    }
+
+    /**
+     * Shows a modal dialog.
+     * @param {string} modalName - The logical name of the modal (e.g., 'project', 'delete').
+     * @param {object} options - Options for showing the modal.
+     * @param {function} [options.updateContent] - Function to update modal content before showing.
+     * @param {boolean} [options.showDuringInitialization=false] - Allow showing even if app is initializing.
+     * @returns {boolean} True if the modal was shown, false otherwise.
      */
     show(modalName, options = {}) {
-      // Ensure only one modal is shown at a time
-      Object.keys(this.modalMappings).forEach(name => {
-        if (name !== modalName) {
-          this.hide(name); // Attempt to hide other modals
-        }
-      });
+      // Prevent unwanted modals during initialization
+      if (window.__appInitializing && !options.showDuringInitialization) {
+        console.log(`[ModalManager] Skipping modal '${modalName}' during app initialization`);
+        return false;
+      }
 
       const modalId = this.modalMappings[modalName];
       if (!modalId) {
@@ -356,6 +386,14 @@
         console.error(`[ModalManager] Dialog element not found for ID: '${modalId}'`);
         return false;
       }
+
+      // Hide any currently active modal before showing a new one
+      if (this.activeModal && this.activeModal !== modalId) {
+        console.log(`[ModalManager] Hiding previously active modal: ${this.activeModal}`);
+        this.hide(Object.keys(this.modalMappings).find(key => this.modalMappings[key] === this.activeModal));
+      }
+
+
       console.log(`[ModalManager] Showing modal: ${modalName} (#${modalId})`);
 
       // If provided, update content before showing
@@ -367,19 +405,24 @@
         }
       }
 
-      // Show the modal using the appropriate method
-      if (typeof modalEl.showModal !== 'function') {
-        console.warn(`[ModalManager] .showModal() not available for ID: '${modalId}', falling back to display-based modal handling`);
-        modalEl.classList.remove('hidden');
-        modalEl.style.display = 'block';
-      } else {
+      // Show the modal using the dialog's showModal method
+      if (typeof modalEl.showModal === 'function') {
         modalEl.showModal();
+        this.activeModal = modalId; // Track the active modal
+        // Optional: Prevent body scroll while modal is open
+        // document.body.style.overflow = 'hidden';
+      } else {
+        console.warn(`[ModalManager] .showModal() not available for ID: '${modalId}'. Cannot show modal.`);
+        return false; // Indicate failure if showModal isn't available
       }
+
       return true;
     }
 
     /**
-     * Hides a modal.
+     * Hides a modal dialog.
+     * @param {string} modalName - The logical name of the modal.
+     * @returns {boolean} True if the modal was hidden, false otherwise.
      */
     hide(modalName) {
       const modalId = this.modalMappings[modalName];
@@ -389,40 +432,126 @@
       }
 
       const modalEl = document.getElementById(modalId);
-      if (!modalEl || typeof modalEl.close !== 'function') {
-        console.warn(`[ModalManager] Dialog element not valid or not found for ID: '${modalId}'`);
+      if (!modalEl) {
+        console.error(`[ModalManager] Dialog element not found for ID: '${modalId}'`);
         return false;
       }
 
       console.log(`[ModalManager] Hiding modal: ${modalName} (#${modalId})`);
-      modalEl.close();
-      return true;
-    }
 
-    /**
-     * Static helper to confirmAction using UIUtils instance.
-     */
-    static confirmAction(config = {}) {
-      if (window.uiUtilsInstance?.confirmAction) {
-        return window.uiUtilsInstance.confirmAction(config);
+      if (typeof modalEl.close === 'function') {
+        modalEl.close(); // Use the dialog's close method
+      } else {
+        console.warn(`[ModalManager] .close() not available for ID: '${modalId}'. Cannot hide modal properly.`);
+        // Fallback: Directly hide if necessary, but less ideal
+        modalEl.classList.add('hidden');
+        modalEl.style.display = 'none';
       }
-      console.error('[ModalManager] UIUtils.confirmAction not available.');
-      return Promise.resolve(false);
+
+      // Reset active modal tracking if this was the active one
+      if (this.activeModal === modalId) {
+        this.activeModal = null;
+        // Restore body scroll if it was modified
+        document.body.style.overflow = '';
+      }
+      return true;
     }
 
     /**
-     * Check if ModalManager is available (always true in this simplified version).
+     * Shows a confirmation dialog.
+     * @param {object} options - Configuration for the confirmation.
+     * @param {string} options.title - Modal title.
+     * @param {string} options.message - Confirmation message.
+     * @param {string} [options.confirmText='Confirm'] - Text for the confirm button.
+     * @param {string} [options.cancelText='Cancel'] - Text for the cancel button.
+     * @param {string} [options.confirmClass='btn-primary'] - CSS class for the confirm button.
+     * @param {function} options.onConfirm - Callback function executed when confirmed.
+     * @param {function} [options.onCancel] - Callback function executed when cancelled.
      */
-    static isAvailable() {
-      return true;
+    confirmAction(options) {
+      const modalName = 'confirm'; // Use a generic confirm modal name
+      const modalId = this.modalMappings[modalName];
+      if (!modalId) {
+        console.error("[ModalManager] Confirm modal ID not mapped.");
+        return;
+      }
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl) {
+        console.error("[ModalManager] Confirm modal element not found.");
+        return;
+      }
+
+      // Update modal content
+      const titleEl = modalEl.querySelector('h3');
+      const messageEl = modalEl.querySelector('p'); // Assuming a <p> for the message
+      const confirmBtn = modalEl.querySelector('#confirmActionBtn'); // Assuming button IDs
+      const cancelBtn = modalEl.querySelector('#cancelActionBtn');
+
+      if (titleEl) titleEl.textContent = options.title;
+      if (messageEl) messageEl.textContent = options.message;
+      if (confirmBtn) {
+        confirmBtn.textContent = options.confirmText || 'Confirm';
+        // Reset classes and add the specified one
+        confirmBtn.className = `btn ${options.confirmClass || 'btn-primary'}`;
+      }
+      if (cancelBtn) cancelBtn.textContent = options.cancelText || 'Cancel';
+
+      // Remove previous listeners to avoid duplicates
+      const newConfirmBtn = confirmBtn.cloneNode(true);
+      confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+      const newCancelBtn = cancelBtn.cloneNode(true);
+      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+
+      // Add new listeners
+      const confirmHandler = () => {
+        this.hide(modalName);
+        if (typeof options.onConfirm === 'function') {
+          options.onConfirm();
+        }
+      };
+      const cancelHandler = () => {
+        this.hide(modalName);
+        if (typeof options.onCancel === 'function') {
+          options.onCancel();
+        }
+      };
+
+      newConfirmBtn.addEventListener('click', confirmHandler);
+      newCancelBtn.addEventListener('click', cancelHandler);
+
+      // Show the confirmation modal
+      this.show(modalName, { showDuringInitialization: options.showDuringInitialization }); // Allow during init if specified
     }
   }
 
-  // Instantiate and assign to global
-  ProjectDashboard.ModalManager = ModalManager;
-  ProjectDashboard.modalManager = new ModalManager();
-  window.modalManager = ProjectDashboard.modalManager;
+  // Instantiate the modal manager globally if it doesn't exist
+  if (!window.modalManager) {
+    window.modalManager = new ModalManager();
+    console.log("[projectDashboardUtils] Global ModalManager instance created.");
+  } else {
+    console.log("[projectDashboardUtils] Global ModalManager already exists.");
+  }
+
+  // Make class available globally as well
   window.ModalManager = ModalManager;
+
+
+  // Ensure dashboardUtilsReady event is fired reliably
+  function signalDashboardUtilsReady() {
+    if (!window.dashboardUtilsReady) {
+      window.dashboardUtilsReady = true;
+      document.dispatchEvent(new CustomEvent("dashboardUtilsReady"));
+      console.log("[projectDashboardUtils] dashboardUtilsReady event dispatched.");
+    }
+  }
+
+  // Signal readiness after a short delay or when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(signalDashboardUtilsReady, 50));
+  } else {
+    setTimeout(signalDashboardUtilsReady, 50);
+  }
 
   // Provide a global showNotification
   window.showNotification = (message, type = 'info', options = {}) => {

@@ -117,6 +117,27 @@
     </div>
 </div>
 
+<!-- Generic Confirmation Modal (Added for ModalManager.confirmAction) -->
+<dialog id="confirmActionModal" class="modal">
+  <div class="modal-box max-w-md w-full">
+    <form method="dialog">
+        {/* Close button top right */}
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="font-bold text-lg">Confirm Action</h3>
+    <p class="py-4">Are you sure you want to proceed?</p>
+    <div class="modal-action">
+      <button id="cancelActionBtn" type="button" class="btn btn-outline">Cancel</button>
+      <button id="confirmActionBtn" type="button" class="btn btn-primary">Confirm</button>
+    </div>
+  </div>
+   {/* Click outside to close */}
+   <form method="dialog" class="modal-backdrop">
+     <button>close</button>
+   </form>
+</dialog>
+
+
 <!-- Content View Modal (for files and artifacts) -->
 <div id="contentViewModal" class="modal hidden">
     <div class="modal-box max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -271,82 +292,141 @@
     // Initialize modal close buttons
     // Helper function to find the modal name from its ID
     function getModalNameFromId(modalId) {
+        // Use the mappings directly from the global modalManager instance
         const mappings = window.modalManager?.modalMappings || {
             project: 'projectFormModal',
             delete: 'deleteConfirmModal',
-            confirm: 'confirmActionModal',
+            confirm: 'confirmActionModal', // Added mapping
             knowledge: 'knowledgeBaseSettingsModal',
             knowledgeResult: 'knowledgeResultModal',
-            customize: 'cardCustomizationModal'
+            instructions: 'instructionsModal',
+            contentView: 'contentViewModal'
+            // Ensure this matches the ModalManager class mappings
         };
         for (const name in mappings) {
             if (mappings[name] === modalId) {
                 return name;
             }
         }
-        console.warn(`Could not find modal name for ID: ${modalId}`);
+        console.warn(`[Modals Init] Could not find modal name for ID: ${modalId}`);
         return null; // Return null if no mapping found
     }
 
     // Initialize modal close buttons to use ModalManager
-    const closeButtons = document.querySelectorAll('[id$="CloseBtn"], [id^="close"], [id$="CancelBtn"]');
+    // Select buttons intended to close modals: close buttons, cancel buttons
+    const closeButtons = document.querySelectorAll(
+        'dialog .modal-action button[type="button"]:not([id^="confirm"]), dialog form[method="dialog"] button, dialog button[id$="CloseBtn"], dialog button[id^="close"], dialog button[id$="CancelBtn"]'
+    );
+
     closeButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const modalElement = this.closest('[id$="Modal"]'); // Find the parent modal element by ID pattern
+        // Prevent adding listener to the backdrop close button if it's handled natively
+        if (button.closest('.modal-backdrop')) return;
+
+        button.addEventListener('click', function(event) {
+            // Find the parent dialog element
+            const modalElement = this.closest('dialog[id$="Modal"], dialog[id="confirmActionModal"]');
             if (modalElement && modalElement.id) {
                 const modalName = getModalNameFromId(modalElement.id);
                 if (modalName && window.modalManager?.hide) {
-                    console.log(`Closing modal '${modalName}' via button click.`);
+                    console.log(`[Modals Init] Closing modal '${modalName}' via button click.`);
+                    // Let the ModalManager handle hiding, which calls dialog.close()
                     window.modalManager.hide(modalName);
-                    // Note: Resetting body overflow is typically handled by the dialog's close() method
-                    // or should be managed within ModalManager.hide if needed.
                 } else {
-                    console.warn(`Could not hide modal with ID ${modalElement.id}. ModalManager or mapping missing.`);
-                    // Fallback to direct hiding if manager fails
-                    modalElement.classList.add('hidden');
-                    document.body.style.overflow = '';
+                    console.warn(`[Modals Init] Could not hide modal with ID ${modalElement.id}. ModalManager or mapping missing.`);
+                    // Fallback to direct closing if manager fails
+                    if (typeof modalElement.close === 'function') {
+                        modalElement.close();
+                    } else {
+                         modalElement.classList.add('hidden');
+                         document.body.style.overflow = ''; // Reset overflow as a fallback
+                    }
                 }
             } else {
-                 console.warn('Could not find parent modal element for button:', this);
+                 console.warn('[Modals Init] Could not find parent modal element for button:', this);
             }
         });
     });
 
-    // Knowledge base form submit
+
+    // Knowledge base form submit (using dialog structure)
     const knowledgeBaseForm = document.getElementById('knowledgeBaseForm');
     if (knowledgeBaseForm) {
       knowledgeBaseForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        const formData = new FormData(this);
-        const data = {};
-
-        for (let [key, value] of formData.entries()) {
-          if (key === 'process_all_files' || key === 'auto_enable') {
-            data[key] = true; // Checkboxes that are checked will be included
-          } else {
-            data[key] = value;
-          }
+        const submitButton = this.querySelector('button[type="submit"]');
+        const originalButtonText = submitButton?.textContent;
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
         }
 
+        const formData = new FormData(this);
+        const data = {};
+        // Correctly handle checkboxes: only include if checked
+        data['process_all_files'] = formData.has('process_all_files');
+        data['auto_enable'] = formData.has('auto_enable');
+
+        for (let [key, value] of formData.entries()) {
+          // Skip checkboxes already handled
+          if (key !== 'process_all_files' && key !== 'auto_enable') {
+             data[key] = value;
+          }
+        }
+        // Ensure boolean values are sent correctly if needed by backend
+        // data['process_all_files'] = data['process_all_files'] === 'on';
+        // data['auto_enable'] = data['auto_enable'] === 'on';
+
+
         const projectId = window.projectManager?.getCurrentProject()?.id;
+        const kbId = document.getElementById('knowledgeBaseIdInput')?.value;
+
         if (projectId) {
-          // Construct the endpoint and call
-          const kbId = document.getElementById('knowledgeBaseIdInput')?.value;
           const endpoint = kbId ?
             `/api/projects/${projectId}/knowledge-base/${kbId}` :
             `/api/projects/${projectId}/knowledge-base`;
+          const method = kbId ? 'PATCH' : 'POST';
 
-          window.apiRequest(endpoint, kbId ? 'PATCH' : 'POST', data)
+          window.apiRequest(endpoint, method, data)
             .then(() => {
               window.showNotification?.('Knowledge base settings saved', 'success');
-              document.getElementById('knowledgeBaseSettingsModal')?.classList.add('hidden');
+              // Close the modal using the manager
+              window.modalManager?.hide('knowledge');
+              // Reload project details to reflect changes
               window.projectManager.loadProjectDetails(projectId);
             })
             .catch(err => {
               window.showNotification?.(`Failed to save settings: ${err.message}`, 'error');
+               console.error("Error saving KB settings:", err);
+            })
+            .finally(() => {
+                 if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalButtonText; // Restore original text
+                }
             });
+        } else {
+             window.showNotification?.('Error: Project context not found.', 'error');
+             if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = originalButtonText;
+             }
         }
       });
     }
+
+     // Project form submit (ensure it uses the manager to close)
+    const projectForm = document.getElementById('projectForm');
+    if (projectForm) {
+        projectForm.addEventListener('submit', (e) => {
+            // The handleProjectFormSubmit function in eventHandler.js
+            // should ideally call window.modalManager.hide('project') on success.
+            // If not, add the closing logic here or ensure it's in the handler.
+            // Example (if handler doesn't close):
+            // handleProjectFormSubmit(e).then(() => {
+            //    window.modalManager?.hide('project');
+            // });
+        });
+    }
+
   });
 </script>
