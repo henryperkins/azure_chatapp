@@ -437,23 +437,29 @@
 
   <!-- Knowledge Base components (loaded only when needed) -->
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
-  <!-- Core JavaScript Dependencies -->
+  <!-- Core Utilities -->
   <script type="module" src="/static/js/auth.js"></script>
-  <script type="module" src="/static/js/uiRenderer.js"></script>
+  <script type="module" src="/static/js/chat-utils.js"></script>
   <script type="module" src="/static/js/eventHandler.js"></script>
+  <script type="module" src="/static/js/notification-handler.js"></script>
+  <script type="module" src="/static/js/modelConfig.js"></script>
 
-  <!-- Application Framework -->
-  <script type="module" src="/static/js/app.js"></script>
-
-  <!-- Project Management Components -->
-  <script type="module" src="/static/js/projectManager.js"></script>
-  <script type="module" src="/static/js/projectModal.js"></script>
+  <!-- UI Framework -->
+  <script type="module" src="/static/js/chat-ui.js"></script>
+  <script type="module" src="/static/js/uiRenderer.js"></script>
   <script type="module" src="/static/js/projectDashboard.js"></script>
+  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
 
   <!-- UI Components -->
   <script type="module" src="/static/js/sidebar.js"></script>
-  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
   <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
+  <script type="module" src="/static/js/projectModal.js"></script>
+
+  <!-- Application Logic -->
+  <script type="module" src="/static/js/projectManager.js"></script>
+
+  <!-- Main Application (load last) -->
+  <script type="module" src="/static/js/app.js"></script>
 
   <!-- Integration script for dynamic content loading -->
   <script>
@@ -524,6 +530,33 @@
         document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
       }
     }, 10000);
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('[Initialization] DOM content loaded, initializing components...');
+
+      // Safety delay to ensure all elements are available
+      setTimeout(() => {
+        // Initialize auth dropdown positioning with JavaScript
+        const authDropdowns = document.querySelectorAll('.auth-dropdown-adjusted');
+        authDropdowns.forEach(dropdown => {
+          const button = dropdown.previousElementSibling;
+          if (button) {
+            dropdown.style.top = (button.offsetTop + button.offsetHeight + 5) + 'px';
+            dropdown.style.right = '1rem';
+          }
+        });
+
+        // Initialize component controllers
+        if (window.initProjectModal) window.initProjectModal();
+        if (window.initProjectDashboard) window.initProjectDashboard();
+
+        // Dispatch central "ready" event for all components to listen for
+        console.log('[Initialization] Dispatching appJsReady event');
+        document.dispatchEvent(new CustomEvent('appJsReady'));
+      }, 300);
+    });
   </script>
 </body>
 </html>

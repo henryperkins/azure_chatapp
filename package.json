@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "description": "Azure OpenAI Chat Application",
   "scripts": {
-    "prebuild": "npm run build:css",
     "build:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css",
     "watch:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --watch",
     "dev": "npm run watch:css",
@@ -41,7 +40,9 @@
     "tailwindcss": "^4.1.4"
   },
   "dependencies": {
-    "mcp": "^1.4.2"
+    "mcp": "^1.4.2",
+    "postcss-import": "^16.1.0",
+    "postcss-nesting": "^13.0.1"
   },
   "engines": {
     "node": ">=18.12.0"

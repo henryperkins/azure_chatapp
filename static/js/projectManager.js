@@ -4,7 +4,7 @@
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
  * Dispatches custom DOM events to inform the UI about loaded or updated data.
  * Contains NO direct DOM manipulation or direct form/modals references.
- * Uses auth.js exclusively for authentication.
+ * Uses ChatUtils for authentication and error handling.
  */
 
 (function () {
@@ -43,126 +43,6 @@
   }
 
   /* ===========================
-     AUTHENTICATION HELPERS
-     =========================== */
-
-  /**
-   * Check authentication with a short timeout, then optionally re-check with forceVerify
-   * @param {number} [timeout=1000] - Timeout in ms
-   * @returns {Promise<boolean>} - Auth status
-   */
-  async function checkAuthenticationWithTimeout(timeout = 1000) {
-    // Make sure window.auth exists and is ready
-    if (!window.auth) {
-      console.warn("[projectManager] Auth module not available");
-      return false;
-    }
-
-    // If auth is not ready yet, wait for readiness with a timeout
-    if (!window.auth.isReady) {
-      try {
-        await Promise.race([
-          new Promise(resolve => {
-            const checkReady = () => {
-              if (window.auth.isReady) {
-                resolve();
-              } else {
-                setTimeout(checkReady, 100);
-              }
-            };
-            checkReady();
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Auth readiness timed out")), timeout))
-        ]);
-      } catch (err) {
-        console.warn("[projectManager] Auth readiness timed out:", err.message);
-        return false;
-      }
-    }
-
-    try {
-      // First attempt: quick check
-      return await Promise.race([
-        window.auth.isAuthenticated({ forceVerify: false }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Auth check timed out")), timeout))
-      ]);
-    } catch (err) {
-      console.warn("[projectManager] Auth check timeout/error:", err.message);
-      try {
-        // Second attempt: force verify
-        return await window.auth.isAuthenticated({ forceVerify: true });
-      } catch (forceErr) {
-        console.warn("[projectManager] Force verify also failed:", forceErr.message);
-        return false;
-      }
-    }
-  }
-
-  // Auth verification cache
-  let __authVerified = false;
-  let __authVerifiedTime = 0;
-
-  /**
-   * Get auth token with retry logic
-   * @returns {Promise<string>} - Auth token
-   */
-  async function getAuthWithRetry() {
-    const logKey = 'getAuthWithRetry';
-    const now = Date.now();
-
-    if (DEBUG && (!lastAuthLogTimestamps[logKey] ||
-      (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
-      console.debug('[ProjectManager] Attempting auth token retrieval');
-      lastAuthLogTimestamps[logKey] = now;
-    }
-
-    try {
-      return await window.auth.getAuthToken();
-    } catch (err) {
-      // If token retrieval fails, force auth verification
-      const isAuth = await window.auth.isAuthenticated({ forceVerify: true });
-      if (isAuth) {
-        return await window.auth.getAuthToken();
-      }
-      throw err;
-    }
-  }
-
-  /**
-   * Helper that throws if not authenticated
-   * @throws {Error}
-   */
-  async function requireAuth() {
-    // Check cache first to avoid redundant checks
-    if (__authVerified && Date.now() - __authVerifiedTime < 5000) {
-      return true;
-    }
-
-    try {
-      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
-      if (isAuthenticated) {
-        __authVerified = true;
-        __authVerifiedTime = Date.now();
-        return true;
-      }
-
-      // One more try with force verify
-      const retryResult = await window.auth.isAuthenticated({ forceVerify: true });
-      if (retryResult) {
-        __authVerified = true;
-        __authVerifiedTime = Date.now();
-        return true;
-      }
-
-      throw new Error("Not authenticated - please login first");
-    } catch (err) {
-      __authVerified = false;
-      emitEvent('projectAuthError', { reason: 'auth_required', error: err });
-      throw err;
-    }
-  }
-
-  /* ===========================
      DATA OPERATIONS - PROJECTS
      =========================== */
 
@@ -180,32 +60,13 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
-      // Explicit authentication check
-      const isAuthenticated = await checkAuthenticationWithTimeout(); // Use helper with timeout
+      // Use centralized auth check
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
         console.warn("[projectManager] loadProjects skipped: User not authenticated.");
-        // Emit specific event for UI to potentially show login prompt
         emitEvent("projectsLoaded", { projects: [], count: 0, filter: { type: cleanFilter }, error: true, reason: 'auth_required' });
         emitEvent("projectAuthError", { reason: 'load_projects', error: new Error("Authentication required") });
         return []; // Return empty array as no projects can be loaded
-      }
-
-      // Throttled logging with operation key to prevent spam
-      const logKey = `loadProjects-${cleanFilter}`;
-      const now = Date.now();
-
-      if (DEBUG && (!lastAuthLogTimestamps[logKey] ||
-        (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
-        console.log('[ProjectManager] Getting auth token for loadProjects');
-        lastAuthLogTimestamps[logKey] = now;
-
-        // Only check cookies in debug mode and with throttling
-        try {
-          const hasAccessToken = document.cookie.includes('access_token=');
-          console.log(`[ProjectManager] Access token cookie ${hasAccessToken ? 'found' : 'not found'}`);
-        } catch (err) {
-          console.warn('[ProjectManager] Cookie check error:', err.message);
-        }
       }
 
       // Build query params
@@ -216,14 +77,7 @@
 
       const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
 
-      // Request the token with allowEmpty option
-      const token = await window.auth.getAuthToken({ allowEmpty: true });
-
-      const response = await window.apiRequest(endpoint, "GET", null, {
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : ''
-        }
-      });
+      const response = await window.apiRequest(endpoint, "GET", null);
 
       // Standardize response format
       let projects = [];
@@ -250,9 +104,7 @@
       return projects;
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
-      if (window.auth?.handleAuthError) {
-        window.auth.handleAuthError(error, "loading projects");
-      }
+      window.ChatUtils.handleError('Loading projects', error);
       emitEvent("projectsLoaded", {
         projects: [],
         count: 0,
@@ -276,12 +128,12 @@
       if (!projectId || typeof projectId !== 'string') {
         throw new Error('Invalid project ID');
       }
-      // Simple UUID format check
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId)) {
+      if (!window.ChatUtils.isValidUUID(projectId)) {
         throw new Error('Malformed project ID');
       }
     } catch (err) {
       emitEvent('projectDetailsError', { projectId, error: err });
+      window.ChatUtils.handleError('Validating project ID', err);
       return null;
     }
 
@@ -292,31 +144,17 @@
       currentProject = null;
       emitEvent("projectDetailsLoading", { projectId });
 
-      // Explicit authentication check
-      const isAuthenticated = await checkAuthenticationWithTimeout();
+      // Use centralized auth check
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
         console.warn(`[projectManager] loadProjectDetails (${projectId}) skipped: User not authenticated.`);
         emitEvent("projectDetailsError", { projectId, error: new Error("Authentication required"), reason: 'auth_required' });
         emitEvent("projectAuthError", { reason: 'project_details', error: new Error("Authentication required") });
-        currentProject = null; // Ensure current project is cleared
+        currentProject = null;
         return null;
       }
 
-      // Use allowEmpty when checking auth to avoid hard errors during initialization
-      let token;
-      try {
-        token = await window.auth.getAuthToken({ allowEmpty: true });
-      } catch (authError) {
-        console.warn("[projectManager] Auth error during token fetch in loadProjectDetails:", authError.message);
-        // Emit projectAuthError event for UI to react
-        emitEvent('projectAuthError', { reason: 'project_details', error: authError });
-        throw new Error('Authentication required to view project details');
-      }
-      const response = await window.apiRequest(projectEndpoint, "GET", null, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await window.apiRequest(projectEndpoint, "GET");
       let projectData = null;
 
       // Standardize response parsing
@@ -334,46 +172,6 @@
       }
 
       currentProject = projectData;
-
-      // Set component visibility flags
-      const chatContainer = document.getElementById('globalChatContainer');
-      const kbContainer = document.getElementById('knowledgeBaseContainer');
-
-      if (chatContainer) {
-        chatContainer.dataset.requiresChat = this.currentView === 'chat';
-      }
-      if (kbContainer) {
-        kbContainer.dataset.requiresKb = currentProject.knowledge_base?.is_active === true;
-      }
-
-      // Clean any 'null' string for knowledge_base_id
-      if (currentProject.knowledge_base_id === "null") {
-        currentProject.knowledge_base_id = null;
-      }
-
-      // If we have a KB ID but no attached knowledge_base object, load it
-      if (currentProject.knowledge_base_id && !currentProject.knowledge_base) {
-        try {
-          const kbDetails = await loadKnowledgeBaseDetails(currentProject.knowledge_base_id);
-          if (kbDetails && kbDetails.id === currentProject.knowledge_base_id) {
-            currentProject.knowledge_base = kbDetails;
-          } else if (window.knowledgeBaseManager?.getCurrentKnowledgeBase) {
-            const kb = window.knowledgeBaseManager.getCurrentKnowledgeBase();
-            if (kb && kb.id === currentProject.knowledge_base_id) {
-              currentProject.knowledge_base = kb;
-            }
-          }
-        } catch (kbError) {
-          if (kbError.status === 404) {
-            console.warn(`[ProjectManager] Knowledge base not found: ${currentProject.knowledge_base_id}`);
-            // Clear the invalid KB ID from the current project
-            currentProject.knowledge_base_id = null;
-            currentProject.knowledge_base = null;
-          } else {
-            console.error(`[ProjectManager] Failed to load KB details (${currentProject.knowledge_base_id}):`, kbError);
-          }
-        }
-      }
 
       // Dispatch "projectLoaded" with a clone
       emitEvent("projectLoaded", JSON.parse(JSON.stringify(currentProject)));
@@ -396,6 +194,7 @@
         if (result.status === 'rejected') {
           const loadType = ['stats', 'files', 'conversations', 'artifacts'][index];
           console.warn(`[projectManager] Failed to load project ${loadType}:`, result.reason);
+          window.ChatUtils.handleError(`Loading project ${loadType}`, result.reason);
           emitEvent(`project${loadType.charAt(0).toUpperCase() + loadType.slice(1)}Error`, {
             projectId,
             error: result.reason
@@ -406,6 +205,7 @@
       return JSON.parse(JSON.stringify(currentProject));
     } catch (err) {
       console.error("[projectManager] Error loading project details:", err);
+      window.ChatUtils.handleError('Loading project details', err);
       emitEvent("projectDetailsError", { projectId, error: err });
       currentProject = null;
       return null;
@@ -420,14 +220,12 @@
    */
   async function loadProjectStats(projectId) {
     try {
-      await requireAuth();
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
 
-      const token = await window.auth.getAuthToken();
-      const response = await window.apiRequest(`/api/projects/${projectId}/stats`, "GET", null, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await window.apiRequest(`/api/projects/${projectId}/stats`, "GET");
       const stats = response.data || {};
 
       // Ensure basic fields
@@ -439,6 +237,7 @@
       return stats;
     } catch (err) {
       console.error("[projectManager] Error loading project stats:", err);
+      window.ChatUtils.handleError('Loading project stats', err);
       emitEvent("projectStatsLoaded", {
         projectId,
         token_usage: 0,
@@ -466,18 +265,17 @@
    */
   async function loadProjectFiles(projectId) {
     try {
-      await requireAuth();
-      const token = await window.auth.getAuthToken();
-      const response = await window.apiRequest(`/api/projects/${projectId}/files`, "GET", null, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
+      const response = await window.apiRequest(`/api/projects/${projectId}/files`, "GET");
       const files = response.data?.files || response.data || [];
       emitEvent("projectFilesLoaded", { projectId, files });
       return files;
     } catch (err) {
       console.error("[projectManager] Error loading project files:", err);
+      window.ChatUtils.handleError('Loading project files', err);
       emitEvent("projectFilesLoaded", { projectId, files: [] });
       emitEvent("projectFilesError", { projectId, error: err });
       return [];
@@ -492,15 +290,12 @@
    */
   async function loadProjectConversations(projectId) {
     try {
-      await requireAuth();
-      // Use direct endpoint construction instead of API_ENDPOINTS lookup
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
       const endpoint = `/api/projects/${projectId}/conversations`;
-      const token = await window.auth.getAuthToken();
-      const response = await window.apiRequest(endpoint, "GET", null, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await window.apiRequest(endpoint, "GET");
       let conversations = [];
 
       if (response.data?.conversations) {
@@ -517,6 +312,7 @@
       return conversations;
     } catch (err) {
       console.error("[projectManager] Error loading conversations:", err);
+      window.ChatUtils.handleError('Loading project conversations', err);
       emitEvent("projectConversationsLoaded", { projectId, conversations: [] });
       emitEvent("projectConversationsError", { projectId, error: err });
       throw err;
@@ -531,18 +327,17 @@
    */
   async function loadProjectArtifacts(projectId) {
     try {
-      await requireAuth();
-      const token = await window.auth.getAuthToken();
-      const response = await window.apiRequest(`/api/projects/${projectId}/artifacts`, "GET", null, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
+      const response = await window.apiRequest(`/api/projects/${projectId}/artifacts`, "GET");
       const artifacts = response.data?.artifacts || response.data || [];
       emitEvent("projectArtifactsLoaded", { projectId, artifacts });
       return artifacts;
     } catch (err) {
       console.error("[projectManager] Error loading artifacts:", err);
+      window.ChatUtils.handleError('Loading project artifacts', err);
       emitEvent("projectArtifactsLoaded", { projectId, artifacts: [] });
       emitEvent("projectArtifactsError", { projectId, error: err });
 
@@ -565,7 +360,10 @@
    * @returns {Promise<Object>}
    */
   async function createOrUpdateProject(projectId, formData) {
-    await requireAuth();
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     const method = projectId ? "PATCH" : "POST";
     const endpoint = projectId
       ? `/api/projects/${projectId}`
@@ -579,7 +377,10 @@
    * @returns {Promise<Object>}
    */
   async function deleteProject(projectId) {
-    await requireAuth();
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     return window.apiRequest(`/api/projects/${projectId}`, "DELETE");
   }
 
@@ -588,7 +389,11 @@
    * @param {string} projectId
    * @returns {Promise<Object>}
    */
-  function togglePinProject(projectId) {
+  async function togglePinProject(projectId) {
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     return window.apiRequest(`/api/projects/${projectId}/pin`, "POST");
   }
 
@@ -597,7 +402,11 @@
    * @param {string} projectId
    * @returns {Promise<Object>}
    */
-  function toggleArchiveProject(projectId) {
+  async function toggleArchiveProject(projectId) {
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     return window.apiRequest(`/api/projects/${projectId}/archive`, "PATCH");
   }
 
@@ -607,7 +416,11 @@
    * @param {string} instructions
    * @returns {Promise<Object>}
    */
-  function saveCustomInstructions(projectId, instructions) {
+  async function saveCustomInstructions(projectId, instructions) {
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     return window.apiRequest(`/api/projects/${projectId}`, "PATCH", {
       custom_instructions: instructions
     });
@@ -697,7 +510,7 @@
       return new Error("File too large (exceeds maximum allowed size)");
     } else if (status === 400) {
       if (detail.includes("token limit")) {
-        const project = window.projectManager?.getCurrentProject();
+        const project = getCurrentProject();
         const maxTokens = project?.max_tokens || 200000;
         return new Error(
           `File exceeds project token limit (${maxTokens.toLocaleString()} tokens). ` +
@@ -739,6 +552,7 @@
         const error = new Error("No active Knowledge Base found. Please enable or create one in project settings before uploading files.");
         error.code = "KB_REQUIRED";
         emitEvent("knowledgeBaseError", { error });
+        window.ChatUtils.handleError('Creating default knowledge base', kbError);
         throw error;
       }
     }
@@ -785,6 +599,7 @@
       return response;
     } catch (err) {
       console.error("[projectManager] File upload error:", err);
+      window.ChatUtils.handleError('Uploading file', err);
       throw parseFileUploadError(err);
     }
   }
@@ -803,6 +618,7 @@
       } catch (err) {
         // If it's a KB error or final attempt, rethrow
         if (++attempt >= retries || err.code === "KB_REQUIRED" || err.code === "KB_INACTIVE") {
+          window.ChatUtils.handleError(`Uploading file (attempt ${attempt}/${retries})`, err);
           throw err;
         }
         // Exponential backoff
@@ -818,7 +634,10 @@
    * @returns {Promise<Object>}
    */
   async function deleteFile(projectId, fileId) {
-    await requireAuth();
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     return window.apiRequest(`/api/projects/${projectId}/files/${fileId}`, "DELETE");
   }
 
@@ -829,7 +648,10 @@
    * @returns {Promise<Array>} - resolves with updated stats & conversation list
    */
   async function deleteProjectConversation(projectId, conversationId) {
-    await requireAuth();
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     await window.apiRequest(`/api/projects/${projectId}/conversations/${conversationId}`, "DELETE");
     return Promise.all([
       loadProjectStats(projectId),
@@ -844,7 +666,10 @@
    * @returns {Promise<Object>}
    */
   async function deleteArtifact(projectId, artifactId) {
-    await requireAuth();
+    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    if (!isAuthenticated) {
+      throw new Error('Not authenticated - please login first');
+    }
     return window.apiRequest(`/api/projects/${projectId}/artifacts/${artifactId}`, "DELETE");
   }
 
@@ -857,7 +682,10 @@
     console.debug('[ProjectManager] Creating conversation for project:', projectId);
 
     try {
-      await requireAuth();
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
 
       // Validate project existence
       if (!currentProject || currentProject.id !== projectId) {
@@ -902,7 +730,7 @@
         model: window.MODEL_CONFIG?.modelName,
         knowledgeBase: !!currentProject?.knowledge_base_id
       });
-
+      window.ChatUtils.handleError('Creating conversation', error);
       throw new Error(`Failed to create conversation: ${formatProjectError(error)}`);
     }
   }
@@ -931,6 +759,7 @@
         error: linkError.message,
         response: linkError?.response?.data
       });
+      window.ChatUtils.handleError('Linking conversation to knowledge base', linkError);
       throw new Error("Created conversation but failed to connect knowledge base");
     }
   }
@@ -959,6 +788,10 @@
    */
   async function loadKnowledgeBaseDetails(knowledgeBaseId) {
     try {
+      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - please login first');
+      }
       // Use the correct endpoint that exists in the API
       const kbData = await window.apiRequest(`/api/knowledge-bases/${knowledgeBaseId}`, "GET");
       // Attach to currentProject if relevant
@@ -969,6 +802,7 @@
       return currentProject?.knowledge_base;
     } catch (err) {
       console.error("[projectManager] Failed to load knowledge base details:", err);
+      window.ChatUtils.handleError('Loading knowledge base details', err);
       emitEvent("knowledgeBaseError", { error: err });
       throw err;
     }
@@ -1025,37 +859,13 @@
 
   /**
    * Initialization function for projectManager
-   *  - Checks auth (non-blocking)
-   *  - Listens for auth state changes to clear current project if user logs out
    * @returns {Promise<void>}
    */
   async function initialize() {
     console.log("[projectManager] Initializing...");
 
-    // Wait for auth module to be ready before checking
-    if (window.auth && !window.auth.isReady) {
-      console.log("[projectManager] Waiting for auth module to be ready...");
-      await new Promise(resolve => {
-        const checkAuth = () => {
-          if (window.auth.isReady) {
-            resolve();
-          } else {
-            setTimeout(checkAuth, 100);
-          }
-        };
-        checkAuth();
-        // Fallback timeout in case isReady never becomes true
-        setTimeout(resolve, 2000);
-      });
-    }
-
-    // Attempt a quick auth check with longer timeout (non-blocking errors are caught)
-    try {
-      const isAuthenticated = await checkAuthenticationWithTimeout(2000);
-      console.log("[projectManager] Authenticated:", isAuthenticated);
-    } catch (err) {
-      console.warn("[projectManager] Initialization auth check failed:", err.message);
-    }
+    // Wait for auth module to be ready using centralized utility
+    await window.ChatUtils.ensureAuthReady();
 
     // Listen for auth changes
     document.addEventListener('authStateChanged', (event) => {
@@ -1067,73 +877,6 @@
     });
 
     console.log("[projectManager] Initialization complete.");
-  }
-
-  /* ===============================
-     CHAT MANAGER FUNCTIONALITY
-     =============================== */
-  // Instead of overwriting the ChatManager object defined in chat-core.js,
-  // extend it if it exists, or create a minimal version with only what's needed
-  if (!window.ChatManager) {
-    console.log('[ProjectManager] Creating new ChatManager object');
-    window.ChatManager = {};
-  } else {
-    console.log('[ProjectManager] Found existing ChatManager, preserving functionality');
-  }
-
-  // Add the project-specific chat initialization function to ChatManager
-  // (but don't overwrite if it already exists)
-  if (!window.ChatManager.initializeProjectChat) {
-    window.ChatManager.initializeProjectChat = function (containerSelector, options = {}) {
-      console.log('[ChatManager] Initializing project chat with selector:', containerSelector);
-
-      if (!window.ChatInterface) {
-        console.error('[ChatManager] ChatInterface not available');
-        throw new Error('ChatInterface not available - chat functionality will be limited');
-      }
-
-      // Configure selectors
-      const chatConfig = {
-        containerSelector: containerSelector,
-        messageContainerSelector: options.messageContainer || '#projectChatMessages',
-        inputSelector: options.inputField || '#chatUIInput',
-        sendButtonSelector: options.sendButton || '#projectChatSendBtn',
-        typingIndicator: options.typingIndicator !== false,
-        readReceipts: options.readReceipts !== false,
-        messageStatus: options.messageStatus !== false
-      };
-
-      // Create or reuse chat interface
-      if (!window.projectChatInterface) {
-        console.log('[ChatManager] Creating new ChatInterface instance');
-        window.projectChatInterface = new window.ChatInterface(chatConfig);
-      } else if (typeof window.projectChatInterface.configureSelectors === 'function') {
-        console.log('[ChatManager] Reconfiguring existing ChatInterface instance');
-        window.projectChatInterface.configureSelectors(chatConfig);
-      } else {
-        console.warn('[ChatManager] Existing chatInterface does not support reconfiguration');
-      }
-
-      // Set up event handlers if provided
-      if (options.onMessageSent && typeof options.onMessageSent === 'function') {
-        window.projectChatInterface.on('messageSent', options.onMessageSent);
-      }
-      if (options.onError && typeof options.onError === 'function') {
-        window.projectChatInterface.on('error', options.onError);
-      }
-
-      // Initialize the chat interface (if not already)
-      if (!window.projectChatInterface.initialized) {
-        console.log('[ChatManager] Initializing ChatInterface');
-        window.projectChatInterface.initialize().catch(err => {
-          console.error('[ChatManager] Failed to initialize chat interface:', err);
-        });
-      }
-
-      return window.projectChatInterface;
-    };
-  } else {
-    console.log('[ProjectManager] ChatManager.initializeProjectChat already exists, not overwriting');
   }
 
   /* ===============================
@@ -1178,5 +921,5 @@
     loadKnowledgeBaseDetails
   };
 
-  console.log('[ProjectManager] projectManager.js (refactored) loaded with ChatManager');
+  console.log('[ProjectManager] projectManager.js loaded and aligned with chat system');
 })();
