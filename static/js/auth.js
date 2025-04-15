@@ -763,64 +763,175 @@ function switchForm(isLogin) {
   const registerForm = document.getElementById("registerForm");
   if (!loginTab || !registerTab || !loginForm || !registerForm) return;
 
+  // Update login tab styles
   loginTab.classList.toggle("border-blue-500", isLogin);
   loginTab.classList.toggle("text-blue-600", isLogin);
+  loginTab.classList.toggle("text-blue-400", isLogin && document.documentElement.classList.contains('dark'));
   loginTab.classList.toggle("text-gray-500", !isLogin);
+  loginTab.classList.toggle("text-gray-400", !isLogin && document.documentElement.classList.contains('dark'));
 
+  // Update register tab styles
   registerTab.classList.toggle("border-blue-500", !isLogin);
   registerTab.classList.toggle("text-blue-600", !isLogin);
+  registerTab.classList.toggle("text-blue-400", !isLogin && document.documentElement.classList.contains('dark'));
   registerTab.classList.toggle("text-gray-500", isLogin);
+  registerTab.classList.toggle("text-gray-400", isLogin && document.documentElement.classList.contains('dark'));
 
+  // Set border-b-2 class on active tab
+  loginTab.classList.toggle("border-b-2", isLogin);
+  registerTab.classList.toggle("border-b-2", !isLogin);
+
+  // Show/hide the appropriate form
   loginForm.classList.toggle("hidden", !isLogin);
   registerForm.classList.toggle("hidden", isLogin);
+
+  // On mobile, adjust the modal position after switching tab
+  setTimeout(() => {
+    if (window.innerWidth < 768) {
+      const authDropdown = document.getElementById("authDropdown");
+      if (authDropdown && !authDropdown.classList.contains('hidden')) {
+        const viewportHeight = window.innerHeight;
+        const dropdownRect = authDropdown.getBoundingClientRect();
+
+        // If dropdown would extend beyond viewport, adjust top position
+        if (dropdownRect.bottom > viewportHeight) {
+          const newTopPosition = Math.max(10, viewportHeight - dropdownRect.height - 10);
+          authDropdown.style.top = `${newTopPosition}px`;
+        }
+      }
+    }
+  }, 10);
 }
 
 function setupUIListeners() {
   const authBtn = document.getElementById("authButton");
   const authDropdown = document.getElementById("authDropdown");
+
   if (authBtn && authDropdown) {
+    // Enhanced click event for auth button with positioning
     authBtn.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
-      authDropdown.classList.toggle("hidden");
+
+      // Toggle dropdown visibility
+      const isHidden = authDropdown.classList.contains('hidden');
+      authDropdown.classList.toggle("hidden", !isHidden);
+
+      // Position dropdown correctly on mobile
+      if (!isHidden) return; // Only position when showing
+
+      if (window.innerWidth < 768) {
+        // Center horizontally on mobile devices
+        authDropdown.style.left = '50%';
+        authDropdown.style.right = 'auto';
+        authDropdown.style.transform = 'translateX(-50%)';
+
+        // Position vertically under the header
+        authDropdown.style.top = '60px';
+
+        // If we have an external handleAuthModalPositioning function, use it
+        if (typeof window.handleAuthModalPositioning === 'function') {
+          window.handleAuthModalPositioning();
+        }
+      }
     });
+
+    // Close dropdown when clicking outside
     document.addEventListener("click", e => {
-      if (!e.target.closest("#authContainer") && !e.target.closest("#authDropdown")) {
+      if (!authDropdown.classList.contains('hidden') &&
+          !e.target.closest("#authContainer") &&
+          !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
       }
     });
+
+    // Adjust touch event to 'touchend' so dropdown isn't immediately closed on mobile
+    document.addEventListener("touchend", e => {
+      if (!authDropdown.classList.contains('hidden') &&
+          !e.target.closest("#authContainer") &&
+          !e.target.closest("#authDropdown")) {
+        authDropdown.classList.add("hidden");
+      }
+    }, { passive: false });
   }
 
+  // Enhanced tab handling with better touch response
   const loginTabEl = document.getElementById("loginTab");
   const registerTabEl = document.getElementById("registerTab");
+
   if (loginTabEl && registerTabEl) {
+    // Login tab event handler
     loginTabEl.addEventListener("click", e => {
       e.preventDefault();
       switchForm(true);
     });
+
+    // Touch event for login tab (for better mobile response)
+    loginTabEl.addEventListener("touchend", e => {
+      e.preventDefault();
+      switchForm(true);
+    }, { passive: false });
+
+    // Register tab event handler
     registerTabEl.addEventListener("click", e => {
       e.preventDefault();
       switchForm(false);
     });
+
+    // Touch event for register tab (for better mobile response)
+    registerTabEl.addEventListener("touchend", e => {
+      e.preventDefault();
+      switchForm(false);
+    }, { passive: false });
   }
 
+  // Login form handling
   const loginForm = document.getElementById("loginForm");
   const registerForm = document.getElementById("registerForm");
+
   if (loginForm) {
     loginForm.addEventListener("submit", async e => {
       e.preventDefault();
+
+      // Show visual feedback that login is processing
+      const submitBtn = loginForm.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Logging in...";
+      }
+
       const formData = new FormData(loginForm);
       const username = formData.get("username");
       const password = formData.get("password");
+
       if (!username || !password) {
         notify("Username and password are required", "error");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Log In";
+        }
         return;
       }
+
       try {
         await loginUser(username, password);
         document.getElementById("authDropdown")?.classList.add('hidden');
       } catch (err) {
+        // Show error and reset button
         notify(err.message || "Login failed", "error");
+
+        // Display error in the login form
+        const errorElement = document.getElementById('login-error');
+        if (errorElement) {
+          errorElement.textContent = err.message || "Login failed";
+          errorElement.classList.remove('hidden');
+        }
+      } finally {
+        // Re-enable login button
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Log In";
+        }
       }
     });
   }
@@ -833,10 +944,30 @@ if (document.getElementById("registerForm")) {
   const registerForm = document.getElementById("registerForm");
   registerForm.addEventListener("submit", async e => {
     e.preventDefault();
+
+    // Show visual feedback that registration is processing
+    const submitBtn = registerForm.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Registering...";
+    }
+
     const data = new FormData(registerForm);
     try {
       await handleRegister(data);
-    } catch { }
+      // Hide modal after successful registration
+      document.getElementById("authDropdown")?.classList.add('hidden');
+    } catch (err) {
+      // Show inline error message if possible
+      const errorMsg = err?.message || "Registration failed";
+      notify(errorMsg, "error");
+    } finally {
+      // Re-enable register button
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Register";
+      }
+    }
   });
 }
 
@@ -1008,3 +1139,131 @@ export default {
     }
   }
 };
+/**
+ * Additional handlers for responsive auth dropdowns on mobile devices
+ * (Merged from mobile-auth-handler.js)
+ */
+let isAuthDropdownVisible = false;
+let lastTouchTime = 0;
+
+/**
+ * Primary function for positioning the auth modal on mobile devices
+ * This is called from app.js and can be called directly when needed
+ */
+function handleAuthModalPositioning() {
+  const authDropdown = document.getElementById("authDropdown");
+  if (!authDropdown || authDropdown.classList.contains('hidden')) {
+    return;
+  }
+
+  if (window.innerWidth < 768) {
+    authDropdown.style.left = '50%';
+    authDropdown.style.right = 'auto';
+    authDropdown.style.transform = 'translateX(-50%)';
+    const viewportHeight = window.innerHeight;
+    const dropdownRect = authDropdown.getBoundingClientRect();
+    if (dropdownRect.bottom > viewportHeight) {
+      const newTopPosition = Math.max(10, viewportHeight - dropdownRect.height - 10);
+      authDropdown.style.top = `${newTopPosition}px`;
+    } else {
+      authDropdown.style.top = '60px';
+    }
+  } else {
+    authDropdown.style.left = '';
+    authDropdown.style.right = '';
+    authDropdown.style.transform = '';
+    authDropdown.style.top = '';
+  }
+}
+
+/**
+ * Enhance form inputs for better mobile experience
+ */
+function enhanceMobileInputs() {
+  const inputs = document.querySelectorAll('#loginForm input, #registerForm input');
+  inputs.forEach(input => {
+    // Listen for autofill (which browsers handle differently)
+    input.addEventListener('animationstart', (e) => {
+      if (e.animationName.includes('autofill')) {
+        input.classList.add('autofilled');
+      }
+    });
+    // Add larger touch targets on focus for mobile
+    input.addEventListener('focus', () => {
+      if (window.innerWidth < 768) {
+        input.classList.add('touch-input-focus');
+      }
+    });
+    input.addEventListener('blur', () => {
+      input.classList.remove('touch-input-focus');
+    });
+  });
+}
+
+/**
+ * Add event listeners for better mobile auth experience
+ */
+function setupMobileAuthListeners() {
+  const authBtn = document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  if (authBtn && authDropdown) {
+    // Additional click handler to store state
+    authBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        isAuthDropdownVisible = !authDropdown.classList.contains('hidden');
+      }, 10);
+    });
+
+    // Orientation change handling
+    window.addEventListener('orientationchange', () => {
+      if (isAuthDropdownVisible) {
+        setTimeout(handleAuthModalPositioning, 100);
+      }
+    });
+
+    // Window resize to reposition dropdown
+    window.addEventListener('resize', () => {
+      if (isAuthDropdownVisible) {
+        handleAuthModalPositioning();
+      }
+    });
+  }
+
+  // Improve login/register tab touch responsiveness
+  const loginTab = document.getElementById('loginTab');
+  const registerTab = document.getElementById('registerTab');
+  if (loginTab && registerTab) {
+    const handleTouchWithDebounce = (handler) => {
+      return (e) => {
+        const now = Date.now();
+        if (now - lastTouchTime > 300) {
+          lastTouchTime = now;
+          handler(e);
+        }
+        e.preventDefault();
+      };
+    };
+    loginTab.addEventListener('touchend', handleTouchWithDebounce(() => {
+      if (typeof window.switchForm === 'function') {
+        window.switchForm(true);
+      }
+    }), { passive: false });
+    registerTab.addEventListener('touchend', handleTouchWithDebounce(() => {
+      if (typeof window.switchForm === 'function') {
+        window.switchForm(false);
+      }
+    }), { passive: false });
+  }
+}
+
+// Make functions available globally
+window.handleAuthModalPositioning = handleAuthModalPositioning;
+window.setupMobileAuthListeners = setupMobileAuthListeners;
+
+/**
+ * Initialize these mobile enhancements after DOM is ready
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  enhanceMobileInputs();
+  setupMobileAuthListeners();
+});

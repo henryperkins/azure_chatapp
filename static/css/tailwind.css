@@ -84,4 +84,24 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+/* Mobile-specific fixes for authentication dropdown */
+@media (max-width: 767px) {
+  #authDropdown {
+    width: 90% !important;
+    max-width: 320px !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    position: fixed !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  }
+
+  /* Make form inputs larger and easier to tap on mobile */
+  #loginForm input,
+  #registerForm input {
+    padding: 0.5rem !important;
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+  }
+}
 }
