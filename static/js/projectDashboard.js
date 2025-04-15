@@ -762,6 +762,7 @@ class ProjectDashboard {
   async _waitForDashboardUtils() {
     const waitId = `waitUtils-${Date.now().toString(36)}`;
     console.log(`[ProjectDashboard][${waitId}] Checking dashboardUtilsReady...`);
+
     // First check if the flag is already set
     if (window.dashboardUtilsReady === true) {
       console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady flag already true.`);
@@ -772,48 +773,42 @@ class ProjectDashboard {
     console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady flag not set, starting wait...`);
 
     try {
-      // Approach 1: Check the flag with polling (faster)
-      for (let i = 0; i < 20; i++) { // try for about 1 second (20 * 50ms = 1000ms)
-        if (window.dashboardUtilsReady === true) {
-          console.log("[ProjectDashboard] Found dashboardUtilsReady flag");
-          return; // Exit immediately if the flag is found
-        }
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-
-      // Approach 2: If polling didn't work, wait for the event with a timeout
+      // Combined approach with shorter timeout (matches projectDashboardUtils.js changes)
       await new Promise((resolve, reject) => {
-        // Set a slightly longer timeout since we already waited 1 second
         const timeout = setTimeout(
-          () => reject(new Error("Timeout waiting for dashboardUtilsReady")),
-          3000
+          () => reject(new Error("Timeout (5s) waiting for dashboardUtilsReady")),
+          5000
         );
 
-        // Listen for the event
+        // Check flag periodically while waiting for event
+        const checkInterval = setInterval(() => {
+          if (window.dashboardUtilsReady === true) {
+            clearTimeout(timeout);
+            clearInterval(checkInterval);
+            document.removeEventListener("dashboardUtilsReady", handleUtilsReady);
+            resolve();
+          }
+        }, 100);
+
         const handleUtilsReady = () => {
           clearTimeout(timeout);
+          clearInterval(checkInterval);
           resolve();
         };
 
         document.addEventListener("dashboardUtilsReady", handleUtilsReady, { once: true });
-
-        // Also check the flag one more time
-        if (window.dashboardUtilsReady === true) {
-          clearTimeout(timeout);
-          document.removeEventListener("dashboardUtilsReady", handleUtilsReady);
-          resolve();
-        }
       });
+
       console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady event received or flag found.`);
     } catch (err) {
       console.error(`[ProjectDashboard][${waitId}] Error waiting for dashboard utils:`, err);
       // If utils are loaded but the event wasn't fired, we can still proceed
       if (window.dashboardUtilsReady === true ||
-        (window.ProjectDashboard && window.ProjectDashboard._initialized)) { // Check ProjectDashboard namespace too
-        console.warn(`[ProjectDashboard][${waitId}] Proceeding despite event timeout - utils appear to be ready`);
+        (window.ProjectDashboard && window.ProjectDashboard._initialized)) {
+        console.warn(`[ProjectDashboard][${waitId}] Proceeding despite timeout - utils appear to be ready`);
         return;
       }
-      throw err; // Re-throw if we cannot confirm readiness
+      throw err;
     }
   }
 
