@@ -195,3 +195,14 @@
 .collapsible-panel {
   transition: max-height 0.3s ease;
 }
+
+/* Auth dropdown positioning */
+.auth-dropdown-adjusted {
+  position: absolute;
+  top: var(--top-position);
+}
+
+/* Apply top position from data attribute */
+[data-top-position] {
+  --top-position: attr(data-top-position px);
+}
