@@ -400,7 +400,7 @@
       const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
       const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
 
-      card.className = `card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-base-300`;
+      card.className = `card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-base-300 rounded-box`;
       card.dataset.projectId = project.id;
       card.setAttribute('role', 'button');
       card.setAttribute('tabindex', '0'); // Make card focusable
@@ -549,20 +549,23 @@ ${content}`)) {
 
     _showLoadingState() {
       if (!this.element) return;
-
       this.element.classList.add('opacity-50', 'pointer-events-none');
+      this.element.innerHTML = '';
 
-      // Use DaisyUI loading component
-      if (!this.element.querySelector('.loading-spinner-overlay')) {
-        const spinnerOverlay = document.createElement('div');
-        spinnerOverlay.className = 'loading-spinner-overlay absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-50 z-10';
-        spinnerOverlay.innerHTML = `
-          <span class="loading loading-spinner loading-lg text-primary"></span>
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < 6; i++) { // Show 6 skeleton cards
+        const skeleton = document.createElement('div');
+        skeleton.className = 'card bg-base-200 shadow-md animate-pulse p-4 rounded-box';
+        skeleton.innerHTML = `
+          <div class="card-body">
+            <div class="h-6 bg-base-300 rounded w-3/4 mb-2"></div>
+            <div class="h-4 bg-base-300 rounded w-full mb-1"></div>
+            <div class="h-4 bg-base-300 rounded w-5/6"></div>
+          </div>
         `;
-        // Prepend to ensure it's behind potential modals but above content
-        this.element.style.position = 'relative'; // Ensure parent is positioned
-        this.element.prepend(spinnerOverlay);
+        fragment.appendChild(skeleton);
       }
+      this.element.appendChild(fragment);
     }
 
     _hideLoadingState() {
