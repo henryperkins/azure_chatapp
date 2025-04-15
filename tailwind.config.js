@@ -13,6 +13,6 @@ module.exports = {
     require('daisyui')
   ],
   daisyui: {
-    themes: ["light", "dark"], // You can adjust or add custom themes here
+    themes: ["light", "dark"]
   }
 };

@@ -2,6 +2,7 @@
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
+@plugin "daisyui";
 
 /* Custom component styles that align with the HTML structure */
 @layer components {
