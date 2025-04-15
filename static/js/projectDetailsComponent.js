@@ -131,11 +131,11 @@ export class ProjectDetailsComponent {
       artifactsList: getElement("#projectArtifactsList"),
 
       // Chat
-      chatContainer: getElement('#projectChatContainer'),
-      chatMessages: getElement('#projectChatMessages'),
-      chatInput: getElement('#projectChatInput'),
-      chatSendBtn: getElement('#projectChatSendBtn'),
-      chatTypingIndicator: getElement('#projectChatTyping')
+      chatContainer: getElement('#globalChatContainer'),
+      chatMessages: getElement('#globalChatMessages'),
+      chatInput: getElement('#globalChatInput'),
+      chatSendBtn: getElement('#globalChatSendBtn'),
+      chatTypingIndicator: getElement('#globalChatTyping')
     };
   }
 
@@ -775,11 +775,11 @@ export class ProjectDetailsComponent {
     localStorage.setItem("selectedProjectId", this.state.currentProject.id);
 
     const chatOptions = {
-      containerSelector: '#projectChatContainer',
-      messageContainerSelector: '#projectChatMessages',
-      inputSelector: '#projectChatInput',
-      sendButtonSelector: '#projectChatSendBtn',
-      typingIndicatorSelector: '#projectChatTyping',
+      containerSelector: '#globalChatContainer',
+      messageContainerSelector: '#globalChatMessages',
+      inputSelector: '#globalChatInput',
+      sendButtonSelector: '#globalChatSendBtn',
+      typingIndicatorSelector: '#globalChatTyping',
       onMessageSent: this.handleMessageSent.bind(this),
       onError: this.handleChatError.bind(this),
       getProjectId: () => this.state.currentProject?.id

@@ -443,18 +443,21 @@
     <!-- Modals will be injected here -->
   </div>
 
-  <!-- Placeholder for Chat UI (to be loaded from chat_ui.html) -->
-  <div id="chatUIContainer" class="hidden">
-    <!-- Chat UI will be injected here -->
+  <!-- Placeholder for Chat UI (loaded only when needed) -->
+  <div id="chatUIContainer" class="hidden" data-requires-chat="true">
+    <!-- Chat UI will be injected here when needed -->
   </div>
 
-  <!-- placeholders for missing elements to fix warnings -->
-  <div id="sidebarActions" class="hidden"></div>
-  <div id="chatUI" class="hidden"></div>
-  <div id="noChatSelectedMessage" class="hidden">No chat selected</div>
-  <div id="conversationArea" class="hidden"></div>
-  <div id="chatTitle" class="hidden">Chat Title</div>
-  <button id="newConversationBtn" class="hidden">New Conversation</button>
+  <!-- Conditional UI elements -->
+  <div id="sidebarActions" class="hidden" data-requires-chat="true"></div>
+  <div id="chatUI" class="hidden" data-requires-chat="true"></div>
+  <div id="noChatSelectedMessage" class="hidden" data-requires-chat="true">No chat selected</div>
+  <div id="conversationArea" class="hidden" data-requires-chat="true"></div>
+  <div id="chatTitle" class="hidden" data-requires-chat="true">Chat Title</div>
+  <button id="newConversationBtn" class="hidden" data-requires-chat="true">New Conversation</button>
+
+  <!-- Knowledge Base components (loaded only when needed) -->
+  <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
   <!-- Core JavaScript Dependencies -->
   <script type="module" src="/static/js/auth.js"></script>
 
