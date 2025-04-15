@@ -10,8 +10,12 @@
  */
 function debounce(func, wait) {
   if (!window.eventHandlers?.debounce) {
-    console.warn("[app.js] eventHandlers.debounce not found. Debounce calls will just run func immediately.");
-    return func;
+    console.warn("[app.js] eventHandlers.debounce not found. Using custom fallback debounce implementation.");
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
   }
   return window.eventHandlers.debounce(func, wait);
 }
