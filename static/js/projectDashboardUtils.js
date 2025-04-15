@@ -680,33 +680,53 @@
   // Provide a proxy for initProjectDashboard in case it's called before projectDashboard.js loads
   window.initProjectDashboard = window.initProjectDashboard || function () {
     console.log('[ProjectDashboard] initProjectDashboard called from projectDashboardUtils.js');
+
+    // If dashboard is already initialized, return immediately
     if (window.projectDashboard && typeof window.projectDashboard.init === 'function') {
       return window.projectDashboard.init();
-    } else {
-      return new Promise((resolve, reject) => {
-        document.addEventListener('projectDashboardInitialized', () => {
-          console.log('[ProjectDashboard] Dashboard initialization detected via event');
-          resolve(window.projectDashboard);
-        }, { once: true });
-
-        // Fallback timeout
-        setTimeout(() => {
-          if (!window.projectDashboard) {
-            console.warn('[ProjectDashboard] Dashboard initialization not completed within expected time');
-            // Instead of rejecting with an error, attempt to proceed with initialization
-            if (window.projectDashboard === undefined) {
-              console.log('[ProjectDashboard] Creating fallback dashboard instance');
-              window.projectDashboard = {
-                init: function () { return Promise.resolve(this); }
-              };
-              // Dispatch custom event to notify other components
-              document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
-            }
-            resolve(window.projectDashboard);
-          }
-        }, 20000); // Extended timeout to 20 seconds
-      });
     }
+
+    // Create a minimal fallback dashboard if none exists
+    if (!window.projectDashboard) {
+      console.log('[ProjectDashboard] Creating fallback dashboard instance');
+      window.projectDashboard = {
+        init: function() {
+          return Promise.resolve(this);
+        },
+        showNotification: function(message, type) {
+          console.log(`[DashboardNotification][${type}] ${message}`);
+        }
+      };
+    }
+
+    // If projectDashboard.js hasn't loaded yet, proceed with fallback
+    if (typeof ProjectDashboard !== 'function') {
+      console.warn('[ProjectDashboard] Main dashboard class not loaded, using fallback');
+      document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+      return Promise.resolve(window.projectDashboard);
+    }
+
+    // Otherwise wait for initialization (with shorter timeout)
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn('[ProjectDashboard] Dashboard initialization timeout (5s) - proceeding with fallback');
+        document.removeEventListener('projectDashboardInitialized', onInitialized);
+        resolve(window.projectDashboard);
+      }, 5000); // Reduced timeout to 5 seconds
+
+      const onInitialized = () => {
+        clearTimeout(timeout);
+        console.log('[ProjectDashboard] Dashboard initialized via event');
+        resolve(window.projectDashboard);
+      };
+
+      document.addEventListener('projectDashboardInitialized', onInitialized, { once: true });
+
+      // Try to initialize if possible
+      if (typeof window.projectDashboard.init === 'function') {
+        window.projectDashboard.init().finally(() => resolve(window.projectDashboard));
+      }
+    });
   };
 
   // Quick check for readiness

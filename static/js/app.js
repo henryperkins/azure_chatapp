@@ -1358,15 +1358,39 @@ async function initializeAllModules() {
 
     if (API_CONFIG.isAuthenticated && view !== 'projects' && !chatId) {
       console.log("[initializeAllModules] Initializing main ChatManager as view is not projects and no chatId is present.");
-      if (window.ChatManager?.initializeChat) {
-        try {
-          await window.ChatManager.initializeChat(); // Initialize the main chat interface
-          console.log("[initializeAllModules] Main ChatManager initialized.");
-        } catch (chatInitError) {
-          console.error("[initializeAllModules] Failed to initialize main ChatManager:", chatInitError);
+
+      // Robust ChatManager check and initialization
+      if (typeof window.ChatManager !== 'undefined') {
+        if (typeof window.ChatManager.initializeChat === 'function') {
+          try {
+            await window.ChatManager.initializeChat();
+            console.log("[initializeAllModules] Main ChatManager initialized.");
+          } catch (chatInitError) {
+            console.error("[initializeAllModules] Failed to initialize main ChatManager:", chatInitError);
+            // Fallback to basic chat UI if available
+            if (typeof window.initBasicChat === 'function') {
+              console.warn("[initializeAllModules] Falling back to basic chat initialization");
+              await window.initBasicChat();
+            }
+          }
+        } else {
+          console.warn("[initializeAllModules] ChatManager exists but initializeChat is not a function");
+          // Check for alternative initialization method
+          if (typeof window.ChatManager.init === 'function') {
+            console.log("[initializeAllModules] Trying ChatManager.init instead");
+            await window.ChatManager.init();
+          }
         }
       } else {
-        console.warn("[initializeAllModules] ChatManager.initializeChat not found.");
+        console.warn("[initializeAllModules] ChatManager not found in window");
+        // Load chat manager if possible
+        if (typeof window.loadChatManager === 'function') {
+          console.log("[initializeAllModules] Attempting to load ChatManager");
+          await window.loadChatManager();
+          if (typeof window.ChatManager?.initializeChat === 'function') {
+            await window.ChatManager.initializeChat();
+          }
+        }
       }
     } else {
       console.log("[initializeAllModules] Skipping main ChatManager initialization (view:", view, "chatId:", chatId, "auth:", API_CONFIG.isAuthenticated, ")");
