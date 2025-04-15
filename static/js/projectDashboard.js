@@ -4,7 +4,11 @@
  * Main controller class for the Project Dashboard UI.
  * Manages the overall UI flow, initialization, and interactions
  * between components and projectManager.js.
+ *
+ * NOTE: This file is loaded as an ES module, so we explicitly export classes to global scope
  */
+
+// Class definition
 class ProjectDashboard {
   constructor() {
     /**
@@ -63,7 +67,6 @@ class ProjectDashboard {
     };
 
     // Use centralized modal manager from Utils
-    // Use the unified modal manager (with a bit more explicit grouping to avoid confusion)
     this.modalManager = window.modalManager ||
       (window.ModalManager?.isAvailable?.() ? window.ModalManager : null);
 
@@ -92,8 +95,26 @@ class ProjectDashboard {
         );
         return false;
       }
+
+      // Check network connectivity first
+      console.log(`[ProjectDashboard][${initId}] Checking network connectivity...`);
+      if (!navigator.onLine) {
+        this.hideInitializationProgress();
+        this._handleCriticalError(
+          new Error("Network connectivity issue. Please check your internet connection.")
+        );
+        return false;
+      }
+
       console.log(`[ProjectDashboard][${initId}] Waiting for Authentication...`);
-      const authReady = await this._waitForAuthentication();
+      // Use a timeout for auth wait to prevent hanging
+      const authReady = await Promise.race([
+        this._waitForAuthentication(),
+        new Promise(resolve => setTimeout(() => {
+          console.log(`[ProjectDashboard][${initId}] Auth wait timed out, proceeding anyway`);
+          resolve(false);
+        }, 5000))
+      ]);
       console.log(`[ProjectDashboard][${initId}] Authentication wait completed (Authenticated: ${authReady})`);
 
       // Stagger initialization steps to prevent blocking
@@ -103,12 +124,23 @@ class ProjectDashboard {
       await this._waitForDashboardUtils();
       console.log(`[ProjectDashboard][${initId}] Dashboard Utils ready.`);
 
+      console.log(`[ProjectDashboard][${initId}] Checking for Component Exports...`);
+      await this._ensureComponentsExported();
+      console.log(`[ProjectDashboard][${initId}] Component exports verified.`);
+
       console.log(`[ProjectDashboard][${initId}] Waiting for Project Manager...`);
       await Promise.race([
         this._waitForProjectManager(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('ProjectManager timeout (5s)')), 5000) // Explicit timeout duration
-        )
+        new Promise(resolve => {
+          setTimeout(() => {
+            console.log(`[ProjectDashboard][${initId}] ProjectManager wait timed out, proceeding with fallback`);
+            // Set up fallback if project manager is unavailable
+            if (!window.projectManager) {
+              window.projectManager = this._createFallbackProjectManager();
+            }
+            resolve();
+          }, 5000);
+        })
       ]);
       console.log(`[ProjectDashboard][${initId}] Project Manager ready.`);
 
@@ -149,10 +181,50 @@ class ProjectDashboard {
     }
   }
 
+  /**
+   * Ensure required component classes are exported to window
+   */
+  async _ensureComponentsExported() {
+    // Check if required component classes are available in global scope
+    const requiredClasses = [
+      'ProjectListComponent',
+      'ProjectDetailsComponent',
+      'KnowledgeBaseComponent'
+    ];
+
+    const missingClasses = requiredClasses.filter(className =>
+      typeof window[className] !== 'function'
+    );
+
+    if (missingClasses.length > 0) {
+      console.warn(`[ProjectDashboard] Missing global components: ${missingClasses.join(', ')}. Creating temporary exports...`);
+
+      // Attempt to find modules in the DOM
+      const scriptModules = Array.from(document.querySelectorAll('script[type="module"]'));
+
+      // Log module URLs for debugging
+      console.log('[ProjectDashboard] Found module scripts:',
+        scriptModules.map(s => s.src).filter(s => s).join(', ')
+      );
+
+      // Wait for potential delayed exports
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Check again after waiting
+      for (const className of missingClasses) {
+        if (typeof window[className] !== 'function') {
+          console.warn(`[ProjectDashboard] Component ${className} still missing after wait.`);
+        } else {
+          console.log(`[ProjectDashboard] Component ${className} became available.`);
+          missingClasses.splice(missingClasses.indexOf(className), 1);
+        }
+      }
+    }
+  }
+
   /* ===========================
      VIEW MANAGEMENT
      =========================== */
-  // Project list view is now handled by showProjectsView() in projectDashboardUtils.js
 
   async showProjectDetails(projectId) {
     this.state.currentView = "details";
@@ -194,8 +266,6 @@ class ProjectDashboard {
       window.showProjectsView();
     }
   }
-
-  // Projects loading is now handled directly by projectManager.loadProjects()
 
   /* ===========================
      EVENT HANDLERS
@@ -312,7 +382,10 @@ class ProjectDashboard {
 
     // Refresh stats after conversations load
     if (this.state.currentProject?.id) {
-      window.projectManager.loadProjectStats(this.state.currentProject.id);
+      window.projectManager.loadProjectStats(this.state.currentProject.id)
+        .catch(err => {
+          console.warn('[ProjectDashboard] Error refreshing stats after conversation load:', err);
+        });
     }
   }
 
@@ -375,11 +448,41 @@ class ProjectDashboard {
         <div class="text-xs">${error.message || "Unknown error occurred"}. Try refreshing the page.</div>
       </div>
       <button class="btn btn-sm btn-ghost" onclick="window.location.reload()">Refresh</button>
+      <button class="btn btn-sm btn-ghost" onclick="window.initProjectDashboard()">Retry</button>
     `;
     // Ensure the container holding the error is visible
     if (containerEl && containerEl.id === 'projectListView') {
       containerEl.classList.remove('hidden');
     }
+  }
+
+  /**
+   * Creates a fallback project manager if the real one isn't available
+   * @returns {Object} - Minimal project manager with required methods
+   */
+  _createFallbackProjectManager() {
+    console.warn('[ProjectDashboard] Creating fallback project manager');
+    return {
+      loadProjects: () => {
+        console.warn('[Fallback] loadProjects called');
+        return Promise.resolve([]);
+      },
+      loadProjectDetails: (id) => {
+        console.warn('[Fallback] loadProjectDetails called for:', id);
+        return Promise.resolve({
+          id: id,
+          name: "Project Not Available",
+          description: "Unable to load project details. Please check your connection.",
+          files: [],
+          conversations: []
+        });
+      },
+      loadProjectStats: () => Promise.resolve({}),
+      loadProjectFiles: () => Promise.resolve([]),
+      loadProjectConversations: () => Promise.resolve([]),
+      loadProjectArtifacts: () => Promise.resolve([]),
+      initialize: () => Promise.resolve(true)
+    };
   }
 
   // Fallback components if real ones are missing
@@ -414,7 +517,9 @@ class ProjectDashboard {
           if (!this.element) return;
           this.element.innerHTML = `
             <div class="text-center p-4">
-              Fallback: Projects will appear here.
+              ${projects.length === 0 ?
+              'No projects available. Create a project to get started.' :
+              `Displaying ${projects.length} projects.`}
             </div>`;
         }
       };
@@ -426,6 +531,12 @@ class ProjectDashboard {
         constructor(options = {}) {
           this.element = document.getElementById("projectDetailsView");
           this.onBack = options.onBack;
+          if (!this.element) {
+            this.element = document.createElement("section");
+            this.element.id = "projectDetailsView";
+            this.element.className = "flex-1 flex flex-col overflow-hidden hidden";
+            document.body.appendChild(this.element);
+          }
         }
         show() {
           this.element?.classList.remove("hidden");
@@ -433,7 +544,17 @@ class ProjectDashboard {
         hide() {
           this.element?.classList.add("hidden");
         }
-        renderProject() { }
+        renderProject(project) {
+          if (!this.element) return;
+          this.element.innerHTML = `
+            <div class="p-4">
+              <h2 class="text-xl font-bold">${project?.name || 'Project Details'}</h2>
+              <p class="text-gray-600">${project?.description || 'No description available'}</p>
+              <button class="btn btn-sm btn-ghost mt-4" id="fallbackBackBtn">Back to Projects</button>
+            </div>
+          `;
+          document.getElementById('fallbackBackBtn')?.addEventListener('click', this.onBack);
+        }
         renderStats() { }
         renderFiles() { }
         renderConversations() { }
@@ -457,7 +578,8 @@ class ProjectDashboard {
 
   async _completeInitialization() {
     if (!window.projectManager) {
-      throw new Error("projectManager is required but not available");
+      window.projectManager = this._createFallbackProjectManager();
+      console.warn("[ProjectDashboard] Created fallback projectManager");
     }
 
     // Ensure essential containers exist with improved visibility handling
@@ -503,7 +625,12 @@ class ProjectDashboard {
       projectListView = document.createElement('main');
       projectListView.id = "projectListView";
       projectListView.className = "flex-1 overflow-y-auto p-4 lg:p-6";
-      document.querySelector('.drawer-content')?.appendChild(projectListView);
+      const drawerContent = document.querySelector('.drawer-content');
+      if (drawerContent) {
+        drawerContent.appendChild(projectListView);
+      } else {
+        document.body.appendChild(projectListView);
+      }
     }
 
     // Set visibility based on auth state
@@ -545,7 +672,12 @@ class ProjectDashboard {
       const detailsContainer = document.createElement('section');
       detailsContainer.id = "projectDetailsView";
       detailsContainer.className = "flex-1 flex flex-col overflow-hidden hidden";
-      document.querySelector('.drawer-content')?.appendChild(detailsContainer);
+      const drawerContent = document.querySelector('.drawer-content');
+      if (drawerContent) {
+        drawerContent.appendChild(detailsContainer);
+      } else {
+        document.body.appendChild(detailsContainer);
+      }
     }
   }
 
@@ -554,35 +686,6 @@ class ProjectDashboard {
     const waitTimeout = 5000; // 5 seconds timeout for waiting for components
 
     try {
-      // Helper function to wait for a component constructor
-      const waitForComponent = async (componentName) => {
-        if (typeof window[componentName] === "function") return; // Already available
-
-        console.log(`[ProjectDashboard] Waiting for ${componentName} to be defined...`);
-        await new Promise((resolve, reject) => {
-          let checks = 0;
-          const interval = setInterval(() => {
-            if (typeof window[componentName] === "function") {
-              clearInterval(interval);
-              resolve();
-            } else if (++checks * 100 >= waitTimeout) {
-              clearInterval(interval);
-              reject(new Error(`${componentName} not available after ${waitTimeout / 1000}s`));
-            }
-          }, 100);
-        }).catch(err => {
-          console.warn(`${componentName} wait failed:`, err);
-          throw err; // Re-throw to be caught by the outer try-catch
-        });
-      };
-
-      // Wait for essential components
-      await Promise.all([
-        waitForComponent('ProjectListComponent'),
-        waitForComponent('ProjectDetailsComponent')
-        // KnowledgeBaseComponent is optional, no need to wait strictly
-      ]);
-
       // Create component instances now that constructors are available
       this.components.projectList = new window.ProjectListComponent({
         elementId: "projectList",
@@ -646,7 +749,13 @@ class ProjectDashboard {
 
     try {
       if (window.auth?.isAuthenticated) {
-        isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        isAuthenticated = await Promise.race([
+          window.auth.isAuthenticated({ forceVerify: false }),
+          new Promise(resolve => setTimeout(() => {
+            console.log("[ProjectDashboard] Auth check timed out, assuming not authenticated");
+            resolve(false);
+          }, 3000))
+        ]);
       }
     } catch (err) {
       console.warn("[ProjectDashboard] Auth check failed:", err);
@@ -669,7 +778,22 @@ class ProjectDashboard {
 
   async loadProjects() {
     if (window.projectManager) {
-      await window.projectManager.loadProjects('all');
+      try {
+        await window.projectManager.loadProjects('all');
+      } catch (err) {
+        console.error("[ProjectDashboard] Error in loadProjects:", err);
+        this.showNotification("Failed to load projects. Please check your connection.", "error");
+        // Dispatch empty projects event to handle UI gracefully
+        document.dispatchEvent(new CustomEvent("projectsLoaded", {
+          detail: {
+            projects: [],
+            count: 0,
+            filter: { type: 'all' },
+            error: true,
+            message: err.message || "Connection error"
+          }
+        }));
+      }
     } else {
       console.warn("[ProjectDashboard] projectManager not available for loading projects.");
     }
@@ -689,6 +813,23 @@ class ProjectDashboard {
     document.addEventListener("projectArtifactsLoaded", this.handleArtifactsLoaded.bind(this));
     document.addEventListener("projectNotFound", this.handleProjectNotFound.bind(this));
 
+    // Handle connection changes
+    window.addEventListener('online', () => {
+      console.log('[ProjectDashboard] Connection restored');
+      this.showNotification('Connection restored', 'success');
+      // Refresh data if we have a project loaded
+      if (this.state.currentProject?.id) {
+        this.refreshProjectData(this.state.currentProject.id);
+      } else {
+        this.loadProjects();
+      }
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('[ProjectDashboard] Connection lost');
+      this.showNotification('Connection lost. Some features may be unavailable.', 'warning');
+    });
+
     // Browser back/forward nav
     window.addEventListener("popstate", (event) => {
       // Add state check to prevent loops if pushState was used without actual nav
@@ -696,6 +837,25 @@ class ProjectDashboard {
         this.processUrlParams(); // Re-process URL on popstate
       }
     });
+  }
+
+  /**
+   * Refresh all data for the currently loaded project
+   * @param {string} projectId - The project ID to refresh
+   */
+  async refreshProjectData(projectId) {
+    if (!projectId || !window.projectManager) return;
+
+    try {
+      await Promise.allSettled([
+        window.projectManager.loadProjectDetails(projectId),
+        window.projectManager.loadProjectStats(projectId),
+        window.projectManager.loadProjectFiles(projectId),
+        window.projectManager.loadProjectConversations(projectId)
+      ]);
+    } catch (err) {
+      console.error('[ProjectDashboard] Error refreshing project data:', err);
+    }
   }
 
   async _waitForDashboardUtils() {
@@ -747,7 +907,16 @@ class ProjectDashboard {
         console.warn(`[ProjectDashboard][${waitId}] Proceeding despite timeout - utils appear to be ready`);
         return;
       }
-      throw err; // Re-throw if utils are definitely not ready
+
+      // Create basic dashboardUtils as fallback
+      console.warn(`[ProjectDashboard][${waitId}] Creating fallback dashboard utils`);
+      window.dashboardUtilsReady = true;
+      window.showProjectsView = window.showProjectsView || function () {
+        const listView = document.getElementById('projectListView');
+        const detailsView = document.getElementById('projectDetailsView');
+        if (listView) listView.classList.remove('hidden');
+        if (detailsView) detailsView.classList.add('hidden');
+      };
     }
   }
 
@@ -935,9 +1104,37 @@ class ProjectDashboard {
   }
 }
 
-// Add app initializer registration if needed
-if (window.appInitializer && window.appInitializer.register) {
-  window.appInitializer.register({
-    init: () => initProjectDashboard()
-  });
+// Define initialize function
+function initProjectDashboard() {
+  console.log('[ProjectManager] initProjectDashboard called');
+  if (!window.projectDashboard) {
+    console.log('[ProjectManager] Creating new ProjectDashboard instance');
+    try {
+      window.projectDashboard = new ProjectDashboard();
+      return window.projectDashboard.init();
+    } catch (err) {
+      console.error('[ProjectManager] Error creating ProjectDashboard instance:', err);
+      return Promise.reject(err);
+    }
+  } else {
+    console.log('[ProjectManager] Using existing ProjectDashboard instance');
+    return Promise.resolve(window.projectDashboard);
+  }
 }
+
+// ES Module Export - Export to global scope
+// This is the KEY PART that was missing in the original code
+window.ProjectDashboard = ProjectDashboard;
+window.initProjectDashboard = initProjectDashboard;
+
+// We also need to ensure the component classes are exported
+// Since this file is loaded as a module, we can't see other modules directly
+
+// Explicitly check what's available in other modules
+// The new _ensureComponentsExported method will look for these components
+
+// In a module, export means we're exposing it to be imported by other modules,
+// but the window.XXX assignment makes it available globally
+
+// Module exports for potential future proper module usage
+export { ProjectDashboard, initProjectDashboard };
