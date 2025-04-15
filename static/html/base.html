@@ -19,8 +19,8 @@
   <!-- Ensure responsive, mobile-friendly behavior -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-  <!-- CSRF token with dynamic injection pattern -->
-  <meta name="csrf-token" content="" id="csrfToken" />
+  <!-- CSRF token will be set by auth.js during initialization -->
+  <meta name="csrf-token" content="{{ csrf_token() }}" id="csrfToken" />
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
@@ -35,8 +35,8 @@
         <!-- Enhance toggle button with proper accessibility attributes -->
         <button id="navToggleBtn" type="button" class="focus:outline-hidden md:hidden"
           aria-label="Toggle sidebar navigation" aria-expanded="false" aria-controls="mainSidebar">
-          <svg role="img" aria-hidden="true" class="w-6 h-6 text-base-content" fill="none"
-            stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <svg role="img" aria-hidden="true" class="w-6 h-6 text-base-content" fill="none" stroke="currentColor"
+            viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
@@ -59,8 +59,7 @@
         <!-- Auth container -->
         <div class="relative" id="authContainer">
           <!-- When logged out: Auth Button -->
-          <button id="authButton" type="button"
-            class="btn btn-primary btn-sm">
+          <button id="authButton" type="button" class="btn btn-primary btn-sm">
             Login
           </button>
 
@@ -76,28 +75,24 @@
             <form id="loginForm" method="POST" onsubmit="event.preventDefault(); return false;">
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" id="login-username" placeholder="Username"
-                  class="px-2 py-1 text-xs border rounded-box"
-                  autocomplete="username" autocorrect="off" autocapitalize="none">
+                  class="px-2 py-1 text-xs border rounded-box" autocomplete="username" autocorrect="off"
+                  autocapitalize="none">
                 <input type="password" name="password" id="login-password" placeholder="Password"
-                  class="px-2 py-1 text-xs border rounded-box"
-                  autocomplete="current-password">
+                  class="px-2 py-1 text-xs border rounded-box" autocomplete="current-password">
               </div>
               <div id="login-error" class="text-error text-xs mb-2 hidden"></div>
               <!-- Improved mobile login button with larger tap target -->
-              <button type="submit" id="loginSubmitBtn"
-                class="btn btn-primary btn-sm w-full">
+              <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-sm w-full">
                 Log In
               </button>
             </form>
 
             <form id="registerForm" class="hidden">
               <div class="flex flex-col gap-2 mb-2">
-                <input type="text" name="username" placeholder="Username"
-                  class="px-2 py-1 text-xs border rounded-box"
+                <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="username" autocorrect="off" autocapitalize="none">
                 <input type="password" name="password" placeholder="Password"
-                  class="px-2 py-1 text-xs border rounded-box"
-                  autocomplete="new-password">
+                  class="px-2 py-1 text-xs border rounded-box" autocomplete="new-password">
               </div>
               <div class="relative mb-2 group">
                 <button type="button" class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
@@ -113,8 +108,7 @@
                   Password must be 12+ characters with uppercase, lowercase, number, and special character.
                 </div>
               </div>
-              <button type="submit"
-                class="btn btn-success btn-xs w-full">
+              <button type="submit" class="btn btn-success btn-xs w-full">
                 Register
               </button>
             </form>
@@ -144,8 +138,7 @@
 
       <!-- Improve close button accessibility -->
       <button id="closeSidebarBtn" type="button"
-        class="md:hidden absolute top-2 right-2 p-2 btn btn-ghost btn-sm btn-square"
-        aria-label="Close sidebar">
+        class="md:hidden absolute top-2 right-2 p-2 btn btn-ghost btn-sm btn-square" aria-label="Close sidebar">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
           stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -154,8 +147,7 @@
 
       <div class="p-4 flex flex-col h-full">
         <!-- New Chat Button (Prominent) -->
-        <a href="/"
-          class="w-full btn btn-neutral mb-4 flex items-center justify-center">
+        <a href="/" class="w-full btn btn-neutral mb-4 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -194,14 +186,14 @@
                 placeholder="Search conversations..."
                 class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-hidden" />
               <svg xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true" fill="none"
-                viewBox="0 0 24 24" stroke="currentColor">
+                class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
                       7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <button id="pinSidebarBtn" type="button"
-              class="ml-2 p-1.5 btn btn-ghost btn-sm btn-circle" title="Pin sidebar open">
+            <button id="pinSidebarBtn" type="button" class="ml-2 p-1.5 btn btn-ghost btn-sm btn-circle"
+              title="Pin sidebar open">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012
@@ -217,7 +209,8 @@
         <!-- Starred Chats Section (hidden by default) -->
         <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
           aria-labelledby="starredChatsTab" tabindex="0">
-          <p class="text-xs text-base-content/60 mb-3">Starred chats are conversations you've marked as important for quick
+          <p class="text-xs text-base-content/60 mb-3">Starred chats are conversations you've marked as important for
+            quick
             access.</p>
           <ul id="starredConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
             <li class="text-center text-base-content/60 py-4">
@@ -273,8 +266,8 @@
             <input type="search" id="sidebarProjectSearch" aria-label="Search projects" placeholder="Search projects..."
               class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-hidden" />
             <svg xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor">
+              class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
                     7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -336,7 +329,8 @@
                     tasks</label>
                 </div>
                 <div class="mt-2">
-                  <label for="thinkingBudget" class="block text-xs text-base-content/60 mb-1">Thinking budget (tokens)</label>
+                  <label for="thinkingBudget" class="block text-xs text-base-content/60 mb-1">Thinking budget
+                    (tokens)</label>
                   <select id="thinkingBudget" class="w-full text-sm border rounded-box p-1">
                     <option value="2048">2,048 tokens (minimum)</option>
                     <option value="4096">4,096 tokens</option>
@@ -353,8 +347,7 @@
               <!-- Vision Panel (for image upload) -->
               <div id="visionPanel" class="hidden mb-3">
                 <label class="block font-medium text-xs">Image Upload (o1 Vision)</label>
-                <input type="file" accept="image/png,image/jpeg" class="mt-2 text-sm"
-                  id="visionFileInput" />
+                <input type="file" accept="image/png,image/jpeg" class="mt-2 text-sm" id="visionFileInput" />
                 <p class="text-xs text-base-content/60 mt-1">
                   Upload JPEG or PNG (≤4 MB).
                 </p>
@@ -365,8 +358,7 @@
               </div>
 
               <!-- Live region for model config display -->
-              <div id="modelConfigDisplay"
-                class="mt-4 p-2 bg-base-200 rounded-box text-xs" aria-live="polite">
+              <div id="modelConfigDisplay" class="mt-4 p-2 bg-base-200 rounded-box text-xs" aria-live="polite">
                 <p><span class="font-medium">Selected Model:</span> <span id="currentModelName">o3-mini</span></p>
                 <p><span class="font-medium">Max Tokens:</span> <span id="currentMaxTokens">500</span></p>
                 <p><span class="font-medium">Reasoning Effort:</span> <span id="currentReasoning">N/A</span></p>
@@ -405,8 +397,7 @@
               <textarea id="globalCustomInstructions"
                 class="w-full px-3 py-2 text-sm border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
                 placeholder="Enter instructions for the AI to follow (e.g., response style, format preferences)..."></textarea>
-              <button id="saveGlobalInstructions"
-                class="mt-2 btn btn-primary btn-sm">
+              <button id="saveGlobalInstructions" class="mt-2 btn btn-primary btn-sm">
                 Save Instructions
               </button>
             </div>
@@ -425,8 +416,7 @@
         <!-- Login required message (shown when not authenticated) -->
         <div id="loginRequiredMessage" class="hidden text-center py-8">
           <p class="text-lg">Please log in to access projects</p>
-          <button id="showLoginBtn" type="button"
-            class="btn btn-primary mt-4">
+          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4">
             Login
           </button>
         </div>
@@ -465,111 +455,114 @@
   <div id="conversationArea" class="hidden"></div>
   <div id="chatTitle" class="hidden">Chat Title</div>
   <button id="newConversationBtn" class="hidden">New Conversation</button>
-<!-- Core JavaScript Dependencies -->
-<script type="module" src="/static/js/auth.js"></script>
+  <!-- Core JavaScript Dependencies -->
+  <script type="module" src="/static/js/auth.js"></script>
 
-<!-- Application Framework -->
-<script type="module" src="/static/js/app.js"></script>
+  <!-- Application Framework -->
+  <script type="module" src="/static/js/app.js"></script>
 
-<!-- Project Management Components -->
-<script type="module" src="/static/js/projectManager.js"></script>
-<script type="module" src="/static/js/projectModal.js"></script>
-<script type="module" src="/static/js/projectDashboard.js"></script>
+  <!-- Project Management Components -->
+  <script type="module" src="/static/js/projectManager.js"></script>
+  <script type="module" src="/static/js/projectModal.js"></script>
+  <script type="module" src="/static/js/projectDashboard.js"></script>
 
-<!-- UI Components -->
-<script type="module" src="/static/js/sidebar.js"></script>
-<script type="module" src="/static/js/projectDashboardUtils.js"></script>
+  <!-- UI Components -->
+  <script type="module" src="/static/js/sidebar.js"></script>
+  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
 
-<!-- Integration script for dynamic content loading -->
-<script>
+  <!-- Integration script for dynamic content loading -->
+  <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        // Initialize auth first to ensure login state is available
-        if (window.auth && typeof window.auth.init === 'function') {
-            try {
-                await window.auth.init();
-                console.log("Authentication initialized");
-            } catch (err) {
-                console.error("Authentication initialization failed:", err);
-            }
+      // Initialize auth first to ensure login state is available
+      if (window.auth && typeof window.auth.init === 'function') {
+        try {
+          await window.auth.init();
+          console.log("Authentication initialized");
+        } catch (err) {
+          console.error("Authentication initialization failed:", err);
         }
+      }
 
-        // Wait a short time for auth to be fully processed
-        await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait a short time for auth to be fully processed
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Load project list
-        fetch('project_list.html').then(response => response.text()).then(html => {
-            document.getElementById('projectListView').innerHTML = html;
-        }).catch(err => console.error('Failed to load project_list.html:', err));
+      // Load project list
+      fetch('project_list.html').then(response => response.text()).then(html => {
+        document.getElementById('projectListView').innerHTML = html;
+      }).catch(err => console.error('Failed to load project_list.html:', err));
 
-        // Load project details
-        fetch('project_details.html').then(response => response.text()).then(html => {
-            document.getElementById('projectDetailsView').innerHTML = html;
-        }).catch(err => console.error('Failed to load project_details.html:', err));
+      // Load project details
+      fetch('project_details.html').then(response => response.text()).then(html => {
+        document.getElementById('projectDetailsView').innerHTML = html;
+      }).catch(err => console.error('Failed to load project_details.html:', err));
 
-        // Load modals
-        fetch('modals.html').then(response => response.text()).then(html => {
-            document.getElementById('modalsContainer').innerHTML = html;
-            document.getElementById('modalsContainer').classList.remove('hidden');
+      // Load modals
+      fetch('modals.html').then(response => response.text()).then(html => {
+        document.getElementById('modalsContainer').innerHTML = html;
+        document.getElementById('modalsContainer').classList.remove('hidden');
 
-            // Initialize projectModal after modals are loaded
-            if (window.initProjectModal) {
-                window.initProjectModal();
-            }
-        }).catch(err => console.error('Failed to load modals.html:', err));
-
-        // Load chat UI
-        fetch('chat_ui.html').then(response => response.text()).then(html => {
-            document.getElementById('chatUIContainer').innerHTML = html;
-            document.getElementById('chatUIContainer').classList.remove('hidden');
-        }).catch(err => console.error('Failed to load chat_ui.html:', err));
-
-        // Initialize project dashboard after content is loaded
-        if (window.appInitializer && window.appInitializer.initialize) {
-            try {
-                await window.appInitializer.initialize();
-                console.log("App initialization complete");
-            } catch (err) {
-                console.error("App initialization failed:", err);
-            }
+        // Initialize projectModal after modals are loaded
+        if (window.initProjectModal) {
+          window.initProjectModal();
         }
+      }).catch(err => console.error('Failed to load modals.html:', err));
+
+      // Load chat UI
+      fetch('chat_ui.html').then(response => response.text()).then(html => {
+        document.getElementById('chatUIContainer').innerHTML = html;
+        document.getElementById('chatUIContainer').classList.remove('hidden');
+      }).catch(err => console.error('Failed to load chat_ui.html:', err));
+
+      // Initialize project dashboard after content is loaded
+      if (window.appInitializer && window.appInitializer.initialize) {
+        try {
+          await window.appInitializer.initialize();
+          console.log("App initialization complete");
+        } catch (err) {
+          console.error("App initialization failed:", err);
+        }
+      }
     });
 
     // Add global event handler for project filter buttons
     document.addEventListener('click', function (e) {
-        if (e.target.matches('.project-filter-btn') || e.target.closest('.project-filter-btn')) {
-            const button = e.target.matches('.project-filter-btn') ? e.target : e.target.closest('.project-filter-btn');
-            const filter = button.dataset.filter || 'all';
+      if (e.target.matches('.project-filter-btn') || e.target.closest('.project-filter-btn')) {
+        const button = e.target.matches('.project-filter-btn') ? e.target : e.target.closest('.project-filter-btn');
+        const filter = button.dataset.filter || 'all';
 
-            // Update UI
-            document.querySelectorAll('.project-filter-btn').forEach(btn => {
-                const span = btn.querySelector('span span:last-child');
-                if (btn === button) {
-                    btn.setAttribute('aria-current', 'page');
-                    btn.classList.remove('text-gray-500', 'dark:text-gray-400');
-                    btn.classList.add('text-blue-600', 'dark:text-blue-400');
-                    if (span) {
-                        span.classList.remove('bg-transparent');
-                        span.classList.add('bg-blue-600');
-                    }
-                } else {
-                    btn.removeAttribute('aria-current');
-                    btn.classList.add('text-gray-500', 'dark:text-gray-400');
-                    btn.classList.remove('text-blue-600', 'dark:text-blue-400');
-                    if (span) {
-                        span.classList.add('bg-transparent');
-                        span.classList.remove('bg-blue-600');
-                    }
-                }
-            });
-
-            // Load projects with the selected filter
-            if (window.projectManager && window.projectManager.loadProjects) {
-                window.projectManager.loadProjects(filter).catch(err => {
-                    console.error('Error loading projects with filter:', filter, err);
-                });
+        // Update UI
+        document.querySelectorAll('.project-filter-btn').forEach(btn => {
+          const span = btn.querySelector('span span:last-child');
+          if (btn === button) {
+            btn.setAttribute('aria-current', 'page');
+            btn.classList.remove('text-gray-500', 'dark:text-gray-400');
+            btn.classList.add('text-blue-600', 'dark:text-blue-400');
+            if (span) {
+              span.classList.remove('bg-transparent');
+              span.classList.add('bg-blue-600');
             }
+          } else {
+            btn.removeAttribute('aria-current');
+            btn.classList.add('text-gray-500', 'dark:text-gray-400');
+            btn.classList.remove('text-blue-600', 'dark:text-blue-400');
+            if (span) {
+              span.classList.add('bg-transparent');
+              span.classList.remove('bg-blue-600');
+            }
+          }
+        });
+
+        // Load projects with the selected filter
+        if (window.projectManager && typeof window.projectManager.loadProjects === 'function') {
+          window.projectManager.loadProjects(filter).catch(err => {
+            console.error('Error loading projects with filter:', filter, err);
+          });
+        } else {
+          console.warn('projectManager.loadProjects is not available yet.');
         }
+      }
     });
-</script>
+  </script>
 </body>
+
 </html>

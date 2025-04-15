@@ -140,7 +140,7 @@
       // Ensure the messageEl is available
       if (!this.messageEl) {
         this.messageEl = document.querySelector("#noProjectsMessage") ||
-                         document.createElement('div');
+          document.createElement('div');
         if (this.messageEl.id !== "noProjectsMessage") {
           this.messageEl.id = "noProjectsMessage";
           this.messageEl.className = "hidden text-center py-8 text-gray-500";
@@ -162,15 +162,15 @@
 
       const listView = document.getElementById('projectListView');
       if (listView) {
-         // Ensure the container for the grid exists
-         const gridContainer = listView.querySelector('#projectList');
-         if (gridContainer) {
-            gridContainer.appendChild(this.element); // Append to the grid container
-         } else {
-            listView.appendChild(this.element); // Fallback: append directly to listView
-         }
+        // Ensure the container for the grid exists
+        const gridContainer = listView.querySelector('#projectList');
+        if (gridContainer) {
+          gridContainer.appendChild(this.element); // Append to the grid container
+        } else {
+          listView.appendChild(this.element); // Fallback: append directly to listView
+        }
       } else {
-         document.body.appendChild(this.element); // Absolute fallback
+        document.body.appendChild(this.element); // Absolute fallback
       }
     }
 
@@ -196,66 +196,50 @@
 
     _toggleListViewVisibility(show) {
       const listView = document.getElementById('projectListView');
-      // const detailsView = document.getElementById('projectDetailsView'); // REMOVE - Let app.js handle details view
 
       if (listView) {
         listView.classList.toggle('hidden', !show);
-        // Ensure layout class is toggled correctly - flex-1 might be handled by parent
-        // listView.classList.toggle('flex-1', show);
         console.log(`[ProjectListComponent] Toggled projectListView visibility: ${show ? 'visible' : 'hidden'}`);
       } else {
         console.warn('[ProjectListComponent] projectListView element not found for visibility toggle.');
       }
-
-      // REMOVED - Let app.js handle details view
-      // if (detailsView) {
-      //   detailsView.classList.toggle('hidden', show);
-      //   console.log(`[ProjectListComponent] Toggled projectDetailsView visibility: ${show ? 'hidden' : 'visible'}`);
-      // } else {
-      //    console.warn('[ProjectListComponent] projectDetailsView element not found for visibility toggle.');
-      // }
-
-      // This part seems redundant if listView itself is the container
-      // if (this.element) {
-      //   this.element.style.display = show ? 'grid' : 'none';
-      // }
     }
 
-  _ensureContainerVisibility() {
-    const container = document.getElementById("projectListView");
-    const loginRequiredMessage = document.getElementById("loginRequiredMessage");
+    _ensureContainerVisibility() {
+      const container = document.getElementById("projectListView");
+      const loginRequiredMessage = document.getElementById("loginRequiredMessage");
 
-    console.log("[ProjectListComponent] Ensuring project list visibility");
+      console.log("[ProjectListComponent] Ensuring project list visibility");
 
-    // Make container visible and hide login required message
-    if (container) {
-      container.classList.remove("hidden");
-      container.classList.add("flex", "flex-col"); // Use flex for proper display
-      console.log("[ProjectListComponent] Made projectListView visible with flex display");
-    } else {
-      console.warn("[ProjectListComponent] Failed to find projectListView container");
+      // Make container visible and hide login required message
+      if (container) {
+        container.classList.remove("hidden");
+        container.classList.add("flex", "flex-col"); // Use flex for proper display
+        console.log("[ProjectListComponent] Made projectListView visible with flex display");
+      } else {
+        console.warn("[ProjectListComponent] Failed to find projectListView container");
+      }
+
+      // Check if projectManagerPanel is visible
+      const projectManagerPanel = document.getElementById("projectManagerPanel");
+      if (projectManagerPanel) {
+        projectManagerPanel.classList.remove("hidden");
+        projectManagerPanel.classList.add("flex");
+        console.log("[ProjectListComponent] Made projectManagerPanel visible");
+      }
+
+      // Hide login message if it exists
+      if (loginRequiredMessage) {
+        loginRequiredMessage.classList.add("hidden");
+        console.log("[ProjectListComponent] Hide login required message");
+      }
+
+      // Make project list element visible too
+      if (this.element) {
+        this.element.classList.add("grid"); // Ensure grid display
+        this.element.classList.remove("hidden");
+      }
     }
-
-    // Check if projectManagerPanel is visible
-    const projectManagerPanel = document.getElementById("projectManagerPanel");
-    if (projectManagerPanel) {
-      projectManagerPanel.classList.remove("hidden");
-      projectManagerPanel.classList.add("flex");
-      console.log("[ProjectListComponent] Made projectManagerPanel visible");
-    }
-
-    // Hide login message if it exists
-    if (loginRequiredMessage) {
-      loginRequiredMessage.classList.add("hidden");
-      console.log("[ProjectListComponent] Hide login required message");
-    }
-
-    // Make project list element visible too
-    if (this.element) {
-      this.element.classList.add("grid"); // Ensure grid display
-      this.element.classList.remove("hidden");
-    }
-  }
 
     _shouldLoadProjectsDirectly(eventOrProjects) {
       return eventOrProjects?.forceRefresh ||
@@ -286,10 +270,10 @@
         projects = eventOrProjects.detail?.data?.projects || [];
       } else if (eventOrProjects?.data?.projects) {
         projects = Array.isArray(eventOrProjects.data.projects) ?
-                   eventOrProjects.data.projects : [];
+          eventOrProjects.data.projects : [];
       } else if (eventOrProjects?.projects) {
         projects = Array.isArray(eventOrProjects.projects) ?
-                   eventOrProjects.projects : [];
+          eventOrProjects.projects : [];
       }
 
       // Log warning if we got an invalid projects structure
@@ -330,12 +314,12 @@
 
     _performDOMUpdate(filteredProjects) {
       if (!this.element) {
-         // Attempt to re-acquire the element if it was missing
-         this._setupDOMReferences();
-         if (!this.element) {
-            console.error("[ProjectListComponent] Cannot perform DOM update, element not found.");
-            return;
-         }
+        // Attempt to re-acquire the element if it was missing
+        this._setupDOMReferences();
+        if (!this.element) {
+          console.error("[ProjectListComponent] Cannot perform DOM update, element not found.");
+          return;
+        }
       }
 
       console.log(`[ProjectListComponent] Updating DOM with ${filteredProjects.length} projects`);
@@ -412,17 +396,17 @@
       `;
 
       if (this.state.cardCustomization.showDescription) {
-         cardContent += `<p class="text-sm text-base-content/80 mb-3 line-clamp-2">${project.description || 'No description'}</p>`;
+        cardContent += `<p class="text-sm text-base-content/80 mb-3 line-clamp-2">${project.description || 'No description'}</p>`;
       }
 
       // Optional: Add badges if enabled and available
       if (this.state.cardCustomization.showBadges && project.badges && project.badges.length > 0) {
-         cardContent += `<div class="card-actions justify-start mb-2 flex-wrap gap-1">`;
-         project.badges.forEach(badge => {
-            const badgeStyle = badge.style || this.state.cardCustomization.defaultBadgeStyle || 'badge-neutral';
-            cardContent += `<span class="badge ${badgeStyle} badge-sm">${badge.icon ? badge.icon + ' ' : ''}${badge.text}</span>`;
-         });
-         cardContent += `</div>`;
+        cardContent += `<div class="card-actions justify-start mb-2 flex-wrap gap-1">`;
+        project.badges.forEach(badge => {
+          const badgeStyle = badge.style || this.state.cardCustomization.defaultBadgeStyle || 'badge-neutral';
+          cardContent += `<span class="badge ${badgeStyle} badge-sm">${badge.icon ? badge.icon + ' ' : ''}${badge.text}</span>`;
+        });
+        cardContent += `</div>`;
       }
 
       cardContent += `
@@ -474,20 +458,20 @@
     _confirmDelete(project) {
       // Use the global modalManager if available
       if (window.modalManager && window.modalManager.confirmAction) {
-         window.modalManager.confirmAction({
-            title: "Delete Project",
-            message: `Are you sure you want to delete "${project.name}"? This action cannot be undone.`,
-            confirmText: "Delete",
-            confirmClass: "btn-error", // Use DaisyUI button class
-            onConfirm: () => this._deleteProject(project.id)
-         });
+        window.modalManager.confirmAction({
+          title: "Delete Project",
+          message: `Are you sure you want to delete "${project.name}"? This action cannot be undone.`,
+          confirmText: "Delete",
+          confirmClass: "btn-error", // Use DaisyUI button class
+          onConfirm: () => this._deleteProject(project.id)
+        });
       } else {
-         // Fallback to native confirm
-         if (confirm(`Delete Project
+        // Fallback to native confirm
+        if (confirm(`Delete Project
 
 Are you sure you want to delete "${project.name}"?`)) {
-           this._deleteProject(project.id);
-         }
+          this._deleteProject(project.id);
+        }
       }
     }
 
@@ -664,19 +648,19 @@ ${content}`)) {
 
       // Ensure projectManager exists before calling
       if (window.projectManager?.loadProjects) {
-         window.projectManager.loadProjects(filter)
-           .catch(err => {
-             console.error('Filter failed:', err);
-             this._renderErrorState('Filter operation failed');
-           })
-           .finally(() => {
-              // Ensure loading state is hidden even on error
-              this._hideLoadingState();
-           });
+        window.projectManager.loadProjects(filter)
+          .catch(err => {
+            console.error('Filter failed:', err);
+            this._renderErrorState('Filter operation failed');
+          })
+          .finally(() => {
+            // Ensure loading state is hidden even on error
+            this._hideLoadingState();
+          });
       } else {
-         console.error("projectManager not available for filtering");
-         this._renderErrorState('System error: Cannot filter projects');
-         this._hideLoadingState();
+        console.error("projectManager not available for filtering");
+        this._renderErrorState('System error: Cannot filter projects');
+        this._hideLoadingState();
       }
     }
 
@@ -703,18 +687,18 @@ ${content}`)) {
 
         // Ensure projectManager exists
         if (window.projectManager?.loadProjects) {
-           window.projectManager.loadProjects(newFilter)
-             .catch(err => {
-               console.error('Navigation load failed:', err);
-               this._renderErrorState('Failed to load projects');
-             })
-             .finally(() => {
-                this._hideLoadingState();
-             }); f
+          window.projectManager.loadProjects(newFilter)
+            .catch(err => {
+              console.error('Navigation load failed:', err);
+              this._renderErrorState('Failed to load projects');
+            })
+            .finally(() => {
+              this._hideLoadingState();
+            });
         } else {
-           console.error("projectManager not available for popstate navigation");
-           this._renderErrorState('System error: Cannot load projects');
-           this._hideLoadingState();
+          console.error("projectManager not available for popstate navigation");
+          this._renderErrorState('System error: Cannot load projects');
+          this._hideLoadingState();
         }
       }
     }
@@ -727,24 +711,24 @@ ${content}`)) {
       }
 
       button.addEventListener('click', () => {
-         // Use the global modal manager
-         if (window.modalManager) {
-            window.modalManager.show('project', {
-               updateContent: (modalEl) => {
-                  // Reset form for creation
-                  const form = modalEl.querySelector('#projectForm');
-                  const title = modalEl.querySelector('#projectModalTitle');
-                  if (form) form.reset();
-                  if (title) title.textContent = 'Create Project';
-                  const projectIdInput = modalEl.querySelector('#projectIdInput');
-                  if (projectIdInput) projectIdInput.value = '';
-               }
-            });
-         } else {
-            console.error("Modal manager not available to show project form.");
-            // Fallback or error message
-            alert("Cannot open project form.");
-         }
+        // Use the global modal manager
+        if (window.modalManager) {
+          window.modalManager.show('project', {
+            updateContent: (modalEl) => {
+              // Reset form for creation
+              const form = modalEl.querySelector('#projectForm');
+              const title = modalEl.querySelector('#projectModalTitle');
+              if (form) form.reset();
+              if (title) title.textContent = 'Create Project';
+              const projectIdInput = modalEl.querySelector('#projectIdInput');
+              if (projectIdInput) projectIdInput.value = '';
+            }
+          });
+        } else {
+          console.error("Modal manager not available to show project form.");
+          // Fallback or error message
+          alert("Cannot open project form.");
+        }
       });
     }
 
@@ -772,15 +756,15 @@ ${content}`)) {
       // Attempt to find an existing modal structure in index.html
       let modal = document.getElementById('cardCustomizationModal');
       if (!modal) {
-         console.debug("cardCustomizationModal not found in HTML, creating fallback...");
-         // Create a fallback <dialog> dynamically
-         modal = document.createElement('dialog');
-         modal.id = 'cardCustomizationModal';
-         // Basic modal styling for DaisyUI (if needed)
-         modal.className = 'modal';
+        console.debug("cardCustomizationModal not found in HTML, creating fallback...");
+        // Create a fallback <dialog> dynamically
+        modal = document.createElement('dialog');
+        modal.id = 'cardCustomizationModal';
+        // Basic modal styling for DaisyUI (if needed)
+        modal.className = 'modal';
 
-         // Provide a minimal structure with the needed elements
-         modal.innerHTML = `
+        // Provide a minimal structure with the needed elements
+        modal.innerHTML = `
            <form method="dialog" class="modal-box">
              <h3 class="font-bold text-xl mb-4">Customize Card Appearance</h3>
              <div class="mb-4">
@@ -815,7 +799,7 @@ ${content}`)) {
              </div>
            </form>
          `;
-         document.body.appendChild(modal);
+        document.body.appendChild(modal);
       }
 
       // Now we have a modal reference, wire up the controls
@@ -831,29 +815,28 @@ ${content}`)) {
       this._populateCustomizationSelects();
     }
 
-     _populateCustomizationSelects() {
-        const themeSelect = document.getElementById('cardThemeSelect');
-        const badgeStyleSelect = document.getElementById('defaultBadgeStyleSelect');
+    _populateCustomizationSelects() {
+      const themeSelect = document.getElementById('cardThemeSelect');
+      const badgeStyleSelect = document.getElementById('defaultBadgeStyleSelect');
 
-        if (themeSelect && themeSelect.options.length === 0) {
-            themeSelect.innerHTML = this.availableThemes.map(theme =>
-                `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`
-            ).join('');
-        }
+      if (themeSelect && themeSelect.options.length === 0) {
+        themeSelect.innerHTML = this.availableThemes.map(theme =>
+          `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`
+        ).join('');
+      }
 
-        if (badgeStyleSelect && badgeStyleSelect.options.length === 0) {
-            badgeStyleSelect.innerHTML = this.badgeStyles.map(style =>
-                `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`
-            ).join('');
-        }
-     }
-
+      if (badgeStyleSelect && badgeStyleSelect.options.length === 0) {
+        badgeStyleSelect.innerHTML = this.badgeStyles.map(style =>
+          `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`
+        ).join('');
+      }
+    }
 
     _showCustomizationModal() {
       const modal = document.getElementById('cardCustomizationModal');
       if (!modal || typeof modal.showModal !== 'function') {
-         console.error("Cannot show customization modal.");
-         return;
+        console.error("Cannot show customization modal.");
+        return;
       }
 
       // Ensure selects are populated before setting values
@@ -873,7 +856,7 @@ ${content}`)) {
     _hideCustomizationModal() {
       const modal = document.getElementById('cardCustomizationModal');
       if (modal && typeof modal.close === 'function') {
-         modal.close(); // Use dialog's close method
+        modal.close(); // Use dialog's close method
       }
     }
 
@@ -982,7 +965,7 @@ ${content}`)) {
         return;
       }
       // Execute action
-      switch(action) {
+      switch (action) {
         case 'view':
           if (typeof this.onViewProject === 'function') {
             console.log(`[ProjectListComponent] Viewing project: ${projectId}`);
@@ -1065,7 +1048,7 @@ ${content}`)) {
 
   // Ensure global instance is saved when created
   const originalProjectListComponent = window.ProjectListComponent;
-  window.ProjectListComponent = function(options) {
+  window.ProjectListComponent = function (options) {
     // Ensure we have valid required options
     if (!options || !options.elementId) {
       console.error("[ProjectListComponent] Missing required elementId option");
@@ -1077,13 +1060,13 @@ ${content}`)) {
     window.projectListComponent = instance;
 
     // Attach a mechanism to allow explicit refresh from outside
-    instance.forceRender = function(projects) {
+    instance.forceRender = function (projects) {
       if (Array.isArray(projects) && projects.length > 0) {
         console.log("[ProjectListComponent] Force rendering projects:", projects.length);
         instance.renderProjects(projects);
       } else {
         console.log("[ProjectListComponent] Force refresh with existing projects");
-        instance.renderProjects({forceRefresh: true});
+        instance.renderProjects({ forceRefresh: true });
       }
     };
 

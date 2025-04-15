@@ -269,15 +269,47 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     // Initialize modal close buttons
+    // Helper function to find the modal name from its ID
+    function getModalNameFromId(modalId) {
+        const mappings = window.modalManager?.modalMappings || {
+            project: 'projectFormModal',
+            delete: 'deleteConfirmModal',
+            confirm: 'confirmActionModal',
+            knowledge: 'knowledgeBaseSettingsModal',
+            knowledgeResult: 'knowledgeResultModal',
+            customize: 'cardCustomizationModal'
+        };
+        for (const name in mappings) {
+            if (mappings[name] === modalId) {
+                return name;
+            }
+        }
+        console.warn(`Could not find modal name for ID: ${modalId}`);
+        return null; // Return null if no mapping found
+    }
+
+    // Initialize modal close buttons to use ModalManager
     const closeButtons = document.querySelectorAll('[id$="CloseBtn"], [id^="close"], [id$="CancelBtn"]');
     closeButtons.forEach(button => {
-      button.addEventListener('click', function() {
-        const modal = this.closest('[id$="Modal"]');
-        if (modal) {
-          modal.classList.add('hidden');
-          document.body.style.overflow = '';
-        }
-      });
+        button.addEventListener('click', function() {
+            const modalElement = this.closest('[id$="Modal"]'); // Find the parent modal element by ID pattern
+            if (modalElement && modalElement.id) {
+                const modalName = getModalNameFromId(modalElement.id);
+                if (modalName && window.modalManager?.hide) {
+                    console.log(`Closing modal '${modalName}' via button click.`);
+                    window.modalManager.hide(modalName);
+                    // Note: Resetting body overflow is typically handled by the dialog's close() method
+                    // or should be managed within ModalManager.hide if needed.
+                } else {
+                    console.warn(`Could not hide modal with ID ${modalElement.id}. ModalManager or mapping missing.`);
+                    // Fallback to direct hiding if manager fails
+                    modalElement.classList.add('hidden');
+                    document.body.style.overflow = '';
+                }
+            } else {
+                 console.warn('Could not find parent modal element for button:', this);
+            }
+        });
     });
 
     // Knowledge base form submit

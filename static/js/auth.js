@@ -327,14 +327,23 @@ async function refreshTokens() {
     }
 
     tokenRefreshInProgress = false;
+    // Ensure auth state is updated and broadcasted on successful refresh
+    authState.isAuthenticated = true; // Mark as authenticated locally
+    // We don't get username from refresh, so keep existing or null
+    broadcastAuth(true, authState.username);
     document.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: true } }));
 
     return { success: true, token: response.access_token };
   })()
     .catch(err => {
+      // On unrecoverable refresh failure, clear the auth state
+      if (AUTH_DEBUG) console.error(`[Auth] Unrecoverable refresh error: ${err.message}. Clearing token state.`);
+      clearTokenState(); // This will also broadcast false
+
       refreshFailCount++;
       tokenRefreshInProgress = false;
       document.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: false, error: err } }));
+      // Re-throw the original error after clearing state
       throw err;
     });
 
@@ -345,144 +354,120 @@ async function refreshTokens() {
  *  Verification Logic
  * ---------------------------------- */
 
-/** Force or retrieve a valid access token. */
+/**
+ * Retrieve a valid access token, attempting refresh if necessary.
+ * Simplified logic: Check access -> Check refresh -> Attempt refresh -> Fail/Return empty.
+ */
 async function getAuthToken(options = {}) {
-  // If token refresh is already in progress, wait for it
-  if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
-    try {
-      await window.__tokenRefreshPromise;
-      const validToken = getCookie('access_token');
-      // Check if the newly refreshed token is valid
-      if (validToken && await checkTokenValidity(validToken)) {
-        return validToken;
-      }
-      // If still invalid but allowEmpty is true, return empty string
-      if (options.allowEmpty) return '';
-      throw new Error('Token refresh did not yield a valid token');
-    } catch (err) {
-      if (options.allowEmpty) return '';
-      throw err;
-    }
-  }
+  const allowEmpty = options.allowEmpty === true;
+  const operationId = `getAuthToken-${Date.now().toString(36)}`; // Unique ID for logging
 
-  // Allow graceful initialization if explicitly requested
-  const gracefulInit = options.gracefulInit === true;
-  const allowEmpty = options.allowEmpty === true || gracefulInit === true;
+  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] getAuthToken called`, options);
 
-  if (AUTH_DEBUG) {
-    console.debug('[Auth] getAuthToken called with options:', options);
-  }
-
-  // During app initialization, return silently if we're in grace period
-  if (gracefulInit && window.__appInitializing && Date.now() - window.__appStartTime < 3000) {
-    console.debug('[Auth] Graceful init: returning empty token during startup');
-    return '';
-  }
-
-  try {
-    // First check if we have a valid access token in cookie
-    const accessToken = getCookie('access_token');
-    if (accessToken && await checkTokenValidity(accessToken)) {
-      if (AUTH_DEBUG) console.debug('[Auth] Found valid access_token cookie');
+  // 1. Check current access token
+  const accessToken = getCookie('access_token');
+  if (accessToken) {
+    const isValid = await checkTokenValidity(accessToken).catch(() => false);
+    if (isValid) {
+      if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Valid access token found in cookie.`);
       return accessToken;
     }
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Access token found but invalid/expired.`);
+  } else {
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] No access token cookie found.`);
+  }
 
-    // If not, try to refresh using refresh token
-    const refreshTokenVal = getCookie('refresh_token');
-    if (refreshTokenVal && await checkTokenValidity(refreshTokenVal, { allowRefresh: true })) {
-      try {
-        const { success, token } = await refreshTokens();
-        if (success) {
-          const newToken = getCookie('access_token');
-          if (newToken) {
-            if (AUTH_DEBUG) console.debug('[Auth] Successfully refreshed token');
-            return newToken;
-          }
-        }
-      } catch (refreshErr) {
-        if (AUTH_DEBUG) console.debug('[Auth] Token refresh failed:', refreshErr);
-        // Continue with verification if refresh fails
+  // 2. Check refresh token validity
+  const refreshToken = getCookie('refresh_token');
+  if (!refreshToken) {
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] No refresh token found.`);
+    if (allowEmpty) return '';
+    throw new Error('Authentication required (no refresh token)');
+  }
+
+  const isRefreshValid = await checkTokenValidity(refreshToken, { allowRefresh: true }).catch(() => false);
+  if (!isRefreshValid) {
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Refresh token found but invalid/expired.`);
+    clearTokenState(); // Clear state if refresh token is bad
+    if (allowEmpty) return '';
+    throw new Error('Session expired (invalid refresh token)');
+  }
+
+  // 3. Attempt token refresh (handles its own locking and retries)
+  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Attempting token refresh.`);
+  try {
+    // Wait for any ongoing refresh first
+    if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
+        if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Waiting for existing refresh promise.`);
+        await window.__tokenRefreshPromise;
+    } else {
+        await refreshTokens(); // Trigger refresh if not already in progress
+    }
+
+    // After refresh attempt (successful or waited), check for new access token
+    const newAccessToken = getCookie('access_token');
+    if (newAccessToken && await checkTokenValidity(newAccessToken).catch(() => false)) {
+      if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Token refresh successful, returning new access token.`);
+      // Ensure auth state is consistent after successful refresh
+      if (!authState.isAuthenticated) {
+          broadcastAuth(true, authState.username); // Broadcast if state was somehow inconsistent
       }
+      return newAccessToken;
+    } else {
+      // This case should ideally be handled within refreshTokens failure logic
+      if (AUTH_DEBUG) console.warn(`[Auth][${operationId}] Refresh completed but no valid access token found.`);
+      // Don't clear state here, refreshTokens should handle that on failure
+      if (allowEmpty) return '';
+      throw new Error('Token refresh failed to provide a valid token.');
     }
-
-    // Last resort: verify auth state directly
-    try {
-      await verifyAuthState(true);
-      if (authState.isAuthenticated) {
-        const newTok = getCookie('access_token');
-        if (newTok) return newTok;
-      }
-    } catch (verifyErr) {
-      if (AUTH_DEBUG) console.debug('[Auth] Auth verification failed:', verifyErr);
-      // Fall through to final return/throw
-    }
-
-    // If we're in graceful mode or allowEmpty, return empty string instead of throwing
+  } catch (refreshError) {
+    if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Token refresh failed:`, refreshError);
+    // refreshTokens should handle clearing state on unrecoverable errors.
+    // We just propagate the error or return empty based on options.
     if (allowEmpty) {
-      console.debug('[Auth] Returning empty token after auth checks (allowEmpty mode)');
-      return '';
+        console.warn(`[Auth][${operationId}] Refresh failed, returning empty token due to allowEmpty.`);
+        return '';
     }
-
-    throw new Error('Not authenticated');
-  } catch (err) {
-    if (allowEmpty) {
-      if (AUTH_DEBUG) console.debug('[Auth] Error caught but allowEmpty=true, returning empty token:', err);
-      return '';
-    }
-    throw err;
+    // Re-throw a more specific error if possible
+    const errorMessage = refreshError.message.includes('expired') ? 'Session expired' : 'Authentication failed during refresh';
+    throw new Error(errorMessage);
   }
 }
 
 /**
  * Master function to verify the user's auth state with the server.
  * If tokens are present but invalid, tries refresh.
- * If forced, calls `/api/auth/verify` up to MAX_VERIFY_ATTEMPTS.
+ * Verifies the user's auth state directly with the server via `/api/auth/verify`.
+ * Should be called when forced verification is needed or periodically.
+ * Does NOT attempt token refresh itself.
  */
-async function verifyAuthState(bypassCache = false) {
+async function verifyAuthState(forceVerify = false) {
+  const operationId = `verifyAuthState-${Date.now().toString(36)}`;
+  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] verifyAuthState called (forceVerify=${forceVerify})`);
+
+  // 1. Check rate limiting and session expired flag
   if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
-    if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - recent fail');
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - recent failure.`);
+    return authState.isAuthenticated; // Return last known state
+  }
+  if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) {
+     if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - session recently marked expired.`);
+     return false; // Definitely not authenticated if recently expired
+  }
+   // Reset expired flag if enough time has passed
+  if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) {
+     sessionExpiredFlag = false;
+  }
+
+  // 2. Check cache (unless forced) - Use simple time-based cache
+  const now = Date.now();
+  if (!forceVerify && authState.lastVerified && (now - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION)) {
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Returning cached auth state (valid for ${((AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION - (now - authState.lastVerified))/1000).toFixed(1)}s).`);
     return authState.isAuthenticated;
   }
-  if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) return false;
-  if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) sessionExpiredFlag = false;
 
-  // Check both the new cache and the existing verification cache
-  if (!bypassCache) {
-
-  }
-
-  let accessToken = getCookie('access_token');
-  let refreshTokenVal = getCookie('refresh_token');
-
-  // If no cookies but direct tokens are in memory, set them as cookies
-  if (!accessToken && window.__directAccessToken) {
-    setAuthCookie('access_token', window.__directAccessToken, 60 * 25);
-    if (window.__directRefreshToken) {
-      setAuthCookie('refresh_token', window.__directRefreshToken, 60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS);
-    }
-    accessToken = window.__directAccessToken;
-    refreshTokenVal = window.__directRefreshToken;
-  }
-
-  if (!accessToken && !refreshTokenVal) {
-    broadcastAuth(false);
-    return false;
-  }
-  if ((!accessToken || (await isTokenExpired(accessToken))) && refreshTokenVal) {
-    try {
-      const r = await refreshTokens();
-      if (!r.success) throw new Error('Refresh token flow failed');
-      authState.isAuthenticated = true;
-      authState.lastVerified = Date.now();
-      broadcastAuth(true);
-      return true;
-    } catch {
-      clearTokenState();
-      broadcastAuth(false);
-      return false;
-    }
-  }
-
+  // 3. Perform server verification
+  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Performing server verification.`);
   const attempts = AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS;
   let lastError;
   for (let i = 1; i <= attempts; i++) {
@@ -493,30 +478,56 @@ async function verifyAuthState(bypassCache = false) {
           setTimeout(() => reject(new Error(`verify timeout (attempt ${i})`)), AUTH_CONSTANTS.VERIFY_TIMEOUT + i * 1000)
         )
       ]);
-      authState.isAuthenticated = !!res.authenticated;
-      authState.username = res.username || null;
-      authState.lastVerified = Date.now();
-      lastVerifyFailureTime = 0;
-      broadcastAuth(!!res.authenticated, authState.username);
-      return !!res.authenticated;
+
+      // --- Success Case ---
+      const serverAuthenticated = !!res.authenticated;
+      const serverUsername = res.username || null;
+      if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Verification successful: authenticated=${serverAuthenticated}, username=${serverUsername}`);
+
+      authState.isAuthenticated = serverAuthenticated;
+      authState.username = serverUsername;
+      authState.lastVerified = Date.now(); // Update cache time
+      lastVerifyFailureTime = 0; // Reset failure time on success
+
+      broadcastAuth(serverAuthenticated, serverUsername); // Broadcast the verified state
+      return serverAuthenticated;
+
     } catch (err) {
       lastError = err;
-      if (err.status === 401) {
+      if (AUTH_DEBUG) console.warn(`[Auth][${operationId}] Verification attempt ${i} failed:`, err);
+
+      // --- Handle 401 Unauthorized ---
+      if (err.status === 401 || err.message?.includes('expired')) {
+        if (AUTH_DEBUG) {
+          console.debug(`[Auth][${operationId}] Received 401/Expired, clearing state.`);
+          console.debug('Access token:', getCookie('access_token') ? 'present' : 'missing');
+          console.debug('Refresh token:', getCookie('refresh_token') ? 'present' : 'missing');
+          console.debug('CSRF token:', document.querySelector('meta[name="csrf-token"]')?.content ? 'present' : 'missing');
+        }
         sessionExpiredFlag = Date.now();
-        clearTokenState();
-        throw new Error('Session expired');
+        clearTokenState(); // Clears state and broadcasts false
+        // No need to throw 'Session expired' here, just return false as the state is now cleared.
+        return false; // Explicitly return false after clearing state
       }
+
+      // --- Handle other errors (timeout, server error) ---
       if (i < attempts) {
+        // Exponential backoff before retrying
         const backoffMs = Math.min(1000 * (2 ** (i - 1)), 5000);
+        if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Waiting ${backoffMs}ms before retry.`);
         await new Promise(r => setTimeout(r, backoffMs));
+      } else {
+         // Max attempts reached
+         if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Max verification attempts reached.`);
+         authState.lastVerified = Date.now(); // Update timestamp even on failure to prevent immediate retry loops
+         lastVerifyFailureTime = Date.now(); // Set failure time to enforce rate limit
+         // Don't change authState here, just throw the last error
+         throw lastError || new Error('Auth verification failed after multiple attempts');
       }
     }
   }
-  authState.isAuthenticated = false;
-  authState.lastVerified = Date.now();
-  broadcastAuth(false);
-  lastVerifyFailureTime = Date.now();
-  throw lastError || new Error('Auth verification failed');
+  // Should not be reached if loop completes or throws
+  return authState.isAuthenticated;
 }
 
 /* ----------------------------------
@@ -1030,6 +1041,19 @@ async function init() {
   if (window.API_CONFIG) window.API_CONFIG.authCheckInProgress = true;
 
   try {
+    // Ensure CSRF token is set before any auth operations
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    if (!csrfMeta?.content) {
+      console.warn('[Auth] Initializing without CSRF token');
+      if (window.getCSRFToken) {
+        const token = await window.getCSRFToken();
+        if (token && csrfMeta) {
+          csrfMeta.content = token;
+          console.log('[Auth] Set CSRF token from getCSRFToken()');
+        }
+      }
+    }
+
     // Attempt to restore from sessionStorage
     const restored = syncTokensToSessionStorage('get');
     if (restored) {
@@ -1094,12 +1118,25 @@ function handleAuthError(error, context = '') {
 }
 
 /* ----------------------------------
+ *  CSRF Token Utilities
+ * ---------------------------------- */
+function getCSRFToken() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (!meta?.content) {
+    console.warn('[Auth] CSRF token meta tag missing or empty');
+    return '';
+  }
+  return meta.content;
+}
+
+/* ----------------------------------
  *  ADDITION #4: Export / Window Attach
  * ---------------------------------- */
 window.auth = window.auth || {};
 Object.assign(window.auth, {
   init,
   standardizeError,
+  getCSRFToken,
   logout,
   login: loginUser,
   handleRegister,
