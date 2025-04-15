@@ -12,8 +12,11 @@
 if (typeof window.ProjectModal === 'undefined') {
   window.ProjectModal = class ProjectModal {
   constructor() {
-    // Delay initialization to ensure DOM is fully loaded
-    setTimeout(() => this.initializeModal(), 100);
+    // Increased delay to ensure DOM is fully loaded including all modals
+    setTimeout(() => this.initializeModal(), 500);
+
+    // Add a fallback initialization attempt with MutationObserver
+    this._setupModalObserver();
   }
 
   initializeModal() {
@@ -337,6 +340,34 @@ if (typeof window.ProjectModal === 'undefined') {
       document.body.style.overflow = '';
     }
   }
+
+  /**
+   * Set up a MutationObserver to watch for the modal element to be added to the DOM
+   * @private
+   */
+  _setupModalObserver() {
+    // Create a MutationObserver to watch for the modal element to be added to the DOM
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length) {
+          const modalAdded = Array.from(mutation.addedNodes).some(node => {
+            return node.id === 'projectFormModal' ||
+                   (node.querySelector && node.querySelector('#projectFormModal'));
+          });
+
+          if (modalAdded) {
+            this.initializeModal();
+            observer.disconnect();
+            console.log('Project form modal detected by observer, initialized');
+            return;
+          }
+        }
+      }
+    });
+
+    // Start observing the document body
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 }
 
 // Initialize and expose globally
@@ -349,16 +380,16 @@ window.initProjectModal = () => {
 
 // Initialize when DOM is ready with a slight delay to ensure all elements are available
 document.addEventListener('DOMContentLoaded', () => {
-  // Delay initialization to ensure all DOM elements are fully loaded and processed
+  // Increase delay to ensure all DOM elements are fully loaded and processed
   setTimeout(() => {
     initProjectModal();
-  }, 300);
+  }, 1000);
 });
 
 // Auto-initialize if loaded after DOMContentLoaded, also with a delay
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   setTimeout(() => {
     initProjectModal();
-  }, 300);
+  }, 1000);
 }
 }

@@ -801,6 +801,7 @@ class KnowledgeBaseComponent {
 
   _useInConversation(result) {
     const chatInput =
+      document.getElementById('chatUIInput') ||
       document.getElementById('projectChatInput') ||
       document.getElementById('chatInput') ||
       document.querySelector('textarea[placeholder*="Send a message"]');
