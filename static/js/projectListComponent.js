@@ -939,99 +939,118 @@ ${content}`)) {
     }
 
     _bindProjectCardEvents() {
-      if (!this.element) return;
-
-      // Use event delegation on the container element
-      this.element.addEventListener('click', (event) => {
-        const projectCard = event.target.closest('.card[data-project-id]'); // Target DaisyUI card
+      if (!this.element) {
+        console.warn("[ProjectListComponent] Cannot bind card events: container element not found");
+        return;
+      }
+      // Remove any existing handler to prevent duplicates
+      if (this._cardClickHandler) {
+        this.element.removeEventListener('click', this._cardClickHandler);
+      }
+      // Create a persistent handler reference
+      this._cardClickHandler = (event) => {
+        const projectCard = event.target.closest('.card[data-project-id]');
         if (!projectCard) return;
-
         const projectId = projectCard.dataset.projectId;
         if (!projectId) return;
-
         this._handleCardClick(projectId, event);
-      });
+      };
+      // Attach with proper event delegation
+      this.element.addEventListener('click', this._cardClickHandler);
+      // Log for diagnostics
+      console.log("[ProjectListComponent] Project card click handlers bound successfully");
     }
 
     // Helper function to handle card click logic
     _handleCardClick(projectId, event = null) {
-        // Check if a specific action button *within* the card was clicked
-        // These buttons are currently not defined in the card structure,
-        // but this logic remains if they are added later.
-        const viewButton = event?.target.closest('[data-action="view-project"]');
-        const pinButton = event?.target.closest('[data-action="pin-project"]');
-        const archiveButton = event?.target.closest('[data-action="archive-project"]');
-        const editButton = event?.target.closest('[data-action="edit-project"]');
-        const deleteButton = event?.target.closest('[data-action="delete-project"]'); // Added delete
-
-        // Determine if the click was on the card itself (not an internal button/link)
-        const isCardClick = !event?.target.closest('button, a, .tooltip'); // Ignore clicks on buttons, links, or tooltips within the card
-
-        if (viewButton || isCardClick) {
-          // Default action: View Project
-          if (this.onViewProject && typeof this.onViewProject === 'function') {
-            event?.preventDefault();
+      // Determine action based on clicked element
+      let action = 'view'; // Default action
+      if (event) {
+        const actionElement = event.target.closest('[data-action]');
+        if (actionElement) {
+          action = actionElement.dataset.action;
+        }
+      }
+      // Find project data
+      const project = this.state.projects.find(p => p.id === projectId);
+      if (!project) {
+        console.warn(`[ProjectListComponent] Project not found for ID: ${projectId}`);
+        this._showNotification('Project not found', 'error');
+        return;
+      }
+      // Execute action
+      switch(action) {
+        case 'view':
+          if (typeof this.onViewProject === 'function') {
+            console.log(`[ProjectListComponent] Viewing project: ${projectId}`);
             this.onViewProject(projectId);
           } else if (window.projectManager?.loadProjectDetails) {
-             event?.preventDefault();
-             // Let the main dashboard handle view switching
-             // this._toggleListViewVisibility(false); // Don't hide here
-             window.projectManager.loadProjectDetails(projectId);
+            window.projectManager.loadProjectDetails(projectId);
           }
-        } else if (pinButton) {
-           event?.preventDefault();
-           if (window.projectManager?.togglePinProject) {
-             window.projectManager.togglePinProject(projectId).then(() => {
-               this._showNotification('Project pin toggled', 'success');
-               this._loadProjectsThroughManager(); // Reload list
-             }).catch(err => {
-                console.error('Error pinning project:', err);
-                this._showNotification('Error pinning project', 'error');
-             });
-           }
-        } else if (archiveButton) {
-           event?.preventDefault();
-           if (window.projectManager?.toggleArchiveProject) {
-             window.projectManager.toggleArchiveProject(projectId).then(() => {
+          break;
+        case 'pin':
+          if (window.projectManager?.togglePinProject) {
+            window.projectManager.togglePinProject(projectId)
+              .then(() => {
+                console.log(`[ProjectListComponent] Toggled pin for project: ${projectId}`);
+                this._showNotification('Project pin toggled', 'success');
+                this._loadProjectsThroughManager();
+              })
+              .catch(this._handleActionError.bind(this, 'pin'));
+          }
+          break;
+        case 'archive':
+          if (window.projectManager?.toggleArchiveProject) {
+            window.projectManager.toggleArchiveProject(projectId)
+              .then(() => {
+                console.log(`[ProjectListComponent] Toggled archive for project: ${projectId}`);
                 this._showNotification('Project archive status toggled', 'success');
-                this._loadProjectsThroughManager(); // Reload list
-             }).catch(err => {
-                console.error('Error archiving project:', err);
-                this._showNotification('Error archiving project', 'error');
-             });
-           }
-        } else if (editButton) {
-            event?.preventDefault();
-            if (window.modalManager) {
-               window.modalManager.show('project', {
-                  updateContent: async (modalEl) => {
-                     // Fetch project data to pre-fill form
-                     const project = this.state.projects.find(p => p.id === projectId) || await window.projectManager?.getProjectById(projectId);
-                     const form = modalEl.querySelector('#projectForm');
-                     const title = modalEl.querySelector('#projectModalTitle');
-                     if (form && project) {
-                        form.querySelector('#projectIdInput').value = project.id;
-                        form.querySelector('#projectNameInput').value = project.name || '';
-                        form.querySelector('#projectDescInput').value = project.description || '';
-                        form.querySelector('#projectGoalsInput').value = project.goals || '';
-                        form.querySelector('#projectMaxTokensInput').value = project.max_tokens || '';
-                        if (title) title.textContent = 'Edit Project';
-                     } else if (title) {
-                        title.textContent = 'Edit Project (Error loading data)';
-                     }
-                  }
-               });
-            } else {
-                console.warn('Edit project function/modal not found');
-                this._showNotification('Cannot open edit form', 'warning');
+                this._loadProjectsThroughManager();
+              })
+              .catch(this._handleActionError.bind(this, 'archive'));
+          }
+          break;
+        case 'edit':
+          this._showEditModal(project);
+          break;
+        case 'delete':
+          this._confirmDelete(project);
+          break;
+        default:
+          console.warn(`[ProjectListComponent] Unknown action: ${action}`);
+      }
+    }
+
+    _handleActionError(action, err) {
+      console.error(`[ProjectListComponent] Error performing ${action} action:`, err);
+      this._showNotification(`Failed to ${action} project`, 'error');
+    }
+
+    _showEditModal(project) {
+      if (!project) return;
+      if (window.modalManager?.show) {
+        window.modalManager.show('project', {
+          updateContent: (modalEl) => {
+            const form = modalEl.querySelector('#projectForm');
+            const title = modalEl.querySelector('#projectModalTitle');
+            if (form) {
+              const idInput = form.querySelector('#projectIdInput');
+              const nameInput = form.querySelector('#projectNameInput');
+              const descInput = form.querySelector('#projectDescInput');
+              const goalsInput = form.querySelector('#projectGoalsInput');
+              const maxTokensInput = form.querySelector('#projectMaxTokensInput');
+              if (idInput) idInput.value = project.id || '';
+              if (nameInput) nameInput.value = project.name || '';
+              if (descInput) descInput.value = project.description || '';
+              if (goalsInput) goalsInput.value = project.goals || '';
+              if (maxTokensInput) maxTokensInput.value = project.max_tokens || '';
             }
-        } else if (deleteButton) {
-            event?.preventDefault();
-            const project = this.state.projects.find(p => p.id === projectId);
-            if (project) {
-               this._confirmDelete(project);
-            }
-        }
+            if (title) title.textContent = 'Edit Project';
+          }
+        });
+      } else if (window.projectModal?.openModal) {
+        window.projectModal.openModal(project);
+      }
     }
   }
 
