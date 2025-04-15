@@ -1224,6 +1224,10 @@ export class ProjectDetailsComponent {
     } else {
       progressBar.classList.add('progress-info');
     }
+    if (typeof window.ProjectDetailsComponent !== 'function') {
+      console.log('[ProjectDetailsComponent] Exposing ProjectDetailsComponent to global scope');
+      window.ProjectDetailsComponent = ProjectDetailsComponent;
+    }
 
     statusText.textContent = `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
 
@@ -1251,4 +1255,13 @@ export class ProjectDetailsComponent {
 }
 
 // If you prefer attaching to the global window instead of an ES module:
-// window.ProjectDetailsComponent = ProjectDetailsComponent;
+/**
+ * Fix for projectDetailsComponent.js
+ * Add at the end of the file
+ */
+// Explicitly expose the ProjectDetailsComponent to the global window object
+// This ensures it's available both as an ES module export and a global variable
+if (typeof window.ProjectDetailsComponent !== 'function') {
+  console.log('[ProjectDetailsComponent] Exposing ProjectDetailsComponent to global scope');
+  window.ProjectDetailsComponent = ProjectDetailsComponent;
+}
