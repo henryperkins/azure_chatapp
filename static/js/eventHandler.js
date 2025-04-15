@@ -1,8 +1,55 @@
 /**
- * eventHandlers.js - Module for setting up event listeners for UI interactions.
- * Separated from app.js to reduce file size and improve modularity.
+ * eventHandler.js - Centralized module for managing all event listeners across the application.
+ * Provides a unified system for setting up, tracking, and cleaning up event listeners.
  */
 
+// Track listeners centrally to prevent memory leaks
+const trackedListeners = new Set();
+
+/**
+ * Utility to debounce functions for performance optimization
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Wait time in milliseconds
+ * @returns {Function} - Debounced function
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+/**
+ * Track a listener for future cleanup
+ * @param {Element|null} element - Element to attach listener to
+ * @param {string} type - Event type (e.g., 'click', 'keydown')
+ * @param {Function} handler - Event handler function
+ * @param {AddEventListenerOptions|Object} [options={}] - Event listener options
+ * @returns {void}
+ */
+function trackListener(element, type, handler, options = {}) {
+    if (!element) return;
+    element.addEventListener(type, handler, options);
+    trackedListeners.add({ element, type, handler, options });
+}
+
+/**
+ * Clean up all tracked event listeners
+ * @returns {void}
+ */
+function cleanupListeners() {
+    trackedListeners.forEach(({ element, type, handler, options }) => {
+        element.removeEventListener(type, handler, options);
+    });
+    trackedListeners.clear();
+}
+
+/**
+ * Handle keyboard shortcut events
+ * @param {KeyboardEvent} e - Keyboard event
+ * @returns {void}
+ */
 function handleKeyDown(e) {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
         if (e.key.toLowerCase() === 'r') {
@@ -16,85 +63,542 @@ function handleKeyDown(e) {
     }
 }
 
+/**
+ * Handle new conversation creation with authentication check
+ * @returns {void}
+ */
 function handleNewConversationClick() {
-    if (window.ensureAuthenticated) {
-        window.ensureAuthenticated().then(isAuth => {
-            if (!isAuth) {
-                if (window.showNotification) window.showNotification("Please log in to create a conversation", "error");
-                return;
-            }
-            if (window.projectManager?.createConversation) {
-                window.projectManager.createConversation(null)
-                    .then(newConversation => {
-                        window.location.href = '/?chatId=' + newConversation.id;
-                    })
-                    .catch(err => {
-                        if (window.handleAPIError) window.handleAPIError('creating conversation', err);
-                    });
-            } else {
-                console.error('No project manager or conversation creation method found');
-            }
-        });
+    if (!window.ensureAuthenticated) {
+        console.error('Authentication check not available');
+        window.showNotification?.('Authentication service unavailable', 'error');
+        return;
     }
+    window.ensureAuthenticated().then(isAuth => {
+        if (!isAuth) {
+            window.showNotification?.('Please log in to create a conversation', 'error');
+            return;
+        }
+        if (!window.projectManager?.createConversation) {
+            console.error('No project manager or conversation creation method found');
+            window.showNotification?.('Conversation creation service unavailable', 'error');
+            return;
+        }
+        window.projectManager
+            .createConversation(null)
+            .then(newConversation => {
+                window.location.href = '/?chatId=' + newConversation.id;
+            })
+            .catch(err => {
+                window.handleAPIError?.('creating conversation', err);
+            });
+    });
 }
 
+/**
+ * Handle project form submission for creating or updating projects
+ * @param {Event} e - Form submission event
+ * @returns {void}
+ */
 function handleProjectFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
-    const modalDialog = form.closest('dialog'); // Get the parent dialog
-    const projectId = form.querySelector("#projectIdInput")?.value;
+    const modalDialog = form.closest('dialog');
+    const projectId = form.querySelector('#projectIdInput')?.value;
     const isEditing = !!projectId;
     const formData = {
-        name: form.querySelector("#projectNameInput")?.value.trim(),
-        description: form.querySelector("#projectDescInput")?.value.trim(),
-        goals: form.querySelector("#projectGoalsInput")?.value.trim(),
-        max_tokens: parseInt(form.querySelector("#projectMaxTokensInput")?.value, 10)
+        name: form.querySelector('#projectNameInput')?.value.trim(),
+        description: form.querySelector('#projectDescInput')?.value.trim(),
+        goals: form.querySelector('#projectGoalsInput')?.value.trim(),
+        max_tokens: parseInt(form.querySelector('#projectMaxTokensInput')?.value, 10),
     };
+
     if (!formData.name) {
-        if (window.showNotification) window.showNotification("Project name is required", "error");
+        window.showNotification?.('Project name is required', 'error');
         return;
     }
+
     const submitButton = form.querySelector('button[type="submit"]');
     const originalButtonText = submitButton?.textContent;
     if (submitButton) {
         submitButton.disabled = true;
         submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
     }
+
     try {
-        window.projectManager.createOrUpdateProject(projectId, formData).then(() => {
-            if (window.showNotification) window.showNotification(isEditing ? "Project updated" : "Project created", "success");
-            if (modalDialog && typeof modalDialog.close === 'function') modalDialog.close();
-            else if (window.modalManager) window.modalManager.hide("project");
-            window.projectManager.loadProjects('all');
-        }).catch(err => {
-            console.error("[ProjectDashboard] Error saving project:", err);
-            if (window.showNotification) window.showNotification(`Failed to save project: ${err.message || 'Unknown error'}`, "error");
-            const errorDiv = form.querySelector('.modal-error-display');
-            if (errorDiv) {
-                errorDiv.textContent = `Error: ${err.message || 'Unknown error'}`;
-                errorDiv.classList.remove('hidden');
-            }
-        }).finally(() => {
-            if (submitButton) {
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonText;
-            }
-        });
+        if (!window.projectManager?.createOrUpdateProject) {
+            throw new Error('Project manager service unavailable');
+        }
+        window.projectManager
+            .createOrUpdateProject(projectId, formData)
+            .then(() => {
+                window.showNotification?.(isEditing ? 'Project updated' : 'Project created', 'success');
+                if (modalDialog && typeof modalDialog.close === 'function') {
+                    modalDialog.close();
+                } else {
+                    window.modalManager?.hide('project');
+                }
+                window.projectManager?.loadProjects('all');
+            })
+            .catch(err => {
+                console.error('[ProjectDashboard] Error saving project:', err);
+                window.showNotification?.(`Failed to save project: ${err.message || 'Unknown error'}`, 'error');
+                const errorDiv = form.querySelector('.modal-error-display');
+                if (errorDiv) {
+                    errorDiv.textContent = `Error: ${err.message || 'Unknown error'}`;
+                    errorDiv.classList.remove('hidden');
+                }
+            })
+            .finally(() => {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                }
+            });
     } catch (err) {
-        console.error("[ProjectDashboard] Error saving project:", err);
-        if (window.showNotification) window.showNotification(`Failed to save project: ${err.message || 'Unknown error'}`, "error");
+        console.error('[ProjectDashboard] Error saving project:', err);
+        window.showNotification?.(`Failed to save project: ${err.message || 'Unknown error'}`, 'error');
     }
 }
 
-function setupEventListeners() {
-    // Listeners from app.js
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('click', (event) => {
-        if (event.target.closest('#newConversationBtn')) {
-            handleNewConversationClick();
+/**
+ * Set up sidebar toggle functionality with touch gestures
+ * @returns {boolean} - True if setup is successful, false otherwise
+ */
+function setupSidebarToggle() {
+    const sidebar = document.getElementById('mainSidebar');
+    const toggleBtn = document.getElementById('navToggleBtn');
+    const closeBtn = document.getElementById('closeSidebarBtn');
+
+    if (!sidebar) {
+        console.warn('Sidebar element not found in DOM');
+        return false;
+    }
+
+    // Add transition end handler to manage animation state
+    function handleTransitionEnd() {
+        if (window.sidebar) {
+            window.sidebar.isAnimating = false;
         }
-        if (event.target.closest('#createProjectBtn')) {
-            if (window.modalManager?.show) window.modalManager.show('project', {
+    }
+    trackListener(sidebar, 'transitionend', handleTransitionEnd);
+
+    // Track close button click
+    if (closeBtn) {
+        trackListener(closeBtn, 'click', () => {
+            if (window.toggleSidebar) {
+                window.toggleSidebar(false);
+            }
+        });
+    }
+
+    // Setup touch gestures for mobile
+    let touchStartX = 0;
+    const threshold = 30; // Minimum horizontal swipe distance
+
+    // Track touch start position with proper passive handling
+    const touchStartHandler = (e) => {
+        touchStartX = e.touches[0].clientX;
+    };
+    trackListener(document, 'touchstart', touchStartHandler, { passive: true });
+
+    // Handle edge swipe to open/close
+    const touchEndHandler = (e) => {
+        const touchEndX = e.changedTouches[0].clientX;
+        const deltaX = touchEndX - touchStartX;
+        const isMobile = window.innerWidth < 768;
+
+        if (!isMobile) return;
+
+        // Edge swipe from left to right to open sidebar
+        if (touchStartX < 50 && deltaX > threshold) {
+            if (window.toggleSidebar) {
+                window.toggleSidebar(true);
+            }
+            e.preventDefault();
+        } else if (window.sidebar?.isOpen && touchStartX > window.innerWidth - 50 && deltaX < -threshold) {
+            // Edge swipe from right to left to close sidebar when open
+            if (window.toggleSidebar) {
+                window.toggleSidebar(false);
+            }
+            e.preventDefault();
+        }
+    };
+    trackListener(document, 'touchend', touchEndHandler, { passive: false });
+
+    // Handle toggle button click
+    if (toggleBtn) {
+        trackListener(toggleBtn, 'click', (e) => {
+            e.stopPropagation();
+            if (window.toggleSidebar) {
+                window.toggleSidebar();
+            }
+        });
+
+        // Add keyboard accessibility
+        trackListener(toggleBtn, 'keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (window.toggleSidebar) {
+                    window.toggleSidebar();
+                }
+            }
+        });
+    }
+
+    // Track window resize for responsive behavior
+    trackListener(window, 'resize', () => {
+        const isMobile = window.innerWidth < 768;
+
+        // Auto-close on mobile resize
+        if (isMobile && window.sidebar?.isOpen) {
+            if (window.toggleSidebar) {
+                window.toggleSidebar(false);
+            }
+        }
+
+        // Always open on desktop
+        if (!isMobile && window.sidebar) {
+            window.sidebar.isOpen = true;
+            if (window.updateSidebarState) {
+                window.updateSidebarState();
+            }
+        }
+    });
+
+    return true;
+}
+
+/**
+ * Set up tab navigation in the sidebar
+ * @returns {void}
+ */
+function setupSidebarTabs() {
+    const tabConfig = {
+        recent: {
+            buttonId: 'recentChatsTab',
+            sectionId: 'recentChatsSection',
+            loader: () => window.loadConversationList?.(),
+        },
+        starred: {
+            buttonId: 'starredChatsTab',
+            sectionId: 'starredChatsSection',
+            loader: () => window.sidebar?.loadStarredConversations?.(),
+        },
+        projects: {
+            buttonId: 'projectsTab',
+            sectionId: 'projectsSection',
+            loader: () => window.loadSidebarProjects?.(),
+        },
+    };
+
+    // Set up event listeners for each tab
+    Object.entries(tabConfig).forEach(([name, config]) => {
+        const button = document.getElementById(config.buttonId);
+        if (button) {
+            // Add keyboard navigation
+            trackListener(button, 'keydown', (e) => {
+                if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    // Navigation logic can be handled by sidebar.js if available
+                    if (window.sidebar && typeof window.sidebar.activateTab === 'function') {
+                        // Call sidebar.js tab activation logic if it exists
+                        // This assumes sidebar.js exposes activateTab globally or via window.sidebar
+                        // Otherwise, handle navigation here (placeholder for now)
+                    }
+                }
+            });
+
+            // Add click handler
+            trackListener(button, 'click', () => {
+                // Save active tab
+                localStorage.setItem('sidebarActiveTab', name);
+                // Let sidebar.js handle the actual tab activation if available
+                if (window.sidebar && typeof window.sidebar.activateTab === 'function') {
+                    window.sidebar.activateTab(name);
+                } else {
+                    // Fallback to basic tab activation if sidebar.js logic is not available
+                    Object.entries(tabConfig).forEach(([tabName, tabData]) => {
+                        const isActive = tabName === name;
+                        const tabButton = document.getElementById(tabData.buttonId);
+                        const tabContent = document.getElementById(tabData.sectionId);
+                        if (tabButton) {
+                            tabButton.setAttribute('aria-selected', isActive);
+                            tabButton.classList.toggle('project-tab-btn-active', isActive);
+                            tabButton.classList.toggle('text-gray-500', !isActive);
+                        }
+                        if (tabContent) {
+                            tabContent.classList.toggle('hidden', !isActive);
+                        }
+                    });
+                    // Trigger loader if available
+                    if (config.loader) {
+                        setTimeout(config.loader, 300);
+                    }
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Set up search functionality for conversations and projects with debouncing
+ * @returns {void}
+ */
+function setupSearch() {
+    const chatSearchInput = document.getElementById('chatSearchInput');
+    if (chatSearchInput) {
+        trackListener(chatSearchInput, 'input', debounce((e) => {
+            window.sidebar?.searchSidebarConversations?.(e.target.value);
+        }, 300));
+    }
+
+    const projectSearchInput = document.getElementById('sidebarProjectSearch');
+    if (projectSearchInput) {
+        trackListener(projectSearchInput, 'input', debounce((e) => {
+            if (window.sidebar?.searchSidebarProjects) {
+                window.sidebar.searchSidebarProjects(e.target.value);
+            } else {
+                const searchTerm = e.target.value.toLowerCase();
+                const projectItems = document.querySelectorAll('#sidebarProjects li');
+                projectItems.forEach(item => {
+                    const projectName = item.textContent.toLowerCase();
+                    item.style.display = projectName.includes(searchTerm) ? '' : 'none';
+                });
+            }
+        }, 300));
+    }
+}
+
+/**
+ * Set up a single collapsible section
+ * @param {string} toggleId - ID of the toggle button
+ * @param {string} panelId - ID of the panel to toggle
+ * @param {string} chevronId - ID of the chevron icon
+ * @param {Function} [onExpand] - Optional callback when panel is expanded
+ * @returns {void}
+ */
+function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
+    try {
+        const toggleButton = document.getElementById(toggleId);
+        const panel = document.getElementById(panelId);
+        const chevron = document.getElementById(chevronId);
+
+        if (!toggleButton || !panel || !chevron) {
+            console.warn(`Collapsible section elements not found: ${toggleId}, ${panelId}, ${chevronId}`);
+            return;
+        }
+
+        // Set up keyboard interaction
+        toggleButton.setAttribute('role', 'button');
+        toggleButton.setAttribute('aria-expanded', 'false');
+        toggleButton.setAttribute('aria-controls', panelId);
+
+        // Load saved state
+        const isExpanded = localStorage.getItem(`${toggleId}_expanded`) === 'true';
+
+        // Apply initial state
+        panel.classList.add('collapsible-panel');
+
+        if (isExpanded) {
+            panel.classList.add('max-h-[500px]');
+            panel.style.maxHeight = 'max-content';
+            chevron.style.transform = 'rotate(180deg)';
+            toggleButton.setAttribute('aria-expanded', 'true');
+
+            // Call onExpand callback if provided
+            if (typeof onExpand === 'function') {
+                setTimeout(onExpand, 100);
+            }
+        } else {
+            panel.classList.add('max-h-0');
+            panel.style.maxHeight = '0px';
+            chevron.style.transform = 'rotate(0deg)';
+        }
+
+        // Add click handler with proper tracking
+        trackListener(toggleButton, 'click', () => {
+            const isCurrentlyExpanded = panel.classList.contains('max-h-[500px]');
+
+            if (isCurrentlyExpanded) {
+                // Collapse
+                panel.style.maxHeight = '0px';
+                panel.classList.remove('max-h-[500px]');
+                chevron.style.transform = 'rotate(0deg)';
+                toggleButton.setAttribute('aria-expanded', 'false');
+                localStorage.setItem(`${toggleId}_expanded`, 'false');
+            } else {
+                // Expand
+                panel.style.maxHeight = 'max-content';
+                panel.classList.add('max-h-[500px]');
+                chevron.style.transform = 'rotate(180deg)';
+                toggleButton.setAttribute('aria-expanded', 'true');
+                localStorage.setItem(`${toggleId}_expanded`, 'true');
+
+                // Call onExpand callback if provided
+                if (typeof onExpand === 'function') {
+                    onExpand();
+                }
+            }
+        });
+    } catch (error) {
+        console.error(`Error setting up collapsible section ${toggleId}:`, error);
+    }
+}
+
+/**
+ * Set up multiple collapsible sections
+ * @returns {void}
+ */
+function setupCollapsibleSections() {
+    const sections = [
+        {
+            toggleId: 'toggleModelConfig',
+            panelId: 'modelConfigPanel',
+            chevronId: 'modelConfigChevron',
+            onExpand: () => window.initializeModelDropdown?.(),
+        },
+        {
+            toggleId: 'toggleCustomInstructions',
+            panelId: 'customInstructionsPanel',
+            chevronId: 'customInstructionsChevron',
+        },
+    ];
+
+    sections.forEach(section => {
+        setupCollapsibleSection(
+            section.toggleId,
+            section.panelId,
+            section.chevronId,
+            section.onExpand
+        );
+    });
+}
+
+/**
+ * Set up sidebar pinning functionality
+ * @returns {void}
+ */
+function setupPinningSidebar() {
+    try {
+        const pinButton = document.getElementById('pinSidebarBtn');
+        const sidebar = document.getElementById('mainSidebar');
+
+        if (!pinButton) {
+            console.debug('Pin button element not found in DOM - pinning functionality disabled');
+            return;
+        }
+
+        if (!sidebar) {
+            console.warn('Sidebar element not initialized - pinning functionality disabled');
+            return;
+        }
+
+        const isPinned = localStorage.getItem('sidebarPinned') === 'true';
+        if (isPinned) {
+            pinButton.classList.add('text-yellow-500');
+            const svg = pinButton.querySelector('svg');
+            if (svg) svg.setAttribute('fill', 'currentColor');
+            document.body.classList.add('pinned-sidebar');
+        }
+
+        trackListener(pinButton, 'click', () => {
+            const isPinnedNow = document.body.classList.contains('pinned-sidebar');
+            if (isPinnedNow) {
+                document.body.classList.remove('pinned-sidebar');
+                pinButton.classList.remove('text-yellow-500');
+                const svg = pinButton.querySelector('svg');
+                if (svg) svg.setAttribute('fill', 'none');
+                localStorage.setItem('sidebarPinned', 'false');
+            } else {
+                document.body.classList.add('pinned-sidebar');
+                pinButton.classList.add('text-yellow-500');
+                const svg = pinButton.querySelector('svg');
+                if (svg) svg.setAttribute('fill', 'currentColor');
+                localStorage.setItem('sidebarPinned', 'true');
+            }
+        });
+    } catch (error) {
+        console.error('Error initializing sidebar pinning:', error);
+    }
+}
+
+/**
+ * Set up custom instructions functionality
+ * @returns {void}
+ */
+function setupCustomInstructions() {
+    const instructionsTextarea = document.getElementById('globalCustomInstructions');
+    const saveButton = document.getElementById('saveGlobalInstructions');
+
+    if (!instructionsTextarea || !saveButton) {
+        console.warn('Custom instructions elements not found in the DOM');
+        return;
+    }
+
+    instructionsTextarea.value = localStorage.getItem('globalCustomInstructions') || '';
+    trackListener(saveButton, 'click', () => {
+        const instructions = instructionsTextarea.value;
+        localStorage.setItem('globalCustomInstructions', instructions);
+        if (window.MODEL_CONFIG) {
+            window.MODEL_CONFIG.customInstructions = instructions;
+        }
+        document.dispatchEvent(
+            new CustomEvent('modelConfigChanged', {
+                detail: {
+                    customInstructions: instructions,
+                    timestamp: Date.now(),
+                },
+            })
+        );
+        window.showNotification?.('Custom instructions saved and applied to chat', 'success') ||
+            console.log('Custom instructions saved');
+    });
+}
+
+/**
+ * Main function for setting up all event listeners
+ * @returns {void}
+ */
+function setupEventListeners() {
+    cleanupListeners(); // Clean up existing listeners to prevent duplicates
+
+    // Setup key shortcuts
+    trackListener(document, 'keydown', handleKeyDown);
+
+    // Set up sidebar components if they exist
+    setupSidebarToggle();
+    setupSidebarTabs();
+    setupSearch();
+    setupCollapsibleSections();
+    setupPinningSidebar();
+    setupCustomInstructions();
+
+    // Set up additional UI interactions
+    const projectForm = document.getElementById('projectForm');
+    if (projectForm) {
+        trackListener(projectForm, 'submit', handleProjectFormSubmit);
+    }
+
+    const newProjectBtn = document.getElementById('sidebarNewProjectBtn');
+    if (newProjectBtn) {
+        trackListener(newProjectBtn, 'click', () => {
+            window.modalManager?.show('project', {});
+        });
+    }
+
+    const showLoginBtn = document.getElementById('showLoginBtn');
+    const authButton = document.getElementById('authButton');
+    if (showLoginBtn && authButton) {
+        trackListener(showLoginBtn, 'click', () => authButton.click());
+    }
+
+    // Set up global click handlers using event delegation
+    trackListener(document, 'click', (event) => {
+        const target = event.target;
+        if (target.closest('#newConversationBtn')) {
+            handleNewConversationClick();
+        } else if (target.closest('#createProjectBtn')) {
+            window.modalManager?.show('project', {
                 updateContent: (modalEl) => {
                     const form = modalEl.querySelector('form');
                     if (form) form.reset();
@@ -102,20 +606,18 @@ function setupEventListeners() {
                     if (projectIdInput) projectIdInput.value = '';
                     const title = modalEl.querySelector('.modal-title, h3');
                     if (title) title.textContent = 'Create New Project';
-                }
+                },
             });
-        }
-        if (event.target.closest('#backToProjectsBtn')) {
-            if (window.ProjectDashboard?.showProjectList) window.ProjectDashboard.showProjectList();
-            else if (typeof window.showProjectsView === 'function') window.showProjectsView();
-            else {
-                const listView = document.getElementById('projectListView');
-                const detailsView = document.getElementById('projectDetailsView');
-                if (listView) listView.classList.remove('hidden');
-                if (detailsView) detailsView.classList.add('hidden');
-            }
-        }
-        if (event.target.closest('#editProjectBtn')) {
+        } else if (target.closest('#backToProjectsBtn')) {
+            window.ProjectDashboard?.showProjectList?.() ||
+                window.showProjectsView?.() ||
+                (() => {
+                    const listView = document.getElementById('projectListView');
+                    const detailsView = document.getElementById('projectDetailsView');
+                    if (listView) listView.classList.remove('hidden');
+                    if (detailsView) detailsView.classList.add('hidden');
+                })();
+        } else if (target.closest('#editProjectBtn')) {
             const currentProject = window.projectManager?.getCurrentProject();
             if (currentProject && window.modalManager?.show) {
                 window.modalManager.show('project', {
@@ -128,99 +630,89 @@ function setupEventListeners() {
                             const title = modalEl.querySelector('.modal-title, h3');
                             if (title) title.textContent = `Edit Project: ${currentProject.name}`;
                         }
-                    }
+                    },
                 });
             }
-        }
-        if (event.target.closest('#pinProjectBtn')) {
+        } else if (target.closest('#pinProjectBtn')) {
             const currentProject = window.projectManager?.getCurrentProject();
             if (currentProject?.id && window.projectManager?.togglePinProject) {
-                window.projectManager.togglePinProject(currentProject.id)
+                window.projectManager
+                    .togglePinProject(currentProject.id)
                     .then(updatedProject => {
-                        if (window.showNotification) window.showNotification('Project ' + (updatedProject.pinned ? 'pinned' : 'unpinned'), 'success');
+                        window.showNotification?.(
+                            'Project ' + (updatedProject.pinned ? 'pinned' : 'unpinned'),
+                            'success'
+                        );
                         window.projectManager.loadProjectDetails(currentProject.id);
-                        if (window.loadSidebarProjects) window.loadSidebarProjects();
+                        window.loadSidebarProjects?.();
                     })
                     .catch(err => {
                         console.error('Error toggling pin:', err);
-                        if (window.showNotification) window.showNotification('Failed to update pin status', 'error');
+                        window.showNotification?.('Failed to update pin status', 'error');
                     });
             }
-        }
-        if (event.target.closest('#archiveProjectBtn')) {
+        } else if (target.closest('#archiveProjectBtn')) {
             const currentProject = window.projectManager?.getCurrentProject();
             if (currentProject && window.ModalManager?.confirmAction) {
                 window.ModalManager.confirmAction({
                     title: 'Confirm Archive',
                     message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} this project?`,
                     confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
-                    confirmClass: currentProject.archived ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700',
+                    confirmClass: currentProject.archived
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'bg-yellow-600 hover:bg-yellow-700',
                     onConfirm: () => {
-                        window.projectManager.toggleArchiveProject(currentProject.id)
+                        window.projectManager
+                            .toggleArchiveProject(currentProject.id)
                             .then(updatedProject => {
-                                if (window.showNotification) window.showNotification(`Project ${updatedProject.archived ? 'archived' : 'unarchived'}`, 'success');
-                                if (window.ProjectDashboard?.showProjectList) window.ProjectDashboard.showProjectList();
-                                if (window.loadSidebarProjects) window.loadSidebarProjects();
+                                window.showNotification?.(
+                                    `Project ${updatedProject.archived ? 'archived' : 'unarchived'}`,
+                                    'success'
+                                );
+                                window.ProjectDashboard?.showProjectList?.();
+                                window.loadSidebarProjects?.();
                                 window.projectManager.loadProjects('all');
                             })
                             .catch(err => {
                                 console.error('Error toggling archive:', err);
-                                if (window.showNotification) window.showNotification('Failed to update archive status', 'error');
+                                window.showNotification?.('Failed to update archive status', 'error');
                             });
-                    }
+                    },
                 });
             }
-        }
-        if (event.target.closest('#minimizeChatBtn')) {
+        } else if (target.closest('#minimizeChatBtn')) {
             const chatContainer = document.getElementById('projectChatContainer');
             if (chatContainer) chatContainer.classList.toggle('hidden');
         }
     });
-    // Additional setup from app.js
-    const projectSearch = document.querySelector('#sidebarProjectSearch');
-    if (projectSearch) {
-        projectSearch.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
-            const projectItems = document.querySelectorAll('#sidebarProjects li');
-            projectItems.forEach(item => {
-                const projectName = item.textContent.toLowerCase();
-                item.style.display = projectName.includes(searchTerm) ? '' : 'none';
-            });
-        });
-    }
-    const newProjectBtn = document.querySelector('#sidebarNewProjectBtn');
-    if (newProjectBtn) {
-        newProjectBtn.addEventListener('click', () => {
-            if (window.modalManager?.show) window.modalManager.show('project', {});
-        });
-    }
-    const showLoginBtn = document.querySelector('#showLoginBtn');
-    const authButton = document.querySelector('#authButton');
-    if (showLoginBtn && authButton) {
-        showLoginBtn.addEventListener('click', () => authButton.click());
-    }
-    // Add form submission listener from projectDashboard.js
-    const projectForm = document.getElementById("projectForm");
-    if (projectForm) {
-        projectForm.addEventListener("submit", handleProjectFormSubmit);
-    }
-    // Navigation tracking from app.js
+
+    // Navigation tracking for page interactions
     function recordInteraction() {
         sessionStorage.setItem('last_page_interaction', Date.now().toString());
     }
-    document.addEventListener('click', (e) => {
-        if (e.target.closest('a[href*="project"]') ||
+    trackListener(document, 'click', (e) => {
+        if (
+            e.target.closest('a[href*="project"]') ||
             e.target.closest('button[data-action*="project"]') ||
             e.target.closest('#manageDashboardBtn') ||
-            e.target.closest('#projectsNav')) {
+            e.target.closest('#projectsNav')
+        ) {
             recordInteraction();
         }
     });
-    window.addEventListener('beforeunload', recordInteraction);
+    trackListener(window, 'beforeunload', recordInteraction);
     recordInteraction();
 }
 
-// Export to window for app.js integration
+// Export to window for integration with other modules
 window.eventHandlers = {
-    init: setupEventListeners
+    init: setupEventListeners,
+    trackListener: trackListener,
+    cleanupListeners: cleanupListeners,
+    handleProjectFormSubmit: handleProjectFormSubmit,
+    handleNewConversationClick: handleNewConversationClick,
+    setupCollapsibleSection: setupCollapsibleSection,
+    setupCollapsibleSections: setupCollapsibleSections,
+    setupPinningSidebar: setupPinningSidebar,
+    setupCustomInstructions: setupCustomInstructions,
 };

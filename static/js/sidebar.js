@@ -1,13 +1,10 @@
 /**
  * sidebar.js
  * ---------
- * Handles all sidebar UI functionality:
+ * Handles core sidebar UI functionality:
  * - Tab switching between Recent, Starred, and Projects
- * - Collapsible settings panels
- * - Pinning/unpinning sidebar
- * - Mobile sidebar toggle and backdrop
- * - Custom instructions saving
  * - Starred conversations management
+ * - Core sidebar state management
  *
  * Uses auth.js exclusively for authentication
  */
@@ -19,12 +16,10 @@ let toggleBtn = null;
 let closeBtn = null;
 let isAnimating = false;
 
-// Track listeners centrally to prevent memory leaks
-const trackedListeners = new Set();
-
 /**
  * Toggle sidebar open/closed state
  * @param {boolean} [forceState] Optional state to force
+ * @returns {void}
  */
 window.toggleSidebar = function (forceState) {
   if (isAnimating) return;
@@ -53,6 +48,7 @@ window.toggleSidebar = function (forceState) {
 
 /**
  * Update the sidebar visibility state and related UI elements
+ * @returns {void}
  */
 function updateSidebarState() {
   const isMobile = window.innerWidth < 768;
@@ -77,7 +73,8 @@ function updateSidebarState() {
 }
 
 /**
- * Update accessibility attributes
+ * Update accessibility attributes for sidebar
+ * @returns {void}
  */
 function updateAccessibilityAttributes() {
   if (!toggleBtn || !sidebar) return;
@@ -93,27 +90,9 @@ function updateAccessibilityAttributes() {
 }
 
 /**
- * Handle window resize events
- */
-function handleResize() {
-  const isMobile = window.innerWidth < 768;
-
-  // Auto-close on mobile resize
-  if (isMobile && isOpen) {
-    toggleSidebar(false);
-  }
-
-  // Always open on desktop
-  if (!isMobile) {
-    isOpen = true;
-    updateSidebarState();
-    updateBackdrop(false);
-  }
-}
-
-/**
- * Create, update or remove backdrop element
+ * Create, update or remove backdrop element for mobile sidebar
  * @param {boolean} show Whether to show the backdrop
+ * @returns {void}
  */
 function updateBackdrop(show) {
   let backdrop = document.getElementById('sidebarBackdrop');
@@ -123,19 +102,19 @@ function updateBackdrop(show) {
     backdrop.id = 'sidebarBackdrop';
     backdrop.className = 'fixed top-0 left-[16rem] bottom-0 right-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
     backdrop.setAttribute('aria-hidden', 'true');
-    backdrop.style.touchAction = 'auto'; // Changed from 'none' to 'auto'
+    backdrop.style.touchAction = 'auto';
     backdrop.style.pointerEvents = 'auto';
 
     // Handle click on backdrop
     const clickHandler = (e) => {
       if (e.target === backdrop) {
         e.preventDefault();
-        toggleSidebar(false);
+        window.toggleSidebar(false);
         document.activeElement?.blur();
       }
     };
 
-    backdrop.addEventListener('touchstart', clickHandler); // Removed { passive: false }
+    backdrop.addEventListener('touchstart', clickHandler);
     backdrop.addEventListener('click', clickHandler);
 
     document.body.appendChild(backdrop);
@@ -147,14 +126,10 @@ function updateBackdrop(show) {
 }
 
 /**
- * Initialize the sidebar toggle functionality
+ * Initialize the sidebar core elements and state
+ * @returns {boolean} True if initialization is successful, false otherwise
  */
 function initializeSidebarToggle() {
-  // Clear existing references to prevent memory leaks
-  if (sidebar) {
-    sidebar.removeEventListener('transitionend', handleTransitionEnd);
-  }
-
   sidebar = document.getElementById('mainSidebar');
   toggleBtn = document.getElementById('navToggleBtn');
   closeBtn = document.getElementById('closeSidebarBtn');
@@ -163,12 +138,6 @@ function initializeSidebarToggle() {
     console.warn('Sidebar element not found in DOM');
     return false;
   }
-
-  // Add transition end handler
-  function handleTransitionEnd() {
-    isAnimating = false;
-  }
-  sidebar.addEventListener('transitionend', handleTransitionEnd);
 
   // Ensure closeBtn exists or create fallback
   if (!closeBtn && sidebar) {
@@ -189,17 +158,6 @@ function initializeSidebarToggle() {
     sidebar.style.transition = 'none';
   }
 
-  // Setup fresh listeners with proper event handling
-  setupMobileToggle();
-
-  // Track closeBtn click
-  if (closeBtn) {
-    trackListener(closeBtn, 'click', () => toggleSidebar(false));
-  }
-
-  // Track window resize
-  trackListener(window, 'resize', handleResize);
-
   // Set initial state based on viewport
   const isMobile = window.innerWidth < 768;
   isOpen = !isMobile; // Default: closed on mobile, open on desktop
@@ -211,104 +169,26 @@ function initializeSidebarToggle() {
 }
 
 /**
- * Set up edge swipe and toggle button for mobile
- */
-function setupMobileToggle() {
-  // Clear existing touch handlers
-  trackedListeners.forEach(({type}) => {
-    if (type === 'touchstart' || type === 'touchend') {
-      document.removeEventListener(type, handler);
-    }
-  });
-
-  // Setup touch gestures for mobile
-  let touchStartX = 0;
-  const threshold = 30; // Minimum horizontal swipe distance
-
-  // Track touch start position with proper passive handling
-  const touchStartHandler = (e) => {
-    touchStartX = e.touches[0].clientX;
-  };
-  trackListener(document, 'touchstart', touchStartHandler, { passive: true });
-
-  // Handle edge swipe to open/close
-  const touchEndHandler = (e) => {
-    const touchEndX = e.changedTouches[0].clientX;
-    const deltaX = touchEndX - touchStartX;
-
-    // Edge swipe from left to right to open sidebar
-    if (touchStartX < 50 && deltaX > threshold) {
-      toggleSidebar(true);
-      e.preventDefault();
-    } else if (isOpen && touchStartX > window.innerWidth - 50 && deltaX < -threshold) {
-      // Edge swipe from right to left to close sidebar when open
-      toggleSidebar(false);
-      e.preventDefault();
-    }
-  };
-  trackListener(document, 'touchend', touchEndHandler, { passive: false });
-
-  // Handle toggle button click
-  if (toggleBtn) {
-    trackListener(toggleBtn, 'click', (e) => {
-      e.stopPropagation();
-      toggleSidebar();
-    });
-
-    // Add keyboard accessibility
-    trackListener(toggleBtn, 'keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    });
-  }
-}
-
-/**
- * Clean up all tracked event listeners
- */
-function cleanupListeners() {
-  trackedListeners.forEach(({ element, type, handler, options }) => {
-    element.removeEventListener(type, handler, options);
-  });
-  trackedListeners.clear();
-}
-
-/**
- * Track a listener for cleanup
- * @param {Element} element - Element to attach listener to
- * @param {string} type - Event type
- * @param {Function} handler - Event handler
- * @param {Object} [options] - Event listener options
- */
-function trackListener(element, type, handler, options = {}) {
-  if (!element) return;
-
-  element.addEventListener(type, handler, options);
-  trackedListeners.add({ element, type, handler, options });
-}
-
-/**
  * Sets up tab navigation in the sidebar
+ * @returns {void}
  */
 function setupSidebarTabs() {
   const tabConfig = {
     recent: {
       buttonId: 'recentChatsTab',
       sectionId: 'recentChatsSection',
-      loader: () => window.loadConversationList?.()
+      loader: () => window.loadConversationList?.(),
     },
     starred: {
       buttonId: 'starredChatsTab',
       sectionId: 'starredChatsSection',
-      loader: loadStarredConversations
+      loader: loadStarredConversations,
     },
     projects: {
       buttonId: 'projectsTab',
       sectionId: 'projectsSection',
-      loader: () => window.loadSidebarProjects?.()
-    }
+      loader: () => window.loadSidebarProjects?.(),
+    },
   };
 
   const tabs = {};
@@ -327,7 +207,7 @@ function setupSidebarTabs() {
       tabs[name] = {
         button,
         content,
-        loader: config.loader
+        loader: config.loader,
       };
 
       // Set ARIA attributes
@@ -336,37 +216,13 @@ function setupSidebarTabs() {
       button.setAttribute('aria-controls', config.sectionId);
       content.setAttribute('role', 'tabpanel');
       content.setAttribute('aria-labelledby', config.buttonId);
-
-      // Add keyboard navigation
-      trackListener(button, 'keydown', (e) => {
-        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-          e.preventDefault();
-
-          const tabsList = Object.keys(tabs);
-          const currentIndex = tabsList.indexOf(name);
-          let newIndex;
-
-          if (e.key === 'ArrowRight') {
-            newIndex = (currentIndex + 1) % tabsList.length;
-          } else {
-            newIndex = (currentIndex - 1 + tabsList.length) % tabsList.length;
-          }
-
-          activateTab(tabsList[newIndex]);
-          tabs[tabsList[newIndex]].button.focus();
-        }
-      });
-
-      // Add click handler
-      trackListener(button, 'click', () => activateTab(name));
     } catch (error) {
       console.error(`Error setting up ${name} tab:`, error);
     }
   });
 
   // Determine which tab to show based on context
-  const isProjectsPage = window.location.pathname.includes('/projects') ||
-    document.getElementById('projectManagerPanel');
+  const isProjectsPage = window.location.pathname.includes('/projects') || document.getElementById('projectManagerPanel');
 
   // Load saved preference or use default based on page
   let activeTab = localStorage.getItem('sidebarActiveTab');
@@ -400,7 +256,6 @@ function setupSidebarTabs() {
     });
 
     // Check auth status before loading data
-    // Use auth.js to check authentication - with retry
     const checkAuth = async () => {
       try {
         let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
@@ -425,7 +280,6 @@ function setupSidebarTabs() {
           setTimeout(() => tabs[tabName].loader(), 300);
         } else if (!isAuthenticated) {
           console.debug(`[Sidebar] User not logged in for tab: ${tabName}. Displaying login prompt.`);
-          // Optionally show a "Please log in" message in the section
           const tabSection = document.getElementById(tabConfig[tabName]?.sectionId);
           if (tabSection) {
             tabSection.innerHTML = `
@@ -436,7 +290,7 @@ function setupSidebarTabs() {
           }
         }
       } catch (err) {
-        console.warn("[Sidebar] Auth verification failed:", err);
+        console.warn('[Sidebar] Auth verification failed:', err);
       }
     };
 
@@ -449,415 +303,8 @@ function setupSidebarTabs() {
 }
 
 /**
- * Sets up collapsible sections in the sidebar
- */
-function setupCollapsibleSections() {
-  const sections = [
-    {
-      toggleId: 'toggleModelConfig',
-      panelId: 'modelConfigPanel',
-      chevronId: 'modelConfigChevron',
-      onExpand: () => window.initializeModelDropdown?.()
-    },
-    {
-      toggleId: 'toggleCustomInstructions',
-      panelId: 'customInstructionsPanel',
-      chevronId: 'customInstructionsChevron'
-    }
-  ];
-
-  sections.forEach(section => {
-    setupCollapsibleSection(
-      section.toggleId,
-      section.panelId,
-      section.chevronId,
-      section.onExpand
-    );
-  });
-}
-
-/**
- * Helper to set up a collapsible section
- * @param {string} toggleId - ID of the toggle button
- * @param {string} panelId - ID of the panel to toggle
- * @param {string} chevronId - ID of the chevron icon
- * @param {Function} onExpand - Optional callback when panel is expanded
- */
-function setupCollapsibleSection(toggleId, panelId, chevronId, onExpand) {
-  try {
-    const toggleButton = document.getElementById(toggleId);
-    const panel = document.getElementById(panelId);
-    const chevron = document.getElementById(chevronId);
-
-    if (!toggleButton || !panel || !chevron) {
-      console.warn(`Collapsible section elements not found: ${toggleId}, ${panelId}, ${chevronId}`);
-      return;
-    }
-
-    // Set up keyboard interaction
-    toggleButton.setAttribute('role', 'button');
-    toggleButton.setAttribute('aria-expanded', 'false');
-    toggleButton.setAttribute('aria-controls', panelId);
-
-    // Load saved state
-    const isExpanded = localStorage.getItem(`${toggleId}_expanded`) === 'true';
-
-    // Apply initial state
-    panel.classList.add('collapsible-panel');
-
-    if (isExpanded) {
-      panel.classList.add('max-h-[500px]');
-      panel.style.maxHeight = 'max-content';
-      chevron.style.transform = 'rotate(180deg)';
-      toggleButton.setAttribute('aria-expanded', 'true');
-
-      // Call onExpand callback if provided
-      if (typeof onExpand === 'function') {
-        setTimeout(onExpand, 100);
-      }
-    } else {
-      panel.classList.add('max-h-0');
-      panel.style.maxHeight = '0px';
-      chevron.style.transform = 'rotate(0deg)';
-    }
-
-    // Add click handler with proper tracking
-    trackListener(toggleButton, 'click', () => {
-      const isCurrentlyExpanded = panel.classList.contains('max-h-[500px]');
-
-      if (isCurrentlyExpanded) {
-        // Collapse
-        panel.style.maxHeight = '0px';
-        panel.classList.remove('max-h-[500px]');
-        chevron.style.transform = 'rotate(0deg)';
-        toggleButton.setAttribute('aria-expanded', 'false');
-        localStorage.setItem(`${toggleId}_expanded`, 'false');
-      } else {
-        // Expand
-        panel.style.maxHeight = 'max-content';
-        panel.classList.add('max-h-[500px]');
-        chevron.style.transform = 'rotate(180deg)';
-        toggleButton.setAttribute('aria-expanded', 'true');
-        localStorage.setItem(`${toggleId}_expanded`, 'true');
-
-        // Call onExpand callback if provided
-        if (typeof onExpand === 'function') {
-          onExpand();
-        }
-      }
-    });
-  } catch (error) {
-    console.error(`Error setting up collapsible section ${toggleId}:`, error);
-  }
-}
-
-/**
- * Setup pinning/unpinning sidebar functionality
- */
-function setupPinningSidebar() {
-  try {
-    const pinButton = document.getElementById('pinSidebarBtn');
-    if (!pinButton) {
-      console.debug('Pin button element not found in DOM - pinning functionality disabled');
-      return;
-    }
-
-    if (!sidebar) {
-      console.warn('Sidebar element not initialized - pinning functionality disabled');
-      return;
-    }
-
-    // Check saved pinned state
-    const isPinned = localStorage.getItem('sidebarPinned') === 'true';
-
-    // Apply initial state
-    if (isPinned) {
-      pinButton.classList.add('text-yellow-500');
-      const svg = pinButton.querySelector('svg');
-      if (svg) {
-        svg.setAttribute('fill', 'currentColor');
-      }
-      document.body.classList.add('pinned-sidebar');
-    }
-
-    // Add click handler
-    trackListener(pinButton, 'click', () => {
-      const isPinnedNow = document.body.classList.contains('pinned-sidebar');
-
-      if (isPinnedNow) {
-        // Unpin sidebar
-        document.body.classList.remove('pinned-sidebar');
-        pinButton.classList.remove('text-yellow-500');
-        const svg = pinButton.querySelector('svg');
-        if (svg) {
-          svg.setAttribute('fill', 'none');
-        }
-        localStorage.setItem('sidebarPinned', 'false');
-      } else {
-        // Pin sidebar
-        document.body.classList.add('pinned-sidebar');
-        pinButton.classList.add('text-yellow-500');
-        const svg = pinButton.querySelector('svg');
-        if (svg) {
-          svg.setAttribute('fill', 'currentColor');
-        }
-        localStorage.setItem('sidebarPinned', 'true');
-      }
-    });
-  } catch (error) {
-    console.error('Error initializing sidebar pinning:', error);
-  }
-}
-
-/**
- * Set up custom instructions functionality
- */
-function setupCustomInstructions() {
-  const instructionsTextarea = document.getElementById('globalCustomInstructions');
-  const saveButton = document.getElementById('saveGlobalInstructions');
-
-  if (!instructionsTextarea || !saveButton) {
-    console.warn('Custom instructions elements not found in the DOM');
-    return;
-  }
-
-  // Load saved instructions
-  instructionsTextarea.value = localStorage.getItem('globalCustomInstructions') || '';
-
-  // Add click handler
-  trackListener(saveButton, 'click', () => {
-    const instructions = instructionsTextarea.value;
-    localStorage.setItem('globalCustomInstructions', instructions);
-
-    // Update MODEL_CONFIG
-    if (window.MODEL_CONFIG) {
-      window.MODEL_CONFIG.customInstructions = instructions;
-    }
-
-    // Dispatch event to notify other components
-    document.dispatchEvent(new CustomEvent('modelConfigChanged', {
-      detail: {
-        customInstructions: instructions,
-        timestamp: Date.now()
-      }
-    }));
-
-    // Show success notification
-    if (typeof window.showNotification === 'function') {
-      window.showNotification('Custom instructions saved and applied to chat', 'success');
-    } else {
-      console.log('Custom instructions saved');
-    }
-  });
-}
-
-/**
- * Set up new chat button and conversation handlers
- */
-function setupNewChatButton() {
-  // New chat button
-  const newChatBtn = document.getElementById('sidebarNewChatBtn');
-  if (newChatBtn) {
-    trackListener(newChatBtn, 'click', newChatClickHandler);
-  }
-
-  // New project button
-  const newProjectBtn = document.getElementById('sidebarNewProjectBtn');
-  if (newProjectBtn) {
-    trackListener(newProjectBtn, 'click', () => {
-      // Use the unified ModalManager for project modal
-      if (window.modalManager) {
-        window.modalManager.show('project');
-      } else if (window.projectModal?.openModal) {
-        window.projectModal.openModal();
-      } else if (window.projectDashboard?.modalManager?.show) {
-        window.projectDashboard.modalManager.show('project');
-      } else {
-        console.error('Modal system not available');
-        if (typeof window.showNotification === 'function') {
-          window.showNotification('Failed to open project form', 'error');
-        }
-      }
-    });
-  }
-}
-
-/**
- * New chat button click handler
- */
-async function newChatClickHandler() {
-  // Clear selected project
-  localStorage.removeItem('selectedProjectId');
-
-  // If on projects page, navigate to index.html
-  if (window.location.pathname.includes('/projects')) {
-    window.location.href = '/index.html';
-    return;
-  }
-
-  // Check authentication using auth.js
-  let isAuthenticated = false;
-  try {
-    isAuthenticated = await window.auth.isAuthenticated();
-  } catch (e) {
-    console.warn("[sidebar] Auth verification failed:", e);
-  }
-
-  if (!isAuthenticated) {
-    if (window.showNotification) {
-      window.showNotification("Please log in to create new chats", "error");
-    }
-
-    // Let auth.js handle this error
-    if (window.auth?.handleAuthError) {
-      window.auth.handleAuthError(
-        { message: "Not authenticated" },
-        "Creating new chat"
-      );
-    }
-    return;
-  }
-
-  // Show loading notification
-  if (window.showNotification) {
-    window.showNotification("Creating new chat...", "info");
-  }
-
-  console.log("Sidebar New Chat button clicked");
-
-  // Create new chat if function exists
-  if (typeof window.createNewChat === 'function') {
-    try {
-      console.log("Calling createNewChat function");
-      const storedModel = window.MODEL_CONFIG?.modelName || "claude-3-7-sonnet-20250219";
-
-      const newChat = await window.createNewChat();
-      console.log("New chat created:", newChat);
-
-      if (window.showNotification) {
-        window.showNotification("Chat created successfully", "success");
-      }
-    } catch (error) {
-      console.error("Error creating new chat:", error);
-
-      if (window.showNotification) {
-        window.showNotification("Error creating new chat: " + error.message, "error");
-      }
-    }
-  } else {
-    console.error("createNewChat function not found");
-
-    if (window.showNotification) {
-      window.showNotification("Chat creation function not available", "error");
-    }
-  }
-}
-
-/**
- * Set up the search functionality for conversations and projects
- */
-function setupSearchInput() {
-  // Set up conversation search
-  const chatSearchInput = document.getElementById('chatSearchInput');
-  if (chatSearchInput) {
-    trackListener(chatSearchInput, 'input', (e) => {
-      searchSidebarConversations(e.target.value);
-    });
-  }
-
-  // Set up project search
-  const projectSearchInput = document.getElementById('sidebarProjectSearch');
-  if (projectSearchInput) {
-    trackListener(projectSearchInput, 'input', (e) => {
-      searchSidebarProjects(e.target.value);
-    });
-  }
-}
-
-/**
- * Search conversation list in the sidebar based on search query
- * @param {string} query - The search query to filter conversations
- */
-function searchSidebarConversations(query) {
-  const sidebarConversations = document.getElementById('sidebarConversations');
-  if (!sidebarConversations) return;
-
-  const conversations = sidebarConversations.querySelectorAll('li');
-  const searchTerm = query.toLowerCase();
-  let hasVisibleConversations = false;
-
-  conversations.forEach(conv => {
-    // Skip if it's an empty state message
-    if (conv.classList.contains('text-center') && conv.classList.contains('text-gray-500')) {
-      return;
-    }
-
-    const title = conv.querySelector('.truncate')?.textContent.toLowerCase() || '';
-    const isVisible = title.includes(searchTerm);
-    conv.classList.toggle('hidden', !isVisible);
-
-    if (isVisible) {
-      hasVisibleConversations = true;
-    }
-  });
-
-  // Show empty state if no matching conversations
-  const existingEmptyState = sidebarConversations.querySelector('.text-center.text-gray-500.py-4');
-  if (!hasVisibleConversations) {
-    if (!existingEmptyState) {
-      const emptyState = document.createElement('li');
-      emptyState.className = 'text-center text-gray-500 py-4';
-      emptyState.textContent = 'No matching conversations found';
-      sidebarConversations.appendChild(emptyState);
-    }
-  } else if (existingEmptyState && existingEmptyState.textContent === 'No matching conversations found') {
-    existingEmptyState.remove();
-  }
-}
-
-/**
- * Search projects list in the sidebar based on search query
- * @param {string} query - The search query to filter projects
- */
-function searchSidebarProjects(query) {
-  const sidebarProjects = document.getElementById('sidebarProjects');
-  if (!sidebarProjects) return;
-
-  const projects = sidebarProjects.querySelectorAll('li');
-  const searchTerm = query.toLowerCase();
-  let hasVisibleProjects = false;
-
-  projects.forEach(project => {
-    // Skip if it's an empty state message
-    if (project.classList.contains('text-center') && project.classList.contains('text-gray-500')) {
-      return;
-    }
-
-    const projectName = project.querySelector('span')?.textContent.toLowerCase() || '';
-    const isVisible = projectName.includes(searchTerm);
-    project.classList.toggle('hidden', !isVisible);
-
-    if (isVisible) {
-      hasVisibleProjects = true;
-    }
-  });
-
-  // Show empty state if no matching projects
-  const existingEmptyState = sidebarProjects.querySelector('.text-center.text-gray-500.py-4');
-  if (!hasVisibleProjects) {
-    if (!existingEmptyState) {
-      const emptyState = document.createElement('li');
-      emptyState.className = 'text-center text-gray-500 py-4';
-      emptyState.textContent = 'No matching projects found';
-      sidebarProjects.appendChild(emptyState);
-    }
-  } else if (existingEmptyState && existingEmptyState.textContent === 'No matching projects found') {
-    existingEmptyState.remove();
-  }
-}
-
-/**
  * Load starred conversations from local storage or server
+ * @returns {Promise<void>}
  */
 async function loadStarredConversations() {
   const container = document.getElementById('starredConversations');
@@ -868,7 +315,7 @@ async function loadStarredConversations() {
   try {
     isAuthenticated = await window.auth.isAuthenticated();
   } catch (e) {
-    console.warn("[sidebar] Auth verification failed:", e);
+    console.warn('[sidebar] Auth verification failed:', e);
   }
 
   if (!isAuthenticated) {
@@ -998,14 +445,14 @@ async function loadStarredConversations() {
 /**
  * Toggle star status for a conversation
  * @param {string} conversationId - The ID of the conversation to toggle
- * @returns {boolean} Whether the conversation is now starred
+ * @returns {Promise<boolean>} Whether the conversation is now starred
  */
 async function toggleStarConversation(conversationId) {
   // Perform authentication check using the unified auth module
   const isAuthenticated = await window.auth.verifyAuthState();
   if (!isAuthenticated) {
     console.error('[Auth] User is not authenticated');
-    return;
+    return false;
   }
 
   // Get current starred conversations
@@ -1028,7 +475,7 @@ async function toggleStarConversation(conversationId) {
   // Update server with new starred list
   try {
     await window.apiRequest('/api/user/preferences', 'PATCH', {
-      starred_conversations: starredIds
+      starred_conversations: starredIds,
     });
   } catch (error) {
     console.error('Failed to update starred conversations on server:', error);
@@ -1053,12 +500,94 @@ function isConversationStarred(conversationId) {
 }
 
 /**
+ * Search conversation list in the sidebar based on search query
+ * @param {string} query - The search query to filter conversations
+ * @returns {void}
+ */
+function searchSidebarConversations(query) {
+  const sidebarConversations = document.getElementById('sidebarConversations');
+  if (!sidebarConversations) return;
+
+  const conversations = sidebarConversations.querySelectorAll('li');
+  const searchTerm = query.toLowerCase();
+  let hasVisibleConversations = false;
+
+  conversations.forEach(conv => {
+    // Skip if it's an empty state message
+    if (conv.classList.contains('text-center') && conv.classList.contains('text-gray-500')) {
+      return;
+    }
+
+    const title = conv.querySelector('.truncate')?.textContent.toLowerCase() || '';
+    const isVisible = title.includes(searchTerm);
+    conv.classList.toggle('hidden', !isVisible);
+
+    if (isVisible) {
+      hasVisibleConversations = true;
+    }
+  });
+
+  // Show empty state if no matching conversations
+  const existingEmptyState = sidebarConversations.querySelector('.text-center.text-gray-500.py-4');
+  if (!hasVisibleConversations) {
+    if (!existingEmptyState) {
+      const emptyState = document.createElement('li');
+      emptyState.className = 'text-center text-gray-500 py-4';
+      emptyState.textContent = 'No matching conversations found';
+      sidebarConversations.appendChild(emptyState);
+    }
+  } else if (existingEmptyState && existingEmptyState.textContent === 'No matching conversations found') {
+    existingEmptyState.remove();
+  }
+}
+
+/**
+ * Search projects list in the sidebar based on search query
+ * @param {string} query - The search query to filter projects
+ * @returns {void}
+ */
+function searchSidebarProjects(query) {
+  const sidebarProjects = document.getElementById('sidebarProjects');
+  if (!sidebarProjects) return;
+
+  const projects = sidebarProjects.querySelectorAll('li');
+  const searchTerm = query.toLowerCase();
+  let hasVisibleProjects = false;
+
+  projects.forEach(project => {
+    // Skip if it's an empty state message
+    if (project.classList.contains('text-center') && project.classList.contains('text-gray-500')) {
+      return;
+    }
+
+    const projectName = project.querySelector('span')?.textContent.toLowerCase() || '';
+    const isVisible = projectName.includes(searchTerm);
+    project.classList.toggle('hidden', !isVisible);
+
+    if (isVisible) {
+      hasVisibleProjects = true;
+    }
+  });
+
+  // Show empty state if no matching projects
+  const existingEmptyState = sidebarProjects.querySelector('.text-center.text-gray-500.py-4');
+  if (!hasVisibleProjects) {
+    if (!existingEmptyState) {
+      const emptyState = document.createElement('li');
+      emptyState.className = 'text-center text-gray-500 py-4';
+      emptyState.textContent = 'No matching projects found';
+      sidebarProjects.appendChild(emptyState);
+    }
+  } else if (existingEmptyState && existingEmptyState.textContent === 'No matching projects found') {
+    existingEmptyState.remove();
+  }
+}
+
+/**
  * Main initialization function for the sidebar
+ * @returns {boolean} True if initialization is successful, false otherwise
  */
 function initializeSidebar() {
-  // Clean up any existing listeners
-  cleanupListeners();
-
   // Initialize core sidebar toggle
   const initSuccess = initializeSidebarToggle();
   if (!initSuccess) {
@@ -1068,99 +597,16 @@ function initializeSidebar() {
 
   // Initialize sidebar features
   setupSidebarTabs();
-  setupCollapsibleSections();
-  setupPinningSidebar();
-  setupCustomInstructions();
-  setupNewChatButton();
-  setupSearchInput();
-
-  // Initialize model dropdown if possible
-  if (typeof window.initializeModelDropdown === 'function') {
-    window.initializeModelDropdown();
-  } else {
-    // Set up listener to initialize when available
-    document.addEventListener('modelConfigInitialized', () => {
-      if (typeof window.initializeModelDropdown === 'function') {
-        window.initializeModelDropdown();
-      }
-    }, { once: true });
-  }
 
   console.log('Sidebar initialized successfully');
   return true;
 }
 
-// Listen for conversation deletion events
-document.addEventListener('conversationDeleted', (e) => {
-  if (e.detail && e.detail.id) {
-    const deletedId = e.detail.id;
-
-    // Remove from starred conversations if needed
-    const starredIds = JSON.parse(localStorage.getItem('starredConversations') || '[]');
-    const starredIndex = starredIds.indexOf(deletedId);
-    if (starredIndex !== -1) {
-      starredIds.splice(starredIndex, 1);
-      localStorage.setItem('starredConversations', JSON.stringify(starredIds));
-
-      // Reload starred view if it's currently visible
-      const starredSection = document.getElementById('starredChatsSection');
-      if (starredSection && !starredSection.classList.contains('hidden')) {
-        loadStarredConversations();
-      }
-    }
-
-    // Remove from recent conversations sidebar
-    const conversationElement = document.querySelector(`#sidebarConversations [data-conversation-id="${deletedId}"]`);
-    if (conversationElement) {
-      conversationElement.remove();
-    }
-  }
-});
-
-// Expose re-initialization function
-window.reinitializeSidebar = initializeSidebar;
-
-// Expose key functions globally
-window.sidebar = {
-  toggleStarConversation,
-  isConversationStarred,
-  loadStarredConversations,
-  searchSidebarConversations,
-  searchSidebarProjects,
-  toggle: toggleSidebar
-};
-
-// Initialize on DOMContentLoaded with proper state tracking
-let sidebarInitialized = false;
-
-function safeInitializeSidebar() {
-  if (sidebarInitialized) return;
-  try {
-    sidebarInitialized = initializeSidebar();
-  } catch (err) {
-    console.error('Sidebar initialization failed:', err);
-    // Retry initialization after delay
-    setTimeout(safeInitializeSidebar, 1000);
-  }
-}
-
-// Track initialization state to prevent duplicate handlers
-document.addEventListener('DOMContentLoaded', safeInitializeSidebar);
-
-// Also initialize when auth is ready if not already initialized
-document.addEventListener('authReady', () => {
-  if (!sidebarInitialized) safeInitializeSidebar();
-});
-
-// Listen for auth state changes from auth.js
-document.addEventListener('authStateChanged', (e) => {
-  updateAuthDependentUI(e.detail?.authenticated, e.detail?.username);
-});
-
 /**
  * Update UI elements based on auth state
  * @param {boolean} authenticated - Whether the user is authenticated
- * @param {string} username - Username if authenticated
+ * @param {string} [username] - Username if authenticated
+ * @returns {void}
  */
 function updateAuthDependentUI(authenticated, username = null) {
   const authDependentElements = [
@@ -1168,7 +614,7 @@ function updateAuthDependentUI(authenticated, username = null) {
     'sidebarNewProjectBtn',
     'starredChatsTab',
     'projectsTab',
-    'recentChatsTab'
+    'recentChatsTab',
   ];
 
   const isLoading = window.auth && window.auth.isAuthCheckInProgress;
@@ -1209,14 +655,6 @@ function updateAuthDependentUI(authenticated, username = null) {
   // Refresh content if authenticated
   if (authenticated) {
     console.debug('[Sidebar] User is authenticated, refreshing appropriate tab content');
-
-    // Force refresh of projects tab since that's what we're debugging
-    if (typeof window.loadSidebarProjects === 'function') {
-      console.debug('[Sidebar] Forcing refresh of sidebar projects');
-      setTimeout(() => window.loadSidebarProjects(), 500);
-    }
-
-    // Also refresh active tab
     const activeTab = localStorage.getItem('sidebarActiveTab');
     if (activeTab === 'starred' && document.getElementById('starredChatsSection')?.classList.contains('hidden') === false) {
       setTimeout(() => loadStarredConversations(), 500);
@@ -1227,3 +665,72 @@ function updateAuthDependentUI(authenticated, username = null) {
     }
   }
 }
+
+// Listen for conversation deletion events
+document.addEventListener('conversationDeleted', (e) => {
+  if (e.detail && e.detail.id) {
+    const deletedId = e.detail.id;
+
+    // Remove from starred conversations if needed
+    const starredIds = JSON.parse(localStorage.getItem('starredConversations') || '[]');
+    const starredIndex = starredIds.indexOf(deletedId);
+    if (starredIndex !== -1) {
+      starredIds.splice(starredIndex, 1);
+      localStorage.setItem('starredConversations', JSON.stringify(starredIds));
+
+      // Reload starred view if it's currently visible
+      const starredSection = document.getElementById('starredChatsSection');
+      if (starredSection && !starredSection.classList.contains('hidden')) {
+        loadStarredConversations();
+      }
+    }
+
+    // Remove from recent conversations sidebar
+    const conversationElement = document.querySelector(`#sidebarConversations [data-conversation-id="${deletedId}"]`);
+    if (conversationElement) {
+      conversationElement.remove();
+    }
+  }
+});
+
+// Expose re-initialization function
+window.reinitializeSidebar = initializeSidebar;
+
+// Expose key functions globally
+window.sidebar = {
+  toggleStarConversation,
+  isConversationStarred,
+  loadStarredConversations,
+  searchSidebarConversations,
+  searchSidebarProjects,
+  toggle: window.toggleSidebar,
+  isOpen,
+  isAnimating,
+};
+
+// Initialize on DOMContentLoaded with proper state tracking
+let sidebarInitialized = false;
+
+function safeInitializeSidebar() {
+  if (sidebarInitialized) return;
+  try {
+    sidebarInitialized = initializeSidebar();
+  } catch (err) {
+    console.error('Sidebar initialization failed:', err);
+    // Retry initialization after delay
+    setTimeout(safeInitializeSidebar, 1000);
+  }
+}
+
+// Track initialization state to prevent duplicate handlers
+document.addEventListener('DOMContentLoaded', safeInitializeSidebar);
+
+// Also initialize when auth is ready if not already initialized
+document.addEventListener('authReady', () => {
+  if (!sidebarInitialized) safeInitializeSidebar();
+});
+
+// Listen for auth state changes from auth.js
+document.addEventListener('authStateChanged', (e) => {
+  updateAuthDependentUI(e.detail?.authenticated, e.detail?.username);
+});
