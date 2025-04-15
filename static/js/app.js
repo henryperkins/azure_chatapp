@@ -1,7 +1,7 @@
 /**
  * app.js - Cookie-based auth only, no CORS/origin usage.
  * Maintains API_CONFIG, uses fetch wrapper, manages UI via auth state.
- * Relies on auth.js for session cookies.
+ * Relies on auth.js for session cookies and integrates with chat system modules.
  */
 
 // PHASE-BASED INITIALIZATION
@@ -103,22 +103,12 @@ function getRequiredElement(selector) {
   if (!el) throw new Error(`Required element not found: ${selector}`);
   return el;
 }
-function setChatUIVisibility(visible) {
-  toggleVisibility(getEl('CHAT_UI'), visible);
-  toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), !visible);
-}
 function setViewportHeight() {
   const vh = window.innerHeight * 0.01;
   document.documentElement.style.setProperty('--vh', `${vh}px`);
 }
 function isValidUUID(uuid) {
-  try {
-    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return typeof uuid === 'string' && regex.test(uuid);
-  } catch (e) {
-    console.error('[isValidUUID] Validation error:', e);
-    return false;
-  }
+  return window.ChatUtils.isValidUUID(uuid);
 }
 
 // AUTHENTICATION FUNCTIONS
@@ -131,12 +121,12 @@ function clearAuthState() {
 }
 
 function ensureAuthenticated(options = {}) {
-  if (!window.auth?.isAuthenticated) {
-    console.warn('[ensureAuthenticated] Auth module unavailable, assuming not authenticated');
+  if (!window.ChatUtils) {
+    console.warn('[ensureAuthenticated] ChatUtils module unavailable, assuming not authenticated');
     return Promise.resolve(false);
   }
   API_CONFIG.authCheckInProgress = true;
-  return window.auth.isAuthenticated(options).then(isAuth => {
+  return window.ChatUtils.isAuthenticated(options).then(isAuth => {
     API_CONFIG.isAuthenticated = isAuth;
     API_CONFIG.authCheckInProgress = false;
     return isAuth;
@@ -285,13 +275,14 @@ const debouncedLoadProject = debounce(async (projectId) => {
     }
   } catch (error) {
     console.error(`[App] Error loading project ${projectId}:`, error);
+    window.ChatUtils.handleError('Loading project', error);
   } finally {
     if (currentlyLoadingProjectId === projectId) currentlyLoadingProjectId = null;
   }
 }, DEBOUNCE_DELAY);
 
 async function loadConversationList() {
-  if (!await window.auth.isAuthenticated({ forceVerify: false })) {
+  if (!await ensureAuthenticated()) {
     log("[loadConversationList] Not authenticated");
     return [];
   }
@@ -299,7 +290,7 @@ async function loadConversationList() {
     log("[loadConversationList] Auth check in progress, deferring");
     return [];
   }
-  let projectId = localStorage.getItem("selectedProjectId");
+  let projectId = window.ChatUtils.getProjectId();
   if (!projectId && window.projectManager?.loadProjects) {
     try {
       const projects = await window.projectManager.loadProjects("all");
@@ -313,6 +304,7 @@ async function loadConversationList() {
       }
     } catch (err) {
       console.error("[loadConversationList] Error auto-selecting project:", err);
+      window.ChatUtils.handleError('Auto-selecting project for conversations', err);
       if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
       return [];
     }
@@ -339,7 +331,7 @@ async function loadConversationList() {
         }).catch(newErr => console.error("[loadConversationList] Failed to load valid projects:", newErr));
       }
     }
-    handleAPIError('loading conversation list', err);
+    window.ChatUtils.handleError('Loading conversation list', err);
     if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
     return [];
   });
@@ -347,7 +339,7 @@ async function loadConversationList() {
 
 async function loadInitialProjects(retryOnFailure = true) {
   try {
-    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
       log("[App] Not authenticated, showing login prompt");
       toggleVisibility(document.getElementById('loginRequiredMessage'), true);
@@ -359,8 +351,9 @@ async function loadInitialProjects(retryOnFailure = true) {
     }
   } catch (err) {
     console.error("[App] Error loading initial projects:", err);
+    window.ChatUtils.handleError('Loading initial projects', err);
     if (retryOnFailure) {
-      await window.auth.isAuthenticated({ forceVerify: true });
+      await ensureAuthenticated({ forceVerify: true });
       loadInitialProjects(false);
     }
   }
@@ -381,26 +374,46 @@ async function loadSidebarProjects() {
       return projectsArray;
     }).catch(error => {
       console.error('[loadSidebarProjects] Failed to load sidebar projects:', error);
+      window.ChatUtils.handleError('Loading sidebar projects', error);
       document.dispatchEvent(new CustomEvent('sidebarProjectsError', { detail: { error } }));
       throw error;
     });
   } catch (error) {
     console.error('Failed to load sidebar projects:', error);
+    window.ChatUtils.handleError('Loading sidebar projects', error);
     throw error;
   }
 }
 
 // NAVIGATION & STATE
-function navigateToConversation(conversationId) {
+async function navigateToConversation(conversationId) {
   window.history.pushState({}, '', `/?chatId=${conversationId}`);
-  setChatUIVisibility(true);
-  if (typeof window.loadConversation === 'function') {
-    return window.loadConversation(conversationId).catch(error => {
-      handleAPIError('loading conversation', error);
-      setChatUIVisibility(false);
-    });
+
+  try {
+    // Ensure ChatManager is initialized
+    if (!window.ChatManager) {
+      console.error('ChatManager not available - initializing chat system');
+      await window.ChatManager.initializeChat();
+    }
+
+    // Delegate UI visibility to ChatInterface after initialization
+    if (window.chatInterface && window.chatInterface.initialized) {
+      await window.chatInterface.ui.ensureChatContainerVisible(window.ChatUtils.getProjectId() !== null);
+    } else {
+      // Fallback if not initialized
+      toggleVisibility(getEl('CHAT_UI'), true);
+      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), false);
+    }
+
+    return await window.ChatManager.loadConversation(conversationId);
+  } catch (error) {
+    console.error('Error navigating to conversation:', error);
+    window.ChatUtils.handleError('Loading conversation', error);
+    // Fallback to hiding UI if load fails
+    toggleVisibility(getEl('CHAT_UI'), false);
+    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+    throw error;
   }
-  return Promise.resolve();
 }
 
 async function handleNavigationChange() {
@@ -413,7 +426,10 @@ async function handleNavigationChange() {
     showProjectListView();
     setTimeout(() => {
       if (window.projectManager?.loadProjects) {
-        window.projectManager.loadProjects('all').catch(err => console.error('[handleNavigationChange] Project loading error:', err));
+        window.projectManager.loadProjects('all').catch(err => {
+          console.error('[handleNavigationChange] Project loading error:', err);
+          window.ChatUtils.handleError('Loading projects on navigation', err);
+        });
       }
     }, 100);
     return;
@@ -426,21 +442,19 @@ async function handleNavigationChange() {
   if (!await ensureAuthenticated()) {
     log('[handleNavigationChange] Not authenticated, show login message.');
     toggleVisibility(document.getElementById("loginRequiredMessage"), true);
-    setChatUIVisibility(false);
+    // Ensure chat UI is hidden if not authenticated
+    toggleVisibility(getEl('CHAT_UI'), false);
+    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
     return;
   }
   toggleVisibility(document.getElementById("loginRequiredMessage"), false);
   if (chatId) {
     log(`[handleNavigationChange] ChatId=${chatId}, loading conversation.`);
-    setChatUIVisibility(true);
-    window.ChatManager.loadConversation(chatId).catch(err => {
-      handleAPIError('loading conversation', err);
-      setChatUIVisibility(false);
-      window.history.replaceState({}, '', '/');
-    });
+    await navigateToConversation(chatId);
   } else {
     log('[handleNavigationChange] No chatId, showing empty state.');
-    setChatUIVisibility(false);
+    toggleVisibility(getEl('CHAT_UI'), false);
+    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
   }
 }
 
@@ -453,26 +467,6 @@ function showProjectListView() {
     console.warn('[showProjectListView] No advanced view management available, using fallback.');
     toggleVisibility(document.getElementById('projectListView'), true);
     toggleVisibility(document.getElementById('projectDetailsView'), false);
-  }
-}
-
-// ERROR HANDLING
-function handleAPIError(context, error) {
-  console.error(`[${context}] API Error:`, error);
-  let message = 'An unexpected error occurred';
-  if (error.name === 'AbortError' || error.message?.includes('timed out')) {
-    message = 'Request timed out. Please retry.';
-  } else if (error.status === 401) {
-    message = 'Session expired. Please log in again.';
-  } else if (error.status === 404) {
-    message = 'Resource not found.';
-  } else if (error.message) {
-    message = error.message;
-  }
-  if (typeof UIUtils !== 'undefined' && UIUtils.showNotification) {
-    UIUtils.showNotification(message, 'error');
-  } else {
-    alert(message);
   }
 }
 
@@ -494,9 +488,18 @@ function setupEventListeners() {
 
 function refreshAppData() {
   log("[refreshAppData] Refreshing application data after authentication.");
-  loadInitialProjects().catch(err => console.error("[refreshAppData] Error loading initial projects:", err));
-  loadConversationList().catch(err => console.warn("[refreshAppData] Failed to load conversations:", err));
-  loadSidebarProjects().catch(err => console.warn("[refreshAppData] Failed to load sidebar projects:", err));
+  loadInitialProjects().catch(err => {
+    console.error("[refreshAppData] Error loading initial projects:", err);
+    window.ChatUtils.handleError('Refreshing initial projects', err);
+  });
+  loadConversationList().catch(err => {
+    console.warn("[refreshAppData] Failed to load conversations:", err);
+    window.ChatUtils.handleError('Refreshing conversation list', err);
+  });
+  loadSidebarProjects().catch(err => {
+    console.warn("[refreshAppData] Failed to load sidebar projects:", err);
+    window.ChatUtils.handleError('Refreshing sidebar projects', err);
+  });
 }
 
 let lastKnownAuthState = null;
@@ -517,6 +520,9 @@ function handleAuthStateChange(e) {
   } else {
     log("[AuthStateChange] User logged out, UI cleared.");
     showProjectListView();
+    // Ensure chat UI is hidden on logout
+    toggleVisibility(getEl('CHAT_UI'), false);
+    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
   }
 }
 
@@ -529,12 +535,33 @@ async function initApp() {
   setupEventListeners();
   if (window.auth?.init) await window.auth.init();
   setPhase(AppPhase.AUTH_CHECKED);
-  await handleNavigationChange();
-  if (API_CONFIG.isAuthenticated && !new URLSearchParams(window.location.search).get('view') && !new URLSearchParams(window.location.search).get('chatId')) {
-    if (window.ChatManager?.initializeChat) {
-      await window.ChatManager.initializeChat().catch(err => console.error("[initApp] Chat init failed:", err));
-    }
-  }
+      // Initialize chat system early to ensure readiness
+      if (window.ChatManager?.initializeChat) {
+        try {
+          await window.ChatManager.initializeChat();
+          log("[initApp] Chat system initialized successfully");
+        } catch (err) {
+          console.error("[initApp] Chat system initialization failed:", err);
+          window.ChatUtils.handleError('Chat system initialization', err);
+        }
+      }
+
+      // Initialize ProjectDashboard if available
+      if (window.ProjectDashboard) {
+        try {
+          log("[initApp] Initializing ProjectDashboard...");
+          const dashboard = new window.ProjectDashboard();
+          await dashboard.init();
+          log("[initApp] ProjectDashboard initialized successfully");
+          window.projectDashboard = dashboard;
+          document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+        } catch (err) {
+          console.error("[initApp] ProjectDashboard initialization failed:", err);
+          window.ChatUtils.handleError('ProjectDashboard initialization', err);
+        }
+      }
+
+      await handleNavigationChange();
   setPhase(AppPhase.COMPLETE);
   log("[initApp] Application initialized");
   return true;
@@ -550,7 +577,6 @@ window.loadConversationList = loadConversationList;
 window.loadSidebarProjects = loadSidebarProjects;
 window.isValidUUID = isValidUUID;
 window.navigateToConversation = navigateToConversation;
-window.handleAPIError = handleAPIError;
 
 // CENTRAL INITIALIZATION
 window.appInitializer = {
@@ -569,7 +595,7 @@ window.appInitializer = {
       log("[appInitializer] Application fully initialized");
     } catch (error) {
       console.error("[appInitializer] Initialization error:", error);
-      alert("Failed to initialize. Please refresh the page.");
+      window.ChatUtils?.handleError('App initialization', error) || alert("Failed to initialize. Please refresh the page.");
     }
   }
 };
@@ -577,7 +603,7 @@ window.appInitializer = {
 document.addEventListener('DOMContentLoaded', () => {
   window.appInitializer.initialize().catch(error => {
     console.error("[DOMContentLoaded] App init error:", error);
-    alert("Failed to initialize. Please refresh the page.");
+    window.ChatUtils?.handleError('App initialization on DOMContentLoaded', error) || alert("Failed to initialize. Please refresh the page.");
   });
   document.dispatchEvent(new CustomEvent('appJsReady'));
 });

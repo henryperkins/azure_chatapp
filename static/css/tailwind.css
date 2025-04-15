@@ -1,5 +1,9 @@
 /* Main Tailwind CSS file with proper configuration for Azure OpenAI Chat */
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+  logs: true;
+}
 
 /* Custom component styles that align with the HTML structure */
 @layer components {
@@ -193,13 +197,9 @@
   transition: max-height 0.3s ease;
 }
 
-/* Auth dropdown positioning */
+/* Auth dropdown positioning - Fixed approach */
 .auth-dropdown-adjusted {
   position: absolute;
-  top: var(--top-position);
-}
-
-/* Apply top position from data attribute */
-[data-top-position] {
-  --top-position: attr(data-top-position px);
+  /* Position will be set via JavaScript instead of CSS variables */
+  z-index: 50;
 }

@@ -1,11 +1,13 @@
 /**
  * chat-ui.js
- * UI components for chat interface
+ * UI components for chat interface.
+ * Handles all DOM manipulation, rendering of messages, input controls, and visual elements.
+ * Focuses strictly on presentation and user interaction, delegating non-UI logic to other modules.
  */
 
 // Define UIComponents as a constructor function attached to window
-window.UIComponents = function(options = {}) {
-  // Store selectors at instance level
+window.UIComponents = function (options = {}) {
+  // Store selectors at instance level for flexibility across different chat contexts
   this.messageContainerSelector = options.messageContainerSelector || '#globalChatMessages';
   this.inputSelector = options.inputSelector || '#chatUIInput';
   this.sendButtonSelector = options.sendButtonSelector || '#globalChatSendBtn';
@@ -16,26 +18,177 @@ window.UIComponents = function(options = {}) {
     sendButton: this.sendButtonSelector
   });
 
+  // Central selectors for container IDs (can be switched for project context)
+  const SELECTORS = {
+    mainChatContainerId: 'globalChatContainer',
+    mainChatUI: 'globalChatUI',
+    mainMessages: 'globalChatMessages',
+    mainInput: 'globalChatInput',
+    mainSendBtn: 'globalChatSendBtn',
+    projectChatContainerId: 'globalChatContainer',
+    projectChatUI: 'globalChatUI',
+    projectMessages: 'globalChatMessages',
+    projectInput: 'globalChatInput',
+    projectSendBtn: 'globalChatSendBtn',
+    markdownStyleId: 'markdown-styles',
+    markdownStyles: `
+      .markdown-table{width:100%;border-collapse:collapse;margin:1em 0}
+      .markdown-table th,.markdown-table td{padding:.5em;border:1px solid #ddd}
+      .markdown-code{background:#f5f5f5;padding:.2em .4em;border-radius:3px}
+      .markdown-pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto}
+      .markdown-quote{border-left:3px solid #ddd;padding:0 1em;color:#666}
+      .code-block-wrapper{position:relative}
+      .copy-code-btn{position:absolute;right:.5em;top:.5em;padding:.25em .5em;background:#fff;border:1px solid #ddd;
+        border-radius:3px;cursor:pointer;font-size:.8em}
+      .copy-code-btn:hover{background:#f5f5f5}
+    `
+  };
+
+  /**
+   * Inject global markdown styles if not present.
+   */
+  this.addMarkdownStyles = function () {
+    if (document.getElementById(SELECTORS.markdownStyleId)) return;
+    const style = document.createElement('style');
+    style.id = SELECTORS.markdownStyleId;
+    style.textContent = SELECTORS.markdownStyles;
+    document.head.appendChild(style);
+  };
+
+  /**
+   * Create or locate the required chat container for project or main chat.
+   * Return the container if found/created/visible, or null otherwise.
+   * @param {boolean} isProjectContext - Whether to use project-specific container IDs
+   * @returns {HTMLElement|null} - The chat container element or null if not created
+   */
+  this.findOrCreateChatContainer = async function (isProjectContext = false) {
+    const containerId = isProjectContext
+      ? SELECTORS.projectChatContainerId
+      : SELECTORS.mainChatContainerId;
+
+    let container = document.querySelector(`#${containerId}`);
+    if (!container) {
+      console.log(`Chat container (#${containerId}) not found, creating...`);
+      const mainContent = document.querySelector('main');
+      if (mainContent) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.className = 'mt-4 transition-all duration-300 ease-in-out';
+        container.style.display = 'block'; // Ensure visible
+
+        // Create messages container
+        const messagesContainer = document.createElement('div');
+        messagesContainer.id = isProjectContext
+          ? SELECTORS.projectMessages
+          : SELECTORS.mainMessages;
+        messagesContainer.className = 'chat-message-container';
+        container.appendChild(messagesContainer);
+
+        // Create input area
+        const inputArea = document.createElement('div');
+        inputArea.className = 'flex items-center border-t border-gray-200 dark:border-gray-700 p-2';
+
+        const chatInput = document.createElement('input');
+        chatInput.id = isProjectContext
+          ? SELECTORS.projectInput
+          : SELECTORS.mainInput;
+        chatInput.type = 'text';
+        chatInput.className = 'flex-1 border rounded-l px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white';
+        chatInput.placeholder = 'Type your message...';
+
+        const sendBtn = document.createElement('button');
+        sendBtn.id = isProjectContext
+          ? SELECTORS.projectSendBtn
+          : SELECTORS.mainSendBtn;
+        sendBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r transition-colors';
+        sendBtn.textContent = 'Send';
+
+        inputArea.appendChild(chatInput);
+        inputArea.appendChild(sendBtn);
+        container.appendChild(inputArea);
+
+        mainContent.appendChild(container);
+        console.log(`Created chat container: #${container.id}`);
+      }
+    }
+    if (container) {
+      // Ensure container is visible
+      container.classList.remove('hidden');
+      container.style.display = 'block';
+
+      // Ensure parent is visible too
+      let parent = container.parentElement;
+      while (parent && parent !== document.body) {
+        if (parent.classList.contains('hidden')) {
+          parent.classList.remove('hidden');
+        }
+        if (parent.style.display === 'none') {
+          parent.style.display = 'block';
+        }
+        parent = parent.parentElement;
+      }
+    }
+    return container;
+  };
+
+  /**
+   * Ensure the chat container is visible, trying multiple times if needed.
+   * @param {boolean} isProjectContext - Whether to use project-specific container IDs
+   * @returns {Promise<HTMLElement|null>} - The visible container or null if not found
+   */
+  this.ensureChatContainerVisible = async function (isProjectContext = false) {
+    let attempts = 0;
+    const maxAttempts = 15;
+    const delay = 400;
+
+    while (attempts < maxAttempts) {
+      const container = await this.findOrCreateChatContainer(isProjectContext);
+      if (container && container.offsetParent !== null) {
+        console.log(`Chat container #${container.id} found and visible.`);
+        return container;
+      }
+      if (attempts % 3 === 0) {
+        console.log(`Searching for chat container (attempt ${attempts + 1}/${maxAttempts})...`);
+      }
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    console.error("Could not find chat container after multiple attempts.");
+    return null;
+  };
+
   // Message list component for rendering messages
   this.messageList = {
     container: document.querySelector(this.messageContainerSelector),
     messageContainerSelector: this.messageContainerSelector, // Store selector for error reporting
     thinkingId: 'thinkingIndicator',
-    // Use existing formatText from formatting.js
-    formatText: window.formatText || function(text) { return text; },
+    // Use existing formatText from formatting.js if available
+    formatText: window.formatText || function (text) { return text; },
     _defaultFormatter: window.formatText,
 
-    clear: function() {
+    /**
+     * Clear all messages from the container.
+     */
+    clear: function () {
       if (this.container) this.container.innerHTML = '';
     },
 
-    setLoading: function(msg = 'Loading...') {
+    /**
+     * Display a loading message in the container.
+     * @param {string} msg - Loading message text
+     */
+    setLoading: function (msg = 'Loading...') {
       if (this.container) {
         this.container.innerHTML = `<div class="text-center text-gray-500">${msg}</div>`;
       }
     },
 
-    addThinking: function() {
+    /**
+     * Add a thinking indicator (e.g., "Claude is thinking...").
+     * @returns {HTMLElement} - The created thinking indicator element
+     */
+    addThinking: function () {
       const thinkingDiv = document.createElement('div');
       thinkingDiv.id = this.thinkingId;
       thinkingDiv.className = 'mb-2 p-2 rounded bg-gray-50 text-gray-600 flex items-center';
@@ -54,11 +207,40 @@ window.UIComponents = function(options = {}) {
       return thinkingDiv;
     },
 
-    removeThinking: function() {
+    /**
+     * Remove the thinking indicator from the container.
+     */
+    removeThinking: function () {
       document.getElementById(this.thinkingId)?.remove();
     },
 
-    renderMessages: function(messages) {
+    /**
+     * Remove the last assistant message (e.g., for regeneration).
+     */
+    removeLastAssistantMessage: function () {
+      if (!this.container) return;
+      const messages = this.container.querySelectorAll('div.bg-green-50');
+      if (messages.length > 0) {
+        messages[messages.length - 1].remove();
+      }
+    },
+
+    /**
+     * Remove the last message added to the container.
+     */
+    removeLastMessage: function () {
+      if (!this.container) return;
+      const lastMessage = this.container.lastElementChild;
+      if (lastMessage && lastMessage.classList.contains('mb-4')) {
+        lastMessage.remove();
+      }
+    },
+
+    /**
+     * Render a list of messages in the container.
+     * @param {Array<Object>} messages - Array of message objects to render
+     */
+    renderMessages: function (messages) {
       this.clear();
       if (!messages || messages.length === 0) {
         this.appendMessage("system", "No messages yet");
@@ -77,7 +259,17 @@ window.UIComponents = function(options = {}) {
       });
     },
 
-    appendMessage: function(role, content, id = null, thinking = null, redacted = null, metadata = null) {
+    /**
+     * Append a single message to the container.
+     * @param {string} role - Message role (e.g., 'user', 'assistant', 'system')
+     * @param {string} content - Message content
+     * @param {string|null} id - Optional message ID
+     * @param {string|null} thinking - Optional thinking text for assistant messages
+     * @param {string|null} redacted - Optional redacted thinking indicator
+     * @param {Object|null} metadata - Optional metadata for the message
+     * @returns {HTMLElement|null} - The created message element or null if failed
+     */
+    appendMessage: function (role, content, id = null, thinking = null, redacted = null, metadata = null) {
       // Check container existence with fallback
       const container = this.container || document.querySelector('#projectChatMessages');
       if (!container || !document.contains(container)) {
@@ -105,13 +297,12 @@ window.UIComponents = function(options = {}) {
         }
         // Create message container
         const msgDiv = document.createElement('div');
-        msgDiv.className = `mb-4 p-4 rounded shadow-sm ${
-          role === 'assistant'
+        msgDiv.className = `mb-4 p-4 rounded shadow-sm ${role === 'assistant'
             ? 'bg-green-50 text-green-800'
             : role === 'system'
               ? 'bg-gray-50 text-gray-600 text-sm'
               : 'bg-blue-50 text-blue-900'
-        }`;
+          }`;
         if (id) msgDiv.id = id;
 
         // Add data attributes for message metadata
@@ -144,7 +335,7 @@ window.UIComponents = function(options = {}) {
         try {
           // Check if content is JSON string
           if (typeof content === 'string' &&
-              (content.trim().startsWith('{') || content.trim().startsWith('['))) {
+            (content.trim().startsWith('{') || content.trim().startsWith('['))) {
             const parsed = JSON.parse(content);
             if (parsed.answer || parsed.content || parsed.message) {
               processedContent = parsed.answer || parsed.content || parsed.message;
@@ -161,7 +352,6 @@ window.UIComponents = function(options = {}) {
         }
 
         // Ensure newlines are preserved and apply formatting
-        // Use window.formatText from formatting.js
         try {
           const safeContent = processedContent || '';
           if (window.formatText) {
@@ -244,7 +434,7 @@ window.UIComponents = function(options = {}) {
     },
 
     // Helper to create thinking blocks
-    _createThinkingContainer: function(thinking, redacted, metadata) {
+    _createThinkingContainer: function (thinking, redacted, metadata) {
       const container = document.createElement('div');
       container.className = 'mt-3 border-t border-gray-200 pt-2';
 
@@ -283,8 +473,8 @@ window.UIComponents = function(options = {}) {
         // Format thinking blocks with proper line breaks and use existing formatter
         const formattedThinking = thinking.replace(/\n/g, '<br>');
         contentDiv.innerHTML = window.formatText ?
-            window.formatText(formattedThinking) :
-            formattedThinking;
+          window.formatText(formattedThinking) :
+          formattedThinking;
       } else if (redacted) {
         contentDiv.innerHTML = `
             <div class="flex items-center text-yellow-700">
@@ -313,7 +503,11 @@ window.UIComponents = function(options = {}) {
       return container;
     },
 
-    addImageIndicator: function(imageUrl) {
+    /**
+     * Add an image indicator to the last user message.
+     * @param {string} imageUrl - URL of the image to display
+     */
+    addImageIndicator: function (imageUrl) {
       if (!this.container) return;
       const msgDivs = this.container.querySelectorAll("div.bg-blue-50");
       const lastUserDiv = msgDivs?.[msgDivs.length - 1];
@@ -336,9 +530,13 @@ window.UIComponents = function(options = {}) {
       }
     },
 
-    // getClass method removed - using consolidated style classes instead
-
-    showAIErrorMessage: function(message, suggestedAction) {
+    /**
+     * Show an AI error message in the container.
+     * @param {string} message - Error message to display
+     * @param {string} suggestedAction - Suggested action for the user
+     * @returns {HTMLElement|null} - The created error element or null if failed
+     */
+    showAIErrorMessage: function (message, suggestedAction) {
       if (!this.container) return null;
 
       // Remove thinking indicator if present
@@ -399,25 +597,38 @@ window.UIComponents = function(options = {}) {
     }
   };
 
-  // Input component
+  // Input component for handling user input
   this.input = {
     element: null,
     button: null,
-    onSend: options.onSend || (() => {}),
+    onSend: options.onSend || (() => { }),
 
-    getValue: function() {
+    /**
+     * Get the current value of the input field.
+     * @returns {string} - Trimmed input value
+     */
+    getValue: function () {
       return this.element ? this.element.value.trim() : '';
     },
 
-    clear: function() {
+    /**
+     * Clear the input field.
+     */
+    clear: function () {
       if (this.element) this.element.value = '';
     },
 
-    focus: function() {
+    /**
+     * Focus the input field.
+     */
+    focus: function () {
       if (this.element) this.element.focus();
     },
 
-    init: function() {
+    /**
+     * Initialize the input component, setting up elements and event listeners.
+     */
+    init: function () {
       // Only initialize if chat container exists and is needed
       const chatContainer = document.getElementById('chatUIContainer');
       if (!chatContainer || chatContainer.dataset.requiresChat !== 'true') {
@@ -490,7 +701,7 @@ window.UIComponents = function(options = {}) {
         // Last resort - look for any button in the chat container
         if (!this.button) {
           const chatContainer = document.querySelector('#projectChatUI') ||
-                               document.querySelector('#chatUI');
+            document.querySelector('#chatUI');
           if (chatContainer) {
             const containerButton = chatContainer.querySelector('button');
             if (containerButton) {
@@ -548,7 +759,10 @@ window.UIComponents = function(options = {}) {
       }
     },
 
-    _send: function() {
+    /**
+     * Internal method to send the message from input.
+     */
+    _send: function () {
       const msg = this.getValue();
       if (msg) {
         console.log('Sending message:', msg);
@@ -559,23 +773,25 @@ window.UIComponents = function(options = {}) {
     }
   };
 
-  // Image upload component
+  // Image upload component for handling image attachments
   this.imageUpload = {
     button: document.querySelector(options.attachButtonSelector || '#chatAttachImageBtn'),
     input: document.querySelector(options.imageInputSelector || '#chatImageInput'),
     preview: document.querySelector(options.previewSelector || '#chatImagePreview'),
     image: document.querySelector(options.previewImageSelector || '#chatPreviewImg'),
     remove: document.querySelector(options.removeButtonSelector || '#chatRemoveImageBtn'),
-    onChange: options.onImageChange || (() => {}),
-    showNotification: options.showNotification || window.showNotification || console.log,
+    onChange: options.onImageChange || (() => { }),
 
-    init: function() {
+    /**
+     * Initialize the image upload component, setting up event listeners.
+     */
+    init: function () {
       if (!this.button || !this.input || !this.preview || !this.remove) return;
 
       this.button.addEventListener("click", () => {
         const model = window.MODEL_CONFIG?.modelName;
         if (model !== "o1" && model !== "gpt-4o") {
-          this.showNotification("Vision only works with the o1 model", "warning");
+          window.ChatUtils.showNotification("Vision only works with the o1 model", "warning");
           return;
         }
         this.input.click();
@@ -586,13 +802,13 @@ window.UIComponents = function(options = {}) {
         if (!file) return;
 
         if (!['image/jpeg', 'image/png'].includes(file.type)) {
-          this.showNotification("Only JPEG/PNG supported", "error");
+          window.ChatUtils.showNotification("Only JPEG/PNG supported", "error");
           this.input.value = '';
           return;
         }
 
         if (file.size > 5 * 1024 * 1024) {
-          this.showNotification("Image must be under 5MB", "error");
+          window.ChatUtils.showNotification("Image must be under 5MB", "error");
           this.input.value = '';
           return;
         }
@@ -618,7 +834,7 @@ window.UIComponents = function(options = {}) {
           this.onChange(base64);
         } catch (err) {
           console.error("Image processing error:", err);
-          this.showNotification("Failed to process image", "error");
+          window.ChatUtils.showNotification("Failed to process image", "error");
           this.preview.classList.add("hidden");
         }
       });
@@ -633,23 +849,30 @@ window.UIComponents = function(options = {}) {
       });
     },
 
-    clear: function() {
+    /**
+     * Clear the image upload input and preview.
+     */
+    clear: function () {
       if (this.input) this.input.value = '';
       if (this.preview) this.preview.classList.add("hidden");
     }
   };
 };
 
-// Initialize UI components
-window.UIComponents.prototype.init = function() {
+/**
+ * Initialize UI components.
+ * @returns {Object} - The UIComponents instance for chaining
+ */
+window.UIComponents.prototype.init = function () {
   this.input.init();
   this.imageUpload.init();
+  this.addMarkdownStyles();
   return this;
 };
 
-// Make the method available globally
+// Make utility methods available globally for backward compatibility
 window.UIUtils = window.UIUtils || {};
-window.UIUtils.showAIErrorHint = function(message, suggestedAction) {
+window.UIUtils.showAIErrorHint = function (message, suggestedAction) {
   // Find active chat interface
   const chatInterface = window.chatInterface || window.projectChatInterface;
   if (chatInterface?.ui?.messageList?.showAIErrorMessage) {

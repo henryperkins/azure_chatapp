@@ -1,13 +1,14 @@
 /**
  * chat-messages.js
- * Message handling service for chat functionality
+ * Message handling service for chat functionality.
+ * Manages sending and receiving messages, including AI model configurations and message-specific error processing.
  */
 
 // Define MessageService as a constructor function attached to window
 window.MessageService = function (options = {}) {
   this.onMessageReceived = options.onMessageReceived || (() => { });
   this.onSending = options.onSending || (() => { });
-  this.onError = options.onError || ((context, error) => window.ChatUtils?.handleError(context, error));
+  this.onError = options.onError || ((context, error) => window.ChatUtils.handleError(context, error));
   this.chatId = null;
 
   // Initialize with current model configuration if available
@@ -25,27 +26,28 @@ window.MessageService = function (options = {}) {
 };
 
 /**
- * Clear all message state
+ * Clear all message state.
  */
-window.MessageService.prototype.clear = function() {
+window.MessageService.prototype.clear = function () {
   this.chatId = null;
 
-
   try {
-    // Clear any UI state with empty array
+    // Clear any UI state with empty array via callback
     if (typeof this.onMessageReceived === 'function') {
       this.onMessageReceived([]);
     }
   } catch (error) {
     console.error('Error clearing messages:', error);
+    window.ChatUtils.handleError('Clearing messages', error);
   }
-
 };
 
 /**
- * Count tokens using Claude's token counting API
+ * Count tokens using Claude's token counting API.
+ * @param {string} text - Text to count tokens for
+ * @returns {Promise<number>} - Number of tokens
  */
-window.MessageService.prototype.countClaudeTokens = async function(text) {
+window.MessageService.prototype.countClaudeTokens = async function (text) {
   try {
     const response = await window.apiRequest(
       '/api/claude/count_tokens',
@@ -53,35 +55,24 @@ window.MessageService.prototype.countClaudeTokens = async function(text) {
       { text, model: this.modelConfig?.modelName }
     );
     return response.data?.input_tokens || Math.ceil(text.length / 4);
-  } catch {
+  } catch (error) {
+    window.ChatUtils.handleError('Counting tokens', error);
     return Math.ceil(text.length / 4); // Fallback
   }
 };
 
 /**
- * Initialize the service with a chat ID and optional WebSocket service
+ * Initialize the service with a chat ID.
+ * @param {string} chatId - Conversation ID to initialize with
  */
 window.MessageService.prototype.initialize = function (chatId) {
   this.chatId = chatId;
+  console.log(`MessageService initialized for chat ID: ${chatId}`);
 };
 
 /**
- * Helper function to validate UUIDs in MessageService
- */
-window.MessageService.prototype._isValidUUID = function (uuid) {
-  if (!uuid) {
-    console.warn('UUID validation failed: UUID is null or undefined');
-    return false;
-  }
-  const isValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
-  if (!isValid) {
-    console.warn(`UUID validation failed for: ${uuid}`);
-  }
-  return isValid;
-};
-
-/**
- * Update the model configuration
+ * Update the model configuration.
+ * @param {Object} config - New model configuration
  */
 window.MessageService.prototype.updateModelConfig = function (config) {
   // Store current model configuration for message sending
@@ -90,7 +81,9 @@ window.MessageService.prototype.updateModelConfig = function (config) {
 };
 
 /**
- * Send a message (user_message) using WebSocket if available or HTTP fallback
+ * Send a message to the current conversation.
+ * @param {string|Object} content - Message content or object to send
+ * @returns {Promise<Object>} - Response from the server
  */
 window.MessageService.prototype.sendMessage = async function (content) {
   if (!this.chatId) {
@@ -109,7 +102,7 @@ window.MessageService.prototype.sendMessage = async function (content) {
 
   // Create the message payload with Claude-specific fields
   const messagePayload = {
-    content: content,
+    content: typeof content === 'string' ? content : content.content,
     role: "user",
     type: "message",
     vision_detail: this.modelConfig?.visionDetail || "auto"
@@ -164,18 +157,16 @@ window.MessageService.prototype.sendMessage = async function (content) {
   try {
     return await this._sendMessageHttp(messagePayload);
   } catch (error) {
-    // Only handle error if it hasn't been handled yet
-    if (!error._handled) {
-      window.ChatUtils?.handleError?.('Sending message', error) ||
-        this.onError('Sending message', error);
-      error._handled = true;
-    }
+    window.ChatUtils.handleError('Sending message', error);
     throw error;
   }
 };
 
 /**
- * HTTP fallback for message sending
+ * HTTP implementation for message sending.
+ * @param {Object} messagePayload - Payload to send
+ * @returns {Promise<Object>} - Server response
+ * @private
  */
 window.MessageService.prototype._sendMessageHttp = async function (messagePayload) {
   // Validate conversation ID again before HTTP request
@@ -183,33 +174,27 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
     throw new Error('Invalid conversation ID');
   }
 
-  // Add authentication check with improved error handling
-  try {
-    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
-    if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
-    }
-  } catch (authError) {
-    console.warn('[MessageService] Authentication error when sending message:', authError);
-    window.auth.handleAuthError(authError, "sending message");
-    throw authError;
+  // Add authentication check using centralized utility
+  const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+  if (!isAuthenticated) {
+    throw new Error('Not authenticated - please login first');
   }
 
   try {
-      // Construct the API endpoint URL
-      const projectId = localStorage.getItem('selectedProjectId')?.trim();
-      const chatId = this.chatId;
+    // Construct the API endpoint URL
+    const projectId = window.ChatUtils.getProjectId();
+    const chatId = this.chatId;
 
-      if (!chatId) {
-          throw new Error('No conversation ID is set, cannot send messages');
-      }
+    if (!chatId) {
+      throw new Error('No conversation ID is set, cannot send messages');
+    }
 
-      let apiUrl;
-      if (projectId) {
-          apiUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
-      } else {
-          apiUrl = `/api/chat/conversations/${chatId}/messages`;
-      }
+    let apiUrl;
+    if (projectId) {
+      apiUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
+    } else {
+      apiUrl = `/api/chat/conversations/${chatId}/messages`;
+    }
 
     // Make the HTTP request
     const response = await window.apiRequest(apiUrl, 'POST', messagePayload);
@@ -234,43 +219,35 @@ window.MessageService.prototype._sendMessageHttp = async function (messagePayloa
 
     return response.data;
   } catch (error) {
-    // Enhanced error handling
-    const enhancedError = this._handleAIError(error);
-    window.ChatUtils?.handleError?.('HTTP message', enhancedError) ||
-      this.onError('HTTP send', enhancedError);
-    throw enhancedError;
+    window.ChatUtils.handleError('HTTP message send', error);
+    throw error;
   }
 };
 
 /**
- * Extract detailed error message from AI response error
- * @param {string|any} errorStr - Error message from AI
+ * Extract detailed error message from AI response error.
+ * @param {string|Object} errorStr - Error message or object from AI
  * @returns {string} - User-friendly error message
+ * @private
  */
-window.MessageService.prototype._extractAIErrorMessage = function(errorStr) {
-  // Ensure errorStr is a string to avoid "errorStr.includes is not a function"
+window.MessageService.prototype._extractAIErrorMessage = function (errorStr) {
+  // Ensure errorStr is a string to avoid errors
   if (errorStr === null || errorStr === undefined) {
     return "AI couldn't generate a response due to an unknown error.";
   }
 
   // Handle object errors more gracefully
   if (typeof errorStr === 'object') {
-    // Try to extract meaningful properties from the error object
     const errorMessage = errorStr.message || errorStr.error || errorStr.description ||
-                         errorStr.details || errorStr.reason;
-
+      errorStr.details || errorStr.reason;
     if (errorMessage) {
       return this._extractAIErrorMessage(errorMessage); // Process the extracted message
     }
-
-    // If we have no specific error message but have keys, show what's available
     const keys = Object.keys(errorStr);
     if (keys.length > 0) {
       try {
-        // Try to stringify the object for more details
         return `AI generation error: ${JSON.stringify(errorStr)}`;
       } catch (e) {
-        // If stringify fails, provide keys at least
         return `AI generation error: Object with properties [${keys.join(', ')}]`;
       }
     }
@@ -311,70 +288,12 @@ window.MessageService.prototype._extractAIErrorMessage = function(errorStr) {
 };
 
 /**
- * Transform general errors into more specific AI errors
- */
-window.MessageService.prototype._handleAIError = function(error) {
-  // If it's already an Error object
-  if (error instanceof Error) {
-    // For the generic "Failed to generate response" error
-    if (error.message === "Failed to generate response") {
-      error.message = this._extractAIErrorMessage("Failed to generate response");
-      error.code = "AI_GENERATION_FAILED";
-      error.userAction = "Try rephrasing your query or waiting a moment before trying again.";
-    }
-    return error;
-  }
-
-  // If it's a string, create a proper Error
-  if (typeof error === 'string') {
-    const enhancedError = new Error(this._extractAIErrorMessage(error));
-    enhancedError.code = "AI_GENERATION_FAILED";
-    enhancedError.originalMessage = error;
-    return enhancedError;
-  }
-
-  // If it's an API error object with status
-  if (error.status) {
-    const statusCode = error.status;
-    let message = error.message || "Unknown error";
-
-    // Check for credit balance issues in the error message or response
-    if (statusCode === 400 &&
-        (message.includes("credit balance") ||
-         message.includes("Plans & Billing") ||
-         (error.response && error.response.data &&
-          error.response.data.assistant_error &&
-          (error.response.data.assistant_error.includes("credit balance") ||
-           error.response.data.assistant_error.includes("Plans & Billing"))))) {
-      message = "Your Claude API credit balance is too low. Please go to Plans & Billing to upgrade or purchase credits.";
-    }
-    // Map HTTP status codes to better error messages
-    else if (statusCode === 429) {
-      message = "Too many requests. Please wait a moment before trying again.";
-    } else if (statusCode === 400 && message.includes("Failed to generate")) {
-      message = this._extractAIErrorMessage("Failed to generate response");
-    } else if (statusCode >= 500) {
-      message = "The AI service is currently unavailable. Please try again later.";
-    }
-
-    const enhancedError = new Error(message);
-    enhancedError.status = statusCode;
-    enhancedError.code = "AI_SERVICE_ERROR";
-    enhancedError.originalError = error;
-    return enhancedError;
-  }
-
-  // Return original if we can't enhance it
-  return error;
-};
-
-
-/**
- * Check if knowledge base is enabled for a project
+ * Check if knowledge base is enabled for a project.
  * @param {string} projectId - The project ID to check
  * @returns {Promise<{enabled: boolean, error?: boolean}>}
+ * @private
  */
-window.MessageService.prototype._checkKnowledgeBaseStatus = async function(projectId) {
+window.MessageService.prototype._checkKnowledgeBaseStatus = async function (projectId) {
   try {
     const response = await window.apiRequest(
       `/api/projects/${projectId}/knowledge-base-status`,
@@ -383,6 +302,7 @@ window.MessageService.prototype._checkKnowledgeBaseStatus = async function(proje
     return { enabled: response.data?.isActive || false };
   } catch (error) {
     console.warn("Error checking knowledge base status:", error);
+    window.ChatUtils.handleError('Checking knowledge base status', error);
     return { enabled: false, error: true };
   }
 };
