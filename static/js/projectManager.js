@@ -1,4 +1,4 @@
-  /**
+/**
  * projectManager.js
  * ------------------
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
@@ -111,7 +111,7 @@
     const now = Date.now();
 
     if (DEBUG && (!lastAuthLogTimestamps[logKey] ||
-               (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
+      (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
       console.debug('[ProjectManager] Attempting auth token retrieval');
       lastAuthLogTimestamps[logKey] = now;
     }
@@ -120,7 +120,7 @@
       return await window.auth.getAuthToken();
     } catch (err) {
       // If token retrieval fails, force auth verification
-      const isAuth = await window.auth.isAuthenticated({forceVerify: true});
+      const isAuth = await window.auth.isAuthenticated({ forceVerify: true });
       if (isAuth) {
         return await window.auth.getAuthToken();
       }
@@ -139,7 +139,7 @@
     }
 
     try {
-      const isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (isAuthenticated) {
         __authVerified = true;
         __authVerifiedTime = Date.now();
@@ -147,7 +147,7 @@
       }
 
       // One more try with force verify
-      const retryResult = await window.auth.isAuthenticated({forceVerify: true});
+      const retryResult = await window.auth.isAuthenticated({ forceVerify: true });
       if (retryResult) {
         __authVerified = true;
         __authVerifiedTime = Date.now();
@@ -157,7 +157,7 @@
       throw new Error("Not authenticated - please login first");
     } catch (err) {
       __authVerified = false;
-      emitEvent('projectAuthError', {reason: 'auth_required', error: err});
+      emitEvent('projectAuthError', { reason: 'auth_required', error: err });
       throw err;
     }
   }
@@ -180,12 +180,22 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
+      // Explicit authentication check
+      const isAuthenticated = await checkAuthenticationWithTimeout(); // Use helper with timeout
+      if (!isAuthenticated) {
+        console.warn("[projectManager] loadProjects skipped: User not authenticated.");
+        // Emit specific event for UI to potentially show login prompt
+        emitEvent("projectsLoaded", { projects: [], count: 0, filter: { type: cleanFilter }, error: true, reason: 'auth_required' });
+        emitEvent("projectAuthError", { reason: 'load_projects', error: new Error("Authentication required") });
+        return []; // Return empty array as no projects can be loaded
+      }
+
       // Throttled logging with operation key to prevent spam
       const logKey = `loadProjects-${cleanFilter}`;
       const now = Date.now();
 
       if (DEBUG && (!lastAuthLogTimestamps[logKey] ||
-                 (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
+        (now - lastAuthLogTimestamps[logKey] > AUTH_LOG_INTERVAL))) {
         console.log('[ProjectManager] Getting auth token for loadProjects');
         lastAuthLogTimestamps[logKey] = now;
 
@@ -206,8 +216,8 @@
 
       const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
 
-      // During initialization, request the token with graceful option
-      const token = await window.auth.getAuthToken({ gracefulInit: true });
+      // Request the token with allowEmpty option
+      const token = await window.auth.getAuthToken({ allowEmpty: true });
 
       const response = await window.apiRequest(endpoint, "GET", null, {
         headers: {
@@ -282,13 +292,22 @@
       currentProject = null;
       emitEvent("projectDetailsLoading", { projectId });
 
-      // Use gracefulInit when checking auth to avoid hard errors during initialization
+      // Explicit authentication check
+      const isAuthenticated = await checkAuthenticationWithTimeout();
+      if (!isAuthenticated) {
+        console.warn(`[projectManager] loadProjectDetails (${projectId}) skipped: User not authenticated.`);
+        emitEvent("projectDetailsError", { projectId, error: new Error("Authentication required"), reason: 'auth_required' });
+        emitEvent("projectAuthError", { reason: 'project_details', error: new Error("Authentication required") });
+        currentProject = null; // Ensure current project is cleared
+        return null;
+      }
+
+      // Use allowEmpty when checking auth to avoid hard errors during initialization
       let token;
       try {
-        // Check auth with graceful option first
-        token = await window.auth.getAuthToken({ gracefulInit: true });
+        token = await window.auth.getAuthToken({ allowEmpty: true });
       } catch (authError) {
-        console.warn("[projectManager] Auth error in loadProjectDetails:", authError.message);
+        console.warn("[projectManager] Auth error during token fetch in loadProjectDetails:", authError.message);
         // Emit projectAuthError event for UI to react
         emitEvent('projectAuthError', { reason: 'project_details', error: authError });
         throw new Error('Authentication required to view project details');
@@ -1054,7 +1073,7 @@
   // Add the project-specific chat initialization function to ChatManager
   // (but don't overwrite if it already exists)
   if (!window.ChatManager.initializeProjectChat) {
-    window.ChatManager.initializeProjectChat = function(containerSelector, options = {}) {
+    window.ChatManager.initializeProjectChat = function (containerSelector, options = {}) {
       console.log('[ChatManager] Initializing project chat with selector:', containerSelector);
 
       if (!window.ChatInterface) {

@@ -93,7 +93,6 @@ const API_ENDPOINTS = {
   AUTH_VERIFY: '/api/auth/verify/',
   PROJECTS: '/api/projects/',
   PROJECT_DETAILS: '/api/projects/{projectId}/',
-  // Removed unused endpoint
   PROJECT_CONVERSATIONS: '/api/projects/{project_id}/conversations',
   PROJECT_FILES: '/api/projects/{projectId}/files/'
 };
@@ -157,13 +156,6 @@ function handleAuthModalPositioning() {
     authDropdown.classList.add('right-0');
   }
 }
-
-/**
- * Ensures user is authenticated (cookie-based).
- * Incorporates authCheckInProgress to avoid race conditions.
- * @param {Object} options - Configuration options
- * @returns {Promise<boolean>} Whether user is authenticated
- */
 
 /**
  * Clears authentication state across the app
@@ -380,20 +372,26 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
 
       // Prepare request options
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+      if (!csrfToken) {
+        console.error('[API] CSRF token missing - triggering auth refresh');
+        await verifyAuthState(true); // Force verify auth state
+        throw new Error('CSRF token missing - please refresh page');
+      }
       const requestOptions = {
         method: uppercaseMethod,
+        credentials: 'include',
         headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
           Accept: 'application/json',
           'Cache-Control': 'no-cache',
           Pragma: 'no-cache',
           'X-Forwarded-Host': window.location.host,
-          'X-Request-Domain': window.location.hostname,
-          'X-CSRF-Token': csrfToken || ''
+          'X-Request-Domain': window.location.hostname
         },
         cache: 'no-store',
         redirect: 'follow',
-        signal: controller.signal,
-        credentials: 'include'
+        signal: controller.signal
       };
 
       // If data is present, handle body
@@ -516,23 +514,13 @@ const debouncedLoadProject = debounce(async (projectId) => {
   currentlyLoadingProjectId = projectId;
 
   try {
-    // Show project details view
-    const projectListView = document.getElementById('projectListView');
-    const projectDetailsView = document.getElementById('projectDetailsView');
-    if (projectListView) projectListView.classList.add('hidden');
-    if (projectDetailsView) projectDetailsView.classList.remove('hidden');
-
-    // Dispatch projectSelected event
-    document.dispatchEvent(new CustomEvent('projectSelected', {
-      detail: { projectId }
-    }));
-
-    if (window.projectManager?.loadProjectDetails) {
-      console.log(`[App] Loading project details: ${projectId}`);
+    // Delegate to ProjectDashboard for UI management
+    if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectDetails === 'function') {
+      console.log(`[App] Delegating to ProjectDashboard for project ${projectId}`);
+      await window.ProjectDashboard.showProjectDetails(projectId);
+    } else if (window.projectManager?.loadProjectDetails) {
+      console.log(`[App] Loading project details via projectManager: ${projectId}`);
       await window.projectManager.loadProjectDetails(projectId);
-    } else if (window.loadProjectDetails) {
-      console.log(`[App] Fallback: loadProjectDetails for ${projectId}`);
-      await window.loadProjectDetails(projectId);
     } else {
       console.warn(`[App] No function found to load project details for ${projectId}`);
     }
@@ -683,19 +671,19 @@ function createConversationListItem(item) {
 
 // Load conversation list
 async function loadConversationList() {
-    try {
-      if (!await window.auth.isAuthenticated({forceVerify: false})) {
-        console.log("[loadConversationList] Not authenticated");
-        return [];
-      }
-      if (API_CONFIG.authCheckInProgress) {
-        console.log("[loadConversationList] Auth check in progress, deferring");
-        return [];
-      }
-    } catch (err) {
-      console.error("[loadConversationList] Authentication check error:", err);
-      return [];  // Return empty array instead of failing
+  try {
+    if (!await window.auth.isAuthenticated({ forceVerify: false })) {
+      console.log("[loadConversationList] Not authenticated");
+      return [];
     }
+    if (API_CONFIG.authCheckInProgress) {
+      console.log("[loadConversationList] Auth check in progress, deferring");
+      return [];
+    }
+  } catch (err) {
+    console.error("[loadConversationList] Authentication check error:", err);
+    return [];  // Return empty array instead of failing
+  }
 
   let projectId = localStorage.getItem("selectedProjectId");
 
@@ -790,46 +778,27 @@ async function handleNavigationChange() {
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
   const view = urlParams.get('view');
+  const projectId = urlParams.get('project');
 
-  if (view === 'projects') {
-    console.log('[handleNavigationChange] View=projects detected, showing projects.');
+  if (view === 'projects' || !projectId) {
+    console.log('[handleNavigationChange] View=projects detected or no project ID, showing projects.');
 
-    // Hide chat UI and show project views
-    const chatUI = document.getElementById('chatUI');
-    const noChatMsg = document.getElementById('noChatSelectedMessage');
-    const loginMsg = document.getElementById('loginRequiredMessage');
-
-    if (chatUI) chatUI.classList.add('hidden');
-    if (noChatMsg) noChatMsg.classList.add('hidden');
-    if (loginMsg) loginMsg.classList.add('hidden');
-
-    // Show project list view instead
-      if (window.ProjectDashboard?.showProjectsView) {
-        window.ProjectDashboard.showProjectsView();
-      } else {
-        const listView = document.getElementById('projectListView');
-        const detailsView = document.getElementById('projectDetailsView');
-        if (listView) {
-          listView.classList.remove('hidden');
-          listView.style.display = 'flex'; // Ensure display is set to flex
-          console.log('[handleNavigationChange] projectListView made visible');
-        }
-        if (detailsView) detailsView.classList.add('hidden');
-      }
-
-    // Make project manager panel visible
-    const projectManagerPanel = document.getElementById('projectManagerPanel');
-    if (projectManagerPanel) {
-      projectManagerPanel.classList.remove('hidden');
-      console.log('[handleNavigationChange] projectManagerPanel made visible');
+    // Delegate to ProjectDashboard for UI management
+    if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectList === 'function') {
+      window.ProjectDashboard.showProjectList();
+    } else if (typeof window.showProjectsView === 'function') {
+      window.showProjectsView();
+    } else {
+      console.warn('[handleNavigationChange] No ProjectDashboard or showProjectsView function available, using fallback.');
+      const listView = document.getElementById('projectListView');
+      const detailsView = document.getElementById('projectDetailsView');
+      if (listView) listView.classList.remove('hidden');
+      if (detailsView) detailsView.classList.add('hidden');
     }
 
     // Ensure projects are loaded by triggering refresh
     setTimeout(() => {
-      if (window.projectListComponent) {
-        console.log('[handleNavigationChange] Triggering project list refresh');
-        window.projectListComponent.renderProjects({forceRefresh: true});
-      } else if (window.projectManager?.loadProjects) {
+      if (window.projectManager?.loadProjects) {
         console.log('[handleNavigationChange] Using projectManager to load projects');
         window.projectManager.loadProjects('all').catch(err =>
           console.error('[handleNavigationChange] Project loading error:', err)
@@ -837,6 +806,12 @@ async function handleNavigationChange() {
       }
     }, 100);
 
+    return;
+  }
+
+  if (projectId) {
+    console.log(`[handleNavigationChange] Project ID=${projectId}, loading project details.`);
+    debouncedLoadProject(projectId);
     return;
   }
 
@@ -895,11 +870,9 @@ function handleAPIError(context, error) {
 // PROJECT LOADING FUNCTIONS
 // ---------------------------------------------------------------------
 
-
-// In app.js
 async function loadInitialProjects(retryOnFailure = true) {
   try {
-    const isAuthenticated = await window.auth.isAuthenticated({forceVerify: false});
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
     if (!isAuthenticated) {
       console.log("[App] Not authenticated, showing login prompt");
       document.getElementById('loginRequiredMessage')?.classList.remove('hidden');
@@ -909,17 +882,13 @@ async function loadInitialProjects(retryOnFailure = true) {
     if (window.projectManager?.loadProjects) {
       const projects = await window.projectManager.loadProjects('all');
       console.log(`[App] Loaded ${projects.length} projects`);
-
-      // Ensure project list is rendered
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects(projects);
-      }
+      // Let ProjectDashboard handle rendering via events
     }
   } catch (err) {
     console.error("[App] Error loading initial projects:", err);
     if (retryOnFailure) {
       console.log("[App] Retrying project load after auth verification");
-      await window.auth.isAuthenticated({forceVerify: true});
+      await window.auth.isAuthenticated({ forceVerify: true });
       loadInitialProjects(false);
     }
   }
@@ -1005,7 +974,6 @@ function showModal(type, options = {}) {
   return false;
 }
 
-
 function setupEventListeners() {
   // Add auth dropdown mobile handling
   const authBtn = document.getElementById('authButton');
@@ -1033,8 +1001,8 @@ function setupEventListeners() {
     // Close dropdown when clicking outside
     document.addEventListener("click", e => {
       if (!authDropdown.classList.contains('hidden') &&
-          !e.target.closest("#authContainer") &&
-          !e.target.closest("#authDropdown")) {
+        !e.target.closest("#authContainer") &&
+        !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
       }
     });
@@ -1042,8 +1010,8 @@ function setupEventListeners() {
     // Handle touch events on mobile with improved target detection
     document.addEventListener("touchstart", e => {
       if (!authDropdown.classList.contains('hidden') &&
-          !e.target.closest("#authContainer") &&
-          !e.target.closest("#authDropdown")) {
+        !e.target.closest("#authContainer") &&
+        !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
       }
     }, { passive: true });
@@ -1098,8 +1066,8 @@ function setupEventListeners() {
     }
 
     if (event.target.closest('#backToProjectsBtn')) {
-      if (window.ProjectDashboard?.showProjectsView) {
-        window.ProjectDashboard.showProjectsView();
+      if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectList === 'function') {
+        window.ProjectDashboard.showProjectList();
       } else if (typeof window.showProjectsView === 'function') {
         window.showProjectsView();
       } else {
@@ -1111,7 +1079,7 @@ function setupEventListeners() {
     }
 
     if (event.target.closest('#editProjectBtn')) {
-      const currentProject = window.projectManager?.currentProject();
+      const currentProject = window.projectManager?.getCurrentProject();
       if (currentProject) {
         showModal('project', {
           updateContent: (modalEl) => {
@@ -1129,12 +1097,12 @@ function setupEventListeners() {
     }
 
     if (event.target.closest('#pinProjectBtn')) {
-      const currentProject = window.projectManager?.currentProject();
+      const currentProject = window.projectManager?.getCurrentProject();
       if (currentProject?.id && window.projectManager?.togglePinProject) {
         window.projectManager.togglePinProject(currentProject.id)
           .then(updatedProject => {
             window.showNotification?.('Project ' + (updatedProject.pinned ? 'pinned' : 'unpinned'), 'success');
-            window.loadProjectDetails?.(currentProject.id);
+            window.projectManager.loadProjectDetails(currentProject.id);
             window.loadSidebarProjects?.();
           })
           .catch(err => {
@@ -1145,7 +1113,7 @@ function setupEventListeners() {
     }
 
     if (event.target.closest('#archiveProjectBtn')) {
-      const currentProject = window.projectManager?.currentProject();
+      const currentProject = window.projectManager?.getCurrentProject();
       if (currentProject && window.ModalManager?.confirmAction) {
         window.ModalManager.confirmAction({
           title: 'Confirm Archive',
@@ -1156,9 +1124,11 @@ function setupEventListeners() {
             window.projectManager.toggleArchiveProject(currentProject.id)
               .then(updatedProject => {
                 window.showNotification?.(`Project ${updatedProject.archived ? 'archived' : 'unarchived'}`, 'success');
-                if (window.ProjectDashboard?.showProjectsView) window.ProjectDashboard.showProjectsView();
+                if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectList === 'function') {
+                  window.ProjectDashboard.showProjectList();
+                }
                 window.loadSidebarProjects?.();
-                window.loadProjects?.();
+                window.projectManager.loadProjects('all');
               })
               .catch(err => {
                 console.error('Error toggling archive:', err);
@@ -1216,62 +1186,40 @@ function handleAuthStateChange(e) {
   handleAppUpdateAuthUI(authenticated, username);
   API_CONFIG.isAuthenticated = authenticated;
 
-    if (authenticated) {
-      if (stateChanged) {
-        console.log("[AuthStateChange] User authenticated, loading initial data...");
+  if (authenticated) {
+    if (stateChanged) {
+      console.log("[AuthStateChange] User authenticated, loading initial data...");
 
-        // Make sure project list view is visible
-        const projectListView = document.getElementById('projectListView');
-        if (projectListView) {
-          projectListView.classList.remove('hidden');
-          console.log("[AuthStateChange] Made project list view visible");
-
-          // Ensure login message is hidden
-          const loginRequiredMessage = document.getElementById('loginRequiredMessage');
-          if (loginRequiredMessage) {
-            loginRequiredMessage.classList.add('hidden');
-            console.log("[AuthStateChange] Hidden login required message");
-          }
-        }
-
-        // Make project manager panel visible
-        const projectManagerPanel = document.getElementById('projectManagerPanel');
-        if (projectManagerPanel && projectManagerPanel.classList.contains('hidden')) {
-          projectManagerPanel.classList.remove('hidden');
-          console.log("[AuthStateChange] Made project manager panel visible");
-        }
-
-        // Force view=projects if we're on the homepage
-        if (!window.location.search) {
-          window.history.pushState({}, '', '/?view=projects');
-          console.log("[AuthStateChange] Redirected to projects view");
-        }
-
-        // Use our new robust project loading sequence
-        loadInitialProjects().catch(err => {
-          console.error("[AuthStateChange] Error loading initial projects:", err);
-        });
-
-        // Still load other components as before
-        loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
-        loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
-
-        // Check chatId once
-        const urlParams = new URLSearchParams(window.location.search);
-        const chatId = urlParams.get('chatId');
-        if (chatId && typeof window.loadConversation === 'function') {
-          window.loadConversation(chatId).catch(err => {
-            console.warn("Failed to load conversation:", err);
-          });
-        }
-      } else {
-        console.log("[AuthStateChange] Already authenticated, forcing UI refresh anyway.");
-        loadInitialProjects().catch(err => {
-          console.error("[AuthStateChange] Error forcing initial projects:", err);
-        });
-        loadConversationList().catch(err => console.warn("Failed forcing conversation load:", err));
-        loadSidebarProjects().catch(err => console.warn("Failed forcing sidebar load:", err));
+      // Delegate UI management to ProjectDashboard
+      if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectList === 'function') {
+        window.ProjectDashboard.showProjectList();
       }
+
+      // Use our new robust project loading sequence
+      loadInitialProjects().catch(err => {
+        console.error("[AuthStateChange] Error loading initial projects:", err);
+      });
+
+      // Still load other components as before
+      loadConversationList().catch(err => console.warn("Failed to load conversations:", err));
+      loadSidebarProjects().catch(err => console.warn("Failed to load sidebar projects:", err));
+
+      // Check chatId once
+      const urlParams = new URLSearchParams(window.location.search);
+      const chatId = urlParams.get('chatId');
+      if (chatId && typeof window.loadConversation === 'function') {
+        window.loadConversation(chatId).catch(err => {
+          console.warn("Failed to load conversation:", err);
+        });
+      }
+    } else {
+      console.log("[AuthStateChange] Already authenticated, forcing UI refresh anyway.");
+      loadInitialProjects().catch(err => {
+        console.error("[AuthStateChange] Error forcing initial projects:", err);
+      });
+      loadConversationList().catch(err => console.warn("Failed forcing conversation load:", err));
+      loadSidebarProjects().catch(err => console.warn("Failed forcing sidebar load:", err));
+    }
   } else {
     const conversationArea = ELEMENTS.CONVERSATION_AREA || getElement(SELECTORS.CONVERSATION_AREA);
     if (conversationArea) conversationArea.innerHTML = '';
@@ -1288,10 +1236,15 @@ function handleAuthStateChange(e) {
     const projectManagerPanel = ELEMENTS.PROJECT_MANAGER_PANEL || getElement(SELECTORS.PROJECT_MANAGER_PANEL);
     projectManagerPanel?.classList.add('hidden');
 
-    const projectDetailsView = document.getElementById('projectDetailsView');
-    if (projectDetailsView) projectDetailsView.classList.add('hidden');
-    const projectListView = document.getElementById('projectListView');
-    if (projectListView) projectListView.classList.remove('hidden');
+    // Delegate to ProjectDashboard for UI cleanup
+    if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectList === 'function') {
+      window.ProjectDashboard.showProjectList();
+    } else {
+      const projectDetailsView = document.getElementById('projectDetailsView');
+      if (projectDetailsView) projectDetailsView.classList.add('hidden');
+      const projectListView = document.getElementById('projectListView');
+      if (projectListView) projectListView.classList.remove('hidden');
+    }
 
     console.log("[AuthStateChange] User logged out, UI cleared.");
   }
@@ -1380,6 +1333,9 @@ async function initializeAllModules() {
     console.log("[initializeAllModules] Starting full initialization");
     await initializeApplication();
 
+    // Ensure all dynamic content is loaded before proceeding
+    await loadDynamicContent();
+
     // Initialize project manager if available
     if (window.projectManager?.initialize) {
       await window.projectManager.initialize();
@@ -1395,29 +1351,26 @@ async function initializeAllModules() {
     // Handle initial navigation
     await handleNavigationChange();
 
-    // --- NEW: Explicitly initialize main chat if needed ---
+    // Only initialize main chat if we are authenticated AND not in project view AND no specific chat is loaded yet
     const urlParams = new URLSearchParams(window.location.search);
     const view = urlParams.get('view');
     const chatId = urlParams.get('chatId');
 
-    // Only initialize main chat if we are authenticated AND not in project view AND no specific chat is loaded yet
     if (API_CONFIG.isAuthenticated && view !== 'projects' && !chatId) {
-        console.log("[initializeAllModules] Initializing main ChatManager as view is not projects and no chatId is present.");
-        if (window.ChatManager?.initializeChat) {
-            try {
-                await window.ChatManager.initializeChat(); // Initialize the main chat interface
-                console.log("[initializeAllModules] Main ChatManager initialized.");
-            } catch (chatInitError) {
-                console.error("[initializeAllModules] Failed to initialize main ChatManager:", chatInitError);
-                // Optionally show an error to the user
-            }
-        } else {
-            console.warn("[initializeAllModules] ChatManager.initializeChat not found.");
+      console.log("[initializeAllModules] Initializing main ChatManager as view is not projects and no chatId is present.");
+      if (window.ChatManager?.initializeChat) {
+        try {
+          await window.ChatManager.initializeChat(); // Initialize the main chat interface
+          console.log("[initializeAllModules] Main ChatManager initialized.");
+        } catch (chatInitError) {
+          console.error("[initializeAllModules] Failed to initialize main ChatManager:", chatInitError);
         }
+      } else {
+        console.warn("[initializeAllModules] ChatManager.initializeChat not found.");
+      }
     } else {
-         console.log("[initializeAllModules] Skipping main ChatManager initialization (view:", view, "chatId:", chatId, "auth:", API_CONFIG.isAuthenticated, ")");
+      console.log("[initializeAllModules] Skipping main ChatManager initialization (view:", view, "chatId:", chatId, "auth:", API_CONFIG.isAuthenticated, ")");
     }
-    // --- END NEW ---
 
     setPhase(AppPhase.COMPLETE);
     console.log("[initializeAllModules] All modules initialized successfully");
@@ -1425,6 +1378,52 @@ async function initializeAllModules() {
   } catch (error) {
     console.error("[initializeAllModules] Initialization error:", error);
     return false;
+  }
+}
+
+// Helper function to load all dynamic HTML content before initializing modules
+async function loadDynamicContent() {
+  console.log("[loadDynamicContent] Loading all dynamic HTML content");
+  const projectListView = document.getElementById('projectListView');
+  const projectDetailsView = document.getElementById('projectDetailsView');
+  const modalsContainer = document.getElementById('modalsContainer');
+  const chatUIContainer = document.getElementById('chatUIContainer');
+
+  const promises = [];
+
+  // Helper to fetch and insert HTML, handling potential null elements
+  const fetchAndInsert = (element, url, containerId) => {
+    if (element && element.innerHTML.trim() === '') {
+      return fetch(url)
+        .then(response => {
+          if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+          return response.text();
+        })
+        .then(html => {
+          element.innerHTML = html;
+          console.log(`[loadDynamicContent] Loaded ${url}`);
+          // Ensure container visibility if needed (e.g., for modals)
+          if (containerId === 'modalsContainer' || containerId === 'chatUIContainer') {
+            element.classList.remove('hidden');
+          }
+        })
+        .catch(err => console.error(`Failed to load ${url}:`, err));
+    }
+    return Promise.resolve(); // Resolve immediately if element doesn't exist or already has content
+  };
+
+  promises.push(fetchAndInsert(projectListView, 'project_list.html', 'projectListView'));
+  promises.push(fetchAndInsert(projectDetailsView, 'project_details.html', 'projectDetailsView'));
+  promises.push(fetchAndInsert(modalsContainer, 'modals.html', 'modalsContainer'));
+  promises.push(fetchAndInsert(chatUIContainer, 'chat_ui.html', 'chatUIContainer'));
+
+  await Promise.all(promises);
+  console.log("[loadDynamicContent] All dynamic content loading attempted");
+
+  // After loading modals, initialize projectModal if available
+  if (modalsContainer && window.initProjectModal) {
+    console.log("[loadDynamicContent] Initializing projectModal after modals loaded.");
+    window.initProjectModal();
   }
 }
 
@@ -1527,30 +1526,21 @@ document.addEventListener('projectSelected', (event) => {
   const projectId = event.detail.projectId;
   console.log('[app.js] projectSelected event received for project:', projectId);
 
-  const projectListView = document.getElementById('projectListView');
-  const projectDetailsView = document.getElementById('projectDetailsView');
-
-  if (projectListView) {
-    projectListView.classList.add('hidden');
-    console.log('[app.js] Hiding projectListView');
-  } else {
-    console.warn('[app.js] projectListView not found');
-  }
-
-  if (projectDetailsView) {
-    projectDetailsView.classList.remove('hidden');
-    console.log('[app.js] Showing projectDetailsView');
-    projectDetailsView.scrollTop = 0;
-  } else {
-    console.warn('[app.js] projectDetailsView not found');
+  // Delegate UI management to ProjectDashboard
+  if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectDetails === 'function') {
+    window.ProjectDashboard.showProjectDetails(projectId);
   }
 });
 
 document.addEventListener('showProjectList', () => {
   console.log('[app.js] showProjectList event received');
-  const projectListView = document.getElementById('projectListView');
-  const projectDetailsView = document.getElementById('projectDetailsView');
-  if (projectListView) projectListView.classList.remove('hidden');
-  if (projectDetailsView) projectDetailsView.classList.add('hidden');
-  window.history.pushState({}, '', '/?view=projects');
+  if (window.ProjectDashboard && typeof window.ProjectDashboard.showProjectList === 'function') {
+    window.ProjectDashboard.showProjectList();
+  } else {
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    if (projectListView) projectListView.classList.remove('hidden');
+    if (projectDetailsView) projectDetailsView.classList.add('hidden');
+    window.history.pushState({}, '', '/?view=projects');
+  }
 });

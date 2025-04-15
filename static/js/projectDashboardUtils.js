@@ -335,9 +335,16 @@
     }
 
     /**
-     * Shows a modal.
+     * Shows a modal, ensuring only one is visible at a time.
      */
     show(modalName, options = {}) {
+      // Ensure only one modal is shown at a time
+      Object.keys(this.modalMappings).forEach(name => {
+        if (name !== modalName) {
+          this.hide(name); // Attempt to hide other modals
+        }
+      });
+
       const modalId = this.modalMappings[modalName];
       if (!modalId) {
         console.error(`[ModalManager] No ID mapping found for modal name: '${modalName}'`);
@@ -608,7 +615,9 @@
             const projectDetailsEl = ProjectDashboard.uiUtils.getElement('projectDetailsView');
             projectDetailsEl?._componentInstance?.updatePinButton?.(updatedProject.pinned);
             // Refresh list in background
-            projectManager.loadProjects?.();
+            if (typeof projectManager.loadProjects === 'function') {
+              projectManager.loadProjects();
+            }
           } catch (error) {
             console.error('Failed to toggle pin:', error);
             ProjectDashboard.showNotification(`Error toggling pin: ${error.message}`, 'error');
@@ -644,7 +653,9 @@
                 'success'
               );
               ProjectDashboard.showProjectsView();
-              projectManager.loadProjects?.();
+              if (typeof projectManager.loadProjects === 'function') {
+                projectManager.loadProjects();
+              }
             }
           } catch (error) {
             console.error('Failed to toggle archive:', error);
@@ -686,7 +697,7 @@
             if (window.projectDashboard === undefined) {
               console.log('[ProjectDashboard] Creating fallback dashboard instance');
               window.projectDashboard = {
-                init: function() { return Promise.resolve(this); }
+                init: function () { return Promise.resolve(this); }
               };
               // Dispatch custom event to notify other components
               document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));

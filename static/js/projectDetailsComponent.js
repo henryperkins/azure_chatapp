@@ -70,7 +70,7 @@ export class ProjectDetailsComponent {
     const getElement = (selector, required = false) => {
       const el = document.querySelector(selector);
       if (required && !el) {
-        throw new Error(`Critical element not found: ${selector}`);
+        console.warn(`[ProjectDetailsComponent] Element not found: ${selector}`);
       }
       return el;
     };
@@ -471,7 +471,9 @@ export class ProjectDetailsComponent {
       console.error('[ProjectDetailsComponent] Upload failed:', error);
       this.notification?.('File upload failed', 'error');
     } finally {
-      e.target.value = null; // Reset input
+      if (e.target) {
+        e.target.value = null; // Reset input
+      }
     }
   }
 
@@ -851,7 +853,7 @@ export class ProjectDetailsComponent {
 
     tabContentIds.forEach(id => {
       tabContents[id] = document.getElementById(`${id}Tab`) ||
-                      document.querySelector(`[data-tab-content="${id}"]`);
+        document.querySelector(`[data-tab-content="${id}"]`);
     });
 
     // Hide all tab contents
@@ -890,7 +892,7 @@ export class ProjectDetailsComponent {
     const projectId = this.state.currentProject?.id;
     if (!projectId) return;
 
-    switch(tabName) {
+    switch (tabName) {
       case 'files':
         if (window.projectManager?.loadProjectFiles) {
           window.projectManager.loadProjectFiles(projectId)
@@ -914,7 +916,7 @@ export class ProjectDetailsComponent {
 
       case 'knowledge':
         if (this.state.currentProject?.knowledge_base_id &&
-            window.projectManager?.loadKnowledgeBaseDetails) {
+          window.projectManager?.loadKnowledgeBaseDetails) {
           window.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id)
             .catch(err => console.error('[ProjectDetailsComponent] Error loading KB details:', err));
         }
@@ -1098,7 +1100,7 @@ export class ProjectDetailsComponent {
     });
   }
 
-  formatUploadErrorMessage(error) {
+  formatUploadErrorMessage(error, fileName = '') {
     if (error?.response?.status === 401 || error.message?.includes('auth')) {
       this.auth?.handleAuthError?.(error);
       return "Authentication error - please log in again";
