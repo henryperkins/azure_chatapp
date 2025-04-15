@@ -397,12 +397,82 @@ export class ProjectDetailsComponent {
     return item;
   }
 
-  handleFileSelection(e) {
+  async handleFileSelection(e) {
     const files = e.target.files;
-    if (files && files.length > 0 && this.state.currentProject?.id) {
-      this.uploadFiles(this.state.currentProject.id, files);
+    if (!files || files.length === 0 || !this.state.currentProject?.id) {
+      return;
     }
-    e.target.value = null; // reset
+
+    const projectId = this.state.currentProject.id;
+
+    try {
+      // First check authentication
+      let isAuthenticated = false;
+      try {
+        isAuthenticated = await this.auth?.isAuthenticated?.();
+      } catch (authErr) {
+        console.warn('[ProjectDetailsComponent] Auth check failed:', authErr);
+      }
+
+      if (!isAuthenticated) {
+        this.notification?.('Please log in to upload files', 'warning');
+
+        // Try to handle auth error
+        if (this.auth?.handleAuthError) {
+          this.auth.handleAuthError(
+            { message: "Authentication required for file upload" },
+            "Uploading files"
+          );
+        }
+        return;
+      }
+
+      // Show upload progress
+      if (this.elements.uploadProgress) {
+        this.elements.uploadProgress.classList.remove('hidden');
+      }
+
+      this.showLoading('files');
+      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
+      this.updateUploadProgress();
+
+      // Use proper preparation method based on what's available
+      let validFiles = [], invalidFiles = [];
+
+      if (typeof window.projectManager?.prepareFileUploads === 'function') {
+        try {
+          const result = await window.projectManager.prepareFileUploads(projectId, files);
+          validFiles = result.validatedFiles || [];
+          invalidFiles = result.invalidFiles || [];
+        } catch (err) {
+          // Fallback to basic validation
+          console.warn('[ProjectDetailsComponent] Error using prepareFileUploads:', err);
+          validFiles = Array.from(files);
+          invalidFiles = [];
+        }
+      } else {
+        // Basic validation as fallback
+        const { validFiles: validatedFiles, invalidFiles: invalidOnes } = this.validateFiles(files);
+        validFiles = validatedFiles;
+        invalidFiles = invalidOnes;
+      }
+
+      // Handle invalid files
+      this.handleInvalidFiles(invalidFiles);
+      if (validFiles.length === 0) return;
+
+      // Upload files with batching
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+        const batch = validFiles.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(file => this.processFile(projectId, file)));
+      }
+    } catch (error) {
+      console.error('[ProjectDetailsComponent] Upload failed:', error);
+      this.notification?.('File upload failed', 'error');
+    } finally {
+      e.target.value = null; // Reset input
+    }
   }
 
   async uploadFiles(projectId, files) {
@@ -763,40 +833,107 @@ export class ProjectDetailsComponent {
    * Tab Switching
    * ------------------------------------------------------------------ */
   onTabClick(event) {
-    const tabButton = event.target.closest('.project-tab-btn[role="tab"]');
-    if (!tabButton) return;
-
-    const tabName = tabButton.dataset.tab;
-    if (tabName) {
-      this.switchTab(tabName);
-    }
+    const tabBtn = event.target.closest('.tab[role="tab"]');
+    if (!tabBtn || tabBtn.classList.contains('tab-disabled')) return;
+    const tabName = tabBtn.dataset.tab;
+    if (!tabName || this.state.activeTab === tabName) return;
+    this.switchTab(tabName);
   }
 
   switchTab(tabName) {
     if (!tabName || this.state.activeTab === tabName) return;
 
-    // Hide all tab contents
-    Object.values(this.elements.tabContents).forEach(content => {
-      if (content) content.classList.add('hidden');
+    console.log(`[ProjectDetailsComponent] Switching to tab: ${tabName}`);
+
+    // Get fresh references to tab contents (don't rely on cached elements)
+    const tabContents = {};
+    const tabContentIds = ['files', 'knowledge', 'conversations', 'artifacts', 'chat', 'details'];
+
+    tabContentIds.forEach(id => {
+      tabContents[id] = document.getElementById(`${id}Tab`) ||
+                      document.querySelector(`[data-tab-content="${id}"]`);
     });
 
-    // Show the selected tab
-    const newTabContent = this.elements.tabContents[tabName];
-    if (newTabContent) {
-      newTabContent.classList.remove('hidden');
+    // Hide all tab contents
+    Object.values(tabContents).forEach(content => {
+      if (content) {
+        content.classList.add('hidden');
+        content.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    // Show the selected tab if it exists
+    const selectedContent = tabContents[tabName];
+    if (selectedContent) {
+      selectedContent.classList.remove('hidden');
+      selectedContent.setAttribute('aria-hidden', 'false');
+    } else {
+      console.warn(`[ProjectDetailsComponent] Tab content not found: ${tabName}`);
     }
 
     // Update tab button states
-    const tabButtons = this.elements.tabContainer?.querySelectorAll('.project-tab-btn[role="tab"]');
+    const tabButtons = document.querySelectorAll('.project-tab-btn[role="tab"]');
     if (tabButtons) {
       tabButtons.forEach(btn => {
         const active = btn.dataset.tab === tabName;
         btn.classList.toggle('tab-active', active);
         btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        btn.tabIndex = active ? 0 : -1;
+
+        // Also add/remove the border and text color classes
+        if (active) {
+          btn.classList.add('text-blue-600', 'border-blue-600');
+          btn.classList.remove('text-gray-500', 'border-transparent');
+        } else {
+          btn.classList.remove('text-blue-600', 'border-blue-600');
+          btn.classList.add('text-gray-500', 'border-transparent');
+        }
       });
     }
 
     this.state.activeTab = tabName;
+
+    // Load tab-specific content if needed
+    this._loadTabContent(tabName);
+  }
+
+  _loadTabContent(tabName) {
+    const projectId = this.state.currentProject?.id;
+    if (!projectId) return;
+
+    switch(tabName) {
+      case 'files':
+        if (window.projectManager?.loadProjectFiles) {
+          window.projectManager.loadProjectFiles(projectId)
+            .catch(err => console.error('[ProjectDetailsComponent] Error loading files:', err));
+        }
+        break;
+
+      case 'conversations':
+        if (window.projectManager?.loadProjectConversations) {
+          window.projectManager.loadProjectConversations(projectId)
+            .catch(err => console.error('[ProjectDetailsComponent] Error loading conversations:', err));
+        }
+        break;
+
+      case 'artifacts':
+        if (window.projectManager?.loadProjectArtifacts) {
+          window.projectManager.loadProjectArtifacts(projectId)
+            .catch(err => console.error('[ProjectDetailsComponent] Error loading artifacts:', err));
+        }
+        break;
+
+      case 'knowledge':
+        if (this.state.currentProject?.knowledge_base_id &&
+            window.projectManager?.loadKnowledgeBaseDetails) {
+          window.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id)
+            .catch(err => console.error('[ProjectDetailsComponent] Error loading KB details:', err));
+        }
+        break;
+      case 'chat':
+        // Chat is initialized in renderProject, but you can refresh here if needed
+        break;
+    }
   }
 
   /* ------------------------------------------------------------------
