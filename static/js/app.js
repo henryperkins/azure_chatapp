@@ -137,7 +137,7 @@ function handleAuthModalPositioning() {
     // but we still need to ensure it's visible within the viewport
 
     // Clear any right positioning that might interfere with our centered approach
-    authDropdown.style.right = '';
+    authDropdown.classList.remove('right-0');
 
     // Ensure the dropdown is fully visible within viewport heights
     const viewportHeight = window.innerHeight;
@@ -146,12 +146,15 @@ function handleAuthModalPositioning() {
     // If dropdown would extend beyond viewport, adjust top position
     if (dropdownRect.bottom > viewportHeight) {
       const newTopPosition = Math.max(10, viewportHeight - dropdownRect.height - 10);
-      authDropdown.style.top = `${newTopPosition}px`;
+      // Use a data attribute to store the position, then handle in CSS
+      authDropdown.dataset.topPosition = newTopPosition;
+      authDropdown.classList.add('auth-dropdown-adjusted');
     }
   } else {
-    // Reset all inline styles for desktop view
-    authDropdown.style.right = '';
-    authDropdown.style.top = '';
+    // Reset all positioning classes for desktop view
+    authDropdown.classList.remove('auth-dropdown-adjusted');
+    delete authDropdown.dataset.topPosition;
+    authDropdown.classList.add('right-0');
   }
 }
 
