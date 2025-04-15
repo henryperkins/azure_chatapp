@@ -947,7 +947,8 @@ async function loadSidebarProjects() {
 
         const container = ELEMENTS.SIDEBAR_PROJECTS || getElement(SELECTORS.SIDEBAR_PROJECTS);
         if (!container) {
-          console.warn('[loadSidebarProjects] Sidebar project container not found');
+          console.warn('[loadSidebarProjects] Sidebar project container not found. Retrying in 100ms...');
+          setTimeout(() => loadSidebarProjects(), 100);
           return;
         }
 
