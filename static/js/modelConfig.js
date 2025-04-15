@@ -7,31 +7,22 @@
 // Import auth.js
 const auth = window.auth;
 
-// Tracked event listeners for proper cleanup
-const trackedListeners = new Set();
-
-/**
- * Track a listener for cleanup
- * @param {Element} element - Element to attach listener to
- * @param {string} type - Event type
- * @param {Function} handler - Event handler
- * @param {Object} [options] - Event listener options
- */
+// Use centralized event handling instead of duplicate implementation
 function trackListener(element, type, handler, options = {}) {
+  if (window.eventHandlers?.trackListener) {
+    return window.eventHandlers.trackListener(element, type, handler, options);
+  }
+  // Fallback implementation if eventHandlers not available
   if (!element) return;
-
   element.addEventListener(type, handler, options);
-  trackedListeners.add({ element, type, handler, options });
 }
 
-/**
- * Clean up all tracked event listeners
- */
 function cleanupListeners() {
-  trackedListeners.forEach(({ element, type, handler, options }) => {
-    element.removeEventListener(type, handler, options);
-  });
-  trackedListeners.clear();
+  if (window.eventHandlers?.cleanupListeners) {
+    return window.eventHandlers.cleanupListeners();
+  }
+  // No fallback needed as this is called after initialization
+  console.warn("Event handlers module not available for cleanup");
 }
 
 /**
@@ -199,7 +190,7 @@ async function initModelConfig() {
           }
         };
         document.addEventListener('authStateChanged', checkAuth);
-        
+
         // Timeout fallback
         setTimeout(() => {
           document.removeEventListener('authStateChanged', checkAuth);
@@ -238,7 +229,6 @@ async function initModelConfig() {
  */
 async function getCurrentModelConfig() {
   // Allow config access without authentication
-
   const models = getModelOptions();
   return models.find(m => m.id === modelConfigState.modelName) || models[0];
 }
@@ -305,7 +295,7 @@ async function setupModelDropdown() {
     console.log("User not authenticated - showing auth prompt");
     modelSelect.innerHTML = '<option value="">Please sign in to select model</option>';
     modelSelect.disabled = true;
-    
+
     // Listen for auth changes to re-enable
     const authListener = () => {
       if (auth.isAuthenticated) {
