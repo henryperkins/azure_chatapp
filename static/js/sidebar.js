@@ -121,7 +121,7 @@ function updateBackdrop(show) {
   if (show && !backdrop) {
     backdrop = document.createElement('div');
     backdrop.id = 'sidebarBackdrop';
-    backdrop.className = 'fixed inset-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
+    backdrop.className = 'fixed top-0 left-[16rem] bottom-0 right-0 bg-black/50 z-[99] md:hidden transition-opacity duration-300';
     backdrop.setAttribute('aria-hidden', 'true');
     backdrop.style.touchAction = 'auto'; // Changed from 'none' to 'auto'
     backdrop.style.pointerEvents = 'auto';
