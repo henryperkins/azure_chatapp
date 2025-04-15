@@ -1080,12 +1080,12 @@ export class ProjectDetailsComponent {
     const loginBtn = authMessage.querySelector('#loginPromptBtn');
     if (loginBtn) {
       loginBtn.addEventListener('click', () => {
-        // Redirect to login or show login modal if available
-        if (window.showLoginModal && typeof window.showLoginModal === 'function') {
-          window.showLoginModal();
+        // Show the auth dropdown directly
+        const authButton = document.getElementById('authButton');
+        if (authButton) {
+          authButton.click();
         } else {
           this.notification?.('Please log in to continue', 'info');
-          // Optional: can redirect to login page if needed
         }
       });
     }

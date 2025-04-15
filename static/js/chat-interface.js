@@ -370,6 +370,13 @@ window.ChatInterface.prototype._checkDependencies = function () {
           if (errorElement && authError) {
             errorElement.textContent = `Error: ${authError.message || 'Authentication required'}`;
           }
+      
+          // Make sure the auth button is visible for easy login
+          const authButton = document.getElementById('authButton');
+          if (authButton) {
+            authButton.classList.add('animate-pulse');
+            setTimeout(() => authButton.classList.remove('animate-pulse'), 2000);
+          }
         }
         Logger.info('User is not authenticated, showing login message');
         return Promise.reject(new Error(authError?.message || 'Not authenticated'));
