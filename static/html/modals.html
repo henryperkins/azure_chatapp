@@ -3,7 +3,7 @@
     <div class="modal-box max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
             <h3 id="projectFormTitle" class="text-xl font-semibold">Create New Project</h3>
-            <button id="closeProjectFormBtn" type="button" class="text-gray-500 hover:text-gray-700">
+            <button id="closeProjectFormBtn" type="button" class="btn btn-ghost btn-sm btn-square">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -14,40 +14,40 @@
             <input type="hidden" id="projectIdInput" name="projectId" value="" />
             <div class="mb-4">
                 <label for="projectForm-nameInput"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    class="block text-sm font-medium text-base-content mb-1">
                     Project Name <span class="text-red-500">*</span>
                 </label>
                 <input id="projectForm-nameInput" name="name" type="text" required aria-required="true"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"
                     aria-describedby="projectForm-nameError" />
-                <div id="projectForm-nameError" class="text-red-500 text-xs mt-1 hidden" role="alert">
+                <div id="projectForm-nameError" class="text-error text-xs mt-1 hidden" role="alert">
                     Project name is required
                 </div>
             </div>
             <div class="mb-4">
-                <label for="projectDescInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label for="projectDescInput" class="block text-sm font-medium text-base-content mb-1">
                     Description
                 </label>
                 <textarea id="projectDescInput" name="description" rows="3"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
             <div class="mb-4">
-                <label for="projectGoalsInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label for="projectGoalsInput" class="block text-sm font-medium text-base-content mb-1">
                     Goals
                 </label>
                 <textarea id="projectGoalsInput" name="goals" rows="3"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
             <div class="mb-4">
                 <label for="projectMaxTokensInput"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    class="block text-sm font-medium text-base-content mb-1">
                     MaximumTokens
                 </label>
                 <div id="projectMaxTokensContainer" class="mt-2">
                     <!-- Slider and input will be injected by projectManager.js -->
                 </div>
                 <input type="hidden" id="projectMaxTokensInput" name="max_tokens" value="200000" />
-                <p class="text-gray-500 text-xs mt-1">
+                <p class="text-base-content/60 text-xs mt-1">
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
             </div>
@@ -79,11 +79,11 @@
             </button>
         </div>
         <div class="mb-4">
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+            <p class="text-sm text-base-content/80 mb-2">
                 Custom instructions are sent at the beginning of every conversation in this project.
             </p>
             <textarea id="customInstructionsInput" rows="8"
-                class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 h-20 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
                 placeholder="Enter instructions for the AI to follow in this project..."></textarea>
         </div>
         <div class="flex justify-end gap-2">
@@ -153,35 +153,35 @@
 
             <div class="mb-4">
                 <label for="knowledgeBaseNameInput"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    class="block text-sm font-medium text-base-content mb-1">
                     Knowledge Base Name*
                 </label>
                 <input id="knowledgeBaseNameInput" name="name" type="text" required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary" />
             </div>
 
             <div class="mb-4">
                 <label for="knowledgeBaseDescInput"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    class="block text-sm font-medium text-base-content mb-1">
                     Description
                 </label>
                 <textarea id="knowledgeBaseDescInput" name="description" rows="3"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
 
             <div class="mb-4">
                 <label for="embeddingModelSelect"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    class="block text-sm font-medium text-base-content mb-1">
                     Embedding Model
                 </label>
                 <select id="embeddingModelSelect" name="embedding_model"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500">
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary">
                     <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (384d • Fast • Default)</option>
                     <option value="text-embedding-3-small">OpenAI: text-embedding-3-small (1536d • Recommended)</option>
                     <option value="text-embedding-3-large">OpenAI: text-embedding-3-large (3072d • Largest)</option>
                     <option value="embed-english-v3.0">Cohere: embed-english-v3.0 (1024d • English Only)</option>
                 </select>
-                <p class="text-xs text-gray-500 mt-1">
+                <p class="text-xs text-base-content/60 mt-1">
                     The embedding model determines how text is converted to vector representations for semantic search.
                 </p>
             </div>
@@ -190,11 +190,11 @@
                 <div class="flex items-center mb-2">
                     <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files"
                         class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" />
-                    <label for="processAllFilesCheckbox" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    <label for="processAllFilesCheckbox" class="ml-2 block text-sm text-base-content">
                         Process all project files for knowledge search
                     </label>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">
+                <p class="text-xs text-base-content/60 mt-1">
                     This will process all existing files in the project for knowledge search. New files will be
                     automatically
                     processed when added.
@@ -205,11 +205,11 @@
                 <div class="flex items-center mb-2">
                     <input type="checkbox" id="autoEnableCheckbox" name="auto_enable"
                         class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" checked />
-                    <label for="autoEnableCheckbox" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    <label for="autoEnableCheckbox" class="ml-2 block text-sm text-base-content">
                         Automatically use knowledge in conversations
                     </label>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">
+                <p class="text-xs text-base-content/60 mt-1">
                     When enabled, the AI will automatically search your project files for relevant information when
                     answering
                     questions.
@@ -245,11 +245,11 @@
         </div>
         <div class="mb-4">
             <div class="flex items-center mb-2">
-                <div class="text-sm font-medium text-gray-500 mr-2">Source:</div>
+                <div class="text-sm font-medium text-base-content/60 mr-2">Source:</div>
                 <div id="knowledgeResultSource" class="text-sm font-semibold">Filename</div>
             </div>
             <div class="flex items-center mb-4">
-                <div class="text-sm font-medium text-gray-500 mr-2">Relevance:</div>
+                <div class="text-sm font-medium text-base-content/60 mr-2">Relevance:</div>
                 <div id="knowledgeResultScore" class="text-sm">Score</div>
             </div>
         </div>

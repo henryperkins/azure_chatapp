@@ -23,19 +23,19 @@
   <meta name="csrf-token" content="" id="csrfToken" />
 </head>
 
-<body class="bg-gray-100 text-gray-900 h-screen flex flex-col">
+<body class="bg-base-200 text-base-content h-screen flex flex-col">
 
   <!--
     Top Navbar
     -------------------------------------------------------------------------
   -->
-  <header role="banner" class="bg-white shadow-xs border-b border-gray-200 dark:border-gray-700 dark:bg-gray-800">
+  <header role="banner" class="bg-base-100 shadow-xs border-b border-base-200">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <!-- Enhance toggle button with proper accessibility attributes -->
         <button id="navToggleBtn" type="button" class="focus:outline-hidden md:hidden"
           aria-label="Toggle sidebar navigation" aria-expanded="false" aria-controls="mainSidebar">
-          <svg role="img" aria-hidden="true" class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none"
+          <svg role="img" aria-hidden="true" class="w-6 h-6 text-base-content" fill="none"
             stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -47,7 +47,7 @@
         <!-- Dark mode toggle with updated classes -->
         <button id="darkModeToggle" type="button" aria-label="Toggle dark mode"
           class="dark-mode-toggle focus:outline-hidden focus:ring-2">
-          <svg id="darkModeIcon" class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
+          <svg id="darkModeIcon" class="w-5 h-5 text-base-content" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707
               M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -66,23 +66,23 @@
 
           <!-- Auth Dropdown (hidden by default) -->
           <div id="authDropdown"
-            class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-white dark:bg-gray-800 rounded-sm shadow-md p-3 z-50 animate-slide-in hidden">
-            <div class="flex border-b border-gray-200 dark:border-gray-700 mb-2 justify-center">
+            class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-base-100 rounded-box shadow-md p-3 z-50 animate-slide-in hidden">
+            <div class="flex border-b border-base-200 mb-2 justify-center">
               <button id="loginTab" type="button"
-                class="px-2 py-1 text-xs font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">Login</button>
+                class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary">Login</button>
               <button id="registerTab" type="button"
-                class="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">Register</button>
+                class="px-2 py-1 text-xs font-medium text-base-content/60">Register</button>
             </div>
             <form id="loginForm" method="POST" onsubmit="event.preventDefault(); return false;">
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" id="login-username" placeholder="Username"
-                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm"
+                  class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="username" autocorrect="off" autocapitalize="none">
                 <input type="password" name="password" id="login-password" placeholder="Password"
-                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm"
+                  class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="current-password">
               </div>
-              <div id="login-error" class="text-red-500 text-xs mb-2 hidden"></div>
+              <div id="login-error" class="text-error text-xs mb-2 hidden"></div>
               <!-- Improved mobile login button with larger tap target -->
               <button type="submit" id="loginSubmitBtn"
                 class="btn btn-primary btn-sm w-full">
@@ -93,14 +93,14 @@
             <form id="registerForm" class="hidden">
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" placeholder="Username"
-                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm"
+                  class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="username" autocorrect="off" autocapitalize="none">
                 <input type="password" name="password" placeholder="Password"
-                  class="px-2 py-1 text-xs border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-sm"
+                  class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="new-password">
               </div>
               <div class="relative mb-2 group">
-                <button type="button" class="text-xs text-gray-500 flex items-center focus:outline-hidden">
+                <button type="button" class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9
@@ -109,7 +109,7 @@
                   Password requirements
                 </button>
                 <div
-                  class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-sm py-1 px-2 w-full z-10">
+                  class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-neutral text-neutral-content text-xs rounded-box py-1 px-2 w-full z-10">
                   Password must be 12+ characters with uppercase, lowercase, number, and special character.
                 </div>
               </div>
@@ -122,8 +122,8 @@
 
           <!-- When logged in: Show username and logout -->
           <div id="userMenu" class="hidden">
-            <span id="authStatus" class="ml-2 text-xs text-green-600">Not Authenticated</span>
-            <a id="logoutBtn" href="#" class="text-xs text-blue-600 hover:underline dark:text-blue-400 ml-2">Logout</a>
+            <span id="authStatus" class="ml-2 text-xs text-success">Not Authenticated</span>
+            <a id="logoutBtn" href="#" class="text-xs text-primary hover:underline ml-2">Logout</a>
           </div>
         </div>
       </div>
@@ -136,7 +136,7 @@
   -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Enhanced Sidebar with improved accessibility attributes -->
-    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg md:shadow-none
+    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-base-100 shadow-lg md:shadow-none
                 transform transition-transform duration-300 ease-in-out
                 -translate-x-full md:translate-x-0">
       <!-- Accessible heading for screen readers -->
@@ -144,7 +144,7 @@
 
       <!-- Improve close button accessibility -->
       <button id="closeSidebarBtn" type="button"
-        class="md:hidden absolute top-2 right-2 p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-hidden"
+        class="md:hidden absolute top-2 right-2 p-2 btn btn-ghost btn-sm btn-square"
         aria-label="Close sidebar">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
           stroke="currentColor">
@@ -152,10 +152,10 @@
         </svg>
       </button>
 
-      <div class="p-4 dark:text-gray-100 flex flex-col h-full">
+      <div class="p-4 flex flex-col h-full">
         <!-- New Chat Button (Prominent) -->
         <a href="/"
-          class="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md flex items-center justify-center mb-4 transition-colors">
+          class="w-full btn btn-neutral mb-4 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -165,19 +165,19 @@
         </a>
 
         <!-- Tab navigation for sidebar sections - Improved accessibility -->
-        <div class="flex mb-4 border-b border-gray-200 dark:border-gray-700" role="tablist">
+        <div class="flex mb-4 border-b border-base-200" role="tablist">
           <button id="recentChatsTab" type="button"
-            class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            class="flex-1 py-2 px-1 text-base-content/60 hover:text-base-content font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
             role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
             Recent
           </button>
           <button id="starredChatsTab" type="button"
-            class="flex-1 py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            class="flex-1 py-2 px-1 text-base-content/60 hover:text-base-content font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
             role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
             Starred
           </button>
           <button id="projectsTab" type="button"
-            class="flex-1 py-2 px-1 border-b-2 border-blue-600 text-blue-600 font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            class="flex-1 py-2 px-1 border-b-2 border-primary text-primary font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
             role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
             Projects
           </button>
@@ -192,16 +192,16 @@
               <label for="chatSearchInput" class="sr-only">Search conversations</label>
               <input type="search" aria-label="Search conversations" id="chatSearchInput"
                 placeholder="Search conversations..."
-                class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded-sm focus:ring-blue-500 focus:outline-hidden dark:bg-gray-800 dark:text-gray-100" />
+                class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-hidden" />
               <svg xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none"
+                class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true" fill="none"
                 viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
                       7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <button id="pinSidebarBtn" type="button"
-              class="ml-2 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Pin sidebar open">
+              class="ml-2 p-1.5 btn btn-ghost btn-sm btn-circle" title="Pin sidebar open">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012
@@ -217,10 +217,10 @@
         <!-- Starred Chats Section (hidden by default) -->
         <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
           aria-labelledby="starredChatsTab" tabindex="0">
-          <p class="text-xs text-gray-500 mb-3">Starred chats are conversations you've marked as important for quick
+          <p class="text-xs text-base-content/60 mb-3">Starred chats are conversations you've marked as important for quick
             access.</p>
           <ul id="starredConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
-            <li class="text-center text-gray-500 py-4">
+            <li class="text-center text-base-content/60 py-4">
               No starred conversations yet. Click the star icon on any conversation to add it here.
             </li>
           </ul>
@@ -232,7 +232,7 @@
           <!-- Projects actions -->
           <div class="mb-3 flex gap-2">
             <a href="#" id="manageProjectsLink"
-              class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-sm text-xs transition-colors flex items-center justify-center font-medium">
+              class="flex-1 btn btn-primary btn-outline btn-sm flex items-center justify-center font-medium">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2
@@ -242,7 +242,7 @@
               Manage Projects
             </a>
             <button id="sidebarNewProjectBtn" type="button"
-              class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded-sm hover:bg-blue-700 text-xs flex items-center justify-center">
+              class="flex-1 btn btn-primary btn-sm flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6
@@ -271,9 +271,9 @@
           <div class="relative mb-2">
             <label for="sidebarProjectSearch" class="sr-only">Search projects</label>
             <input type="search" id="sidebarProjectSearch" aria-label="Search projects" placeholder="Search projects..."
-              class="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 dark:border-gray-700 rounded-sm focus:ring-blue-500 focus:outline-hidden dark:bg-gray-800 dark:text-gray-100" />
+              class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-hidden" />
             <svg xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 absolute left-2 top-1.5 text-gray-400 pointer-events-none" aria-hidden="true" fill="none"
+              class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true" fill="none"
               viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
                     7 0 11-14 0 7 7 0 0114 0z" />
@@ -286,7 +286,7 @@
         </div>
 
         <!-- Settings section (collapsible) -->
-        <div class="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div class="mt-auto pt-4 border-t border-base-200">
           <!-- Model configuration toggle button -->
           <button id="toggleModelConfig" type="button"
             class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
@@ -317,18 +317,18 @@
 
               <!-- Max Tokens Input Group -->
               <div id="maxTokensContainer" class="mb-3">
-                <label class="block font-medium dark:text-gray-200 text-xs">Max Completion Tokens</label>
+                <label class="block font-medium text-xs">Max Completion Tokens</label>
                 <!-- Slider and input will be injected by modelConfig.js -->
               </div>
 
               <!-- Reasoning Effort Panel (slider) -->
-              <div id="reasoningPanel" class="bg-gray-50 dark:bg-gray-700 p-2 rounded-sm mt-2 mb-3">
+              <div id="reasoningPanel" class="bg-base-200 p-2 rounded-box mt-2 mb-3">
                 <!-- Slider is injected by modelConfig.js -->
               </div>
 
               <!-- Extended Thinking Panel -->
               <div id="extendedThinkingPanel" class="hidden mb-3">
-                <label class="block font-medium dark:text-gray-200 text-xs">Extended Thinking</label>
+                <label class="block font-medium text-xs">Extended Thinking</label>
                 <div class="flex items-center mt-2">
                   <input type="checkbox" id="extendedThinkingToggle"
                     class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm">
@@ -336,8 +336,8 @@
                     tasks</label>
                 </div>
                 <div class="mt-2">
-                  <label for="thinkingBudget" class="block text-xs text-gray-500 mb-1">Thinking budget (tokens)</label>
-                  <select id="thinkingBudget" class="w-full text-sm border rounded-sm p-1">
+                  <label for="thinkingBudget" class="block text-xs text-base-content/60 mb-1">Thinking budget (tokens)</label>
+                  <select id="thinkingBudget" class="w-full text-sm border rounded-box p-1">
                     <option value="2048">2,048 tokens (minimum)</option>
                     <option value="4096">4,096 tokens</option>
                     <option value="8192">8,192 tokens</option>
@@ -345,20 +345,20 @@
                     <option value="32000">32,000 tokens (maximum)</option>
                   </select>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">
+                <p class="text-xs text-base-content/60 mt-2">
                   Extended thinking gives Claude more space to solve complex problems, but uses more tokens.
                 </p>
               </div>
 
               <!-- Vision Panel (for image upload) -->
               <div id="visionPanel" class="hidden mb-3">
-                <label class="block font-medium dark:text-gray-200 text-xs">Image Upload (o1 Vision)</label>
-                <input type="file" accept="image/png,image/jpeg" class="mt-2 text-sm dark:text-gray-200"
+                <label class="block font-medium text-xs">Image Upload (o1 Vision)</label>
+                <input type="file" accept="image/png,image/jpeg" class="mt-2 text-sm"
                   id="visionFileInput" />
-                <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                <p class="text-xs text-base-content/60 mt-1">
                   Upload JPEG or PNG (≤4 MB).
                 </p>
-                <div id="visionStatus" class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                <div id="visionStatus" class="mt-2 text-sm text-base-content/80">
                   <!-- Filled dynamically: "Analyzing..." or error messages -->
                 </div>
                 <div id="visionPreview" class="mt-2"></div>
@@ -366,7 +366,7 @@
 
               <!-- Live region for model config display -->
               <div id="modelConfigDisplay"
-                class="mt-4 p-2 bg-gray-100 dark:bg-gray-700 rounded-sm text-xs dark:text-gray-200" aria-live="polite">
+                class="mt-4 p-2 bg-base-200 rounded-box text-xs" aria-live="polite">
                 <p><span class="font-medium">Selected Model:</span> <span id="currentModelName">o3-mini</span></p>
                 <p><span class="font-medium">Max Tokens:</span> <span id="currentMaxTokens">500</span></p>
                 <p><span class="font-medium">Reasoning Effort:</span> <span id="currentReasoning">N/A</span></p>
@@ -374,8 +374,8 @@
               </div>
 
               <!-- Loading indicator for config changes -->
-              <div id="modelConfigLoading" class="mt-3 text-blue-600 flex items-center text-xs" aria-hidden="true">
-                <svg class="animate-spin h-4 w-4 mr-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+              <div id="modelConfigLoading" class="mt-3 text-primary flex items-center text-xs" aria-hidden="true">
+                <svg class="animate-spin h-4 w-4 mr-2 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none"
                   viewBox="0 0 24 24" aria-hidden="true">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -401,12 +401,12 @@
             class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
             aria-labelledby="toggleCustomInstructions">
             <div class="pt-2 pb-1">
-              <p class="text-xs text-gray-500 mb-2">Set default instructions for how the AI should respond.</p>
+              <p class="text-xs text-base-content/60 mb-2">Set default instructions for how the AI should respond.</p>
               <textarea id="globalCustomInstructions"
-                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-sm shadow-sm focus:outline-hidden focus:ring-blue-500 focus:border-blue-500 h-20 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                class="w-full px-3 py-2 text-sm border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
                 placeholder="Enter instructions for the AI to follow (e.g., response style, format preferences)..."></textarea>
               <button id="saveGlobalInstructions"
-                class="mt-2 px-3 py-1 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-xs">
+                class="mt-2 btn btn-primary btn-sm">
                 Save Instructions
               </button>
             </div>
@@ -421,7 +421,7 @@
       <div id="notificationArea" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
 
       <!-- Scroll container -->
-      <div class="flex-1 overflow-y-auto p-4 md:p-6 dark:bg-gray-900 dark:text-gray-100">
+      <div class="flex-1 overflow-y-auto p-4 md:p-6">
         <!-- Login required message (shown when not authenticated) -->
         <div id="loginRequiredMessage" class="hidden text-center py-8">
           <p class="text-lg">Please log in to access projects</p>
@@ -433,7 +433,7 @@
 
         <!-- Project Manager Section (shown when authenticated) -->
         <section id="projectManagerPanel"
-          class="bg-white dark:bg-gray-800 rounded-sm shadow-sm p-4 mb-6 flex flex-col min-h-0 border border-gray-200 dark:border-gray-700">
+          class="bg-base-100 rounded-box shadow-xs p-4 mb-6 flex flex-col min-h-0 border border-base-200">
           <!-- Placeholder for Project List View -->
           <div id="projectListView" class="flex-1 flex flex-col min-h-0">
             <!-- Content will be loaded dynamically from project_list.html -->

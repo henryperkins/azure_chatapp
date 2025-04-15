@@ -3,7 +3,7 @@
   <h2 class="text-xl font-semibold">Projects</h2>
   <div class="flex gap-2">
     <input id="projectSearchInput" type="search" placeholder="Search projects..."
-      class="border px-2 py-1 rounded-sm text-sm" />
+      class="border px-2 py-1 rounded-box text-sm" />
     <button id="createProjectBtn" type="button"
       class="btn btn-primary btn-sm">
       New Project
@@ -12,7 +12,7 @@
 </div>
 
 <!-- Projects filter tabs -->
-<div class="flex border-b border-gray-200 dark:border-gray-700 mb-4" id="projectFilterTabs">
+<div class="flex border-b border-base-200 mb-4" id="projectFilterTabs">
   <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200"
     data-filter="all" type="button" aria-current="page" onclick="handleProjectFilterClick('all', this)">
     <span class="relative py-1.5">
@@ -21,7 +21,7 @@
     </span>
   </button>
   <button
-    class="project-filter-btn px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
+    class="project-filter-btn px-4 py-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors duration-200"
     data-filter="pinned" type="button" onclick="handleProjectFilterClick('pinned', this)">
     <span class="relative py-1.5">
       <span class="block">Pinned</span>
@@ -29,7 +29,7 @@
     </span>
   </button>
   <button
-    class="project-filter-btn px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
+    class="project-filter-btn px-4 py-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors duration-200"
     data-filter="archived" type="button" onclick="handleProjectFilterClick('archived', this)">
     <span class="relative py-1.5">
       <span class="block">Archived</span>
@@ -54,8 +54,8 @@
         tab.removeAttribute('aria-current');
         span.classList.add('bg-transparent');
         span.classList.remove('bg-blue-600');
-        tab.classList.add('text-gray-500', 'dark:text-gray-400');
-        tab.classList.remove('text-blue-600', 'dark:text-blue-400');
+        tab.classList.add('text-base-content/60');
+        tab.classList.remove('text-primary');
       }
     });
 
@@ -74,7 +74,7 @@
 </div>
 
 <!-- No projects message -->
-<div id="noProjectsMessage" class="hidden text-center py-8 text-gray-500">
+<div id="noProjectsMessage" class="hidden text-center py-8 text-base-content/60">
   No projects found. Create your first project using the "New Project" button.
 </div>
 

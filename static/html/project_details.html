@@ -1,7 +1,7 @@
 <!-- Breadcrumb navigation for better navigation -->
-<div class="flex items-center mb-4 text-sm text-gray-500">
+<div class="flex items-center mb-4 text-sm text-base-content/60">
   <button id="backToProjectsBtn" type="button"
-    class="mr-2 text-gray-500 hover:text-gray-700 flex items-center">
+    class="mr-2 btn btn-ghost btn-sm flex items-center">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
       <path fill-rule="evenodd" d="M9.707 16.707a1 1
             0 01-1.414 0l-6-6a1 1
@@ -13,7 +13,7 @@
     <span class="ml-1">All Projects</span>
   </button>
   <span class="mx-2">/</span>
-  <span id="projectTitle" class="text-gray-700 dark:text-gray-300 font-semibold">Project Title</span>
+  <span id="projectTitle" class="text-base-content font-semibold">Project Title</span>
 </div>
 
 <!-- Enhanced action buttons -->
@@ -107,32 +107,32 @@
 </div>
 
 <!-- Tab navigation -->
-<div class="mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+<div class="mb-6 border-b border-base-200 overflow-x-auto">
   <div class="flex whitespace-nowrap min-w-full -mb-px" role="tablist">
     <button id="detailsTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 active text-blue-600 dark:text-blue-400 border-blue-600"
+      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 active text-primary border-primary"
       role="tab" aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
       Details
     </button>
     <button id="filesTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
       role="tab" aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
       Files
     </button>
     <button id="conversationsTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
       role="tab" aria-selected="false" aria-controls="conversationsTab" tabindex="-1"
       data-tab="conversations">
       <span class="hidden xs:inline">Conversations</span>
       <span class="xs:hidden">Convos</span>
     </button>
     <button id="artifactsTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
       role="tab" aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
       Artifacts
     </button>
     <button id="knowledgeTabBtn" type="button"
-      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300"
+      class="project-tab-btn px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 border-transparent text-base-content/60 hover:text-base-content hover:border-base-300"
       role="tab" aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
       <span class="hidden xs:inline">Knowledge Base</span>
       <span class="xs:hidden">KB</span>
@@ -161,7 +161,7 @@
       <h3 class="tab-heading">Custom Instructions</h3>
       <div class="bg-base-200 p-4 rounded-box">
         <p id="projectInstructions" class="tab-content">No custom instructions set.</p>
-        <button id="editInstructionsBtn" type="button" class="mt-3 text-sm text-blue-600 hover:underline">
+        <button id="editInstructionsBtn" type="button" class="mt-3 text-sm text-primary hover:underline">
           Edit Instructions
         </button>
       </div>
@@ -204,20 +204,20 @@
       <p class="text-xs text-gray-500 mt-2">Supported formats: .txt, .pdf, .doc, .docx, .csv, .json, .md</p>
     </div>
 
-    <div id="filesUploadProgress" class="hidden mb-4 bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
+    <div id="filesUploadProgress" class="hidden mb-4 bg-base-100 p-3 rounded-box shadow-xs">
       <div class="flex items-center justify-between mb-2">
         <span id="kbStatusIndicator" class="text-sm font-medium"></span>
         <div id="kbRequirementTooltip"
-          class="hidden text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-sm">
+          class="hidden text-xs bg-warning/20 text-warning px-2 py-1 rounded-box">
           Files are indexed in Knowledge Base for AI search
         </div>
       </div>
-      <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-        <div id="fileProgressBar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
+      <div class="w-full bg-base-300 rounded-full h-2.5">
+        <div id="fileProgressBar" class="bg-success h-2.5 rounded-full transition-all duration-300"
           style="width: 0%"></div>
       </div>
-      <p id="uploadStatus" class="text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
-      <div id="supportedFileTypes" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+      <p id="uploadStatus" class="text-xs text-base-content/60 mt-1">Uploading...</p>
+      <div id="supportedFileTypes" class="text-xs text-base-content/60 mt-2">
         Supported: .txt, .md, .csv, .json, .pdf, .doc, .docx, .py, .js, .html, .css (Max 30MB)
         <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">ℹ️</span>
       </div>
@@ -225,7 +225,7 @@
 
     <div id="projectFilesList" class="grid grid-cols-1 gap-2 mt-4">
       <!-- Files will be dynamically inserted here -->
-      <div class="text-gray-500 text-center py-8">No files uploaded yet</div>
+      <div class="text-base-content/60 text-center py-8">No files uploaded yet</div>
     </div>
   </div>
 
@@ -246,7 +246,7 @@
     </div>
     <div id="projectConversationsList" class="mt-4">
       <!-- Conversations will be populated here -->
-      <div class="text-gray-500 text-center py-8">No conversations yet.</div>
+      <div class="text-base-content/60 text-center py-8">No conversations yet.</div>
     </div>
   </div>
 
@@ -262,7 +262,7 @@
     </div>
     <div id="projectArtifactsList" class="mt-4">
       <!-- Artifacts will be populated here -->
-      <div class="text-gray-500 text-center py-8">No artifacts generated yet.</div>
+      <div class="text-base-content/60 text-center py-8">No artifacts generated yet.</div>
     </div>
   </div>
 
@@ -348,9 +348,9 @@
     </div>
 
     <!-- Knowledge Base Status -->
-    <div id="knowledgeBaseStatus" class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-sm">
+    <div id="knowledgeBaseStatus" class="mb-6 p-4 bg-base-200 rounded-box">
       <div id="knowledgeBaseInactive" class="flex flex-col items-center justify-center py-8">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-3" fill="none"
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-base-content/40 mb-3" fill="none"
           viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832
                 5.477 9.246 5
@@ -374,7 +374,7 @@
                 1.253" />
         </svg>
         <h4 class="text-lg font-medium mb-2">Knowledge Base Not Configured</h4>
-        <p class="text-gray-500 text-center mb-3 max-w-lg">
+        <p class="text-base-content/60 text-center mb-3 max-w-lg">
           Configure a knowledge base to enable AI to search your project files and use relevant information
           to answer your questions.
         </p>
@@ -387,8 +387,8 @@
       <div id="knowledgeBaseActive" class="hidden">
         <div class="flex items-center mb-4">
           <div
-            class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mr-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none"
+            class="flex-shrink-0 h-10 w-10 rounded-full bg-success/20 flex items-center justify-center mr-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-success" fill="none"
               viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6
                     2a9 9
@@ -400,11 +400,11 @@
           </div>
           <div>
             <h4 class="font-medium text-lg"><span id="knowledgeBaseName">Project Knowledge Base</span></h4>
-            <p class="text-sm text-gray-500">
+            <p class="text-sm text-base-content/60">
               <span id="kbStatusText">Active</span>
               <span id="kbStatusBadge"
-                class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                <span class="h-2 w-2 rounded-full bg-green-400 mr-1.5 flex-shrink-0"></span>
+                class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/20 text-success">
+                <span class="h-2 w-2 rounded-full bg-success mr-1.5 flex-shrink-0"></span>
                 Enabled
               </span>
             </p>
@@ -414,7 +414,7 @@
               <input type="checkbox" name="knowledgeBaseEnabled" id="knowledgeBaseEnabled" checked
                 class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" />
               <label for="knowledgeBaseEnabled"
-                class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                class="toggle-label block overflow-hidden h-6 rounded-full bg-base-300 cursor-pointer"></label>
             </span>
             <span class="text-sm" id="knowledgeBaseEnabledLabel">Enabled</span>
           </div>
@@ -423,46 +423,46 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
           <div class="bg-base-100 p-3 rounded-box shadow-xs">
             <div class="text-2xl font-semibold mb-1" id="knowledgeFileCount">0</div>
-            <div class="text-xs text-gray-500">Files Processed</div>
+            <div class="text-xs text-base-content/60">Files Processed</div>
           </div>
-          <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
             <div class="text-2xl font-semibold mb-1" id="knowledgeChunkCount">0</div>
-            <div class="text-xs text-gray-500">Text Chunks</div>
+            <div class="text-xs text-base-content/60">Text Chunks</div>
           </div>
-          <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
             <div class="text-2xl font-semibold mb-1" id="kbVersionDisplay"
               aria-label="Knowledge Base Schema Version">
               Schema v1
             </div>
-            <div class="text-xs text-gray-500">Schema Version</div>
+            <div class="text-xs text-base-content/60">Schema Version</div>
           </div>
 
-          <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
             <div class="text-2xl font-semibold mb-1" id="kbLastUsedDisplay"
               aria-label="Last Used Timestamp">
               Never
             </div>
-            <div class="text-xs text-gray-500">Last Used</div>
+            <div class="text-xs text-base-content/60">Last Used</div>
           </div>
 
-          <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
             <div class="text-2xl font-semibold mb-1" id="knowledgeFileSize">0 MB</div>
-            <div class="text-xs text-gray-500">Total Size</div>
+            <div class="text-xs text-base-content/60">Total Size</div>
           </div>
 
-          <div class="bg-white dark:bg-gray-800 p-3 rounded-sm shadow-xs">
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
             <div>
-              <select id="knowledgeBaseModelSelect" class="w-full text-sm border rounded-sm">
+              <select id="knowledgeBaseModelSelect" class="w-full text-sm border rounded-box">
                 <option value="all-MiniLM-L6-v2" selected>Default Model</option>
                 <option value="text-embedding-3-small">OpenAI Small</option>
                 <option value="text-embedding-3-large">OpenAI Large</option>
               </select>
             </div>
-            <div class="text-xs text-gray-500 mt-1">Embedding Model</div>
+            <div class="text-xs text-base-content/60 mt-1">Embedding Model</div>
           </div>
         </div>
 
-        <div class="text-sm text-gray-600 mt-2 dark:text-gray-300" id="knowledgeBaseDescription">
+        <div class="text-sm text-base-content/80 mt-2" id="knowledgeBaseDescription">
           This knowledge base helps the AI provide more accurate responses by searching relevant information
           from your project files.
         </div>
@@ -486,8 +486,8 @@
         </button>
       </div>
       <div id="knowledgeSearchOptions" class="flex justify-end mb-2">
-        <label class="text-sm text-gray-600 mr-2">Results: </label>
-        <select id="knowledgeTopK" class="text-sm border border-gray-300 rounded-sm">
+        <label class="text-sm text-base-content/80 mr-2">Results: </label>
+        <select id="knowledgeTopK" class="text-sm border border-base-300 rounded-box">
           <option value="3">3</option>
           <option value="5" selected>5</option>
           <option value="10">10</option>
@@ -506,8 +506,8 @@
 
     <!-- No results placeholder -->
     <div id="knowledgeNoResults" class="mb-6 hidden">
-      <div class="bg-gray-50 dark:bg-gray-700 p-6 rounded-sm text-center">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none"
+      <div class="bg-base-200 p-6 rounded-box text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-base-content/40 mx-auto mb-3" fill="none"
           viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172
                 16.172a4 4 0 015.656
@@ -522,7 +522,7 @@
                 0z" />
         </svg>
         <h4 class="text-lg font-medium mb-2">No results found</h4>
-        <p class="text-gray-500">Try a different search query or add more files to your project.</p>
+        <p class="text-base-content/60">Try a different search query or add more files to your project.</p>
       </div>
     </div>
 
@@ -531,7 +531,7 @@
       <h3 class="font-medium mb-3">Files with Knowledge Processing</h3>
       <div id="knowledgeProcessedFiles">
         <!-- Files with processing status will be displayed here -->
-        <div class="text-gray-500 text-center py-8">No files have been processed for knowledge search yet.
+        <div class="text-base-content/60 text-center py-8">No files have been processed for knowledge search yet.
         </div>
       </div>
     </div>
@@ -552,12 +552,12 @@
         // Update button states
         tabButtons.forEach(btn => {
           if (btn === this) {
-            btn.classList.add('text-blue-600', 'border-blue-600');
-            btn.classList.remove('border-transparent', 'text-gray-500');
+            btn.classList.add('text-primary', 'border-primary');
+            btn.classList.remove('border-transparent', 'text-base-content/60');
             btn.setAttribute('aria-selected', 'true');
           } else {
-            btn.classList.remove('text-blue-600', 'border-blue-600');
-            btn.classList.add('border-transparent', 'text-gray-500');
+            btn.classList.remove('text-primary', 'border-primary');
+            btn.classList.add('border-transparent', 'text-base-content/60');
             btn.setAttribute('aria-selected', 'false');
           }
         });
