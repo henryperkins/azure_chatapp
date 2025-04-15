@@ -1073,3 +1073,16 @@ ${content}`)) {
     return instance;
   };
 })();
+
+// Ensure the ProjectListComponent is correctly exposed to the global scope
+// This fixes the issue where the dashboard cannot find the component
+if (typeof window.ProjectListComponent !== 'function') {
+  console.log('[ProjectListComponent] Exposing ProjectListComponent to global scope');
+
+  // The original class constructor might still be available as originalProjectListComponent
+  if (typeof window.originalProjectListComponent === 'function') {
+    window.ProjectListComponent = window.originalProjectListComponent;
+  }
+  // Otherwise keep the existing wrapper if it exists
+}
+
