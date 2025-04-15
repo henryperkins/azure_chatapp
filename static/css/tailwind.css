@@ -30,7 +30,7 @@
   }
 
   .drag-zone-active {
-    @apply border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900 dark:bg-opacity-20;
+    @apply border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20;
   }
 
   /* Tab Section Styles - Used in project_details.html */
