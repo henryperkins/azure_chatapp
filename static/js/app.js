@@ -516,12 +516,15 @@ async function handleNavigationChange() {
   }
 }
 
+// Define a global flag to track if showProjectListView is in progress
+let _showingProjectListView = false;
+
 async function showProjectListView() {
-  if (this._showingProjectListView) {
+  if (_showingProjectListView) {
     console.log("[App] showProjectListView already in progress, skipping...");
     return;
   }
-  this._showingProjectListView = true;
+  _showingProjectListView = true;
 
   try {
     if (!await ensureAuthenticated()) {
@@ -545,10 +548,9 @@ async function showProjectListView() {
     console.error("[showProjectListView] Error:", error);
     window.ChatUtils.handleError('Showing project list view', error);
   } finally {
-    this._showingProjectListView = false;
+    _showingProjectListView = false;
   }
 }
-
 
 // INITIALIZATION
 function cacheElements() {
@@ -685,7 +687,6 @@ async function initApp() {
   return true;
 }
 
-
 // EXPORTS
 window.API_CONFIG = API_CONFIG;
 window.SELECTORS = SELECTORS;
@@ -706,6 +707,12 @@ window.appInitializer = {
     else window.appInitializer.queue.push(component);
   },
   initialize: async () => {
+    if (window.appInitializer.status === 'initializing' || window.appInitializer.status === 'ready') {
+      console.log("[appInitializer] Initialization already in progress or complete, skipping...");
+      return;
+    }
+    window.appInitializer.status = 'initializing';
+
     try {
       log("[appInitializer] Starting centralized initialization");
       await initApp();
@@ -715,6 +722,7 @@ window.appInitializer = {
     } catch (error) {
       console.error("[appInitializer] Initialization error:", error);
       window.ChatUtils?.handleError('App initialization', error) || alert("Failed to initialize. Please refresh the page.");
+      window.appInitializer.status = 'error';
     }
   }
 };
