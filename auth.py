@@ -547,10 +547,8 @@ async def refresh_token(
                         f"User '{locked_user.username}' token_version updated from "
                         f"{old_version} to {locked_user.token_version}"
                     )
-                    await session.flush()
-                    await session.commit()
 
-                # Issue a new refresh token
+        # Issue a new refresh token
                 new_refresh_payload = build_jwt_payload(
                     locked_user,
                     token_type="refresh",
