@@ -284,7 +284,7 @@
         // Also create details view container if missing
         let detailsView = document.getElementById("projectDetailsView");
         if (!detailsView) {
-          detailsView = document.createElement("div");
+          detailsView = document.createElement("div");b 
           detailsView.id = "projectDetailsView";
           detailsView.className = "hidden flex-1 overflow-y-auto p-4 lg:p-6";
           container.parentNode.appendChild(detailsView);
@@ -1130,10 +1130,9 @@ ${content}`)) {
       // Execute action
       switch (action) {
         case 'view':
-          if (typeof this.onViewProject === 'function') {
-            console.log(`[ProjectListComponent] Viewing project: ${projectId}`);
-            this.onViewProject(projectId);
-          } else if (window.projectManager?.loadProjectDetails) {
+          // Navigate to project details URL
+          window.history.pushState({}, '', `/?project=${projectId}`);
+          if (window.projectManager?.loadProjectDetails) {
             window.projectManager.loadProjectDetails(projectId);
           }
           break;

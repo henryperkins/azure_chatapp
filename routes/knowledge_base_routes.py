@@ -10,6 +10,7 @@ Consolidated routes for knowledge base management with improved:
 """
 
 import logging
+import uuid
 from uuid import UUID
 from typing import Dict, Any, Optional
 from fastapi import (
@@ -124,7 +125,6 @@ async def create_project_knowledge_base(
         )
 
         # Associate with project
-        import uuid
         project.knowledge_base_id = uuid.UUID(str(kb["id"]))
         await db.commit()
 
@@ -189,7 +189,7 @@ async def get_project_knowledge_bases(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve knowledge bases"
-        )
+        ) from e
 
 @router.get("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
 async def get_project_knowledge_base(
@@ -221,7 +221,7 @@ async def get_project_knowledge_base(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve knowledge base"
-        )
+        ) from e
 
 @router.patch("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
 async def update_knowledge_base(
@@ -264,7 +264,7 @@ async def update_knowledge_base(
         raise HTTPException(
             status_code=500,
             detail="Failed to update knowledge base"
-        )
+        ) from e
 
 @router.delete("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
 async def delete_knowledge_base(
@@ -309,7 +309,7 @@ async def delete_knowledge_base(
         raise HTTPException(
             status_code=500,
             detail="Failed to delete knowledge base"
-        )
+        ) from e
 
 # ----------------------------------------------------------------------
 # Knowledge Base Status & Health
@@ -360,7 +360,7 @@ async def get_knowledge_base_status(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve knowledge base status"
-        )
+        ) from e
 
 # ----------------------------------------------------------------------
 # Search Operations
@@ -404,7 +404,7 @@ async def search_project_knowledge(
         raise HTTPException(
             status_code=500,
             detail="Search operation failed"
-        )
+        ) from e
 
 # ----------------------------------------------------------------------
 # File Operations
@@ -453,7 +453,7 @@ async def upload_knowledge_base_file(
         raise HTTPException(
             status_code=500,
             detail="Failed to upload file"
-        )
+        ) from e
 
 @router.post(
     "/projects/{project_id}/knowledge-bases/reindex",
@@ -512,7 +512,7 @@ async def reindex_knowledge_base(
         raise HTTPException(
             status_code=500,
             detail="Failed to reindex knowledge base"
-        )
+        ) from e
 
 @router.delete(
     "/projects/{project_id}/knowledge-bases/files/{file_id}",
@@ -548,7 +548,7 @@ async def delete_knowledge_base_file(
         raise HTTPException(
             status_code=500,
             detail="Failed to delete file"
-        )
+        ) from e
 
 # ----------------------------------------------------------------------
 # Knowledge Base Toggle
@@ -594,4 +594,4 @@ async def toggle_knowledge_base(
         raise HTTPException(
             status_code=500,
             detail="Failed to toggle knowledge base"
-        )
+        ) from e

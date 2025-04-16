@@ -13,13 +13,15 @@ from typing import Optional, Any, List, Dict, Type
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import joinedload
 
 from models.project import Project
 from models.user import User
 from models.knowledge_base import KnowledgeBase
 from models.conversation import Conversation
+from models.project_file import ProjectFile
+from utils.serializers import serialize_list
 
 # =======================================================
 #  Knowledge Base Validation
@@ -56,12 +58,9 @@ async def check_knowledge_base_status(
     project_id: UUID, db: AsyncSession
 ) -> Dict[str, Any]:
     """Check if project's knowledge base has indexed content"""
-    from models.project_file import ProjectFile
-    from sqlalchemy import select, func
-
     # Count processed files and total chunks
     stmt = select(
-        func.count().label("file_count"),
+        func.count(1).label("file_count"),
         func.sum(
             ProjectFile.config["search_processing"]["chunk_count"].as_integer()
         ).label("total_chunks"),
@@ -357,7 +356,6 @@ async def get_paginated_resources(
     items = result.scalars().all()
 
     if serializer_func:
-        from utils.serializers import serialize_list
         return serialize_list(items, serializer_func)
 
     # Return raw items if no serializer provided
