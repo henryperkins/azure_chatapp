@@ -689,7 +689,7 @@ async function ensureComponentsInitialized() {
   if (typeof window.ProjectListComponent === 'function' && !window.projectListComponent) {
     try {
       window.projectListComponent = new window.ProjectListComponent({
-        elementId: "projectList",
+        elementId: "sidebarProjects",
         onViewProject: (projectId) => {
           if (window.ProjectDashboard?.showProjectDetails) {
             window.ProjectDashboard.showProjectDetails(projectId);
@@ -820,7 +820,6 @@ window.apiRequest = apiRequest;
 window.getBaseUrl = getBaseUrl;
 window.ensureAuthenticated = ensureAuthenticated;
 window.loadConversationList = loadConversationList;
-window.loadSidebarProjects = loadSidebarProjects;
 window.isValidUUID = isValidUUID;
 window.navigateToConversation = navigateToConversation;
 
