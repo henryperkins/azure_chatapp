@@ -192,11 +192,14 @@
       // Add event delegation for project card clicks
       this._bindProjectCardEvents();
 
-      // Listen for 'authReady' event so we can force-refresh projects if user is authenticated.
+      // Listen for 'authReady' event to refresh projects if user is authenticated
       document.addEventListener('authReady', (evt) => {
         if (evt.detail.authenticated) {
-          console.log("[ProjectListComponent] 'authReady' -> user is authenticated. Forcing project refresh.");
-          this.renderProjects({ forceRefresh: true });
+          console.log("[ProjectListComponent] 'authReady' -> user is authenticated. Refreshing projects.");
+          // Only refresh projects, don't trigger any modals
+          this._loadProjectsThroughManager()
+            .then(projects => this.renderProjects(projects))
+            .catch(err => console.error("Failed to refresh projects on auth:", err));
         }
       });
     }
@@ -1210,9 +1213,6 @@ ${content}`)) {
 
   // Export to global scope
   window.ProjectListComponent = ProjectListComponent;
-
-  // Removed the authStateChanged listener from here.
-  // Project loading after authentication is now handled centrally in app.js.
 
   // Ensure global instance is saved when created
   const originalProjectListComponent = window.ProjectListComponent;
