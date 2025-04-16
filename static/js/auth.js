@@ -9,10 +9,13 @@ let lastVerifyFailureTime = 0;
 let tokenRefreshInProgress = false;
 let lastRefreshAttempt = null;
 let refreshFailCount = 0;
+let backendUnavailableFlag = false;
+let lastBackendUnavailableTime = 0;
 
 // Config
 const MIN_RETRY_INTERVAL = 5000; // ms between verification attempts after failure
 const MAX_REFRESH_RETRIES = 3;
+const BACKEND_UNAVAILABLE_COOLDOWN = 30000; // 30 seconds circuit-breaker for backend connectivity issues
 
 const authState = {
   isAuthenticated: false,
@@ -361,22 +364,40 @@ async function verifyAuthState(forceVerify = false) {
     console.debug(`[Auth][${operationId}] Access token:`, getCookie('access_token'));
     console.debug(`[Auth][${operationId}] Refresh token:`, getCookie('refresh_token'));
   }
+
+  // Circuit breaker pattern - check if backend is known to be unavailable
+  if (backendUnavailableFlag && Date.now() - lastBackendUnavailableTime < BACKEND_UNAVAILABLE_COOLDOWN) {
+    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - backend marked unavailable until ${new Date(lastBackendUnavailableTime + BACKEND_UNAVAILABLE_COOLDOWN).toLocaleTimeString()}`);
+    // Dispatch an event to notify UI components about backend unavailability
+    document.dispatchEvent(new CustomEvent("backendUnavailable", {
+      detail: {
+        until: new Date(lastBackendUnavailableTime + BACKEND_UNAVAILABLE_COOLDOWN),
+        reason: 'circuit_breaker'
+      }
+    }));
+    return authState.isAuthenticated;
+  }
+
   if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
     if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - recent failure.`);
     return authState.isAuthenticated;
   }
+
   if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) {
     if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - session recently marked expired.`);
     return false;
   }
+
   if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) {
     sessionExpiredFlag = false;
   }
+
   const now = Date.now();
   if (!forceVerify && authState.lastVerified && (now - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION)) {
     if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Returning cached auth state`);
     return authState.isAuthenticated;
   }
+
   if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Performing server verification.`);
   const attempts = AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS;
   let lastError;
@@ -444,6 +465,32 @@ async function verifyAuthState(forceVerify = false) {
         clearTokenState();
         return false;
       }
+      // Check for network-related errors that indicate backend service is down
+      const isNetworkError =
+        err.message?.includes('ERR_CONNECTION_RESET') ||
+        err.message?.includes('Failed to fetch') ||
+        err.message?.includes('NetworkError') ||
+        err.message?.includes('Network request failed') ||
+        err.message?.includes('timeout') ||
+        err.message?.toLowerCase()?.includes('network') ||
+        err.name === 'AbortError';
+
+      if (isNetworkError && i >= attempts) {
+        // Circuit breaker pattern: mark backend as unavailable
+        backendUnavailableFlag = true;
+        lastBackendUnavailableTime = Date.now();
+        console.error(`[Auth][${operationId}] Backend service appears to be unavailable. Circuit breaker activated.`);
+
+        // Broadcast backend unavailability to UI components
+        document.dispatchEvent(new CustomEvent("backendUnavailable", {
+          detail: {
+            until: new Date(lastBackendUnavailableTime + BACKEND_UNAVAILABLE_COOLDOWN),
+            reason: 'connection_failed',
+            error: err.message
+          }
+        }));
+      }
+
       if (i < attempts) {
         const backoffMs = Math.min(1000 * (2 ** (i - 1)), 5000);
         await new Promise(r => setTimeout(r, backoffMs));

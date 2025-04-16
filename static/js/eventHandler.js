@@ -64,6 +64,58 @@ function handleKeyDown(e) {
 }
 
 /**
+ * Handle backend unavailability notification from auth.js
+ * @param {CustomEvent} event - The backend unavailable event with details
+ * @returns {void}
+ */
+function handleBackendUnavailable(event) {
+    const { until, reason, error } = event.detail || {};
+    const untilTime = until?.toLocaleTimeString?.() || 'unknown time';
+
+    console.warn(`[EventHandler] Backend service unavailable: ${reason || 'unknown reason'}, circuit breaker active until ${untilTime}`);
+
+    // Show a notification to the user
+    if (window.showNotification) {
+        window.showNotification(
+            `Backend service is unavailable. The system will retry after ${untilTime}.`,
+            "warning",
+            8000 // extended duration for this important message
+        );
+    }
+
+    // Add global status indicator
+    const statusIndicator = document.createElement('div');
+    statusIndicator.className = 'backend-unavailable-indicator fixed bottom-4 right-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 shadow-lg rounded z-50';
+    statusIndicator.innerHTML = `
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-yellow-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm">Backend connectivity issue detected. Some features may be unavailable.</p>
+                <p class="text-xs mt-1">Will retry connection after ${untilTime}</p>
+            </div>
+        </div>
+    `;
+
+    // Remove any existing indicators before adding a new one
+    document.querySelectorAll('.backend-unavailable-indicator').forEach(el => el.remove());
+    document.body.appendChild(statusIndicator);
+
+    // Auto-remove after the circuit breaker timeout
+    const now = new Date();
+    const untilDate = until || new Date(now.getTime() + 30000); // default 30s if not provided
+    const timeoutMs = Math.max(100, untilDate.getTime() - now.getTime());
+
+    setTimeout(() => {
+        statusIndicator.classList.add('fade-out');
+        setTimeout(() => statusIndicator.remove(), 1000);
+    }, timeoutMs);
+}
+
+/**
  * Handle new conversation creation with authentication check
  * @returns {void}
  */
@@ -517,6 +569,9 @@ function setupEventListeners() {
     // Setup key shortcuts
     trackListener(document, 'keydown', handleKeyDown);
 
+    // Listen for backend unavailability events
+    trackListener(document, 'backendUnavailable', handleBackendUnavailable);
+
     // Set up sidebar components if they exist
     setupSidebarToggle();
     setupSidebarTabs();
@@ -663,6 +718,7 @@ window.eventHandlers = {
     cleanupListeners: cleanupListeners,
     handleProjectFormSubmit: handleProjectFormSubmit,
     handleNewConversationClick: handleNewConversationClick,
+    handleBackendUnavailable: handleBackendUnavailable, // Export our new handler
     setupCollapsibleSection: setupCollapsibleSection,
     setupCollapsibleSections: setupCollapsibleSections,
     setupPinningSidebar: setupPinningSidebar,

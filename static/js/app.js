@@ -630,8 +630,43 @@ function setupEventListeners() {
   document.addEventListener('authStateChanged', handleAuthStateChange);
   window.addEventListener('resize', setViewportHeight);
   window.addEventListener('orientationchange', () => window.dispatchEvent(new Event('resize')));
+  // Add listener for backend unavailability events from auth.js
+  document.addEventListener('backendUnavailable', handleBackendUnavailable);
   if (window.eventHandlers?.init) window.eventHandlers.init();
   else console.warn('[setupEventListeners] Event handlers module not loaded');
+}
+
+// Handle backend unavailability notifications
+function handleBackendUnavailable(event) {
+  const { until, reason, error } = event.detail || {};
+  console.warn(`[App] Backend service unavailable: ${reason || 'unknown reason'}, circuit breaker active until ${until?.toLocaleTimeString?.() || 'unknown'}`);
+
+  // Show user-friendly notification
+  if (window.showNotification) {
+    window.showNotification(
+      "Backend service is temporarily unavailable. Please check your server connection.",
+      "warning"
+    );
+  }
+
+  // Display a banner message in key UI locations
+  const errorMessage = `
+    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
+      <p class="font-bold">⚠️ Connection Issue</p>
+      <p>The backend service is currently unreachable. Please check if the server is running.</p>
+    </div>
+  `;
+
+  // Add error message to key UI areas
+  ['projectsSection', 'recentChatsSection', 'starredChatsSection'].forEach(sectionId => {
+    const section = document.getElementById(sectionId);
+    if (section && !section.querySelector('.border-yellow-500')) {
+      // Only add if not already present
+      const tempEl = document.createElement('div');
+      tempEl.innerHTML = errorMessage;
+      section.prepend(tempEl.firstElementChild);
+    }
+  });
 }
 
 function refreshAppData() {

@@ -46,13 +46,79 @@ const sidebarTabConfig = {
     buttonId: 'projectsTab',
     sectionId: 'projectsSection',
     loader: () => {
+      // Try to initialize projectListComponent if it doesn't exist yet
+      if (!window.projectListComponent && typeof window.ProjectListComponent === 'function') {
+        try {
+          console.log('[Sidebar] Initializing missing projectListComponent');
+          window.projectListComponent = new window.ProjectListComponent({
+            elementId: "sidebarProjects",
+            onViewProject: (projectId) => {
+              if (window.ProjectDashboard?.showProjectDetails) {
+                window.ProjectDashboard.showProjectDetails(projectId);
+              }
+            }
+          });
+        } catch (err) {
+          console.warn('[Sidebar] Failed to initialize projectListComponent:', err);
+        }
+      }
+
       window.projectManager.loadProjects('all')
         .then(projects => {
-          window.projectListComponent.renderProjects(projects);
+          if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
+            window.projectListComponent.renderProjects(projects);
+          } else {
+            console.error('Failed to render sidebar projects: projectListComponent is undefined or missing renderProjects function');
+            // Create fallback message for user
+            const projectsSection = document.getElementById('projectsSection');
+            if (projectsSection) {
+              projectsSection.innerHTML = '<div class="text-red-500 p-4">Unable to load projects. Component initialization failed.</div>';
+            }
+
+            // Attempt to create a basic fallback renderer
+            const sidebarProjects = document.getElementById('sidebarProjects');
+            if (sidebarProjects && projects && Array.isArray(projects)) {
+              console.log('[Sidebar] Using fallback project renderer for', projects.length, 'projects');
+              sidebarProjects.innerHTML = '';
+
+              if (projects.length === 0) {
+                sidebarProjects.innerHTML = '<li class="text-center text-gray-500 py-4">No projects available</li>';
+              } else {
+                const fragment = document.createDocumentFragment();
+                projects.forEach(project => {
+                  const li = document.createElement('li');
+                  li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center justify-between';
+                  li.dataset.projectId = project.id;
+
+                  const title = document.createElement('span');
+                  title.className = 'truncate';
+                  title.textContent = project.name || `Project ${project.id}`;
+
+                  li.appendChild(title);
+                  li.addEventListener('click', () => {
+                    if (window.ProjectDashboard?.showProjectDetails) {
+                      window.ProjectDashboard.showProjectDetails(project.id);
+                    }
+                  });
+
+                  fragment.appendChild(li);
+                });
+                sidebarProjects.appendChild(fragment);
+              }
+            }
+          }
         })
         .catch(err => {
           console.error('Failed to load sidebar projects:', err);
-          window.ChatUtils.handleError('Sidebar project load', err);
+          if (window.ChatUtils && window.ChatUtils.handleError) {
+            window.ChatUtils.handleError('Sidebar project load', err);
+          }
+
+          // Display user-friendly error message
+          const projectsSection = document.getElementById('projectsSection');
+          if (projectsSection) {
+            projectsSection.innerHTML = '<div class="text-red-500 p-4">Unable to connect to backend service. Please check if the server is running.</div>';
+          }
         });
     },
   },
@@ -295,9 +361,33 @@ function activateTab(tabName) {
       let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (isAuthenticated && sidebarTabConfig[tabName].loader) {
         setTimeout(() => sidebarTabConfig[tabName].loader(), 300);
+      } else if (!isAuthenticated) {
+        // Handle unauthenticated state gracefully for each tab type
+        const sectionElement = document.getElementById(sidebarTabConfig[tabName].sectionId);
+        if (sectionElement) {
+          // Show authentication required message based on tab
+          if (tabName === 'projects') {
+            sectionElement.innerHTML = '<div class="text-center p-4 text-gray-500">Please log in to view your projects</div>';
+          } else if (tabName === 'starred') {
+            sectionElement.innerHTML = '<div class="text-center p-4 text-gray-500">Please log in to view starred conversations</div>';
+          } else if (tabName === 'recent') {
+            sectionElement.innerHTML = '<div class="text-center p-4 text-gray-500">Please log in to view recent conversations</div>';
+          }
+        }
       }
     } catch (err) {
       console.warn('[Sidebar] Auth verification failed:', err);
+
+      // Handle authentication error gracefully
+      const sectionElement = document.getElementById(sidebarTabConfig[tabName].sectionId);
+      if (sectionElement) {
+        sectionElement.innerHTML = '<div class="text-red-500 p-4">Unable to verify authentication. Backend service may be unavailable.</div>';
+      }
+
+      // Log the error for diagnostics
+      if (window.ChatUtils && typeof window.ChatUtils.handleError === 'function') {
+        window.ChatUtils.handleError('Sidebar auth verification', err);
+      }
     }
   };
 
