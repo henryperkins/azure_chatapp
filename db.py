@@ -8,12 +8,12 @@ Incorporates additional suggestions for improved reliability and clarity.
 
 import logging
 import time
-from datetime import datetime
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
 from config import settings
@@ -352,13 +352,17 @@ async def validate_db_schema() -> list[str]:
                     normalized_orm_def = orm_default_str.strip("('").lower()
 
                     # Now compare with the DB default
-                    default_sql = await conn.execute(text(f"""
+                    default_sql = await conn.execute(
+                        text(
+                            f"""
                         SELECT column_default
                         FROM information_schema.columns
                         WHERE table_name='{table.name}'
                         AND column_name='{col.name}'
                         AND table_schema='public'
-                    """))
+                    """
+                        )
+                    )
                     db_row = default_sql.fetchone()
                     db_default = db_row[0] if db_row else None
                     if db_default and isinstance(db_default, str):
@@ -383,12 +387,13 @@ def _retry_foreign_key_add(
     col_name: str,
     referred_table: str,
     referred_col: str,
-    ondelete_clause: str,
+    ondelete_clause: Optional[str] = None,
     max_retries: int = 3,
-):
+) -> None:
     """
     Try adding a foreign key constraint up to `max_retries` times,
     handling potential deadlocks by sleeping briefly between attempts.
+    Reduces nested blocks by flattening logic for reattempt.
     """
     constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
     ondelete_sql = f" ON DELETE {ondelete_clause}" if ondelete_clause else ""
@@ -397,13 +402,11 @@ def _retry_foreign_key_add(
         try:
             sync_conn.execute(
                 text(
-                    f"""
-                    ALTER TABLE {table_name}
-                    ADD CONSTRAINT {constraint_name}
-                    FOREIGN KEY ({col_name})
-                    REFERENCES {referred_table}({referred_col})
-                    {ondelete_sql}
-                """
+                    f"ALTER TABLE {table_name}\n"
+                    f"ADD CONSTRAINT {constraint_name}\n"
+                    f"FOREIGN KEY ({col_name})\n"
+                    f"REFERENCES {referred_table}({referred_col})\n"
+                    f"{ondelete_sql}\n"
                 )
             )
             logger.info(
@@ -412,7 +415,7 @@ def _retry_foreign_key_add(
             )
             return
         except Exception as e:
-            # Check for deadlock
+            # Flattening the deadlock retry logic to reduce nested blocks
             if "deadlock" in str(e).lower() and attempt < max_retries - 1:
                 sleep_time = 0.3 * (attempt + 1)
                 logger.warning(
@@ -420,12 +423,12 @@ def _retry_foreign_key_add(
                     f"(Attempt {attempt + 1}/{max_retries})"
                 )
                 time.sleep(sleep_time)
-            else:
-                logger.error(
-                    f"Failed to add foreign key {constraint_name}: {e} "
-                    f"after {attempt + 1} attempts"
-                )
-                raise
+                continue
+            logger.error(
+                f"Failed to add foreign key {constraint_name}: {e} "
+                f"after {attempt + 1} attempts"
+            )
+            raise
 
 
 async def fix_db_schema() -> None:
