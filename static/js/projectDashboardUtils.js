@@ -23,7 +23,7 @@
  * 5. The code remains in the global scope but can be refactored into an ES module if desired.
  */
 
-(function () {
+(function() {
   // Prevent double-initialization
   if (window.ProjectDashboard && window.ProjectDashboard._initialized) {
     console.log('[ProjectDashboard] Already initialized, skipping...');
@@ -31,6 +31,7 @@
   }
 
   console.log('[ProjectDashboard] Initializing projectDashboardUtils.js');
+
 
   /* =========================================================================
    *  GLOBAL NAMESPACE SETUP
@@ -866,5 +867,123 @@
   // Expose the namespace globally
   window.ProjectDashboard = ProjectDashboard;
 
+  // Create a template loading tracker
+  window.templateLoadTracker = {
+    templates: {
+      'project_list.html': false,
+      'project_details.html': false,
+      'modals.html': false
+    },
+    allLoaded: function() {
+      return Object.values(this.templates).every(loaded => loaded);
+    },
+    markLoaded: function(templateName) {
+      if (this.templates.hasOwnProperty(templateName)) {
+        this.templates[templateName] = true;
+        console.log(`[TemplateTracker] ${templateName} loaded`);
+
+        if (this.allLoaded()) {
+          console.log('[TemplateTracker] All templates loaded, dispatching event');
+          document.dispatchEvent(new CustomEvent('templatesLoaded'));
+        }
+      }
+    },
+    reset: function() {
+      Object.keys(this.templates).forEach(key => {
+        this.templates[key] = false;
+      });
+    }
+  };
+
+  /**
+   * Wait for all templates to be loaded
+   * @param {number} timeoutMs - Timeout in milliseconds
+   * @returns {Promise<boolean>} - Whether all templates were loaded
+   */
+  function waitForTemplatesLoaded(timeoutMs = 5000) {
+    // If already loaded, resolve immediately
+    if (window.templateLoadTracker.allLoaded()) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        document.removeEventListener('templatesLoaded', onTemplatesLoaded);
+        console.warn('[TemplateWaiter] Timeout waiting for templates');
+        resolve(false);
+      }, timeoutMs);
+
+      function onTemplatesLoaded() {
+        clearTimeout(timeoutId);
+        document.removeEventListener('templatesLoaded', onTemplatesLoaded);
+        resolve(true);
+      }
+
+      document.addEventListener('templatesLoaded', onTemplatesLoaded);
+    });
+  }
+
+  // Export to use in projectDashboard
+  window.waitForTemplatesLoaded = waitForTemplatesLoaded;
+
   console.log('[ProjectDashboard] projectDashboardUtils.js loaded successfully');
+
+  // Create a template loading tracker
+  window.templateLoadTracker = {
+    templates: {
+      'project_list.html': false,
+      'project_details.html': false,
+      'modals.html': false
+    },
+    allLoaded: function() {
+      return Object.values(this.templates).every(loaded => loaded);
+    },
+    markLoaded: function(templateName) {
+      if (this.templates.hasOwnProperty(templateName)) {
+        this.templates[templateName] = true;
+        console.log(`[TemplateTracker] ${templateName} loaded`);
+
+        if (this.allLoaded()) {
+          console.log('[TemplateTracker] All templates loaded, dispatching event');
+          document.dispatchEvent(new CustomEvent('templatesLoaded'));
+        }
+      }
+    },
+    reset: function() {
+      Object.keys(this.templates).forEach(key => {
+        this.templates[key] = false;
+      });
+    }
+  };
+
+  /**
+   * Wait for all templates to be loaded
+   * @param {number} timeoutMs - Timeout in milliseconds
+   * @returns {Promise<boolean>} - Whether all templates were loaded
+   */
+  function waitForTemplatesLoaded(timeoutMs = 5000) {
+    // If already loaded, resolve immediately
+    if (window.templateLoadTracker.allLoaded()) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        document.removeEventListener('templatesLoaded', onTemplatesLoaded);
+        console.warn('[TemplateWaiter] Timeout waiting for templates');
+        resolve(false);
+      }, timeoutMs);
+
+      function onTemplatesLoaded() {
+        clearTimeout(timeoutId);
+        document.removeEventListener('templatesLoaded', onTemplatesLoaded);
+        resolve(true);
+      }
+
+      document.addEventListener('templatesLoaded', onTemplatesLoaded);
+    });
+  }
+
+  // Export to use in projectDashboard
+  window.waitForTemplatesLoaded = waitForTemplatesLoaded;
 })();
