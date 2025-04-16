@@ -668,11 +668,6 @@ function refreshAppData() {
           console.warn("[refreshAppData] Failed to load conversations:", err);
           window.ChatUtils.handleError('Refreshing conversation list', err);
           return [];
-        }),
-        loadSidebarProjects().catch(err => {
-          console.warn("[refreshAppData] Failed to load sidebar projects:", err);
-          window.ChatUtils.handleError('Refreshing sidebar projects', err);
-          return [];
         })
       ]);
     })
