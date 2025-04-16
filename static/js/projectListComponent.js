@@ -41,6 +41,12 @@
         return;
       }
 
+      // Skip if this is an event from another source
+      if (eventOrProjects?.source && eventOrProjects.source !== "projectManager") {
+        console.log("[ProjectListComponent] Ignoring event from other source:", eventOrProjects.source);
+        return;
+      }
+
       if (this._shouldLoadProjectsDirectly(eventOrProjects)) {
         return this._loadProjectsThroughManager();
       }
@@ -284,7 +290,7 @@
         // Also create details view container if missing
         let detailsView = document.getElementById("projectDetailsView");
         if (!detailsView) {
-          detailsView = document.createElement("div");b 
+          detailsView = document.createElement("div");b
           detailsView.id = "projectDetailsView";
           detailsView.className = "hidden flex-1 overflow-y-auto p-4 lg:p-6";
           container.parentNode.appendChild(detailsView);

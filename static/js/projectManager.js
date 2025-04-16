@@ -37,8 +37,11 @@
    * @param {Object} detail - Event data
    */
   function emitEvent(eventName, detail) {
-    // Always ensure we pass an object
-    const eventDetail = (typeof detail === 'object' && detail !== null) ? detail : {};
+    // Always ensure we pass an object with source tracking
+    const eventDetail = {
+      ...((typeof detail === 'object' && detail !== null) ? detail : {}),
+      source: "projectManager"
+    };
     document.dispatchEvent(new CustomEvent(eventName, { detail: eventDetail }));
   }
 
@@ -57,18 +60,22 @@
    */
   async function loadProjects(filter = null) {
     // Guard against recursive calls
-    if (projectLoadingInProgress) {
+    if (projectLoadingInProgress || window.__projectLoadingInProgress) {
       console.log("[projectManager] Project loading already in progress, skipping duplicate call");
       return [];
     }
 
     projectLoadingInProgress = true;
+    window.__projectLoadingInProgress = true;
 
     const validFilters = ["all", "pinned", "archived", "active"];
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
     // Show loading state immediately
-    emitEvent("projectsLoading", { filter: cleanFilter });
+    emitEvent("projectsLoading", {
+      filter: cleanFilter,
+      source: "projectManager"
+    });
 
     try {
       // Use centralized auth check
@@ -82,9 +89,20 @@
           lastAuthLogTimestamps[operationKey] = now;
         }
         emitEvent("showLoginPrompt", { reason: "loadProjects" });
-        emitEvent("projectsLoaded", { projects: [], count: 0, filter: { type: cleanFilter }, error: true, reason: 'auth_required' });
-        emitEvent("projectAuthError", { reason: 'load_projects', error: new Error("Authentication required") });
-        return []; // Return empty array as no projects can be loaded
+        emitEvent("projectsLoaded", {
+          projects: [],
+          count: 0,
+          filter: { type: cleanFilter },
+          error: true,
+          reason: 'auth_required',
+          source: "projectManager"
+        });
+        emitEvent("projectAuthError", {
+          reason: 'load_projects',
+          error: new Error("Authentication required"),
+          source: "projectManager"
+        });
+        return [];
       }
 
       // Build query params
@@ -116,7 +134,8 @@
       emitEvent("projectsLoaded", {
         projects,
         count: projects.length,
-        filter: { type: cleanFilter }
+        filter: { type: cleanFilter },
+        source: "projectManager"
       });
 
       return projects;
@@ -127,12 +146,14 @@
         projects: [],
         count: 0,
         filter: { type: filter },
-        error: true
+        error: true,
+        source: "projectManager"
       });
       return [];
     } finally {
-      // Reset the guard flag after completion (whether successful or not)
+      // Reset the guard flags after completion
       projectLoadingInProgress = false;
+      window.__projectLoadingInProgress = false;
     }
   }
 

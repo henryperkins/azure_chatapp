@@ -346,43 +346,23 @@ async function loadConversationList() {
   });
 }
 
-async function loadInitialProjects(retryOnFailure = true) {
+async function loadProjects() {
   try {
     const isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
       log("[App] Not authenticated, showing login prompt");
-      const loginMsg = document.getElementById('loginRequiredMessage');
-      if (loginMsg) {
-        loginMsg.classList.remove('hidden');
-        log("[App] Made loginRequiredMessage visible");
-      }
-
-      // Ensure project container is hidden when not authenticated
-      const projectPanel = document.getElementById('projectManagerPanel');
-      if (projectPanel) {
-        projectPanel.classList.add('hidden');
-        log("[App] Hidden projectManagerPanel for unauthenticated state");
-      }
+      toggleVisibility(document.getElementById('loginRequiredMessage'), true);
+      toggleVisibility(document.getElementById('projectManagerPanel'), false);
       return;
     }
 
     // Hide login message, show project container when authenticated
-    const loginMsg = document.getElementById('loginRequiredMessage');
-    if (loginMsg) loginMsg.classList.add('hidden');
+    toggleVisibility(document.getElementById('loginRequiredMessage'), false);
+    toggleVisibility(document.getElementById('projectManagerPanel'), true);
+    toggleVisibility(document.getElementById('projectListView'), true);
 
-    const projectPanel = document.getElementById('projectManagerPanel');
-    if (projectPanel) {
-      projectPanel.classList.remove('hidden');
-      log("[App] Showed projectManagerPanel for authenticated state");
-    }
-
-    // Always ensure the project list view is visible
-    const projectListView = document.getElementById('projectListView');
-    if (projectListView) {
-      projectListView.classList.remove('hidden');
-      projectListView.style.display = 'flex';
-      log("[App] Ensured projectListView is visible");
-    }
+    // Ensure components are initialized
+    await ensureComponentsInitialized();
 
     // Load projects through projectManager
     if (window.projectManager?.loadProjects) {
@@ -390,58 +370,25 @@ async function loadInitialProjects(retryOnFailure = true) {
       const projects = await window.projectManager.loadProjects('all');
       log(`[App] Loaded ${projects.length} projects`);
 
-      // Force render projects directly through component if it exists
-      if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
+      // Render projects through the component
+      if (window.projectListComponent) {
         window.projectListComponent.renderProjects(projects);
-        log("[App] Directly rendered projects through projectListComponent");
       }
 
-      // Handle empty project list explicitly
+      // Handle empty project list
       if (projects.length === 0) {
-        const noProjectsMsg = document.getElementById('noProjectsMessage');
-        if (noProjectsMsg) {
-          noProjectsMsg.classList.remove('hidden');
-          log("[App] Showed noProjectsMessage for empty project list");
-        }
+        toggleVisibility(document.getElementById('noProjectsMessage'), true);
       }
-    } else {
-      console.warn("[App] projectManager not available for loading projects");
     }
   } catch (err) {
-    console.error("[App] Error loading initial projects:", err);
-    window.ChatUtils.handleError('Loading initial projects', err);
-    if (retryOnFailure) {
-      await ensureAuthenticated({ forceVerify: true });
-      loadInitialProjects(false);
-    }
+    console.error("[App] Error loading projects:", err);
+    window.ChatUtils.handleError('Loading projects', err);
+  } finally {
+    // Clear loading flag
+    window.__projectLoadingInProgress = false;
   }
 }
 
-async function loadSidebarProjects() {
-  if (!await ensureAuthenticated()) {
-    log("[loadSidebarProjects] Not authenticated");
-    return [];
-  }
-  try {
-    return apiRequest(API_ENDPOINTS.PROJECTS).then(apiResponse => {
-      let projectsArray = Array.isArray(apiResponse) ? apiResponse :
-        Array.isArray(apiResponse?.data) ? apiResponse.data :
-          Array.isArray(apiResponse?.projects) ? apiResponse.projects : [];
-      if (window.uiRenderer?.renderProjects) window.uiRenderer.renderProjects(projectsArray);
-      document.dispatchEvent(new CustomEvent('sidebarProjectsRendered', { detail: { count: projectsArray.length } }));
-      return projectsArray;
-    }).catch(error => {
-      console.error('[loadSidebarProjects] Failed to load sidebar projects:', error);
-      window.ChatUtils.handleError('Loading sidebar projects', error);
-      document.dispatchEvent(new CustomEvent('sidebarProjectsError', { detail: { error } }));
-      throw error;
-    });
-  } catch (error) {
-    console.error('Failed to load sidebar projects:', error);
-    window.ChatUtils.handleError('Loading sidebar projects', error);
-    throw error;
-  }
-}
 
 // NAVIGATION & STATE
 async function navigateToConversation(conversationId) {
@@ -656,12 +603,12 @@ async function showProjectListView() {
       projectPanel.classList.remove('hidden');
       log("[showProjectListView] Showing project panel");
     }
-    // Load initial projects without triggering unsafe operations
+    // Load projects without triggering unsafe operations
     if (window.dashboardUtilsReady || (typeof window.showProjectsView === 'function')) {
-      await loadInitialProjects();
+      await loadProjects();
     } else {
       console.warn("[showProjectListView] dashboardUtils not ready, delaying project loading");
-      setTimeout(() => loadInitialProjects(), 500); // Delay until utils are potentially ready
+      setTimeout(() => loadProjects(), 500); // Delay until utils are potentially ready
     }
   } catch (error) {
     console.error("[showProjectListView] Error:", error);
@@ -695,17 +642,82 @@ function refreshAppData() {
   }
 
   log("[refreshAppData] Refreshing application data after authentication.");
-  loadInitialProjects().catch(err => {
-    console.error("[refreshAppData] Error loading initial projects:", err);
-    window.ChatUtils.handleError('Refreshing initial projects', err);
-  });
-  loadConversationList().catch(err => {
-    console.warn("[refreshAppData] Failed to load conversations:", err);
-    window.ChatUtils.handleError('Refreshing conversation list', err);
-  });
-  loadSidebarProjects().catch(err => {
-    console.warn("[refreshAppData] Failed to load sidebar projects:", err);
-    window.ChatUtils.handleError('Refreshing sidebar projects', err);
+
+  // First ensure component initialization
+  ensureComponentsInitialized()
+    .then(() => {
+      // Single source of truth for project loading
+      if (window.projectManager?.loadProjects) {
+        return window.projectManager.loadProjects('all');
+      } else {
+        return Promise.reject(new Error('projectManager not available'));
+      }
+    })
+    .then(projects => {
+      log(`[refreshAppData] Loaded ${projects.length} projects`);
+
+      // Direct rendering instead of relying on events
+      if (window.projectListComponent?.renderProjects) {
+        window.projectListComponent.renderProjects(projects);
+        log("[refreshAppData] Rendered projects through projectListComponent");
+      }
+
+      // Also refresh conversations and sidebar projects
+      return Promise.all([
+        loadConversationList().catch(err => {
+          console.warn("[refreshAppData] Failed to load conversations:", err);
+          window.ChatUtils.handleError('Refreshing conversation list', err);
+          return [];
+        }),
+        loadSidebarProjects().catch(err => {
+          console.warn("[refreshAppData] Failed to load sidebar projects:", err);
+          window.ChatUtils.handleError('Refreshing sidebar projects', err);
+          return [];
+        })
+      ]);
+    })
+    .catch(err => {
+      console.error("[refreshAppData] Error refreshing data:", err);
+      window.ChatUtils.handleError('Refreshing application data', err);
+    });
+}
+
+async function ensureComponentsInitialized() {
+  // Check if project components are already initialized
+  if (window.projectListComponent) {
+    return Promise.resolve();
+  }
+
+  log("[ensureComponentsInitialized] Waiting for component initialization...");
+
+  // Try to initialize components if needed
+  if (typeof window.ProjectListComponent === 'function' && !window.projectListComponent) {
+    try {
+      window.projectListComponent = new window.ProjectListComponent({
+        elementId: "projectList",
+        onViewProject: (projectId) => {
+          if (window.ProjectDashboard?.showProjectDetails) {
+            window.ProjectDashboard.showProjectDetails(projectId);
+          }
+        }
+      });
+      log("[ensureComponentsInitialized] Created projectListComponent instance");
+    } catch (err) {
+      console.warn("[ensureComponentsInitialized] Error creating projectListComponent:", err);
+    }
+  }
+
+  // Return a promise that resolves when components are ready or times out
+  return new Promise(resolve => {
+    let checks = 0;
+    const maxChecks = 10;
+    const checkInterval = setInterval(() => {
+      if (window.projectListComponent || ++checks >= maxChecks) {
+        clearInterval(checkInterval);
+        log(`[ensureComponentsInitialized] Components ready (or timed out after ${checks} checks)`);
+        resolve();
+      }
+    }, 100);
   });
 }
 
