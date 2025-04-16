@@ -703,34 +703,107 @@ ${content}`)) {
       }
     }
 
-    _bindCreateProjectButton() {
-      const button = document.getElementById('createProjectBtn');
-      if (!button) {
-        console.warn('Create project button (createProjectBtn) not found');
-        return;
+  _bindCreateProjectButton() {
+    let button = document.getElementById('createProjectBtn');
+    if (!button) {
+      console.warn('[ProjectListComponent] Create project button (createProjectBtn) not found');
+
+      // Try to find the button by its text content or class
+      const possibleButtons = Array.from(document.querySelectorAll('button'))
+        .filter(btn =>
+          btn.textContent?.trim().toLowerCase() === 'new project' ||
+          btn.classList.contains('btn-primary')
+        );
+
+      if (possibleButtons.length > 0) {
+        button = possibleButtons[0];
+        console.log('[ProjectListComponent] Found alternative button:', button);
+      } else {
+        // Create a fallback button
+        this._createFallbackCreateProjectButton();
+        button = document.getElementById('createProjectBtn');
+        if (!button) return; // Give up if still not found
+      }
+    }
+
+    // Safely remove existing handler to prevent duplicates
+    const newButton = button.cloneNode(true);
+    if (button.parentNode) {
+      button.parentNode.replaceChild(newButton, button);
+      button = newButton;
+    }
+
+    button.addEventListener('click', () => {
+      // Use the global modal manager
+      if (window.modalManager) {
+        window.modalManager.show('project', {
+          updateContent: (modalEl) => {
+            // Reset form for creation
+            const form = modalEl.querySelector('#projectForm');
+            const title = modalEl.querySelector('#projectModalTitle');
+            if (form) form.reset();
+            if (title) title.textContent = 'Create Project';
+            const projectIdInput = modalEl.querySelector('#projectIdInput');
+            if (projectIdInput) projectIdInput.value = '';
+          }
+        });
+      } else {
+        console.error("[ProjectListComponent] Modal manager not available to show project form.");
+        // Fallback or error message
+        alert("Cannot open project form.");
+      }
+    });
+  }
+
+  // Add this method to ProjectListComponent
+  _createFallbackCreateProjectButton() {
+    // Find a good container for the button
+    const headerSection = document.querySelector('.mb-4.flex.items-center.justify-between') ||
+                          document.querySelector('#projectListView > div:first-child');
+
+    if (!headerSection) {
+      // Create a header if not found
+      const container = document.getElementById('projectListView');
+      if (!container) return;
+
+      const newHeader = document.createElement('div');
+      newHeader.className = 'mb-4 flex items-center justify-between';
+      newHeader.innerHTML = `
+        <h2 class="text-xl font-semibold">Projects</h2>
+        <div class="flex gap-2">
+          <button id="createProjectBtn" type="button" class="btn btn-primary btn-sm">New Project</button>
+        </div>
+      `;
+
+      if (container.firstChild) {
+        container.insertBefore(newHeader, container.firstChild);
+      } else {
+        container.appendChild(newHeader);
       }
 
-      button.addEventListener('click', () => {
-        // Use the global modal manager
-        if (window.modalManager) {
-          window.modalManager.show('project', {
-            updateContent: (modalEl) => {
-              // Reset form for creation
-              const form = modalEl.querySelector('#projectForm');
-              const title = modalEl.querySelector('#projectModalTitle');
-              if (form) form.reset();
-              if (title) title.textContent = 'Create Project';
-              const projectIdInput = modalEl.querySelector('#projectIdInput');
-              if (projectIdInput) projectIdInput.value = '';
-            }
-          });
-        } else {
-          console.error("Modal manager not available to show project form.");
-          // Fallback or error message
-          alert("Cannot open project form.");
-        }
-      });
+      console.log('[ProjectListComponent] Created fallback header with project button');
+      return;
     }
+
+    // If there's already a header but no button
+    let actionsContainer = headerSection.querySelector('.flex.gap-2');
+    if (!actionsContainer) {
+      // Create action container
+      actionsContainer = document.createElement('div');
+      actionsContainer.className = 'flex gap-2';
+      headerSection.appendChild(actionsContainer);
+    }
+
+    // Create button
+    const button = document.createElement('button');
+    button.id = 'createProjectBtn';
+    button.type = 'button';
+    button.className = 'btn btn-primary btn-sm';
+    button.textContent = 'New Project';
+
+    actionsContainer.appendChild(button);
+    console.log('[ProjectListComponent] Created fallback create project button');
+  }
 
     _initializeCustomizationUI() {
       // Find the button added in index.html
@@ -1085,4 +1158,3 @@ if (typeof window.ProjectListComponent !== 'function') {
   }
   // Otherwise keep the existing wrapper if it exists
 }
-

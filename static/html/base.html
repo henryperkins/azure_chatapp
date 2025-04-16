@@ -472,29 +472,46 @@
           await window.auth.init();
           console.log("Authentication initialized");
         } catch (err) {
-          console.error("Authentication initialization failed:", err); // Fixed comma
+          console.error("Authentication initialization failed:", err);
         }
       }
 
       // Wait a short time for auth to be fully processed
-      await new Promise(resolve => setTimeout(resolve, 100)); // Fixed syntax
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Reset template tracker
+      if (window.templateLoadTracker) {
+        window.templateLoadTracker.reset();
+      }
 
       // Load HTML content parallel but wait for all before initialization
       const htmlPromises = [
         fetch('project_list.html').then(response => response.text())
           .then(html => {
             document.getElementById('projectListView').innerHTML = html;
+            // Mark template as loaded
+            if (window.templateLoadTracker) {
+              window.templateLoadTracker.markLoaded('project_list.html');
+            }
           }).catch(err => console.error('Failed to load project_list.html:', err)),
 
         fetch('project_details.html').then(response => response.text())
           .then(html => {
             document.getElementById('projectDetailsView').innerHTML = html;
+            // Mark template as loaded
+            if (window.templateLoadTracker) {
+              window.templateLoadTracker.markLoaded('project_details.html');
+            }
           }).catch(err => console.error('Failed to load project_details.html:', err)),
 
         fetch('modals.html').then(response => response.text())
           .then(html => {
             document.getElementById('modalsContainer').innerHTML = html;
             document.getElementById('modalsContainer').classList.remove('hidden');
+            // Mark template as loaded
+            if (window.templateLoadTracker) {
+              window.templateLoadTracker.markLoaded('modals.html');
+            }
           }).catch(err => console.error('Failed to load modals.html:', err)),
 
         fetch('chat_ui.html').then(response => response.text())
@@ -507,8 +524,15 @@
       // Wait for all HTML content to load
       await Promise.all(htmlPromises);
 
+      // Set a flag to indicate DOM is updated with templates
+      window.templatesLoadedInDOM = true;
+      console.log("[TemplateLoader] All template HTML has been loaded into DOM");
+
       // Initialize modals if needed
       if (window.initProjectModal) window.initProjectModal();
+
+      // Wait for DOM to be updated with templates before initializing app
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Initialize app with increased timeouts
       if (window.appInitializer?.initialize) {

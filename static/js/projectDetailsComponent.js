@@ -1,4 +1,4 @@
-/**
+ /**
  * ProjectDetailsComponent.js
  *
  * A comprehensive UI component for managing project details, files,
@@ -55,6 +55,12 @@ export class ProjectDetailsComponent {
     // Scroll and drag/drop bindings
     this.scrollHandler = this.handleScroll.bind(this);
     this.handleDragEvent = this.handleDragEvent.bind(this);
+
+    // Check if the HTML templates are loaded
+    this.templatesReady = window.templatesLoadedInDOM || false;
+
+    // Add MutationObserver to detect when elements are added
+    this._setupElementObserver();
 
     // Basic setup
     this.initElements();
@@ -1252,7 +1258,249 @@ export class ProjectDetailsComponent {
   handleScroll() {
     // If implementing virtual scroll, handle it here
   }
+
+  /**
+   * Sets up a MutationObserver to watch for elements being added to the DOM
+   * This allows us to re-initialize elements when they're dynamically added
+   */
+  _setupElementObserver() {
+    // Don't set up observers if templates are confirmed loaded
+    if (this.templatesReady) return;
+
+    // Create an observer that watches for elements to be added to the DOM
+    this.elementObserver = new MutationObserver((mutations) => {
+      let shouldRefreshElements = false;
+
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          // Check if any of our needed elements were added
+          const addedIds = Array.from(mutation.addedNodes)
+            .filter(node => node.nodeType === Node.ELEMENT_NODE)
+            .flatMap(el => [
+              el.id ? el : null,
+              ...Array.from(el.querySelectorAll('[id]'))
+            ])
+            .filter(Boolean)
+            .map(el => el.id);
+
+          // These are the elements we're looking for
+          const neededIds = [
+            'projectFilesList', 'backToProjectsBtn', 'dragDropZone',
+            'filesTab', 'projectTitle', 'projectDescription'
+          ];
+
+          if (addedIds.some(id => neededIds.includes(id))) {
+            shouldRefreshElements = true;
+            console.log('[ProjectDetailsComponent] Detected important elements being added to DOM');
+          }
+        }
+      }
+
+      if (shouldRefreshElements) {
+        // Re-initialize the elements
+        console.log('[ProjectDetailsComponent] Re-initializing elements after DOM updates');
+        this.initElements();
+      }
+    });
+
+    // Start observing
+    const container = document.getElementById('projectDetailsView');
+    if (container) {
+      this.elementObserver.observe(container, {
+        childList: true,
+        subtree: true
+      });
+      console.log('[ProjectDetailsComponent] Started DOM observer for projectDetailsView');
+    }
+  }
+
+  /**
+   * Ensures that all essential elements exist, creating fallbacks if needed
+   */
+  _ensureEssentialElements() {
+    // Check for critical elements, create fallbacks if needed
+    if (!this.elements.filesList) {
+      this._createMissingElement('#projectFilesList');
+    }
+
+    if (!this.elements.backBtn) {
+      this._createMissingElement('#backToProjectsBtn');
+    }
+
+    if (!this.elements.dragZone) {
+      this._createMissingElement('#dragDropZone');
+    }
+  }
+
+  /**
+   * Creates a missing element based on its selector
+   * @param {string} selector - The CSS selector for the element to create
+   * @returns {HTMLElement|null} - The created element or null if creation fails
+   */
+  _createMissingElement(selector) {
+    if (!selector.startsWith('#')) return null;
+
+    const id = selector.substring(1);
+    const container = document.getElementById('projectDetailsView');
+    if (!container) return null;
+
+    // Create element based on its id
+    let element = null;
+
+    switch (id) {
+      case 'projectFilesList':
+        element = document.createElement('div');
+        element.id = id;
+        element.className = 'grid grid-cols-1 gap-2 mt-4';
+
+        // Find appropriate container
+        const filesTab = document.getElementById('filesTab');
+        if (filesTab) {
+          filesTab.appendChild(element);
+        } else {
+          container.appendChild(element);
+        }
+        break;
+
+      case 'backToProjectsBtn':
+        element = document.createElement('button');
+        element.id = id;
+        element.type = 'button';
+        element.className = 'mr-2 btn btn-ghost btn-sm flex items-center';
+        element.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+          <span class="ml-1">All Projects</span>
+        `;
+
+        // Add handler
+        if (this.onBack) {
+          element.addEventListener('click', this.onBack);
+        }
+
+        // Find breadcrumb container
+        const breadcrumb = container.querySelector('.flex.items-center.mb-4');
+        if (breadcrumb) {
+          breadcrumb.insertBefore(element, breadcrumb.firstChild);
+        } else {
+          container.insertBefore(element, container.firstChild);
+        }
+        break;
+
+      case 'dragDropZone':
+        element = document.createElement('div');
+        element.id = id;
+        element.className = 'mb-4 drag-zone border-2 border-dashed border-base-300 rounded-lg p-6 text-center';
+        element.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <p class="text-sm font-medium mb-1">Drag and drop your files here</p>
+          <p class="text-xs text-gray-500">or click the Upload button above</p>
+        `;
+
+        // Find filesTab
+        const filesTabForDrag = document.getElementById('filesTab');
+        if (filesTabForDrag) {
+          // Insert after the upload button section
+          const uploadSection = filesTabForDrag.querySelector('.tab-section.flex.justify-between');
+          if (uploadSection) {
+            if (uploadSection.nextSibling) {
+              filesTabForDrag.insertBefore(element, uploadSection.nextSibling);
+            } else {
+              filesTabForDrag.appendChild(element);
+            }
+          } else {
+            filesTabForDrag.appendChild(element);
+          }
+        } else {
+          container.appendChild(element);
+        }
+        break;
+
+      default:
+        // Create generic placeholder for other elements
+        element = document.createElement('div');
+        element.id = id;
+        element.className = 'fallback-element';
+        element.setAttribute('data-fallback', 'true');
+        container.appendChild(element);
+    }
+
+    if (element) {
+      console.log(`[ProjectDetailsComponent] Created fallback element for ${selector}`);
+    }
+
+    return element;
+  }
+
+  /**
+   * Manual check of required templates/elements if automatic detection fails
+   * @returns {Promise<boolean>} True if critical elements exist
+   */
+  async _manualTemplateCheck() {
+    // Critical elements that must be present after template loading
+    const criticalElements = [
+      // Project list elements
+      { id: 'projectList', template: 'project_list.html' },
+      { id: 'createProjectBtn', template: 'project_list.html' },
+      { id: 'noProjectsMessage', template: 'project_list.html' },
+
+      // Project details elements
+      { id: 'projectTitle', template: 'project_details.html' },
+      { id: 'backToProjectsBtn', template: 'project_details.html' },
+      { id: 'filesTab', template: 'project_details.html' },
+      { id: 'dragDropZone', template: 'project_details.html' },
+      { id: 'projectFilesList', template: 'project_details.html' },
+
+      // Modal elements
+      { id: 'projectFormModal', template: 'modals.html' }
+    ];
+
+    // Wait for essential elements from each template
+    const maxAttempts = 15;
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      const missingElements = criticalElements.filter(el => !document.getElementById(el.id));
+
+      if (missingElements.length === 0) {
+        console.log("[ProjectDetailsComponent] Manual check confirmed all critical elements exist");
+        return true;
+      }
+
+      console.log(`[ProjectDetailsComponent] Waiting for elements (${attempts+1}/${maxAttempts}): ${missingElements.map(el => el.id).join(', ')}`);
+
+      // Check template content
+      const listView = document.getElementById('projectListView');
+      const detailsView = document.getElementById('projectDetailsView');
+      const modalsContainer = document.getElementById('modalsContainer');
+
+      if (!listView?.innerHTML || !detailsView?.innerHTML || !modalsContainer?.innerHTML) {
+        console.log("[ProjectDetailsComponent] Template containers still empty, waiting...");
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 200));
+      attempts++;
+    }
+
+    console.warn("[ProjectDetailsComponent] Some elements still missing after wait, continuing with fallbacks");
+    return false;
+  }
 }
+
+// Update destroy method to clean up the observer
+let originalDestroy = ProjectDetailsComponent.prototype.destroy;
+ProjectDetailsComponent.prototype.destroy = function() {
+  originalDestroy.call(this);
+
+  // Clean up the observer
+  if (this.elementObserver) {
+    this.elementObserver.disconnect();
+    this.elementObserver = null;
+  }
+};
 
 // If you prefer attaching to the global window instead of an ES module:
 /**
