@@ -409,30 +409,29 @@ async def login_user(
         raise HTTPException(status_code=401, detail="Invalid credentials.")
 
     # Update user and generate tokens in a transaction
-    async with session.begin_nested():
+    async with session.begin():
         locked_user = await session.get(User, user.id, with_for_update=True)
         if not locked_user:
             raise HTTPException(status_code=500, detail="User lock failed.")
 
         locked_user.last_login = naive_utc_now()
         # locked_user.token_version remains the same on successful login
-        await session.commit()
 
-        # Generate access token
-        access_payload = build_jwt_payload(
-            locked_user,
-            token_type="access",
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-        )
-        access_token = create_access_token(access_payload)
+    # Generate access token
+    access_payload = build_jwt_payload(
+        locked_user,
+        token_type="access",
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    access_token = create_access_token(access_payload)
 
-        # Generate refresh token
-        refresh_payload = build_jwt_payload(
-            locked_user,
-            token_type="refresh",
-            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
-        )
-        refresh_token = create_access_token(refresh_payload)
+    # Generate refresh token
+    refresh_payload = build_jwt_payload(
+        locked_user,
+        token_type="refresh",
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    refresh_token = create_access_token(refresh_payload)
 
     # Clean up expired tokens (optional background process)
     await clean_expired_tokens(session)
@@ -517,7 +516,7 @@ async def refresh_token(
         raise HTTPException(status_code=401, detail="No refresh token cookie found.")
 
     try:
-        async with session.begin_nested():
+        async with session.begin():
             locked_user = await session.get(User, user.id, with_for_update=True)
             if not locked_user:
                 raise HTTPException(status_code=500, detail="User lock failed.")
@@ -525,16 +524,15 @@ async def refresh_token(
             locked_user.last_login = naive_utc_now()
             locked_user.last_activity = naive_utc_now()
 
-            # Create new access token
-            access_payload = build_jwt_payload(
-                locked_user,
-                token_type="access",
-                expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-            )
-            new_access_token = create_access_token(access_payload)
-            await session.commit()
+        # Create new access token
+        access_payload = build_jwt_payload(
+            locked_user,
+            token_type="access",
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
+        new_access_token = create_access_token(access_payload)
 
-            # Check if refresh token is close to expiring
+        # Check if refresh token is close to expiring
             decoded = await verify_token(refresh_token_cookie, "refresh", request)
             expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
             time_remaining = expires_at - datetime.now(timezone.utc)
