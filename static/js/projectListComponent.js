@@ -218,6 +218,8 @@
         console.log("[ProjectListComponent] Made projectListView visible with flex display");
       } else {
         console.warn("[ProjectListComponent] Failed to find projectListView container");
+        // Try to create container if missing
+        this._createContainerIfMissing();
       }
 
       // Check if projectManagerPanel is visible
@@ -228,23 +230,62 @@
         console.log("[ProjectListComponent] Made projectManagerPanel visible");
       }
 
-      // Hide login message if it exists
-      if (loginRequiredMessage) {
-        loginRequiredMessage.classList.add("hidden");
-        console.log("[ProjectListComponent] Hide login required message");
-      }
+      // Check if user is authenticated
+      const isAuthenticated = window.auth?.isAuthenticated ? 
+                              window.auth.isAuthenticated({ forceVerify: false }) : 
+                              Promise.resolve(false);
+      
+      isAuthenticated.then(authStatus => {
+        // Hide login message if authenticated
+        if (loginRequiredMessage) {
+          loginRequiredMessage.classList.toggle("hidden", authStatus);
+          console.log(`[ProjectListComponent] ${authStatus ? 'Hid' : 'Showed'} login required message based on auth status`);
+        }
+      }).catch(err => {
+        console.warn("[ProjectListComponent] Error checking auth status:", err);
+      });
 
       // Make project list element visible too
       if (this.element) {
         this.element.classList.add("grid"); // Ensure grid display
         this.element.classList.remove("hidden");
+        console.log("[ProjectListComponent] Made project list grid visible");
+      } else {
+        console.warn("[ProjectListComponent] Project list element is null, cannot make visible");
+        this._setupDOMReferences(); // Try to re-acquire references
+      }
+    }
+    
+    // Helper method to create container if it doesn't exist
+    _createContainerIfMissing() {
+      let container = document.getElementById("projectListView");
+      if (!container) {
+        console.log("[ProjectListComponent] Creating missing projectListView container");
+        container = document.createElement("main");
+        container.id = "projectListView";
+        container.className = "flex-1 overflow-y-auto p-4 lg:p-6";
+        
+        // Find a good parent to append to
+        const drawerContent = document.querySelector(".drawer-content") || document.body;
+        drawerContent.appendChild(container);
+        
+        // Create the project list grid container inside
+        const projectList = document.createElement("div");
+        projectList.id = "projectList";
+        projectList.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+        container.appendChild(projectList);
+        
+        // Update our element reference
+        this.element = projectList;
+        console.log("[ProjectListComponent] Created missing containers");
       }
     }
 
     _shouldLoadProjectsDirectly(eventOrProjects) {
       return eventOrProjects?.forceRefresh ||
         eventOrProjects?.directCall ||
-        !eventOrProjects;
+        !eventOrProjects ||
+        (Array.isArray(eventOrProjects) && eventOrProjects.length === 0); // Also load if empty array
     }
 
     _loadProjectsThroughManager() {
@@ -315,14 +356,23 @@
     _performDOMUpdate(filteredProjects) {
       if (!this.element) {
         // Attempt to re-acquire the element if it was missing
+        console.warn("[ProjectListComponent] Element not found for DOM update, attempting to recreate");
         this._setupDOMReferences();
+        
         if (!this.element) {
-          console.error("[ProjectListComponent] Cannot perform DOM update, element not found.");
-          return;
+          console.error("[ProjectListComponent] Cannot perform DOM update, element still not found after reacquisition");
+          this._createFallbackContainer();
+          if (!this.element) {
+            console.error("[ProjectListComponent] Failed to create fallback container. Cannot render projects.");
+            return;
+          }
         }
       }
 
       console.log(`[ProjectListComponent] Updating DOM with ${filteredProjects.length} projects`);
+
+      // First ensure containers are visible properly
+      this._ensureContainerVisibility();
 
       // Clear with a safety check
       try {
@@ -344,6 +394,17 @@
         this.messageEl.classList.add("hidden");
       } else {
         console.warn("[ProjectListComponent] messageEl not found for empty state");
+        // Try to create a message element if missing
+        this.messageEl = document.querySelector("#noProjectsMessage");
+        if (!this.messageEl) {
+          const container = document.getElementById("projectListView");
+          if (container) {
+            this.messageEl = document.createElement("div");
+            this.messageEl.id = "noProjectsMessage";
+            this.messageEl.className = "text-center py-10 text-base-content/70 hidden";
+            container.appendChild(this.messageEl);
+          }
+        }
       }
 
       const fragment = document.createDocumentFragment();

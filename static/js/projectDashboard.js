@@ -771,4 +771,454 @@ class ProjectDashboard {
       });
 
       // Conditionally initialize KnowledgeBaseComponent
-      const kbContainer = document.getElementById('knowle
+      const kbContainer = document.getElementById('knowledgeBaseContainer');
+      const shouldInitKB = kbContainer && kbContainer.dataset.requiresKb === 'true' && this.state.currentView === 'details' && this.state.currentProject?.knowledge_base_id;
+
+      if (shouldInitKB && typeof window.KnowledgeBaseComponent === "function") {
+        console.log("[ProjectDashboard] Initializing KnowledgeBaseComponent.");
+        this.components.knowledgeBase = new window.KnowledgeBaseComponent({});
+      } else {
+        console.log(`[ProjectDashboard] Skipping KnowledgeBaseComponent initialization.`);
+        this.components.knowledgeBase = null;
+      }
+
+    } catch (err) {
+      console.error(`[ProjectDashboard] Component creation attempt ${attempts + 1} failed:`, err);
+
+      if (attempts < maxAttempts) {
+        const delay = 100 * Math.pow(2, attempts);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this._createComponentsWithRetry(attempts + 1);
+      }
+
+      console.warn("[ProjectDashboard] Using fallback components after repeated failures");
+      this.ensureFallbackComponents(); // Ensure fallbacks are created if retries fail
+
+      // Re-create with fallbacks if necessary
+      if (!this.components.projectList) {
+        this.components.projectList = new window.ProjectListComponent({
+          elementId: "projectList",
+          onViewProject: this.handleViewProject.bind(this)
+        });
+      }
+      if (!this.components.projectDetails) {
+        this.components.projectDetails = new window.ProjectDetailsComponent({
+          onBack: this.handleBackToList.bind(this),
+          utils: window.uiUtilsInstance || window.UIUtils,
+          projectManager: window.projectManager,
+          auth: window.auth,
+          notification: this.showNotification
+        });
+      }
+    }
+  }
+
+  async _waitForAuthentication() {
+    const waitId = `waitAuth-${Date.now().toString(36)}`;
+    console.log(`[ProjectDashboard][${waitId}] Checking authentication state...`);
+    this.showInitializationProgress("Checking authentication state...");
+
+    // Check if auth module exists first
+    if (!window.auth || typeof window.auth.isAuthenticated !== 'function') {
+      console.warn(`[ProjectDashboard][${waitId}] Auth module not available or missing isAuthenticated.`);
+      // Proceed without authentication, UI should handle this state
+      return false;
+    }
+
+    // First check if we already have auth info (quick check)
+    try {
+      const authenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      if (authenticated) {
+        console.log(`[ProjectDashboard][${waitId}] User is authenticated (cached), proceeding.`);
+        return true;
+      }
+    } catch (err) {
+      console.warn(`[ProjectDashboard][${waitId}] Initial auth check failed:`, err);
+      // Continue to wait for event or timeout
+    }
+
+    // If not authenticated, wait a bit for possible login or authReady event
+    console.log(`[ProjectDashboard][${waitId}] Not authenticated, waiting for authReady or authStateChanged event (max 3s)...`);
+    return new Promise((resolve) => {
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          console.log(`[ProjectDashboard][${waitId}] Proceeding without confirmed authentication after timeout.`);
+          document.removeEventListener("authReady", authListener);
+          document.removeEventListener("authStateChanged", authListener);
+          resolve(false); // Resolve false after timeout
+        }
+      }, 3000); // 3-second timeout
+
+      const authListener = (event) => {
+        if (resolved) return; // Prevent multiple resolves
+        const isAuthenticated = event.detail?.authenticated || false;
+        console.log(`[ProjectDashboard][${waitId}] Received '${event.type}' event (Authenticated: ${isAuthenticated})`);
+        clearTimeout(timeoutId);
+        document.removeEventListener("authReady", authListener);
+        document.removeEventListener("authStateChanged", authListener);
+        resolved = true;
+        resolve(isAuthenticated);
+      };
+
+      document.addEventListener("authReady", authListener, { once: true });
+      document.addEventListener("authStateChanged", authListener, { once: true });
+
+      // Final check in case event fired before listener attached
+      if (window.auth?.isReady) {
+        if (!resolved) {
+          console.log(`[ProjectDashboard][${waitId}] Auth state already verified, resolving.`);
+          clearTimeout(timeoutId);
+          document.removeEventListener("authReady", authListener);
+          document.removeEventListener("authStateChanged", authListener);
+          resolved = true;
+          window.auth.isAuthenticated({ forceVerify: false }).then(authenticated => {
+            resolve(authenticated);
+          }).catch(() => {
+            resolve(false);
+          });
+        }
+      }
+    });
+  }
+
+  async _waitForDashboardUtils() {
+    const waitId = `waitUtils-${Date.now().toString(36)}`;
+    console.log(`[ProjectDashboard][${waitId}] Checking dashboardUtilsReady...`);
+
+    // First check if the flag is already set
+    if (window.dashboardUtilsReady === true) {
+      console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady flag already true.`);
+      return;
+    }
+
+    this.showInitializationProgress("Waiting for dashboard utilities...");
+    console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady flag not set, starting wait...`);
+
+    try {
+      // Increased timeout to 10s (from 5s)
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error("Timeout (10s) waiting for dashboardUtilsReady")),
+          10000 // Increased timeout
+        );
+
+        // Check flag periodically while waiting for event
+        const checkInterval = setInterval(() => {
+          if (window.dashboardUtilsReady === true) {
+            clearTimeout(timeout);
+            clearInterval(checkInterval);
+            document.removeEventListener("dashboardUtilsReady", handleUtilsReady); // Ensure listener removed
+            resolve();
+          }
+        }, 100);
+
+        const handleUtilsReady = () => {
+          clearTimeout(timeout);
+          clearInterval(checkInterval);
+          resolve();
+        };
+
+        document.addEventListener("dashboardUtilsReady", handleUtilsReady, { once: true });
+      });
+
+      console.log(`[ProjectDashboard][${waitId}] dashboardUtilsReady event received or flag found.`);
+    } catch (err) {
+      console.error(`[ProjectDashboard][${waitId}] Error waiting for dashboard utils:`, err);
+      // If utils are loaded but the event wasn't fired, we can still proceed
+      if (window.dashboardUtilsReady === true ||
+        (window.ProjectDashboard && window.ProjectDashboard._initialized)) {
+        console.warn(`[ProjectDashboard][${waitId}] Proceeding despite timeout - utils appear to be ready`);
+        return;
+      }
+
+      // Create basic dashboardUtils as fallback
+      console.warn(`[ProjectDashboard][${waitId}] Creating fallback dashboard utils`);
+      window.dashboardUtilsReady = true;
+      window.showProjectsView = window.showProjectsView || function () {
+        const listView = document.getElementById('projectListView');
+        const detailsView = document.getElementById('projectDetailsView');
+        if (listView) listView.classList.remove('hidden');
+        if (detailsView) detailsView.classList.add('hidden');
+      };
+    }
+  }
+
+  async _waitForProjectManager() {
+    const waitId = `waitPM-${Date.now().toString(36)}`;
+    console.log(`[ProjectDashboard][${waitId}] Checking projectManager...`);
+    if (window.projectManager) {
+      console.log(`[ProjectDashboard][${waitId}] projectManager already available.`);
+      return;
+    }
+    this.showInitializationProgress("Waiting for ProjectManager...");
+    console.log(`[ProjectDashboard][${waitId}] projectManager not found, starting wait...`);
+    await new Promise((resolve, reject) => {
+      let checks = 0;
+      const maxChecks = 40; // 40 * 100ms = 4 seconds
+      const checkInterval = setInterval(() => {
+        if (window.projectManager) {
+          console.log(`[ProjectDashboard][${waitId}] projectManager found after ${checks * 100}ms.`);
+          clearInterval(checkInterval);
+          resolve();
+        } else if (++checks >= maxChecks) {
+          clearInterval(checkInterval);
+          reject(new Error(`Timeout waiting for ProjectManager after ${maxChecks * 100}ms`));
+        }
+      }, 100);
+    });
+  }
+
+  async _waitForDocument() {
+    const waitId = `waitDoc-${Date.now().toString(36)}`;
+    console.log(`[ProjectDashboard][${waitId}] Checking document readyState...`);
+    if (this._isDocumentReady()) {
+      console.log(`[ProjectDashboard][${waitId}] Document already ready.`);
+      return;
+    }
+    this.showInitializationProgress("Waiting for DOM...");
+    console.log(`[ProjectDashboard][${waitId}] Document not ready, adding DOMContentLoaded listener.`);
+    await new Promise(resolve => {
+      document.addEventListener("DOMContentLoaded", () => {
+        console.log(`[ProjectDashboard][${waitId}] DOMContentLoaded event fired.`);
+        resolve();
+      }, { once: true }); // Ensure listener is removed after firing
+    });
+  }
+
+  async _processUrlWithAuthCheck() {
+    // Check authentication before handling URL
+    let isAuthenticated = false;
+
+    try {
+      if (window.auth?.isAuthenticated) {
+        isAuthenticated = await Promise.race([
+          window.auth.isAuthenticated({ forceVerify: false }),
+          new Promise(resolve => setTimeout(() => {
+            console.log("[ProjectDashboard] Auth check timed out, assuming not authenticated");
+            resolve(false);
+          }, 3000))
+        ]);
+      }
+    } catch (err) {
+      console.warn("[ProjectDashboard] Auth check failed:", err);
+    }
+
+    if (isAuthenticated) {
+      this.processUrlParams();
+
+      // Initial project load with delay to avoid race conditions
+      setTimeout(() => {
+        this.loadProjects().catch(err => {
+          console.error("[ProjectDashboard] Initial project load failed:", err);
+        });
+      }, 100);
+    } else {
+      // Show login required state instead of processing URL
+      this.showProjectList(); // This will show login required if auth check fails
+    }
+  }
+
+  async loadProjects() {
+    if (window.projectManager) {
+      try {
+        await window.projectManager.loadProjects('all');
+      } catch (err) {
+        console.error("[ProjectDashboard] Error in loadProjects:", err);
+        this.showNotification("Failed to load projects. Please check your connection.", "error");
+        // Dispatch empty projects event to handle UI gracefully
+        document.dispatchEvent(new CustomEvent("projectsLoaded", {
+          detail: {
+            projects: [],
+            count: 0,
+            filter: { type: 'all' },
+            error: true,
+            message: err.message || "Connection error"
+          }
+        }));
+      }
+    } else {
+      console.warn("[ProjectDashboard] projectManager not available for loading projects.");
+    }
+  }
+
+  registerEventListeners() {
+    // Listen for authentication events
+    document.addEventListener("authStateChanged", this._handleAuthStateChange.bind(this));
+    document.addEventListener("authStateConfirmed", this._handleAuthStateChange.bind(this));
+
+    // Listen for project-related events from projectManager
+    document.addEventListener("projectsLoaded", this.handleProjectsLoaded.bind(this));
+    document.addEventListener("projectLoaded", this.handleProjectLoaded.bind(this));
+    document.addEventListener("projectStatsLoaded", this.handleProjectStatsLoaded.bind(this));
+    document.addEventListener("projectFilesLoaded", this.handleFilesLoaded.bind(this));
+    document.addEventListener("projectConversationsLoaded", this.handleConversationsLoaded.bind(this));
+    document.addEventListener("projectArtifactsLoaded", this.handleArtifactsLoaded.bind(this));
+    document.addEventListener("projectNotFound", this.handleProjectNotFound.bind(this));
+
+    // Handle connection changes
+    window.addEventListener('online', () => {
+      console.log('[ProjectDashboard] Connection restored');
+      this.showNotification('Connection restored', 'success');
+      // Refresh data if we have a project loaded
+      if (this.state.currentProject?.id) {
+        this.refreshProjectData(this.state.currentProject.id);
+      } else {
+        this.loadProjects();
+      }
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('[ProjectDashboard] Connection lost');
+      this.showNotification('Connection lost. Some features may be unavailable.', 'warning');
+    });
+
+    // Browser back/forward nav
+    window.addEventListener("popstate", (event) => {
+      // Add state check to prevent loops if pushState was used without actual nav
+      if (event.state !== null) {
+        this.processUrlParams(); // Re-process URL on popstate
+      }
+    });
+  }
+
+  // NEW: Handle auth state changes (modified)
+  _handleAuthStateChange(event) {
+    const isAuthenticated = event.detail?.authenticated || false;
+    const stateChanged = isAuthenticated !== (this.state.lastAuthState ?? !isAuthenticated); // Compare with previous state
+
+    // Prevent duplicate handling if already processing
+    if (this._handlingAuthChange) {
+      console.log("[ProjectDashboard] Auth change handling already in progress, skipping.");
+      return;
+    }
+    this._handlingAuthChange = true;
+    this.state.lastAuthState = isAuthenticated; // Store current state
+
+    console.log(`[ProjectDashboard] Auth state changed. Authenticated: ${isAuthenticated}, State Changed: ${stateChanged}`);
+
+    // Update UI visibility based on auth state
+    const loginRequiredMsg = document.getElementById("loginRequiredMessage");
+    const projectPanel = document.getElementById("projectManagerPanel"); // Assuming this is the main container for projects
+    if (loginRequiredMsg) loginRequiredMsg.classList.toggle('hidden', isAuthenticated);
+    if (projectPanel) projectPanel.classList.toggle('hidden', !isAuthenticated);
+
+    // Make sure project list is visible after login
+    const projectListView = document.getElementById('projectListView');
+    if (projectListView && isAuthenticated) {
+      projectListView.classList.remove('hidden');
+      console.log("[ProjectDashboard] Ensured projectListView is visible after authentication");
+    }
+
+    if (isAuthenticated) {
+      // If the state actually changed to authenticated, refresh necessary data
+      if (stateChanged) {
+        console.log("[ProjectDashboard] Auth state changed to authenticated. Refreshing project list.");
+        // Use promise chain instead of setTimeout
+        this._ensureProjectManager()
+          .then(() => window.projectManager.loadProjects('all'))
+          .then(projects => {
+            console.log(`[ProjectDashboard] Successfully loaded ${projects?.length || 0} projects`);
+            // Force render the projects after loading
+            if (this.components.projectList && typeof this.components.projectList.renderProjects === 'function') {
+              console.log("[ProjectDashboard] Explicitly rendering projects after successful load");
+              this.components.projectList.renderProjects(projects);
+            }
+          })
+          .catch(err => {
+            console.error("[ProjectDashboard] Failed to load projects after auth change:", err);
+          })
+          .finally(() => {
+            this._handlingAuthChange = false;
+            // Process URL params again after auth and project load attempt
+            this.processUrlParams();
+          });
+      } else {
+        console.log("[ProjectDashboard] Auth state confirmed as authenticated. Ensuring view is correct.");
+        // Ensure the correct view is displayed even if auth state didn't strictly change
+        this.processUrlParams();
+        this._handlingAuthChange = false;
+      }
+    } else {
+      // User is not authenticated, ensure project list/details are hidden and login prompt is shown
+      console.log("[ProjectDashboard] Auth state changed to not authenticated. Showing project list view (which handles login prompt).");
+      this.showProjectList(); // This should handle showing the login message via _ensureContainersExist
+      this._handlingAuthChange = false;
+    }
+  }
+
+  // Helper to ensure projectManager is available (simple check)
+  async _ensureProjectManager() {
+    if (window.projectManager) {
+      return Promise.resolve();
+    } else {
+      // Wait a short period for projectManager to potentially become available
+      return new Promise((resolve, reject) => {
+        let checks = 0;
+        const interval = setInterval(() => {
+          if (window.projectManager) {
+            clearInterval(interval);
+            resolve();
+          } else if (++checks > 20) { // Wait up to 2 seconds
+            clearInterval(interval);
+            reject(new Error("projectManager not available after wait"));
+          }
+        }, 100);
+      });
+    }
+  }
+
+  /**
+   * Refresh all data for the currently loaded project
+   * @param {string} projectId - The project ID to refresh
+   */
+  async refreshProjectData(projectId) {
+    if (!projectId || !this.projectManager) return;
+
+    try {
+      await Promise.allSettled([
+        this.projectManager.loadProjectDetails(projectId),
+        this.projectManager.loadProjectStats(projectId),
+        this.projectManager.loadProjectFiles(projectId),
+        this.projectManager.loadProjectConversations(projectId)
+      ]);
+    } catch (err) {
+      console.error('[ProjectDashboard] Error refreshing project data:', err);
+    }
+  }
+}
+
+// Define initialize function
+function initProjectDashboard() {
+  console.log('[ProjectManager] initProjectDashboard called');
+  if (!window.projectDashboard) {
+    console.log('[ProjectManager] Creating new ProjectDashboard instance');
+    try {
+      window.projectDashboard = new ProjectDashboard();
+      return window.projectDashboard.init();
+    } catch (err) {
+      console.error('[ProjectManager] Error creating ProjectDashboard instance:', err);
+      return Promise.reject(err);
+    }
+  } else {
+    console.log('[ProjectManager] Using existing ProjectDashboard instance');
+    return Promise.resolve(window.projectDashboard);
+  }
+}
+
+// ES Module Export - Export to global scope
+// This is the KEY PART that was missing in the original code
+window.ProjectDashboard = ProjectDashboard;
+window.initProjectDashboard = initProjectDashboard;
+
+// We also need to ensure the component classes are exported
+// Since this file is loaded as a module, we can't see other modules directly
+
+// Explicitly check what's available in other modules
+// The new _ensureComponentsExported method will look for these components
+
+// In a module, export means we're exposing it to be imported by other modules,
+// but the window.XXX assignment makes it available globally
+
+// Module exports for potential future proper module usage
+export { ProjectDashboard, initProjectDashboard };
