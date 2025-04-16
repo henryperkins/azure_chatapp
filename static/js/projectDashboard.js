@@ -686,67 +686,179 @@ class ProjectDashboard {
     return false;
   }
 
-  _ensureContainersExist() {
-    // Check authentication state first
-    const isAuthenticated = window.auth?.isAuthenticated ? true : false;
+  async _ensureContainersExist() {
+    // Get authentication state (properly await the Promise if it's async)
+    let isAuthenticated = false;
+    try {
+      if (window.auth?.isAuthenticated) {
+        if (typeof window.auth.isAuthenticated === 'function') {
+          isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        } else {
+          isAuthenticated = !!window.auth.isAuthenticated;
+        }
+      }
+    } catch (err) {
+      console.warn('[ProjectDashboard] Error checking authentication:', err);
+    }
+    
+    console.log(`[ProjectDashboard] _ensureContainersExist (authenticated: ${isAuthenticated})`);
 
+    // Ensure projectManagerPanel exists and is visible when authenticated
+    const projectManagerPanel = document.getElementById("projectManagerPanel");
+    if (projectManagerPanel) {
+      projectManagerPanel.classList.toggle('hidden', !isAuthenticated);
+    }
+
+    // Ensure projectListView exists
     let projectListView = document.getElementById("projectListView");
     if (!projectListView) {
+      console.log('[ProjectDashboard] Creating missing projectListView element');
       projectListView = document.createElement('main');
       projectListView.id = "projectListView";
       projectListView.className = "flex-1 overflow-y-auto p-4 lg:p-6";
+      
+      // Try to find the right container to append to
       const drawerContent = document.querySelector('.drawer-content');
-      if (drawerContent) {
+      const projectManagerPanel = document.getElementById('projectManagerPanel');
+      
+      if (projectManagerPanel) {
+        projectManagerPanel.appendChild(projectListView);
+      } else if (drawerContent) {
         drawerContent.appendChild(projectListView);
       } else {
         document.body.appendChild(projectListView);
       }
     }
 
-    // Set visibility based on auth state
+    // Set proper visibility based on auth state
     projectListView.classList.toggle('hidden', !isAuthenticated);
+    if (isAuthenticated) {
+      projectListView.style.display = 'flex';
+      projectListView.style.flexDirection = 'column';
+    }
 
+    // Ensure projectList grid exists
     let projectListGrid = document.getElementById("projectList");
     if (!projectListGrid) {
+      console.log('[ProjectDashboard] Creating missing projectList grid element');
       projectListGrid = document.createElement('div');
       projectListGrid.id = "projectList";
       projectListGrid.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-      projectListView.appendChild(projectListGrid);
+      
+      if (projectListView) {
+        // Find existing filter tabs to insert after, or prepend
+        const filterTabs = projectListView.querySelector('#projectFilterTabs');
+        if (filterTabs) {
+          filterTabs.after(projectListGrid);
+        } else {
+          projectListView.appendChild(projectListGrid);
+        }
+      }
     }
 
+    // Ensure noProjectsMessage exists
     let noProjectsMessage = document.getElementById("noProjectsMessage");
     if (!noProjectsMessage) {
+      console.log('[ProjectDashboard] Creating missing noProjectsMessage element');
       noProjectsMessage = document.createElement('div');
       noProjectsMessage.id = "noProjectsMessage";
       noProjectsMessage.className = "text-center py-10 text-base-content/70 hidden";
-      projectListView.appendChild(noProjectsMessage);
+      noProjectsMessage.textContent = "No projects found. Create your first project using the \"New Project\" button.";
+      if (projectListView) {
+        projectListView.appendChild(noProjectsMessage);
+      }
     }
 
-    // Add login message if not authenticated
+    // Ensure loginRequiredMessage exists and is properly visible
     let loginRequiredMessage = document.getElementById("loginRequiredMessage");
     if (!loginRequiredMessage) {
+      console.log('[ProjectDashboard] Creating missing loginRequiredMessage element');
       loginRequiredMessage = document.createElement('div');
       loginRequiredMessage.id = "loginRequiredMessage";
       loginRequiredMessage.className = "text-center py-10 text-base-content/70";
       loginRequiredMessage.innerHTML = "Please log in to view your projects";
-      projectListView.appendChild(loginRequiredMessage);
+      
+      // Try to find main content container to append to
+      const mainContent = document.querySelector('main') || document.body;
+      mainContent.appendChild(loginRequiredMessage);
     }
-    loginRequiredMessage.classList.toggle('hidden', isAuthenticated);
+    
+    // Set visibility for login message
+    if (loginRequiredMessage) {
+      loginRequiredMessage.classList.toggle('hidden', isAuthenticated);
+    }
 
-    // Ensure project details view is hidden by default
+    // Ensure projectDetailsView exists and is properly hidden initially
     const projectDetailsView = document.getElementById("projectDetailsView");
     if (projectDetailsView) {
       projectDetailsView.classList.add("hidden");
     } else {
+      console.log('[ProjectDashboard] Creating missing projectDetailsView element');
       // Create details view if missing (basic structure)
       const detailsContainer = document.createElement('section');
       detailsContainer.id = "projectDetailsView";
       detailsContainer.className = "flex-1 flex flex-col overflow-hidden hidden";
-      const drawerContent = document.querySelector('.drawer-content');
-      if (drawerContent) {
-        drawerContent.appendChild(detailsContainer);
+      
+      // Find appropriate container to append to
+      const projectManagerPanel = document.getElementById('projectManagerPanel');
+      if (projectManagerPanel) {
+        projectManagerPanel.appendChild(detailsContainer);
       } else {
-        document.body.appendChild(detailsContainer);
+        const drawerContent = document.querySelector('.drawer-content');
+        if (drawerContent) {
+          drawerContent.appendChild(detailsContainer);
+        } else {
+          document.body.appendChild(detailsContainer);
+        }
+      }
+    }
+    
+    // Force load HTML templates if they're missing
+    await this._ensureTemplatesLoaded();
+  }
+  
+  /**
+   * Ensure HTML templates are loaded for project list and details views
+   */
+  async _ensureTemplatesLoaded() {
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+    
+    if (projectListView && projectListView.children.length === 0) {
+      console.log('[ProjectDashboard] Attempting to load project_list.html template');
+      try {
+        const response = await fetch('/static/html/project_list.html');
+        if (response.ok) {
+          const html = await response.text();
+          projectListView.innerHTML = html;
+          console.log('[ProjectDashboard] Successfully loaded project_list.html template');
+          
+          // Also mark as loaded in the template tracker if it exists
+          if (window.templateLoadTracker) {
+            window.templateLoadTracker.markLoaded('project_list.html');
+          }
+        }
+      } catch (err) {
+        console.error('[ProjectDashboard] Failed to load project_list.html:', err);
+      }
+    }
+    
+    if (projectDetailsView && projectDetailsView.children.length === 0) {
+      console.log('[ProjectDashboard] Attempting to load project_details.html template');
+      try {
+        const response = await fetch('/static/html/project_details.html');
+        if (response.ok) {
+          const html = await response.text();
+          projectDetailsView.innerHTML = html;
+          console.log('[ProjectDashboard] Successfully loaded project_details.html template');
+          
+          // Also mark as loaded in the template tracker if it exists
+          if (window.templateLoadTracker) {
+            window.templateLoadTracker.markLoaded('project_details.html');
+          }
+        }
+      } catch (err) {
+        console.error('[ProjectDashboard] Failed to load project_details.html:', err);
       }
     }
   }

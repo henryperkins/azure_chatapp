@@ -474,8 +474,33 @@ function updateAuthUI(authenticated, username = null) {
   }
   const loginMsg = document.getElementById('loginRequiredMessage');
   if (loginMsg) loginMsg.classList.toggle('hidden', authenticated);
+  
+  // Project management visibility
   const projectPanel = document.getElementById('projectManagerPanel');
-  if (projectPanel) projectPanel.classList.toggle('hidden', !authenticated);
+  if (projectPanel) {
+    projectPanel.classList.toggle('hidden', !authenticated);
+    console.log(`[Auth] projectManagerPanel visibility set to ${!authenticated ? 'hidden' : 'visible'}`);
+  }
+  
+  // Ensure project list view is visible too when authenticated
+  const projectListView = document.getElementById('projectListView');
+  if (projectListView && authenticated) {
+    projectListView.classList.remove('hidden');
+    console.log('[Auth] Ensuring projectListView is visible after auth update');
+  }
+  
+  // Show no projects message if authenticated but no projects are shown
+  const projectList = document.getElementById('projectList');
+  const noProjectsMessage = document.getElementById('noProjectsMessage');
+  if (authenticated && projectList && noProjectsMessage) {
+    const hasProjects = projectList.children.length > 0 && 
+                        !projectList.querySelector('.loading-spinner');
+    
+    if (!hasProjects) {
+      noProjectsMessage.classList.remove('hidden');
+      console.log('[Auth] No projects found, showing noProjectsMessage');
+    }
+  }
 }
 
 /* ----------------------------------

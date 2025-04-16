@@ -351,12 +351,61 @@ async function loadInitialProjects(retryOnFailure = true) {
     const isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
       log("[App] Not authenticated, showing login prompt");
-      toggleVisibility(document.getElementById('loginRequiredMessage'), true);
+      const loginMsg = document.getElementById('loginRequiredMessage');
+      if (loginMsg) {
+        loginMsg.classList.remove('hidden');
+        log("[App] Made loginRequiredMessage visible");
+      }
+      
+      // Ensure project container is hidden when not authenticated
+      const projectPanel = document.getElementById('projectManagerPanel');
+      if (projectPanel) {
+        projectPanel.classList.add('hidden');
+        log("[App] Hidden projectManagerPanel for unauthenticated state");
+      }
       return;
     }
+    
+    // Hide login message, show project container when authenticated
+    const loginMsg = document.getElementById('loginRequiredMessage');
+    if (loginMsg) loginMsg.classList.add('hidden');
+    
+    const projectPanel = document.getElementById('projectManagerPanel');
+    if (projectPanel) {
+      projectPanel.classList.remove('hidden');
+      log("[App] Showed projectManagerPanel for authenticated state");
+    }
+    
+    // Always ensure the project list view is visible
+    const projectListView = document.getElementById('projectListView');
+    if (projectListView) {
+      projectListView.classList.remove('hidden');
+      projectListView.style.display = 'flex';
+      log("[App] Ensured projectListView is visible");
+    }
+    
+    // Load projects through projectManager
     if (window.projectManager?.loadProjects) {
+      log("[App] Loading projects through projectManager...");
       const projects = await window.projectManager.loadProjects('all');
       log(`[App] Loaded ${projects.length} projects`);
+      
+      // Force render projects directly through component if it exists
+      if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
+        window.projectListComponent.renderProjects(projects);
+        log("[App] Directly rendered projects through projectListComponent");
+      }
+      
+      // Handle empty project list explicitly
+      if (projects.length === 0) {
+        const noProjectsMsg = document.getElementById('noProjectsMessage');
+        if (noProjectsMsg) {
+          noProjectsMsg.classList.remove('hidden');
+          log("[App] Showed noProjectsMessage for empty project list");
+        }
+      }
+    } else {
+      console.warn("[App] projectManager not available for loading projects");
     }
   } catch (err) {
     console.error("[App] Error loading initial projects:", err);
