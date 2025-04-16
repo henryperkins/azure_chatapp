@@ -312,11 +312,15 @@ class ProjectDashboard {
   }
 
   handleProjectsLoaded(event) {
-    const { data, error, message } = event.detail || {}; // Destructure detail
-    let projects = data?.projects || (Array.isArray(event.detail) ? event.detail : []); // Handle different event structures
-    let hasError = !!error;
-    let originalCount = data?.count || projects.length;
-    let filter = data?.filter?.type || "all";
+    // Skip if this is an event from another source
+    if (event.detail?.source && event.detail.source !== "projectManager") {
+      console.log("[ProjectDashboard] Ignoring projectsLoaded event from other source:", event.detail.source);
+      return;
+    }
+
+    const { projects = [], count = 0, filter = { type: "all" }, error = false, message = "" } = event.detail || {};
+    const hasError = !!error;
+    const originalCount = count;
 
     // Clear loading state explicitly if it wasn't cleared by loadProjects error handling
     const listContainer = document.getElementById("projectList");
@@ -1150,13 +1154,7 @@ class ProjectDashboard {
 
     if (isAuthenticated) {
       this.processUrlParams();
-
-      // Initial project load with delay to avoid race conditions
-      setTimeout(() => {
-        this.loadProjects().catch(err => {
-          console.error("[ProjectDashboard] Initial project load failed:", err);
-        });
-      }, 100);
+      // Project loading is now handled by app.js's refreshAppData()
     } else {
       // Show login required state instead of processing URL
       this.showProjectList(); // This will show login required if auth check fails
@@ -1164,12 +1162,30 @@ class ProjectDashboard {
   }
 
   async loadProjects() {
+    // Check if projects are already being loaded by app.js
+    if (window.__projectLoadingInProgress) {
+      console.log("[ProjectDashboard] Project loading already in progress from app.js, skipping duplicate load");
+      return;
+    }
+
+    // Only load projects if we have a manager and no loading is in progress
     if (window.projectManager) {
       try {
-        await window.projectManager.loadProjects('all');
+        // Set global flag to prevent duplicate loading
+        window.__projectLoadingInProgress = true;
+
+        const projects = await window.projectManager.loadProjects('all');
+
+        // Clear flag when done
+        window.__projectLoadingInProgress = false;
+        return projects;
       } catch (err) {
         console.error("[ProjectDashboard] Error in loadProjects:", err);
         this.showNotification("Failed to load projects. Please check your connection.", "error");
+
+        // Clear flag on error too
+        window.__projectLoadingInProgress = false;
+
         // Dispatch empty projects event to handle UI gracefully
         document.dispatchEvent(new CustomEvent("projectsLoaded", {
           detail: {
@@ -1177,12 +1193,15 @@ class ProjectDashboard {
             count: 0,
             filter: { type: 'all' },
             error: true,
-            message: err.message || "Connection error"
+            message: err.message || "Connection error",
+            source: "projectDashboard"
           }
         }));
+        return [];
       }
     } else {
       console.warn("[ProjectDashboard] projectManager not available for loading projects.");
+      return [];
     }
   }
 
