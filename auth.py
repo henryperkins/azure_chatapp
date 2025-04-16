@@ -537,18 +537,18 @@ async def refresh_token(
         expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
         time_remaining = expires_at - datetime.now(timezone.utc)
 
-            if time_remaining < timedelta(hours=6):
-                # If we haven't updated token_version recently, do so
-                current_ts = int(datetime.now(timezone.utc).timestamp())
-                old_version = locked_user.token_version
-                if not old_version or (current_ts - old_version) > 300:
-                    locked_user.token_version = current_ts
-                    logger.info(
-                        f"User '{locked_user.username}' token_version updated from "
-                        f"{old_version} to {locked_user.token_version}"
-                    )
+        if time_remaining < timedelta(hours=6):
+            # If we haven't updated token_version recently, do so
+            current_ts = int(datetime.now(timezone.utc).timestamp())
+            old_version = locked_user.token_version
+            if not old_version or (current_ts - old_version) > 300:
+                locked_user.token_version = current_ts
+                logger.info(
+                    f"User '{locked_user.username}' token_version updated from "
+                    f"{old_version} to {locked_user.token_version}"
+                )
 
-        # Issue a new refresh token
+            # Issue a new refresh token
                 new_refresh_payload = build_jwt_payload(
                     locked_user,
                     token_type="refresh",
