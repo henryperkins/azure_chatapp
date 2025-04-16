@@ -67,8 +67,10 @@
 
       console.log('Initializing chat system...');
 
-      // Check for project context
+      // Check for project context with explicit logging
       const projectId = window.ChatUtils.getProjectId();
+      const isProjectContext = window.location.pathname.includes('/projects') || Boolean(projectId);
+      console.log(`[ChatManager] Init with projectId: ${projectId}, isProjectContext: ${isProjectContext}`);
       if (!projectId) {
         console.warn('[ChatManager] No project selected, will initialize without creating conversation');
       } else {
@@ -81,9 +83,6 @@
 
         // 2) Check or create the main chat interface if none exists
         if (!this.chatInterface) {
-          // Determine if in project context based on location or project ID
-          const isProjectContext = window.location.pathname.includes('/projects') || projectId;
-
           // Initialize chat interface with dynamic selectors
           this.chatInterface = new window.ChatInterface({});
           await this.chatInterface.initialize();
@@ -300,7 +299,16 @@
   window.sendMessage = ChatManager.sendMessage.bind(ChatManager);
 
   // ---------------------------
-  // 4) EVENT LISTENERS
+  // 4) Dispatch chatManagerReady Event
+  // ---------------------------
+  // Signal that ChatManager is defined and available for use
+  console.log('[ChatManager] Dispatching chatManagerReady event');
+  document.dispatchEvent(new CustomEvent('chatManagerReady', {
+    detail: { instance: ChatManager }
+  }));
+
+  // ---------------------------
+  // 5) EVENT LISTENERS
   // ---------------------------
   // Listen for model config changes
   document.addEventListener('modelConfigChanged', (e) => {

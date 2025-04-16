@@ -5,10 +5,9 @@ FastAPI entrypoint with consolidated routes and security configuration.
 """
 
 import logging
-import os
 from typing import Callable, Awaitable
 from fastapi import FastAPI, Request, HTTPException, Response
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware

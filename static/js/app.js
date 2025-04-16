@@ -448,71 +448,179 @@ async function navigateToConversation(conversationId) {
   window.history.pushState({}, '', `/?chatId=${conversationId}`);
 
   try {
-    // Ensure ChatManager is initialized
-    if (!window.ChatManager) {
-      console.error('ChatManager not available - initializing chat system');
-      await window.ChatManager.initializeChat();
+    // Check if a project is selected before proceeding
+    const projectId = window.ChatUtils.getProjectId();
+    if (!projectId) {
+      console.warn("No project selected, cannot navigate to conversation without project context.");
+      window.ChatUtils.showNotification("Please select a project first", "error");
+      // Redirect to project selection
+      window.history.pushState({}, '', '/?view=projects');
+      toggleVisibility(getEl('CHAT_UI'), false);
+      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+      return false;
     }
 
-    // Delegate UI visibility to ChatInterface after initialization
-    if (window.chatInterface && window.chatInterface.initialized) {
-      await window.chatInterface.ui.ensureChatContainerVisible(window.ChatUtils.getProjectId() !== null);
+    // Ensure ChatManager is available
+    await ensureChatManagerAvailable().catch(err => {
+      console.error('Failed to ensure ChatManager availability:', err);
+      throw err;
+    });
+
+    if (window.ChatManager && window.ChatManager.loadConversation) {
+      // Delegate UI visibility to ChatInterface after initialization
+      if (window.chatInterface && window.chatInterface.initialized) {
+        await window.chatInterface.ui.ensureChatContainerVisible(window.ChatUtils.getProjectId() !== null);
+      } else {
+        // Fallback if not initialized
+        toggleVisibility(getEl('CHAT_UI'), true);
+        toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), false);
+      }
+      return await window.ChatManager.loadConversation(conversationId);
     } else {
-      // Fallback if not initialized
-      toggleVisibility(getEl('CHAT_UI'), true);
-      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), false);
+      throw new Error('ChatManager not properly initialized');
     }
-
-    return await window.ChatManager.loadConversation(conversationId);
   } catch (error) {
     console.error('Error navigating to conversation:', error);
     window.ChatUtils.handleError('Loading conversation', error);
-    // Fallback to hiding UI if load fails
     toggleVisibility(getEl('CHAT_UI'), false);
     toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
     throw error;
   }
 }
 
-async function handleNavigationChange() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const chatId = urlParams.get('chatId');
-  const view = urlParams.get('view');
-  const projectId = urlParams.get('project');
-  if (view === 'projects' || !projectId) {
-    log('[handleNavigationChange] View=projects detected or no project ID, showing projects.');
-    showProjectListView();
-    setTimeout(() => {
-      if (window.projectManager?.loadProjects) {
-        window.projectManager.loadProjects('all').catch(err => {
-          console.error('[handleNavigationChange] Project loading error:', err);
-          window.ChatUtils.handleError('Loading projects on navigation', err);
-        });
+// Helper function to ensure ChatManager is available - Updated for robustness
+async function ensureChatManagerAvailable() {
+  if (!window.ChatManager) {
+    console.log('Waiting for ChatManager to become available...');
+
+    const chatCoreScript = document.querySelector('script[src*="chat-core.js"]');
+    if (!chatCoreScript) {
+      console.log('Loading chat-core.js dynamically');
+      await loadScript('/static/js/chat-core.js').catch(err => {
+        console.error('Failed to load chat-core.js:', err);
+        window.ChatUtils.handleError('Loading chat-core.js', err);
+      });
+    }
+
+    // Wait for ChatManager to be defined with a timeout and event listener
+    return new Promise((resolve, reject) => {
+      if (window.ChatManager) {
+        resolve();
+        return;
       }
-    }, 100);
-    return;
+
+      document.addEventListener('chatManagerReady', () => {
+        console.log('ChatManager is now available via event');
+        resolve();
+      }, { once: true });
+
+      const checkInterval = setInterval(() => {
+        if (window.ChatManager) {
+          clearInterval(checkInterval);
+          clearTimeout(timeout);
+          resolve();
+        }
+      }, 100);
+
+      const timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        console.error('Timeout waiting for ChatManager');
+        reject(new Error('ChatManager initialization timed out'));
+      }, 10000); // Increased timeout for more patience
+    });
   }
-  if (projectId) {
-    log(`[handleNavigationChange] Project ID=${projectId}, loading project details.`);
-    debouncedLoadProject(projectId);
-    return;
-  }
-  if (!await ensureAuthenticated()) {
-    log('[handleNavigationChange] Not authenticated, show login message.');
-    toggleVisibility(document.getElementById("loginRequiredMessage"), true);
-    // Ensure chat UI is hidden if not authenticated
-    toggleVisibility(getEl('CHAT_UI'), false);
-    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
-    return;
-  }
-  toggleVisibility(document.getElementById("loginRequiredMessage"), false);
-  if (chatId) {
-    log(`[handleNavigationChange] ChatId=${chatId}, loading conversation.`);
-    await navigateToConversation(chatId);
-  } else {
-    log('[handleNavigationChange] No chatId, showing empty state.');
-    toggleVisibility(getEl('CHAT_UI'), false);
-    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+  return Promise.resolve();
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function handleNavigationChange() {
+  try {
+    if (window.__appInitializing) {
+      console.log("App still initializing, waiting before handling navigation...");
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!window.__appInitializing) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          console.warn("Timeout waiting for app initialization during navigation");
+          resolve();
+        }, 10000);
+      });
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatId = urlParams.get('chatId');
+    const view = urlParams.get('view');
+    const projectId = urlParams.get('project');
+    if (view === 'projects' || !projectId) {
+      log('[handleNavigationChange] View=projects detected or no project ID, showing projects.');
+      showProjectListView();
+      setTimeout(() => {
+        if (window.projectManager?.loadProjects) {
+          window.projectManager.loadProjects('all').catch(err => {
+            console.error('[handleNavigationChange] Project loading error:', err);
+            window.ChatUtils.handleError('Loading projects on navigation', err);
+          });
+        }
+      }, 100);
+      return;
+    }
+    if (projectId) {
+      log(`[handleNavigationChange] Project ID=${projectId}, loading project details.`);
+      debouncedLoadProject(projectId);
+      return;
+    }
+    if (!await ensureAuthenticated()) {
+      log('[handleNavigationChange] Not authenticated, show login message.');
+      toggleVisibility(document.getElementById("loginRequiredMessage"), true);
+      // Ensure chat UI is hidden if not authenticated
+      toggleVisibility(getEl('CHAT_UI'), false);
+      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+      return;
+    }
+    toggleVisibility(document.getElementById("loginRequiredMessage"), false);
+    if (chatId) {
+      log(`[handleNavigationChange] ChatId=${chatId}, loading conversation.`);
+      await ensureChatManagerAvailable().catch(err => {
+        console.warn('ChatManager not ready, deferring conversation loading:', err);
+        window.pendingChatId = chatId;
+      });
+
+      if (window.ChatManager?.loadConversation) {
+        await navigateToConversation(chatId);
+      } else {
+        console.warn('ChatManager not ready, deferring conversation loading');
+        window.pendingChatId = chatId;
+        // Set up a listener to load pending chat ID when ChatManager is ready
+        document.addEventListener('chatManagerReady', async () => {
+          if (window.pendingChatId) {
+            console.log(`ChatManager ready, loading pending chat ID: ${window.pendingChatId}`);
+            await navigateToConversation(window.pendingChatId);
+            window.pendingChatId = null;
+          }
+        }, { once: true });
+      }
+    } else {
+      log('[handleNavigationChange] No chatId, showing empty state.');
+      toggleVisibility(getEl('CHAT_UI'), false);
+      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+    }
+  } catch (error) {
+    console.error('Navigation error:', error);
+    window.ChatUtils.handleError('Navigation change', error);
   }
 }
 

@@ -81,65 +81,98 @@ window.ConversationService = class ConversationService {
     this.onLoadingStart();
 
     try {
+      // Log the chatId being attempted
+      console.log(`[ConversationService] Loading conversation with ID: ${chatId}`);
       // First determine if the conversation belongs to a project
-      let convUrl = `/api/chat/conversations/${chatId}`;
-      let msgUrl = `/api/chat/conversations/${chatId}/messages`;
+      let convUrl = `/api/conversations/${chatId}`; // Default to standalone endpoint
+      let msgUrl = `/api/conversations/${chatId}/messages`;
       let conversation, messages;
       let isProjectConversation = false;
-      let projectId = null;
+      let projectId = window.ChatUtils.getProjectId();
+
+      // Log project context for debugging
+      console.log(`[ConversationService] Attempting load with projectId: ${projectId || 'none'}`);
+
+      // Use project-specific endpoint if projectId is available and valid
+      if (projectId && this._isValidUUID(projectId)) {
+        convUrl = `/api/projects/${projectId}/conversations/${chatId}`;
+        msgUrl = `/api/projects/${projectId}/conversations/${chatId}/messages`;
+        isProjectConversation = true;
+        console.log(`[ConversationService] Using project-specific endpoint: ${convUrl}`);
+      } else if (projectId) {
+        console.warn(`[ConversationService] Invalid project ID detected: ${projectId}, falling back to standalone endpoint`);
+        projectId = null; // Reset to avoid using invalid ID
+      } else {
+        console.warn("[ConversationService] No project ID found, attempting standalone conversation load");
+      }
 
       try {
-        // Try to load the conversation from the standalone endpoint
+        console.log(`[ConversationService] Fetching conversation from ${convUrl}`);
         conversation = await window.apiRequest(convUrl, "GET");
+        console.log(`[ConversationService] Successfully loaded conversation from ${convUrl}`);
       } catch (error) {
-        if (error.status === 404) {
-          // If 404, the conversation might belong to a project
-          projectId = window.ChatUtils.getProjectId();
-          if (projectId) {
-            console.log(`Conversation ${chatId} not found in standalone conversations. Trying project ${projectId}.`);
-            convUrl = `/api/chat/projects/${projectId}/conversations/${chatId}`;
-            msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
-            isProjectConversation = true;
-            conversation = await window.apiRequest(convUrl, "GET");
-          } else {
-            throw error;
-          }
+        console.error(`[ConversationService] Failed to load conversation from ${convUrl}:`, error);
+        if (error.status === 404 && isProjectConversation) {
+          // Fallback to standalone endpoint if project-specific fails
+          console.log(`[ConversationService] Project-based load failed for ${projectId}, trying standalone endpoint.`);
+          convUrl = `/api/conversations/${chatId}`;
+          isProjectConversation = false;
+          conversation = await window.apiRequest(convUrl, "GET").catch(standaloneError => {
+            console.error(`[ConversationService] Standalone endpoint also failed from ${convUrl}:`, standaloneError);
+            throw standaloneError;
+          });
+          console.log(`[ConversationService] Successfully loaded conversation from standalone endpoint`);
+        } else if (error.status === 401) {
+          window.ChatUtils.showNotification("Session expired, please log in again", "error");
+          throw new Error("Authentication failed (401)");
+        } else if (error.status === 403) {
+          window.ChatUtils.showNotification("Access denied to this conversation", "error");
+          throw new Error("Access denied (403)");
+        } else if (error.status === 404) {
+          window.ChatUtils.showNotification("Conversation not found", "error");
+          throw new Error("Conversation not found (404)");
         } else {
-          throw error;
+          throw new Error(`Failed to load conversation: ${error.message || 'Unknown error'} (Status: ${error.status || 'N/A'})`);
         }
       }
 
       // If we got here, we have a valid conversation
       if (isProjectConversation) {
-        msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
-      } else if (conversation.project_id) {
+        msgUrl = `/api/projects/${projectId}/conversations/${chatId}/messages`;
+      } else if (conversation.project_id && this._isValidUUID(conversation.project_id)) {
         projectId = conversation.project_id;
-        msgUrl = `/api/chat/projects/${projectId}/conversations/${chatId}/messages`;
+        msgUrl = `/api/projects/${projectId}/conversations/${chatId}/messages`;
         isProjectConversation = true;
+        console.log(`[ConversationService] Updated projectId from conversation data: ${projectId}`);
       }
 
       // Now get messages using the correct endpoint
       try {
+        console.log(`[ConversationService] Fetching messages from ${msgUrl}`);
         messages = await window.apiRequest(msgUrl, "GET");
+        console.log(`[ConversationService] Successfully loaded messages from ${msgUrl}`);
       } catch (error) {
+        console.error(`[ConversationService] Message retrieval failed from ${msgUrl}:`, error);
         if (error.status === 404) {
           let fallbackProjectId = projectId || conversation.project_id || window.ChatUtils.getProjectId();
-          if (fallbackProjectId) {
-            console.log(`Message retrieval failed with endpoint ${msgUrl}. Trying project endpoint with ID ${fallbackProjectId}.`);
-            msgUrl = `/api/chat/projects/${fallbackProjectId}/conversations/${chatId}/messages`;
+          if (fallbackProjectId && this._isValidUUID(fallbackProjectId)) {
+            console.log(`[ConversationService] Message retrieval failed with endpoint ${msgUrl}. Trying project endpoint with ID ${fallbackProjectId}.`);
+            msgUrl = `/api/projects/${fallbackProjectId}/conversations/${chatId}/messages`;
             try {
-              console.log(`Attempting fallback to: ${msgUrl}`);
+              console.log(`[ConversationService] Attempting fallback to: ${msgUrl}`);
               messages = await window.apiRequest(msgUrl, "GET");
-              console.log(`Fallback to project endpoint for messages succeeded.`);
+              console.log(`[ConversationService] Fallback to project endpoint for messages succeeded.`);
             } catch (fallbackError) {
-              console.error(`Fallback also failed: ${fallbackError.message}`);
-              throw error;
+              console.error(`[ConversationService] Fallback also failed: ${fallbackError.message}. Using empty messages.`);
+              messages = { data: { messages: [] } };
+              window.ChatUtils.showNotification("Failed to load messages, displaying conversation without content", "warning");
             }
           } else {
-            throw error;
+            console.error("[ConversationService] No valid fallback project ID available. Using empty messages.");
+            messages = { data: { messages: [] } };
           }
         } else {
-          throw error;
+          throw new Error(`Failed to load messages: ${error.message || 'Unknown error'} (Status: ${error.status || 'N/A'})`);
         }
       }
 
@@ -155,15 +188,21 @@ window.ConversationService = class ConversationService {
     } catch (error) {
       this.onLoadingEnd();
       let errorMessage = 'Failed to load conversation';
-      if (error.status === 404) {
-        errorMessage = 'Conversation not found - it may have been deleted or moved';
-      } else if (error.status === 401) {
+      if (error.message.includes('Authentication failed')) {
         errorMessage = 'Session expired - please log in again';
+      } else if (error.message.includes('not found')) {
+        errorMessage = 'Conversation not found - it may have been deleted or moved';
+      } else if (error.message.includes('Access denied')) {
+        errorMessage = 'You do not have permission to access this conversation';
+      } else {
+        errorMessage = `Failed to load conversation: ${error.message}`;
       }
+      console.error(`[ConversationService] ${errorMessage}`, error);
       window.ChatUtils.handleError('Loading conversation', new Error(errorMessage));
       return false;
     }
   }
+
 
   /**
    * Create a new conversation with a direct token (for specific auth scenarios).
@@ -198,8 +237,7 @@ window.ConversationService = class ConversationService {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const url = projectId
-          ? `/api/projects/${projectId}/conversations`
-          : `/api/chat/conversations`;
+          `/api/projects/${projectId}/conversations`;
 
         // Custom fetch implementation that uses the provided token directly
         const response = await fetch(url, {

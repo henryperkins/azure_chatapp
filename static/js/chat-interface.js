@@ -300,6 +300,7 @@ window.ChatInterface.prototype._handleInitialConversation = async function () {
         projectsBtn.classList.remove('animate-pulse', 'bg-blue-50', 'dark:bg-blue-900/20');
       }, 5000);
     }
+    window.ChatUtils.showNotification("Please select a project to start a conversation", "warning");
     return Promise.resolve(false);
   }
 
@@ -342,6 +343,7 @@ window.ChatInterface.prototype._handleInitialConversation = async function () {
     return Promise.reject(error);
   }
 };
+
 
 /**
  * Load a conversation by ID.

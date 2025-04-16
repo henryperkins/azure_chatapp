@@ -7,22 +7,20 @@ and metadata, without knowledge base implementation details.
 
 import logging
 from uuid import UUID
-from typing import Optional, Dict, cast
-import os
-import shutil
+from typing import Optional, Dict
 from enum import Enum
 
 from fastapi import (
-    APIRouter, 
-    Depends, 
-    HTTPException, 
-    status, 
-    Request, 
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Request,
     Query
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from db import get_async_session
 from models.user import User
@@ -34,7 +32,6 @@ from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import validate_project_access
 import config
-from services import knowledgebase_service
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
@@ -91,9 +88,9 @@ async def create_project(
             user_id=current_user.id,
         )
         await save_model(db, project)
-        
+
         logger.info(f"Created project {project.id} for user {current_user.id}")
-        
+
         return await create_standard_response(
             serialize_project(project),
             "Project created successfully"
@@ -101,7 +98,7 @@ async def create_project(
     except Exception as e:
         logger.error(f"Project creation failed: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Project creation failed: {str(e)}"
         ) from e
 
@@ -134,7 +131,7 @@ async def list_projects(
             projects = [p for p in projects if not p.archived]
 
         serialized = [serialize_project(p) for p in projects]
-        
+
         return {
             "projects": serialized,
             "count": len(serialized),
@@ -236,7 +233,7 @@ async def toggle_archive_project(
 ):
     """Toggle archive status"""
     project = await validate_project_access(project_id, current_user, db)
-    
+
     project.archived = not project.archived
     if project.archived and project.pinned:
         project.pinned = False
@@ -255,7 +252,7 @@ async def toggle_pin_project(
 ):
     """Toggle pin status"""
     project = await validate_project_access(project_id, current_user, db)
-    
+
     if project.archived and not project.pinned:
         raise HTTPException(400, "Cannot pin archived projects")
 
@@ -286,7 +283,7 @@ async def get_project_stats(
         Conversation.project_id == project_id,
         Conversation.is_deleted.is_(False),
     )
-    
+
     # Get file statistics
     files_result = await db.execute(
         select(
@@ -295,12 +292,12 @@ async def get_project_stats(
         ).where(ProjectFile.project_id == project_id)
     )
     file_count, total_size = files_result.first() or (0, 0)
-    
+
     # Get artifact count
     artifacts = await get_all_by_condition(
         db, Artifact, Artifact.project_id == project_id
     )
-    
+
     # KB information (simplified)
     kb_info = None
     if project.knowledge_base_id:
