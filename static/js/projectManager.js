@@ -46,6 +46,9 @@
      DATA OPERATIONS - PROJECTS
      =========================== */
 
+  // Track if project loading is already in progress to prevent recursive calls
+  let projectLoadingInProgress = false;
+
   /**
    * Load a list of projects from the server (optionally filtered).
    * Dispatches "projectsLoaded" event with { projects, count, filter, error? }.
@@ -53,6 +56,14 @@
    * @returns {Promise<Array>} - Array of projects
    */
   async function loadProjects(filter = null) {
+    // Guard against recursive calls
+    if (projectLoadingInProgress) {
+      console.log("[projectManager] Project loading already in progress, skipping duplicate call");
+      return [];
+    }
+
+    projectLoadingInProgress = true;
+
     const validFilters = ["all", "pinned", "archived", "active"];
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
@@ -119,6 +130,9 @@
         error: true
       });
       return [];
+    } finally {
+      // Reset the guard flag after completion (whether successful or not)
+      projectLoadingInProgress = false;
     }
   }
 

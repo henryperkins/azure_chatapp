@@ -638,32 +638,41 @@
    * ========================================================================= */
   ProjectDashboard.showProjectsView = function () {
     console.log('[ProjectDashboardUtils] showProjectsView called');
-    const listView = document.getElementById('projectListView');
-    const detailsView = document.getElementById('projectDetailsView');
+    try {
+      const listView = document.getElementById('projectListView');
+      const detailsView = document.getElementById('projectDetailsView');
 
-    if (listView) {
-      listView.classList.remove('hidden');
-    } else {
-      console.warn('[ProjectDashboardUtils] #projectListView not found');
+      if (listView) {
+        listView.classList.remove('hidden');
+      } else {
+        console.warn('[ProjectDashboardUtils] #projectListView not found');
+      }
+
+      if (detailsView) {
+        detailsView.classList.add('hidden');
+      } else {
+        console.warn('[ProjectDashboardUtils] #projectDetailsView not found');
+      }
+
+      // Update URL without triggering a full navigation
+      const currentUrl = new URL(window.location);
+      currentUrl.searchParams.delete('project');
+      currentUrl.searchParams.delete('chatId');
+      window.history.pushState({}, '', currentUrl.pathname + currentUrl.search);
+    } catch (error) {
+      console.error('[ProjectDashboardUtils] Error in showProjectsView:', error);
+      window.showNotification && window.showNotification('Error updating UI. Please refresh the page.', 'error');
     }
-
-    if (detailsView) {
-      detailsView.classList.add('hidden');
-    } else {
-      console.warn('[ProjectDashboardUtils] #projectDetailsView not found');
-    }
-
-    // Update URL without triggering a full navigation
-    const currentUrl = new URL(window.location);
-    currentUrl.searchParams.delete('project');
-    currentUrl.searchParams.delete('chatId');
-    window.history.pushState({}, '', currentUrl.pathname + currentUrl.search);
   };
 
-  // Provide global reference if needed
-  if (!window.showProjectsView) {
+  // Ensure window.showProjectsView is set and not overwritten
+  if (!window.showProjectsView || typeof window.showProjectsView !== 'function') {
     window.showProjectsView = ProjectDashboard.showProjectsView;
+    console.log('[ProjectDashboardUtils] showProjectsView assigned to window');
+  } else {
+    console.warn('[ProjectDashboardUtils] showProjectsView already exists on window, preserving existing function');
   }
+
 
   /* =========================================================================
    *  6. FINAL SETUP & EVENT DISPATCH
