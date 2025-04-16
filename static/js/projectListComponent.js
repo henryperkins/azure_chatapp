@@ -31,26 +31,32 @@
       this._toggleListViewVisibility(false);
     }
 
-    renderProjects(eventOrProjects) {
-      try {
-        this._ensureContainerVisibility();
+  renderProjects(eventOrProjects) {
+    try {
+      this._ensureContainerVisibility();
 
-        if (this._shouldLoadProjectsDirectly(eventOrProjects)) {
-          return this._loadProjectsThroughManager();
-        }
-
-        const projects = this._extractProjects(eventOrProjects);
-        this.state.projects = projects;
-
-        this._resetScrollPosition();
-        this._renderFilteredProjects();
-      } catch (err) {
-        console.error('Project rendering error:', err);
-        this._renderErrorState('Failed to display projects');
-      } finally {
-        this._hideLoadingState();
+      // Guard against re-rendering if already in progress
+      if (this.state.loading) {
+        console.log("[ProjectListComponent] Render already in progress, skipping...");
+        return;
       }
+
+      if (this._shouldLoadProjectsDirectly(eventOrProjects)) {
+        return this._loadProjectsThroughManager();
+      }
+
+      const projects = this._extractProjects(eventOrProjects);
+      this.state.projects = projects;
+
+      this._resetScrollPosition();
+      this._renderFilteredProjects();
+    } catch (err) {
+      console.error('Project rendering error:', err);
+      this._renderErrorState('Failed to display projects');
+    } finally {
+      this._hideLoadingState();
     }
+  }
 
     applyGlobalTheme(themeId) {
       if (!this._isValidTheme(themeId)) return;
@@ -231,10 +237,10 @@
       }
 
       // Check if user is authenticated
-      const isAuthenticated = window.auth?.isAuthenticated ? 
-                              window.auth.isAuthenticated({ forceVerify: false }) : 
+      const isAuthenticated = window.auth?.isAuthenticated ?
+                              window.auth.isAuthenticated({ forceVerify: false }) :
                               Promise.resolve(false);
-      
+
       isAuthenticated.then(authStatus => {
         // Hide login message if authenticated
         if (loginRequiredMessage) {
@@ -255,7 +261,7 @@
         this._setupDOMReferences(); // Try to re-acquire references
       }
     }
-    
+
     // Helper method to create container if it doesn't exist
     _createContainerIfMissing() {
       let container = document.getElementById("projectListView");
@@ -264,22 +270,33 @@
         container = document.createElement("main");
         container.id = "projectListView";
         container.className = "flex-1 overflow-y-auto p-4 lg:p-6";
-        
+
         // Find a good parent to append to
         const drawerContent = document.querySelector(".drawer-content") || document.body;
         drawerContent.appendChild(container);
-        
+
         // Create the project list grid container inside
         const projectList = document.createElement("div");
         projectList.id = "projectList";
         projectList.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
         container.appendChild(projectList);
-        
+
+        // Also create details view container if missing
+        let detailsView = document.getElementById("projectDetailsView");
+        if (!detailsView) {
+          detailsView = document.createElement("div");
+          detailsView.id = "projectDetailsView";
+          detailsView.className = "hidden flex-1 overflow-y-auto p-4 lg:p-6";
+          container.parentNode.appendChild(detailsView);
+        }
+
         // Update our element reference
         this.element = projectList;
-        console.log("[ProjectListComponent] Created missing containers");
+        console.log("[ProjectListComponent] Created missing containers including projectDetailsView");
       }
+      return container;
     }
+
 
     _shouldLoadProjectsDirectly(eventOrProjects) {
       return eventOrProjects?.forceRefresh ||
@@ -288,18 +305,30 @@
         (Array.isArray(eventOrProjects) && eventOrProjects.length === 0); // Also load if empty array
     }
 
-    _loadProjectsThroughManager() {
-      if (!window.projectManager?.loadProjects) {
-        throw new Error('projectManager not available');
-      }
-
-      this._showLoadingState();
-      return window.projectManager.loadProjects()
-        .catch(err => {
-          console.error('Project loading failed:', err);
-          this._renderErrorState('Failed to load projects');
-        });
+  _loadProjectsThroughManager() {
+    if (!window.projectManager?.loadProjects) {
+      throw new Error('projectManager not available');
     }
+
+    // Set loading state to prevent recursive calls
+    if (this.state.loading) {
+      console.log("[ProjectListComponent] Already loading projects, skipping...");
+      return Promise.resolve([]);
+    }
+
+    this.state.loading = true;
+    this._showLoadingState();
+    return window.projectManager.loadProjects()
+      .catch(err => {
+        console.error('Project loading failed:', err);
+        this._renderErrorState('Failed to load projects');
+        return [];
+      })
+      .finally(() => {
+        this.state.loading = false;
+        this._hideLoadingState();
+      });
+  }
 
     _extractProjects(eventOrProjects) {
       let projects = [];
@@ -358,7 +387,7 @@
         // Attempt to re-acquire the element if it was missing
         console.warn("[ProjectListComponent] Element not found for DOM update, attempting to recreate");
         this._setupDOMReferences();
-        
+
         if (!this.element) {
           console.error("[ProjectListComponent] Cannot perform DOM update, element still not found after reacquisition");
           this._createFallbackContainer();

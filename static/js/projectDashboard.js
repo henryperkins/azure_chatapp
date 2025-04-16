@@ -263,9 +263,41 @@ class ProjectDashboard {
     if (projectId) {
       this.showProjectDetails(projectId);
     } else {
-      window.showProjectsView();
+      try {
+        if (typeof window.showProjectsView === 'function') {
+          window.showProjectsView();
+        } else {
+          console.warn("[ProjectDashboard] window.showProjectsView is not a function or not defined, using fallback");
+          // Fallback logic to show project list view manually
+          const listView = document.getElementById('projectListView');
+          if (listView) {
+            listView.classList.remove('hidden');
+            listView.style.display = 'block'; // Ensure visibility
+            console.log("[ProjectDashboard] Fallback: Manually showed projectListView");
+          } else {
+            console.warn("[ProjectDashboard] Fallback failed: #projectListView not found");
+          }
+          const detailsView = document.getElementById('projectDetailsView');
+          if (detailsView) {
+            detailsView.classList.add('hidden');
+            console.log("[ProjectDashboard] Fallback: Manually hid projectDetailsView");
+          }
+          // Optionally, load projects if needed
+          if (window.projectManager) {
+            window.projectManager.loadProjects('all').catch(err => {
+              console.error("[ProjectDashboard] Fallback: Failed to load projects:", err);
+              this.showNotification("Failed to load projects", "error");
+            });
+          }
+        }
+      } catch (error) {
+        console.error("[ProjectDashboard] Error in processUrlParams:", error);
+        this.showNotification && this.showNotification("Error processing URL parameters", "error");
+      }
     }
   }
+
+
 
   /* ===========================
      EVENT HANDLERS
@@ -700,7 +732,7 @@ class ProjectDashboard {
     } catch (err) {
       console.warn('[ProjectDashboard] Error checking authentication:', err);
     }
-    
+
     console.log(`[ProjectDashboard] _ensureContainersExist (authenticated: ${isAuthenticated})`);
 
     // Ensure projectManagerPanel exists and is visible when authenticated
@@ -716,11 +748,11 @@ class ProjectDashboard {
       projectListView = document.createElement('main');
       projectListView.id = "projectListView";
       projectListView.className = "flex-1 overflow-y-auto p-4 lg:p-6";
-      
+
       // Try to find the right container to append to
       const drawerContent = document.querySelector('.drawer-content');
       const projectManagerPanel = document.getElementById('projectManagerPanel');
-      
+
       if (projectManagerPanel) {
         projectManagerPanel.appendChild(projectListView);
       } else if (drawerContent) {
@@ -744,7 +776,7 @@ class ProjectDashboard {
       projectListGrid = document.createElement('div');
       projectListGrid.id = "projectList";
       projectListGrid.className = "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-      
+
       if (projectListView) {
         // Find existing filter tabs to insert after, or prepend
         const filterTabs = projectListView.querySelector('#projectFilterTabs');
@@ -777,12 +809,12 @@ class ProjectDashboard {
       loginRequiredMessage.id = "loginRequiredMessage";
       loginRequiredMessage.className = "text-center py-10 text-base-content/70";
       loginRequiredMessage.innerHTML = "Please log in to view your projects";
-      
+
       // Try to find main content container to append to
       const mainContent = document.querySelector('main') || document.body;
       mainContent.appendChild(loginRequiredMessage);
     }
-    
+
     // Set visibility for login message
     if (loginRequiredMessage) {
       loginRequiredMessage.classList.toggle('hidden', isAuthenticated);
@@ -798,7 +830,7 @@ class ProjectDashboard {
       const detailsContainer = document.createElement('section');
       detailsContainer.id = "projectDetailsView";
       detailsContainer.className = "flex-1 flex flex-col overflow-hidden hidden";
-      
+
       // Find appropriate container to append to
       const projectManagerPanel = document.getElementById('projectManagerPanel');
       if (projectManagerPanel) {
@@ -812,18 +844,18 @@ class ProjectDashboard {
         }
       }
     }
-    
+
     // Force load HTML templates if they're missing
     await this._ensureTemplatesLoaded();
   }
-  
+
   /**
    * Ensure HTML templates are loaded for project list and details views
    */
   async _ensureTemplatesLoaded() {
     const projectListView = document.getElementById('projectListView');
     const projectDetailsView = document.getElementById('projectDetailsView');
-    
+
     if (projectListView && projectListView.children.length === 0) {
       console.log('[ProjectDashboard] Attempting to load project_list.html template');
       try {
@@ -832,7 +864,7 @@ class ProjectDashboard {
           const html = await response.text();
           projectListView.innerHTML = html;
           console.log('[ProjectDashboard] Successfully loaded project_list.html template');
-          
+
           // Also mark as loaded in the template tracker if it exists
           if (window.templateLoadTracker) {
             window.templateLoadTracker.markLoaded('project_list.html');
@@ -842,7 +874,7 @@ class ProjectDashboard {
         console.error('[ProjectDashboard] Failed to load project_list.html:', err);
       }
     }
-    
+
     if (projectDetailsView && projectDetailsView.children.length === 0) {
       console.log('[ProjectDashboard] Attempting to load project_details.html template');
       try {
@@ -851,7 +883,7 @@ class ProjectDashboard {
           const html = await response.text();
           projectDetailsView.innerHTML = html;
           console.log('[ProjectDashboard] Successfully loaded project_details.html template');
-          
+
           // Also mark as loaded in the template tracker if it exists
           if (window.templateLoadTracker) {
             window.templateLoadTracker.markLoaded('project_details.html');

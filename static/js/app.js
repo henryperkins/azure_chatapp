@@ -356,7 +356,7 @@ async function loadInitialProjects(retryOnFailure = true) {
         loginMsg.classList.remove('hidden');
         log("[App] Made loginRequiredMessage visible");
       }
-      
+
       // Ensure project container is hidden when not authenticated
       const projectPanel = document.getElementById('projectManagerPanel');
       if (projectPanel) {
@@ -365,17 +365,17 @@ async function loadInitialProjects(retryOnFailure = true) {
       }
       return;
     }
-    
+
     // Hide login message, show project container when authenticated
     const loginMsg = document.getElementById('loginRequiredMessage');
     if (loginMsg) loginMsg.classList.add('hidden');
-    
+
     const projectPanel = document.getElementById('projectManagerPanel');
     if (projectPanel) {
       projectPanel.classList.remove('hidden');
       log("[App] Showed projectManagerPanel for authenticated state");
     }
-    
+
     // Always ensure the project list view is visible
     const projectListView = document.getElementById('projectListView');
     if (projectListView) {
@@ -383,19 +383,19 @@ async function loadInitialProjects(retryOnFailure = true) {
       projectListView.style.display = 'flex';
       log("[App] Ensured projectListView is visible");
     }
-    
+
     // Load projects through projectManager
     if (window.projectManager?.loadProjects) {
       log("[App] Loading projects through projectManager...");
       const projects = await window.projectManager.loadProjects('all');
       log(`[App] Loaded ${projects.length} projects`);
-      
+
       // Force render projects directly through component if it exists
       if (window.projectListComponent && typeof window.projectListComponent.renderProjects === 'function') {
         window.projectListComponent.renderProjects(projects);
         log("[App] Directly rendered projects through projectListComponent");
       }
-      
+
       // Handle empty project list explicitly
       if (projects.length === 0) {
         const noProjectsMsg = document.getElementById('noProjectsMessage');
@@ -516,17 +516,39 @@ async function handleNavigationChange() {
   }
 }
 
-function showProjectListView() {
-  if (window.ProjectDashboard?.showProjectList) {
-    window.ProjectDashboard.showProjectList();
-  } else if (typeof window.showProjectsView === 'function') {
-    window.showProjectsView();
-  } else {
-    console.warn('[showProjectListView] No advanced view management available, using fallback.');
-    toggleVisibility(document.getElementById('projectListView'), true);
-    toggleVisibility(document.getElementById('projectDetailsView'), false);
+async function showProjectListView() {
+  if (this._showingProjectListView) {
+    console.log("[App] showProjectListView already in progress, skipping...");
+    return;
+  }
+  this._showingProjectListView = true;
+
+  try {
+    if (!await ensureAuthenticated()) {
+      log("[showProjectListView] Not authenticated");
+      return;
+    }
+    // Avoid inline scripts or unsafe DOM updates
+    const projectPanel = document.getElementById('projectManagerPanel');
+    if (projectPanel) {
+      projectPanel.classList.remove('hidden');
+      log("[showProjectListView] Showing project panel");
+    }
+    // Load initial projects without triggering unsafe operations
+    if (window.dashboardUtilsReady || (typeof window.showProjectsView === 'function')) {
+      await loadInitialProjects();
+    } else {
+      console.warn("[showProjectListView] dashboardUtils not ready, delaying project loading");
+      setTimeout(() => loadInitialProjects(), 500); // Delay until utils are potentially ready
+    }
+  } catch (error) {
+    console.error("[showProjectListView] Error:", error);
+    window.ChatUtils.handleError('Showing project list view', error);
+  } finally {
+    this._showingProjectListView = false;
   }
 }
+
 
 // INITIALIZATION
 function cacheElements() {
@@ -545,6 +567,12 @@ function setupEventListeners() {
 }
 
 function refreshAppData() {
+  // Guard against multiple concurrent refreshes
+  if (API_CONFIG.authCheckInProgress) {
+    log("[refreshAppData] Auth check in progress, deferring refresh");
+    return;
+  }
+
   log("[refreshAppData] Refreshing application data after authentication.");
   loadInitialProjects().catch(err => {
     console.error("[refreshAppData] Error loading initial projects:", err);
@@ -566,14 +594,23 @@ function handleAuthStateChange(e) {
   const stateChanged = authenticated !== lastKnownAuthState;
   lastKnownAuthState = authenticated;
   API_CONFIG.isAuthenticated = authenticated;
+
+  // Update auth UI if available
   if (window.auth?.updateAuthUI) window.auth.updateAuthUI(authenticated, username);
+
   if (authenticated) {
+    // Prevent redundant data loads when auth check is already in progress
+    if (API_CONFIG.authCheckInProgress) {
+      log("[AuthStateChange] Auth check in progress, skipping data refresh");
+      return;
+    }
+
     if (stateChanged) {
       log("[AuthStateChange] User authenticated, loading initial data...");
       refreshAppData();
     } else {
-      log("[AuthStateChange] Already authenticated, forcing UI refresh.");
-      refreshAppData();
+      // Don't force refresh when state hasn't changed
+      log("[AuthStateChange] Already authenticated, no state change, skipping UI refresh.");
     }
   } else {
     log("[AuthStateChange] User logged out, UI cleared.");
@@ -591,6 +628,25 @@ async function initApp() {
   setViewportHeight();
   cacheElements();
   setupEventListeners();
+
+  // Wait for dashboardUtilsReady to ensure showProjectsView is defined
+  if (!window.dashboardUtilsReady) {
+    console.log("[initApp] Waiting for dashboardUtilsReady...");
+    await new Promise(resolve => {
+      document.addEventListener('dashboardUtilsReady', () => {
+        console.log("[initApp] dashboardUtilsReady received");
+        resolve();
+      }, { once: true });
+      // Timeout in case event never fires
+      setTimeout(() => {
+        console.warn("[initApp] Timeout waiting for dashboardUtilsReady, proceeding anyway");
+        resolve();
+      }, 5000);
+    });
+  } else {
+    console.log("[initApp] dashboardUtilsReady already set, proceeding.");
+  }
+
   if (window.auth?.init) await window.auth.init();
   setPhase(AppPhase.AUTH_CHECKED);
   // Initialize chat system early to ensure readiness
@@ -620,10 +676,15 @@ async function initApp() {
   }
 
   await handleNavigationChange();
+
+  // Mark initialization as complete to allow UI operations
+  window.__appInitializing = false;
+
   setPhase(AppPhase.COMPLETE);
   log("[initApp] Application initialized");
   return true;
 }
+
 
 // EXPORTS
 window.API_CONFIG = API_CONFIG;
