@@ -533,9 +533,9 @@ async def refresh_token(
         new_access_token = create_access_token(access_payload)
 
         # Check if refresh token is close to expiring
-            decoded = await verify_token(refresh_token_cookie, "refresh", request)
-            expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
-            time_remaining = expires_at - datetime.now(timezone.utc)
+        decoded = await verify_token(refresh_token_cookie, "refresh", request)
+        expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
+        time_remaining = expires_at - datetime.now(timezone.utc)
 
             if time_remaining < timedelta(hours=6):
                 # If we haven't updated token_version recently, do so
