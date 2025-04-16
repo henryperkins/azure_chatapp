@@ -1,5 +1,5 @@
 <!-- Project Creation/Edit Modal -->
-<div id="projectFormModal" class="modal hidden" aria-modal="true" aria-labelledby="projectFormTitle" role="dialog">
+<dialog id="projectFormModal" class="modal" aria-modal="true" aria-labelledby="projectFormTitle">
     <div class="modal-box max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
             <h3 id="projectFormTitle" class="text-xl font-semibold">Create New Project</h3>
@@ -9,7 +9,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
-        </div>
+        </dialog>
         <form id="projectForm">
             <input type="hidden" id="projectIdInput" name="projectId" value="" />
             <div class="mb-4">

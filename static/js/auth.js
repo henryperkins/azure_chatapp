@@ -45,9 +45,14 @@ function getCookie(name) {
 
 /** Sets an auth cookie with standard attributes in one place. */
 function setAuthCookie(name, value, maxAgeSeconds) {
-  const secure = location.protocol === 'https:' ? 'Secure; ' : '';
-  const sameSite = 'SameSite=Strict';
+  let secure = location.protocol === 'https:' ? 'Secure; ' : '';
+  let sameSite = 'SameSite=Strict';
   const path = '/;';
+  // Allow local dev override
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    secure = '';
+    sameSite = 'SameSite=Lax';
+  }
   if (!value) {
     document.cookie = `${name}=; path=${path} expires=Thu, 01 Jan 1970 00:00:00 GMT; ${secure}${sameSite}`;
   } else {

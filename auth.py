@@ -68,16 +68,23 @@ class CookieSettings:
 
     def domain(self, hostname: str | None) -> str | None:
         # More comprehensive check for local environments
-        if not hostname or hostname in {"localhost", "127.0.0.1"} or hostname.startswith("192.168.") or hostname.startswith("10."):
+        if (
+            not hostname
+            or hostname in {"localhost", "127.0.0.1"}
+            or hostname.startswith("192.168.")
+            or hostname.startswith("10.")
+        ):
             return None
 
         # For custom domain environments like Azure, we may need to be more flexible
-        if '.' not in hostname:
+        if "." not in hostname:
             return None
 
         return self.cookie_domain
 
-    def same_site(self, hostname: str | None, key: str) -> Literal['lax', 'strict', 'none'] | None:
+    def same_site(
+        self, hostname: str | None, key: str
+    ) -> Literal["lax", "strict", "none"] | None:
         # For access and refresh tokens, allow 'none' in development for more flexible testing
         if self.env != "production" and key in ["access_token", "refresh_token"]:
             return "none" if not self.secure else "lax"
@@ -386,7 +393,9 @@ async def login_user(
             user.password_hash.encode("utf-8"),
         )
         verify_duration = (datetime.now(timezone.utc) - verify_start).total_seconds()
-        logger.debug(f"Password verification took {verify_duration:.3f}s for user {lower_username}")
+        logger.debug(
+            f"Password verification took {verify_duration:.3f}s for user {lower_username}"
+        )
     except ValueError as exc:
         logger.error("Corrupted password hash for user '%s': %s", lower_username, exc)
         raise HTTPException(
@@ -431,8 +440,20 @@ async def login_user(
     # Set cookies with type-safe settings
     try:
         # Use the unified set_secure_cookie method for consistency
-        set_secure_cookie(response, "access_token", access_token, ACCESS_TOKEN_EXPIRE_MINUTES * 60, request)
-        set_secure_cookie(response, "refresh_token", refresh_token, 60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS, request)
+        set_secure_cookie(
+            response,
+            "access_token",
+            access_token,
+            ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            request,
+        )
+        set_secure_cookie(
+            response,
+            "refresh_token",
+            refresh_token,
+            60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+            request,
+        )
 
         logger.debug(f"Cookies set via set_secure_cookie for {lower_username}")
     except Exception as e:
@@ -442,11 +463,13 @@ async def login_user(
             access_token=access_token,
             token_type="bearer",
             refresh_token=refresh_token,
-            message="Login successful but cookies could not be set"
+            message="Login successful but cookies could not be set",
         )
 
     logger.info("User '%s' logged in. Access & refresh tokens issued.", lower_username)
-    return LoginResponse(access_token=access_token, token_type="bearer", refresh_token=refresh_token)
+    return LoginResponse(
+        access_token=access_token, token_type="bearer", refresh_token=refresh_token
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -613,7 +636,7 @@ async def verify_auth_status(
 
 # -----------------------------------------------------------------------------
 # Testing Utilities
-    # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 @router.get("/debug/auth-log", response_model=dict)
 async def get_auth_debug_info():
     """Returns the current authentication debug info. Not exposed in production."""
@@ -637,7 +660,6 @@ async def get_token_expiry_settings() -> dict[str, int]:
     }
 
 
-
 @router.get("/test-cookie")
 async def test_cookie(request: Request, response: Response) -> dict[str, str]:
     """Sets a test cookie for debugging cookie behavior."""
@@ -649,6 +671,7 @@ async def test_cookie(request: Request, response: Response) -> dict[str, str]:
 async def get_server_time() -> dict[str, float]:
     """Returns the current server timestamp (UTC)."""
     return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
+
 
 @router.get("/apple-touch-icon.png")
 @router.get("/apple-touch-icon-precomposed.png")
@@ -662,15 +685,15 @@ async def ignore_apple_touch_icon():
 # -----------------------------------------------------------------------------
 @router.post("/set-cookies")
 async def set_cookies_endpoint(
-    request: Request,
-    response: Response,
-    token_req: TokenRequest
+    request: Request, response: Response, token_req: TokenRequest
 ):
     """
     Manually sets authentication tokens in secure cookies.
     Used by frontend when automatic cookie setting fails.
     """
-    logger.info(f"Manual cookie set request from: {request.client.host if request.client else 'unknown'}, hostname: {request.url.hostname}")
+    logger.info(
+        f"Manual cookie set request from: {request.client.host if request.client else 'unknown'}, hostname: {request.url.hostname}"
+    )
 
     # Try both approaches - standard secure cookies and fallback non-secure cookies
     try:
@@ -680,7 +703,7 @@ async def set_cookies_endpoint(
             "access_token",
             token_req.access_token,
             max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
-            request=request
+            request=request,
         )
 
         if token_req.refresh_token:
@@ -689,7 +712,7 @@ async def set_cookies_endpoint(
                 "refresh_token",
                 token_req.refresh_token,
                 max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
-                request=request
+                request=request,
             )
 
         # Also set a third-party cookie flag to help client detect support

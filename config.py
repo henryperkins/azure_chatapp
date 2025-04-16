@@ -1,11 +1,11 @@
-# MODIFIED: config.py
-# Reason: Consolidate model configurations, add capabilities based on docs, standardize structure.
+# config.py
 
 import os
 from dotenv import load_dotenv
 from typing import Any
 from pathlib import Path
-# Removed unused imports
+
+
 
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
@@ -14,7 +14,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 class Settings:
     """
     Central configuration class with strict security defaults.
-    
+
     Security Principles:
     1. Same-origin enforcement - no CORS support
     2. Cookie security:
@@ -26,7 +26,9 @@ class Settings:
     """
 
     # Debug/Environment
-    DEBUG = os.getenv("DEBUG", "False").lower() == "true"  # True if DEBUG= true/TRUE/True
+    DEBUG = (
+        os.getenv("DEBUG", "False").lower() == "true"
+    )  # True if DEBUG= true/TRUE/True
     ENV = os.getenv("ENV", "development")
 
     # Session
@@ -34,11 +36,10 @@ class Settings:
         "SESSION_SECRET", "default-secret-key-change-in-production"
     )
 
-
     # Database
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/azure_chat_db",
+        "postgresql+asyncpg://postgres:newpassword@localhost:5432/azure_chat_db",
     )
     # Format: postgresql+asyncpg://username:password@host:port/dbname
 
@@ -55,7 +56,8 @@ class Settings:
 
     # Allowed hosts - security setting for host header validation
     ALLOWED_HOSTS: list[str] = (
-        ["put.photo"] if ENV == "production" 
+        ["put.photo"]
+        if ENV == "production"
         else ["localhost", "127.0.0.1", "0.0.0.0", "put.photo"]
     )
 
@@ -68,7 +70,7 @@ class Settings:
     AZURE_O1_MAX_IMAGES = int(
         os.getenv("AZURE_O1_MAX_IMAGES", "10")
     )  # Max images for o1
-    AZURE_DEFAULT_API_VERSION = "2024-05-01-preview"  # Default for non-reasoning
+    AZURE_DEFAULT_API_VERSION = "2025-03-01-preview"  # Default for non-reasoning
     AZURE_REASONING_API_VERSION = (
         "2025-03-01-preview"  # Recommended for reasoning models
     )
@@ -245,4 +247,4 @@ class Settings:
 
 settings = Settings()
 
-__all__ = ['settings']
+__all__ = ["settings"]
