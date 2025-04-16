@@ -1,7 +1,7 @@
 /**
  * Authentication module for handling user sessions, tokens, and auth state
  */
-const AUTH_DEBUG = false;
+const AUTH_DEBUG = true;
 
 // Session & Retry Flags
 let sessionExpiredFlag = false;
@@ -350,7 +350,12 @@ async function getAuthToken(options = {}) {
 
 async function verifyAuthState(forceVerify = false) {
   const operationId = `verifyAuthState-${Date.now().toString(36)}`;
-  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] verifyAuthState called (forceVerify=${forceVerify})`);
+  if (AUTH_DEBUG) {
+    console.debug(`[Auth][${operationId}] verifyAuthState called (forceVerify=${forceVerify})`);
+    console.debug(`[Auth][${operationId}] Current auth state:`, authState);
+    console.debug(`[Auth][${operationId}] Access token:`, getCookie('access_token'));
+    console.debug(`[Auth][${operationId}] Refresh token:`, getCookie('refresh_token'));
+  }
   if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
     if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - recent failure.`);
     return authState.isAuthenticated;
@@ -374,12 +379,24 @@ async function verifyAuthState(forceVerify = false) {
     try {
       const csrfToken = getCSRFToken();
       if (!csrfToken) {
+        if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] CSRF token missing`);
         if (i === attempts) throw new Error('CSRF token missing for verification');
         await new Promise(r => setTimeout(r, 500));
         continue;
       }
+      if (AUTH_DEBUG) {
+        console.debug(`[Auth][${operationId}] Making verify request with headers:`, {
+          'X-CSRF-Token': csrfToken,
+          'X-Debug-Request-ID': operationId
+        });
+      }
       const res = await Promise.race([
-        apiRequest('/api/auth/verify', 'GET', null, { headers: { 'X-CSRF-Token': csrfToken } }),
+        apiRequest('/api/auth/verify', 'GET', null, {
+          headers: {
+            'X-CSRF-Token': csrfToken,
+            'X-Debug-Request-ID': operationId
+          }
+        }),
         new Promise((_, reject) => setTimeout(() => reject(new Error(`verify timeout (attempt ${i})`)), AUTH_CONSTANTS.VERIFY_TIMEOUT + i * 1000))
       ]);
       const serverAuthenticated = !!res.authenticated;
@@ -474,28 +491,28 @@ function updateAuthUI(authenticated, username = null) {
   }
   const loginMsg = document.getElementById('loginRequiredMessage');
   if (loginMsg) loginMsg.classList.toggle('hidden', authenticated);
-  
+
   // Project management visibility
   const projectPanel = document.getElementById('projectManagerPanel');
   if (projectPanel) {
     projectPanel.classList.toggle('hidden', !authenticated);
     console.log(`[Auth] projectManagerPanel visibility set to ${!authenticated ? 'hidden' : 'visible'}`);
   }
-  
+
   // Ensure project list view is visible too when authenticated
   const projectListView = document.getElementById('projectListView');
   if (projectListView && authenticated) {
     projectListView.classList.remove('hidden');
     console.log('[Auth] Ensuring projectListView is visible after auth update');
   }
-  
+
   // Show no projects message if authenticated but no projects are shown
   const projectList = document.getElementById('projectList');
   const noProjectsMessage = document.getElementById('noProjectsMessage');
   if (authenticated && projectList && noProjectsMessage) {
-    const hasProjects = projectList.children.length > 0 && 
+    const hasProjects = projectList.children.length > 0 &&
                         !projectList.querySelector('.loading-spinner');
-    
+
     if (!hasProjects) {
       noProjectsMessage.classList.remove('hidden');
       console.log('[Auth] No projects found, showing noProjectsMessage');
@@ -946,6 +963,9 @@ Object.assign(window.auth, {
     } catch {
       return false;
     }
+  },
+  getCurrentUser: () => {
+    return authState.isAuthenticated ? authState.username : null;
   }
 });
 window.handleAuthModalPositioning = handleAuthModalPositioning;

@@ -565,8 +565,16 @@ async function handleNavigationChange() {
     const chatId = urlParams.get('chatId');
     const view = urlParams.get('view');
     const projectId = urlParams.get('project');
+
+    // Get references to the main views
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
+
     if (view === 'projects' || !projectId) {
       log('[handleNavigationChange] View=projects detected or no project ID, showing projects.');
+      // Show list view, hide details view
+      if (projectListView) projectListView.classList.remove('hidden');
+      if (projectDetailsView) projectDetailsView.classList.add('hidden');
       showProjectListView();
       setTimeout(() => {
         if (window.projectManager?.loadProjects) {
@@ -580,6 +588,9 @@ async function handleNavigationChange() {
     }
     if (projectId) {
       log(`[handleNavigationChange] Project ID=${projectId}, loading project details.`);
+      // Show details view, hide list view
+      if (projectListView) projectListView.classList.add('hidden');
+      if (projectDetailsView) projectDetailsView.classList.remove('hidden');
       debouncedLoadProject(projectId);
       return;
     }
