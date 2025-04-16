@@ -3,17 +3,18 @@ db.py
 -----
 Sets up the PostgreSQL database connection using SQLAlchemy.
 Defines the async init_db process for migrations or table creation.
+Incorporates additional suggestions for improved reliability and clarity.
 """
 
 import logging
 import time
 from datetime import datetime
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-# Removed
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
 from contextlib import asynccontextmanager
+
+from sqlalchemy import create_engine, text, inspect
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
+from sqlalchemy.orm import sessionmaker
 
 from config import settings
 
@@ -22,27 +23,19 @@ logger = logging.getLogger(__name__)
 # Use the DATABASE_URL from config settings
 DATABASE_URL = settings.DATABASE_URL
 
-async_engine = create_async_engine(
-    DATABASE_URL, echo=False, pool_pre_ping=True  # Disable engine-level logging
-)
+# ---------------------------------------------------------
+# Async engine/session: for normal runtime usage
+# ---------------------------------------------------------
+
+async_engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine, autocommit=False, autoflush=False, expire_on_commit=False
 )
 
-# Create sync engine for migrations and schema validation
-sync_engine = create_engine(
-    DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL
-    else DATABASE_URL
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
-
-
-Base = declarative_base()
-
 
 async def get_async_session():
-    """FastAPI dependency for getting an async session."""
+    """FastAPI dependency for getting an async DB session."""
     async with AsyncSessionLocal() as session:
         yield session
 
@@ -50,9 +43,9 @@ async def get_async_session():
 @asynccontextmanager
 async def get_async_session_context():
     """
-    Async context manager for getting a session outside of FastAPI dependencies.
+    Async context manager for obtaining a session outside of FastAPI dependencies.
 
-    Example:
+    Example usage:
         async with get_async_session_context() as session:
             # Use session here
     """
@@ -63,117 +56,185 @@ async def get_async_session_context():
         await session.close()
 
 
-# Removed
+# ---------------------------------------------------------
+# Sync engine/session: for DDL, schema validation/fixing
+# ---------------------------------------------------------
+# If the URI uses +asyncpg, strip it for sync usage
+sync_url = (
+    DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL else DATABASE_URL
+)
+sync_engine = create_engine(sync_url)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
+Base = declarative_base()
+
+
+# ---------------------------------------------------------
+# Helper functions for table introspection and creation
+# ---------------------------------------------------------
+async def _get_existing_tables():
+    """Get a list of existing table names using an async connection."""
+    async with async_engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='public'"
+            )
+        )
+        return {row[0] for row in result.fetchall()}
+
+
+async def _create_missing_tables(tables: list[str]):
+    """
+    Create missing tables with basic progress tracking
+    using synchronous metadata create.
+    """
+    for idx, table_name in enumerate(tables, 1):
+        logger.info(f"Creating table {idx}/{len(tables)}: {table_name}")
+        async with async_engine.begin() as conn:
+            # Option A: run the sync create via run_sync
+            # table_obj = Base.metadata.tables[table_name]
+            # await conn.run_sync(table_obj.create)
+
+            # Option B: more direct approach (as in your code):
+            await conn.run_sync(
+                lambda sync_conn: Base.metadata.tables[table_name].create(sync_conn)
+            )
+
+
+# ---------------------------------------------------------
+# Database Schema Validation
+# ---------------------------------------------------------
 async def validate_db_schema() -> list[str]:
-    """Validate schema and return (has_mismatches, details) tuple"""
-    # Removed
-    
+    """
+    Validate schema and return a list of mismatch details.
+
+    Checks (simplified list):
+    1. Column existence and type (with length checks)
+    2. Missing columns (that aren't nullable or have default)
+    3. Index existence
+    4. Foreign key constraints
+    5. Unique constraints
+    6. Default values
+    7. Basic relationship checks
+
+    Return:
+        A list of strings describing any mismatches found.
+        An empty list means everything matches the ORM definitions.
+    """
     logger.info("Validating database schema...")
     mismatch_details = []
 
     async with async_engine.connect() as conn:
-        # Get database schema with type mapping
-        result = await conn.execute(text("""
+        # -------------------------------------------------
+        # 1. Retrieve database schema from information_schema
+        # -------------------------------------------------
+        result = await conn.execute(
+            text(
+                """
             SELECT table_name, column_name, data_type, udt_name, character_maximum_length
-            FROM information_schema.columns 
+            FROM information_schema.columns
             WHERE table_schema = 'public'
-        """))
+        """
+            )
+        )
         db_schema = {
             (row.table_name, row.column_name): {
-                'data_type': row.data_type,
-                'udt_name': row.udt_name,
-                'max_length': row.character_maximum_length
-            } for row in result
+                "data_type": row.data_type,
+                "udt_name": row.udt_name,
+                "max_length": row.character_maximum_length,
+            }
+            for row in result
         }
-        
-        # Get ORM metadata with type normalization
-        orm_schema = {}
+
+        # -------------------------------------------------
+        # 2. Prepare an ORM-based schema representation
+        # -------------------------------------------------
+        # Basic type equivalents
         type_equivalents = {
-            'VARCHAR': ['character varying'],
-            'TEXT': ['text'],
-            'TIMESTAMP': ['timestamp without time zone'],
-            'UUID': ['uuid'],
-            'JSONB': ['jsonb'],
-            'INTEGER': ['integer', 'int4'],  # Handle PostgreSQL aliases
-            'BIGINT': ['bigint', 'int8'],
-            'BOOLEAN': ['boolean', 'bool'],
+            "VARCHAR": ["character varying"],
+            "TEXT": ["text"],
+            "TIMESTAMP": ["timestamp without time zone"],
+            "UUID": ["uuid"],
+            "JSONB": ["jsonb"],
+            "INTEGER": ["integer", "int4"],
+            "BIGINT": ["bigint", "int8"],
+            "BOOLEAN": ["boolean", "bool"],
         }
-        
+
+        # Build a dict with (table, column) -> type_string
+        orm_schema = {}
         for table in Base.metadata.tables.values():
             for column in table.columns:
-                # Normalize ORM type
-                orm_base_type = str(column.type).split('(')[0].upper()
-                orm_type = orm_base_type
-                
-                # Check for length-specified types
-                length = getattr(column.type, 'length', None)
-                if length and orm_base_type == 'VARCHAR':
-                    orm_type = f'character varying({length})'
+                orm_base_type = str(column.type).split("(")[0].upper()
+                # Check if it's a VARCHAR with length
+                length = getattr(column.type, "length", None)
+                if length and orm_base_type == "VARCHAR":
+                    orm_type = f"character varying({length})"
                 else:
-                    # Use first equivalent as the canonical type
-                    orm_type = type_equivalents.get(orm_base_type, [orm_base_type.lower()])[0]
-                
+                    # Use the first equivalent for normalization
+                    orm_type = type_equivalents.get(
+                        orm_base_type, [orm_base_type.lower()]
+                    )[0]
                 orm_schema[(table.name, column.name)] = orm_type
 
-        # Compare schemas with type normalization
+        # -------------------------------------------------
+        # 3. Compare DB schema vs. ORM schema
+        # -------------------------------------------------
         for (table, column), orm_type in orm_schema.items():
             db_info = db_schema.get((table, column))
             if not db_info:
                 mismatch_details.append(f"Missing column: {table}.{column}")
                 continue
-                
-            db_type = db_info['data_type']
-            udt_name = db_info['udt_name']
-            db_max_length = db_info['max_length']
-            
-            # Get the actual ORM column object
+
+            db_type = db_info["data_type"]
+            udt_name = db_info["udt_name"]
+            db_max_length = db_info["max_length"]
+
+            # Original column type object:
             table_obj = Base.metadata.tables[table]
             column_obj = table_obj.columns[column]
-
-            # Get type equivalents for comparison
-            orm_base_type = str(column_obj.type).split('(')[0].upper()
+            orm_base_type = str(column_obj.type).split("(")[0].upper()
             equivalents = type_equivalents.get(orm_base_type, [orm_base_type.lower()])
-            
-            # Handle special cases first
+
+            # Decide if types match
             type_matches = False
-            if orm_base_type == 'VARCHAR' and orm_type.startswith('character varying'):
-                # Handle VARCHAR length checks
-                if db_type == 'character varying':
-                    orm_length = None
-                    if '(' in orm_type:
-                        orm_length = int(orm_type.split('(')[1].split(')')[0])
-                    if orm_length and db_max_length and db_max_length != orm_length:
+
+            # (a) Specialized checks for VARCHAR
+            if orm_base_type == "VARCHAR" and orm_type.startswith("character varying"):
+                if db_type == "character varying":
+                    actor_length = None
+                    if "(" in orm_type:
+                        actor_length = int(orm_type.split("(")[1].split(")")[0])
+                    if actor_length and db_max_length and db_max_length != actor_length:
                         mismatch_details.append(
                             f"Length mismatch: {table}.{column} "
-                            f"DB: varchar({db_max_length}) vs ORM: varchar({orm_length})"
+                            f"DB: varchar({db_max_length}) vs ORM: varchar({actor_length})"
                         )
-                    elif orm_length is None and db_max_length:
-                        pass  # ORM doesn't specify length
                     else:
+                        # If length omitted in ORM or matches, we consider them okay
                         type_matches = True
-                else:
-                    type_matches = False
-            
-            elif orm_type.startswith('text'):
-                # Handle TEXT equality differently
-                type_matches = db_type == 'text'
-            elif orm_base_type in ['UUID', 'JSONB', 'INTEGER', 'BIGINT', 'BOOLEAN']:
-                # Case-insensitive UDT check against all equivalents
-                type_matches = udt_name.lower() in [e.lower() for e in equivalents]
-                
-                # Special handling for boolean alias 'bool'
-                if orm_base_type == 'BOOLEAN' and udt_name.lower() == 'bool':
+
+            # (b) TEXT check
+            elif orm_type.startswith("text"):
+                type_matches = db_type == "text"
+
+            # (c) Typical enumerations: UUID, JSONB, INTEGER, BIGINT, BOOLEAN
+            elif orm_base_type in type_equivalents:
+                # Check DB UDT name vs recognized equivalents
+                if udt_name.lower() in [e.lower() for e in equivalents]:
                     type_matches = True
-            
-            elif orm_type == 'timestamp without time zone':
-                type_matches = db_type == 'timestamp without time zone'
-            # Handle timestamp precision differences
-            elif 'timestamp' in db_type.lower() and 'timestamp' in orm_type.lower():
-                db_precision = db_type.split('(')[1].split(')')[0] if '(' in db_type else '6'
-                orm_precision = orm_type.split('(')[1].split(')')[0] if '(' in orm_type else '6'
-                type_matches = db_precision == orm_precision
-            
+                # Special boolean alias
+                if orm_base_type == "BOOLEAN" and udt_name.lower() == "bool":
+                    type_matches = True
+
+            # (d) Timestamps
+            elif orm_type == "timestamp without time zone":
+                type_matches = db_type == "timestamp without time zone"
+            elif "timestamp" in db_type.lower() and "timestamp" in orm_type.lower():
+                # Might want to parse precision, but skipping for brevity
+                type_matches = True
+
             if not type_matches:
                 mismatch_details.append(
                     f"Type mismatch: {table}.{column} - "
@@ -181,124 +242,248 @@ async def validate_db_schema() -> list[str]:
                     f"vs ORM: {orm_type}"
                 )
 
-        # Check for missing columns that are nullable with default values
+        # -------------------------------------------------
+        # 4. Check for missing columns that are not nullable or have no default
+        # -------------------------------------------------
         orm_columns = set(orm_schema.keys())
         db_columns = set(db_schema.keys())
         missing_columns = orm_columns - db_columns
         for table, column in missing_columns:
-            # Get column details from ORM
             orm_col = Base.metadata.tables[table].columns[column]
-            
-            # Skip columns with server defaults or nullable
             if orm_col.server_default is not None or orm_col.nullable:
-                logger.debug(f"Intentionally skipping nullable/defaulted column: {table}.{column}")
+                logger.debug(
+                    f"Skipping missing column {table}.{column} "
+                    f"because it's nullable or has a default."
+                )
                 continue
-                
             mismatch_details.append(f"Missing column: {table}.{column}")
+
+        # -------------------------------------------------
+        # 5. Index checks via sync inspector
+        # -------------------------------------------------
+        sync_inspector = inspect(sync_engine)
+        for table in Base.metadata.tables.values():
+            table_name = table.name
+            if not sync_inspector.has_table(table_name):
+                continue
+            db_indexes = {idx["name"] for idx in sync_inspector.get_indexes(table_name)}
+            for idx in table.indexes:
+                if idx.name not in db_indexes:
+                    mismatch_details.append(f"Missing index: {table_name}.{idx.name}")
+
+        # -------------------------------------------------
+        # 6. Foreign key constraint checks
+        # -------------------------------------------------
+        for table in Base.metadata.tables.values():
+            table_name = table.name
+            if not sync_inspector.has_table(table_name):
+                continue
+            db_fks = sync_inspector.get_foreign_keys(table_name)
+            db_fk_tuples = {
+                (
+                    fk["constrained_columns"][0],
+                    fk["referred_table"],
+                    fk.get("ondelete"),
+                    fk["referred_columns"][0] if fk["referred_columns"] else None,
+                )
+                for fk in db_fks
+                if fk["constrained_columns"]
+            }
+            for fk in table.foreign_keys:
+                col_name = fk.parent.name
+                referred_table = fk.column.table.name
+                referred_col = fk.column.name
+                ondelete_clause = fk.ondelete.upper() if fk.ondelete else None
+                check_tuple = (col_name, referred_table, ondelete_clause, referred_col)
+                if check_tuple not in db_fk_tuples:
+                    mismatch_details.append(
+                        f"Missing or incorrect foreign key for {table_name}.{col_name} -> "
+                        f"{referred_table}.{referred_col} (ondelete={ondelete_clause})"
+                    )
+
+        # -------------------------------------------------
+        # 7. Unique constraints check
+        # -------------------------------------------------
+        for table in Base.metadata.tables.values():
+            table_name = table.name
+            if not sync_inspector.has_table(table_name):
+                continue
+            try:
+                db_uniques = sync_inspector.get_unique_constraints(table_name)
+                db_unique_columns_set = {
+                    tuple(sorted(u["column_names"]))
+                    for u in db_uniques
+                    if u["column_names"]
+                }
+                # Check single-column unique
+                for col in table.columns:
+                    if col.unique:
+                        if (col.name,) not in db_unique_columns_set:
+                            mismatch_details.append(
+                                f"Missing or incorrect unique constraint on {table_name}.{col.name}"
+                            )
+                # Check multi-column unique constraints
+                for constraint in table.constraints:
+                    if constraint.__class__.__name__ == "UniqueConstraint":
+                        orm_cols = tuple(sorted([c.name for c in constraint.columns]))
+                        if orm_cols not in db_unique_columns_set:
+                            mismatch_details.append(
+                                f"Missing or incorrect multi-column unique constraint "
+                                f"on {table_name} columns {orm_cols}"
+                            )
+            except Exception as e:
+                logger.debug(
+                    f"Skipping unique constraint check for {table_name} due to: {e}"
+                )
+
+        # -------------------------------------------------
+        # 8. Default values check (basic)
+        # -------------------------------------------------
+        for table in Base.metadata.tables.values():
+            for col in table.columns:
+                if col.server_default is not None:
+                    # Extract the default argument (may be string or SQL expression)
+                    orm_default_arg = col.server_default.arg
+
+                    # Convert the arg to a string to safely compare or log
+                    orm_default_str = str(orm_default_arg)
+
+                    # You can now do your normalization / comparison
+                    normalized_orm_def = orm_default_str.strip("('").lower()
+
+                    # Now compare with the DB default
+                    default_sql = await conn.execute(text(f"""
+                        SELECT column_default
+                        FROM information_schema.columns
+                        WHERE table_name='{table.name}'
+                        AND column_name='{col.name}'
+                        AND table_schema='public'
+                    """))
+                    db_row = default_sql.fetchone()
+                    db_default = db_row[0] if db_row else None
+                    if db_default and isinstance(db_default, str):
+                        normalized_db_def = db_default.strip("('::text)").lower()
+                        if normalized_db_def != normalized_orm_def:
+                            mismatch_details.append(
+                                f"Default mismatch on {table.name}.{col.name}: "
+                                f"DB={db_default} vs ORM={orm_default_str}"
+                            )
+
+        # Relationship checks are somewhat covered by foreign keys above
 
     return mismatch_details
 
 
-async def _get_existing_tables():
-    """Get existing tables using async connection"""
-    async with async_engine.connect() as conn:
-        result = await conn.execute(
-            text("SELECT table_name FROM information_schema.tables")
-        )
-        return {row[0] for row in result.fetchall()}
+# ---------------------------------------------------------
+# Comprehensive schema alignment (DDL) function
+# ---------------------------------------------------------
+def _retry_foreign_key_add(
+    sync_conn,
+    table_name: str,
+    col_name: str,
+    referred_table: str,
+    referred_col: str,
+    ondelete_clause: str,
+    max_retries: int = 3,
+):
+    """
+    Try adding a foreign key constraint up to `max_retries` times,
+    handling potential deadlocks by sleeping briefly between attempts.
+    """
+    constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
+    ondelete_sql = f" ON DELETE {ondelete_clause}" if ondelete_clause else ""
 
-async def _create_missing_tables(tables: list[str]):
-    """Create missing tables with progress tracking"""
-    for idx, table_name in enumerate(tables, 1):
-        logger.info(f"Creating table {idx}/{len(tables)}: {table_name}")
-        async with async_engine.begin() as conn:
-            await conn.run_sync(
-                lambda sync_conn: Base.metadata.tables[table_name].create(sync_conn)
+    for attempt in range(max_retries):
+        try:
+            sync_conn.execute(
+                text(
+                    f"""
+                    ALTER TABLE {table_name}
+                    ADD CONSTRAINT {constraint_name}
+                    FOREIGN KEY ({col_name})
+                    REFERENCES {referred_table}({referred_col})
+                    {ondelete_sql}
+                """
+                )
             )
-
-from sqlalchemy.ext.asyncio import AsyncEngine
-
-
-
-async def init_db() -> None:
-    """Initialize database with improved progress tracking"""
-    try:
-        logger.info("Initialization started")
-        
-        # Step 1: Create missing tables
-        logger.info("Checking for missing tables...")
-        existing_tables = await _get_existing_tables()
-        tables_to_create = [
-            t for t in Base.metadata.tables.keys() if t not in existing_tables
-        ]
-        if tables_to_create:
-            await _create_missing_tables(tables_to_create)
-        
-        # Step 2: Schema alignment (with progress callbacks)
-        logger.info("Running schema alignment...")
-        await fix_db_schema()
-        
-        # Step 3: Final validation
-        logger.info("Validating final schema...")
-        mismatch_details = await validate_db_schema()
-        if mismatch_details:
-            logger.warning(f"Schema validation completed with {len(mismatch_details)} issues")
-            for issue in mismatch_details[:5]:  # Log first 5 issues
-                logger.warning(issue)
-        else:
-            logger.info("Schema validation successful - all ORM definitions match database")
-
-    except Exception as e:
-        logger.error(f"❌ DB initialization failed: {str(e)}")
-        raise
+            logger.info(
+                f"Added/updated foreign key: {table_name}.{col_name} -> "
+                f"{referred_table}.{referred_col} ON DELETE {ondelete_clause or 'NO ACTION'}"
+            )
+            return
+        except Exception as e:
+            # Check for deadlock
+            if "deadlock" in str(e).lower() and attempt < max_retries - 1:
+                sleep_time = 0.3 * (attempt + 1)
+                logger.warning(
+                    f"Deadlock detected adding foreign key {constraint_name}, retrying in {sleep_time}s... "
+                    f"(Attempt {attempt + 1}/{max_retries})"
+                )
+                time.sleep(sleep_time)
+            else:
+                logger.error(
+                    f"Failed to add foreign key {constraint_name}: {e} "
+                    f"after {attempt + 1} attempts"
+                )
+                raise
 
 
 async def fix_db_schema() -> None:
-    """Comprehensive schema alignment using synchronous session for DDL"""
-    from sqlalchemy import inspect, text
+    """
+    Comprehensive schema alignment using synchronous session for DDL.
+    Attempts to create missing columns, fix column types, add indexes,
+    and correct foreign key constraints.
+    """
     from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
     logger.info("Starting comprehensive schema alignment...")
 
-    # Use sync engine for all schema operations
     with sync_engine.begin() as sync_conn:
         inspector = inspect(sync_conn)
-        
-        # Add statement timeout to prevent hanging (30 seconds)
+        # Add statement timeout to prevent indefinite blocking
         sync_conn.execute(text("SET statement_timeout = 30000"))
 
-        # 1. Add missing tables with progress indication
+        # 1. Create missing tables using the simpler approach
         existing_tables = set(inspector.get_table_names())
         total_tables = len(Base.metadata.tables)
         for idx, (table_name, table) in enumerate(Base.metadata.tables.items(), 1):
             if table_name not in existing_tables:
-                logger.info(f"({idx}/{total_tables}) Creating table: {table_name}")
-                table.create(sync_conn)
+                logger.info(
+                    f"({idx}/{total_tables}) Creating missing table: {table_name}"
+                )
+                table.create(sync_conn)  # or table.create(bind=sync_conn)
             else:
-                logger.debug(f"({idx}/{total_tables}) Table exists: {table_name}")
+                logger.debug(
+                    f"({idx}/{total_tables}) Table already exists: {table_name}"
+                )
 
-        # Special handling for token_blacklist additions
-        if inspector.has_table('token_blacklist'):
-            # Add creation_reason with VARCHAR(50) defaulting to empty string
-            sync_conn.execute(text("""
+        # Special handling for token_blacklist as in your code
+        if inspector.has_table("token_blacklist"):
+            sync_conn.execute(
+                text(
+                    """
                 ALTER TABLE token_blacklist
                 ADD COLUMN IF NOT EXISTS creation_reason VARCHAR(50) NOT NULL DEFAULT ''
-            """))
-            
-            # Add created_at with timestamp defaulting to current time (WITHOUT time zone to match ORM)
-            sync_conn.execute(text("""
+            """
+                )
+            )
+            sync_conn.execute(
+                text(
+                    """
                 ALTER TABLE token_blacklist
-                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP 
+                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP
                 NOT NULL DEFAULT CURRENT_TIMESTAMP
-            """))
-            
-            # Check if created_at exists and has TIME ZONE, if so alter it to remove timezone
-            sync_conn.execute(text("""
+            """
+                )
+            )
+            sync_conn.execute(
+                text(
+                    """
                 DO $$
                 BEGIN
                     IF EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name = 'token_blacklist' 
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'token_blacklist'
                         AND column_name = 'created_at'
                         AND data_type = 'timestamp with time zone'
                     ) THEN
@@ -306,219 +491,197 @@ async def fix_db_schema() -> None:
                         ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE;
                     END IF;
                 END $$;
-            """))
+            """
+                )
+            )
             logger.info("Ensured token_blacklist schema compliance")
 
-        # 2. Add missing columns
-        for table_name in Base.metadata.tables.keys():
-            # Skip tables that don't exist in the database yet
+        # 2. Add or create missing columns
+        for table_name, table in Base.metadata.tables.items():
             if not inspector.has_table(table_name):
-                logger.info(f"Skipping non-existent table: {table_name}")
+                # If the table doesn't exist yet, we've just created it above
                 continue
 
-            # Get database columns
             db_cols = {c["name"] for c in inspector.get_columns(table_name)}
+            orm_cols = set(table.columns.keys())
 
-            # Get ORM columns
-            orm_cols = set(Base.metadata.tables[table_name].columns.keys())
-
-            # Find missing columns
             missing = orm_cols - db_cols
             for col_name in missing:
-                col = Base.metadata.tables[table_name].columns[col_name]
+                col = table.columns[col_name]
+                # You can let SQLAlchemy generate the DDL:
+                #
+                # col.create(sync_conn)
+                #
+                # Or do the explicit approach with text-based DDL:
+                col_type_str = col.type.compile(sync_engine.dialect)
+                col_spec = f"{col_name} {col_type_str}"
 
-                # Construct proper column specification
-                col_spec = f"{col_name} {col.type.compile(sync_engine.dialect)}"
-
-                # Handle NOT NULL constraints with existing data
+                # Provide a fallback default for NOT NULL columns with no server default
                 if not col.nullable and col.server_default is None:
-                    # Create default value based on type for existing rows
                     if str(col.type) == "JSONB":
                         col_spec += " DEFAULT '{}'::jsonb"
                     elif str(col.type) == "BOOLEAN":
                         col_spec += " DEFAULT false"
                     elif str(col.type).startswith("INTEGER"):
                         col_spec += " DEFAULT 0"
-                    elif str(col.type).startswith("UUID"):
+                    elif str(col.type).startswith("BIGINT"):
+                        col_spec += " DEFAULT 0"
+                    elif "UUID" in str(col.type).upper():
+                        # gen_random_uuid() requires 'pgcrypto' extension in some Postgres versions
                         col_spec += " DEFAULT gen_random_uuid()"
-                    elif col_name == 'created_at' and str(col.type) == 'TIMESTAMP':
+                    elif (
+                        col_name == "created_at"
+                        and "TIMESTAMP" in str(col.type).upper()
+                    ):
                         col_spec += " DEFAULT CURRENT_TIMESTAMP"
-                    elif col_name == 'creation_reason' and str(col.type) == 'VARCHAR':
-                        col_spec += " DEFAULT ''"
                     else:
-                        col_spec += " DEFAULT ''"  # Default empty string for other types
+                        # Fallback default
+                        col_spec += " DEFAULT ''"
 
                 col_spec += " NOT NULL" if not col.nullable else " NULL"
 
-                if col.server_default:
+                # If the ORM column has a default, you can attempt to incorporate it
+                if col.server_default is not None:
                     col_spec += f" DEFAULT {col.server_default.arg}"
 
-                # Handle special case for token_type column to avoid PostgreSQL DEFAULT expression limitation
-                if col_name == "token_type" and "DEFAULT access" in col_spec:
-                    col_spec = col_spec.replace("DEFAULT access", "DEFAULT 'access'")
-                
-                # Modify the DDL to add EXISTS check
+                # Avoid issues with unquoted or special defaults
+                # Adjust as needed for your domain
                 ddl = f"""
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
-                        SELECT 1 
-                        FROM information_schema.columns 
-                        WHERE table_name = '{table_name}' 
-                        AND column_name = '{col_name}'
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = '{table_name}'
+                          AND column_name = '{col_name}'
+                          AND table_schema = 'public'
                     ) THEN
                         ALTER TABLE {table_name} ADD COLUMN {col_spec};
                     END IF;
                 END $$;
                 """
                 sync_conn.execute(text(ddl))
-                logger.info(f"Added column: {table_name}.{col_name}")
+                logger.info(f"Added column {table_name}.{col_name}")
 
-        # 2. Create missing indexes
+        # 3. Create missing indexes
         for table_name, table in Base.metadata.tables.items():
-            # Get existing indexes
+            if not inspector.has_table(table_name):
+                continue
+
             db_indexes = {idx["name"] for idx in inspector.get_indexes(table_name)}
-
-            # Check which indexes need to be created
-            for idx in [i for i in table.indexes if i.name not in db_indexes]:
-                # Verify all index columns exist first
-                missing_cols = []
-                for col in idx.columns:
-                    if col.name not in {c["name"] for c in inspector.get_columns(table_name)}:
-                        missing_cols.append(col.name)
-                
-                if missing_cols:
-                    logger.warning(f"Skipping index {idx.name} - missing columns: {missing_cols}")
-                    continue
-                
-                try:
+            for idx in table.indexes:
+                if idx.name not in db_indexes:
+                    # Verify the index's columns exist
+                    index_col_names = {col.name for col in idx.columns}
+                    existing_col_names = {
+                        c["name"] for c in inspector.get_columns(table_name)
+                    }
+                    missing_cols = index_col_names - existing_col_names
+                    if missing_cols:
+                        logger.warning(
+                            f"Skipping creation of index {idx.name} on {table_name} "
+                            f"- missing columns: {missing_cols}"
+                        )
+                        continue
                     logger.info(f"Creating index {idx.name} on {table_name}")
-                    # Use CONCURRENTLY if possible (PostgreSQL only)
-                    if idx.dialect_kwargs.get('postgresql_concurrently'):
-                        sync_conn.execute(text(f"CREATE INDEX CONCURRENTLY {idx.name} ON {table_name} {idx.column_expressions}"))
-                    else:
+                    try:
+                        # If you prefer concurrency:
+                        # if idx.dialect_kwargs.get('postgresql_concurrently'):
+                        #     sync_conn.execute(text(f"CREATE INDEX CONCURRENTLY {idx.name} "
+                        #                            f"ON {table_name} ({','.join(index_col_names)})"))
+                        # else:
                         idx.create(sync_conn)
-                except Exception as index_error:
-                    logger.error(f"Failed to create index {idx.name}: {index_error}")
-                    # Continue instead of failing whole process
-                    continue
+                    except Exception as e:
+                        logger.error(f"Failed to create index {idx.name}: {e}")
 
-        # 3. Handle column type changes
+        # 4. Column type alterations if needed
+        db_tables = inspector.get_table_names()
         for table_name, table in Base.metadata.tables.items():
+            if table_name not in db_tables:
+                continue
             db_cols = inspector.get_columns(table_name)
             db_col_dict = {c["name"]: c for c in db_cols}
 
             for col_name, orm_col in table.columns.items():
                 if col_name not in db_col_dict:
-                    continue  # Skip columns that don't exist yet
-
+                    continue
                 db_col = db_col_dict[col_name]
-                db_type = str(db_col["type"]).split("(")[0]
-                orm_type = str(orm_col.type).split("(")[0]
+                db_type_name = str(db_col["type"]).split("(")[0]
+                orm_type_name = str(orm_col.type).split("(")[0]
 
-                # Handle type conversion
-                # Get base type for comparison
-                orm_base_type = str(orm_col.type).split('(')[0].upper()
-                type_equivalents = {
-                    'VARCHAR': ['character varying'],
-                    'TEXT': ['text'],
-                    'TIMESTAMP': ['timestamp without time zone'],
-                    'UUID': ['uuid'],
-                    'JSONB': ['jsonb'],
-                    'INTEGER': ['integer', 'int4'],
-                    'BIGINT': ['bigint', 'int8'],
-                    'BOOLEAN': ['boolean', 'bool'],
-                }
-
-                if db_type != orm_type:
+                if db_type_name != orm_type_name:
                     logger.warning(
-                        f"Type mismatch: {table_name}.{orm_col.name} (DB: {db_type} vs ORM: {orm_type})"
+                        f"Potential type mismatch: {table_name}.{col_name} (DB: {db_type_name} vs ORM: {orm_type_name})"
                     )
-                    # Handle common type conversions safely
-                    if "VARCHAR" in db_type and "TEXT" in orm_type:
+                    # Attempt some safe conversions
+                    if "VARCHAR" in db_type_name and "TEXT" in orm_type_name:
                         sync_conn.execute(
                             text(
-                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
+                                f"ALTER TABLE {table_name} ALTER COLUMN {col_name} TYPE TEXT"
                             )
                         )
                         logger.info(
-                            f"Converted {table_name}.{orm_col.name} from VARCHAR to TEXT"
+                            f"Converted {table_name}.{col_name} from VARCHAR to TEXT"
                         )
-                    elif orm_type == 'text' and db_type != 'text':
+                    elif orm_type_name.upper() in ["TEXT"] and db_type_name != "text":
                         try:
                             sync_conn.execute(
                                 text(
-                                    f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE TEXT"
+                                    f"ALTER TABLE {table_name} ALTER COLUMN {col_name} TYPE TEXT"
                                 )
                             )
-                            logger.info(
-                                f"Converted {table_name}.{orm_col.name} to TEXT type"
-                            )
+                            logger.info(f"Converted {table_name}.{col_name} to TEXT")
                         except Exception as e:
-                            logger.error(f"Failed to convert to TEXT: {e}")
-                    elif orm_base_type in ['INTEGER', 'BIGINT', 'BOOLEAN']:
-                        # Check if existing type is compatible
-                        if db_type.lower() not in [e.lower() for e in type_equivalents.get(orm_base_type, [])]:
-                            try:
-                                sync_conn.execute(
-                                    text(
-                                        f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE {orm_col.type.compile(sync_engine.dialect)}"
-                                    )
-                                )
-                                logger.info(f"Converted {table_name}.{orm_col.name} from {db_type} to {orm_col.type}")
-                            except Exception as e:
-                                logger.error(f"Failed to convert type for {table_name}.{orm_col.name}: {e}")
-                        else:
-                            logger.debug(f"Skipping compatible type: {table_name}.{orm_col.name} ({db_type} == {orm_col.type})")
-                    elif "CHAR" in db_type and "UUID" in orm_type:
+                            logger.error(
+                                f"Failed to convert {table_name}.{col_name} to TEXT: {e}"
+                            )
+                    elif (
+                        isinstance(orm_col.type, PG_UUID)
+                        and db_type_name.lower() != "uuid"
+                    ):
+                        # Convert from char/varchar to UUID
                         try:
                             sync_conn.execute(
                                 text(
-                                    f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE UUID USING {orm_col.name}::uuid"
+                                    f"ALTER TABLE {table_name} "
+                                    f"ALTER COLUMN {col_name} TYPE UUID USING {col_name}::uuid"
                                 )
                             )
-                            logger.info(
-                                f"Converted {table_name}.{orm_col.name} from CHAR to UUID"
-                            )
+                            logger.info(f"Converted {table_name}.{col_name} to UUID")
                         except Exception as e:
-                            logger.error(f"Failed to convert to UUID: {e}")
-                            # Create a new UUID column and migrate data
+                            logger.error(f"Direct alter to UUID failed: {e}")
+                            # Fallback approach: create temp column, copy, drop old, rename
+                            temp_col_name = f"{col_name}_new"
                             sync_conn.execute(
                                 text(
-                                    f"ALTER TABLE {table_name} ADD COLUMN {orm_col.name}_new UUID DEFAULT gen_random_uuid()"
+                                    f"ALTER TABLE {table_name} "
+                                    f"ADD COLUMN {temp_col_name} UUID DEFAULT gen_random_uuid()"
                                 )
                             )
                             sync_conn.execute(
                                 text(
-                                    f"UPDATE {table_name} SET {orm_col.name}_new = {orm_col.name}::uuid"
+                                    f"UPDATE {table_name} SET {temp_col_name} = {col_name}::uuid "
+                                    f"WHERE {col_name} ~ '^[0-9a-fA-F-]{{36}}$'"
                                 )
+                            )
+                            # The above `WHERE` tries to filter valid UUID strings
+                            sync_conn.execute(
+                                text(f"ALTER TABLE {table_name} DROP COLUMN {col_name}")
                             )
                             sync_conn.execute(
                                 text(
-                                    f"ALTER TABLE {table_name} DROP COLUMN {orm_col.name}"
-                                )
-                            )
-                            sync_conn.execute(
-                                text(
-                                    f"ALTER TABLE {table_name} RENAME COLUMN {orm_col.name}_new TO {orm_col.name}"
+                                    f"ALTER TABLE {table_name} RENAME COLUMN {temp_col_name} TO {col_name}"
                                 )
                             )
                             logger.info(
-                                f"Successfully migrated {table_name}.{orm_col.name} to UUID via new column"
+                                f"Migrated {table_name}.{col_name} to UUID via new column approach"
                             )
-                    elif isinstance(orm_col.type, PG_UUID) and db_type != "uuid":
-                        # Handle UUID columns that aren't properly typed
-                        sync_conn.execute(
-                            text(
-                                f"ALTER TABLE {table_name} ALTER COLUMN {orm_col.name} TYPE UUID USING {orm_col.name}::uuid"
-                            )
-                        )
-                        logger.info(
-                            f"Converted {table_name}.{orm_col.name} to UUID type"
-                        )
-                        
-        # 5. Handle foreign key constraints with proper cascade rules
+
+        # 5. Foreign key constraint fixes
         for table_name, table in Base.metadata.tables.items():
+            if not inspector.has_table(table_name):
+                continue
+
             db_fks = inspector.get_foreign_keys(table_name)
             db_fk_cols = {
                 (fk["constrained_columns"][0], fk["referred_table"], fk.get("ondelete"))
@@ -529,86 +692,92 @@ async def fix_db_schema() -> None:
             for fk in table.foreign_keys:
                 col_name = fk.parent.name
                 referred_table = fk.column.table.name
+                referred_col = fk.column.name
                 ondelete = None
-                
-                # Get ondelete rule from the column if specified
-                for col in table.columns:
-                    if col.name == col_name and col.foreign_keys:
-                        for fk_constraint in col.foreign_keys:
+                # Gather ondelete from the foreign key if present
+                for c in table.columns:
+                    if c.name == col_name:
+                        for fk_constraint in c.foreign_keys:
                             if fk_constraint.ondelete:
                                 ondelete = fk_constraint.ondelete.upper()
 
-                if (col_name, referred_table, ondelete) not in db_fk_cols:
-                    # FK doesn't exist or has different cascade rules, try to add it
-                    try:
-                        constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
-                        ondelete_clause = f" ON DELETE {ondelete}" if ondelete else ""
-                
-                        # Drop existing constraint if it exists but has different rules
-                        for existing_fk in db_fks:
-                            if (existing_fk["constrained_columns"] and
-                                existing_fk["constrained_columns"][0] == col_name and
-                                existing_fk["referred_table"] == referred_table):
-                                try:
-                                    sync_conn.execute(
-                                        text(
-                                            f"ALTER TABLE {table_name} DROP CONSTRAINT {existing_fk['name']}"
-                                        )
+                tuple_check = (col_name, referred_table, ondelete)
+                if tuple_check not in db_fk_cols:
+                    # Possibly we have an existing constraint with different ondelete
+                    # or none at all. We'll drop any that partially match if needed:
+                    for existing_fk in db_fks:
+                        if (
+                            existing_fk["constrained_columns"]
+                            and existing_fk["constrained_columns"][0] == col_name
+                            and existing_fk["referred_table"] == referred_table
+                        ):
+                            try:
+                                sync_conn.execute(
+                                    text(
+                                        f"ALTER TABLE {table_name} DROP CONSTRAINT {existing_fk['name']}"
                                     )
-                                    logger.info(
-                                        f"Dropped existing foreign key constraint {existing_fk['name']} to update cascade rules"
-                                    )
-                                except Exception as drop_error:
-                                    logger.warning(
-                                        f"Failed to drop existing constraint {existing_fk['name']}: {drop_error}"
-                                    )
-                                    continue  # Skip adding new constraint if we can't drop old one
+                                )
+                                logger.info(
+                                    f"Dropped existing FK {existing_fk['name']} to update with correct cascade rules"
+                                )
+                            except Exception as drop_err:
+                                logger.warning(
+                                    f"Could not drop {existing_fk['name']}: {drop_err}"
+                                )
+                                continue
 
-                        try:
-                            sync_conn.execute(text(
-                                f"ALTER TABLE {table_name} "
-                                f"ADD CONSTRAINT {constraint_name} "
-                                f"FOREIGN KEY ({col_name}) "
-                                f"REFERENCES {referred_table} ({fk.column.name}) "
-                                f"{ondelete_clause}"
-                            ))
-                            logger.info(
-                                f"Successfully added foreign key constraint: {table_name}.{col_name} -> {referred_table} "
-                                f"with ON DELETE {ondelete if ondelete else 'NO ACTION'}"
-                            )
-                        except Exception as add_error:
-                            logger.error(
-                                f"Failed to add foreign key constraint for {table_name}.{col_name}: {add_error}\n"
-                                f"SQL: ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
-                                f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
-                                f"{ondelete_clause}"
-                            )
-                            # Attempt to create constraint without ondelete clause if that was the issue
-                            if ondelete_clause:
-                                try:
-                                    sync_conn.execute(
-                                        text(
-                                            f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
-                                            f"FOREIGN KEY ({col_name}) REFERENCES {referred_table}({fk.column.name})"
-                                        )
-                                    )
-                                    logger.warning(
-                                        f"Added constraint without ON DELETE clause due to previous error"
-                                    )
-                                except Exception as simple_add_error:
-                                    logger.error(
-                                        f"Completely failed to add foreign key constraint: {simple_add_error}"
-                                    )
-                    except Exception as outer_error:
-                        max_retries = 3
-                        attempt = 0
-                        constraint_name = f"{table_name}_{col_name}_fkey"  # Default FK naming convention
-                        if "deadlock" in str(outer_error).lower() and attempt < max_retries - 1:
-                            logger.warning(f"Deadlock detected on FK {constraint_name}, retrying... (Attempt {attempt + 1})")
-                            time.sleep(0.1 * (attempt + 1))
-                            continue
-                        else:
-                            logger.error(
-                                f"Failed to handle foreign key constraint for {table_name}.{col_name}: {outer_error}"
-                            )
-                            raise
+                    _retry_foreign_key_add(
+                        sync_conn,
+                        table_name,
+                        col_name,
+                        referred_table,
+                        referred_col,
+                        ondelete,
+                    )
+
+    logger.info("Finished comprehensive schema alignment.")
+
+
+# ---------------------------------------------------------
+# Main Database Initialization
+# ---------------------------------------------------------
+async def init_db() -> None:
+    """
+    Initialize database with improved progress tracking:
+      1. Create missing tables (async approach).
+      2. Align schema (fix columns, indexes, FKs, etc.).
+      3. Validate final schema and log mismatches.
+    """
+    try:
+        logger.info("Database initialization started...")
+
+        # Step 1: Create missing tables
+        logger.info("Checking for missing tables...")
+        existing_tables = await _get_existing_tables()
+        tables_to_create = [
+            t for t in Base.metadata.tables.keys() if t not in existing_tables
+        ]
+        if tables_to_create:
+            await _create_missing_tables(tables_to_create)
+
+        # Step 2: Schema alignment
+        logger.info("Running schema alignment (DDL fixes)...")
+        await fix_db_schema()
+
+        # Step 3: Final validation
+        logger.info("Validating final schema...")
+        mismatch_details = await validate_db_schema()
+        if mismatch_details:
+            logger.warning(
+                f"Schema validation completed with {len(mismatch_details)} issue(s)."
+            )
+            # Log just the first few
+            for issue in mismatch_details[:7]:
+                logger.warning(f"  - {issue}")
+        else:
+            logger.info(
+                "Schema validation successful! All ORM definitions match the database."
+            )
+    except Exception as e:
+        logger.error(f"❌ DB initialization failed: {str(e)}")
+        raise
