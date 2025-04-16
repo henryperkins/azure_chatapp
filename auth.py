@@ -422,7 +422,7 @@ async def login_user(
 
     # Generate access token
     access_payload = build_jwt_payload(
-        locked_user,
+        user,
         token_type="access",
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
@@ -430,8 +430,8 @@ async def login_user(
 
     # Generate refresh token
     refresh_payload = build_jwt_payload(
-        locked_user,
-        token_type="refresh",
+        user,
+        token_type="refresh", 
         expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
     refresh_token = create_access_token(refresh_payload)
