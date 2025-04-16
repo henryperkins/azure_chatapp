@@ -371,51 +371,54 @@ async def login_user(
     await rate_limit_login(request, creds.username)
 
     lower_username = creds.username.lower()
-    result = await session.execute(select(User).where(User.username == lower_username))
-    user = result.scalars().first()
-    if not user:
-        logger.warning("Login attempt for non-existent user: %s", lower_username)
-        raise HTTPException(status_code=401, detail="Invalid credentials.")
-
-    if not user.is_active:
-        logger.warning("Login attempt for disabled account: %s", lower_username)
-        raise HTTPException(
-            status_code=403, detail="Account disabled. Contact support."
-        )
-
-    # Password verification with timing and better error handling
-    verify_start = datetime.now(timezone.utc)
-    try:
-        valid_password = await asyncio.get_event_loop().run_in_executor(
-            None,
-            bcrypt.checkpw,
-            creds.password.encode("utf-8"),
-            user.password_hash.encode("utf-8"),
-        )
-        verify_duration = (datetime.now(timezone.utc) - verify_start).total_seconds()
-        logger.debug(
-            f"Password verification took {verify_duration:.3f}s for user {lower_username}"
-        )
-    except ValueError as exc:
-        logger.error("Corrupted password hash for user '%s': %s", lower_username, exc)
-        raise HTTPException(
-            status_code=400, detail="Corrupted password hash. Please reset account."
-        ) from exc
-
-    if not valid_password:
-        logger.warning("Failed login for user: %s", lower_username)
-        # Add small delay to prevent timing attacks
-        await asyncio.sleep(0.5)
-        raise HTTPException(status_code=401, detail="Invalid credentials.")
-
-    # Update user and generate tokens in a transaction
+    
+    # Move all database operations into a single transaction block
     async with session.begin():
-        locked_user = await session.get(User, user.id, with_for_update=True)
-        if not locked_user:
-            raise HTTPException(status_code=500, detail="User lock failed.")
+        # Get user with row lock to prevent concurrent updates
+        result = await session.execute(
+            select(User)
+            .where(User.username == lower_username)
+            .with_for_update()
+        )
+        user = result.scalars().first()
+        
+        if not user:
+            logger.warning("Login attempt for non-existent user: %s", lower_username)
+            raise HTTPException(status_code=401, detail="Invalid credentials.")
 
-        locked_user.last_login = naive_utc_now()
-        # locked_user.token_version remains the same on successful login
+        if not user.is_active:
+            logger.warning("Login attempt for disabled account: %s", lower_username)
+            raise HTTPException(
+                status_code=403, detail="Account disabled. Contact support."
+            )
+
+        # Password verification with timing and better error handling
+        verify_start = datetime.now(timezone.utc)
+        try:
+            valid_password = await asyncio.get_event_loop().run_in_executor(
+                None,
+                bcrypt.checkpw,
+                creds.password.encode("utf-8"),
+                user.password_hash.encode("utf-8"),
+            )
+            verify_duration = (datetime.now(timezone.utc) - verify_start).total_seconds()
+            logger.debug(
+                f"Password verification took {verify_duration:.3f}s for user {lower_username}"
+            )
+        except ValueError as exc:
+            logger.error("Corrupted password hash for user '%s': %s", lower_username, exc)
+            raise HTTPException(
+                status_code=400, detail="Corrupted password hash. Please reset account."
+            ) from exc
+
+        if not valid_password:
+            logger.warning("Failed login for user: %s", lower_username)
+            # Add small delay to prevent timing attacks
+            await asyncio.sleep(0.5)
+            raise HTTPException(status_code=401, detail="Invalid credentials.")
+
+        # Update user last login
+        user.last_login = naive_utc_now()
 
     # Generate access token
     access_payload = build_jwt_payload(
