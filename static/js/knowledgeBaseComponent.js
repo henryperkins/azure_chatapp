@@ -115,90 +115,6 @@ class KnowledgeBaseComponent {
     });
   }
 
-  _injectStyles() {
-    // Remove this function - styles are handled by Tailwind/DaisyUI via app.css
-    // const styleId = 'kb-component-styles';
-    // if (document.getElementById(styleId)) return;
-
-    // const style = document.createElement('style');
-    // style.id = styleId;
-    // style.textContent = `
-    //   .kb-spinner {
-    //     border: 2px solid rgba(0, 0, 0, 0.1);
-    //     border-left-color: #3b82f6;
-    //     border-radius: 50%;
-    //     width: 1rem;
-    //     height: 1rem;
-    //     animation: kb-spin 1s linear infinite;
-    //   }
-    //   @keyframes kb-spin {
-    //     to { transform: rotate(360deg); }
-    //   }
-    //   .kb-result-item {
-    //     transition: all 0.2s ease;
-    //     cursor: pointer;
-    //   }
-    //   .kb-result-item:hover {
-    //     transform: translateY(-1px);
-    //     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    //   }
-    //   .kb-status-badge {
-    //     display: inline-flex;
-    //     align-items: center;
-    //     padding: 0.25rem 0.5rem;
-    //     border-radius: 9999px;
-    //     font-size: 0.75rem;
-    //     font-weight: 500;
-    //   }
-    //   .kb-status-active {
-    //     background-color: #ecfdf5;
-    //     color: #059669;
-    //   }
-    //   .kb-status-inactive {
-    //     background-color: #fee2e2;
-    //     color: #dc2626;
-    //   }
-    //   .kb-notification {
-    //     padding: 0.75rem 1rem;
-    //     margin-bottom: 1rem;
-    //     border-radius: 0.375rem;
-    //     border: 1px solid transparent;
-    //   }
-    //   .kb-notification.info {
-    //     color: #0c5460;
-    //     background-color: #d1ecf1;
-    //     border-color: #bee5eb;
-    //   }
-    //   .kb-notification.warning {
-    //     color: #856404;
-    //     background-color: #fff3cd;
-    //     border-color: #ffeeba;
-    //   }
-    //   .kb-notification.error {
-    //     color: #721c24;
-    //     background-color: #f8d7da;
-    //     border-color: #f5c6cb;
-    //   }
-    //   .kb-notification.success {
-    //     color: #155724;
-    //     background-color: #d4edda;
-    //     border-color: #c3e6cb;
-    //   }
-    //   .kb-line-clamp-3 {
-    //     display: -webkit-box;
-    //     -webkit-line-clamp: 3;
-    //     -webkit-box-orient: vertical;
-    //     overflow: hidden;
-    //   }
-    //   .kb-disabled-option {
-    //     opacity: 0.5;
-    //     cursor: not-allowed;
-    //     color: #999;
-    //   }
-    // `;
-    // document.head.appendChild(style);
-  }
-
   _cacheElements() {
     this.elements = {
       // Core elements
@@ -626,29 +542,6 @@ class KnowledgeBaseComponent {
     statusBadge.className = `badge ${isActive ? 'badge-success' : 'badge-warning'} badge-sm`;
     statusBadge.textContent = isActive ? "Active" : "Inactive";
     statusBadge.title = isActive ? "Knowledge base is enabled." : "Knowledge base is disabled.";
-  }
-
-  _updateKnowledgeBaseStats(stats) {
-     // This function is likely deprecated as stats are shown in projectDetailsComponent
-     console.warn("_updateKnowledgeBaseStats is likely deprecated.");
-     // const { fileCountDisplay, fileSizeDisplay } = this.elements;
-
-     // if (fileCountDisplay) {
-     //   fileCountDisplay.textContent = stats?.file_count ?? 0;
-     //   fileCountDisplay.title = `Total files: ${stats?.file_count ?? 0}`;
-     // }
-
-     // if (fileSizeDisplay) {
-     //   const sizeText = this.formatBytes(stats?.total_size || 0);
-     //   fileSizeDisplay.textContent = sizeText;
-     //   fileSizeDisplay.title = `Total size: ${stats?.total_size || 0} bytes`;
-     // }
-
-     // const chunkCountEl = document.getElementById('knowledgeChunkCount');
-     // if (chunkCountEl && stats?.chunk_count !== undefined) {
-     //   chunkCountEl.textContent = stats.chunk_count;
-     //   chunkCountEl.title = `Total chunks: ${stats.chunk_count}`;
-     // }
   }
 
   _renderSearchResults(results) {

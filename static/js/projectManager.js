@@ -63,7 +63,14 @@
       // Use centralized auth check
       const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
-        console.warn("[projectManager] loadProjects skipped: User not authenticated.");
+        // Rate-limit repeated warning logs
+        const now = Date.now();
+        const operationKey = "loadProjects_not_authenticated";
+        if (!lastAuthLogTimestamps[operationKey] || now - lastAuthLogTimestamps[operationKey] > AUTH_LOG_INTERVAL) {
+          console.warn("[projectManager] loadProjects requires login, showing login prompt");
+          lastAuthLogTimestamps[operationKey] = now;
+        }
+        emitEvent("showLoginPrompt", { reason: "loadProjects" });
         emitEvent("projectsLoaded", { projects: [], count: 0, filter: { type: cleanFilter }, error: true, reason: 'auth_required' });
         emitEvent("projectAuthError", { reason: 'load_projects', error: new Error("Authentication required") });
         return []; // Return empty array as no projects can be loaded
