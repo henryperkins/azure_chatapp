@@ -45,7 +45,16 @@ const sidebarTabConfig = {
   projects: {
     buttonId: 'projectsTab',
     sectionId: 'projectsSection',
-    loader: () => window.loadSidebarProjects?.(),
+    loader: () => {
+      window.projectManager.loadProjects('all')
+        .then(projects => {
+          window.projectListComponent.renderProjects(projects);
+        })
+        .catch(err => {
+          console.error('Failed to load sidebar projects:', err);
+          window.ChatUtils.handleError('Sidebar project load', err);
+        });
+    },
   },
 };
 
