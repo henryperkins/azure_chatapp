@@ -683,27 +683,6 @@ window.ChatInterface.prototype._handleMessageReceived = function (message) {
 };
 
 /**
- * Change the target container for message rendering.
- * @param {string} selector - CSS selector for the new container
- * @returns {boolean} Success state
- */
-window.ChatInterface.prototype.setTargetContainer = function (selector) {
-  if (!this.ui || !this.ui.messageList) {
-    Logger.error("UI components not initialized yet.");
-    return false;
-  }
-  const newContainer = document.querySelector(selector);
-  if (newContainer) {
-    this.ui.messageList.container = newContainer;
-    Logger.info(`Chat message container set to: ${selector}`);
-    return true;
-  } else {
-    Logger.error(`Failed to find container with selector: ${selector}`);
-    return false;
-  }
-};
-
-/**
  * Register event handler for custom events.
  * @param {string} eventName - Name of the event
  * @param {Function} handler - Event handler function
@@ -807,15 +786,6 @@ window.ChatInterface.prototype.loadProject = async function(projectId) {
   }));
 
   return true;
-};
-
-/**
- * Add event listener with tracking for cleanup
- */
-window.ChatInterface.prototype.addEventListener = function(target, type, handler, options = {}) {
-  target.addEventListener(type, handler, options);
-  this._eventListeners.push({ target, type, handler, options });
-  return handler;
 };
 
 /**

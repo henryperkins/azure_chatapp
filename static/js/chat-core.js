@@ -32,35 +32,6 @@
     MODEL_CONFIG: {},
 
     /**
-     * Load required modules in parallel (unless there are strict dependencies).
-     * @returns {Promise<void>}
-     */
-    ensureModulesLoaded: async function () {
-      const loadPromises = SELECTORS.scripts.map(mod => {
-        if (!window[mod.name]) {
-          console.log(`Loading ${mod.name} from ${mod.path}`);
-          return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = mod.path;
-            script.onload = () => {
-              console.log(`Loaded ${mod.name}`);
-              resolve();
-            };
-            script.onerror = (err) => {
-              console.error(`Failed to load ${mod.name}:`, err);
-              reject(new Error(`Failed to load ${mod.path}`));
-            };
-            document.head.appendChild(script);
-          });
-        }
-        // Already available
-        return Promise.resolve();
-      });
-
-      await Promise.all(loadPromises);
-    },
-
-    /**
      * Primary initialization entry point for the chat system.
      * @returns {Promise<Object>} - The initialized chat interface
      */
@@ -190,33 +161,12 @@
     },
 
     /**
-     * Load an existing conversation by chatId, ensuring chat is initialized.
-     * @param {string} chatId - Conversation ID to load
-     * @returns {Promise<boolean>} - Success status
-     */
-    loadConversation: async function (chatId) {
-      try {
-        if (!this.chatInterface) {
-          await this.initializeChat();
-        }
-        if (!this.chatInterface.loadConversation) {
-          throw new Error('Chat interface not available');
-        }
-        return await this.chatInterface.loadConversation(chatId);
-      } catch (error) {
-        console.error('Failed to load conversation:', error);
-        window.ChatUtils.handleError('Loading conversation', error);
-        throw error;
-      }
-    },
-
-    /**
      * Ensures a conversation exists for the specified project.
      * Will either load an existing conversation or create a new one.
      * @param {string} projectId - The project ID
      * @returns {Promise<Object>} The conversation object
      */
-    ensureProjectConversation: async function(projectId) {
+    ensureProjectConversation: async function (projectId) {
       try {
         if (!projectId) {
           throw new Error('Project ID is required');
@@ -282,65 +232,6 @@
         this.chatInterface.currentChatId = chatId;
       }
       return await this.chatInterface.sendMessage(userMsg);
-    },
-
-    /**
-     * Initialize a project chat component.
-     * @param {string} containerSelector - The selector for the chat container
-     * @param {Object} options - Configuration options
-     * @returns {Object} - The chat interface instance
-     */
-    initializeProjectChat: function (containerSelector, options = {}) {
-      console.log('[ChatManager] Initializing project chat with selector:', containerSelector);
-
-      if (!window.ChatInterface) {
-        console.error('[ChatManager] ChatInterface not available');
-        throw new Error('ChatInterface not available - chat functionality will be limited');
-      }
-
-      // Configure selectors
-      const chatConfig = {
-        containerSelector: containerSelector,
-        messageContainerSelector: options.messageContainer || '#projectChatMessages',
-        inputSelector: options.inputField || '#projectChatInput',
-        sendButtonSelector: options.sendButton || '#projectChatSendBtn',
-        typingIndicator: options.typingIndicator !== false,
-        readReceipts: options.readReceipts !== false,
-        messageStatus: options.messageStatus !== false
-      };
-
-      // Initialize the global chat interface if it doesn't exist
-      if (!window.globalChatInterface) {
-        console.log('[ChatManager] Creating globalChatInterface during project chat init');
-        this.initializeChat(); // This will create and initialize the global interface
-      }
-
-      // Configure the existing global interface with the project-specific selectors
-      if (typeof window.globalChatInterface.configureSelectors === 'function') {
-        console.log('[ChatManager] Configuring global interface for project use');
-        window.globalChatInterface.configureSelectors(chatConfig);
-      }
-
-      // Set project context if project ID is available
-      const projectId = window.ChatUtils.getProjectId();
-      if (projectId && typeof window.globalChatInterface.loadProject === 'function') {
-        console.log(`[ChatManager] Setting project context: ${projectId}`);
-        window.globalChatInterface.loadProject(projectId);
-      }
-
-      // Set up event handlers if provided
-      if (options.onMessageSent && typeof options.onMessageSent === 'function') {
-        window.globalChatInterface.on('messageSent', options.onMessageSent);
-      }
-      if (options.onError && typeof options.onError === 'function') {
-        window.globalChatInterface.on('error', options.onError);
-      }
-
-      // For backward compatibility
-      window.projectChatInterface = window.globalChatInterface;
-      this.projectChatInterface = window.globalChatInterface;
-
-      return window.globalChatInterface;
     }
   };
 

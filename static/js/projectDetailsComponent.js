@@ -116,10 +116,6 @@ export class ProjectDetailsComponent {
    * Initialize chat interface by ensuring the global interface is ready
    * and configured for the current project
    */
-  async initChatInterface() {
-    // Try to init chat system with no specific conversation ID
-    return this._initializeChatSystem();
-  }
 
   /**
    * Centralized method to initialize the chat system and optionally load a conversation.
@@ -212,7 +208,7 @@ export class ProjectDetailsComponent {
     document.addEventListener('chatInterfaceInitialized', () => {
       console.log('[ProjectDetailsComponent] Received chatInterfaceInitialized event');
       if (this.state.activeTab === 'chat' && this.state.currentProject?.id) {
-        this.initChatInterface();
+        this._initializeChatSystem();
       }
     });
 
@@ -797,11 +793,6 @@ export class ProjectDetailsComponent {
   /* ------------------------------------------------------------------
    * Chat Interface
    * ------------------------------------------------------------------ */
-
-  async initChatInterface() {
-    // Try to init chat system with no specific conversation ID
-    return this._initializeChatSystem();
-  }
 
   /**
    * Centralized method to initialize the chat system and optionally load a conversation.
