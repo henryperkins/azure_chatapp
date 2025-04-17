@@ -64,6 +64,44 @@ export class ProjectDetailsComponent {
     this.setupDragDropHandlers();
   }
 
+  initElements() {
+    // Find required elements and store them
+    this.elements = {
+      container: document.getElementById('projectDetailsView'),
+      title: document.getElementById('projectTitle'),
+      description: document.getElementById('projectDescription'),
+      backBtn: document.getElementById('backToProjectsBtn'),
+      pinBtn: document.getElementById('pinProjectBtn'),
+      archiveBtn: document.getElementById('archiveProjectBtn'),
+      tabContainer: document.getElementById('projectDetailsTabs'),
+      dragZone: document.getElementById('dragDropZone'),
+      filesList: document.getElementById('projectFilesList'),
+      fileInput: document.getElementById('projectFileInput'),
+      uploadBtnTrigger: document.getElementById('uploadFileBtn'),
+      uploadProgress: document.getElementById('uploadProgressContainer'),
+      progressBar: document.getElementById('uploadProgressBar'),
+      uploadStatus: document.getElementById('uploadStatusText'),
+      chatContainer: document.getElementById('projectChatContainer'),
+      chatMessages: document.getElementById('projectChatMessages'),
+
+      // Tab content sections
+      tabContents: {
+        files: document.getElementById('filesTabContent'),
+        knowledge: document.getElementById('knowledgeTabContent'),
+        conversations: document.getElementById('conversationsTabContent'),
+        artifacts: document.getElementById('artifactsTabContent'),
+        chat: document.getElementById('chatTabContent')
+      },
+
+      // Loading states
+      loadingStates: {
+        files: document.getElementById('filesLoadingIndicator'),
+        conversations: document.getElementById('conversationsLoadingIndicator'),
+        artifacts: document.getElementById('artifactsLoadingIndicator')
+      }
+    };
+  }
+
   /* ------------------------------------------------------------------
    * Public Lifecycle Methods
    * ------------------------------------------------------------------ */
