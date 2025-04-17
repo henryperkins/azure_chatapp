@@ -171,6 +171,12 @@ export class ProjectDetailsComponent {
       });
       this.elements.fileInput.addEventListener('change', this.handleFileSelection.bind(this));
     }
+    
+    // New conversation button
+    const newConversationBtn = document.getElementById('projectNewConversationBtn');
+    if (newConversationBtn) {
+      newConversationBtn.addEventListener('click', () => this.createNewChat());
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -653,9 +659,15 @@ export class ProjectDetailsComponent {
       this.elements.conversationsList.innerHTML = `
         <div class="text-base-content/70 text-center py-8">
           <p>No conversations yet</p>
-          <button class="btn btn-sm btn-outline mt-2" onclick="projectDetails.switchTab('chat')">Start Chatting</button>
+          <button class="btn btn-sm btn-primary mt-2" id="newChatFromEmptyState">Create New Chat</button>
         </div>
       `;
+      
+      // Add event listener for the new chat button
+      const newChatBtn = document.getElementById('newChatFromEmptyState');
+      if (newChatBtn) {
+        newChatBtn.addEventListener('click', () => this.createNewChat());
+      }
     } else {
       this.elements.conversationsList.innerHTML = conversations
         .map(conv => this.createConversationItem(conv))
@@ -686,6 +698,47 @@ export class ProjectDetailsComponent {
       </div>
     `;
     return item.outerHTML;
+  }
+  
+  /**
+   * Creates a new chat conversation for the current project
+   */
+  async createNewChat() {
+    if (!this.state.currentProject?.id) {
+      this.notification?.('No project selected', 'error');
+      return;
+    }
+    
+    try {
+      // Store project ID in localStorage for chat system
+      localStorage.setItem("selectedProjectId", this.state.currentProject.id);
+      
+      // Use projectManager to create conversation
+      const conversation = await window.projectManager.createConversation(
+        this.state.currentProject.id
+      );
+      
+      // Switch to chat tab and load the conversation
+      this.switchTab('chat');
+      const chatInstance = this.chatInstance || window.projectChatInterface;
+      if (chatInstance) {
+        await chatInstance.loadConversation(conversation.id);
+      }
+      
+      // Update URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('chatId', conversation.id);
+      if (!newUrl.searchParams.has('project')) {
+        newUrl.searchParams.set('project', this.state.currentProject.id);
+      }
+      window.history.pushState({}, "", newUrl);
+      
+      return conversation;
+    } catch (error) {
+      console.error('Failed to create chat:', error);
+      this.notification?.('Failed to create chat: ' + error.message, 'error');
+      throw error;
+    }
   }
 
   async handleConversationClick(conversation) {
@@ -959,7 +1012,28 @@ export class ProjectDetailsComponent {
         }
         break;
       case 'chat':
-        // Chat is initialized in renderProject, but you can refresh here if needed
+        // Initialize or ensure chat interface is ready when tab is selected
+        if (!this.chatInstance && this.state.currentProject?.id) {
+          // Try to initialize chat interface if not initialized
+          this.initChatInterface();
+          
+          // Check if we need to create a new conversation or load an existing one
+          const urlParams = new URLSearchParams(window.location.search);
+          const chatId = urlParams.get('chatId');
+          
+          if (chatId) {
+            // If we have a chat ID, try to load it
+            const chatInstance = this.chatInstance || window.projectChatInterface;
+            if (chatInstance) {
+              chatInstance.loadConversation(chatId)
+                .catch(err => console.error('[ProjectDetailsComponent] Error loading conversation:', err));
+            }
+          } else if (this.chatInstance && !this.chatInstance.currentChatId) {
+            // If no conversation is loaded, create a new one
+            this.createNewChat()
+              .catch(err => console.error('[ProjectDetailsComponent] Error creating new chat:', err));
+          }
+        }
         break;
     }
   }

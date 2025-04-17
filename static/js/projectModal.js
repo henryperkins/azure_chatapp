@@ -12,8 +12,8 @@
 if (typeof window.ProjectModal === 'undefined') {
   window.ProjectModal = class ProjectModal {
   constructor() {
-    // Increased delay to ensure DOM is fully loaded including all modals
-    setTimeout(() => this.initializeModal(), 500);
+    // Initialize the modal without auto-opening it
+    this.initializeModal();
 
     // Add a fallback initialization attempt with MutationObserver
     this._setupModalObserver();
@@ -26,6 +26,11 @@ if (typeof window.ProjectModal === 'undefined') {
     if (!this.modalElement) {
       console.warn('Project form modal element not found, will retry when needed');
       return;
+    }
+    
+    // Ensure the dialog is closed by default
+    if (this.modalElement.nodeName === 'DIALOG' && this.modalElement.hasAttribute('open')) {
+      this.modalElement.close();
     }
 
     // Try to find form elements with multiple possible IDs
@@ -112,6 +117,15 @@ if (typeof window.ProjectModal === 'undefined') {
           manager.modalMappings = manager.modalMappings || {};
           manager.modalMappings[this.modalId] = this.modalElement.id || this.modalElement;
         }
+      }
+      
+      // Ensure the modal is not shown automatically after registration
+      if (manager.hide && typeof manager.hide === 'function') {
+        manager.hide(this.modalId);
+      } else if (this.modalElement.nodeName === 'DIALOG') {
+        this.modalElement.close();
+      } else {
+        this.modalElement.classList.add('hidden');
       }
     } catch (err) {
       console.error('Error registering modal with manager:', err);
@@ -378,18 +392,18 @@ window.initProjectModal = () => {
   return window.projectModal;
 };
 
-// Initialize when DOM is ready with a slight delay to ensure all elements are available
+// Initialize when DOM is ready, but don't open the modal automatically
 document.addEventListener('DOMContentLoaded', () => {
-  // Increase delay to ensure all DOM elements are fully loaded and processed
-  setTimeout(() => {
-    initProjectModal();
-  }, 1000);
+  // Initialize the modal without showing it
+  if (!window.projectModal) {
+    window.projectModal = new ProjectModal();
+  }
 });
 
-// Auto-initialize if loaded after DOMContentLoaded, also with a delay
+// Init if loaded after DOMContentLoaded, but without auto-showing
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  setTimeout(() => {
-    initProjectModal();
-  }, 1000);
+  if (!window.projectModal) {
+    window.projectModal = new ProjectModal();
+  }
 }
 }

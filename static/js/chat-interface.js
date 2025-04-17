@@ -175,6 +175,40 @@ window.ChatInterface.prototype._setupDependencies = async function () {
 };
 
 /**
+ * Ensures a project conversation exists - either loads existing or creates new
+ * @param {string} projectId - The project ID to ensure a conversation for
+ * @returns {Promise<Object>} The conversation object
+ */
+window.ChatInterface.prototype.ensureProjectConversation = async function (projectId) {
+  if (!projectId) {
+    throw new Error('Project ID is required');
+  }
+  
+  // Store the project ID for the chat system
+  localStorage.setItem("selectedProjectId", projectId);
+  this.projectId = projectId;
+  
+  // Try to load the most recent conversation for this project
+  const urlParams = new URLSearchParams(window.location.search);
+  const chatId = urlParams.get('chatId');
+  
+  if (chatId) {
+    try {
+      // Try to load the specified conversation
+      const success = await this.loadConversation(chatId);
+      if (success) {
+        return this.conversationService.currentConversation;
+      }
+    } catch (err) {
+      Logger.warn(`Could not load conversation ${chatId}, will create new:`, err);
+    }
+  }
+  
+  // Otherwise create a new conversation for this project
+  return await this.createNewConversation();
+};
+
+/**
  * Set up event listeners for custom events and UI interactions.
  * @private
  */
@@ -283,6 +317,18 @@ window.ChatInterface.prototype._handleInitialConversation = async function () {
   const projectId = window.ChatUtils.getProjectId();
   if (!projectId) {
     Logger.warn('No project is currently selected, skipping conversation creation');
+    
+    // Handle for when project isn't selected yet - check if we're on the project detail page
+    const projectDetailsView = document.getElementById("projectDetailsView");
+    const isProjectDetailsPage = projectDetailsView && !projectDetailsView.classList.contains('hidden');
+    
+    if (isProjectDetailsPage) {
+      // On project details page but no project ID - might be loading, just log warning
+      Logger.warn('On project details page but no project ID selected yet');
+      return Promise.resolve(false);
+    }
+    
+    // Standard handling for when not on project details page
     const noChatMsg = document.getElementById("noChatSelectedMessage");
     if (noChatMsg) {
       noChatMsg.classList.remove("hidden");
@@ -431,6 +477,14 @@ window.ChatInterface.prototype.createNewConversation = async function () {
       throw new Error('Not authenticated - please login first');
     }
 
+    // Get project ID for context (required for creating conversations)
+    const projectId = window.ChatUtils.getProjectId();
+    if (!projectId) {
+      Logger.warn('No project selected, cannot create conversation');
+      window.ChatUtils.showNotification("Please select a project first", "warning");
+      return null;
+    }
+
     const conversation = await this.conversationService.createNewConversation();
     if (!conversation?.id) {
       throw new Error('Invalid conversation response from server');
@@ -438,7 +492,15 @@ window.ChatInterface.prototype.createNewConversation = async function () {
 
     Logger.info(`New conversation created successfully with ID: ${conversation.id}`);
     this.currentChatId = conversation.id;
-    window.history.pushState({}, '', `/?chatId=${conversation.id}`);
+    
+    // Update URL with both project and chat ID
+    const url = new URL(window.location.href);
+    url.searchParams.set('chatId', conversation.id);
+    // Only add project param if not already there
+    if (!url.searchParams.has('project')) {
+      url.searchParams.set('project', projectId);
+    }
+    window.history.pushState({}, '', url.toString());
 
     // Initialize message service
     if (this.messageService) {

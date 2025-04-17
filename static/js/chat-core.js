@@ -203,15 +203,62 @@
         throw error;
       }
     },
+    
+    /**
+     * Ensures a conversation exists for the specified project.
+     * Will either load an existing conversation or create a new one.
+     * @param {string} projectId - The project ID
+     * @returns {Promise<Object>} The conversation object
+     */
+    ensureProjectConversation: async function(projectId) {
+      try {
+        if (!projectId) {
+          throw new Error('Project ID is required');
+        }
+        
+        if (!this.chatInterface) {
+          await this.initializeChat();
+        }
+        
+        if (typeof this.chatInterface.ensureProjectConversation !== 'function') {
+          console.warn('ChatInterface.ensureProjectConversation not available, falling back');
+          
+          // Fallback implementation
+          localStorage.setItem("selectedProjectId", projectId);
+          const urlParams = new URLSearchParams(window.location.search);
+          const chatId = urlParams.get('chatId');
+          
+          if (chatId) {
+            await this.loadConversation(chatId);
+            return this.chatInterface.conversationService?.currentConversation;
+          } else {
+            return await this.createNewConversation(projectId);
+          }
+        }
+        
+        return await this.chatInterface.ensureProjectConversation(projectId);
+      } catch (error) {
+        console.error('Failed to ensure project conversation:', error);
+        window.ChatUtils.handleError('Ensuring project conversation', error);
+        throw error;
+      }
+    },
 
     /**
      * Create a new conversation (chat).
+     * @param {string} [projectId] - Optional project ID to use for creating the conversation
      * @returns {Promise<Object>} - Created conversation
      */
-    createNewConversation: async function () {
+    createNewConversation: async function (projectId) {
       if (!this.chatInterface) {
         await this.initializeChat();
       }
+      
+      // If projectId is provided, store it in localStorage
+      if (projectId) {
+        localStorage.setItem("selectedProjectId", projectId);
+      }
+      
       return await this.chatInterface.createNewConversation();
     },
 
