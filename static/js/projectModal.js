@@ -1,409 +1,293 @@
 /**
- * @file projectModal.js
- * @description Project Modal Controller with form handling
- * @module ProjectModal
- *
- * Features:
- * - Form validation and auto-saving
- * - Accessibility compliant
- * - Multiple exit paths with confirmation
+ * Project Modal Component
+ * Handles the creation and editing of projects using a modal dialog
  */
 
-if (typeof window.ProjectModal === 'undefined') {
-  window.ProjectModal = class ProjectModal {
-  constructor() {
-    // Initialize the modal without auto-opening it
-    this.initializeModal();
+(function () {
+  class ProjectModal {
+    constructor() {
+      this.modalElement = null;
+      this.formElement = null;
+      this.isOpen = false;
+      this.currentProjectId = null;
 
-    // Add a fallback initialization attempt with MutationObserver
-    this._setupModalObserver();
-  }
+      // Bind methods to preserve 'this' context
+      this.openModal = this.openModal.bind(this);
+      this.closeModal = this.closeModal.bind(this);
+      this.handleSubmit = this.handleSubmit.bind(this);
 
-  initializeModal() {
-    // Get modal elements
-    this.modalId = 'project';
-    this.modalElement = document.getElementById('projectFormModal');
-    if (!this.modalElement) {
-      console.warn('Project form modal element not found, will retry when needed');
-      return;
-    }
-    
-    // Ensure the dialog is closed by default
-    if (this.modalElement.nodeName === 'DIALOG' && this.modalElement.hasAttribute('open')) {
-      this.modalElement.close();
+      // Initialize once the DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => this.init());
+      } else {
+        this.init();
+      }
     }
 
-    // Try to find form elements with multiple possible IDs
-    this.form = document.getElementById('projectForm');
-    this.nameInput = document.getElementById('projectForm-nameInput') ||
-                     document.getElementById('projectNameInput');
-    this.nameError = document.getElementById('projectForm-nameError') ||
-                     document.getElementById('projectNameError');
-    this.submitBtn = document.getElementById('submitProjectFormBtn') ||
-                     document.querySelector('#projectForm button[type="submit"]');
+    init() {
+      // Try to find the existing modal
+      this.modalElement = document.getElementById('projectModal');
 
-    // More resilient handling of missing elements
-    if (!this.form || !this.nameInput || !this.submitBtn) {
-      console.warn('Some modal form elements not found, will retry when modal is opened');
-      // Don't return early, still register with modal manager
+      // Create modal if it doesn't exist
+      if (!this.modalElement) {
+        this.createModalElement();
+      }
+
+      // Set up event listeners
+      this.setupEventListeners();
+
+      console.log('[ProjectModal] Initialized');
     }
 
-    // Register with the unified ModalManager if available
-    this._registerWithModalManager();
+    createModalElement() {
+      this.modalElement = document.createElement('dialog');
+      this.modalElement.id = 'projectModal';
+      this.modalElement.className = 'modal';
 
-    // Initialize event listeners, load draft values
-    this.initEventListeners();
-    this.loadDraft();
-    this.initialized = true;
-  }
+      this.modalElement.innerHTML = `
+        <div class="modal-box">
+          <h3 id="projectModalTitle" class="font-bold text-lg mb-4">Create Project</h3>
+          <form id="projectForm" class="space-y-4">
+            <input type="hidden" id="projectIdInput" name="projectId" value="">
 
-  /**
-   * Register this modal with the unified ModalManager
-   * @private
-   */
-  _registerWithModalManager() {
-    // First try global manager instance
-    if (window.modalManager) {
-      this._completeRegistration(window.modalManager);
+            <div class="form-control">
+              <label for="projectNameInput" class="label">
+                <span class="label-text">Project Name</span>
+              </label>
+              <input id="projectNameInput" name="name" type="text"
+                     class="input input-bordered w-full" required
+                     placeholder="Enter project name">
+            </div>
+
+            <div class="form-control">
+              <label for="projectDescInput" class="label">
+                <span class="label-text">Description</span>
+              </label>
+              <textarea id="projectDescInput" name="description"
+                        class="textarea textarea-bordered min-h-16"
+                        placeholder="Optional project description"></textarea>
+            </div>
+
+            <div class="form-control">
+              <label for="projectGoalsInput" class="label">
+                <span class="label-text">Goals</span>
+              </label>
+              <textarea id="projectGoalsInput" name="goals"
+                        class="textarea textarea-bordered min-h-16"
+                        placeholder="Optional project goals"></textarea>
+            </div>
+
+            <div class="form-control">
+              <label for="projectMaxTokensInput" class="label">
+                <span class="label-text">Max Tokens</span>
+              </label>
+              <input id="projectMaxTokensInput" name="maxTokens" type="number"
+                     class="input input-bordered w-full"
+                     placeholder="Optional token limit">
+            </div>
+
+            <div class="modal-action">
+              <button type="button" id="projectCancelBtn" class="btn">Cancel</button>
+              <button type="submit" id="projectSaveBtn" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      document.body.appendChild(this.modalElement);
+      this.formElement = this.modalElement.querySelector('#projectForm');
     }
-    // Then try ProjectDashboard namespace
-    else if (window.ProjectDashboard && window.ProjectDashboard.modalManager) {
-      this._completeRegistration(window.ProjectDashboard.modalManager);
-    }
-    // If not available yet, set up a retry with a delay
-    else {
-      console.log('ModalManager not yet available, will retry registration in 500ms');
-      setTimeout(() => {
-        if (window.modalManager || (window.ProjectDashboard && window.ProjectDashboard.modalManager)) {
-          const manager = window.modalManager || window.ProjectDashboard.modalManager;
-          this._completeRegistration(manager);
-        } else {
-          console.warn('ModalManager not available for ProjectModal registration after retry');
+
+    setupEventListeners() {
+      // Get form element if not already set
+      if (!this.formElement) {
+        this.formElement = this.modalElement.querySelector('#projectForm');
+      }
+
+      // Form submission handler
+      if (this.formElement) {
+        this.formElement.removeEventListener('submit', this.handleSubmit);
+        this.formElement.addEventListener('submit', this.handleSubmit);
+      }
+
+      // Cancel button handler
+      const cancelBtn = this.modalElement.querySelector('#projectCancelBtn');
+      if (cancelBtn) {
+        cancelBtn.removeEventListener('click', this.closeModal);
+        cancelBtn.addEventListener('click', this.closeModal);
+      }
+
+      // Close on ESC key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.isOpen) {
+          this.closeModal();
         }
-      }, 500);
-    }
-  }
+      });
 
-  /**
-   * Complete the registration with the modal manager
-   * @private
-   * @param {Object} manager - The modal manager instance
-   */
-  _completeRegistration(manager) {
-    try {
-      // Check if manager exists
-      if (!manager) {
-        console.error('Modal manager is undefined or null');
+      // Close on backdrop click (if using <dialog>)
+      this.modalElement.addEventListener('click', (e) => {
+        if (e.target === this.modalElement && this.isOpen) {
+          this.closeModal();
+        }
+      });
+    }
+
+    openModal(project = null) {
+      if (!this.modalElement) {
+        console.error('[ProjectModal] Modal element not found');
         return;
       }
 
-      // Check if manager has registerModal method (backward compatibility)
-      if (typeof manager.registerModal === 'function') {
-        manager.registerModal(this.modalId, this.modalElement);
-        console.log(`ProjectModal registered with ModalManager using registerModal for ID: ${this.modalId}`);
-      } else {
-        // For new ModalManager implementation that doesn't have registerModal
-        // Just ensure the modalId is in the mappings
-        if (manager.modalMappings || manager.modals) {
-          const mappingsObj = manager.modalMappings || manager.modals;
-          if (!mappingsObj[this.modalId]) {
-            console.log(`Adding '${this.modalId}' to ModalManager mappings`);
-            mappingsObj[this.modalId] = this.modalElement.id || this.modalElement;
-          }
-          console.log(`ProjectModal registered with ModalManager for ID: ${this.modalId}`);
-        } else {
-          // Create mappings if they don't exist
-          console.log('Creating modalMappings property on manager');
-          manager.modalMappings = manager.modalMappings || {};
-          manager.modalMappings[this.modalId] = this.modalElement.id || this.modalElement;
-        }
+      // Reset the form
+      if (this.formElement) {
+        this.formElement.reset();
       }
-      
-      // Ensure the modal is not shown automatically after registration
-      if (manager.hide && typeof manager.hide === 'function') {
-        manager.hide(this.modalId);
-      } else if (this.modalElement.nodeName === 'DIALOG') {
+
+      // Set title based on whether we're editing or creating
+      const titleElement = this.modalElement.querySelector('#projectModalTitle');
+      if (titleElement) {
+        titleElement.textContent = project ? 'Edit Project' : 'Create Project';
+      }
+
+      // Set form values if editing an existing project
+      if (project) {
+        this.currentProjectId = project.id;
+        const idInput = this.modalElement.querySelector('#projectIdInput');
+        const nameInput = this.modalElement.querySelector('#projectNameInput');
+        const descInput = this.modalElement.querySelector('#projectDescInput');
+        const goalsInput = this.modalElement.querySelector('#projectGoalsInput');
+        const maxTokensInput = this.modalElement.querySelector('#projectMaxTokensInput');
+
+        if (idInput) idInput.value = project.id || '';
+        if (nameInput) nameInput.value = project.name || '';
+        if (descInput) descInput.value = project.description || '';
+        if (goalsInput) goalsInput.value = project.goals || '';
+        if (maxTokensInput) maxTokensInput.value = project.max_tokens || '';
+      } else {
+        this.currentProjectId = null;
+        // Clear the hidden project ID field
+        const idInput = this.modalElement.querySelector('#projectIdInput');
+        if (idInput) idInput.value = '';
+      }
+
+      // Show the modal using the appropriate method
+      if (typeof this.modalElement.showModal === 'function') {
+        this.modalElement.showModal();
+      } else {
+        this.modalElement.style.display = 'flex';
+      }
+
+      this.isOpen = true;
+    }
+
+    closeModal() {
+      if (!this.modalElement) return;
+
+      if (typeof this.modalElement.close === 'function') {
         this.modalElement.close();
       } else {
-        this.modalElement.classList.add('hidden');
+        this.modalElement.style.display = 'none';
       }
-    } catch (err) {
-      console.error('Error registering modal with manager:', err);
+
+      this.isOpen = false;
+      this.currentProjectId = null;
     }
 
-    // Add a special handler for cleanup when hiding
-    if (manager.hide && typeof manager.hide === 'function') {
-      const originalHide = manager.hide;
-      // Only modify if not already modified
-      if (!manager._hideOverridden) {
-        manager.hide = (modalId, ...args) => {
-          if (modalId === this.modalId) {
-            document.body.style.overflow = ''; // Reset body overflow
-          }
-          return originalHide.call(manager, modalId, ...args);
+    async handleSubmit(e) {
+      e.preventDefault();
+
+      if (!this.formElement) {
+        console.error('[ProjectModal] Form not found');
+        return;
+      }
+
+      try {
+        const formData = new FormData(this.formElement);
+        const projectData = {
+          name: formData.get('name'),
+          description: formData.get('description') || '',
+          goals: formData.get('goals') || '',
+          max_tokens: formData.get('maxTokens') || null
         };
-        manager._hideOverridden = true;
-      }
-    }
-  }
 
-  initEventListeners() {
-    // Form submission
-    this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+        // Get the project ID if we're editing
+        const projectId = formData.get('projectId');
 
-    // Auto-save on input changes
-    this.nameInput.addEventListener('input', () => this.saveDraft());
-
-    const descInput = document.getElementById('projectDescInput');
-    if (descInput) {
-      descInput.addEventListener('input', () => this.saveDraft());
-    }
-
-    const goalsInput = document.getElementById('projectGoalsInput');
-    if (goalsInput) {
-      goalsInput.addEventListener('input', () => this.saveDraft());
-    }
-  }
-
-  async handleSubmit(e) {
-    e.preventDefault();
-
-    // Validate form
-    if (!this.validateForm()) return;
-
-    // Disable submit button during request
-    this.submitBtn.disabled = true;
-    this.submitBtn.innerHTML = `
-      <svg class="animate-spin h-4 w-4 mx-auto text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-    `;
-
-    try {
-      const formData = {
-        name: this.nameInput.value.trim(),
-        description: document.getElementById('projectDescInput')?.value.trim() || '',
-        goals: document.getElementById('projectGoalsInput')?.value.trim() || '',
-        max_tokens: parseInt(document.getElementById('projectMaxTokensInput')?.value || '0', 10)
-      };
-
-      const projectId = document.getElementById('projectIdInput')?.value || null;
-      const response = await window.projectManager.createOrUpdateProject(projectId, formData);
-
-      this.showNotification(
-        projectId ? 'Project updated' : 'Project created',
-        'success'
-      );
-
-      this.clearDraft();
-      this.closeModal();
-
-      // Refresh project list
-      if (window.projectDashboard) {
-        window.projectDashboard.loadProjects();
-      }
-    } catch (error) {
-      console.error('Project save failed:', error);
-      this.showNotification(
-        error.message || 'Failed to save project',
-        'error'
-      );
-    } finally {
-      this.submitBtn.disabled = false;
-      this.submitBtn.textContent = 'Save Project';
-    }
-  }
-
-  /**
-   * Show a notification using the unified notification system
-   * @param {string} message - Message to show
-   * @param {string} type - Notification type (success, error, warning, info)
-   */
-  showNotification(message, type) {
-    if (window.showNotification) {
-      window.showNotification(message, type);
-    } else {
-      console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-  }
-
-  /**
-   * Validate form fields
-   * @returns {boolean} Whether the form is valid
-   */
-  validateForm() {
-    let isValid = true;
-
-    if (!this.nameInput.value.trim()) {
-      if (this.nameError) {
-        this.nameError.classList.remove('hidden');
-      }
-      this.nameInput.focus();
-      isValid = false;
-    } else if (this.nameError) {
-      this.nameError.classList.add('hidden');
-    }
-
-    return isValid;
-  }
-
-  /**
-   * Save draft form values to localStorage
-   */
-  saveDraft() {
-    const draft = {
-      name: this.nameInput.value,
-      description: document.getElementById('projectDescInput')?.value || '',
-      goals: document.getElementById('projectGoalsInput')?.value || ''
-    };
-    localStorage.setItem('projectDraft', JSON.stringify(draft));
-  }
-
-  /**
-   * Load draft form values from localStorage
-   */
-  loadDraft() {
-    try {
-      const draft = JSON.parse(localStorage.getItem('projectDraft'));
-      if (draft) {
-        this.nameInput.value = draft.name || '';
-
-        const descInput = document.getElementById('projectDescInput');
-        if (descInput) {
-          descInput.value = draft.description || '';
+        if (!projectData.name) {
+          this.showError('Project name is required');
+          return;
         }
 
-        const goalsInput = document.getElementById('projectGoalsInput');
-        if (goalsInput) {
-          goalsInput.value = draft.goals || '';
-        }
+        // Show loading state
+        this.setLoading(true);
+
+        // Save the project
+        await this.saveProject(projectId, projectData);
+
+        // Close the modal
+        this.closeModal();
+
+        // Show success notification
+        this.showSuccess(projectId ? 'Project updated' : 'Project created');
+
+      } catch (error) {
+        console.error('[ProjectModal] Save error:', error);
+        this.showError('Failed to save project');
+      } finally {
+        this.setLoading(false);
       }
-    } catch (e) {
-      console.warn('Failed to load project form draft', e);
     }
-  }
 
-  /**
-   * Clear saved draft values
-   */
-  clearDraft() {
-    localStorage.removeItem('projectDraft');
-  }
+    async saveProject(projectId, projectData) {
+      // Check if we have the project manager available
+      if (!window.projectManager) {
+        throw new Error('Project manager not available');
+      }
 
-  /**
-   * Open the project modal using the unified ModalManager
-   */
-  openModal() {
-    // Re-initialize elements if they weren't found initially
-    if (!this.form || !this.nameInput || !this.submitBtn) {
-      this.form = document.getElementById('projectForm');
-      this.nameInput = document.getElementById('projectForm-nameInput') ||
-                       document.getElementById('projectNameInput');
-      this.nameError = document.getElementById('projectForm-nameError') ||
-                       document.getElementById('projectNameError');
-      this.submitBtn = document.getElementById('submitProjectFormBtn') ||
-                       document.querySelector('#projectForm button[type="submit"]');
-
-      if (!this.form || !this.nameInput || !this.submitBtn) {
-        console.warn('Modal form elements still not found during openModal');
+      // Determine if creating or updating
+      if (projectId) {
+        // Update existing project
+        await window.projectManager.updateProject(projectId, projectData);
       } else {
-        console.log('Successfully found modal elements on open');
-        // Now that we have the elements, initialize event listeners
-        this.initEventListeners();
+        // Create new project
+        await window.projectManager.createProject(projectData);
+      }
+
+      // Refresh projects list
+      await window.projectManager.loadProjects();
+    }
+
+    setLoading(isLoading) {
+      const saveButton = this.modalElement.querySelector('#projectSaveBtn');
+      const cancelButton = this.modalElement.querySelector('#projectCancelBtn');
+
+      if (saveButton) {
+        saveButton.disabled = isLoading;
+        saveButton.classList.toggle('loading', isLoading);
+      }
+
+      if (cancelButton) {
+        cancelButton.disabled = isLoading;
       }
     }
 
-    const modalEl = document.getElementById('projectFormModal');
-    if (!modalEl) {
-      console.error('Modal element not found');
-      return;
-    }
-
-    try {
-      if (window.ModalManager && window.modalManager) {
-        window.modalManager.show(this.modalId);
+    showError(message) {
+      if (window.showNotification) {
+        window.showNotification(message, 'error');
       } else {
-        // Robust fallback
-        modalEl.classList.remove('hidden');
-        modalEl.style.display = 'flex';
+        alert(message);
       }
+    }
 
-      // Additional UI setup
-      document.body.style.overflow = 'hidden';
-      this.nameInput?.focus();
-
-    } catch (error) {
-      console.error('Error opening modal:', error);
-      // Emergency fallback
-      modalEl.classList.remove('hidden');
-      modalEl.style.display = 'flex';
+    showSuccess(message) {
+      if (window.showNotification) {
+        window.showNotification(message, 'success');
+      } else {
+        console.log(message);
+      }
     }
   }
 
-  /**
-   * Close the project modal using the unified ModalManager
-   */
-  closeModal() {
-    if (window.ModalManager && window.modalManager) {
-      window.modalManager.hide(this.modalId);
-    } else {
-      // Fallback to direct manipulation
-      this.modalElement.classList.add('hidden');
-      this.modalElement.style.display = 'none';
-      document.body.style.overflow = '';
-    }
-  }
-
-  /**
-   * Set up a MutationObserver to watch for the modal element to be added to the DOM
-   * @private
-   */
-  _setupModalObserver() {
-    // Create a MutationObserver to watch for the modal element to be added to the DOM
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === 'childList' && mutation.addedNodes.length) {
-          const modalAdded = Array.from(mutation.addedNodes).some(node => {
-            return node.id === 'projectFormModal' ||
-                   (node.querySelector && node.querySelector('#projectFormModal'));
-          });
-
-          if (modalAdded) {
-            this.initializeModal();
-            observer.disconnect();
-            console.log('Project form modal detected by observer, initialized');
-            return;
-          }
-        }
-      }
-    });
-
-    // Start observing the document body
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
-}
-
-// Initialize and expose globally
-window.initProjectModal = () => {
-  if (!window.projectModal) {
-    window.projectModal = new ProjectModal();
-  }
-  return window.projectModal;
-};
-
-// Initialize when DOM is ready, but don't open the modal automatically
-document.addEventListener('DOMContentLoaded', () => {
-  // Initialize the modal without showing it
-  if (!window.projectModal) {
-    window.projectModal = new ProjectModal();
-  }
-});
-
-// Init if loaded after DOMContentLoaded, but without auto-showing
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  if (!window.projectModal) {
-    window.projectModal = new ProjectModal();
-  }
-}
-}
+  // Create an instance and expose it globally
+  window.projectModal = new ProjectModal();
+})();
