@@ -483,24 +483,45 @@
       const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
       const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
 
-      card.className = `card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-base-300 rounded-box`;
+      card.className = `card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow border border-base-300 rounded-box relative overflow-visible`;
       card.dataset.projectId = project.id;
-      card.setAttribute('role', 'button');
-      card.setAttribute('tabindex', '0'); // Make card focusable
-
+      
       // Add project name, description, etc. using card-body
       let cardContent = `
         <div class="card-body p-4">
-          <h3 class="card-title text-lg truncate mb-1">${project.name || 'Unnamed Project'}</h3>
+          <div class="flex justify-between items-start relative z-10">
+            <h3 class="card-title text-lg truncate mb-1">${project.name || 'Unnamed Project'}</h3>
+            <div class="flex gap-1">
+              <button class="btn btn-ghost btn-xs btn-square hover:bg-base-200" data-action="view" data-project-id="${project.id}" aria-label="Open project">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </button>
+              <button class="btn btn-ghost btn-xs btn-square hover:bg-base-200" data-action="edit" data-project-id="${project.id}" aria-label="Edit project">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10" data-action="delete" data-project-id="${project.id}" aria-label="Delete project">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
       `;
 
       if (this.state.cardCustomization.showDescription) {
-        cardContent += `<p class="text-sm text-base-content/80 mb-3 line-clamp-2">${project.description || 'No description'}</p>`;
+        cardContent += `<p class="text-sm text-base-content/80 mb-3 line-clamp-2 relative z-10">${project.description || 'No description'}</p>`;
       }
+
+      // Make the main area of the card clickable for navigation, but with lower z-index
+      cardContent += `<div class="absolute inset-0 cursor-pointer z-0" data-action="view" data-project-id="${project.id}"></div>`;
 
       // Optional: Add badges if enabled and available
       if (this.state.cardCustomization.showBadges && project.badges && project.badges.length > 0) {
-        cardContent += `<div class="card-actions justify-start mb-2 flex-wrap gap-1">`;
+        cardContent += `<div class="card-actions justify-start mb-2 flex-wrap gap-1 relative z-10">`;
         project.badges.forEach(badge => {
           const badgeStyle = badge.style || this.state.cardCustomization.defaultBadgeStyle || 'badge-neutral';
           cardContent += `<span class="badge ${badgeStyle} badge-sm">${badge.icon ? badge.icon + ' ' : ''}${badge.text}</span>`;
@@ -509,7 +530,7 @@
       }
 
       cardContent += `
-          <div class="card-actions justify-end mt-auto pt-2 border-t border-base-content/10 text-xs text-base-content/70">
+          <div class="card-actions justify-end mt-auto pt-2 border-t border-base-content/10 text-xs text-base-content/70 relative z-10">
             ${this.state.cardCustomization.showDate ? `<span>Updated: ${new Date(project.updated_at).toLocaleDateString()}</span>` : ''}
             ${project.pinned ? '<span class="ml-2 tooltip tooltip-left" data-tip="Pinned">📌</span>' : ''}
             ${project.archived ? '<span class="ml-2 tooltip tooltip-left" data-tip="Archived">📦</span>' : ''}
@@ -580,14 +601,29 @@ Are you sure you want to delete "${project.name}"?`)) {
         return;
       }
 
+      // First update UI immediately to make it feel responsive
+      const projectIndex = this.state.projects.findIndex(p => p.id === projectId);
+      if (projectIndex !== -1) {
+        // Create a copy of the projects array
+        const updatedProjects = [...this.state.projects];
+        // Remove the project from the copy
+        updatedProjects.splice(projectIndex, 1);
+        // Update state and re-render
+        this.state.projects = updatedProjects;
+        this._renderFilteredProjects();
+      }
+
       window.projectManager.deleteProject(projectId)
         .then(() => {
           this._showNotification("Project deleted", "success");
+          // Refresh from server to make sure UI is in sync
           window.projectManager.loadProjects();
         })
         .catch(err => {
           console.error("Delete failed:", err);
           this._showNotification("Failed to delete project", "error");
+          // Refresh from server to restore the project if delete failed
+          window.projectManager.loadProjects();
         });
     }
 
@@ -1121,14 +1157,35 @@ ${content}`)) {
 
     // Helper function to handle card click logic
     _handleCardClick(projectId, event = null) {
-      // Determine action based on clicked element
-      let action = 'view'; // Default action
+      // Stop event propagation if this is coming from a button
       if (event) {
+        // Find if the click originated from an action button
+        const actionButton = event.target.closest('button[data-action]');
+        if (actionButton) {
+          // Prevent the click from triggering the card click handler
+          event.stopPropagation();
+          
+          // Get the action from the button
+          const action = actionButton.dataset.action;
+          this._executeAction(action, projectId);
+          return;
+        }
+        
+        // Check for other specific action elements (not buttons)
         const actionElement = event.target.closest('[data-action]');
         if (actionElement) {
-          action = actionElement.dataset.action;
+          const action = actionElement.dataset.action;
+          this._executeAction(action, projectId);
+          return;
         }
       }
+      
+      // Default action is 'view' for general card clicks
+      this._executeAction('view', projectId);
+    }
+    
+    // Execute the appropriate action based on the action type
+    _executeAction(action, projectId) {
       // Find project data
       const project = this.state.projects.find(p => p.id === projectId);
       if (!project) {
@@ -1136,6 +1193,9 @@ ${content}`)) {
         this._showNotification('Project not found', 'error');
         return;
       }
+      
+      console.log(`[ProjectListComponent] Executing action '${action}' for project: ${projectId}`);
+      
       // Execute action
       switch (action) {
         case 'view':
