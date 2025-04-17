@@ -839,41 +839,49 @@ Are you sure you want to delete "${project.name}"?`)) {
     }
 
     _bindCreateProjectButton() {
+      // Add loading indicator to container while searching for button
+      const container = document.getElementById('projectListView');
+      if (container && !container.classList.contains('initializing-buttons')) {
+        container.classList.add('initializing-buttons');
+      }
+
       // First attempt to find the button directly
       let button = document.getElementById('createProjectBtn');
 
       // If button doesn't exist, try alternative approaches
       if (!button) {
-        console.warn('[ProjectListComponent] Create project button (createProjectBtn) not found');
+        console.log('[ProjectListComponent] Create project button not found, creating fallback...');
 
-        // Try to find the button by text or class
-        const possibleButtons = Array.from(document.querySelectorAll('button'))
-          .filter(btn =>
-            btn.textContent?.trim().toLowerCase() === 'new project' ||
-            btn.classList.contains('btn-primary')
-          );
+        // Create a fallback button
+        this._createFallbackCreateProjectButton();
+        button = document.getElementById('createProjectBtn');
 
-        if (possibleButtons.length > 0) {
-          button = possibleButtons[0];
-          console.log('[ProjectListComponent] Found alternative button:', button);
-        } else {
-          // Create a fallback button
-          this._createFallbackCreateProjectButton();
-          button = document.getElementById('createProjectBtn');
-          if (!button) {
-            // Set up a delayed retry mechanism if button still not found
-            console.log('[ProjectListComponent] Setting up delayed retry for button binding');
+        // Add a safe retry with exponential backoff
+        if (!button) {
+          const retryAttempt = parseInt(container?.dataset.buttonRetryAttempt || '0', 10);
+          if (retryAttempt < 3) { // Limit retry attempts
+            const delay = Math.pow(2, retryAttempt) * 500; // Exponential backoff (500ms, 1000ms, 2000ms)
+            console.log(`[ProjectListComponent] Scheduling retry attempt ${retryAttempt + 1} in ${delay}ms`);
+
+            if (container) {
+              container.dataset.buttonRetryAttempt = (retryAttempt + 1).toString();
+            }
+
             setTimeout(() => {
-              // Try one more time after a delay, in case HTML is still loading
-              const retryButton = document.getElementById('createProjectBtn');
-              if (retryButton) {
-                console.log('[ProjectListComponent] Button found on retry, binding events');
-                this._bindButtonEvents(retryButton);
-              }
-            }, 500);
-            return;
+              this._bindCreateProjectButton();
+            }, delay);
+          } else {
+            console.warn('[ProjectListComponent] Failed to create project button after multiple attempts');
+            this._showNotification('Project creation UI could not be fully initialized. Try refreshing the page.', 'warning');
           }
+          return;
         }
+      }
+
+      // Clear initialization state
+      if (container) {
+        container.classList.remove('initializing-buttons');
+        delete container.dataset.buttonRetryAttempt;
       }
 
       // Bind the events to the button

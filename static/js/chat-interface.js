@@ -39,6 +39,9 @@ window.ChatInterface = function (options = {}) {
   // Event system for custom handlers
   this._eventHandlers = {};
 
+  // Event listeners tracking for cleanup
+  this._eventListeners = [];
+
   // Initialize services and components to null (set during initialization)
   this.messageService = null;
   this.conversationService = null;
@@ -183,15 +186,15 @@ window.ChatInterface.prototype.ensureProjectConversation = async function (proje
   if (!projectId) {
     throw new Error('Project ID is required');
   }
-  
+
   // Store the project ID for the chat system
   localStorage.setItem("selectedProjectId", projectId);
   this.projectId = projectId;
-  
+
   // Try to load the most recent conversation for this project
   const urlParams = new URLSearchParams(window.location.search);
   const chatId = urlParams.get('chatId');
-  
+
   if (chatId) {
     try {
       // Try to load the specified conversation
@@ -203,7 +206,7 @@ window.ChatInterface.prototype.ensureProjectConversation = async function (proje
       Logger.warn(`Could not load conversation ${chatId}, will create new:`, err);
     }
   }
-  
+
   // Otherwise create a new conversation for this project
   return await this.createNewConversation();
 };
@@ -317,17 +320,17 @@ window.ChatInterface.prototype._handleInitialConversation = async function () {
   const projectId = window.ChatUtils.getProjectId();
   if (!projectId) {
     Logger.warn('No project is currently selected, skipping conversation creation');
-    
+
     // Handle for when project isn't selected yet - check if we're on the project detail page
     const projectDetailsView = document.getElementById("projectDetailsView");
     const isProjectDetailsPage = projectDetailsView && !projectDetailsView.classList.contains('hidden');
-    
+
     if (isProjectDetailsPage) {
       // On project details page but no project ID - might be loading, just log warning
       Logger.warn('On project details page but no project ID selected yet');
       return Promise.resolve(false);
     }
-    
+
     // Standard handling for when not on project details page
     const noChatMsg = document.getElementById("noChatSelectedMessage");
     if (noChatMsg) {
@@ -492,7 +495,7 @@ window.ChatInterface.prototype.createNewConversation = async function () {
 
     Logger.info(`New conversation created successfully with ID: ${conversation.id}`);
     this.currentChatId = conversation.id;
-    
+
     // Update URL with both project and chat ID
     const url = new URL(window.location.href);
     url.searchParams.set('chatId', conversation.id);
@@ -772,4 +775,58 @@ window.ChatInterface.prototype.configureSelectors = function (customOpts = {}) {
     input: this.inputSelector,
     sendButton: this.sendButtonSelector
   });
+};
+
+/**
+ * Updates the interface to work with a different project
+ * @param {string} projectId - The project to load
+ */
+window.ChatInterface.prototype.loadProject = async function(projectId) {
+  if (!projectId) return false;
+
+  console.log(`[ChatInterface] Loading project: ${projectId}`);
+
+  // Store project context
+  this.projectId = projectId;
+
+  // Update services with project context
+  if (this.conversationService) {
+    this.conversationService.setProjectContext(projectId);
+  }
+
+  if (this.messageService) {
+    this.messageService.setProjectContext(projectId);
+  }
+
+  // Update storage/localStorage
+  localStorage.setItem("selectedProjectId", projectId);
+
+  // Notify system about project change
+  document.dispatchEvent(new CustomEvent('chatProjectChanged', {
+    detail: { projectId }
+  }));
+
+  return true;
+};
+
+/**
+ * Add event listener with tracking for cleanup
+ */
+window.ChatInterface.prototype.addEventListener = function(target, type, handler, options = {}) {
+  target.addEventListener(type, handler, options);
+  this._eventListeners.push({ target, type, handler, options });
+  return handler;
+};
+
+/**
+ * Clean up all event listeners
+ */
+window.ChatInterface.prototype.cleanup = function() {
+  console.log('[ChatInterface] Cleaning up event listeners');
+  if (this._eventListeners) {
+    this._eventListeners.forEach(({ target, type, handler, options }) => {
+      target.removeEventListener(type, handler, options);
+    });
+    this._eventListeners = [];
+  }
 };

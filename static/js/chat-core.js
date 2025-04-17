@@ -6,6 +6,11 @@
  */
 (function () {
   // ---------------------------
+  // 0) SINGLE GLOBAL INTERFACE
+  // ---------------------------
+  window.globalChatInterface = null;
+
+  // ---------------------------
   // 1) CENTRAL SCRIPT SELECTORS
   // ---------------------------
   const SELECTORS = {
@@ -81,25 +86,26 @@
         // 1) Load dependencies (only once)
         await this.ensureModulesLoaded();
 
-        // 2) Check or create the main chat interface if none exists
-        if (!this.chatInterface) {
-          // Initialize chat interface with dynamic selectors
-          this.chatInterface = new window.ChatInterface({});
-          await this.chatInterface.initialize();
-          // For backward compatibility
-          window.chatInterface = this.chatInterface;
-
-          // Also set projectChatInterface to the same instance unless changed later
-          if (!this.projectChatInterface) {
-            this.projectChatInterface = this.chatInterface;
-            window.projectChatInterface = this.projectChatInterface;
-          }
+        // 2) Initialize single global interface
+        if (!window.globalChatInterface) {
+          console.log('[ChatManager] Creating new global chat interface');
+          window.globalChatInterface = new window.ChatInterface({});
+          await window.globalChatInterface.initialize();
+        } else {
+          console.log('[ChatManager] Using existing global chat interface');
         }
 
         // 3) Setup global keyboard shortcuts
         this.setupGlobalKeyboardShortcuts();
-        console.log('Chat system initialized successfully');
-        return this.chatInterface;
+
+        // 4) For backward compatibility
+        this.chatInterface = window.globalChatInterface;
+        this.projectChatInterface = window.globalChatInterface;
+        window.chatInterface = window.globalChatInterface;
+        window.projectChatInterface = window.globalChatInterface;
+
+        console.log('[ChatManager] Chat system initialized');
+        return window.globalChatInterface;
       } catch (error) {
         console.error('Failed to initialize chat system:', error);
         window.ChatUtils.handleError('Initializing chat', error);
@@ -203,7 +209,7 @@
         throw error;
       }
     },
-    
+
     /**
      * Ensures a conversation exists for the specified project.
      * Will either load an existing conversation or create a new one.
@@ -215,19 +221,19 @@
         if (!projectId) {
           throw new Error('Project ID is required');
         }
-        
+
         if (!this.chatInterface) {
           await this.initializeChat();
         }
-        
+
         if (typeof this.chatInterface.ensureProjectConversation !== 'function') {
           console.warn('ChatInterface.ensureProjectConversation not available, falling back');
-          
+
           // Fallback implementation
           localStorage.setItem("selectedProjectId", projectId);
           const urlParams = new URLSearchParams(window.location.search);
           const chatId = urlParams.get('chatId');
-          
+
           if (chatId) {
             await this.loadConversation(chatId);
             return this.chatInterface.conversationService?.currentConversation;
@@ -235,7 +241,7 @@
             return await this.createNewConversation(projectId);
           }
         }
-        
+
         return await this.chatInterface.ensureProjectConversation(projectId);
       } catch (error) {
         console.error('Failed to ensure project conversation:', error);
@@ -253,12 +259,12 @@
       if (!this.chatInterface) {
         await this.initializeChat();
       }
-      
+
       // If projectId is provided, store it in localStorage
       if (projectId) {
         localStorage.setItem("selectedProjectId", projectId);
       }
-      
+
       return await this.chatInterface.createNewConversation();
     },
 
@@ -303,35 +309,38 @@
         messageStatus: options.messageStatus !== false
       };
 
-      // Create or reuse chat interface
-      if (!window.projectChatInterface) {
-        console.log('[ChatManager] Creating new ChatInterface instance');
-        window.projectChatInterface = new window.ChatInterface(chatConfig);
-      } else if (typeof window.projectChatInterface.configureSelectors === 'function') {
-        console.log('[ChatManager] Reconfiguring existing ChatInterface instance');
-        window.projectChatInterface.configureSelectors(chatConfig);
-      } else {
-        console.warn('[ChatManager] Existing chatInterface does not support reconfiguration');
+      // Initialize the global chat interface if it doesn't exist
+      if (!window.globalChatInterface) {
+        console.log('[ChatManager] Creating globalChatInterface during project chat init');
+        this.initializeChat(); // This will create and initialize the global interface
+      }
+
+      // Configure the existing global interface with the project-specific selectors
+      if (typeof window.globalChatInterface.configureSelectors === 'function') {
+        console.log('[ChatManager] Configuring global interface for project use');
+        window.globalChatInterface.configureSelectors(chatConfig);
+      }
+
+      // Set project context if project ID is available
+      const projectId = window.ChatUtils.getProjectId();
+      if (projectId && typeof window.globalChatInterface.loadProject === 'function') {
+        console.log(`[ChatManager] Setting project context: ${projectId}`);
+        window.globalChatInterface.loadProject(projectId);
       }
 
       // Set up event handlers if provided
       if (options.onMessageSent && typeof options.onMessageSent === 'function') {
-        window.projectChatInterface.on('messageSent', options.onMessageSent);
+        window.globalChatInterface.on('messageSent', options.onMessageSent);
       }
       if (options.onError && typeof options.onError === 'function') {
-        window.projectChatInterface.on('error', options.onError);
+        window.globalChatInterface.on('error', options.onError);
       }
 
-      // Initialize the chat interface (if not already)
-      if (!window.projectChatInterface.initialized) {
-        console.log('[ChatManager] Initializing ChatInterface');
-        window.projectChatInterface.initialize().catch(err => {
-          console.error('[ChatManager] Failed to initialize chat interface:', err);
-          window.ChatUtils.handleError('Initializing project chat', err);
-        });
-      }
+      // For backward compatibility
+      window.projectChatInterface = window.globalChatInterface;
+      this.projectChatInterface = window.globalChatInterface;
 
-      return window.projectChatInterface;
+      return window.globalChatInterface;
     }
   };
 
