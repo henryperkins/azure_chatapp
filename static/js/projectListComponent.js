@@ -31,38 +31,38 @@
       this._toggleListViewVisibility(false);
     }
 
-  renderProjects(eventOrProjects) {
-    try {
-      this._ensureContainerVisibility();
+    renderProjects(eventOrProjects) {
+      try {
+        this._ensureContainerVisibility();
 
-      // Guard against re-rendering if already in progress
-      if (this.state.loading) {
-        console.log("[ProjectListComponent] Render already in progress, skipping...");
-        return;
+        // Guard against re-rendering if already in progress
+        if (this.state.loading) {
+          console.log("[ProjectListComponent] Render already in progress, skipping...");
+          return;
+        }
+
+        // Skip if this is an event from another source
+        if (eventOrProjects?.source && eventOrProjects.source !== "projectManager") {
+          console.log("[ProjectListComponent] Ignoring event from other source:", eventOrProjects.source);
+          return;
+        }
+
+        if (this._shouldLoadProjectsDirectly(eventOrProjects)) {
+          return this._loadProjectsThroughManager();
+        }
+
+        const projects = this._extractProjects(eventOrProjects);
+        this.state.projects = projects;
+
+        this._resetScrollPosition();
+        this._renderFilteredProjects();
+      } catch (err) {
+        console.error('Project rendering error:', err);
+        this._renderErrorState('Failed to display projects');
+      } finally {
+        this._hideLoadingState();
       }
-
-      // Skip if this is an event from another source
-      if (eventOrProjects?.source && eventOrProjects.source !== "projectManager") {
-        console.log("[ProjectListComponent] Ignoring event from other source:", eventOrProjects.source);
-        return;
-      }
-
-      if (this._shouldLoadProjectsDirectly(eventOrProjects)) {
-        return this._loadProjectsThroughManager();
-      }
-
-      const projects = this._extractProjects(eventOrProjects);
-      this.state.projects = projects;
-
-      this._resetScrollPosition();
-      this._renderFilteredProjects();
-    } catch (err) {
-      console.error('Project rendering error:', err);
-      this._renderErrorState('Failed to display projects');
-    } finally {
-      this._hideLoadingState();
     }
-  }
 
     applyGlobalTheme(themeId) {
       if (!this._isValidTheme(themeId)) return;
@@ -117,8 +117,8 @@
         { id: 'default', name: 'Default' }, // Uses base-100/base-content
         { id: 'primary', name: 'Primary' }, // Uses primary/primary-content
         { id: 'secondary', name: 'Secondary' }, // Uses secondary/secondary-content
-        { id: 'accent', name: 'Accent' }, // Uses accent/accent-content
-        { id: 'neutral', name: 'Neutral' } // Uses neutral/neutral-content
+        { id: 'accent', name: 'Accent' },   // Uses accent/accent-content
+        { id: 'neutral', name: 'Neutral' }  // Uses neutral/neutral-content
       ];
 
       // Define badge styles using DaisyUI badge colors/styles
@@ -153,6 +153,7 @@
       if (!this.messageEl) {
         this.messageEl = document.querySelector("#noProjectsMessage") ||
           document.createElement('div');
+
         if (this.messageEl.id !== "noProjectsMessage") {
           this.messageEl.id = "noProjectsMessage";
           this.messageEl.className = "hidden text-center py-8 text-gray-500";
@@ -246,9 +247,9 @@
       }
 
       // Check if user is authenticated
-      const isAuthenticated = window.auth?.isAuthenticated ?
-                              window.auth.isAuthenticated({ forceVerify: false }) :
-                              Promise.resolve(false);
+      const isAuthenticated = window.auth?.isAuthenticated
+        ? window.auth.isAuthenticated({ forceVerify: false })
+        : Promise.resolve(false);
 
       isAuthenticated.then(authStatus => {
         // Hide login message if authenticated
@@ -260,7 +261,7 @@
         console.warn("[ProjectListComponent] Error checking auth status:", err);
       });
 
-      // Make project list element visible too
+      // Make project list element visible
       if (this.element) {
         this.element.classList.add("grid"); // Ensure grid display
         this.element.classList.remove("hidden");
@@ -293,7 +294,7 @@
         // Also create details view container if missing
         let detailsView = document.getElementById("projectDetailsView");
         if (!detailsView) {
-          detailsView = document.createElement("div");b
+          detailsView = document.createElement("div");
           detailsView.id = "projectDetailsView";
           detailsView.className = "hidden flex-1 overflow-y-auto p-4 lg:p-6";
           container.parentNode.appendChild(detailsView);
@@ -306,38 +307,37 @@
       return container;
     }
 
-
     _shouldLoadProjectsDirectly(eventOrProjects) {
       return eventOrProjects?.forceRefresh ||
         eventOrProjects?.directCall ||
         !eventOrProjects ||
-        (Array.isArray(eventOrProjects) && eventOrProjects.length === 0); // Also load if empty array
+        (Array.isArray(eventOrProjects) && eventOrProjects.length === 0); // Load if empty array
     }
 
-  _loadProjectsThroughManager() {
-    if (!window.projectManager?.loadProjects) {
-      throw new Error('projectManager not available');
-    }
+    _loadProjectsThroughManager() {
+      if (!window.projectManager?.loadProjects) {
+        throw new Error('projectManager not available');
+      }
 
-    // Set loading state to prevent recursive calls
-    if (this.state.loading) {
-      console.log("[ProjectListComponent] Already loading projects, skipping...");
-      return Promise.resolve([]);
-    }
+      // Set loading state to prevent recursive calls
+      if (this.state.loading) {
+        console.log("[ProjectListComponent] Already loading projects, skipping...");
+        return Promise.resolve([]);
+      }
 
-    this.state.loading = true;
-    this._showLoadingState();
-    return window.projectManager.loadProjects()
-      .catch(err => {
-        console.error('Project loading failed:', err);
-        this._renderErrorState('Failed to load projects');
-        return [];
-      })
-      .finally(() => {
-        this.state.loading = false;
-        this._hideLoadingState();
-      });
-  }
+      this.state.loading = true;
+      this._showLoadingState();
+      return window.projectManager.loadProjects()
+        .catch(err => {
+          console.error('Project loading failed:', err);
+          this._renderErrorState('Failed to load projects');
+          return [];
+        })
+        .finally(() => {
+          this.state.loading = false;
+          this._hideLoadingState();
+        });
+    }
 
     _extractProjects(eventOrProjects) {
       let projects = [];
@@ -348,20 +348,23 @@
       } else if (eventOrProjects instanceof Event) {
         projects = eventOrProjects.detail?.data?.projects || [];
       } else if (eventOrProjects?.data?.projects) {
-        projects = Array.isArray(eventOrProjects.data.projects) ?
-          eventOrProjects.data.projects : [];
+        projects = Array.isArray(eventOrProjects.data.projects)
+          ? eventOrProjects.data.projects
+          : [];
       } else if (eventOrProjects?.projects) {
-        projects = Array.isArray(eventOrProjects.projects) ?
-          eventOrProjects.projects : [];
+        projects = Array.isArray(eventOrProjects.projects)
+          ? eventOrProjects.projects
+          : [];
       }
 
-      // Log warning if we got an invalid projects structure
+      // Log warning if we got an invalid structure
       if (!Array.isArray(projects)) {
         console.warn("Projects data is not an array, using empty array instead", eventOrProjects);
         projects = [];
       }
 
-      return projects.map(p => p.to_dict ? p.to_dict() : p);
+      // If a project has to_dict, convert
+      return projects.map(p => (p.to_dict ? p.to_dict() : p));
     }
 
     _resetScrollPosition() {
@@ -384,9 +387,12 @@
     _getFilteredProjects() {
       return this.state.projects.filter(p => {
         switch (this.state.filter) {
-          case 'pinned': return p.pinned;
-          case 'archived': return p.archived;
-          default: return true;
+          case 'pinned':
+            return p.pinned;
+          case 'archived':
+            return p.archived;
+          default:
+            return true;
         }
       });
     }
@@ -412,9 +418,9 @@
       // First ensure containers are visible properly
       this._ensureContainerVisibility();
 
-      // Clear with a safety check
+      // Clear old content
       try {
-        this.element.innerHTML = ""; // Clear the grid container
+        this.element.innerHTML = "";
       } catch (err) {
         console.error("[ProjectListComponent] Error clearing element:", err);
         // Try one more time to get the element
@@ -485,7 +491,7 @@
 
       card.className = `card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow border border-base-300 rounded-box relative overflow-visible`;
       card.dataset.projectId = project.id;
-      
+
       // Add project name, description, etc. using card-body
       let cardContent = `
         <div class="card-body p-4">
@@ -601,7 +607,7 @@ Are you sure you want to delete "${project.name}"?`)) {
         return;
       }
 
-      // First update UI immediately to make it feel responsive
+      // First update UI immediately for responsiveness
       const projectIndex = this.state.projects.findIndex(p => p.id === projectId);
       if (projectIndex !== -1) {
         // Create a copy of the projects array
@@ -616,7 +622,7 @@ Are you sure you want to delete "${project.name}"?`)) {
       window.projectManager.deleteProject(projectId)
         .then(() => {
           this._showNotification("Project deleted", "success");
-          // Refresh from server to make sure UI is in sync
+          // Refresh from server to ensure UI is in sync
           window.projectManager.loadProjects();
         })
         .catch(err => {
@@ -632,16 +638,14 @@ Are you sure you want to delete "${project.name}"?`)) {
       if (window.modalManager && window.modalManager.confirmAction) {
         window.modalManager.confirmAction({
           title: title,
-          message: content, // Assuming content is simple text or basic HTML
+          message: content, // Assuming content is text or basic HTML
           confirmText: confirmText || "Confirm",
-          confirmClass: confirmClass || "btn-primary", // Use DaisyUI button classes
+          confirmClass: confirmClass || "btn-primary",
           onConfirm: onConfirm
         });
       } else {
         // Fallback to native confirm
-        if (confirm(`${title}
-
-${content}`)) {
+        if (confirm(`${title}\n\n${content}`)) {
           onConfirm();
         }
       }
@@ -708,6 +712,7 @@ ${content}`)) {
       const initialFilter = this._getInitialFilter();
       this.state.filter = initialFilter;
 
+      // Finish the snippet where it cut off:
       this._setInitialActiveButton(buttons, initialFilter);
       this._loadInitialProjects(initialFilter);
 
@@ -726,7 +731,6 @@ ${content}`)) {
         container = document.createElement("div");
         container.className = "project-filter-tabs tabs mb-4";
         // For a basic fallback, append near the top of body or an existing parent
-        // to keep it accessible. Adjust as needed in your layout.
         document.body.prepend(container);
       }
 
@@ -773,7 +777,6 @@ ${content}`)) {
 
       allButtons.forEach(btn => {
         const isActive = btn === button;
-        // Use DaisyUI tab active class
         btn.classList.toggle('tab-active', isActive);
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
@@ -781,7 +784,7 @@ ${content}`)) {
       this.state.filter = filter;
       this._updateURL(filter);
 
-      // Ensure projectManager exists before calling
+      // Ensure projectManager exists
       if (window.projectManager?.loadProjects) {
         window.projectManager.loadProjects(filter)
           .catch(err => {
@@ -789,7 +792,6 @@ ${content}`)) {
             this._renderErrorState('Filter operation failed');
           })
           .finally(() => {
-            // Ensure loading state is hidden even on error
             this._hideLoadingState();
           });
       } else {
@@ -815,12 +817,10 @@ ${content}`)) {
 
         allButtons.forEach(btn => {
           const isActive = btn.dataset.filter === newFilter;
-          // Use DaisyUI tab active class
           btn.classList.toggle('tab-active', isActive);
           btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
 
-        // Ensure projectManager exists
         if (window.projectManager?.loadProjects) {
           window.projectManager.loadProjects(newFilter)
             .catch(err => {
@@ -838,110 +838,127 @@ ${content}`)) {
       }
     }
 
-  _bindCreateProjectButton() {
-    let button = document.getElementById('createProjectBtn');
-    if (!button) {
-      console.warn('[ProjectListComponent] Create project button (createProjectBtn) not found');
+    _bindCreateProjectButton() {
+      // First attempt to find the button directly
+      let button = document.getElementById('createProjectBtn');
 
-      // Try to find the button by its text content or class
-      const possibleButtons = Array.from(document.querySelectorAll('button'))
-        .filter(btn =>
-          btn.textContent?.trim().toLowerCase() === 'new project' ||
-          btn.classList.contains('btn-primary')
-        );
+      // If button doesn't exist, try alternative approaches
+      if (!button) {
+        console.warn('[ProjectListComponent] Create project button (createProjectBtn) not found');
 
-      if (possibleButtons.length > 0) {
-        button = possibleButtons[0];
-        console.log('[ProjectListComponent] Found alternative button:', button);
-      } else {
-        // Create a fallback button
-        this._createFallbackCreateProjectButton();
-        button = document.getElementById('createProjectBtn');
-        if (!button) return; // Give up if still not found
-      }
-    }
+        // Try to find the button by text or class
+        const possibleButtons = Array.from(document.querySelectorAll('button'))
+          .filter(btn =>
+            btn.textContent?.trim().toLowerCase() === 'new project' ||
+            btn.classList.contains('btn-primary')
+          );
 
-    // Safely remove existing handler to prevent duplicates
-    const newButton = button.cloneNode(true);
-    if (button.parentNode) {
-      button.parentNode.replaceChild(newButton, button);
-      button = newButton;
-    }
-
-    button.addEventListener('click', () => {
-      // Use the global modal manager
-      if (window.modalManager) {
-        window.modalManager.show('project', {
-          updateContent: (modalEl) => {
-            // Reset form for creation
-            const form = modalEl.querySelector('#projectForm');
-            const title = modalEl.querySelector('#projectModalTitle');
-            if (form) form.reset();
-            if (title) title.textContent = 'Create Project';
-            const projectIdInput = modalEl.querySelector('#projectIdInput');
-            if (projectIdInput) projectIdInput.value = '';
+        if (possibleButtons.length > 0) {
+          button = possibleButtons[0];
+          console.log('[ProjectListComponent] Found alternative button:', button);
+        } else {
+          // Create a fallback button
+          this._createFallbackCreateProjectButton();
+          button = document.getElementById('createProjectBtn');
+          if (!button) {
+            // Set up a delayed retry mechanism if button still not found
+            console.log('[ProjectListComponent] Setting up delayed retry for button binding');
+            setTimeout(() => {
+              // Try one more time after a delay, in case HTML is still loading
+              const retryButton = document.getElementById('createProjectBtn');
+              if (retryButton) {
+                console.log('[ProjectListComponent] Button found on retry, binding events');
+                this._bindButtonEvents(retryButton);
+              }
+            }, 500);
+            return;
           }
-        });
-      } else {
-        console.error("[ProjectListComponent] Modal manager not available to show project form.");
-        // Fallback or error message
-        alert("Cannot open project form.");
-      }
-    });
-  }
-
-  // Add this method to ProjectListComponent
-  _createFallbackCreateProjectButton() {
-    // Find a good container for the button
-    const headerSection = document.querySelector('.mb-4.flex.items-center.justify-between') ||
-                          document.querySelector('#projectListView > div:first-child');
-
-    if (!headerSection) {
-      // Create a header if not found
-      const container = document.getElementById('projectListView');
-      if (!container) return;
-
-      const newHeader = document.createElement('div');
-      newHeader.className = 'mb-4 flex items-center justify-between';
-      newHeader.innerHTML = `
-        <h2 class="text-xl font-semibold">Projects</h2>
-        <div class="flex gap-2">
-          <button id="createProjectBtn" type="button" class="btn btn-primary btn-sm">New Project</button>
-        </div>
-      `;
-
-      if (container.firstChild) {
-        container.insertBefore(newHeader, container.firstChild);
-      } else {
-        container.appendChild(newHeader);
+        }
       }
 
-      console.log('[ProjectListComponent] Created fallback header with project button');
-      return;
+      // Bind the events to the button
+      this._bindButtonEvents(button);
     }
 
-    // If there's already a header but no button
-    let actionsContainer = headerSection.querySelector('.flex.gap-2');
-    if (!actionsContainer) {
-      // Create action container
-      actionsContainer = document.createElement('div');
-      actionsContainer.className = 'flex gap-2';
-      headerSection.appendChild(actionsContainer);
+    /**
+     * Binds the necessary events to the createProjectBtn
+     * Extracted for better code reuse in the delayed retry case
+     */
+    _bindButtonEvents(button) {
+      // Replace any existing handler
+      const newButton = button.cloneNode(true);
+      if (button.parentNode) {
+        button.parentNode.replaceChild(newButton, button);
+        button = newButton;
+      }
+
+      button.addEventListener('click', () => {
+        // Use the global modal manager
+        if (window.modalManager) {
+          window.modalManager.show('project', {
+            updateContent: (modalEl) => {
+              // Reset form for creation
+              const form = modalEl.querySelector('#projectForm');
+              const title = modalEl.querySelector('#projectModalTitle');
+              if (form) form.reset();
+              if (title) title.textContent = 'Create Project';
+              const projectIdInput = modalEl.querySelector('#projectIdInput');
+              if (projectIdInput) projectIdInput.value = '';
+            }
+          });
+        } else {
+          console.error("[ProjectListComponent] Modal manager not available to show project form.");
+          alert("Cannot open project form.");
+        }
+      });
     }
 
-    // Create button
-    const button = document.createElement('button');
-    button.id = 'createProjectBtn';
-    button.type = 'button';
-    button.className = 'btn btn-primary btn-sm';
-    button.textContent = 'New Project';
+    _createFallbackCreateProjectButton() {
+      const headerSection = document.querySelector('.mb-4.flex.items-center.justify-between')
+        || document.querySelector('#projectListView > div:first-child');
 
-    actionsContainer.appendChild(button);
-    console.log('[ProjectListComponent] Created fallback create project button');
-  }
+      if (!headerSection) {
+        // Create a header if not found
+        const container = document.getElementById('projectListView');
+        if (!container) return;
+
+        const newHeader = document.createElement('div');
+        newHeader.className = 'mb-4 flex items-center justify-between';
+        newHeader.innerHTML = `
+          <h2 class="text-xl font-semibold">Projects</h2>
+          <div class="flex gap-2">
+            <button id="createProjectBtn" type="button" class="btn btn-primary btn-sm">New Project</button>
+          </div>
+        `;
+        if (container.firstChild) {
+          container.insertBefore(newHeader, container.firstChild);
+        } else {
+          container.appendChild(newHeader);
+        }
+        console.log('[ProjectListComponent] Created fallback header with project button');
+        return;
+      }
+
+      // If there's already a header but no button
+      let actionsContainer = headerSection.querySelector('.flex.gap-2');
+      if (!actionsContainer) {
+        actionsContainer = document.createElement('div');
+        actionsContainer.className = 'flex gap-2';
+        headerSection.appendChild(actionsContainer);
+      }
+
+      // Create button
+      const button = document.createElement('button');
+      button.id = 'createProjectBtn';
+      button.type = 'button';
+      button.className = 'btn btn-primary btn-sm';
+      button.textContent = 'New Project';
+
+      actionsContainer.appendChild(button);
+      console.log('[ProjectListComponent] Created fallback create project button');
+    }
 
     _initializeCustomizationUI() {
-      // Find the button added in index.html
       let button = document.getElementById('customizeCardsBtn');
       if (!button) {
         console.debug("Customize cards button (customizeCardsBtn) not found. Creating fallback...");
@@ -952,65 +969,58 @@ ${content}`)) {
         document.body.appendChild(button);
       }
 
-      // Make it visible and add listener
       button.classList.remove('hidden');
       button.addEventListener('click', () => this._showCustomizationModal());
 
-      // Modal creation should happen regardless of button presence
       this._createCustomizationModal();
     }
 
     _createCustomizationModal() {
-      // Attempt to find an existing modal structure in index.html
       let modal = document.getElementById('cardCustomizationModal');
       if (!modal) {
         console.debug("cardCustomizationModal not found in HTML, creating fallback...");
-        // Create a fallback <dialog> dynamically
         modal = document.createElement('dialog');
         modal.id = 'cardCustomizationModal';
-        // Basic modal styling for DaisyUI (if needed)
         modal.className = 'modal';
 
-        // Provide a minimal structure with the needed elements
         modal.innerHTML = `
-           <form method="dialog" class="modal-box">
-             <h3 class="font-bold text-xl mb-4">Customize Card Appearance</h3>
-             <div class="mb-4">
-               <label for="cardThemeSelect" class="block mb-1">Theme:</label>
-               <select id="cardThemeSelect" class="select select-bordered w-full max-w-xs"></select>
-             </div>
+          <form method="dialog" class="modal-box">
+            <h3 class="font-bold text-xl mb-4">Customize Card Appearance</h3>
+            <div class="mb-4">
+              <label for="cardThemeSelect" class="block mb-1">Theme:</label>
+              <select id="cardThemeSelect" class="select select-bordered w-full max-w-xs"></select>
+            </div>
 
-             <div class="mb-4">
-               <label class="label cursor-pointer flex items-center gap-2">
-                 <span class="label-text">Show Description</span>
-                 <input type="checkbox" id="showDescriptionCheckbox" class="checkbox checkbox-primary"/>
-               </label>
-               <label class="label cursor-pointer flex items-center gap-2">
-                 <span class="label-text">Show Date</span>
-                 <input type="checkbox" id="showDateCheckbox" class="checkbox checkbox-primary"/>
-               </label>
-               <label class="label cursor-pointer flex items-center gap-2">
-                 <span class="label-text">Show Badges</span>
-                 <input type="checkbox" id="showBadgesCheckbox" class="checkbox checkbox-primary"/>
-               </label>
-             </div>
+            <div class="mb-4">
+              <label class="label cursor-pointer flex items-center gap-2">
+                <span class="label-text">Show Description</span>
+                <input type="checkbox" id="showDescriptionCheckbox" class="checkbox checkbox-primary"/>
+              </label>
+              <label class="label cursor-pointer flex items-center gap-2">
+                <span class="label-text">Show Date</span>
+                <input type="checkbox" id="showDateCheckbox" class="checkbox checkbox-primary"/>
+              </label>
+              <label class="label cursor-pointer flex items-center gap-2">
+                <span class="label-text">Show Badges</span>
+                <input type="checkbox" id="showBadgesCheckbox" class="checkbox checkbox-primary"/>
+              </label>
+            </div>
 
-             <div class="mb-6">
-               <label for="defaultBadgeStyleSelect" class="block mb-1">Default Badge Style:</label>
-               <select id="defaultBadgeStyleSelect" class="select select-bordered w-full max-w-xs"></select>
-             </div>
+            <div class="mb-6">
+              <label for="defaultBadgeStyleSelect" class="block mb-1">Default Badge Style:</label>
+              <select id="defaultBadgeStyleSelect" class="select select-bordered w-full max-w-xs"></select>
+            </div>
 
-             <div class="modal-action">
-               <button type="button" id="resetCustomizationBtn" class="btn btn-secondary">Reset</button>
-               <button type="button" id="applyCustomizationBtn" class="btn btn-primary">Apply</button>
-               <button type="button" id="closeCustomizationBtn" class="btn">Close</button>
-             </div>
-           </form>
-         `;
+            <div class="modal-action">
+              <button type="button" id="resetCustomizationBtn" class="btn btn-secondary">Reset</button>
+              <button type="button" id="applyCustomizationBtn" class="btn btn-primary">Apply</button>
+              <button type="button" id="closeCustomizationBtn" class="btn">Close</button>
+            </div>
+          </form>
+        `;
         document.body.appendChild(modal);
       }
 
-      // Now we have a modal reference, wire up the controls
       const closeBtn = modal.querySelector('#closeCustomizationBtn');
       const applyBtn = modal.querySelector('#applyCustomizationBtn');
       const resetBtn = modal.querySelector('#resetCustomizationBtn');
@@ -1019,7 +1029,6 @@ ${content}`)) {
       applyBtn?.addEventListener('click', () => this._applyCardCustomization());
       resetBtn?.addEventListener('click', () => this._resetCardCustomization());
 
-      // Populate selects if not already done
       this._populateCustomizationSelects();
     }
 
@@ -1028,15 +1037,15 @@ ${content}`)) {
       const badgeStyleSelect = document.getElementById('defaultBadgeStyleSelect');
 
       if (themeSelect && themeSelect.options.length === 0) {
-        themeSelect.innerHTML = this.availableThemes.map(theme =>
-          `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`
-        ).join('');
+        themeSelect.innerHTML = this.availableThemes
+          .map(theme => `<option value="${theme.id}" ${this.state.cardCustomization.theme === theme.id ? 'selected' : ''}>${theme.name}</option>`)
+          .join('');
       }
 
       if (badgeStyleSelect && badgeStyleSelect.options.length === 0) {
-        badgeStyleSelect.innerHTML = this.badgeStyles.map(style =>
-          `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`
-        ).join('');
+        badgeStyleSelect.innerHTML = this.badgeStyles
+          .map(style => `<option value="${style.id}" ${this.state.cardCustomization.defaultBadgeStyle === style.id ? 'selected' : ''}>${style.name}</option>`)
+          .join('');
       }
     }
 
@@ -1046,25 +1055,22 @@ ${content}`)) {
         console.error("Cannot show customization modal.");
         return;
       }
-
-      // Ensure selects are populated before setting values
+      // Populate selects before setting values
       this._populateCustomizationSelects();
 
-      // Set current values from state
       document.getElementById('cardThemeSelect').value = this.state.cardCustomization.theme;
       document.getElementById('showDescriptionCheckbox').checked = this.state.cardCustomization.showDescription;
-      // document.getElementById('showTokensCheckbox').checked = this.state.cardCustomization.showTokens; // Removed? Add back if needed
       document.getElementById('showDateCheckbox').checked = this.state.cardCustomization.showDate;
       document.getElementById('showBadgesCheckbox').checked = this.state.cardCustomization.showBadges;
       document.getElementById('defaultBadgeStyleSelect').value = this.state.cardCustomization.defaultBadgeStyle;
 
-      modal.showModal(); // Use dialog's showModal method
+      modal.showModal();
     }
 
     _hideCustomizationModal() {
       const modal = document.getElementById('cardCustomizationModal');
       if (modal && typeof modal.close === 'function') {
-        modal.close(); // Use dialog's close method
+        modal.close();
       }
     }
 
@@ -1072,15 +1078,14 @@ ${content}`)) {
       this.state.cardCustomization = {
         theme: document.getElementById('cardThemeSelect').value,
         showDescription: document.getElementById('showDescriptionCheckbox').checked,
-        // showTokens: document.getElementById('showTokensCheckbox').checked, // Removed?
         showDate: document.getElementById('showDateCheckbox').checked,
         showBadges: document.getElementById('showBadgesCheckbox').checked,
         defaultBadgeStyle: document.getElementById('defaultBadgeStyleSelect').value,
-        globalBadges: this.state.cardCustomization.globalBadges || [] // Preserve global badges if they exist
+        globalBadges: this.state.cardCustomization.globalBadges || []
       };
 
       this._saveCardCustomization();
-      this.renderProjects(this.state.projects); // Re-render cards with new settings
+      this.renderProjects(this.state.projects);
       this._hideCustomizationModal();
 
       this._showNotification('Customization applied', 'success');
@@ -1120,7 +1125,7 @@ ${content}`)) {
       return {
         theme: 'default',
         showDescription: true,
-        showTokens: true,
+        showTokens: true, // (If you want to remove this, set false or remove the property.)
         showDate: true,
         showBadges: true,
         defaultBadgeStyle: 'default',
@@ -1137,7 +1142,7 @@ ${content}`)) {
         console.warn("[ProjectListComponent] Cannot bind card events: container element not found");
         return;
       }
-      // Remove any existing handler to prevent duplicates
+      // Remove any existing handler
       if (this._cardClickHandler) {
         this.element.removeEventListener('click', this._cardClickHandler);
       }
@@ -1149,29 +1154,22 @@ ${content}`)) {
         if (!projectId) return;
         this._handleCardClick(projectId, event);
       };
-      // Attach with proper event delegation
       this.element.addEventListener('click', this._cardClickHandler);
-      // Log for diagnostics
       console.log("[ProjectListComponent] Project card click handlers bound successfully");
     }
 
-    // Helper function to handle card click logic
     _handleCardClick(projectId, event = null) {
-      // Stop event propagation if this is coming from a button
+      // Stop event propagation if this is from a button
       if (event) {
-        // Find if the click originated from an action button
         const actionButton = event.target.closest('button[data-action]');
         if (actionButton) {
-          // Prevent the click from triggering the card click handler
           event.stopPropagation();
-          
-          // Get the action from the button
           const action = actionButton.dataset.action;
           this._executeAction(action, projectId);
           return;
         }
-        
-        // Check for other specific action elements (not buttons)
+
+        // Check for other specific action elements
         const actionElement = event.target.closest('[data-action]');
         if (actionElement) {
           const action = actionElement.dataset.action;
@@ -1179,27 +1177,22 @@ ${content}`)) {
           return;
         }
       }
-      
-      // Default action is 'view' for general card clicks
+      // Default action is 'view'
       this._executeAction('view', projectId);
     }
-    
-    // Execute the appropriate action based on the action type
+
     _executeAction(action, projectId) {
-      // Find project data
       const project = this.state.projects.find(p => p.id === projectId);
       if (!project) {
         console.warn(`[ProjectListComponent] Project not found for ID: ${projectId}`);
         this._showNotification('Project not found', 'error');
         return;
       }
-      
+
       console.log(`[ProjectListComponent] Executing action '${action}' for project: ${projectId}`);
-      
-      // Execute action
+
       switch (action) {
         case 'view':
-          // Navigate to project details URL
           window.history.pushState({}, '', `/?project=${projectId}`);
           if (window.projectManager?.loadProjectDetails) {
             window.projectManager.loadProjectDetails(projectId);
@@ -1209,7 +1202,6 @@ ${content}`)) {
           if (window.projectManager?.togglePinProject) {
             window.projectManager.togglePinProject(projectId)
               .then(() => {
-                console.log(`[ProjectListComponent] Toggled pin for project: ${projectId}`);
                 this._showNotification('Project pin toggled', 'success');
                 this._loadProjectsThroughManager();
               })
@@ -1220,7 +1212,6 @@ ${content}`)) {
           if (window.projectManager?.toggleArchiveProject) {
             window.projectManager.toggleArchiveProject(projectId)
               .then(() => {
-                console.log(`[ProjectListComponent] Toggled archive for project: ${projectId}`);
                 this._showNotification('Project archive status toggled', 'success');
                 this._loadProjectsThroughManager();
               })
@@ -1271,23 +1262,23 @@ ${content}`)) {
     }
   }
 
-  // Export to global scope
+  // Export the class to global scope
   window.ProjectListComponent = ProjectListComponent;
 
-  // Ensure global instance is saved when created
+  // Keep reference to the original, so we can wrap it for a default global instance
   const originalProjectListComponent = window.ProjectListComponent;
   window.ProjectListComponent = function (options) {
-    // Ensure we have valid required options
+    // Ensure valid required options
     if (!options || !options.elementId) {
       console.error("[ProjectListComponent] Missing required elementId option");
       options = options || {};
-      options.elementId = options.elementId || "projectList"; // Fall back to default ID
+      options.elementId = options.elementId || "projectList";
     }
 
     const instance = new originalProjectListComponent(options);
     window.projectListComponent = instance;
 
-    // Attach a mechanism to allow explicit refresh from outside
+    // Attach a method to allow explicit refresh from outside
     instance.forceRender = function (projects) {
       if (Array.isArray(projects) && projects.length > 0) {
         console.log("[ProjectListComponent] Force rendering projects:", projects.length);
@@ -1302,14 +1293,10 @@ ${content}`)) {
   };
 })();
 
-// Ensure the ProjectListComponent is correctly exposed to the global scope
-// This fixes the issue where the dashboard cannot find the component
+// Ensure the ProjectListComponent is exposed in case the wrapper initialization is skipped
 if (typeof window.ProjectListComponent !== 'function') {
   console.log('[ProjectListComponent] Exposing ProjectListComponent to global scope');
-
-  // The original class constructor might still be available as originalProjectListComponent
   if (typeof window.originalProjectListComponent === 'function') {
     window.ProjectListComponent = window.originalProjectListComponent;
   }
-  // Otherwise keep the existing wrapper if it exists
 }

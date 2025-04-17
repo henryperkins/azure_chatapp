@@ -720,7 +720,48 @@ async function ensureComponentsInitialized() {
 
   log("[ensureComponentsInitialized] Waiting for component initialization...");
 
-  // Try to initialize components if needed
+  // First, make sure the project list HTML is always loaded regardless of current state
+  try {
+    // Force reload the HTML to ensure all elements are present
+    log("[ensureComponentsInitialized] Loading project_list.html content");
+    const projectListElement = document.getElementById('projectListView');
+    if (projectListElement) {
+      // Always load fresh HTML to ensure the button is there
+      const response = await fetch('static/html/project_list.html');
+      if (!response.ok) throw new Error(`Failed to load project_list.html: ${response.status}`);
+      const html = await response.text();
+      projectListElement.innerHTML = html;
+
+      // Initialize the event listeners for elements in the newly loaded HTML
+      const createProjectBtn = document.getElementById('createProjectBtn');
+      if (createProjectBtn) {
+        createProjectBtn.addEventListener('click', () => {
+          if (window.modalManager) {
+            window.modalManager.show('project', {
+              updateContent: (modalEl) => {
+                const form = modalEl.querySelector('#projectForm');
+                const title = modalEl.querySelector('#projectModalTitle');
+                if (form) form.reset();
+                if (title) title.textContent = 'Create Project';
+                const projectIdInput = modalEl.querySelector('#projectIdInput');
+                if (projectIdInput) projectIdInput.value = '';
+              }
+            });
+          }
+        });
+        console.log("[ensureComponentsInitialized] Successfully bound createProjectBtn click handler");
+      }
+
+      // Wait a moment to ensure the DOM is fully updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } else {
+      console.warn("[ensureComponentsInitialized] No projectListView found to load HTML into");
+    }
+  } catch (err) {
+    console.error("[ensureComponentsInitialized] Error loading project list HTML:", err);
+  }
+
+  // Now initialize components AFTER the HTML is loaded
   if (typeof window.ProjectListComponent === 'function' && !window.projectListComponent) {
     try {
       window.projectListComponent = new window.ProjectListComponent({
