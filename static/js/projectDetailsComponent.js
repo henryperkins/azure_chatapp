@@ -1,14 +1,9 @@
- /**
- * ProjectDetailsComponent.js
+/**
+ * projectDetailsComponent.js
  *
- * A comprehensive UI component for managing project details, files,
- * conversations, and artifacts with modern interactive features.
- *
- * Improvements Incorporated:
- * 1. Avoided event-listener memory leaks by storing bound handlers for removal.
- * 2. Reduced unnecessary debug logs and grouped them under a `DEBUG` flag.
- * 3. Applied consistent usage of `requestAnimationFrame` for smooth DOM updates.
- * 4. Minor structural cleanups for clarity and maintainability.
+ * A refined, deduplicated, and more maintainable version of the ProjectDetailsComponent.
+ * Leverages helper methods to reduce repetitive code in file uploads, chat initialization,
+ * error handling, and DOM manipulation.
  */
 
 const DEBUG = false;
@@ -18,7 +13,7 @@ function debugLog(...args) {
 
 export class ProjectDetailsComponent {
   constructor(options = {}) {
-    // Store bound event handlers to properly remove them in destroy():
+    // Store bound handlers for proper removal:
     this.boundHandleConversationsLoaded = this.handleConversationsLoaded.bind(this);
     this.boundHandleArtifactsLoaded = this.handleArtifactsLoaded.bind(this);
     this.boundOnTabClick = this.onTabClick.bind(this);
@@ -29,7 +24,7 @@ export class ProjectDetailsComponent {
       throw new Error('onBack callback function is required');
     }
 
-    // Initialize core properties and helpers
+    // Initialize injected dependencies (or fallback to globals)
     this.onBack = options.onBack;
     this.utils = options.utils || window.uiUtilsInstance;
     this.projectManager = options.projectManager || window.projectManager;
@@ -40,9 +35,10 @@ export class ProjectDetailsComponent {
     this.state = {
       currentProject: null,
       activeTab: 'files',
-      searchCache: new Map()
+      searchCache: new Map() // for caching search results
     };
 
+    // File upload stats & config
     this.fileUploadStatus = { completed: 0, failed: 0, total: 0 };
     this.fileConstants = {
       allowedExtensions: [
@@ -52,144 +48,33 @@ export class ProjectDetailsComponent {
       maxSizeMB: 30
     };
 
-    // Scroll and drag/drop bindings
+    // Additional bindings
     this.scrollHandler = this.handleScroll.bind(this);
     this.handleDragEvent = this.handleDragEvent.bind(this);
 
-    // Check if the HTML templates are loaded
+    // Tracks whether HTML templates are already in the DOM
     this.templatesReady = window.templatesLoadedInDOM || false;
 
-    // Add MutationObserver to detect when elements are added
+    // Observe DOM changes in case elements are loaded dynamically
     this._setupElementObserver();
 
     // Basic setup
     this.initElements();
     this.bindEvents();
     this.setupDragDropHandlers();
-    // Chat will be initialized after project is loaded
   }
 
   /* ------------------------------------------------------------------
-   * DOM Initialization
-   * ------------------------------------------------------------------ */
-  initElements() {
-    const getElement = (selector, required = false) => {
-      const el = document.querySelector(selector);
-      if (required && !el) {
-        console.warn(`[ProjectDetailsComponent] Element not found: ${selector}`);
-      }
-      return el;
-    };
-
-    this.elements = {
-      // Container & basic project info
-      container: getElement("#projectDetailsView", true),
-      title: getElement("#projectTitle"),
-      description: getElement("#projectDescription"),
-
-      // Stats
-      tokenUsage: getElement("#tokenUsage"),
-      maxTokens: getElement("#maxTokens"),
-      tokenPercentageDisplay: getElement("#tokenPercentageDisplay"),
-      tokenProgressBar: getElement("#tokenProgressBar"),
-      conversationCount: getElement("#conversationCount"),
-      totalMessages: getElement("#totalMessages"),
-
-      // Files
-      filesList: getElement("#projectFilesList", true),
-      // File Upload
-      uploadProgress: getElement("#filesUploadProgress"),
-      progressBar: getElement("#fileProgressBar"),
-      uploadStatus: getElement("#uploadStatus"),
-      uploadBtnTrigger: getElement("#uploadFileBtnTrigger"),
-      fileInput: getElement("#fileInput"),
-
-      // Buttons
-      pinBtn: getElement("#pinProjectBtn"),
-      editBtn: getElement("#editProjectBtn"),
-      archiveBtn: getElement("#archiveProjectBtn"),
-      backBtn: getElement("#backToProjectsBtn", true),
-
-      // Drag & Drop
-      dragZone: getElement("#dragDropZone", true),
-
-      // Loading Indicators
-      loadingStates: {
-        files: getElement("#filesLoading"),
-        conversations: getElement("#conversationsLoading"),
-        artifacts: getElement("#artifactsLoading")
-      },
-
-      // Tabs
-      tabContainer: getElement('.tabs[role="tablist"]'),
-      tabContents: {
-        files: getElement('#filesTab'),
-        knowledge: getElement('#knowledgeTab'),
-        conversations: getElement('#conversationsTab'),
-        artifacts: getElement('#artifactsTab'),
-        chat: getElement('#chatTab')
-      },
-
-      // Conversations
-      conversationsList: getElement("#projectConversationsList"),
-
-      // Artifacts
-      artifactsList: getElement("#projectArtifactsList"),
-
-      // Chat
-      chatContainer: getElement('#globalChatContainer'),
-      chatMessages: getElement('#globalChatMessages'),
-      chatInput: getElement('#globalChatInput'),
-      chatSendBtn: getElement('#globalChatSendBtn'),
-      chatTypingIndicator: getElement('#globalChatTyping')
-    };
-  }
-
-  bindEvents() {
-    // Back button
-    if (this.elements.backBtn) {
-      this.elements.backBtn.addEventListener('click', this.onBack);
-    }
-
-    // Project loading events
-    document.addEventListener("projectConversationsLoaded", this.boundHandleConversationsLoaded);
-    document.addEventListener("projectArtifactsLoaded", this.boundHandleArtifactsLoaded);
-
-    // Tabs (event delegation)
-    if (this.elements.tabContainer) {
-      // To avoid multiple attachments, check a data attribute
-      if (!this.elements.tabContainer.dataset.listenerAttached) {
-        this.elements.tabContainer.addEventListener('click', this.boundOnTabClick);
-        this.elements.tabContainer.dataset.listenerAttached = 'true';
-      }
-    }
-
-    // File upload triggers
-    if (this.elements.uploadBtnTrigger && this.elements.fileInput) {
-      this.elements.uploadBtnTrigger.addEventListener('click', () => {
-        this.elements.fileInput.click();
-      });
-      this.elements.fileInput.addEventListener('change', this.handleFileSelection.bind(this));
-    }
-    
-    // New conversation button
-    const newConversationBtn = document.getElementById('projectNewConversationBtn');
-    if (newConversationBtn) {
-      newConversationBtn.addEventListener('click', () => this.createNewChat());
-    }
-  }
-
-  /* ------------------------------------------------------------------
-   * Lifecycle Methods
+   * Public Lifecycle Methods
    * ------------------------------------------------------------------ */
   show() {
-    if (!this.elements.container) return;
+    if (!this.elements?.container) return;
     this.elements.container.classList.remove('hidden', 'opacity-0');
     this.elements.container.classList.add('block', 'opacity-100');
   }
 
   hide() {
-    if (!this.elements.container) return;
+    if (!this.elements?.container) return;
     this.elements.container.classList.add('opacity-0');
     setTimeout(() => {
       this.elements.container.classList.add('hidden');
@@ -198,46 +83,168 @@ export class ProjectDetailsComponent {
   }
 
   destroy() {
+    // Remove bound project-level listeners
     document.removeEventListener("projectConversationsLoaded", this.boundHandleConversationsLoaded);
     document.removeEventListener("projectArtifactsLoaded", this.boundHandleArtifactsLoaded);
 
+    // Remove scroll listener if applied
     if (this.elements.filesList) {
-      this.elements.filesList.removeEventListener('scroll', this.scrollHandler);
+      this._manageListeners(this.elements.filesList, 'scroll', this.scrollHandler, 'remove');
     }
 
+    // Remove tab click if present
     if (this.elements.tabContainer && this.elements.tabContainer.dataset.listenerAttached) {
-      this.elements.tabContainer.removeEventListener('click', this.boundOnTabClick);
+      this._manageListeners(this.elements.tabContainer, 'click', this.boundOnTabClick, 'remove');
       delete this.elements.tabContainer.dataset.listenerAttached;
     }
 
+    // Remove drag events
     if (this.elements.dragZone) {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
-        this.elements.dragZone.removeEventListener(event, this.handleDragEvent);
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+        this._manageListeners(this.elements.dragZone, ev, this.handleDragEvent, 'remove');
       });
+    }
+
+    // Disconnect the MutationObserver
+    if (this.elementObserver) {
+      this.elementObserver.disconnect();
+      this.elementObserver = null;
     }
   }
 
-  /* ------------------------------------------------------------------
-   * Core Rendering
-   * ------------------------------------------------------------------ */
-  renderProject(project) {
-    if (!project || typeof project !== 'object') {
-      console.error('Invalid project data - authentication may be required');
-      this._renderAuthRequiredMessage();
-      return;
+  /**
+   * Initialize chat interface by ensuring the global interface is ready
+   * and configured for the current project
+   */
+  async initChatInterface() {
+    // Try to init chat system with no specific conversation ID
+    return this._initializeChatSystem();
+  }
+
+  /**
+   * Centralized method to initialize the chat system and optionally load a conversation.
+   */
+  async _initializeChatSystem(conversationId = null) {
+    const container = this.elements?.chatContainer || document.getElementById('projectChatContainer');
+    if (!container) {
+      debugLog('[ProjectDetailsView] No chat container found');
+      return false;
     }
 
-    this.state.currentProject = project;
+    this._showChatLoading(container);
 
-    // Initialize chat interface once we have a project ID
-    this.initChatInterface();
+    try {
+      // 1. Ensure script loaded
+      const loaded = await this._ensureChatInterfaceLoaded();
+      if (!loaded) {
+        throw new Error('Failed to load ChatInterface script');
+      }
 
-    // Quick fade-out
+      // 2. Get or initialize global chat interface
+      if (!window.globalChatInterface) {
+        debugLog('[ProjectDetailsView] Creating new global ChatInterface');
+        window.globalChatInterface = new window.ChatInterface({
+          container: 'globalChatMessages',
+          inputField: 'chatUIInput',
+          sendButton: 'globalChatSendBtn'
+        });
+        await window.globalChatInterface.initialize();
+
+        // For backwards compatibility
+        window.chatInterface = window.globalChatInterface;
+        window.projectChatInterface = window.globalChatInterface;
+      }
+
+      // 3. Configure for current project
+      if (this.state.currentProject?.id) {
+        await window.globalChatInterface.loadProject(this.state.currentProject.id);
+      }
+
+      // Store reference for component use
+      this.chatInstance = window.globalChatInterface;
+
+      // 4. Load conversation if specified
+      if (conversationId) {
+        await window.globalChatInterface.loadConversation(conversationId);
+      }
+
+      return true;
+    } catch (error) {
+      this._showChatError(error.message || 'Chat initialization failed');
+      this._handleOperationError('_initializeChatSystem', error);
+      return false;
+    } finally {
+      this._hideChatLoading(container);
+    }
+  }
+
+  bindEvents() {
+    // Back button
+    if (this.elements.backBtn) {
+      this._manageListeners(this.elements.backBtn, 'click', this.onBack);
+    }
+
+    // Project loading events
+    document.addEventListener("projectConversationsLoaded", this.boundHandleConversationsLoaded);
+    document.addEventListener("projectArtifactsLoaded", this.boundHandleArtifactsLoaded);
+
+    // Tabs
+    if (this.elements.tabContainer && !this.elements.tabContainer.dataset.listenerAttached) {
+      this._manageListeners(this.elements.tabContainer, 'click', this.boundOnTabClick);
+      this.elements.tabContainer.dataset.listenerAttached = 'true';
+    }
+
+    // File upload triggers
+    if (this.elements.uploadBtnTrigger && this.elements.fileInput) {
+      this._manageListeners(this.elements.uploadBtnTrigger, 'click', () => {
+        this.elements.fileInput.click();
+      });
+      this._manageListeners(this.elements.fileInput, 'change', this.handleFileSelection.bind(this));
+    }
+
+    // New conversation button
+    const newConversationBtn = document.getElementById('projectNewConversationBtn');
+    if (newConversationBtn) {
+      this._manageListeners(newConversationBtn, 'click', () => this.createNewChat());
+    }
+
+    // Listeners for chat interface events
+    document.addEventListener('chatInterfaceInitialized', () => {
+      console.log('[ProjectDetailsComponent] Received chatInterfaceInitialized event');
+      if (this.state.activeTab === 'chat' && this.state.currentProject?.id) {
+        this.initChatInterface();
+      }
+    });
+
+    document.addEventListener('chatInterfaceLoaded', () => {
+      console.log('[ProjectDetailsComponent] Received chatInterfaceLoaded event');
+      // Potentially handle script loaded but not init.
+    });
+  }
+
+  setupDragDropHandlers() {
+    if (!this.elements.dragZone) return;
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+      this._manageListeners(this.elements.dragZone, ev, this.handleDragEvent);
+    });
+
+    // Clicking drag zone triggers file input
+    this._manageListeners(this.elements.dragZone, 'click', () => {
+      this.elements.fileInput?.click();
+    });
+  }
+
+  /* ------------------------------------------------------------------
+   * Core Rendering & Project-Specific
+   * ------------------------------------------------------------------ */
+
+  updateProjectHeader(project) {
+    if (!project) return;
+
     if (this.elements.container) {
       this.elements.container.classList.add('opacity-0');
     }
 
-    // Update title & description
     if (this.elements.title) {
       this.elements.title.textContent = project.name || '';
       this.elements.title.classList.add('text-gray-900', 'dark:text-gray-100');
@@ -247,15 +254,6 @@ export class ProjectDetailsComponent {
       this.elements.description.classList.add('text-gray-600', 'dark:text-gray-300');
     }
 
-    // Render stats, files, conversations, artifacts if present
-    if (project.stats) this.renderStats(project.stats);
-    if (project.conversations) this.renderConversations(project.conversations);
-    if (project.files) this.renderFiles(project.files);
-    if (project.artifacts) this.renderArtifacts(project.artifacts);
-
-    this.updatePinButton(project.pinned);
-    this.updateArchiveButton(project.archived);
-
     // Fade in
     if (this.elements.container) {
       setTimeout(() => {
@@ -263,18 +261,46 @@ export class ProjectDetailsComponent {
         this.elements.container.classList.add('opacity-100');
       }, 50);
     }
-
-    // Load associated project data from server
-    this.refreshProjectData(project.id);
   }
 
-  renderStats(stats) {
-    if (!stats || typeof stats !== 'object') {
+  updateProjectMetadata(project) {
+    if (!project) return;
+
+    // Render stats if present
+    if (project.stats) {
+      this.renderStats(project.stats);
+    }
+
+    // Pin/archive states
+    this.updatePinButton(project.pinned);
+    this.updateArchiveButton(project.archived);
+  }
+
+  async loadProjectFiles(projectId) {
+    await this._withLoadingIndicator('files', async () => {
+      if (this.projectManager?.loadProjectFiles) {
+        const files = await this.projectManager.loadProjectFiles(projectId);
+        this.renderFiles(files);
+      }
+    });
+  }
+
+  async loadProjectConversations(projectId) {
+    await this._withLoadingIndicator('conversations', async () => {
+      if (this.projectManager?.loadProjectConversations) {
+        const conversations = await this.projectManager.loadProjectConversations(projectId);
+        this.renderConversations(conversations);
+      }
+    });
+  }
+
+  renderStats(stats = {}) {
+    if (typeof stats !== 'object') {
       console.error('Invalid stats data');
       return;
     }
 
-    const formatNumber = this.utils?.formatNumber || (n => n?.toString() || '0');
+    const formatNumber = this.utils?.formatNumber || (n => String(n || '0'));
 
     if (this.elements.tokenUsage) {
       this.elements.tokenUsage.textContent = formatNumber(stats.token_usage);
@@ -293,7 +319,12 @@ export class ProjectDetailsComponent {
     }
     if (this.elements.tokenProgressBar) {
       this.elements.tokenProgressBar.value = pct;
-      this.elements.tokenProgressBar.classList.remove('progress-success', 'progress-warning', 'progress-error', 'progress-primary');
+      this.elements.tokenProgressBar.classList.remove(
+        'progress-success',
+        'progress-warning',
+        'progress-error',
+        'progress-primary'
+      );
 
       if (pct > 90) {
         this.elements.tokenProgressBar.classList.add('progress-error');
@@ -314,9 +345,171 @@ export class ProjectDetailsComponent {
   }
 
   /* ------------------------------------------------------------------
-   * Files
+   * Files and Uploads
    * ------------------------------------------------------------------ */
+
+  async handleFileSelection(e) {
+    if (!this.state.currentProject?.id) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    await this._handleFileUpload(this.state.currentProject.id, files);
+    // Reset input
+    if (e.target) e.target.value = null;
+  }
+
+  async uploadFiles(projectId, files) {
+    if (!projectId || !files?.length) return;
+    await this._handleFileUpload(projectId, files);
+  }
+
+  /**
+   * Centralized handler for file uploads, reducing duplication
+   */
+  async _handleFileUpload(projectId, files) {
+    // Quick auth check
+    if (!await this._verifyAuth('file upload')) return;
+
+    // Show initial progress
+    this._setupUploadProgress(files.length);
+
+    // Validate file set
+    let validFiles = [], invalidFiles = [];
+    try {
+      // Optional advanced verification if available
+      if (typeof this.projectManager?.prepareFileUploads === 'function') {
+        const result = await this.projectManager.prepareFileUploads(projectId, files);
+        validFiles = result.validatedFiles || [];
+        invalidFiles = result.invalidFiles || [];
+      } else {
+        // Basic local validation fallback
+        ({ validFiles, invalidFiles } = this.validateFiles(files));
+      }
+    } catch (err) {
+      this._handleOperationError('_handleFileUpload', err, {
+        messageFormatter: () => `File preparation failed: ${err.message || 'Unknown error'}`
+      });
+      // Fallback to local validation if custom preparation failed
+      ({ validFiles, invalidFiles } = this.validateFiles(files));
+    }
+
+    // Handle invalid files
+    this.handleInvalidFiles(invalidFiles);
+    if (validFiles.length === 0) return;
+
+    // Batch upload
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+      const batch = validFiles.slice(i, i + BATCH_SIZE);
+      // Process each file in the batch concurrently
+      await Promise.all(batch.map(file => this._processFile(projectId, file)));
+    }
+
+    // Once done, refresh project data
+    await this.refreshProjectData(projectId);
+  }
+
+  async _processFile(projectId, file) {
+    try {
+      if (!this.projectManager?.uploadFile) {
+        throw new Error('ProjectManager uploadFile() is not available');
+      }
+      await this.projectManager.uploadFile(projectId, file);
+
+      this.fileUploadStatus.completed++;
+      this.updateUploadProgress();
+
+      this._notifySuccess(`${file.name} uploaded successfully`);
+
+      // Optionally reload knowledge base after first success
+      if (this.fileUploadStatus.completed === 1) {
+        this.refreshKnowledgeBase(projectId);
+      }
+    } catch (error) {
+      console.error(`Upload error for ${file.name}:`, error);
+      this.fileUploadStatus.failed++;
+      this.fileUploadStatus.completed++;
+      this.updateUploadProgress();
+
+      const errMsg = this.formatUploadErrorMessage(error, file.name);
+      this._notifyError(`Failed to upload ${file.name}: ${errMsg}`);
+    }
+  }
+
+  /**
+   * Validate files locally based on extension and size.
+   */
+  validateFiles(files) {
+    const { allowedExtensions, maxSizeMB } = this.fileConstants;
+    const validFiles = [], invalidFiles = [];
+
+    for (const file of files) {
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      const isValidExt = allowedExtensions.includes(ext);
+      const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
+
+      if (!isValidExt) {
+        invalidFiles.push({
+          file,
+          error: `Invalid file type (${ext}). Allowed: ${allowedExtensions.join(', ')}`
+        });
+      } else if (!isValidSize) {
+        invalidFiles.push({
+          file,
+          error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`
+        });
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    return { validFiles, invalidFiles };
+  }
+
+  handleInvalidFiles(invalidFiles = []) {
+    for (const { file, error } of invalidFiles) {
+      this._notifyError(`Skipped ${file.name}: ${error}`);
+    }
+  }
+
+  async confirmDeleteFile(file) {
+    if (!file?.id || !this.state.currentProject?.id) return;
+    const doDelete = async () => {
+      try {
+        await this.projectManager?.deleteFile(this.state.currentProject.id, file.id);
+        this._notifySuccess('File deleted successfully');
+        await this.refreshProjectData(this.state.currentProject.id);
+      } catch (err) {
+        this._handleOperationError('confirmDeleteFile', err, {
+          messageFormatter: () => 'Failed to delete file'
+        });
+      }
+    };
+
+    if (this.utils?.confirmAction) {
+      this.utils.confirmAction({
+        title: "Delete File",
+        message: `Are you sure you want to delete "${file.filename}"? This cannot be undone.`,
+        confirmText: "Delete",
+        confirmClass: "btn-error",
+        onConfirm: doDelete
+      });
+    } else {
+      const confirmed = confirm(`Delete ${file.filename}? This cannot be undone.`);
+      if (confirmed) doDelete();
+    }
+  }
+
+  async downloadFile(file) {
+    if (!file?.id || !this.state.currentProject?.id) return;
+    await this._withLoadingIndicator('files', async () => {
+      const success = await this.projectManager?.downloadFile(this.state.currentProject.id, file.id);
+      if (!success) throw new Error('Download failed');
+    });
+  }
+
   renderFiles(files = []) {
+    // Show a quick loading state in case of large data
     this.showLoading('files');
 
     const listContainer = this.elements.filesList;
@@ -326,13 +519,13 @@ export class ProjectDetailsComponent {
     }
 
     requestAnimationFrame(() => {
-      if (!files || files.length === 0) {
+      if (!files.length) {
         this.renderEmptyFilesState(listContainer);
       } else {
-        listContainer.innerHTML = ''; // Clear
+        listContainer.innerHTML = '';
         const fragment = document.createDocumentFragment();
         files.forEach(file => {
-          fragment.appendChild(this.createFileItem(file));
+          fragment.appendChild(this._buildFileItem(file));
         });
         listContainer.appendChild(fragment);
       }
@@ -352,8 +545,8 @@ export class ProjectDetailsComponent {
     `;
   }
 
-  createFileItem(file) {
-    if (!file || !this.utils) return document.createElement('div');
+  _buildFileItem(file) {
+    if (!this.utils) return document.createElement('div');
 
     const item = this.utils.createElement("div", {
       className: "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-md shadow-sm hover:bg-base-200 transition-colors",
@@ -364,40 +557,41 @@ export class ProjectDetailsComponent {
       className: "flex items-center gap-3 min-w-0 flex-1"
     });
 
+    // File icon
     const icon = this.utils.createElement("span", {
       className: `text-xl ${file.file_type === 'pdf' ? 'text-error' : 'text-primary'}`
     });
-    icon.innerHTML = this.utils.fileIcon(file.file_type);
+    icon.innerHTML = this.utils.fileIcon?.(file.file_type) || '📄';
 
+    // File details
     const detailDiv = this.utils.createElement("div", {
       className: "flex flex-col min-w-0 flex-1"
     });
-
     detailDiv.appendChild(this.utils.createElement("div", {
       className: "font-medium truncate",
       textContent: file.filename
     }));
-
-    const sizeDate = this.utils.createElement("div", {
+    detailDiv.appendChild(this.utils.createElement("div", {
       className: "text-xs text-base-content/70",
-      textContent: `${this.utils.formatBytes(file.file_size)} · ${this.utils.formatDate(file.created_at)}`
-    });
-    detailDiv.appendChild(sizeDate);
+      textContent: `${this.utils.formatBytes?.(file.file_size) || file.file_size} · ${this.utils.formatDate?.(file.created_at) || file.created_at}`
+    }));
 
-    const statusBadge = this.createProcessingBadge(file.metadata?.search_processing || {});
+    // Processing badge
+    const statusBadge = this._createProcessingBadge(file.metadata?.search_processing || {});
     detailDiv.appendChild(statusBadge);
 
     infoDiv.appendChild(icon);
     infoDiv.appendChild(detailDiv);
 
+    // Actions
     const actions = this.utils.createElement("div", { className: "flex gap-1" });
-    actions.appendChild(this.createActionButton({
+    actions.appendChild(this._createActionButton({
       icon: "trash",
       colorClass: "btn-error",
       action: () => this.confirmDeleteFile(file),
       tooltip: "Delete file"
     }));
-    actions.appendChild(this.createActionButton({
+    actions.appendChild(this._createActionButton({
       icon: "download",
       colorClass: "btn-info",
       action: () => this.downloadFile(file),
@@ -409,357 +603,134 @@ export class ProjectDetailsComponent {
     return item;
   }
 
-  async handleFileSelection(e) {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !this.state.currentProject?.id) {
-      return;
-    }
-
-    const projectId = this.state.currentProject.id;
-
-    try {
-      // First check authentication
-      let isAuthenticated = false;
-      try {
-        isAuthenticated = await this.auth?.isAuthenticated?.();
-      } catch (authErr) {
-        console.warn('[ProjectDetailsComponent] Auth check failed:', authErr);
-      }
-
-      if (!isAuthenticated) {
-        this.notification?.('Please log in to upload files', 'warning');
-
-        // Try to handle auth error
-        if (this.auth?.handleAuthError) {
-          this.auth.handleAuthError(
-            { message: "Authentication required for file upload" },
-            "Uploading files"
-          );
-        }
-        return;
-      }
-
-      // Show upload progress
-      if (this.elements.uploadProgress) {
-        this.elements.uploadProgress.classList.remove('hidden');
-      }
-
-      this.showLoading('files');
-      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-      this.updateUploadProgress();
-
-      // Use proper preparation method based on what's available
-      let validFiles = [], invalidFiles = [];
-
-      if (typeof window.projectManager?.prepareFileUploads === 'function') {
-        try {
-          const result = await window.projectManager.prepareFileUploads(projectId, files);
-          validFiles = result.validatedFiles || [];
-          invalidFiles = result.invalidFiles || [];
-        } catch (err) {
-          // Fallback to basic validation
-          console.warn('[ProjectDetailsComponent] Error using prepareFileUploads:', err);
-          validFiles = Array.from(files);
-          invalidFiles = [];
-        }
-      } else {
-        // Basic validation as fallback
-        const { validFiles: validatedFiles, invalidFiles: invalidOnes } = this.validateFiles(files);
-        validFiles = validatedFiles;
-        invalidFiles = invalidOnes;
-      }
-
-      // Handle invalid files
-      this.handleInvalidFiles(invalidFiles);
-      if (validFiles.length === 0) return;
-
-      // Upload files with batching
-      const BATCH_SIZE = 3;
-      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
-        const batch = validFiles.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(file => this.processFile(projectId, file)));
-      }
-    } catch (error) {
-      console.error('[ProjectDetailsComponent] Upload failed:', error);
-      this.notification?.('File upload failed', 'error');
-    } finally {
-      if (e.target) {
-        e.target.value = null; // Reset input
-      }
-    }
-  }
-
-  async uploadFiles(projectId, files) {
-    try {
-      const isAuthenticated = await this.auth?.isAuthenticated();
-      if (!isAuthenticated) {
-        this.notification?.('Please log in to upload files', 'warning');
-        return;
-      }
-
-      if (this.elements.uploadProgress) {
-        this.elements.uploadProgress.classList.remove('hidden');
-      }
-
-      this.showLoading('files');
-      this.fileUploadStatus = { completed: 0, failed: 0, total: files.length };
-      this.updateUploadProgress();
-
-      // Basic validation (the UI may do extra checks)
-      const { validFiles, invalidFiles } = this.validateFiles(files);
-      this.handleInvalidFiles(invalidFiles);
-      if (validFiles.length === 0) return;
-
-      const BATCH_SIZE = 3;
-      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
-        const batch = validFiles.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(file => this.processFile(projectId, file)));
-      }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      this.notification?.('File upload failed', 'error');
-    }
-  }
-
-  async processFile(projectId, file) {
-    try {
-      if (!this.projectManager?.uploadFile) {
-        throw new Error('Project manager not available');
-      }
-      const response = await this.projectManager.uploadFile(projectId, file);
-      this.fileUploadStatus.completed++;
-      this.updateUploadProgress();
-
-      this.notification?.(`${file.name} uploaded successfully`, 'success');
-      // Optionally refresh knowledge base on first success
-      if (this.fileUploadStatus.completed === 1) {
-        this.refreshKnowledgeBase(projectId);
-      }
-    } catch (error) {
-      console.error(`Upload error for ${file.name}:`, error);
-      this.fileUploadStatus.failed++;
-      this.fileUploadStatus.completed++;
-      this.updateUploadProgress();
-
-      this.notification?.(`Failed to upload ${file.name}: ${this.formatUploadErrorMessage(error, file.name)}`, 'error');
-    } finally {
-      if (this.fileUploadStatus.completed === this.fileUploadStatus.total) {
-        this.hideLoading('files');
-        // Refresh data once at the end
-        await this.refreshProjectData(projectId);
-      }
-    }
-  }
-
-  validateFiles(files) {
-    const { allowedExtensions, maxSizeMB } = this.fileConstants;
-    const validFiles = [], invalidFiles = [];
-
-    Array.from(files).forEach(file => {
-      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
-      const isValidExt = allowedExtensions.includes(fileExt);
-      const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
-
-      if (isValidExt && isValidSize) {
-        validFiles.push(file);
-      } else {
-        const reason = !isValidExt
-          ? `Invalid file type (${fileExt}). Allowed: ${allowedExtensions.join(', ')}`
-          : `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`;
-        invalidFiles.push({ file, error: reason });
-      }
-    });
-
-    return { validFiles, invalidFiles };
-  }
-
-  handleInvalidFiles(invalidFiles) {
-    invalidFiles.forEach(({ file, error }) => {
-      this.notification?.(`Skipped ${file.name}: ${error}`, 'warning');
-    });
-  }
-
-  confirmDeleteFile(file) {
-    if (!file?.id || !this.state.currentProject?.id) return;
-
-    if (this.utils?.confirmAction) {
-      this.utils.confirmAction({
-        title: "Delete File",
-        message: `Are you sure you want to delete "${file.filename}"? This cannot be undone.`,
-        confirmText: "Delete",
-        confirmClass: "btn-error",
-        onConfirm: () => {
-          this.projectManager?.deleteFile(this.state.currentProject.id, file.id)
-            .then(() => {
-              this.notification?.('File deleted successfully', 'success');
-              this.refreshProjectData(this.state.currentProject.id);
-            })
-            .catch(err => {
-              console.error('Delete failed:', err);
-              this.notification?.('Failed to delete file', 'error');
-            });
-        }
-      });
-    } else {
-      const confirmed = confirm(`Delete ${file.filename}? This cannot be undone.`);
-      if (confirmed) {
-        this.projectManager?.deleteFile(this.state.currentProject.id, file.id)
-          .then(() => this.refreshProjectData(this.state.currentProject.id))
-          .catch(err => {
-            console.error('Delete failed:', err);
-            this.notification?.('Failed to delete file', 'error');
-          });
-      }
-    }
-  }
-
-  async downloadFile(file) {
-    if (!file?.id || !this.state.currentProject?.id || !this.projectManager?.downloadFile) return;
-    try {
-      this.showLoading('files');
-      const success = await this.projectManager.downloadFile(this.state.currentProject.id, file.id);
-      if (!success) throw new Error('Download failed');
-    } catch (err) {
-      console.error('Download error:', err);
-      this.notification?.('File download failed', 'error');
-    } finally {
-      this.hideLoading('files');
-    }
-  }
-
   /* ------------------------------------------------------------------
-   * Conversation/Artifacts
+   * Conversation / Artifacts
    * ------------------------------------------------------------------ */
   handleConversationsLoaded(event) {
-    const conversations = event.detail?.conversations || event.detail?.data?.conversations
-      || (Array.isArray(event.detail) ? event.detail : []);
+    const detail = event?.detail;
+    const conversations = detail?.conversations || detail?.data?.conversations
+      || (Array.isArray(detail) ? detail : []);
     this.renderConversations(conversations);
 
     if (this.elements.conversationCount) {
       this.elements.conversationCount.textContent = conversations.length;
     }
 
-    const totalMessages = conversations.reduce((sum, conv) => sum + (conv.message_count || 0), 0);
+    const totalMsgs = conversations.reduce((sum, c) => sum + (c.message_count || 0), 0);
     if (this.elements.totalMessages) {
-      this.elements.totalMessages.textContent = `${totalMessages} messages`;
+      this.elements.totalMessages.textContent = `${totalMsgs} messages`;
     }
   }
 
   handleArtifactsLoaded(event) {
-    const artifacts = event.detail?.artifacts || event.detail?.data?.artifacts
-      || (Array.isArray(event.detail) ? event.detail : []);
+    const detail = event?.detail;
+    const artifacts = detail?.artifacts || detail?.data?.artifacts
+      || (Array.isArray(detail) ? detail : []);
     this.renderArtifacts(artifacts);
   }
 
   renderConversations(conversations = []) {
-    if (!this.elements.conversationsList) return;
+    const listEl = this.elements.conversationsList;
+    if (!listEl) return;
+
     this.showLoading('conversations');
 
-    if (conversations.length === 0) {
-      this.elements.conversationsList.innerHTML = `
+    if (!conversations.length) {
+      listEl.innerHTML = `
         <div class="text-base-content/70 text-center py-8">
           <p>No conversations yet</p>
           <button class="btn btn-sm btn-primary mt-2" id="newChatFromEmptyState">Create New Chat</button>
         </div>
       `;
-      
-      // Add event listener for the new chat button
       const newChatBtn = document.getElementById('newChatFromEmptyState');
       if (newChatBtn) {
-        newChatBtn.addEventListener('click', () => this.createNewChat());
+        this._manageListeners(newChatBtn, 'click', () => this.createNewChat());
       }
     } else {
-      this.elements.conversationsList.innerHTML = conversations
-        .map(conv => this.createConversationItem(conv))
-        .join('');
+      listEl.innerHTML = conversations.map(conv => this._createConversationItemHTML(conv)).join('');
     }
+
     this.hideLoading('conversations');
   }
 
-  createConversationItem(conversation) {
-    const item = document.createElement('div');
-    item.className = "p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors";
-    item.setAttribute('role', 'button');
-    item.setAttribute('tabindex', '0');
+  _createConversationItemHTML(conversation) {
+    // We'll build and return an HTML string
+    const dateStr = this.utils?.formatDate?.(conversation.updated_at) || conversation.updated_at;
+    const handleClickAttr = `onclick="(${() => this.handleConversationClick(conversation)})()"`;
+    const handleKeyAttr = `
+      onkeydown="(function(e){
+        if(e.key === 'Enter' || e.key === ' '){
+          (${() => this.handleConversationClick(conversation)})();
+        }
+      })(event)"
+    `;
 
-    item.onclick = () => this.handleConversationClick(conversation);
-    item.onkeydown = (e) => {
-      if (e.key === 'Enter' || e.key === ' ') this.handleConversationClick(conversation);
-    };
-
-    item.innerHTML = `
-      <h4 class="font-medium truncate mb-1">${conversation.title || 'Untitled conversation'}</h4>
-      <p class="text-sm text-base-content/70 truncate">
-        ${conversation.last_message || 'No messages yet'}
-      </p>
-      <div class="flex justify-between mt-1 text-xs text-base-content/60">
-        <span>${this.utils?.formatDate(conversation.updated_at) || conversation.updated_at}</span>
-        <span class="badge badge-ghost badge-sm">${conversation.message_count || 0} msgs</span>
+    return `
+      <div class="p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors"
+        role="button" tabindex="0"
+        ${handleClickAttr}
+        ${handleKeyAttr}>
+        <h4 class="font-medium truncate mb-1">${conversation.title || 'Untitled conversation'}</h4>
+        <p class="text-sm text-base-content/70 truncate">
+          ${conversation.last_message || 'No messages yet'}
+        </p>
+        <div class="flex justify-between mt-1 text-xs text-base-content/60">
+          <span>${dateStr}</span>
+          <span class="badge badge-ghost badge-sm">${conversation.message_count || 0} msgs</span>
+        </div>
       </div>
     `;
-    return item.outerHTML;
   }
-  
-  /**
-   * Creates a new chat conversation for the current project
-   */
+
   async createNewChat() {
     if (!this.state.currentProject?.id) {
-      this.notification?.('No project selected', 'error');
+      this._notifyError('No project selected');
       return;
     }
-    
+
     try {
-      // Store project ID in localStorage for chat system
       localStorage.setItem("selectedProjectId", this.state.currentProject.id);
-      
-      // Use projectManager to create conversation
-      const conversation = await window.projectManager.createConversation(
-        this.state.currentProject.id
-      );
-      
-      // Switch to chat tab and load the conversation
+
+      // Create conversation in manager
+      const conversation = await this.projectManager.createConversation(this.state.currentProject.id);
+
+      // Switch to chat tab
       this.switchTab('chat');
-      const chatInstance = this.chatInstance || window.projectChatInterface;
-      if (chatInstance) {
-        await chatInstance.loadConversation(conversation.id);
-      }
-      
-      // Update URL
+
+      // Load conversation in the chat interface
+      await this._initializeChatSystem(conversation.id);
+
+      // Update the URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set('chatId', conversation.id);
       if (!newUrl.searchParams.has('project')) {
         newUrl.searchParams.set('project', this.state.currentProject.id);
       }
       window.history.pushState({}, "", newUrl);
-      
+
       return conversation;
     } catch (error) {
-      console.error('Failed to create chat:', error);
-      this.notification?.('Failed to create chat: ' + error.message, 'error');
+      this._handleOperationError('createNewChat', error, {
+        messageFormatter: () => `Failed to create chat: ${error.message}`
+      });
       throw error;
     }
   }
 
   async handleConversationClick(conversation) {
     if (!conversation?.id || !this.state.currentProject?.id) {
-      this.notification?.('Invalid conversation data', 'error');
+      this._notifyError('Invalid conversation data');
       return;
     }
 
     try {
       localStorage.setItem("selectedProjectId", this.state.currentProject.id);
-
       this.switchTab('chat');
-      const chatInstance = this.chatInstance
-        || window.projectChatInterface
-        || window.ChatManager?.getChatInstance?.('#projectChatContainer');
 
-      if (!chatInstance) throw new Error('Chat system not ready');
-
-      this.showLoading('conversations');
-      const success = await chatInstance.loadConversation(conversation.id);
-      if (!success) throw new Error('Failed to load conversation');
+      // Attempt to initialize chat with conversation
+      await this._withLoadingIndicator('conversations', async () => {
+        await this._initializeChatSystem(conversation.id);
+      });
 
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set('chatId', conversation.id);
@@ -768,40 +739,49 @@ export class ProjectDetailsComponent {
       }
       window.history.pushState({}, "", newUrl);
     } catch (err) {
-      console.error('Error loading conversation:', err);
-      this.notification?.(`Error loading conversation: ${err.message}`, 'error');
-    } finally {
-      this.hideLoading('conversations');
+      this._handleOperationError('handleConversationClick', err, {
+        messageFormatter: () => `Error loading conversation: ${err.message}`
+      });
     }
   }
 
   renderArtifacts(artifacts = []) {
-    if (!this.elements.artifactsList) return;
+    const listEl = this.elements.artifactsList;
+    if (!listEl) return;
+
     this.showLoading('artifacts');
 
-    if (artifacts.length === 0) {
-      this.elements.artifactsList.innerHTML = `
+    if (!artifacts.length) {
+      listEl.innerHTML = `
         <div class="text-base-content/70 text-center py-8">
           <p>No artifacts generated yet.</p>
         </div>
       `;
     } else {
-      this.elements.artifactsList.innerHTML = artifacts.map(a => this.createArtifactItem(a)).join('');
+      listEl.innerHTML = artifacts.map(a => this._createArtifactItem(a)).join('');
     }
+
     this.hideLoading('artifacts');
   }
 
-  createArtifactItem(artifact) {
-    const date = this.utils?.formatDate(artifact.created_at) || '';
+  _createArtifactItem(artifact) {
+    const date = this.utils?.formatDate(artifact.created_at) || artifact.created_at;
+    const downloadAction = `onclick="(function(){
+      const pd = window.projectDetails || window.globalProjectDetails;
+      pd && pd.downloadArtifact('${artifact.id}');
+    })()"`;
+
     return `
       <div class="p-3 border-b border-base-300 hover:bg-base-200 transition-colors">
         <div class="flex justify-between items-center">
           <h4 class="font-medium truncate">${artifact.name || 'Untitled Artifact'}</h4>
           <span class="text-xs text-base-content/60">${date}</span>
         </div>
-        <p class="text-sm text-base-content/70 truncate mt-1">${artifact.description || artifact.type || 'No description'}</p>
+        <p class="text-sm text-base-content/70 truncate mt-1">
+          ${artifact.description || artifact.type || 'No description'}
+        </p>
         <div class="mt-2 flex gap-2">
-          <button class="btn btn-xs btn-outline" onclick="projectDetails.downloadArtifact('${artifact.id}')">Download</button>
+          <button class="btn btn-xs btn-outline" ${downloadAction}>Download</button>
         </div>
       </div>
     `;
@@ -809,124 +789,167 @@ export class ProjectDetailsComponent {
 
   async downloadArtifact(artifactId) {
     if (!artifactId || !this.state.currentProject?.id || !this.projectManager?.downloadArtifact) return;
-    try {
-      this.showLoading('artifacts');
+    await this._withLoadingIndicator('artifacts', async () => {
       await this.projectManager.downloadArtifact(this.state.currentProject.id, artifactId);
-    } catch (err) {
-      console.error("Artifact download error:", err);
-      this.notification?.('Artifact download failed', 'error');
-    } finally {
-      this.hideLoading('artifacts');
-    }
+    });
   }
 
   /* ------------------------------------------------------------------
    * Chat Interface
    * ------------------------------------------------------------------ */
-  initChatInterface() {
-    if (!this.state.currentProject?.id) {
-      console.warn('[ProjectDetailsView] No project ID to initialize chat.');
-      return;
+
+  async initChatInterface() {
+    // Try to init chat system with no specific conversation ID
+    return this._initializeChatSystem();
+  }
+
+  /**
+   * Centralized method to initialize the chat system and optionally load a conversation.
+   */
+  async _initializeChatSystem(conversationId = null) {
+    const container = this.elements?.chatContainer || document.getElementById('projectChatContainer');
+    if (!container) {
+      debugLog('[ProjectDetailsView] No chat container found');
+      return false;
     }
 
-    localStorage.setItem("selectedProjectId", this.state.currentProject.id);
+    this._showChatLoading(container);
 
-    const chatOptions = {
-      containerSelector: '#globalChatContainer',
-      messageContainerSelector: '#globalChatMessages',
-      inputSelector: '#globalChatInput',
-      sendButtonSelector: '#globalChatSendBtn',
-      typingIndicatorSelector: '#globalChatTyping',
-      onMessageSent: this.handleMessageSent.bind(this),
-      onError: this.handleChatError.bind(this),
-      getProjectId: () => this.state.currentProject?.id
-    };
-
-    // Use a centralized factory approach with maximum safety
-    const initializeChatSystem = async () => {
-      // Priority 1: ChatManager API
-      if (window.ChatManager?.initializeProjectChat) {
-        try {
-          console.log('[ProjectDetailsView] Using ChatManager.initializeProjectChat');
-          return window.ChatManager.initializeProjectChat('#projectChatContainer', chatOptions);
-        } catch (err) {
-          console.warn('[ProjectDetailsView] ChatManager initialization failed:', err);
-        }
+    try {
+      // Ensure script loaded
+      const loaded = await this._ensureChatInterfaceLoaded();
+      if (!loaded) {
+        throw new Error('Failed to load ChatInterface script');
       }
 
-      // Priority 2: Existing chat interface
-      if (window.chatInterface?.configureSelectors) {
-        try {
-          console.log('[ProjectDetailsView] Using existing chatInterface');
-          // Ensure configureSelectors is called correctly
-          window.chatInterface.configureSelectors(chatOptions);
-          // Re-initialize if needed or return the configured instance
-          if (!window.chatInterface.initialized) {
-             await window.chatInterface.initialize();
-          }
-          return window.chatInterface;
-        } catch (err) {
-          console.warn('[ProjectDetailsView] chatInterface configuration failed:', err);
-        }
+      // Attempt several strategies to get a chat instance
+      const success = await this._tryChatInitMethods(conversationId);
+      if (!success) {
+        throw new Error('All chat initialization methods failed');
       }
 
-      // Priority 3: Create new instance
-      if (typeof window.ChatInterface === 'function') {
-        try {
-          console.log('[ProjectDetailsView] Creating new ChatInterface instance');
-          const instance = new window.ChatInterface(chatOptions);
-          await instance.initialize();
-          window.projectChatInterface = instance; // Assign to global if needed
-          return instance;
-        } catch (err) {
-          console.warn('[ProjectDetailsView] ChatInterface instantiation failed:', err);
-        }
-      }
-
-      return null; // Return null if all methods fail
-    };
-
-    // Try to initialize and store the result
-    initializeChatSystem()
-      .then(instance => {
-        this.chatInstance = instance;
-        if (!instance) {
-          console.warn('[ProjectDetailsView] All chat initialization methods failed');
-          // Optionally disable chat tab/button if initialization fails completely
-          const chatTabButton = this.elements.tabContainer?.querySelector('[data-tab="chat"]');
-          if (chatTabButton) {
-            chatTabButton.classList.add('hidden'); // Or 'tab-disabled'
-          }
-        } else {
-           console.log('[ProjectDetailsView] Chat initialized successfully.');
-        }
-      })
-      .catch(err => {
-        console.error('[ProjectDetailsView] Fatal error in chat initialization:', err);
-        // Optionally disable chat tab/button on fatal error
-        const chatTabButton = this.elements.tabContainer?.querySelector('[data-tab="chat"]');
-        if (chatTabButton) {
-           chatTabButton.classList.add('hidden'); // Or 'tab-disabled'
-        }
-      });
+      return true;
+    } catch (error) {
+      this._showChatError(error.message || 'Chat initialization failed');
+      this._handleOperationError('_initializeChatSystem', error);
+      return false;
+    } finally {
+      this._hideChatLoading(container);
+    }
   }
 
-  handleMessageSent(data) {
-    debugLog('Message sent:', data);
-    this.notification?.('Message sent successfully', 'success');
+  async _ensureChatInterfaceLoaded() {
+    if (window.ChatInterface) {
+      debugLog('[ProjectDetailsView] ChatInterface is already loaded');
+      return true;
+    }
+
+    // Possible paths to attempt
+    const possiblePaths = [
+      '/static/js/chat-interface.js',
+      '/static/js/chat/chat-interface.js',
+      '/static/dist/chat-interface.js'
+    ];
+
+    for (let i = 0; i < possiblePaths.length; i++) {
+      try {
+        debugLog(`[ProjectDetailsView] Loading ChatInterface script from ${possiblePaths[i]}`);
+        await this._loadScript(possiblePaths[i]);
+        if (window.ChatInterface) {
+          return true;
+        }
+      } catch (e) {
+        console.warn(`[ProjectDetailsView] Failed to load from ${possiblePaths[i]}:`, e);
+      }
+    }
+
+    // As a last attempt, see if ChatManager can load it
+    if (window.ChatManager?.ensureChatInterface) {
+      try {
+        await window.ChatManager.ensureChatInterface();
+        return Boolean(window.ChatInterface);
+      } catch (err) {
+        console.error('[ProjectDetailsView] ChatManager failed loading ChatInterface:', err);
+      }
+    }
+
+    return false;
   }
 
-  handleChatError(error) {
-    console.error('Chat error:', error);
-    this.notification?.(`Chat error: ${error.message || 'Unknown error'}`, 'error');
+  _loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = (err) => {
+        reject(new Error(`Failed to load script: ${src}`));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  _showChatError(message) {
+    const chatMessages = this.elements?.chatMessages || document.getElementById('projectChatMessages');
+    if (!chatMessages) return;
+
+    chatMessages.innerHTML = `
+      <div class="flex flex-col items-center justify-center p-6 text-center">
+        <div class="text-error mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 class="font-medium text-lg mb-2">Chat Initialization Failed</h3>
+        <p class="text-base-content/70 mb-4">${message}</p>
+        <div class="flex space-x-2">
+          <button id="retryChatInitBtn" class="btn btn-sm btn-primary mr-2">Retry</button>
+          <button id="refreshPageBtn" class="btn btn-sm btn-ghost">Refresh</button>
+        </div>
+      </div>
+    `;
+
+    // Handlers
+    const retryBtn = document.getElementById('retryChatInitBtn');
+    if (retryBtn) {
+      this._manageListeners(retryBtn, 'click', () => this._initializeChatSystem());
+    }
+
+    const refreshBtn = document.getElementById('refreshPageBtn');
+    if (refreshBtn) {
+      this._manageListeners(refreshBtn, 'click', () => window.location.reload());
+    }
+
+    this._notifyError(message);
+  }
+
+  _showChatLoading(container) {
+    if (!container) return;
+    container.classList.add('initializing');
+    const messagesEl = this.elements.chatMessages || document.getElementById('projectChatMessages');
+    if (messagesEl) {
+      messagesEl.innerHTML = `<div id="chatLoadingIndicator" class="flex justify-center p-4">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>`;
+    }
+  }
+
+  _hideChatLoading(container) {
+    if (!container) return;
+    container.classList.remove('initializing');
+    const loadingEl = document.getElementById('chatLoadingIndicator');
+    if (loadingEl) {
+      loadingEl.remove();
+    }
   }
 
   /* ------------------------------------------------------------------
-   * Tab Switching
+   * Tab Navigation
    * ------------------------------------------------------------------ */
   onTabClick(event) {
     const tabBtn = event.target.closest('.tab[role="tab"]');
     if (!tabBtn || tabBtn.classList.contains('tab-disabled')) return;
+
     const tabName = tabBtn.dataset.tab;
     if (!tabName || this.state.activeTab === tabName) return;
     this.switchTab(tabName);
@@ -935,32 +958,19 @@ export class ProjectDetailsComponent {
   switchTab(tabName) {
     if (!tabName || this.state.activeTab === tabName) return;
 
-    console.log(`[ProjectDetailsComponent] Switching to tab: ${tabName}`);
+    debugLog(`[ProjectDetailsComponent] Switching to tab: ${tabName}`);
 
-    // Get fresh references to tab contents (don't rely on cached elements)
-    const tabContents = {};
-    const tabContentIds = ['files', 'knowledge', 'conversations', 'artifacts', 'chat', 'details'];
-
-    tabContentIds.forEach(id => {
-      tabContents[id] = document.getElementById(`${id}Tab`) ||
-        document.querySelector(`[data-tab-content="${id}"]`);
-    });
-
-    // Hide all tab contents
-    Object.values(tabContents).forEach(content => {
-      if (content) {
-        content.classList.add('hidden');
-        content.setAttribute('aria-hidden', 'true');
+    const tabContentIds = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'];
+    for (const id of tabContentIds) {
+      const contentEl = this.elements.tabContents[id];
+      if (!contentEl) continue;
+      if (id === tabName) {
+        contentEl.classList.remove('hidden');
+        contentEl.setAttribute('aria-hidden', 'false');
+      } else {
+        contentEl.classList.add('hidden');
+        contentEl.setAttribute('aria-hidden', 'true');
       }
-    });
-
-    // Show the selected tab if it exists
-    const selectedContent = tabContents[tabName];
-    if (selectedContent) {
-      selectedContent.classList.remove('hidden');
-      selectedContent.setAttribute('aria-hidden', 'false');
-    } else {
-      console.warn(`[ProjectDetailsComponent] Tab content not found: ${tabName}`);
     }
 
     // Update tab button states
@@ -973,8 +983,6 @@ export class ProjectDetailsComponent {
     });
 
     this.state.activeTab = tabName;
-
-    // Load tab-specific content if needed
     this._loadTabContent(tabName);
   }
 
@@ -984,56 +992,44 @@ export class ProjectDetailsComponent {
 
     switch (tabName) {
       case 'files':
-        if (window.projectManager?.loadProjectFiles) {
-          window.projectManager.loadProjectFiles(projectId)
-            .catch(err => console.error('[ProjectDetailsComponent] Error loading files:', err));
-        }
+        this.loadProjectFiles(projectId).catch(err => {
+          this._handleOperationError('loadProjectFiles', err);
+        });
         break;
-
       case 'conversations':
-        if (window.projectManager?.loadProjectConversations) {
-          window.projectManager.loadProjectConversations(projectId)
-            .catch(err => console.error('[ProjectDetailsComponent] Error loading conversations:', err));
-        }
+        this.loadProjectConversations(projectId).catch(err => {
+          this._handleOperationError('loadProjectConversations', err);
+        });
         break;
-
       case 'artifacts':
-        if (window.projectManager?.loadProjectArtifacts) {
-          window.projectManager.loadProjectArtifacts(projectId)
-            .catch(err => console.error('[ProjectDetailsComponent] Error loading artifacts:', err));
+        if (this.projectManager?.loadProjectArtifacts) {
+          this._withLoadingIndicator('artifacts', async () => {
+            const artifacts = await this.projectManager.loadProjectArtifacts(projectId);
+            this.renderArtifacts(artifacts);
+          }).catch(err => {
+            this._handleOperationError('loadProjectArtifacts', err);
+          });
         }
         break;
-
       case 'knowledge':
-        if (this.state.currentProject?.knowledge_base_id &&
-          window.projectManager?.loadKnowledgeBaseDetails) {
-          window.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id)
-            .catch(err => console.error('[ProjectDetailsComponent] Error loading KB details:', err));
+        if (this.state.currentProject?.knowledge_base_id && this.projectManager?.loadKnowledgeBaseDetails) {
+          this.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id)
+            .catch(err => debugLog('[ProjectDetailsComponent] KB load error:', err));
         }
         break;
       case 'chat':
-        // Initialize or ensure chat interface is ready when tab is selected
-        if (!this.chatInstance && this.state.currentProject?.id) {
-          // Try to initialize chat interface if not initialized
-          this.initChatInterface();
-          
-          // Check if we need to create a new conversation or load an existing one
+        // Initialize chat if not yet
+        this._initializeChatSystem().then(() => {
+          // If there's a chatId in URL, load it
           const urlParams = new URLSearchParams(window.location.search);
           const chatId = urlParams.get('chatId');
-          
-          if (chatId) {
-            // If we have a chat ID, try to load it
-            const chatInstance = this.chatInstance || window.projectChatInterface;
-            if (chatInstance) {
-              chatInstance.loadConversation(chatId)
-                .catch(err => console.error('[ProjectDetailsComponent] Error loading conversation:', err));
-            }
+          if (chatId && (this.chatInstance || window.projectChatInterface)) {
+            (this.chatInstance || window.projectChatInterface).loadConversation(chatId)
+              .catch(err => debugLog('[ProjectDetailsComponent] Chat load error:', err));
           } else if (this.chatInstance && !this.chatInstance.currentChatId) {
-            // If no conversation is loaded, create a new one
-            this.createNewChat()
-              .catch(err => console.error('[ProjectDetailsComponent] Error creating new chat:', err));
+            this.createNewChat().catch(err => debugLog('[ProjectDetailsComponent] Chat creation error:', err));
           }
-        }
+        });
         break;
     }
   }
@@ -1041,21 +1037,6 @@ export class ProjectDetailsComponent {
   /* ------------------------------------------------------------------
    * Drag & Drop
    * ------------------------------------------------------------------ */
-  setupDragDropHandlers() {
-    if (!this.elements.dragZone) return;
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
-      this.elements.dragZone.removeEventListener(ev, this.handleDragEvent);
-      this.elements.dragZone.addEventListener(ev, this.handleDragEvent);
-    });
-
-    // Click on drag zone opens file input
-    this.elements.dragZone.addEventListener('click', () => {
-      if (this.elements.fileInput) {
-        this.elements.fileInput.click();
-      }
-    });
-  }
-
   handleDragEvent(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -1082,29 +1063,32 @@ export class ProjectDetailsComponent {
       debugLog('[ProjectDetailsComponent] No files found in drop event.');
       return;
     }
-
-    const projectId = this.state.currentProject?.id;
-    if (!projectId) {
-      this.notification?.('Cannot upload: No project selected.', 'error');
+    if (!this.state.currentProject?.id) {
+      this._notifyError('Cannot upload: No project selected.');
       return;
     }
 
     try {
-      await this.uploadFiles(projectId, files);
+      await this.uploadFiles(this.state.currentProject.id, files);
     } catch (error) {
-      console.error('[ProjectDetailsComponent] Error uploading dropped files:', error);
-      this.notification?.(`File upload failed: ${error.message}`, 'error');
+      this._handleOperationError('handleDrop', error, {
+        messageFormatter: () => `File upload failed: ${error.message}`
+      });
     }
   }
 
   /* ------------------------------------------------------------------
-   * Helpers & Misc
+   * General Helpers / Utilities
    * ------------------------------------------------------------------ */
+
+  /**
+   * Reloads project data from the server
+   */
   async refreshProjectData(projectId) {
     if (!projectId || !this.projectManager) return;
-
     debugLog(`[ProjectDetails] Refreshing data for project ${projectId}`);
 
+    // Show loading states
     this.showLoading('files');
     this.showLoading('conversations');
     this.showLoading('artifacts');
@@ -1119,10 +1103,10 @@ export class ProjectDetailsComponent {
       await Promise.allSettled(promises);
       debugLog(`[ProjectDetails] Finished refreshing data for project ${projectId}`);
     } catch (err) {
-      console.error("Error refreshing project data:", err);
-      this.notification?.('Failed to refresh project data', 'error');
+      this._handleOperationError('refreshProjectData', err, {
+        messageFormatter: () => 'Failed to refresh project data'
+      });
     } finally {
-      // Hide spinners (some may be hidden earlier by events)
       this.hideLoading('files');
       this.hideLoading('conversations');
       this.hideLoading('artifacts');
@@ -1131,11 +1115,15 @@ export class ProjectDetailsComponent {
 
   refreshKnowledgeBase(projectId) {
     if (this.state.currentProject?.knowledge_base_id && this.projectManager?.loadKnowledgeBaseDetails) {
-      this.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id);
+      this.projectManager.loadKnowledgeBaseDetails(this.state.currentProject.knowledge_base_id)
+        .catch(err => debugLog('[ProjectDetailsComponent] KB load error:', err));
     }
   }
 
-  createProcessingBadge(processing = {}) {
+  /**
+   * Creates a small badge indicating file processing status.
+   */
+  _createProcessingBadge(processing = {}) {
     const statusMap = {
       success: { class: "badge-success", text: "Ready", icon: "✓" },
       error: { class: "badge-error", text: "Failed", icon: "⚠" },
@@ -1157,67 +1145,12 @@ export class ProjectDetailsComponent {
     return badge;
   }
 
-  _renderAuthRequiredMessage() {
-    if (!this.elements.container) return;
-
-    // Clear existing content
-    if (this.elements.title) this.elements.title.textContent = '';
-    if (this.elements.description) this.elements.description.textContent = '';
-
-    // Create authentication required message
-    const authMessage = document.createElement('div');
-    authMessage.className = 'flex flex-col items-center justify-center p-8 text-center';
-    authMessage.innerHTML = `
-      <div class="text-error mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v3m0-3h2m-2 0H9m3-3V8m0 0V5m0 3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </div>
-      <h3 class="text-xl font-bold mb-2">Authentication Required</h3>
-      <p class="mb-4">Please log in to view project details.</p>
-      <button id="loginPromptBtn" class="btn btn-primary">Log In</button>
-    `;
-
-    // Add login button click handler
-    const loginBtn = authMessage.querySelector('#loginPromptBtn');
-    if (loginBtn) {
-      loginBtn.addEventListener('click', () => {
-        // Show the auth dropdown directly
-        const authButton = document.getElementById('authButton');
-        if (authButton) {
-          authButton.click();
-        } else {
-          this.notification?.('Please log in to continue', 'info');
-        }
-      });
-    }
-
-    // Append to container
-    const tabContent = this.elements.tabContents.files;
-    if (tabContent) {
-      tabContent.innerHTML = '';
-      tabContent.appendChild(authMessage);
-      // Switch to files tab to show the message
-      this.switchTab('files');
-    } else if (this.elements.container) {
-      // Fallback if tab content not found
-      this.elements.container.innerHTML = '';
-      this.elements.container.appendChild(authMessage);
-    }
-
-    // Hide loading indicators
-    Object.keys(this.elements.loadingStates || {}).forEach(key => {
-      this.hideLoading(key);
-    });
-  }
-
-  formatUploadErrorMessage(error, fileName = '') {
+  formatUploadErrorMessage(error, fileName) {
     if (error?.response?.status === 401 || error.message?.includes('auth')) {
       this.auth?.handleAuthError?.(error);
       return "Authentication error - please log in again";
     }
 
-    // Basic error mapping
     const errorMessages = {
       "dangerous patterns": "File contains potentially unsafe content",
       "validation": "File format not supported",
@@ -1228,31 +1161,80 @@ export class ProjectDetailsComponent {
     };
 
     const key = Object.keys(errorMessages).find(k =>
-      error.message?.includes(k) || error.response?.data?.message?.includes(k)
+      error.message?.includes(k) ||
+      error.response?.data?.message?.includes(k)
     );
     return errorMessages[key || "default"];
   }
 
-  createActionButton({ icon, colorClass, action, tooltip }) {
-    if (!this.utils) return document.createElement('div');
-    const button = this.utils.createElement("button", {
-      className: `btn btn-ghost btn-square btn-sm ${colorClass} tooltip tooltip-left`,
-      onclick: action,
-      "data-tip": tooltip
+  /* ------------------------------------------------------------------
+   * Event Listeners & Observers
+   * ------------------------------------------------------------------ */
+
+  // Single helper to add/remove event listeners
+  _manageListeners(element, type, handler, action = 'add') {
+    if (!element) return;
+    if (action === 'add') {
+      element.addEventListener(type, handler);
+    } else {
+      element.removeEventListener(type, handler);
+    }
+  }
+
+  /**
+   * Monitors DOM for dynamic element insertions, re-initializing as needed.
+   */
+  _setupElementObserver() {
+    if (this.templatesReady) return;
+
+    this.elementObserver = new MutationObserver((mutations) => {
+      let shouldRefreshElements = false;
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length) {
+          const neededIds = [
+            'projectFilesList',
+            'backToProjectsBtn',
+            'dragDropZone',
+            'filesTab',
+            'projectTitle',
+            'projectDescription'
+          ];
+
+          const addedIds = Array.from(mutation.addedNodes)
+            .filter(node => node.nodeType === Node.ELEMENT_NODE)
+            .flatMap(el => [
+              el.id ? el : null,
+              ...Array.from(el.querySelectorAll?.('[id]') || [])
+            ])
+            .filter(Boolean)
+            .map(el => el.id);
+
+          if (addedIds.some(id => neededIds.includes(id))) {
+            shouldRefreshElements = true;
+            debugLog('[ProjectDetailsComponent] Detected important elements being added/changed in DOM');
+          }
+        }
+      }
+
+      if (shouldRefreshElements) {
+        debugLog('[ProjectDetailsComponent] Re-initializing elements after DOM updates');
+        this.initElements();
+      }
     });
 
-    const iconMap = {
-      trash: '<path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H7.862a2.25 2.25 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/>',
-      download: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />'
-    };
-
-    button.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-        ${iconMap[icon] || ''}
-      </svg>
-    `;
-    return button;
+    const container = document.getElementById('projectDetailsView');
+    if (container) {
+      this.elementObserver.observe(container, {
+        childList: true,
+        subtree: true
+      });
+      debugLog('[ProjectDetailsComponent] Started DOM observer for #projectDetailsView');
+    }
   }
+
+  /* ------------------------------------------------------------------
+   * Buttons & UI
+   * ------------------------------------------------------------------ */
 
   updatePinButton(pinned) {
     if (!this.elements.pinBtn) return;
@@ -1272,6 +1254,33 @@ export class ProjectDetailsComponent {
     this.elements.archiveBtn.classList.add('tooltip', 'tooltip-bottom');
   }
 
+  _createActionButton({ icon, colorClass, action, tooltip }) {
+    if (!this.utils) return document.createElement('button');
+
+    const button = this.utils.createElement("button", {
+      className: `btn btn-ghost btn-square btn-sm ${colorClass} tooltip tooltip-left`,
+      "data-tip": tooltip
+    });
+    button.addEventListener('click', action);
+
+    const iconMap = {
+      trash: '<path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H7.862a2.25 2.25 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/>',
+      download: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />'
+    };
+
+    button.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.5" stroke="currentColor">
+        ${iconMap[icon] || ''}
+      </svg>
+    `;
+    return button;
+  }
+
+  /* ------------------------------------------------------------------
+   * Loading Indicators
+   * ------------------------------------------------------------------ */
+
   showLoading(type) {
     if (this.elements.loadingStates?.[type]) {
       this.elements.loadingStates[type].classList.remove('hidden');
@@ -1284,15 +1293,49 @@ export class ProjectDetailsComponent {
     }
   }
 
+  hideAllLoadingStates() {
+    Object.keys(this.elements.loadingStates || {}).forEach(key => {
+      this.hideLoading(key);
+    });
+  }
+
+  /**
+   * Higher-order function to wrap operations with loading indicator
+   */
+  async _withLoadingIndicator(type, fn) {
+    this.showLoading(type);
+    try {
+      return await fn();
+    } finally {
+      this.hideLoading(type);
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * File Upload Progress
+   * ------------------------------------------------------------------ */
+  _setupUploadProgress(total) {
+    if (!this.elements.uploadProgress) return;
+    this.elements.uploadProgress.classList.remove('hidden');
+    this.showLoading('files');
+    this.fileUploadStatus = { completed: 0, failed: 0, total };
+    this.updateUploadProgress();
+  }
+
+  _completeUploadProcess() {
+    // This can be invoked if we need final steps after upload,
+    // but in this refactor we handle it inside _handleFileUpload.
+  }
+
   updateUploadProgress() {
     const { completed, failed, total } = this.fileUploadStatus;
     const progressContainer = this.elements.uploadProgress;
     const progressBar = this.elements.progressBar;
     const statusText = this.elements.uploadStatus;
-    if (total === 0 || !progressContainer || !progressBar || !statusText) return;
+    if (!progressContainer || !progressBar || !statusText || total === 0) return;
 
-    const percentage = Math.round((completed / total) * 100);
-    progressBar.value = percentage;
+    const pct = Math.round((completed / total) * 100);
+    progressBar.value = pct;
     progressBar.classList.remove('progress-success', 'progress-warning', 'progress-error', 'progress-info');
 
     if (failed > 0 && completed === total) {
@@ -1304,17 +1347,13 @@ export class ProjectDetailsComponent {
     } else {
       progressBar.classList.add('progress-info');
     }
-    if (typeof window.ProjectDetailsComponent !== 'function') {
-      console.log('[ProjectDetailsComponent] Exposing ProjectDetailsComponent to global scope');
-      window.ProjectDetailsComponent = ProjectDetailsComponent;
-    }
 
     statusText.textContent = `Uploading ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}`;
 
     if (completed < total) {
       progressContainer.classList.remove("hidden", "opacity-0");
     } else {
-      // Upload finished
+      // All uploads done
       setTimeout(() => {
         progressContainer.classList.add("opacity-0");
         setTimeout(() => {
@@ -1329,261 +1368,112 @@ export class ProjectDetailsComponent {
     }
   }
 
-  handleScroll() {
-    // If implementing virtual scroll, handle it here
-  }
+  /* ------------------------------------------------------------------
+   * Auth & Error Handling
+   * ------------------------------------------------------------------ */
 
-  /**
-   * Sets up a MutationObserver to watch for elements being added to the DOM
-   * This allows us to re-initialize elements when they're dynamically added
-   */
-  _setupElementObserver() {
-    // Don't set up observers if templates are confirmed loaded
-    if (this.templatesReady) return;
+  async _verifyAuth(context) {
+    let isAuthenticated = false;
+    try {
+      isAuthenticated = await this.auth?.isAuthenticated?.();
+    } catch (err) {
+      console.warn(`[ProjectDetailsComponent] Auth check failed for ${context}:`, err);
+    }
 
-    // Create an observer that watches for elements to be added to the DOM
-    this.elementObserver = new MutationObserver((mutations) => {
-      let shouldRefreshElements = false;
-
-      for (const mutation of mutations) {
-        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-          // Check if any of our needed elements were added
-          const addedIds = Array.from(mutation.addedNodes)
-            .filter(node => node.nodeType === Node.ELEMENT_NODE)
-            .flatMap(el => [
-              el.id ? el : null,
-              ...Array.from(el.querySelectorAll('[id]'))
-            ])
-            .filter(Boolean)
-            .map(el => el.id);
-
-          // These are the elements we're looking for
-          const neededIds = [
-            'projectFilesList', 'backToProjectsBtn', 'dragDropZone',
-            'filesTab', 'projectTitle', 'projectDescription'
-          ];
-
-          if (addedIds.some(id => neededIds.includes(id))) {
-            shouldRefreshElements = true;
-            console.log('[ProjectDetailsComponent] Detected important elements being added to DOM');
-          }
-        }
+    if (!isAuthenticated) {
+      this._notifyWarning(`Please log in to continue (${context})`);
+      if (this.auth?.handleAuthError) {
+        this.auth.handleAuthError({ message: "Authentication required" }, context);
       }
-
-      if (shouldRefreshElements) {
-        // Re-initialize the elements
-        console.log('[ProjectDetailsComponent] Re-initializing elements after DOM updates');
-        this.initElements();
-      }
-    });
-
-    // Start observing
-    const container = document.getElementById('projectDetailsView');
-    if (container) {
-      this.elementObserver.observe(container, {
-        childList: true,
-        subtree: true
-      });
-      console.log('[ProjectDetailsComponent] Started DOM observer for projectDetailsView');
     }
+    return isAuthenticated;
   }
 
-  /**
-   * Ensures that all essential elements exist, creating fallbacks if needed
-   */
-  _ensureEssentialElements() {
-    // Check for critical elements, create fallbacks if needed
-    if (!this.elements.filesList) {
-      this._createMissingElement('#projectFilesList');
+  _handleOperationError(context, error, meta = {}) {
+    console.error(`[${context}]`, error);
+
+    // 401 / auth handling
+    if (error?.response?.status === 401) {
+      this.auth?.handleAuthError?.(error, context);
+      return;
     }
 
-    if (!this.elements.backBtn) {
-      this._createMissingElement('#backToProjectsBtn');
-    }
+    // Format error message
+    const msg = meta.messageFormatter
+      ? meta.messageFormatter(error)
+      : `${context} failed: ${error.message || 'Unknown error'}`;
 
-    if (!this.elements.dragZone) {
-      this._createMissingElement('#dragDropZone');
-    }
+    this._notifyError(msg);
   }
 
-  /**
-   * Creates a missing element based on its selector
-   * @param {string} selector - The CSS selector for the element to create
-   * @returns {HTMLElement|null} - The created element or null if creation fails
-   */
-  _createMissingElement(selector) {
-    if (!selector.startsWith('#')) return null;
-
-    const id = selector.substring(1);
-    const container = document.getElementById('projectDetailsView');
-    if (!container) return null;
-
-    // Create element based on its id
-    let element = null;
-
-    switch (id) {
-      case 'projectFilesList':
-        element = document.createElement('div');
-        element.id = id;
-        element.className = 'grid grid-cols-1 gap-2 mt-4';
-
-        // Find appropriate container
-        const filesTab = document.getElementById('filesTab');
-        if (filesTab) {
-          filesTab.appendChild(element);
-        } else {
-          container.appendChild(element);
-        }
-        break;
-
-      case 'backToProjectsBtn':
-        element = document.createElement('button');
-        element.id = id;
-        element.type = 'button';
-        element.className = 'mr-2 btn btn-ghost btn-sm flex items-center';
-        element.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-          </svg>
-          <span class="ml-1">All Projects</span>
-        `;
-
-        // Add handler
-        if (this.onBack) {
-          element.addEventListener('click', this.onBack);
-        }
-
-        // Find breadcrumb container
-        const breadcrumb = container.querySelector('.flex.items-center.mb-4');
-        if (breadcrumb) {
-          breadcrumb.insertBefore(element, breadcrumb.firstChild);
-        } else {
-          container.insertBefore(element, container.firstChild);
-        }
-        break;
-
-      case 'dragDropZone':
-        element = document.createElement('div');
-        element.id = id;
-        element.className = 'mb-4 drag-zone border-2 border-dashed border-base-300 rounded-lg p-6 text-center';
-        element.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          <p class="text-sm font-medium mb-1">Drag and drop your files here</p>
-          <p class="text-xs text-gray-500">or click the Upload button above</p>
-        `;
-
-        // Find filesTab
-        const filesTabForDrag = document.getElementById('filesTab');
-        if (filesTabForDrag) {
-          // Insert after the upload button section
-          const uploadSection = filesTabForDrag.querySelector('.tab-section.flex.justify-between');
-          if (uploadSection) {
-            if (uploadSection.nextSibling) {
-              filesTabForDrag.insertBefore(element, uploadSection.nextSibling);
-            } else {
-              filesTabForDrag.appendChild(element);
-            }
-          } else {
-            filesTabForDrag.appendChild(element);
-          }
-        } else {
-          container.appendChild(element);
-        }
-        break;
-
-      default:
-        // Create generic placeholder for other elements
-        element = document.createElement('div');
-        element.id = id;
-        element.className = 'fallback-element';
-        element.setAttribute('data-fallback', 'true');
-        container.appendChild(element);
-    }
-
-    if (element) {
-      console.log(`[ProjectDetailsComponent] Created fallback element for ${selector}`);
-    }
-
-    return element;
-  }
-
-  /**
-   * Manual check of required templates/elements if automatic detection fails
-   * @returns {Promise<boolean>} True if critical elements exist
-   */
-  async _manualTemplateCheck() {
-    // Critical elements that must be present after template loading
-    const criticalElements = [
-      // Project list elements
-      { id: 'projectList', template: 'project_list.html' },
-      { id: 'createProjectBtn', template: 'project_list.html' },
-      { id: 'noProjectsMessage', template: 'project_list.html' },
-
-      // Project details elements
-      { id: 'projectTitle', template: 'project_details.html' },
-      { id: 'backToProjectsBtn', template: 'project_details.html' },
-      { id: 'filesTab', template: 'project_details.html' },
-      { id: 'dragDropZone', template: 'project_details.html' },
-      { id: 'projectFilesList', template: 'project_details.html' },
-
-      // Modal elements
-      { id: 'projectFormModal', template: 'modals.html' }
-    ];
-
-    // Wait for essential elements from each template
-    const maxAttempts = 15;
-    let attempts = 0;
-
-    while (attempts < maxAttempts) {
-      const missingElements = criticalElements.filter(el => !document.getElementById(el.id));
-
-      if (missingElements.length === 0) {
-        console.log("[ProjectDetailsComponent] Manual check confirmed all critical elements exist");
+  _safeExecute(fn, operationName) {
+    return (async () => {
+      try {
+        await fn();
         return true;
+      } catch (err) {
+        this._handleOperationError(operationName, err);
+        return false;
       }
+    })();
+  }
 
-      console.log(`[ProjectDetailsComponent] Waiting for elements (${attempts+1}/${maxAttempts}): ${missingElements.map(el => el.id).join(', ')}`);
-
-      // Check template content
-      const listView = document.getElementById('projectListView');
-      const detailsView = document.getElementById('projectDetailsView');
-      const modalsContainer = document.getElementById('modalsContainer');
-
-      if (!listView?.innerHTML || !detailsView?.innerHTML || !modalsContainer?.innerHTML) {
-        console.log("[ProjectDetailsComponent] Template containers still empty, waiting...");
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 200));
-      attempts++;
+  _clearErrorStates() {
+    const errEls = document.querySelectorAll('.project-error-message');
+    for (const el of errEls) {
+      el.remove();
     }
+  }
 
-    console.warn("[ProjectDetailsComponent] Some elements still missing after wait, continuing with fallbacks");
-    return false;
+  _showErrorState(message) {
+    const container = document.getElementById('projectDetailsView');
+    if (!container) return;
+
+    const errorEl = document.createElement('div');
+    errorEl.className = 'alert alert-error project-error-message';
+    errorEl.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2
+                 m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>${message}</span>
+      <button class="btn btn-sm" onclick="this.parentElement.remove()">Dismiss</button>
+    `;
+
+    if (container.firstChild) {
+      container.insertBefore(errorEl, container.firstChild);
+    } else {
+      container.appendChild(errorEl);
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * Notifications
+   * ------------------------------------------------------------------ */
+  _notifySuccess(msg) {
+    this.notification?.(msg, 'success');
+  }
+
+  _notifyError(msg) {
+    this.notification?.(msg, 'error');
+  }
+
+  _notifyWarning(msg) {
+    this.notification?.(msg, 'warning');
+  }
+
+  /* ------------------------------------------------------------------
+   * Scrolling & Reserved Hooks
+   * ------------------------------------------------------------------ */
+  handleScroll() {
+    // If implementing advanced virtual scrolling, do it here
   }
 }
 
-// Update destroy method to clean up the observer
-let originalDestroy = ProjectDetailsComponent.prototype.destroy;
-ProjectDetailsComponent.prototype.destroy = function() {
-  originalDestroy.call(this);
-
-  // Clean up the observer
-  if (this.elementObserver) {
-    this.elementObserver.disconnect();
-    this.elementObserver = null;
-  }
-};
-
-// If you prefer attaching to the global window instead of an ES module:
 /**
- * Fix for projectDetailsComponent.js
- * Add at the end of the file
+ * Expose globally if needed.
  */
-// Explicitly expose the ProjectDetailsComponent to the global window object
-// This ensures it's available both as an ES module export and a global variable
 if (typeof window.ProjectDetailsComponent !== 'function') {
-  console.log('[ProjectDetailsComponent] Exposing ProjectDetailsComponent to global scope');
   window.ProjectDetailsComponent = ProjectDetailsComponent;
 }
