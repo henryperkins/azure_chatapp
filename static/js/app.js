@@ -192,11 +192,20 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         });
         finalUrl += (cleanEndpoint.includes('?') ? '&' : '?') + queryParams.toString();
       }
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-      if (!csrfToken) {
-        console.error('[API] CSRF token missing - triggering auth refresh');
-        await verifyAuthState(true);
-        throw new Error('CSRF token missing - please refresh page');
+      let csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+      if (!csrfToken || !csrfToken.trim()) {
+        console.warn('[API] CSRF token missing. Attempting to retrieve a new CSRF token...');
+        if (window.getCSRFTokenAsync && typeof window.getCSRFTokenAsync === 'function') {
+          csrfToken = await window.getCSRFTokenAsync();
+        }
+        if (!csrfToken || !csrfToken.trim()) {
+          console.error('[API] CSRF token still missing after retrieval - triggering auth refresh');
+          await verifyAuthState(true);
+          throw new Error('CSRF token missing - please refresh page');
+        }
+        // Cache the retrieved token in the meta tag for future use
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) metaTag.content = csrfToken;
       }
       const requestOptions = {
         method: uppercaseMethod,
