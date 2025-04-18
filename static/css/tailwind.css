@@ -4,7 +4,6 @@
 
 /* 1. Core Imports (Preflight included automatically) */
 @import "tailwindcss";
-@import "tailwindcss/typography";
 @import "daisyui";
 
 /* 2. Theme Configuration */
