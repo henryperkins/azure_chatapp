@@ -1,5 +1,4 @@
-/* Main Tailwind CSS file with proper configuration for Azure OpenAI Chat */
-@import "tailwindcss" source(none);
+@import "tailwindcss";
 @source "./static/html/*.html";
 @source "./static/js/*.js";
 @plugin "daisyui";
