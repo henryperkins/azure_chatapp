@@ -2,12 +2,14 @@
   "type": "module",
   "name": "azure_chatapp",
   "version": "1.0.0",
-  "description": "Azure OpenAI Chat Application",
+  "description": "Azure OpenAI Chat Application with Tailwind CSS",
   "scripts": {
     "build:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css",
     "watch:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --watch",
     "dev": "npm run watch:css",
-    "lint:css": "stylelint './static/css/*.css' --custom-syntax postcss-lit"
+    "lint:css": "stylelint './static/css/*.css' --custom-syntax postcss-lit",
+    "prebuild": "npm run build:css",
+    "start": "node your-server-file.js"
   },
   "repository": {
     "type": "git",
@@ -17,35 +19,35 @@
     "azure",
     "openai",
     "chat",
-    "tailwind"
+    "tailwind",
+    "daisyui"
   ],
-  "author": "",
+  "author": "Your Name",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/henryperkins/azure_chatapp/issues"
   },
   "homepage": "https://github.com/henryperkins/azure_chatapp#readme",
+  "engines": {
+    "node": ">=18.12.0",
+    "npm": ">=9.0.0"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.52.0",
+    "@tailwindcss/postcss": "^4.1.4",
     "@tailwindcss/typography": "^0.5.16",
-    "@types/node": "^22.14.1",
     "autoprefixer": "^10.4.21",
     "daisyui": "^5.0.27",
-    "magnitude-test": "^0.0.10",
     "postcss": "^8.5.3",
     "postcss-cli": "^11.0.1",
+    "postcss-import": "^16.1.0",
     "postcss-nested": "^7.0.2",
+    "postcss-nesting": "^13.0.1",
     "stylelint": "^16.18.0",
     "stylelint-config-standard": "^38.0.0",
     "tailwindcss": "^4.1.4"
   },
   "dependencies": {
-    "@tailwindcss/postcss": "^4.1.4",
-    "mcp": "^1.4.2",
-    "postcss-import": "^16.1.0",
-    "postcss-nesting": "^13.0.1"
-  },
-  "engines": {
-    "node": ">=18.12.0"
+    "express": "^4.18.2",
+    "mcp": "^1.4.2"
   }
 }
