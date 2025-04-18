@@ -50,7 +50,7 @@
         tracesSampleRate: isLocalDev ? 1.0 : parseFloat(window.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
 
         // Session replay sample rates
-        replaysSessionSampleRate: 0.1,   // 10% of sessions
+        replaysSessionSampleRate: 0.15,  // 15% of sessions
         replaysOnErrorSampleRate: 1.0,   // 100% of sessions with errors
 
         integrations: [
@@ -112,6 +112,22 @@
       });
 
       console.log('[Sentry] Initialized and configured');
+
+      window.showUserFeedbackDialog = function(eventId) {
+        if (window.Sentry && typeof Sentry.showReportDialog === 'function') {
+          Sentry.showReportDialog({
+            eventId: eventId,
+            title: "Cuéntanos más sobre el error",
+            subtitle: "Ayúdanos a identificar y corregir este problema rápidamente",
+            subtitle2: "",
+            labelName: "Nombre",
+            labelEmail: "Email",
+            labelComments: "Comentarios",
+            labelSubmit: "Enviar reporte",
+            successMessage: "¡Gracias por tu ayuda!"
+          });
+        }
+      };
     };
 
     // Dynamically insert Sentry loader script
