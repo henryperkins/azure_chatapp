@@ -764,11 +764,14 @@ function setupUIListeners() {
         await loginUser(username, password);
         document.getElementById("authDropdown")?.classList.add('hidden');
       } catch (err) {
-        notify(err.message || "Login failed", "error");
+        const errorMsg = err.message || "Login failed";
+        notify(errorMsg, "error");
         const errorElement = document.getElementById('login-error');
         if (errorElement) {
-          errorElement.textContent = err.message || "Login failed";
+          errorElement.textContent = errorMsg;
           errorElement.classList.remove('hidden');
+          // Scroll to error if needed
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
       } finally {
         if (submitBtn) {
