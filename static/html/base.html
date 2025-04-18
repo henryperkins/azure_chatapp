@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
 <head>
   <!-- Sentry Initialization - Must be first to capture all errors -->
@@ -40,7 +40,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <h1 class="text-xl font-semibold dark:text-gray-100">Azure OpenAI Chat</h1>
+        <h1 class="text-xl font-semibold text-base-content">Azure OpenAI Chat</h1>
       </div>
 
       <div class="flex items-center gap-4">
@@ -280,9 +280,9 @@
             <div class="pt-2 pb-1">
               <!-- Model Selection -->
               <div class="mb-3">
-                <label for="modelSelect" class="block font-medium dark:text-gray-200 text-xs">Select Model</label>
+                <label for="modelSelect" class="block font-medium text-base-content text-xs">Select Model</label>
                 <select id="modelSelect"
-                  class="w-full mt-1 border border-gray-300 rounded-sm dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500 text-sm">
+                  class="w-full mt-1 border border-base-300 rounded-sm bg-base-100 text-base-content focus:outline-hidden focus:ring-1 focus:ring-blue-500 text-sm">
                   <option value="o3-mini">o3-mini</option>
                   <option value="o1">o1 (Vision Support)</option>
                   <option value="o1-mini">o1-mini</option>
@@ -462,6 +462,9 @@
 
   <!-- Application Logic -->
   <script type="module" src="/static/js/projectManager.js"></script>
+
+  <!-- Theme toggle functionality -->
+  <script src="/static/js/theme-toggle.js"></script>
 
   <!-- Main Application (load last) -->
   <script type="module" src="/static/js/app.js"></script>
