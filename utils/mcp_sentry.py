@@ -103,17 +103,6 @@ def _clear_expired_cache():
     for key in expired_keys:
         ISSUE_CACHE.pop(key, None)
 
-# Cache configuration
-ISSUE_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
-CACHE_TTL = 300  # 5 minutes
-
-def _clear_expired_cache():
-    """Clear expired cache entries"""
-    current_time = time.time()
-    expired_keys = [k for k, (_, expiry) in ISSUE_CACHE.items() if expiry < current_time]
-    for key in expired_keys:
-        ISSUE_CACHE.pop(key, None)
-
 @with_retry
 def get_issue_details(issue_id_or_url: str, use_cache: bool = True) -> Dict[str, Any]:
     """
@@ -199,72 +188,6 @@ def get_issue_details(issue_id_or_url: str, use_cache: bool = True) -> Dict[str,
             span.set_data("error", str(e))
             raise
 
-@with_retry
-def get_issue_details(issue_id_or_url: str) -> Dict[str, Any]:
-    """
-    Get detailed information about a Sentry issue using the MCP server.
-
-    Args:
-        issue_id_or_url: Sentry issue ID or URL
-
-    Returns:
-        Dictionary with issue details
-
-    Raises:
-        ServerConnectionError: If the MCP server is not running or unreachable
-        ServerResponseError: If the MCP server returns an error
-    """
-    # Log the attempt
-    logger.info(f"Fetching issue details for {issue_id_or_url}")
-
-    # First check if the MCP server for Sentry is running
-    if not check_mcp_server():
-        # Try to start it automatically
-        if not start_mcp_server():
-            raise ServerConnectionError("Sentry MCP server is not running and could not be started")
-
-    # Create a span for this operation
-    with sentry_sdk.start_span(op="mcp.request", description=f"Get Sentry Issue {issue_id_or_url}") as span:
-        # Track the issue_id in span data
-        span.set_data("issue_id", issue_id_or_url)
-
-        try:
-            # Use subprocess to call the MCP server CLI tool
-            result = subprocess.run(
-                [
-                    "python", "-m", SERVER_CMD,
-                    "--get-issue", issue_id_or_url
-                ],
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT
-            )
-
-            if result.returncode != 0:
-                span.set_status("internal_error")
-                error_msg = f"MCP server returned error: {result.stderr}"
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg)
-
-            # Try to parse the JSON output
-            try:
-                data = json.loads(result.stdout)
-                span.set_status("ok")
-                return data
-            except json.JSONDecodeError:
-                span.set_status("internal_error")
-                error_msg = f"Failed to parse MCP server output: {result.stdout[:200]}..."
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg)
-
-        except subprocess.TimeoutExpired:
-            span.set_status("internal_error")
-            span.set_data("error", "MCP server request timed out")
-            raise ServerConnectionError("MCP server request timed out")
-        except Exception as e:
-            span.set_status("internal_error")
-            span.set_data("error", str(e))
-            raise
 
 def check_mcp_server() -> bool:
     """
