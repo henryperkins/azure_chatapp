@@ -7,6 +7,10 @@ export default {
   plugins: [
     require('daisyui')
   ],
+  // Enable container queries (Tailwind v4+)
+  experimental: {
+    containerQueries: true
+  },
   daisyui: {
     themes: ["light", "dark"],
     logs: true
