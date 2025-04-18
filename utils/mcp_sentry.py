@@ -104,7 +104,10 @@ def _clear_expired_cache():
         ISSUE_CACHE.pop(key, None)
 
 @with_retry
-def get_issue_details(issue_id_or_url: str, use_cache: bool = True) -> Dict[str, Any]:
+def get_issue_details(issue_id_or_url: Union[str, List[str]], use_cache: bool = True) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    """Get details for one or multiple issues"""
+    if isinstance(issue_id_or_url, list):
+        return [get_issue_details(issue, use_cache) for issue in issue_id_or_url]
     """
     Get detailed information about a Sentry issue using the MCP server.
     Supports caching to reduce load on the MCP server.

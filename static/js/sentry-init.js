@@ -40,14 +40,14 @@
       // Adjust these to match your environment and release channels
       const isLocalDev = window.location.hostname.includes('localhost');
       const environment = isLocalDev ? 'development' : 'production';
-      const releaseVersion = 'azure-chatapp@1.0.0';
+      const releaseVersion = window.APP_VERSION || 'azure-chatapp@1.0.0';
 
       Sentry.init({
         environment,
         release: releaseVersion,
 
         // Adjust performance sample rates
-        tracesSampleRate: isLocalDev ? 1.0 : 0.2,
+        tracesSampleRate: isLocalDev ? 1.0 : parseFloat(window.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
 
         // Session replay sample rates
         replaysSessionSampleRate: 0.1,   // 10% of sessions
