@@ -3,6 +3,11 @@
 @import "tailwindcss";
 @tailwind utilities;
 
+@theme inline {
+  --font-poppins: Poppins, sans-serif;
+  --shadow-custom: 0 4px 10px rgba(0,0,0,0.15);
+}
+
 /* Custom component styles that align with the HTML structure */
 @layer components {
   /* Project Cards - Used in project_list.html */
@@ -113,32 +118,35 @@
   }
 }
 
-@layer utilities {
-  .container-query-md {
-    @container (min-width: 48rem) {
-      .container-md #projectList {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
+@container (min-width: 48rem) {
+  .sidebar {
+    width: 20%;
   }
+  
+  #projectList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  
+  .project-stats {
+    display: flex;
+    gap: 1rem;
+  }
+}
 
-  .container-query-lg {
-    @container (min-width: 64rem) {
-      #projectList {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-    }
+@container (min-width: 64rem) {
+  #projectList {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
   .banner {
-    background: color-mix(in srgb, #1d4ed8 50%, #ffffff 50%);
+    background: color-mix(in srgb, var(--color-blue-500, #1d4ed8) 40%, var(--color-white, #ffffff) 60%);
   }
   .project-card.pinned {
-    background: color-mix(in srgb, gold 20%, #ffffff 80%);
+    background: color-mix(in srgb, gold 20%, var(--color-white, #ffffff) 80%);
   }
   .project-card.archived {
-    background: color-mix(in srgb, gray 40%, #ffffff 60%);
+    background: color-mix(in srgb, gray 40%, var(--color-white, #ffffff) 60%);
     @apply opacity-70;
   }
   .line-clamp-2 {
@@ -170,26 +178,36 @@
   }
 
 /* Animation keyframes */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
+@theme {
+  --animate-slide-in: slideIn 0.3s ease-out;
+  --animate-fade-in-scale: fade-in-scale 0.3s ease-out;
+  
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+  
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
   }
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.5;
+  
+  @keyframes fade-in-scale {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
   }
 }
 
@@ -200,6 +218,14 @@
 
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-slide-in {
+  animation: var(--animate-slide-in);
+}
+
+.fade-in {
+  animation: var(--animate-fade-in-scale);
 }
 
 /* Accessibility: Reduce motion preferences */
@@ -223,6 +249,15 @@
   .btn, .project-filter-btn, .project-tab-btn {
     @apply ring ring-offset-2 ring-primary;
   }
+}
+
+/* Modern utility replacements */
+.grow {
+  flex-grow: 1;
+}
+
+.text-blue-500\/75 {
+  color: rgb(59 130 246 / 0.75);
 }
 
 /* Custom fixes for specific layouts */
