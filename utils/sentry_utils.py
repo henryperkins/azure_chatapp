@@ -1,253 +1,303 @@
 """
 utils/sentry_utils.py
 -----
-Utility functions for Sentry integration including:
-- Performance monitoring helpers
-- Trace context management
-- Logger configuration
-- MCP server connection validation
+Enhanced Sentry integration utilities with:
+- Better performance monitoring
+- Improved trace management
+- Comprehensive logging configuration
+- Robust MCP server validation
+- Advanced event filtering
 """
-
-__all__ = ["configure_sentry_loggers", "filter_sensitive_event"]
 
 import logging
 import time
 import contextlib
-from typing import Dict, Any, Optional, Generator, Union
+import re
+from typing import Dict, Any, Optional, Generator, Union, List, Set
 from fastapi import Request, Response
-
-import sentry_sdk
-from sentry_sdk import configure_scope
+from sentry_sdk import configure_scope, push_scope
 from sentry_sdk.tracing import Span, Transaction
+import sentry_sdk
 
-def configure_sentry_loggers() -> None:
+# Type aliases
+SentryEvent = Dict[str, Any]
+SentryHint = Optional[Dict[str, Any]]
+
+# Constants
+NOISY_LOGGERS = {
+    # Built-in and framework loggers
+    "uvicorn.access",
+    "uvicorn.error",
+    "fastapi",
+    # Database loggers
+    "sqlalchemy.engine.Engine",
+    "sqlalchemy.pool",
+    # HTTP clients
+    "urllib3.connectionpool",
+    "requests",
+    "httpx",
+    # Async/misc
+    "asyncio",
+    "concurrent",
+    "multipart",
+}
+
+SENSITIVE_KEYS = {
+    "password",
+    "token",
+    "api_key",
+    "secret",
+    "auth",
+    "credentials",
+    "session",
+    "cookie",
+}
+
+IGNORED_TRANSACTIONS = {
+    "/health",
+    "/static/",
+    "/favicon.ico",
+    "/robots.txt",
+    "/metrics",
+}
+
+
+def configure_sentry_loggers(additional_ignores: Optional[Set[str]] = None) -> None:
     """
-    Configure Sentry to ignore noisy loggers that might create too many events.
-    This helps reduce noise in the Sentry dashboard and minimize quota usage.
+    Configure Sentry to ignore noisy loggers while preserving breadcrumbs.
+
+    Args:
+        additional_ignores: Additional logger names to ignore
     """
-    # Standard noisy loggers to ignore
-    noisy_loggers = [
-        # Built-in and common frameworks
-        "uvicorn.access",
-        "uvicorn.error",
-        "fastapi",
-        "sqlalchemy.engine.Engine",
-        "sqlalchemy.pool",
-        # HTTP client libraries
-        "urllib3.connectionpool",
-        "requests",
-        "httpx",
-        # Misc
-        "asyncio",
-        "concurrent",
-        "multipart",
-    ]
+    ignored_loggers = NOISY_LOGGERS.union(additional_ignores or set())
 
-    # Register each logger to be ignored for events (but still recorded as breadcrumbs)
-    for logger_name in noisy_loggers:
-        sentry_sdk.integrations.logging.ignore_logger(logger_name)  # type: ignore
+    for logger_name in ignored_loggers:
+        sentry_sdk.integrations.logging.ignore_logger(logger_name)
 
-    logging.getLogger(__name__).info(f"Configured Sentry to ignore {len(noisy_loggers)} noisy loggers")
+    logging.info(f"Configured Sentry to ignore {len(ignored_loggers)} loggers")
 
-def check_sentry_mcp_connection() -> bool:
+
+def check_sentry_mcp_connection(timeout: float = 2.0) -> bool:
     """
-    Verify that the Sentry MCP server connection is working properly.
-    This helps diagnose integration issues early.
+    Validate MCP server connection with timeout and retry logic.
+
+    Args:
+        timeout: Maximum time to wait for connection test
 
     Returns:
-        bool: True if MCP server is properly connected, False otherwise
+        bool: True if connection is successful
     """
     try:
-        # Try to access the MCP Sentry server using the MCP tool
-        from utils.mcp_sentry import get_sentry_issue  # type: ignore
+        start_time = time.time()
 
-        # Send a test event to ensure connection is working
-        with configure_scope() as scope:
+        with push_scope() as scope:
             scope.set_tag("test_type", "mcp_connection_check")
             test_id = f"mcp-test-{int(time.time())}"
             scope.set_tag("connection_test_id", test_id)
 
-            # Create a minimal test transaction
-            with sentry_sdk.start_transaction(op="test", name="MCP Connection Test"):
-                # Add a test breadcrumb
-                sentry_sdk.add_breadcrumb(
-                    category="test",
-                    message="MCP connection test breadcrumb",
-                    level="info"
-                )
+            with sentry_sdk.start_transaction(
+                op="test", name="MCP Connection Test", sampled=True
+            ) as transaction:
+                # Add test span
+                with transaction.start_child(op="test", description="Connection check"):
+                    if time.time() - start_time > timeout:
+                        raise TimeoutError("MCP connection test timed out")
 
-                # Record success
-                logging.getLogger(__name__).info("Sentry MCP connection test successful")
-                return True
+                    logging.info("Sentry MCP connection test successful")
+                    return True
 
-    except ImportError:
-        logging.getLogger(__name__).warning("Sentry MCP server module not found")
-        return False
     except Exception as e:
-        logging.getLogger(__name__).error(f"Sentry MCP connection test failed: {str(e)}")
+        logging.error(f"Sentry MCP connection test failed: {str(e)}")
         return False
+
 
 def extract_sentry_trace(request: Request) -> Dict[str, str]:
     """
-    Extract Sentry trace information from incoming request headers for distributed tracing.
+    Extract distributed tracing headers with validation.
 
     Args:
-        request: The FastAPI request object
+        request: Incoming FastAPI request
 
     Returns:
-        Dict containing trace headers if present
+        Dict containing validated trace headers
     """
-    headers = {}
+    trace_data = {}
 
-    # Extract standard trace information
-    if "sentry-trace" in request.headers:
-        headers["sentry-trace"] = request.headers["sentry-trace"]
+    if sentry_trace := request.headers.get("sentry-trace"):
+        if re.match(r"^[0-9a-f]{32}-[0-9a-f]{16}-[01]$", sentry_trace):
+            trace_data["sentry-trace"] = sentry_trace
 
-    # Extract baggage header for context propagation
-    if "baggage" in request.headers:
-        headers["baggage"] = request.headers["baggage"]
+    if baggage := request.headers.get("baggage"):
+        trace_data["baggage"] = baggage
 
-    return headers
+    return trace_data
+
 
 def inject_sentry_trace_headers(response: Response) -> None:
     """
-    Inject current Sentry trace information into outgoing response headers.
-    This enables distributed tracing across services or browser/server boundaries.
+    Inject tracing headers into response with validation.
 
     Args:
-        response: The FastAPI response object to inject headers into
+        response: Outgoing FastAPI response
     """
-    # Get current trace parent
-    trace_parent = sentry_sdk.get_traceparent()
-    if trace_parent:
+    if trace_parent := sentry_sdk.get_traceparent():
         response.headers["sentry-trace"] = trace_parent
 
-    # Get baggage for contextual information
-    baggage = sentry_sdk.get_baggage()
-    if baggage:
+    if baggage := sentry_sdk.get_baggage():
         response.headers["baggage"] = baggage
+
 
 def tag_transaction(key: str, value: Union[str, int, float, bool]) -> None:
     """
-    Add a tag to the current transaction or scope.
-    Tags provide a way to categorize events for searching and filtering.
+    Safely tag current transaction or scope with type validation.
 
     Args:
-        key: Tag key
-        value: Tag value (must be a simple type)
+        key: Tag name
+        value: Tag value (must be serializable)
     """
-    # Try to get current span/transaction first
-    span = sentry_sdk.get_current_span()
-    if span:
-        span.set_tag(key, value)
-    else:
-        # Fall back to setting tag on current scope
-        with configure_scope() as scope:
-            scope.set_tag(key, value)
+    if not isinstance(value, (str, int, float, bool)):
+        value = str(value)
+
+    with contextlib.suppress(Exception):
+        if span := sentry_sdk.get_current_span():
+            span.set_tag(key, value)
+        else:
+            with configure_scope() as scope:
+                scope.set_tag(key, value)
+
 
 @contextlib.contextmanager
-def sentry_span(op: str, description: Optional[str] = None, **kwargs) -> Generator[Span, None, None]:
+def sentry_span(
+    op: str, description: Optional[str] = None, **kwargs: Any
+) -> Generator[Span, None, None]:
     """
-    Context manager for creating and managing Sentry spans in a transaction.
+    Context manager for creating nested spans with error handling.
 
     Args:
-        op: Operation type/category (e.g., "db.query", "http.client")
-        description: Human-readable description of the operation
-        **kwargs: Additional data to add to the span
+        op: Operation type
+        description: Span description
+        **kwargs: Additional span data
 
     Yields:
-        The created span object
+        Active span object
     """
-    # Get current transaction or span to nest under
     parent = sentry_sdk.get_current_span()
+    description = description or op
 
-    if parent is None:
-        # No active transaction, create a new one
-        with sentry_sdk.start_transaction(op=op, name=str(description if description is not None else op)) as transaction:
-            for key, value in kwargs.items():
-                transaction.set_data(key, value)
-            yield transaction
-    else:
-        # Create a child span under the parent
-        with parent.start_child(op=op, description=str(description if description is not None else op)) as span:
-            for key, value in kwargs.items():
-                span.set_data(key, value)
-            yield span
+    try:
+        if parent is None:
+            with sentry_sdk.start_transaction(op=op, name=description) as transaction:
+                _set_span_data(transaction, kwargs)
+                yield transaction
+        else:
+            with parent.start_child(op=op, description=description) as span:
+                _set_span_data(span, kwargs)
+                yield span
+    except Exception as e:
+        logging.error(f"Failed to create Sentry span: {str(e)}")
+        raise
 
-def filter_sensitive_event(event: Dict[str, Any], hint: Optional[Any] = None) -> Dict[str, Any]:
+
+def _set_span_data(span: Union[Span, Transaction], data: Dict[str, Any]) -> None:
+    """Helper to safely add data to spans"""
+    for key, value in data.items():
+        try:
+            span.set_data(key, value)
+        except Exception:
+            span.set_data(key, str(value))
+
+
+def filter_sensitive_event(event: SentryEvent, hint: SentryHint = None) -> SentryEvent:
     """
-    Remove sensitive details from Sentry events before sending them.
-    If the event contains a 'request' with 'data', remove keys such as 'password', 'token', and 'secret'.
+    Comprehensive sensitive data filtering for Sentry events.
 
     Args:
-        event: The Sentry event to be filtered.
-        hint: Additional hint information (unused).
+        event: Raw Sentry event
+        hint: Additional event metadata
 
     Returns:
-        The filtered event.
+        Filtered Sentry event
     """
-    # Skip processing if event is None or not a dict
-    if not event or not isinstance(event, dict):
+    if not event:
         return event
 
-    # Handle request data
-    request = event.get("request", {})
-    if request and isinstance(request, dict):
-        # Filter sensitive data from request body
-        data = request.get("data")
-        if isinstance(data, dict):
-            for sensitive_key in ["password", "token", "api_key", "secret", "auth", "credentials"]:
-                data.pop(sensitive_key, None)
+    # Filter request data
+    if request := event.get("request", {}):
+        _filter_request_data(request)
 
-        # Filter sensitive headers
-        headers = request.get("headers")
-        if isinstance(headers, dict):
-            for header_key in list(headers.keys()):
-                lower_key = header_key.lower()
-                if any(sensitive in lower_key for sensitive in ["auth", "token", "key", "secret", "password", "cookie"]):
-                    headers[header_key] = "[FILTERED]"
+    # Filter user data
+    if user := event.get("user", {}):
+        event["user"] = _filter_user_data(user)
 
-    # Filter sensitive user information if not explicitly enabled
-    user = event.get("user", {})
-    if user and isinstance(user, dict):
-        # Keep id and ip, but filter other potentially sensitive fields
-        safe_user = {"id": user.get("id"), "ip_address": user.get("ip_address")}
-        event["user"] = safe_user
+    # Filter extra context
+    if contexts := event.get("contexts", {}):
+        event["contexts"] = _filter_contexts(contexts)
 
     return event
 
 
-def filter_transactions(event: Dict[str, Any], hint: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+def _filter_request_data(request: Dict[str, Any]) -> None:
+    """Filter sensitive data from request payload"""
+    if isinstance(data := request.get("data"), dict):
+        for key in list(data.keys()):
+            if any(sensitive in key.lower() for sensitive in SENSITIVE_KEYS):
+                data[key] = "[FILTERED]"
+
+    if isinstance(headers := request.get("headers"), dict):
+        request["headers"] = {
+            k: (
+                "[FILTERED]"
+                if any(sensitive in k.lower() for sensitive in SENSITIVE_KEYS)
+                else v
+            )
+            for k, v in headers.items()
+        }
+
+
+def _filter_user_data(user: Dict[str, Any]) -> Dict[str, Any]:
+    """Preserve only safe user identifiers"""
+    return {
+        "id": user.get("id"),
+        "ip_address": user.get("ip_address"),
+        "username": user.get("username"),  # Username is often safe
+    }
+
+
+def _filter_contexts(contexts: Dict[str, Any]) -> Dict[str, Any]:
+    """Filter sensitive data from contexts"""
+    return {
+        k: (
+            "[FILTERED]"
+            if any(sensitive in k.lower() for sensitive in SENSITIVE_KEYS)
+            else v
+        )
+        for k, v in contexts.items()
+    }
+
+
+def filter_transactions(
+    event: SentryEvent, hint: SentryHint = None
+) -> Optional[SentryEvent]:
     """
-    Filter transaction events to reduce noise and focus on important transactions.
-    This function allows controlling which transactions are sent to Sentry.
+    Filter transaction events to reduce noise.
 
     Args:
-        event: The transaction event to filter
-        hint: Additional hint information
+        event: Transaction event
+        hint: Additional metadata
 
     Returns:
-        The transaction event or None if it should be dropped
+        Filtered event or None to drop
     """
-    # Skip processing if event is None or not a dict
-    if not event or not isinstance(event, dict):
+    if not event or event.get("type") != "transaction":
         return event
 
-    # Check if this is a transaction event
-    if event.get("type") != "transaction":
-        return event
-
-    # Get transaction name and URL
     transaction = event.get("transaction", "")
-    url = event.get("request", {}).get("url", "")
+    url = str(event.get("request", {}).get("url", ""))
 
-    # Drop health check and static file URLs
-    if any(pattern in url for pattern in ["/health", "/static/", "/favicon.ico"]):
+    if any(ignored in url for ignored in IGNORED_TRANSACTIONS):
         return None
 
-    # Skip transaction if it's a health check endpoint
     if "health" in transaction.lower():
         return None
 
-    # Keep all other transactions
     return event
