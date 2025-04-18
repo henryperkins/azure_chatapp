@@ -872,7 +872,3 @@ This quick reference guide provides a comprehensive overview of Tailwind CSS v4'
 44. [v4] Cannot apply unknown utility class: xxx · Issue #15778 · tailwindlabs/tailwindcss, https://github.com/tailwindlabs/tailwindcss/issues/15778
 45. v4: define all Tailwind CSS Variables using ":root, :host" selector for Shadow DOM compatibility · tailwindlabs/tailwindcss · Discussion #15556 · GitHub, https://github.com/tailwindlabs/tailwindcss/discussions/15556
 46. How to Access Theme in Tailwind CSS v4? · tailwindlabs/tailwindcss · Discussion #16436 - GitHub, https://github.com/tailwindlabs/tailwindcss/discussions/16436
-
---------------------------------------------------
-
-This complete note includes every section, example, utility table, and work cited reference exactly as provided. If you need any further adjustments or clarifications, please let me know!
