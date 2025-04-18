@@ -120,9 +120,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
-}
 
-@layer utilities {
   @container (min-width: 64rem) {
     #projectList {
       grid-template-columns: repeat(3, minmax(0, 1fr));
