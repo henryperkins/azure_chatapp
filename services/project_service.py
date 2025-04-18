@@ -79,6 +79,8 @@ async def check_knowledge_base_status(
     }
 
 
+from services.utils.validation import validate_resource_exists, validate_user_resource_access
+
 async def validate_project_access(
     project_id: UUID, user: User, db: AsyncSession, skip_ownership_check: bool = False
 ) -> Project:
@@ -92,23 +94,26 @@ async def validate_project_access(
         db: Database session
         skip_ownership_check: If True, skips user ownership validation
     """
-    query = select(Project).where(Project.id == project_id)
-    if not skip_ownership_check:
-        query = query.where(Project.user_id == user.id)
-    query = query.options(joinedload(Project.knowledge_base))
-
-    result = await db.execute(query)
-    project = result.scalars().first()
-
-    if not project:
-        raise HTTPException(
-            status_code=404, detail="Project not found or unauthorized access"
+    if skip_ownership_check:
+        project = await validate_resource_exists(
+            db, Project, project_id, "Project not found"
         )
-
+    else:
+        project = await validate_user_resource_access(
+            db, Project, project_id, user.id, 
+            "Project not found or unauthorized access"
+        )
+    
+    # Load knowledge base relationship
+    query = select(Project).where(Project.id == project_id)
+    query = query.options(joinedload(Project.knowledge_base))
+    result = await db.execute(query)
+    project_with_kb = result.scalars().first()
+    
     if project.archived:
         raise HTTPException(status_code=400, detail="Project is archived")
 
-    return project
+    return project_with_kb or project
 
 
 async def get_valid_project(project_id: int, user: User, db: AsyncSession) -> Project:
@@ -265,27 +270,36 @@ async def validate_resource_access(
       - Not archived (if archived is a field)
     Raises 404 if not found, 400 if archived.
     """
-    query = select(model_class).where(model_class.id == resource_id)
-
-    if hasattr(model_class, "user_id"):
-        query = query.where(model_class.user_id == user.id)
-
-    if additional_conditions:
-        for condition in additional_conditions:
-            query = query.where(condition)
-
-    result = await db.execute(query)
-    resource = result.scalars().first()
-
-    if not resource:
-        raise HTTPException(
-            status_code=404, detail=f"{resource_name} not found or unauthorized access"
+    from services.utils.validation import validate_user_resource_access
+    
+    try:
+        resource = await validate_user_resource_access(
+            db, model_class, resource_id, user.id,
+            f"{resource_name} not found or unauthorized access"
         )
-
-    if hasattr(resource, "archived") and resource.archived:
-        raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
-
-    return resource
+        
+        # Apply additional conditions if provided
+        if additional_conditions:
+            query = select(model_class).where(model_class.id == resource_id)
+            for condition in additional_conditions:
+                query = query.where(condition)
+            result = await db.execute(query)
+            resource_with_conditions = result.scalars().first()
+            if not resource_with_conditions:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"{resource_name} does not meet required conditions"
+                )
+        
+        # Check archived status
+        if hasattr(resource, "archived") and resource.archived:
+            raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
+            
+        return resource
+        
+    except HTTPException:
+        # Re-raise the exception
+        raise
 
 
 # =======================================================

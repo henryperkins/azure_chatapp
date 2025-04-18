@@ -151,6 +151,8 @@ async def create_artifact(
     return new_artifact
 
 
+from services.utils.validation import validate_resource_exists, validate_user_resource_access, validate_project_resource
+
 async def get_artifact(
     db: AsyncSession, artifact_id: UUID, project_id: UUID, user_id: Optional[int] = None
 ) -> Artifact:
@@ -166,31 +168,27 @@ async def get_artifact(
     Returns:
         Artifact object
     """
-    from services.project_service import validate_resource_access
-    from models.user import User
-
     if user_id is not None:
-        user = await db.get(User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        # Use shared validation function
-        return await validate_resource_access(
-            artifact_id, project_id, user, db, "Artifact", Artifact
+        # First validate user exists
+        await validate_resource_exists(db, User, user_id, "User not found")
+        
+        # Then validate project belongs to user
+        await validate_user_resource_access(
+            db, Project, project_id, user_id, 
+            "Project not found or access denied"
         )
-
-    # If no user_id provided, just check if artifact exists in project
-    result = await db.execute(
-        select(Artifact).where(
-            Artifact.id == artifact_id, Artifact.project_id == project_id
+        
+        # Finally validate artifact belongs to project
+        return await validate_project_resource(
+            db, Artifact, artifact_id, project_id,
+            "Artifact not found in project"
         )
-    )
-    artifact = result.scalars().first()
-
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
-
-    return artifact
+    else:
+        # If no user_id provided, just check if artifact exists in project
+        return await validate_project_resource(
+            db, Artifact, artifact_id, project_id,
+            "Artifact not found in project"
+        )
 
 
 async def list_artifacts(

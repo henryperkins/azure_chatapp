@@ -25,7 +25,6 @@ from fastapi import HTTPException, UploadFile, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, exists
 from sqlalchemy.exc import SQLAlchemyError
-from functools import wraps
 from db import get_async_session_context
 
 import config
@@ -38,136 +37,14 @@ from services.vector_db import VectorDB, process_file_for_search, get_vector_db
 from utils.file_validation import FileValidator, sanitize_filename
 from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
+from services.utils.error_handlers import handle_service_errors
+from services.utils.repository import get_by_id, save_model, get_all_by_condition
+from services.utils.validation import validate_resource_exists, validate_user_resource_access
+from services.knowledgebase_helpers import (
+    KBConfig, StorageManager, VectorDBManager, TokenManager, MetadataHelper
+)
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------
-# Configuration and Helpers
-# ---------------------------------------------------------------------
-
-class KBConfig:
-    """Centralized configuration for knowledge base service"""
-    @staticmethod
-    def get() -> Dict[str, Any]:
-        return {
-            "max_file_bytes": getattr(config, "MAX_FILE_SIZE", 30_000_000),
-            "stream_threshold": getattr(config, "STREAM_THRESHOLD", 10_000_000),
-            "default_embedding_model": getattr(
-                config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2"
-            ),
-            "vector_db_storage_path": getattr(
-                config, "VECTOR_DB_STORAGE_PATH", "./data/vector_db"
-            ),
-            "default_chunk_size": getattr(config, "DEFAULT_CHUNK_SIZE", 1000),
-            "default_chunk_overlap": getattr(config, "DEFAULT_CHUNK_OVERLAP", 200),
-            "allowed_sort_fields": {"created_at", "filename", "file_size"},
-        }
-
-
-class StorageManager:
-    """Handles all file storage operations"""
-    @staticmethod
-    def get() -> Any:
-        from services.file_storage import get_file_storage  # pylint: disable=import-outside-toplevel
-        return get_file_storage({
-            "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-            "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-        })
-
-
-class VectorDBManager:
-    """Manages VectorDB instances and operations"""
-    @staticmethod
-    async def get_for_project(
-        project_id: UUID,
-        model_name: Optional[str] = None,
-        db: Optional[AsyncSession] = None
-    ) -> VectorDB:
-        config = KBConfig.get()
-        return await get_vector_db(
-            model_name=model_name or config["default_embedding_model"],
-            storage_path=os.path.join(
-                config["vector_db_storage_path"],
-                str(project_id)
-            ),
-            load_existing=True
-        )
-
-
-class TokenManager:
-    """Handles token counting and limits"""
-    @staticmethod
-    async def update_usage(
-        project: Project,
-        delta: int,
-        db: AsyncSession
-    ) -> None:
-        project.token_usage = max(0, project.token_usage + delta)
-        await save_model(db, project)
-
-    @staticmethod
-    async def validate_usage(
-        project: Project,
-        additional_tokens: int
-    ) -> bool:
-        if not project.max_tokens:
-            return True
-        return (project.token_usage + additional_tokens) <= project.max_tokens
-
-
-def extract_file_metadata(
-    file_record: ProjectFile,
-    include_token_count: bool = True
-) -> Dict[str, Any]:
-    """Extract standardized metadata from file record"""
-    metadata = {
-        "filename": file_record.filename,
-        "file_type": file_record.file_type,
-        "file_size": file_record.file_size,
-        "created_at": file_record.created_at.isoformat() if file_record.created_at else None,
-    }
-
-    if include_token_count and file_record.config:
-        metadata["token_count"] = file_record.config.get("token_count", 0)
-
-    if file_record.config and "search_processing" in file_record.config:
-        metadata["processing"] = file_record.config["search_processing"]
-
-    return metadata
-
-
-# ---------------------------------------------------------------------
-# Error Handling Decorator
-# ---------------------------------------------------------------------
-
-def handle_service_errors(
-    detail_message: str = "Operation failed",
-    status_code: int = 500
-):
-    """Decorator for consistent error handling in service functions"""
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            try:
-                return await func(*args, **kwargs)
-            except HTTPException:
-                raise
-            except ValueError as e:
-                logger.warning(f"Validation error in {func.__name__}: {e}")
-                raise HTTPException(
-                    status_code=400, detail=f"{detail_message}: {str(e)}"
-                ) from e
-            except SQLAlchemyError as e:
-                logger.error(f"Database error in {func.__name__}: {str(e)}", exc_info=True)
-                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
-            except Exception as e:
-                logger.exception(f"Unhandled error in {func.__name__}: {str(e)}")
-                raise HTTPException(
-                    status_code=status_code, detail=f"{detail_message}: {str(e)}"
-                ) from e
-        return wrapper
-    return decorator
 
 
 # ---------------------------------------------------------------------
@@ -186,9 +63,7 @@ async def create_knowledge_base(
     if db is None:
         raise ValueError("Database session is required")
 
-    project = await get_by_id(db, Project, project_id)
-    if not project:
-        raise ValueError("Project not found")
+    project = await validate_resource_exists(db, Project, project_id, "Project not found")
 
     if project.knowledge_base_id:
         raise ValueError("Project already has a knowledge base")
@@ -217,7 +92,13 @@ async def ensure_project_has_knowledge_base(
     user_id: Optional[int] = None
 ) -> KnowledgeBase:
     """Ensures a project has an active knowledge base with locking protection against race conditions"""
-    project = await _validate_user_and_project(project_id, user_id, db)
+    if user_id is not None:
+        user = await validate_resource_exists(db, User, user_id, "User not found")
+        project = await validate_user_resource_access(
+            db, Project, project_id, user_id, "Project not found or access denied"
+        )
+    else:
+        project = await validate_resource_exists(db, Project, project_id, "Project not found")
 
     # Check if project already has a knowledge base (common case)
     if project.knowledge_base_id:
@@ -483,23 +364,7 @@ async def _validate_project_and_kb(
     kb = await get_by_id(db, KnowledgeBase, project.knowledge_base_id)
     return project, kb
 
-async def _validate_user_and_project(
-    project_id: UUID,
-    user_id: Optional[int],
-    db: AsyncSession
-) -> Project:
-    """Validate user access to project"""
-    if user_id is not None:
-        from services.project_service import validate_project_access  # pylint: disable=import-outside-toplevel
-        user = await get_by_id(db, User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        return await validate_project_access(project_id, user, db)
-
-    project = await get_by_id(db, Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+# This function is now replaced by validate_user_resource_access from services.utils.validation
 
 async def _validate_file_access(
     project_id: UUID,
