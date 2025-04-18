@@ -660,6 +660,7 @@ async function handleRegister(formData) {
  *  UI Listeners
  * ---------------------------------- */
 
+// Export switchForm for use in event registry
 function switchForm(isLogin) {
   const loginTab = document.getElementById("loginTab");
   const registerTab = document.getElementById("registerTab");
@@ -695,45 +696,34 @@ function switchForm(isLogin) {
   }, 10);
 }
 
+// Track auth-specific listeners for cleanup
+const authListeners = new Set();
+
 function setupUIListeners() {
-  const authBtn = document.getElementById("authButton");
+  // Document-level listeners for auth dropdown
   const authDropdown = document.getElementById("authDropdown");
-  if (authBtn && authDropdown) {
-    authBtn.addEventListener("click", e => {
-      e.preventDefault();
-      e.stopPropagation();
-      const isHidden = authDropdown.classList.contains('hidden');
-      authDropdown.classList.toggle("hidden", !isHidden);
-      if (!isHidden) return;
-      if (window.innerWidth < 768) {
-        authDropdown.style.left = '50%';
-        authDropdown.style.right = 'auto';
-        authDropdown.style.transform = 'translateX(-50%)';
-        authDropdown.style.top = '60px';
-      }
-    });
-    document.addEventListener("click", e => {
+  if (authDropdown) {
+    const clickHandler = (e) => {
       if (!authDropdown.classList.contains('hidden') &&
-        !e.target.closest("#authContainer") &&
-        !e.target.closest("#authDropdown")) {
+          !e.target.closest("#authContainer") &&
+          !e.target.closest("#authDropdown")) {
         authDropdown.classList.add("hidden");
       }
-    });
-    document.addEventListener("touchend", e => {
+    };
+    const touchHandler = (e) => {
       if (!authDropdown.classList.contains('hidden') &&
-        !e.target.closest("#authContainer") &&
-        !e.target.closest("#authDropdown")) {
+          !e.target.closest("#authContainer") &&
+          !e.target.closest("#authDropdown")) {
+        e.preventDefault();
         authDropdown.classList.add("hidden");
       }
-    }, { passive: false });
-  }
-  const loginTabEl = document.getElementById("loginTab");
-  const registerTabEl = document.getElementById("registerTab");
-  if (loginTabEl && registerTabEl) {
-    loginTabEl.addEventListener("click", e => { e.preventDefault(); switchForm(true); });
-    loginTabEl.addEventListener("touchend", e => { e.preventDefault(); switchForm(true); }, { passive: false });
-    registerTabEl.addEventListener("click", e => { e.preventDefault(); switchForm(false); });
-    registerTabEl.addEventListener("touchend", e => { e.preventDefault(); switchForm(false); }, { passive: false });
+    };
+
+    document.addEventListener("click", clickHandler);
+    document.addEventListener("touchend", touchHandler, { passive: false });
+
+    authListeners.add({ element: document, type: 'click', handler: clickHandler });
+    authListeners.add({ element: document, type: 'touchend', handler: touchHandler });
   }
   const loginForm = document.getElementById("loginForm");
   if (loginForm) {

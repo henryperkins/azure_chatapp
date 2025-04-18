@@ -568,16 +568,61 @@
   /* =========================================================================
    *  4. NOTIFICATION & ERROR HANDLING
    * ========================================================================= */
-  // Global error event
-  window.addEventListener('error', (evt) => {
+  // Track all dashboard listeners
+  const dashboardListeners = new Set();
+
+  // Cleanup all dashboard listeners
+  function cleanupDashboardListeners() {
+    dashboardListeners.forEach(({element, type, handler}) => {
+      element.removeEventListener(type, handler);
+    });
+    dashboardListeners.clear();
+  }
+
+  // Global error event handler
+  function handleGlobalError(evt) {
     const error = evt.error || evt;
     const errorMessage = error?.message || evt.message || 'Unknown error';
     console.error('[GlobalError]', errorMessage, error?.stack || '');
     window.showNotification(`An error occurred: ${errorMessage}`, 'error');
-  });
+  }
 
-  // Global unhandled promise rejection
-  window.addEventListener('unhandledrejection', (evt) => {
+  // Global unhandled rejection handler
+  function handleUnhandledRejection(evt) {
+    const reason = evt.reason;
+    const errorMessage = reason?.message || 'Unhandled Rejection';
+    const errorStack = reason?.stack || '';
+
+    // Check for auth errors
+    const isAuthError =
+      errorMessage.includes('Authentication required') ||
+      errorMessage.includes('Not authenticated') ||
+      errorMessage.includes('auth token') ||
+      errorMessage.includes('login') ||
+      (reason?.status === 401);
+
+    // Standardize error if auth.js is available
+    const stdErr = window.auth?.standardizeError?.(reason) || reason;
+
+    if (isAuthError || stdErr?.requiresLogin || stdErr?.code === 'SESSION_EXPIRED') {
+      console.warn('[GlobalRejection] Auth error:', errorMessage);
+      window.showNotification('Authentication required. Please log in.', 'error', {timeout: 7000});
+      evt.preventDefault();
+      return;
+    }
+
+    console.error('[UnhandledRejection]', errorMessage, errorStack);
+    window.showNotification(`Unhandled error: ${errorMessage}`, 'error');
+    evt.preventDefault();
+  }
+
+  // Register unhandled rejection handler
+  window.addEventListener('unhandledrejection', handleUnhandledRejection);
+  dashboardListeners.add({
+    element: window,
+    type: 'unhandledrejection',
+    handler: handleUnhandledRejection
+  });
     const reason = evt.reason;
     const errorMessage = reason?.message || 'Unhandled Rejection';
     const errorStack = reason?.stack || '';

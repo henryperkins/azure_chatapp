@@ -1,10 +1,148 @@
 /**
  * eventHandler.js - Centralized module for managing all event listeners across the application.
  * Provides a unified system for setting up, tracking, and cleaning up event listeners.
+ * Now integrates with Sentry to capture errors and performance metrics.
+ *
+ * Event Types:
+ * - DOM Events: click, keydown, submit, etc.
+ * - Custom Events: backendUnavailable, modelConfigChanged, etc.
+ * - Window Events: beforeunload, resize, etc.
  */
+
+// Priority buckets for event execution
+const EVENT_PRIORITIES = {
+    CRITICAL: 1,
+    HIGH: 3,
+    DEFAULT: 5,
+    LOW: 7,
+    BACKGROUND: 9
+};
 
 // Track listeners centrally to prevent memory leaks
 const trackedListeners = new Set();
+
+/**
+ * Event Registry - Maps selectors to handler functions with metadata
+ * Structure: {
+ *   [selector]: {
+ *     handler: Function,
+ *     eventType: String,
+ *     priority: Number (1-10, 5=default),
+ *     description: String
+ *   }
+ * }
+ */
+const eventRegistry = {
+    // Document-level delegated events
+    '#newConversationBtn': {
+        handler: handleNewConversationClick,
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Creates a new conversation after auth check'
+    },
+    '#createProjectBtn': {
+        handler: () => window.modalManager?.show('project', {}),
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Opens project creation modal'
+    },
+    '#backToProjectsBtn': {
+        handler: () => window.ProjectDashboard?.showProjectList?.() || window.showProjectsView?.(),
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Returns to projects list view'
+    },
+    '#editProjectBtn': {
+        handler: () => {
+            const currentProject = window.projectManager?.getCurrentProject();
+            if (currentProject && window.modalManager?.show) {
+                window.modalManager.show('project', {
+                    updateContent: (modalEl) => {
+                        const form = modalEl.querySelector('form');
+                        if (form) {
+                            form.querySelector('#projectId').value = currentProject.id;
+                            form.querySelector('#projectName').value = currentProject.name;
+                            form.querySelector('#projectDescription').value = currentProject.description || '';
+                            const title = modalEl.querySelector('.modal-title, h3');
+                            if (title) title.textContent = `Edit Project: ${currentProject.name}`;
+                        }
+                    }
+                });
+            }
+        },
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Opens project edit modal'
+    },
+    '#pinProjectBtn': {
+        handler: () => {
+            const currentProject = window.projectManager?.getCurrentProject();
+            if (currentProject?.id && window.projectManager?.togglePinProject) {
+                window.projectManager
+                    .togglePinProject(currentProject.id)
+                    .then(updatedProject => {
+                        window.showNotification?.(
+                            'Project ' + (updatedProject.pinned ? 'pinned' : 'unpinned'),
+                            'success'
+                        );
+                        window.projectManager.loadProjectDetails(currentProject.id);
+                        window.loadSidebarProjects?.();
+                    })
+                    .catch(err => {
+                        console.error('Error toggling pin:', err);
+                        window.showNotification?.('Failed to update pin status', 'error');
+                    });
+            }
+        },
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Toggles project pinned state'
+    },
+    '#archiveProjectBtn': {
+        handler: () => {
+            const currentProject = window.projectManager?.getCurrentProject();
+            if (currentProject && window.ModalManager?.confirmAction) {
+                window.ModalManager.confirmAction({
+                    title: 'Confirm Archive',
+                    message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} this project?`,
+                    confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
+                    confirmClass: currentProject.archived
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'bg-yellow-600 hover:bg-yellow-700',
+                    onConfirm: () => {
+                        window.projectManager
+                            .toggleArchiveProject(currentProject.id)
+                            .then(updatedProject => {
+                                window.showNotification?.(
+                                    `Project ${updatedProject.archived ? 'archived' : 'unarchived'}`,
+                                    'success'
+                                );
+                                window.ProjectDashboard?.showProjectList?.();
+                                window.loadSidebarProjects?.();
+                                window.projectManager.loadProjects('all');
+                            })
+                            .catch(err => {
+                                console.error('Error toggling archive:', err);
+                                window.showNotification?.('Failed to update archive status', 'error');
+                            });
+                    }
+                });
+            }
+        },
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Toggles project archived state'
+    },
+    '#minimizeChatBtn': {
+        handler: () => {
+            const chatContainer = document.getElementById('projectChatContainer');
+            if (chatContainer) chatContainer.classList.toggle('hidden');
+        },
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.LOW,
+        description: 'Toggles chat container visibility'
+    }
+};
 
 /**
  * Debounce function to limit the rate at which a function is executed.
@@ -21,17 +159,112 @@ function debounce(func, wait) {
 }
 
 /**
- * Track a listener for future cleanup
+ * Track a listener for future cleanup with enhanced options.
+ * Adds a Sentry transaction for performance and captures exceptions.
+ *
  * @param {Element|null} element - Element to attach listener to
  * @param {string} type - Event type (e.g., 'click', 'keydown')
  * @param {Function} handler - Event handler function
- * @param {AddEventListenerOptions|Object} [options={}] - Event listener options
+ * @param {Object} [options={}] - Event listener options with extensions:
+ *   - priority: Number (1-10) for execution order
+ *   - description: String describing the handler's purpose
+ *   - passive: Boolean for passive event listeners
+ *   - capture: Boolean for capture phase
  * @returns {void}
  */
 function trackListener(element, type, handler, options = {}) {
     if (!element) return;
-    element.addEventListener(type, handler, options);
-    trackedListeners.add({ element, type, handler, options });
+
+    // Wrap handler for performance + error capturing
+    const wrappedHandler = (event) => {
+        const transaction = window.Sentry?.startTransaction({
+            name: `event.${type}`,
+            op: 'ui.interaction',
+            tags: {
+                element: element.id || element.className || element.tagName,
+                handler: options.description || handler.name || '(anonymous)'
+            }
+        });
+        const startTime = performance.now();
+
+        try {
+            // Add performance mark
+            performance.mark(`${type}_handler_start`);
+
+            // Execute handler
+            handler(event);
+
+            // Log successful execution
+            if (window.Sentry) {
+                Sentry.addBreadcrumb({
+                    category: 'event',
+                    message: `Handled ${type} event`,
+                    level: 'info',
+                    data: {
+                        element: element.id || element.className || element.tagName,
+                        handler: options.description || handler.name || '(anonymous)'
+                    }
+                });
+            }
+        } catch (error) {
+            console.error(`Error in ${type} handler:`, error);
+            if (window.Sentry) {
+                Sentry.withScope(scope => {
+                    scope.setTag('event_type', type);
+                    scope.setContext('element', {
+                        id: element.id,
+                        class: element.className,
+                        tagName: element.tagName,
+                        html: element.outerHTML.slice(0, 1000) // Limited HTML snippet
+                    });
+                    scope.setContext('handler', {
+                        description: options.description || '',
+                        originalName: handler.name || '(anonymous)',
+                        source: handler.toString().slice(0, 500) // Limited source code
+                    });
+                    scope.setLevel('error');
+                    Sentry.captureException(error);
+                });
+            }
+        } finally {
+            const duration = performance.now() - startTime;
+            performance.measure(`${type}_handler_duration`, {
+                start: `${type}_handler_start`,
+                duration
+            });
+
+            if (duration > 100) { // Log slow handlers
+                console.warn(`Slow ${type} handler took ${duration.toFixed(2)}ms`);
+                if (window.Sentry) {
+                    Sentry.captureMessage(`Slow event handler for '${type}'`, {
+                        level: 'warning',
+                        contexts: {
+                            performance: {
+                                duration_ms: duration,
+                                element: element.id || element.className || element.tagName
+                            }
+                        }
+                    });
+                }
+            }
+            transaction?.finish();
+        }
+    };
+
+    const listenerOptions = {
+        passive: true,
+        ...options
+    };
+
+    element.addEventListener(type, wrappedHandler, listenerOptions);
+    trackedListeners.add({
+        element,
+        type,
+        handler: wrappedHandler,
+        options: listenerOptions,
+        originalHandler: handler,
+        description: options.description || ''
+    });
 }
 
 /**
@@ -51,6 +284,7 @@ function cleanupListeners() {
  * @returns {void}
  */
 function handleKeyDown(e) {
+    // Example: Ctrl/Cmd + R => regenerateChat
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
         if (e.key.toLowerCase() === 'r') {
             e.preventDefault();
@@ -326,7 +560,6 @@ function setupSidebarToggle() {
  */
 function setupSidebarTabs() {
     // Use sidebar.js tab configuration if available
-    // Removed duplicate definition, now references window.sidebar
     if (window.sidebar && typeof window.sidebar.setupTabs === 'function') {
         // Use sidebar's own setup if available
         window.sidebar.setupTabs();
@@ -599,99 +832,19 @@ function setupEventListeners() {
         trackListener(showLoginBtn, 'click', () => authButton.click());
     }
 
-    // Set up global click handlers using event delegation
-    trackListener(document, 'click', (event) => {
-        const target = event.target;
-        if (target.closest('#newConversationBtn')) {
-            handleNewConversationClick();
-        } else if (target.closest('#createProjectBtn')) {
-            window.modalManager?.show('project', {
-                updateContent: (modalEl) => {
-                    const form = modalEl.querySelector('form');
-                    if (form) form.reset();
-                    const projectIdInput = modalEl.querySelector('#projectId');
-                    if (projectIdInput) projectIdInput.value = '';
-                    const title = modalEl.querySelector('.modal-title, h3');
-                    if (title) title.textContent = 'Create New Project';
-                },
-            });
-        } else if (target.closest('#backToProjectsBtn')) {
-            window.ProjectDashboard?.showProjectList?.() ||
-                window.showProjectsView?.() ||
-                (() => {
-                    const listView = document.getElementById('projectListView');
-                    const detailsView = document.getElementById('projectDetailsView');
-                    if (listView) listView.classList.remove('hidden');
-                    if (detailsView) detailsView.classList.add('hidden');
-                })();
-        } else if (target.closest('#editProjectBtn')) {
-            const currentProject = window.projectManager?.getCurrentProject();
-            if (currentProject && window.modalManager?.show) {
-                window.modalManager.show('project', {
-                    updateContent: (modalEl) => {
-                        const form = modalEl.querySelector('form');
-                        if (form) {
-                            form.querySelector('#projectId').value = currentProject.id;
-                            form.querySelector('#projectName').value = currentProject.name;
-                            form.querySelector('#projectDescription').value = currentProject.description || '';
-                            const title = modalEl.querySelector('.modal-title, h3');
-                            if (title) title.textContent = `Edit Project: ${currentProject.name}`;
-                        }
-                    },
-                });
+    // Register events from the registry (document-level delegation)
+    Object.entries(eventRegistry).forEach(([selector, config]) => {
+        trackListener(document, config.eventType, (event) => {
+            if (event.target.closest(selector)) {
+                config.handler(event);
             }
-        } else if (target.closest('#pinProjectBtn')) {
-            const currentProject = window.projectManager?.getCurrentProject();
-            if (currentProject?.id && window.projectManager?.togglePinProject) {
-                window.projectManager
-                    .togglePinProject(currentProject.id)
-                    .then(updatedProject => {
-                        window.showNotification?.(
-                            'Project ' + (updatedProject.pinned ? 'pinned' : 'unpinned'),
-                            'success'
-                        );
-                        window.projectManager.loadProjectDetails(currentProject.id);
-                        window.loadSidebarProjects?.();
-                    })
-                    .catch(err => {
-                        console.error('Error toggling pin:', err);
-                        window.showNotification?.('Failed to update pin status', 'error');
-                    });
-            }
-        } else if (target.closest('#archiveProjectBtn')) {
-            const currentProject = window.projectManager?.getCurrentProject();
-            if (currentProject && window.ModalManager?.confirmAction) {
-                window.ModalManager.confirmAction({
-                    title: 'Confirm Archive',
-                    message: `Are you sure you want to ${currentProject.archived ? 'unarchive' : 'archive'} this project?`,
-                    confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
-                    confirmClass: currentProject.archived
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-yellow-600 hover:bg-yellow-700',
-                    onConfirm: () => {
-                        window.projectManager
-                            .toggleArchiveProject(currentProject.id)
-                            .then(updatedProject => {
-                                window.showNotification?.(
-                                    `Project ${updatedProject.archived ? 'archived' : 'unarchived'}`,
-                                    'success'
-                                );
-                                window.ProjectDashboard?.showProjectList?.();
-                                window.loadSidebarProjects?.();
-                                window.projectManager.loadProjects('all');
-                            })
-                            .catch(err => {
-                                console.error('Error toggling archive:', err);
-                                window.showNotification?.('Failed to update archive status', 'error');
-                            });
-                    },
-                });
-            }
-        } else if (target.closest('#minimizeChatBtn')) {
-            const chatContainer = document.getElementById('projectChatContainer');
-            if (chatContainer) chatContainer.classList.toggle('hidden');
-        }
+        }, {
+            priority: config.priority,
+            description: config.description
+        });
     });
+
+    // Add any non-delegated event handlers
 
     // Navigation tracking for page interactions
     function recordInteraction() {
@@ -706,8 +859,14 @@ function setupEventListeners() {
         ) {
             recordInteraction();
         }
+    }, {
+        priority: EVENT_PRIORITIES.BACKGROUND,
+        description: 'Tracks user navigation interactions'
     });
-    trackListener(window, 'beforeunload', recordInteraction);
+    trackListener(window, 'beforeunload', recordInteraction, {
+        priority: EVENT_PRIORITIES.CRITICAL,
+        description: 'Records final interaction before page unload'
+    });
     recordInteraction();
 }
 
@@ -718,10 +877,10 @@ window.eventHandlers = {
     cleanupListeners: cleanupListeners,
     handleProjectFormSubmit: handleProjectFormSubmit,
     handleNewConversationClick: handleNewConversationClick,
-    handleBackendUnavailable: handleBackendUnavailable, // Export our new handler
+    handleBackendUnavailable: handleBackendUnavailable,
     setupCollapsibleSection: setupCollapsibleSection,
     setupCollapsibleSections: setupCollapsibleSections,
     setupPinningSidebar: setupPinningSidebar,
     setupCustomInstructions: setupCustomInstructions,
-    debounce, // Export debounce function
+    debounce // Export debounce function
 };

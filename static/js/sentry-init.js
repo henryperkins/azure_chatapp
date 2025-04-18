@@ -8,8 +8,8 @@
  *
  * Loads as early as possible to capture all errors.
  * Dynamically injects the Sentry loader script unless disabled by user preference.
+ * Replace 'YOUR_DSN_PUBLIC_KEY' with your actual public DSN key, or an ENV variable.
  */
-
 (function () {
   /**
    * Determines if Sentry should be disabled based on:
@@ -30,6 +30,24 @@
     }
   }
 
+  // Helper to retrieve your DSN (inline, environment variable, etc.)
+  function getDsn() {
+    // In production, you might read from window.ENV.SENTRY_DSN or process.env.SENTRY_DSN
+    // For now, replace with your actual DSN:
+    return 'https://js.sentry-cdn.com/YOUR_DSN_PUBLIC_KEY.min.js';
+  }
+
+  // Helper to detect environment
+  function detectEnvironment() {
+    return window.location.hostname.includes('localhost') ? 'development' : 'production';
+  }
+
+  // Helper to provide a release version
+  function getReleaseVersion() {
+    // Ideally: read from a global build variable or version file
+    return window.APP_VERSION || 'azure-chatapp@1.0.0';
+  }
+
   // Proceed only if not disabled
   if (!shouldDisableSentry()) {
     /**
@@ -37,17 +55,17 @@
      * Configures Sentry using the Global Sentry object.
      */
     window.sentryOnLoad = function () {
-      // Adjust these to match your environment and release channels
-      const isLocalDev = window.location.hostname.includes('localhost');
-      const environment = isLocalDev ? 'development' : 'production';
-      const releaseVersion = window.APP_VERSION || 'azure-chatapp@1.0.0';
+      const environment = detectEnvironment();
+      const releaseVersion = getReleaseVersion();
 
       Sentry.init({
-        environment,
+        environment: environment,
         release: releaseVersion,
 
         // Adjust performance sample rates
-        tracesSampleRate: isLocalDev ? 1.0 : parseFloat(window.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+        tracesSampleRate: environment === 'development'
+          ? 1.0
+          : parseFloat(window.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
 
         // Session replay sample rates
         replaysSessionSampleRate: 0.15,  // 15% of sessions
@@ -96,7 +114,7 @@
       });
 
       // Add global tags
-      Sentry.setTag('app_version', '1.0.0');
+      Sentry.setTag('app_version', '1.0.0'); // Adjust as needed
 
       // Monitor auth changes for user identification
       document.addEventListener('authStateChanged', function (event) {
@@ -104,7 +122,7 @@
           Sentry.setUser({
             id: event.detail.username,
             username: event.detail.username
-            // Avoid storing PII such as email, IP, or full name
+            // Avoid storing additional PII
           });
         } else {
           Sentry.setUser(null);
@@ -113,7 +131,7 @@
 
       console.log('[Sentry] Initialized and configured');
 
-      window.showUserFeedbackDialog = function(eventId) {
+      window.showUserFeedbackDialog = function (eventId) {
         if (window.Sentry && typeof Sentry.showReportDialog === 'function') {
           Sentry.showReportDialog({
             eventId: eventId,
@@ -132,9 +150,8 @@
 
     // Dynamically insert Sentry loader script
     const script = document.createElement('script');
-    script.src = 'https://js.sentry-cdn.com/YOUR_DSN_PUBLIC_KEY.min.js'; // Replace with your actual DSN
+    script.src = getDsn(); // e.g. 'https://js.sentry-cdn.com/YOUR_DSN_PUBLIC_KEY.min.js'
     script.crossOrigin = 'anonymous';
-    script.setAttribute('data-lazy', 'no');
 
     // Insert script into the document
     const firstScript = document.getElementsByTagName('script')[0];
