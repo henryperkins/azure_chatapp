@@ -1091,3 +1091,5 @@ export default {
     }
   }
 };
+
+window.getCSRFTokenAsync = getCSRFTokenAsync;
