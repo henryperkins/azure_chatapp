@@ -267,7 +267,14 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     """Handle unexpected exceptions with Sentry integration."""
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     if SENTRY_ENABLED:
-        sentry_sdk.capture_exception(exc)
+        event_id = sentry_sdk.capture_exception(exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error", 
+                "sentry_event_id": event_id
+            },
+        )
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
