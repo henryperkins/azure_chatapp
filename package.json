@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Azure OpenAI Chat Application",
   "scripts": {
-    "build:css": "node_modules/.bin/tailwindcss -i ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --minify",
+    "build:css": "tailwindcss -i ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --minify",
     "watch:css": "npx tailwindcss -i ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --watch",
     "dev": "npm run watch:css",
     "lint:css": "stylelint './static/css/**/*.css'"
