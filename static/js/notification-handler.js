@@ -186,14 +186,36 @@
     }
   }
 
+  // Track all event listeners
+  const notificationListeners = new Set();
+
+  // Register message event listener with tracking
+  function addNotificationListener() {
+    window.addEventListener('message', handleNotificationMessages);
+    notificationListeners.add({
+      element: window,
+      type: 'message',
+      handler: handleNotificationMessages
+    });
+  }
+
+  // Cleanup all notification listeners
+  function cleanupNotificationListeners() {
+    notificationListeners.forEach(({element, type, handler}) => {
+      element.removeEventListener(type, handler);
+    });
+    notificationListeners.clear();
+  }
+
   // Register message event listener
-  window.addEventListener('message', handleNotificationMessages);
+  addNotificationListener();
 
   // Expose the API
   window.notificationHandler = {
     show: showNotification,
     hide: hideNotification,
-    clear: clearAllNotifications
+    clear: clearAllNotifications,
+    cleanup: cleanupNotificationListeners
   };
 
   // Provide backward compatibility with existing notification system

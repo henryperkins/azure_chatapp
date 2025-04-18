@@ -635,14 +635,43 @@ function cacheElements() {
   });
 }
 
+// Track app listeners for cleanup
+const appListeners = new Set();
+
 function setupEventListeners() {
-  document.addEventListener('authStateChanged', handleAuthStateChange);
-  window.addEventListener('resize', setViewportHeight);
-  window.addEventListener('orientationchange', () => window.dispatchEvent(new Event('resize')));
-  // Add listener for backend unavailability events from auth.js
-  document.addEventListener('backendUnavailable', handleBackendUnavailable);
-  if (window.eventHandlers?.init) window.eventHandlers.init();
-  else console.warn('[setupEventListeners] Event handlers module not loaded');
+  // Document-level listeners
+  const authStateHandler = (e) => handleAuthStateChange(e);
+  const backendUnavailableHandler = (e) => handleBackendUnavailable(e);
+
+  document.addEventListener('authStateChanged', authStateHandler);
+  document.addEventListener('backendUnavailable', backendUnavailableHandler);
+
+  appListeners.add({ element: document, type: 'authStateChanged', handler: authStateHandler });
+  appListeners.add({ element: document, type: 'backendUnavailable', handler: backendUnavailableHandler });
+
+  // Window-level listeners
+  const resizeHandler = () => setViewportHeight();
+  const orientationHandler = () => window.dispatchEvent(new Event('resize'));
+
+  window.addEventListener('resize', resizeHandler);
+  window.addEventListener('orientationchange', orientationHandler);
+
+  appListeners.add({ element: window, type: 'resize', handler: resizeHandler });
+  appListeners.add({ element: window, type: 'orientationchange', handler: orientationHandler });
+
+  // Initialize event handlers if available
+  if (window.eventHandlers?.init) {
+    window.eventHandlers.init();
+  } else {
+    console.warn('[setupEventListeners] Event handlers module not loaded');
+  }
+}
+
+function cleanupAppListeners() {
+  appListeners.forEach(({element, type, handler}) => {
+    element.removeEventListener(type, handler);
+  });
+  appListeners.clear();
 }
 
 // Handle backend unavailability notifications
@@ -835,6 +864,8 @@ function handleAuthStateChange(e) {
 }
 
 async function initApp() {
+  // Clean up any existing listeners first
+  cleanupAppListeners();
   setPhase(AppPhase.BOOT);
   if (document.readyState === 'loading') await new Promise(r => document.addEventListener('DOMContentLoaded', r));
   setPhase(AppPhase.DOM_READY);
