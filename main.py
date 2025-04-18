@@ -89,8 +89,8 @@ def configure_sentry() -> None:
             dsn=SENTRY_DSN,
             environment=ENVIRONMENT,
             release=f"{APP_NAME}@{APP_VERSION}",
-            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
-            profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.5")),
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2" if ENVIRONMENT == "production" else "1.0")),
+            profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1" if ENVIRONMENT == "production" else "0.5")),
             send_default_pii=os.getenv("SENTRY_SEND_DEFAULT_PII", "false").lower()
             == "true",
             attach_stacktrace=True,
@@ -234,9 +234,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", include_in_schema=False)
-async def serve_frontend() -> FileResponse:
-    """Serve the main frontend application."""
-    return FileResponse("static/html/base.html")
+async def serve_frontend(request: Request) -> Response:
+    """Serve the main frontend application with version info."""
+    response = FileResponse("static/html/base.html")
+    response.set_cookie("APP_VERSION", APP_VERSION)
+    return response
 
 
 @app.get("/health", tags=["system"])
@@ -265,7 +267,14 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     """Handle unexpected exceptions with Sentry integration."""
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     if SENTRY_ENABLED:
-        sentry_sdk.capture_exception(exc)
+        event_id = sentry_sdk.capture_exception(exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error", 
+                "sentry_event_id": event_id
+            },
+        )
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},

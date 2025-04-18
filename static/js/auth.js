@@ -826,6 +826,19 @@ function setupAuthStateMonitoring() {
 }
 
 async function init() {
+  // Set CSRF token if missing
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  if (!csrfMeta?.content) {
+    try {
+      const res = await apiRequest('/api/auth/csrf', 'GET');
+      if (res?.token) {
+        csrfMeta.content = res.token;
+      }
+    } catch (err) {
+      console.error('[Auth] Failed to get CSRF token:', err);
+    }
+  }
+
   if (window.__authInitializing) {
     return new Promise(res => {
       const checkInit = () => {
