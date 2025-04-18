@@ -109,8 +109,8 @@
 
 /* Custom utilities to support text truncation and other features */
 @layer utilities {
-  #projectList {
-    @container (min-width: 48rem) {
+  @container (min-width: 48rem) {
+    #projectList {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
