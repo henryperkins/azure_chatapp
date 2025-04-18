@@ -72,7 +72,7 @@
               <button id="registerTab" type="button"
                 class="px-2 py-1 text-xs font-medium text-base-content/60">Register</button>
             </div>
-            <form id="loginForm" method="POST" onsubmit="event.preventDefault(); return false;">
+            <form id="loginForm" method="POST">
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" id="login-username" placeholder="Username"
                   class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="username" autocorrect="off"
@@ -80,7 +80,7 @@
                 <input type="password" name="password" id="login-password" placeholder="Password"
                   class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="current-password">
               </div>
-              <div id="login-error" class="text-error text-xs mb-2 hidden"></div>
+              <div id="login-error" role="alert" class="text-error text-xs mb-2 hidden"></div>
               <!-- Improved mobile login button with larger tap target -->
               <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-sm w-full">
                 Log In

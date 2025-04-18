@@ -739,6 +739,11 @@ function setupUIListeners() {
   if (loginForm) {
     loginForm.addEventListener("submit", async e => {
       e.preventDefault();
+      const errorElement = document.getElementById('login-error');
+      if (errorElement) {
+        errorElement.textContent = "";
+        errorElement.classList.add("hidden");
+      }
       const submitBtn = loginForm.querySelector('button[type="submit"]');
       if (submitBtn) {
         submitBtn.disabled = true;
