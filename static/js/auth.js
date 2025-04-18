@@ -403,7 +403,7 @@ async function verifyAuthState(forceVerify = false) {
   let lastError;
   for (let i = 1; i <= attempts; i++) {
     try {
-      const csrfToken = getCSRFToken();
+      const csrfToken = await getCSRFTokenAsync();
       if (!csrfToken) {
         if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] CSRF token missing`);
         if (i === attempts) throw new Error('CSRF token missing for verification');
@@ -921,6 +921,28 @@ function handleAuthError(error, context = '') {
  *  CSRF Token Utilities
  * ---------------------------------- */
 
+async function getCSRFTokenAsync() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (!meta || !meta.content || meta.content.trim() === "") {
+    console.warn('[Auth] CSRF token missing, fetching from server...');
+    try {
+      const res = await apiRequest('/api/auth/csrf', 'GET');
+      if (res && res.token) {
+        meta.content = res.token;
+        return res.token;
+      } else {
+        console.error('[Auth] CSRF token endpoint did not return a token.');
+        return "";
+      }
+    } catch (err) {
+      console.error('[Auth] Failed to fetch CSRF token:', err);
+      return "";
+    }
+  }
+  return meta.content;
+}
+
+// Keep synchronous version for non-async contexts
 function getCSRFToken() {
   const meta = document.querySelector('meta[name="csrf-token"]');
   if (!meta?.content) {
