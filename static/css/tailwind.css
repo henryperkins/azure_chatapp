@@ -110,6 +110,15 @@
 
 /* Custom utilities to support text truncation and other features */
 @layer utilities {
+  @container (min-width: 48rem) {
+    #projectList {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .banner {
+    background: color-mix(in srgb, #1d4ed8 50%, #ffffff 50%);
+  }
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -179,6 +188,13 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Optional Composable Variants */
+@variants hover, focus, active {
+  .btn-enhanced {
+    @apply text-white bg-blue-500;
   }
 }
 
