@@ -6,12 +6,16 @@
  */
 
 // Configuration for logging levels
-const CONFIG = {
-  LOG_LEVEL: 'error', // 'debug', 'info', 'warn', 'error', or 'none'
-  AUTH_DEBUG: true,    // Enable auth debugging for detailed logs
-  MAX_AUTH_RETRIES: 3,
-  AUTH_RETRY_DELAY: 300
-};
+// Use window.CONFIG to prevent redeclaration errors when script is loaded multiple times
+if (typeof window.CONFIG === 'undefined') {
+  window.CONFIG = {
+    LOG_LEVEL: 'error', // 'debug', 'info', 'warn', 'error', or 'none'
+    AUTH_DEBUG: true,    // Enable auth debugging for detailed logs
+    MAX_AUTH_RETRIES: 3,
+    AUTH_RETRY_DELAY: 300
+  };
+}
+const CONFIG = window.CONFIG;
 
 // Logger utility to standardize logging
 const Logger = {

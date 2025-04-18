@@ -1,0 +1,15 @@
+/* Azure OpenAI Chat - Main CSS file */
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+  root: ":root";
+  logs: true;
+}
+
+/* Custom theme configuration */
+:root {
+  --font-poppins: Poppins, sans-serif;
+  --shadow-custom: 0 4px 10px rgba(0,0,0,0.15);
+  --color-blue-500: #1d4ed8;
+  --color-white: #ffffff;
+}

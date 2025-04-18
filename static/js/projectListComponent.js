@@ -701,9 +701,9 @@ Are you sure you want to delete "${project.name}"?`)) {
       if (spinnerOverlay) spinnerOverlay.remove();
     }
 
-    _bindFilterEvents() {
-      // Use the specific class for filter tabs
-      const buttons = document.querySelectorAll('.project-filter-tabs .project-filter-btn');
+  _bindFilterEvents() {
+    // Target buttons by their class within the projectFilterTabs ID
+    const buttons = document.querySelectorAll('#projectFilterTabs .project-filter-btn');
       if (!buttons.length) {
         console.debug("No project filter buttons found. Creating fallback filter tabs...");
         this._createFallbackFilterTabs();
@@ -777,7 +777,30 @@ Are you sure you want to delete "${project.name}"?`)) {
 
       allButtons.forEach(btn => {
         const isActive = btn === button;
-        btn.classList.toggle('tab-active', isActive);
+
+        // Toggle active class for the button itself
+        if (isActive) {
+          btn.classList.add('text-base-content');
+          btn.classList.remove('text-base-content/60');
+          btn.setAttribute('aria-current', 'page');
+        } else {
+          btn.classList.remove('text-base-content');
+          btn.classList.add('text-base-content/60');
+          btn.removeAttribute('aria-current');
+        }
+
+        // Update the underline span element
+        const underlineSpan = btn.querySelector('.absolute.bottom-0');
+        if (underlineSpan) {
+          if (isActive) {
+            underlineSpan.classList.remove('bg-transparent');
+            underlineSpan.classList.add('bg-blue-600');
+          } else {
+            underlineSpan.classList.add('bg-transparent');
+            underlineSpan.classList.remove('bg-blue-600');
+          }
+        }
+
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 

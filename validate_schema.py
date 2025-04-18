@@ -22,9 +22,19 @@ async def main():
     # Run validation
     mismatch_details = await validate_db_schema()
 
-    if mismatch_details:
-        print(f"\n❌ Found {len(mismatch_details)} schema mismatches:")
-        for detail in mismatch_details:
+    # Filter out false positive timestamp mismatches
+    # (where both types are "timestamp without time zone")
+    filtered_mismatches = []
+    for detail in mismatch_details:
+        if "type mismatch" in detail.lower() and "timestamp without time zone vs orm: timestamp without time zone" in detail.lower():
+            # Skip this mismatch as it's a false positive
+            continue
+        filtered_mismatches.append(detail)
+
+    # Report results
+    if filtered_mismatches:
+        print(f"\n❌ Found {len(filtered_mismatches)} schema mismatches:")
+        for detail in filtered_mismatches:
             print(f"  - {detail}")
         return False
     else:
