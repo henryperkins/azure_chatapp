@@ -1038,6 +1038,8 @@ Object.assign(window.auth, {
     return authState.isAuthenticated ? authState.username : null;
   }
 });
+// Make verifyAuthState available as a global variable
+window.verifyAuthState = verifyAuthState;
 window.handleAuthModalPositioning = handleAuthModalPositioning;
 window.setupMobileAuthListeners = setupMobileAuthListeners;
 
