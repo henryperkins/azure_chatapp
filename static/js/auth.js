@@ -1,6 +1,15 @@
 /**
- * Authentication module for handling user sessions, tokens, and auth state
+ * Final Remediated Authentication Module
+ * --------------------------------------
+ * Key Changes:
+ *  - Removed "HttpOnly" from setAuthCookie (must be set by server)
+ *  - Adjusted SameSite rules for localhost vs. HTTPS
+ *  - Unified refresh throttling to __refreshCooldownUntil
+ *  - Exported standardizeError() and logFormIssue()
+ *  - Omit Max-Age if none provided
+ *  - Removed old sessionStorage code entirely
  */
+
 const AUTH_DEBUG = true;
 
 // Session & Retry Flags
@@ -8,15 +17,16 @@ let sessionExpiredFlag = false;
 let lastVerifyFailureTime = 0;
 let tokenRefreshInProgress = false;
 let lastRefreshAttempt = null;
-let refreshFailCount = 0;
+let __refreshCooldownUntil = 0;  // Throttle timestamp
 let backendUnavailableFlag = false;
 let lastBackendUnavailableTime = 0;
 
 // Config
 const MIN_RETRY_INTERVAL = 5000; // ms between verification attempts after failure
 const MAX_REFRESH_RETRIES = 3;
-const BACKEND_UNAVAILABLE_COOLDOWN = 30000; // 30 seconds circuit-breaker for backend connectivity issues
+const BACKEND_UNAVAILABLE_COOLDOWN = 30000; // 30 seconds circuit-breaker
 
+// Auth State
 const authState = {
   isAuthenticated: false,
   username: null,
@@ -26,17 +36,22 @@ const authState = {
 
 // Primary constants for timeouts & intervals
 const AUTH_CONSTANTS = {
-  VERIFICATION_INTERVAL: 300000, // 5 min
+  VERIFICATION_INTERVAL: 300000,    // 5 min
   VERIFICATION_CACHE_DURATION: 60000, // 1 min
-  REFRESH_TIMEOUT: 10000, // 10s
-  VERIFY_TIMEOUT: 5000, // 5s
+  REFRESH_TIMEOUT: 10000,           // 10s
+  VERIFY_TIMEOUT: 5000,             // 5s
   MAX_VERIFY_ATTEMPTS: 3,
   ACCESS_TOKEN_EXPIRE_MINUTES: 30,
   REFRESH_TOKEN_EXPIRE_DAYS: 1
 };
 
 /* ----------------------------------
- *  Helpers: Cookies, Storage, Debug
+ *  Single AuthBus for All Events
+ * ---------------------------------- */
+const AuthBus = new EventTarget();
+
+/* ----------------------------------
+ *  Cookie Helpers
  * ---------------------------------- */
 
 /** Returns the cookie value by name or null if missing. */
@@ -46,50 +61,66 @@ function getCookie(name) {
   return null;
 }
 
-/** Sets an auth cookie with standard attributes in one place. */
+/**
+ * Sets or clears a cookie with standard attributes.
+ * Note: "HttpOnly" cannot be set from JS; must be done in server response headers.
+ * Also note that for real security, the server should set Secure + HttpOnly cookies.
+ */
 function setAuthCookie(name, value, maxAgeSeconds) {
-  let secure = location.protocol === 'https:' ? 'Secure; ' : '';
-  let sameSite = 'SameSite=Strict';
-  const path = '/;';
-  // Allow local dev override
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    secure = '';
+  // Decide on default SameSite & Secure for environment
+  let sameSite = 'SameSite=None';
+  let secure   = 'Secure; ';
+
+  // If not actually on HTTPS or on localhost, fallback
+  if (location.protocol !== 'https:' ||
+     location.hostname === 'localhost' ||
+     location.hostname === '127.0.0.1') {
     sameSite = 'SameSite=Lax';
+    secure   = '';
   }
+
+  const path = '/';
+  const cookieParts = [
+    `${name}=${value || ''}`,
+    `Path=${path}`,
+    sameSite,
+    secure
+  ];
+
+  // Only add Max-Age if it's a positive number
+  if (typeof maxAgeSeconds === 'number' && maxAgeSeconds > 0) {
+    cookieParts.push(`Max-Age=${maxAgeSeconds}`);
+  }
+
+  // Build final cookie string
+  let cookieString = cookieParts.join('; ');
+  document.cookie = cookieString;
+
+  // If value falsy, explicitly expire the cookie
   if (!value) {
-    document.cookie = `${name}=; path=${path} expires=Thu, 01 Jan 1970 00:00:00 GMT; ${secure}${sameSite}`;
-  } else {
-    document.cookie = `${name}=${value}; path=${path} max-age=${maxAgeSeconds}; ${secure}${sameSite}`;
+    document.cookie = `${name}=; Path=${path}; Max-Age=0; ${sameSite}; ${secure}`;
   }
 }
+
+/* ----------------------------------
+ *  JWT / Token Handling
+ * ---------------------------------- */
 
 /** Fetch token expiry from JWT 'exp' claim. */
 function getTokenExpiry(token) {
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp * 1000;
+    return payload.exp ? payload.exp * 1000 : null;
   } catch {
     return null;
   }
 }
 
-/** Checks if a token is already expired (server time if available). */
-async function isTokenExpired(token) {
-  if (!token) return true;
-  const expiry = getTokenExpiry(token);
-  if (!expiry) return true;
-  let serverTime;
-  try {
-    const { serverTimestamp } = await apiRequest('/api/auth/timestamp', 'GET');
-    serverTime = serverTimestamp * 1000;
-  } catch {
-    serverTime = Date.now();
-  }
-  return expiry < (serverTime - 10000);
-}
-
-/** Basic fallback for token expiry settings. */
+/**
+ * Checks if a token is valid by looking at both 'exp'
+ * and a maximum allowed age derived from 'iat'.
+ */
 let __cachedExpirySettings = null;
 async function fetchTokenExpirySettings() {
   if (__cachedExpirySettings) return __cachedExpirySettings;
@@ -100,127 +131,122 @@ async function fetchTokenExpirySettings() {
   return __cachedExpirySettings;
 }
 
-/** Checks token age against a max window derived from iat. */
 async function checkTokenValidity(token, { allowRefresh = false } = {}) {
   if (!token) return false;
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
+    const now = Date.now() / 1000;
+
+    // If 'exp' is in the past, it's invalid
+    if (payload.exp && payload.exp < now) {
+      return false;
+    }
+
     const settings = await fetchTokenExpirySettings();
     const maxAge = allowRefresh
-      ? settings.refresh_token_expire_days * 86400
-      : settings.access_token_expire_minutes * 60;
-    const tokenAge = (Date.now() / 1000) - payload.iat;
-    return tokenAge < maxAge;
+      ? settings.refresh_token_expire_days * 86400 // days -> seconds
+      : settings.access_token_expire_minutes * 60;  // minutes -> seconds
+
+    if (!payload.iat) return false;
+    if ((now - payload.iat) > maxAge) return false;
+
+    return true;
   } catch {
     return false;
   }
 }
 
-/** Clears in-memory auth state & marks session as expired. */
-function clearTokenState() {
-  authState.isAuthenticated = false;
-  authState.username = null;
-  authState.lastVerified = 0;
-  sessionExpiredFlag = Date.now();
-  refreshFailCount = 0;
-  broadcastAuth(false);
-  if (AUTH_DEBUG) console.debug('[Auth] Auth state cleared');
-}
+/* ----------------------------------
+ *  CSRF Token Utilities
+ * ---------------------------------- */
 
-/** Basic user notification fallback. */
-function notify(message, type = "info") {
-  if (window.showNotification) {
-    window.showNotification(message, type);
-  } else {
-    console.log(`[${type.toUpperCase()}] ${message}`);
-  }
-}
+let __csrfToken = '';
+let __csrfTokenPromise = null;
 
-/** Helper logging for form or security issues. */
-function logFormIssue(type, details) {
-  if (AUTH_DEBUG) {
-    console.warn(`[Auth][Issue] ${type}`, details);
-  }
-  if (window.telemetry?.logSecurityEvent && type.includes('SECURITY')) {
-    window.telemetry.logSecurityEvent(type, details);
-  }
-}
+/** Prime CSRF Token once at application startup. */
+async function primeCSRFToken() {
+  if (__csrfToken) return __csrfToken;
+  if (__csrfTokenPromise) return __csrfTokenPromise;
 
-/** Minimal error standardization. */
-function standardizeError(error, context) {
-  const e = {
-    status: error.status || 500,
-    message: error.message || "Unknown error",
-    context: context || "auth",
-    code: error.code || "UNKNOWN_ERROR"
-  };
-  if (e.status === 401 || e.message.includes('expired')) {
-    e.code = "SESSION_EXPIRED";
-  }
-  return e;
-}
+  __csrfTokenPromise = (async () => {
+    try {
+      const res = await authRequest('/api/auth/csrf', 'GET');
+      if (!res?.token) throw new Error('Invalid CSRF token response');
 
-/** Optionally show session-expired UI. */
-function showSessionExpiredModal() {
-  notify("Your session has expired. Please log in again.", "error");
-}
-
-/** Single function that either sets or gets tokens from sessionStorage. */
-function syncTokensToSessionStorage(action = 'get') {
-  if (action === 'store') {
-    const accessToken = getCookie('access_token');
-    const refreshToken = getCookie('refresh_token');
-    if (accessToken) sessionStorage.setItem('access_token', accessToken);
-    else sessionStorage.removeItem('access_token');
-    if (refreshToken) sessionStorage.setItem('refresh_token', refreshToken);
-    else sessionStorage.removeItem('refresh_token');
-    if (authState.username) sessionStorage.setItem('username', authState.username);
-    return true;
-  } else {
-    const accessToken = sessionStorage.getItem('access_token');
-    const refreshToken = sessionStorage.getItem('refresh_token');
-    const username = sessionStorage.getItem('username');
-    let restored = false;
-    if (accessToken && !getCookie('access_token')) {
-      setAuthCookie('access_token', accessToken, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
-      restored = true;
+      // Synchronize with <meta> tag
+      let meta = document.querySelector('meta[name="csrf-token"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'csrf-token';
+        document.head.appendChild(meta);
+      }
+      meta.content = res.token;
+      __csrfToken = res.token;
+      return res.token;
+    } catch (err) {
+      __csrfTokenPromise = null;
+      throw err;
     }
-    if (refreshToken && !getCookie('refresh_token')) {
-      setAuthCookie('refresh_token', refreshToken, 60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS);
-      restored = true;
-    }
-    if (username) window.__lastUsername = username;
-    return restored;
-  }
+  })();
+
+  return __csrfTokenPromise;
+}
+
+/** Returns a promise for a valid CSRF token or throws on failure. */
+async function getCSRFTokenAsync() {
+  if (__csrfToken) return __csrfToken;
+  return primeCSRFToken();
+}
+
+/** Synchronous fallback (may be outdated if primeCSRFToken in progress). */
+function getCSRFToken() {
+  return __csrfToken;
 }
 
 /* ----------------------------------
  *  Core HTTP Functions
  * ---------------------------------- */
 
+/**
+ * Lower-level auth request that always sends credentials & JSON headers.
+ * If we already have a CSRF token, includes it in X-CSRF-Token.
+ */
 async function authRequest(endpoint, method, body = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (__csrfToken) {
+    headers['X-CSRF-Token'] = __csrfToken;
+  }
+
+  let resp;
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    if (csrfToken && method !== 'GET') headers['X-CSRF-Token'] = csrfToken;
-    const resp = await fetch(endpoint, {
+    resp = await fetch(endpoint, {
       method,
       credentials: 'include',
       headers,
       body: body ? JSON.stringify(body) : undefined
     });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ message: 'Unknown error' }));
-      throw { status: resp.status, message: err.message || 'Authentication failed' };
-    }
-    return resp.json();
-  } catch (error) {
-    throw error;
+  } catch (fetchError) {
+    throw fetchError;
   }
+
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({ message: 'Unknown error' }));
+    throw {
+      status: resp.status,
+      message: errData.message || 'Authentication failed'
+    };
+  }
+
+  return resp.json();
 }
 
+/**
+ * If a global apiRequest override is provided, use it; else call authRequest.
+ */
 async function apiRequest(url, method, data = null, options = {}) {
-  if (window.apiRequest) return window.apiRequest(url, method, data, options);
+  if (window.apiRequest) {
+    return window.apiRequest(url, method, data, options);
+  }
   return authRequest(url, method, data);
 }
 
@@ -229,48 +255,64 @@ async function apiRequest(url, method, data = null, options = {}) {
  * ---------------------------------- */
 
 async function refreshTokens() {
-  const refreshId = Date.now().toString(36);
+  // Check throttle
+  if (Date.now() < __refreshCooldownUntil) {
+    throw new Error('Refresh attempts are temporarily throttled.');
+  }
+
   if (tokenRefreshInProgress) {
-    if (AUTH_DEBUG) console.debug(`[Auth][${refreshId}] Refresh in progress`);
+    if (AUTH_DEBUG) console.debug('[Auth] Refresh already in progress, awaiting promise.');
     return window.__tokenRefreshPromise;
   }
-  const now = Date.now();
-  const timeSinceLastVerified = now - authState.lastVerified;
-  if (timeSinceLastVerified < 5000) {
-    if (AUTH_DEBUG) console.debug(`[Auth][${refreshId}] Skipping refresh - recent verify`);
-    return { success: true, token: getCookie('access_token') };
-  }
-  if (lastRefreshAttempt && now - lastRefreshAttempt < 30000 && refreshFailCount >= MAX_REFRESH_RETRIES) {
-    return Promise.reject(new Error('Too many refresh attempts'));
-  }
+
+  // Ensure CSRF token is available first
+  await getCSRFTokenAsync().catch(err => {
+    if (AUTH_DEBUG) console.error('[Auth] Could not fetch CSRF token before refresh:', err);
+    throw new Error('No CSRF token available for refresh');
+  });
+
   tokenRefreshInProgress = true;
-  lastRefreshAttempt = now;
+  lastRefreshAttempt = Date.now();
+
   window.__tokenRefreshPromise = (async () => {
-    let refreshTokenVal = getCookie('refresh_token');
+    const refreshTokenVal = getCookie('refresh_token');
     if (!refreshTokenVal) {
       tokenRefreshInProgress = false;
       throw new Error('No refresh token available');
     }
+
     const expiry = getTokenExpiry(refreshTokenVal);
     if (expiry && expiry < Date.now()) {
       tokenRefreshInProgress = false;
       throw new Error('Refresh token expired');
     }
+
     let lastError, response;
     for (let attempt = 1; attempt <= MAX_REFRESH_RETRIES; attempt++) {
       try {
-        if (AUTH_DEBUG) console.debug(`[Auth] Refresh attempt ${attempt}/${MAX_REFRESH_RETRIES}`);
+        if (AUTH_DEBUG) {
+          console.debug(`[Auth] Refresh attempt ${attempt}/${MAX_REFRESH_RETRIES}`);
+        }
+
         const controller = new AbortController();
         const timeoutMs = AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt - 1);
+
         const fetchPromise = apiRequest('/api/auth/refresh', 'POST', null, { signal: controller.signal });
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
         response = await fetchPromise.catch(err => {
           if (err.name === 'AbortError') throw new Error(`Refresh timeout (${timeoutMs}ms)`);
           throw err;
         });
+
         clearTimeout(timeoutId);
-        if (!response?.access_token) throw new Error('Invalid refresh response');
-        if (response.token_version) authState.tokenVersion = response.token_version;
+
+        if (!response?.access_token) {
+          throw new Error('Invalid refresh response');
+        }
+        if (response.token_version) {
+          authState.tokenVersion = response.token_version;
+        }
         break;
       } catch (err) {
         lastError = err;
@@ -280,62 +322,87 @@ async function refreshTokens() {
         }
       }
     }
-    if (lastError && !response?.access_token) throw lastError;
-    refreshFailCount = 0;
+
+    if (lastError && !response?.access_token) {
+      throw lastError;
+    }
+
     authState.lastVerified = Date.now();
+
+    // Update cookies with new tokens
     if (response.access_token) {
       setAuthCookie('access_token', response.access_token, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
     }
     if (response.refresh_token) {
       setAuthCookie('refresh_token', response.refresh_token, 60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS);
     }
+
     tokenRefreshInProgress = false;
     authState.isAuthenticated = true;
     broadcastAuth(true, authState.username);
-    document.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: true } }));
+
+    AuthBus.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: true } }));
     return { success: true, token: response.access_token };
   })().catch(err => {
-    if (AUTH_DEBUG) console.error(`[Auth] Unrecoverable refresh error: ${err.message}. Clearing token state.`);
+    if (AUTH_DEBUG) {
+      console.error('[Auth] Unrecoverable refresh error:', err);
+    }
     clearTokenState();
-    refreshFailCount++;
     tokenRefreshInProgress = false;
-    document.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: false, error: err } }));
+
+    // Throttle refresh attempts for 30s
+    __refreshCooldownUntil = Date.now() + 30000;
+
+    AuthBus.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: false, error: err } }));
     throw err;
   });
+
   return window.__tokenRefreshPromise;
 }
 
 /* ----------------------------------
- *  Verification Logic
+ *  Auth Verification & Access Token
  * ---------------------------------- */
+
+function clearTokenState() {
+  authState.isAuthenticated = false;
+  authState.username = null;
+  authState.lastVerified = 0;
+  sessionExpiredFlag = Date.now();
+  broadcastAuth(false);
+  if (AUTH_DEBUG) console.debug('[Auth] Auth state cleared');
+}
 
 async function getAuthToken(options = {}) {
   const allowEmpty = options.allowEmpty === true;
-  const operationId = `getAuthToken-${Date.now().toString(36)}`;
-  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] getAuthToken called`, options);
   const accessToken = getCookie('access_token');
+
+  // If we already have a valid access token, use it
   if (accessToken) {
     const isValid = await checkTokenValidity(accessToken).catch(() => false);
     if (isValid) {
-      if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Valid access token found in cookie.`);
+      if (AUTH_DEBUG) console.debug('[Auth] Found valid access token in cookie.');
       return accessToken;
     }
   }
-  const refreshToken = getCookie('refresh_token');
-  if (!refreshToken) {
+
+  // Access token is missing/invalid, try refresh
+  const refreshTokenVal = getCookie('refresh_token');
+  if (!refreshTokenVal) {
     if (allowEmpty) return '';
     throw new Error('Authentication required (no refresh token)');
   }
-  const isRefreshValid = await checkTokenValidity(refreshToken, { allowRefresh: true }).catch(() => false);
+
+  const isRefreshValid = await checkTokenValidity(refreshTokenVal, { allowRefresh: true }).catch(() => false);
   if (!isRefreshValid) {
     clearTokenState();
     if (allowEmpty) return '';
     throw new Error('Session expired (invalid refresh token)');
   }
-  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Attempting token refresh.`);
+
   try {
     if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
-      if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Waiting for existing refresh promise.`);
+      if (AUTH_DEBUG) console.debug('[Auth] Waiting for existing refreshTokens promise...');
       await window.__tokenRefreshPromise;
     } else {
       await refreshTokens();
@@ -346,30 +413,20 @@ async function getAuthToken(options = {}) {
       return newAccessToken;
     } else {
       if (allowEmpty) return '';
-      throw new Error('Token refresh failed to provide a valid token.');
+      throw new Error('Token refresh failed to provide a valid access token');
     }
-  } catch (refreshError) {
-    if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Token refresh failed:`, refreshError);
+  } catch (err) {
+    if (AUTH_DEBUG) console.error('[Auth] Token refresh failed:', err);
     if (allowEmpty) return '';
-    const errorMessage = refreshError.message.includes('expired') ? 'Session expired' : 'Authentication failed during refresh';
-    throw new Error(errorMessage);
+    throw new Error(err.message.includes('expired') ? 'Session expired' : 'Authentication failed during refresh');
   }
 }
 
 async function verifyAuthState(forceVerify = false) {
-  const operationId = `verifyAuthState-${Date.now().toString(36)}`;
-  if (AUTH_DEBUG) {
-    console.debug(`[Auth][${operationId}] verifyAuthState called (forceVerify=${forceVerify})`);
-    console.debug(`[Auth][${operationId}] Current auth state:`, authState);
-    console.debug(`[Auth][${operationId}] Access token:`, getCookie('access_token'));
-    console.debug(`[Auth][${operationId}] Refresh token:`, getCookie('refresh_token'));
-  }
-
-  // Circuit breaker pattern - check if backend is known to be unavailable
-  if (backendUnavailableFlag && Date.now() - lastBackendUnavailableTime < BACKEND_UNAVAILABLE_COOLDOWN) {
-    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - backend marked unavailable until ${new Date(lastBackendUnavailableTime + BACKEND_UNAVAILABLE_COOLDOWN).toLocaleTimeString()}`);
-    // Dispatch an event to notify UI components about backend unavailability
-    document.dispatchEvent(new CustomEvent("backendUnavailable", {
+  // Circuit breaker if backend is known to be down
+  if (backendUnavailableFlag && (Date.now() - lastBackendUnavailableTime < BACKEND_UNAVAILABLE_COOLDOWN)) {
+    if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - backend unavailable.');
+    AuthBus.dispatchEvent(new CustomEvent('backendUnavailable', {
       detail: {
         until: new Date(lastBackendUnavailableTime + BACKEND_UNAVAILABLE_COOLDOWN),
         reason: 'circuit_breaker'
@@ -378,73 +435,70 @@ async function verifyAuthState(forceVerify = false) {
     return authState.isAuthenticated;
   }
 
+  // Minimum retry interval after a failure
   if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
-    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - recent failure.`);
+    if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - recent failure.');
     return authState.isAuthenticated;
   }
 
-  if (sessionExpiredFlag && Date.now() - sessionExpiredFlag < 10000) {
-    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Skipping verify - session recently marked expired.`);
+  // If session was marked expired, short-circuit unless 10s passed
+  if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag < 10000)) {
+    if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - session recently expired.');
     return false;
   }
 
-  if (sessionExpiredFlag && Date.now() - sessionExpiredFlag >= 10000) {
+  if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag >= 10000)) {
     sessionExpiredFlag = false;
   }
 
   const now = Date.now();
-  if (!forceVerify && authState.lastVerified && (now - authState.lastVerified < AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION)) {
-    if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Returning cached auth state`);
+  const timeSinceLastVerified = now - authState.lastVerified;
+  const shouldVerify = forceVerify ||
+    (timeSinceLastVerified > AUTH_CONSTANTS.VERIFICATION_CACHE_DURATION) ||
+    !authState.lastVerified;
+
+  if (!shouldVerify) {
+    if (AUTH_DEBUG) console.debug('[Auth] Returning cached auth state.');
     return authState.isAuthenticated;
   }
 
-  if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Performing server verification.`);
-  const attempts = AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS;
+  if (AUTH_DEBUG) console.debug('[Auth] Performing server verification.');
+
   let lastError;
-  for (let i = 1; i <= attempts; i++) {
+  for (let i = 1; i <= AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS; i++) {
     try {
-      const csrfToken = await getCSRFTokenAsync();
-      if (!csrfToken) {
-        if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] CSRF token missing`);
-        if (i === attempts) throw new Error('CSRF token missing for verification');
-        await new Promise(r => setTimeout(r, 500));
-        continue;
-      }
-      if (AUTH_DEBUG) {
-        console.debug(`[Auth][${operationId}] Making verify request with headers:`, {
-          'X-CSRF-Token': csrfToken,
-          'X-Debug-Request-ID': operationId
-        });
-      }
+      await getCSRFTokenAsync();
       const res = await Promise.race([
-        apiRequest('/api/auth/verify', 'GET', null, {
-          headers: {
-            'X-CSRF-Token': csrfToken,
-            'X-Debug-Request-ID': operationId
-          }
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`verify timeout (attempt ${i})`)), AUTH_CONSTANTS.VERIFY_TIMEOUT + i * 1000))
+        apiRequest('/api/auth/verify', 'GET'),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`verify timeout (attempt ${i})`)), AUTH_CONSTANTS.VERIFY_TIMEOUT + i * 1000)
+        )
       ]);
+
       const serverAuthenticated = !!res.authenticated;
       const serverUsername = res.username || null;
-      if (AUTH_DEBUG) console.debug(`[Auth][${operationId}] Verification successful: authenticated=${serverAuthenticated}`);
       authState.isAuthenticated = serverAuthenticated;
       authState.username = serverUsername;
       authState.lastVerified = Date.now();
       lastVerifyFailureTime = 0;
+
       broadcastAuth(serverAuthenticated, serverUsername);
       return serverAuthenticated;
     } catch (err) {
       lastError = err;
-      if (AUTH_DEBUG) console.warn(`[Auth][${operationId}] Verification attempt ${i} failed:`, err);
-      if (err.status === 401 || err.message?.includes('expired')) {
-        const refreshToken = getCookie('refresh_token');
-        if (!refreshToken) {
+      if (AUTH_DEBUG) {
+        console.warn(`[Auth] Verification attempt ${i} failed:`, err);
+      }
+
+      // 401 or expired → try refresh
+      if (err.status === 401 || err.message.includes('expired')) {
+        const refreshTokenVal = getCookie('refresh_token');
+        if (!refreshTokenVal) {
           sessionExpiredFlag = Date.now();
           clearTokenState();
           return false;
         }
-        const isRefreshValid = await checkTokenValidity(refreshToken, { allowRefresh: true }).catch(() => false);
+        const isRefreshValid = await checkTokenValidity(refreshTokenVal, { allowRefresh: true }).catch(() => false);
         if (!isRefreshValid) {
           sessionExpiredFlag = Date.now();
           clearTokenState();
@@ -454,9 +508,10 @@ async function verifyAuthState(forceVerify = false) {
           refreshTokens(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 2000))
         ]).catch(refreshErr => {
-          if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Token refresh failed:`, refreshErr);
+          if (AUTH_DEBUG) console.error('[Auth] Token refresh during verify failed:', refreshErr);
           return null;
         });
+
         if (refreshResult?.success) {
           await new Promise(r => setTimeout(r, 500));
           continue;
@@ -465,24 +520,23 @@ async function verifyAuthState(forceVerify = false) {
         clearTokenState();
         return false;
       }
-      // Check for network-related errors that indicate backend service is down
-      const isNetworkError =
-        err.message?.includes('ERR_CONNECTION_RESET') ||
-        err.message?.includes('Failed to fetch') ||
-        err.message?.includes('NetworkError') ||
-        err.message?.includes('Network request failed') ||
-        err.message?.includes('timeout') ||
-        err.message?.toLowerCase()?.includes('network') ||
-        err.name === 'AbortError';
 
-      if (isNetworkError && i >= attempts) {
-        // Circuit breaker pattern: mark backend as unavailable
+      // Check for network-level error
+      const isNetworkError = [
+        'ERR_CONNECTION_RESET',
+        'Failed to fetch',
+        'NetworkError',
+        'Network request failed',
+        'timeout'
+      ].some(netStr => err.message?.includes(netStr)) || (err.name === 'AbortError');
+
+      if (isNetworkError && i >= AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS) {
+        // Mark backend unavailable
         backendUnavailableFlag = true;
         lastBackendUnavailableTime = Date.now();
-        console.error(`[Auth][${operationId}] Backend service appears to be unavailable. Circuit breaker activated.`);
+        console.error('[Auth] Backend service appears to be unavailable. Circuit breaker activated.');
 
-        // Broadcast backend unavailability to UI components
-        document.dispatchEvent(new CustomEvent("backendUnavailable", {
+        AuthBus.dispatchEvent(new CustomEvent('backendUnavailable', {
           detail: {
             until: new Date(lastBackendUnavailableTime + BACKEND_UNAVAILABLE_COOLDOWN),
             reason: 'connection_failed',
@@ -491,11 +545,11 @@ async function verifyAuthState(forceVerify = false) {
         }));
       }
 
-      if (i < attempts) {
+      if (i < AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS) {
         const backoffMs = Math.min(1000 * (2 ** (i - 1)), 5000);
         await new Promise(r => setTimeout(r, backoffMs));
       } else {
-        if (AUTH_DEBUG) console.error(`[Auth][${operationId}] Max verification attempts reached.`);
+        if (AUTH_DEBUG) console.error('[Auth] Max verification attempts reached.');
         authState.lastVerified = Date.now();
         lastVerifyFailureTime = Date.now();
         throw lastError || new Error('Auth verification failed after multiple attempts');
@@ -506,70 +560,20 @@ async function verifyAuthState(forceVerify = false) {
 }
 
 /* ----------------------------------
- *  UI Handling & State Broadcasting
+ *  UI / Auth State Broadcasting
  * ---------------------------------- */
 
+/** Broadcasts auth changes via the AuthBus. */
 function broadcastAuth(authenticated, username = null) {
-  const changed = (authState.isAuthenticated !== authenticated) || (authState.username !== username);
+  const detail = {
+    authenticated,
+    username,
+    timestamp: Date.now(),
+    source: 'authStateChanged'
+  };
   authState.isAuthenticated = authenticated;
   authState.username = username;
-  updateAuthUI(authenticated, username);
-  const detail = { authenticated, username, timestamp: Date.now(), source: 'authStateChanged' };
-  document.dispatchEvent(new CustomEvent("authStateChanged", { detail }));
-  window.dispatchEvent(new CustomEvent("authStateChanged", { detail }));
-}
-
-function updateAuthUI(authenticated, username = null) {
-  const userStatus = document.getElementById('userStatus');
-  const authButton = document.getElementById('authButton');
-  if (userStatus) userStatus.textContent = authenticated ? (username || 'Online') : 'Offline';
-  if (authButton) authButton.textContent = authenticated ? (username || 'Account') : 'Login';
-  const loggedInState = document.getElementById('loggedInState');
-  if (loggedInState) {
-    loggedInState.classList.toggle('hidden', !authenticated);
-    const usrSpan = document.getElementById('loggedInUsername');
-    if (usrSpan && username) usrSpan.textContent = username;
-  }
-  const loginForm = document.getElementById('loginForm');
-  const registerForm = document.getElementById('registerForm');
-  if (loginForm && registerForm) {
-    if (authenticated) {
-      loginForm.classList.add('hidden');
-      registerForm.classList.add('hidden');
-    } else {
-      loginForm.classList.remove('hidden');
-      registerForm.classList.add('hidden');
-    }
-  }
-  const loginMsg = document.getElementById('loginRequiredMessage');
-  if (loginMsg) loginMsg.classList.toggle('hidden', authenticated);
-
-  // Project management visibility
-  const projectPanel = document.getElementById('projectManagerPanel');
-  if (projectPanel) {
-    projectPanel.classList.toggle('hidden', !authenticated);
-    console.log(`[Auth] projectManagerPanel visibility set to ${!authenticated ? 'hidden' : 'visible'}`);
-  }
-
-  // Ensure project list view is visible too when authenticated
-  const projectListView = document.getElementById('projectListView');
-  if (projectListView && authenticated) {
-    projectListView.classList.remove('hidden');
-    console.log('[Auth] Ensuring projectListView is visible after auth update');
-  }
-
-  // Show no projects message if authenticated but no projects are shown
-  const projectList = document.getElementById('projectList');
-  const noProjectsMessage = document.getElementById('noProjectsMessage');
-  if (authenticated && projectList && noProjectsMessage) {
-    const hasProjects = projectList.children.length > 0 &&
-                        !projectList.querySelector('.loading-spinner');
-
-    if (!hasProjects) {
-      noProjectsMessage.classList.remove('hidden');
-      console.log('[Auth] No projects found, showing noProjectsMessage');
-    }
-  }
+  AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail }));
 }
 
 /* ----------------------------------
@@ -582,30 +586,39 @@ async function loginUser(username, password) {
   }
   window.__loginInProgress = true;
   window.__loginAbortController = new AbortController();
+
   const loginTimeout = setTimeout(() => {
-    if (window.__loginAbortController) window.__loginAbortController.abort();
+    if (window.__loginAbortController) {
+      window.__loginAbortController.abort();
+    }
     throw new Error('Login timed out');
   }, 15000);
+
   try {
-    const response = await apiRequest('/api/auth/login', 'POST', { username: username.trim(), password });
+    await getCSRFTokenAsync();
+    const response = await apiRequest('/api/auth/login', 'POST', {
+      username: username.trim(),
+      password
+    });
+
     if (!response.access_token) throw new Error('No access token received');
-    window.__recentLoginTimestamp = Date.now();
-    window.__directAccessToken = response.access_token;
-    window.__directRefreshToken = response.refresh_token;
-    window.__lastUsername = response.username || username;
     setAuthCookie('access_token', response.access_token, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
+
     if (response.refresh_token) {
       setAuthCookie('refresh_token', response.refresh_token, 60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS);
     }
+
     authState.isAuthenticated = true;
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
     sessionExpiredFlag = false;
-    syncTokensToSessionStorage('store');
+
     broadcastAuth(true, authState.username);
-    document.dispatchEvent(new CustomEvent('authStateConfirmed', {
-      detail: { isAuthenticated: true, username: authState.username, timestamp: Date.now() }
+
+    AuthBus.dispatchEvent(new CustomEvent('authStateConfirmed', {
+      detail: { isAuthenticated: true, username: authState.username }
     }));
+
     return { ...response, success: true };
   } catch (error) {
     const e = standardizeError(error, 'login_api');
@@ -620,17 +633,24 @@ async function loginUser(username, password) {
 
 async function logout(e) {
   e?.preventDefault();
+
+  // Immediately broadcast false so UI reacts
+  broadcastAuth(false);
+
   try {
     await Promise.race([
       apiRequest('/api/auth/logout', 'POST'),
       new Promise((_, rej) => setTimeout(() => rej(new Error('Logout timeout')), 5000))
     ]);
-  } catch {
-    // Proceed to clear state even if API fails
+  } catch (err) {
+    if (AUTH_DEBUG) console.warn('[Auth] Logout request failed:', err);
+    // Proceed regardless
+  } finally {
+    clearTokenState();
+    setAuthCookie('access_token', '', 0);
+    setAuthCookie('refresh_token', '', 0);
+    window.location.href = '/login'; // or wherever
   }
-  clearTokenState();
-  notify("Logged out successfully", "success");
-  window.location.href = '/index.html';
 }
 
 async function handleRegister(formData) {
@@ -644,6 +664,7 @@ async function handleRegister(formData) {
     notify("Password must be at least 12 characters", "error");
     return;
   }
+
   try {
     await apiRequest('/api/auth/register', 'POST', { username: username.trim(), password });
     const result = await loginUser(username, password);
@@ -657,247 +678,41 @@ async function handleRegister(formData) {
 }
 
 /* ----------------------------------
- *  UI Listeners
+ *  Utility & Error Handling
  * ---------------------------------- */
 
-// Export switchForm for use in event registry
-function switchForm(isLogin) {
-  const loginTab = document.getElementById("loginTab");
-  const registerTab = document.getElementById("registerTab");
-  const loginForm = document.getElementById("loginForm");
-  const registerForm = document.getElementById("registerForm");
-  if (!loginTab || !registerTab || !loginForm || !registerForm) return;
-  loginTab.classList.toggle("border-blue-500", isLogin);
-  loginTab.classList.toggle("text-blue-600", isLogin);
-  loginTab.classList.toggle("text-blue-400", isLogin && document.documentElement.classList.contains('dark'));
-  loginTab.classList.toggle("text-gray-500", !isLogin);
-  loginTab.classList.toggle("text-gray-400", !isLogin && document.documentElement.classList.contains('dark'));
-  registerTab.classList.toggle("border-blue-500", !isLogin);
-  registerTab.classList.toggle("text-blue-600", !isLogin);
-  registerTab.classList.toggle("text-blue-400", !isLogin && document.documentElement.classList.contains('dark'));
-  registerTab.classList.toggle("text-gray-500", isLogin);
-  registerTab.classList.toggle("text-gray-400", isLogin && document.documentElement.classList.contains('dark'));
-  loginTab.classList.toggle("border-b-2", isLogin);
-  registerTab.classList.toggle("border-b-2", !isLogin);
-  loginForm.classList.toggle("hidden", !isLogin);
-  registerForm.classList.toggle("hidden", isLogin);
-  setTimeout(() => {
-    if (window.innerWidth < 768) {
-      const authDropdown = document.getElementById("authDropdown");
-      if (authDropdown && !authDropdown.classList.contains('hidden')) {
-        const viewportHeight = window.innerHeight;
-        const dropdownRect = authDropdown.getBoundingClientRect();
-        if (dropdownRect.bottom > viewportHeight) {
-          const newTopPosition = Math.max(10, viewportHeight - dropdownRect.height - 10);
-          authDropdown.style.top = `${newTopPosition}px`;
-        }
-      }
-    }
-  }, 10);
+function logFormIssue(type, details) {
+  if (AUTH_DEBUG) {
+    console.warn(`[Auth][Issue] ${type}`, details);
+  }
+  if (window.telemetry?.logSecurityEvent && type.includes('SECURITY')) {
+    window.telemetry.logSecurityEvent(type, details);
+  }
 }
 
-// Track auth-specific listeners for cleanup
-const authListeners = new Set();
-
-function setupUIListeners() {
-  // Document-level listeners for auth dropdown
-  const authDropdown = document.getElementById("authDropdown");
-  if (authDropdown) {
-    const clickHandler = (e) => {
-      if (!authDropdown.classList.contains('hidden') &&
-          !e.target.closest("#authContainer") &&
-          !e.target.closest("#authDropdown")) {
-        authDropdown.classList.add("hidden");
-      }
-    };
-    const touchHandler = (e) => {
-      if (!authDropdown.classList.contains('hidden') &&
-          !e.target.closest("#authContainer") &&
-          !e.target.closest("#authDropdown")) {
-        e.preventDefault();
-        authDropdown.classList.add("hidden");
-      }
-    };
-
-    document.addEventListener("click", clickHandler);
-    document.addEventListener("touchend", touchHandler, { passive: false });
-
-    authListeners.add({ element: document, type: 'click', handler: clickHandler });
-    authListeners.add({ element: document, type: 'touchend', handler: touchHandler });
+function standardizeError(error, context) {
+  const e = {
+    status: error.status || 500,
+    message: error.message || "Unknown error",
+    context: context || "auth",
+    code: error.code || "UNKNOWN_ERROR"
+  };
+  if (e.status === 401 || e.message.includes('expired')) {
+    e.code = "SESSION_EXPIRED";
   }
-  const loginForm = document.getElementById("loginForm");
-  if (loginForm) {
-    loginForm.addEventListener("submit", async e => {
-      e.preventDefault();
-      const errorElement = document.getElementById('login-error');
-      if (errorElement) {
-        errorElement.textContent = "";
-        errorElement.classList.add("hidden");
-      }
-      const submitBtn = loginForm.querySelector('button[type="submit"]');
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Logging in...";
-      }
-      const formData = new FormData(loginForm);
-      const username = formData.get("username");
-      const password = formData.get("password");
-      if (!username || !password) {
-        notify("Username and password are required", "error");
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Log In";
-        }
-        return;
-      }
-      try {
-        await loginUser(username, password);
-        document.getElementById("authDropdown")?.classList.add('hidden');
-      } catch (err) {
-        const errorMsg = err.message || "Login failed";
-        notify(errorMsg, "error");
-        const errorElement = document.getElementById('login-error');
-        if (errorElement) {
-          errorElement.textContent = errorMsg;
-          errorElement.classList.remove('hidden');
-          // Scroll to error if needed
-          errorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Log In";
-        }
-      }
-    });
-  }
-  const registerForm = document.getElementById("registerForm");
-  if (registerForm) {
-    registerForm.addEventListener("submit", async e => {
-      e.preventDefault();
-      const submitBtn = registerForm.querySelector('button[type="submit"]');
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Registering...";
-      }
-      const data = new FormData(registerForm);
-      try {
-        await handleRegister(data);
-        document.getElementById("authDropdown")?.classList.add('hidden');
-      } catch (err) {
-        const errorMsg = err?.message || "Registration failed";
-        notify(errorMsg, "error");
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Register";
-        }
-      }
-    });
-  }
-  document.getElementById("logoutBtn")?.addEventListener("click", logout);
+  return e;
 }
 
-/* ----------------------------------
- *  Monitoring & Initialization
- * ---------------------------------- */
-
-function setupAuthStateMonitoring() {
-  setTimeout(() => verifyAuthState(false).catch(() => { }), 300);
-  const intervalMs = AUTH_CONSTANTS.VERIFICATION_INTERVAL * 3;
-  const authCheck = setInterval(() => {
-    if (!sessionExpiredFlag) verifyAuthState(false).catch(() => { });
-  }, intervalMs);
-  window.addEventListener('focus', () => {
-    if (!window.__verifyingOnFocus &&
-      (!authState.lastVerified || Date.now() - authState.lastVerified > 300000)) {
-      window.__verifyingOnFocus = true;
-      setTimeout(() => {
-        verifyAuthState(false).finally(() => {
-          window.__verifyingOnFocus = false;
-        });
-      }, 1000);
-    }
-  });
-  setInterval(() => syncTokensToSessionStorage('store'), 30000);
-  window.addEventListener('beforeunload', () => clearInterval(authCheck));
+function notify(message, type = "info") {
+  if (window.showNotification) {
+    window.showNotification(message, type);
+  } else {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+  }
 }
 
-async function init() {
-  // Set CSRF token if missing
-  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-  if (!csrfMeta?.content) {
-    try {
-      const res = await apiRequest('/api/auth/csrf', 'GET');
-      if (res?.token) {
-        csrfMeta.content = res.token;
-      }
-    } catch (err) {
-      console.error('[Auth] Failed to get CSRF token:', err);
-    }
-  }
-
-  if (window.__authInitializing) {
-    return new Promise(res => {
-      const checkInit = () => {
-        if (window.auth.isInitialized) res(true);
-        else setTimeout(checkInit, 50);
-      };
-      checkInit();
-    });
-  }
-  window.__authInitializing = true;
-  if (window.auth.isInitialized) {
-    window.__authInitializing = false;
-    return true;
-  }
-  if (window.API_CONFIG) window.API_CONFIG.authCheckInProgress = true;
-  try {
-    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    if (!csrfMeta?.content) {
-      console.warn('[Auth] Initializing without CSRF token');
-      if (window.getCSRFToken) {
-        const token = await window.getCSRFToken();
-        if (token && csrfMeta) {
-          csrfMeta.content = token;
-          console.log('[Auth] Set CSRF token from getCSRFToken()');
-        }
-      }
-    }
-    const restored = syncTokensToSessionStorage('get');
-    if (restored) {
-      authState.isAuthenticated = true;
-      authState.lastVerified = Date.now();
-      broadcastAuth(true, window.__lastUsername);
-    }
-    setupUIListeners();
-    setupAuthStateMonitoring();
-    if (!restored) {
-      await new Promise(r => setTimeout(r, 600));
-      try {
-        await verifyAuthState(false);
-      } catch (error) {
-        console.warn("[Auth] Initial verification failed:", error);
-      }
-    }
-    window.auth.isInitialized = true;
-    window.auth.isReady = true;
-    console.log("[Auth] Module initialized");
-    document.dispatchEvent(new CustomEvent('authReady', {
-      detail: { authenticated: authState.isAuthenticated, username: authState.username }
-    }));
-    return true;
-  } catch (error) {
-    console.error("[Auth] Initialization failed:", error);
-    if (!authState.isAuthenticated) broadcastAuth(false);
-    document.dispatchEvent(new CustomEvent('authReady', {
-      detail: { authenticated: false, error: error.message }
-    }));
-    return false;
-  } finally {
-    if (window.API_CONFIG) window.API_CONFIG.authCheckInProgress = false;
-    window.__authInitializing = false;
-  }
+function showSessionExpiredModal() {
+  notify("Your session has expired. Please log in again.", "error");
 }
 
 function handleAuthError(error, context = '') {
@@ -911,137 +726,82 @@ function handleAuthError(error, context = '') {
 }
 
 /* ----------------------------------
- *  CSRF Token Utilities
+ *  Initialization & Monitoring
  * ---------------------------------- */
 
-async function getCSRFTokenAsync() {
-  const meta = document.querySelector('meta[name="csrf-token"]');
-  if (!meta || !meta.content || meta.content.trim() === "") {
-    console.warn('[Auth] CSRF token missing, fetching from server...');
-    try {
-      const res = await apiRequest('/api/auth/csrf', 'GET');
-      if (res && res.token) {
-        meta.content = res.token;
-        return res.token;
-      } else {
-        console.error('[Auth] CSRF token endpoint did not return a token.');
-        return "";
+let __authInitializing = false;
+
+async function init() {
+  if (__authInitializing) return;
+  __authInitializing = true;
+
+  try {
+    // Prime CSRF up front
+    await primeCSRFToken();
+
+    // If there's a cookie, let's verify
+    if (getCookie('access_token')) {
+      try {
+        await verifyAuthState(false);
+      } catch (error) {
+        console.warn("[Auth] Initial verification failed:", error);
       }
-    } catch (err) {
-      console.error('[Auth] Failed to fetch CSRF token:', err);
-      return "";
     }
-  }
-  return meta.content;
-}
 
-// Keep synchronous version for non-async contexts
-function getCSRFToken() {
-  const meta = document.querySelector('meta[name="csrf-token"]');
-  if (!meta?.content) {
-    console.warn('[Auth] CSRF token meta tag missing or empty');
-    return '';
-  }
-  return meta.content;
-}
+    // Optional periodic verification
+    const intervalMs = AUTH_CONSTANTS.VERIFICATION_INTERVAL * 3;
+    const authCheckInterval = setInterval(() => {
+      if (!sessionExpiredFlag) {
+        verifyAuthState(false).catch(() => { /* no-op */ });
+      }
+    }, intervalMs);
 
-/* ----------------------------------
- *  Mobile Auth Enhancements
- * ---------------------------------- */
-
-function handleAuthModalPositioning() {
-  const authDropdown = document.getElementById("authDropdown");
-  if (!authDropdown || authDropdown.classList.contains('hidden')) return;
-  if (window.innerWidth < 768) {
-    authDropdown.style.left = '50%';
-    authDropdown.style.right = 'auto';
-    authDropdown.style.transform = 'translateX(-50%)';
-    const viewportHeight = window.innerHeight;
-    const dropdownRect = authDropdown.getBoundingClientRect();
-    if (dropdownRect.bottom > viewportHeight) {
-      const newTopPosition = Math.max(10, viewportHeight - dropdownRect.height - 10);
-      authDropdown.style.top = `${newTopPosition}px`;
-    } else {
-      authDropdown.style.top = '60px';
-    }
-  } else {
-    authDropdown.style.left = '';
-    authDropdown.style.right = '';
-    authDropdown.style.transform = '';
-    authDropdown.style.top = '';
-  }
-}
-
-function enhanceMobileInputs() {
-  const inputs = document.querySelectorAll('#loginForm input, #registerForm input');
-  inputs.forEach(input => {
-    input.addEventListener('animationstart', (e) => {
-      if (e.animationName.includes('autofill')) input.classList.add('autofilled');
+    // Reverify on focus if 5+ minutes have passed
+    window.addEventListener('focus', () => {
+      if (!window.__verifyingOnFocus &&
+          (!authState.lastVerified || (Date.now() - authState.lastVerified > 300000))) {
+        window.__verifyingOnFocus = true;
+        setTimeout(() => {
+          verifyAuthState(false).finally(() => {
+            window.__verifyingOnFocus = false;
+          });
+        }, 1000);
+      }
     });
-    input.addEventListener('focus', () => {
-      if (window.innerWidth < 768) input.classList.add('touch-input-focus');
-    });
-    input.addEventListener('blur', () => input.classList.remove('touch-input-focus'));
-  });
-}
 
-let isAuthDropdownVisible = false;
-let lastTouchTime = 0;
+    window.addEventListener('beforeunload', () => clearInterval(authCheckInterval));
 
-function setupMobileAuthListeners() {
-  const authBtn = document.getElementById('authButton');
-  const authDropdown = document.getElementById('authDropdown');
-  if (authBtn && authDropdown) {
-    authBtn.addEventListener('click', () => {
-      setTimeout(() => {
-        isAuthDropdownVisible = !authDropdown.classList.contains('hidden');
-      }, 10);
-    });
-    window.addEventListener('orientationchange', () => {
-      if (isAuthDropdownVisible) setTimeout(handleAuthModalPositioning, 100);
-    });
-    window.addEventListener('resize', () => {
-      if (isAuthDropdownVisible) handleAuthModalPositioning();
-    });
-  }
-  const loginTab = document.getElementById('loginTab');
-  const registerTab = document.getElementById('registerTab');
-  if (loginTab && registerTab) {
-    const handleTouchWithDebounce = (handler) => {
-      return (e) => {
-        const now = Date.now();
-        if (now - lastTouchTime > 300) {
-          lastTouchTime = now;
-          handler(e);
-        }
-        e.preventDefault();
-      };
-    };
-    loginTab.addEventListener('touchend', handleTouchWithDebounce(() => switchForm(true)), { passive: false });
-    registerTab.addEventListener('touchend', handleTouchWithDebounce(() => switchForm(false)), { passive: false });
+    console.log("[Auth] Module initialized");
+    window.auth.isInitialized = true;
+    window.auth.isReady = true;
+
+    AuthBus.dispatchEvent(new CustomEvent('authReady', {
+      detail: { authenticated: authState.isAuthenticated, username: authState.username }
+    }));
+  } catch (error) {
+    console.error("[Auth] Initialization failed:", error);
+    clearTokenState();
+  } finally {
+    __authInitializing = false;
   }
 }
 
 /* ----------------------------------
- *  Export / Window Attach
+ *  Public API & Exports
  * ---------------------------------- */
 
 window.auth = window.auth || {};
 Object.assign(window.auth, {
   init,
-  standardizeError,
-  getCSRFToken,
-  logout,
   login: loginUser,
-  handleRegister,
+  logout,
   getAuthToken,
-  refreshTokens,
   verifyAuthState,
+  refreshTokens,
   clear: clearTokenState,
-  broadcastAuth,
-  handleAuthError,
-  updateAuthUI,
   isInitialized: false,
+  isReady: false,
+  getCurrentUser: () => authState.isAuthenticated ? authState.username : null,
   isAuthenticated: async (opts = {}) => {
     try {
       return await verifyAuthState(opts.forceVerify || false);
@@ -1049,20 +809,15 @@ Object.assign(window.auth, {
       return false;
     }
   },
-  getCurrentUser: () => {
-    return authState.isAuthenticated ? authState.username : null;
-  }
-});
-// Make verifyAuthState available as a global variable
-window.verifyAuthState = verifyAuthState;
-window.handleAuthModalPositioning = handleAuthModalPositioning;
-window.setupMobileAuthListeners = setupMobileAuthListeners;
-
-document.addEventListener('DOMContentLoaded', () => {
-  enhanceMobileInputs();
-  setupMobileAuthListeners();
+  AuthBus,             // For outside modules
+  logFormIssue,
+  standardizeError,
+  handleAuthError,
+  getCSRFTokenAsync,
+  getCSRFToken
 });
 
+// Default export for bundlers
 export default {
   init,
   login: loginUser,
@@ -1071,15 +826,19 @@ export default {
   refreshTokens,
   getAuthToken,
   clear: clearTokenState,
+  logFormIssue,
   standardizeError,
   handleAuthError,
+  isInitialized: () => window.auth.isInitialized,
+  isReady: () => window.auth.isReady,
   isAuthenticated: async (opts = {}) => {
     try {
       return await verifyAuthState(opts.forceVerify || false);
     } catch {
       return false;
     }
-  }
+  },
+  AuthBus,
+  getCSRFTokenAsync,
+  getCSRFToken
 };
-
-window.getCSRFTokenAsync = getCSRFTokenAsync;

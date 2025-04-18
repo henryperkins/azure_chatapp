@@ -1,10 +1,10 @@
 /**
- * projectManager.js
- * ------------------
+ * projectManager.js - Aligned with AuthBus
+ * ---------------------------------------
  * Handles all data operations (API calls) for projects, files, conversations, artifacts.
  * Dispatches custom DOM events to inform the UI about loaded or updated data.
  * Contains NO direct DOM manipulation or direct form/modals references.
- * Uses ChatUtils for authentication and error handling.
+ * Uses window.auth for authentication checks and window.apiRequest for API calls.
  */
 
 (function () {
@@ -15,33 +15,34 @@
   const API_ENDPOINTS = {
     PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
     PROJECT_FILES: '/api/projects/{projectId}/files/'
+    // Add other endpoints as needed
   };
-
-  // Debug flag for controlling auth token logging
-  const DEBUG = false; // Set to true only during development
-  const AUTH_LOG_INTERVAL = 5000; // Minimum ms between auth logs for the same operation
-  let lastAuthLogTimestamps = {}; // Track last log time by operation
 
   /* ===========================
      STATE MANAGEMENT
      =========================== */
   // Store the current project in memory for convenience
   let currentProject = null;
+  let isAuthInitialized = false; // Track if auth module reported ready
 
   /* ===========================
      EVENT MANAGEMENT
      =========================== */
   /**
-   * Emit a custom event with data
+   * Emit a custom event with data (on document for UI components).
+   * projectManager uses standard DOM events for project/file-specific updates,
+   * while auth status is handled via AuthBus in auth.js.
+   *
    * @param {string} eventName - Name of the event to emit
-   * @param {Object} detail - Event data
+   * @param {Object} detail - Event payload
    */
   function emitEvent(eventName, detail) {
-    // Always ensure we pass an object with source tracking
+    // Always ensure we pass an object with a source field
     const eventDetail = {
       ...((typeof detail === 'object' && detail !== null) ? detail : {}),
       source: "projectManager"
     };
+
     document.dispatchEvent(new CustomEvent(eventName, { detail: eventDetail }));
   }
 
@@ -59,49 +60,40 @@
    * @returns {Promise<Array>} - Array of projects
    */
   async function loadProjects(filter = null) {
-    // Guard against recursive calls
+    if (!isAuthInitialized) {
+      console.warn("[projectManager] loadProjects called before auth is ready. Waiting...");
+      await new Promise(resolve => window.auth.AuthBus.addEventListener('authReady', resolve, { once: true }));
+      console.log("[projectManager] Auth is ready, proceeding with loadProjects.");
+    }
+
     if (projectLoadingInProgress || window.__projectLoadingInProgress) {
       console.log("[projectManager] Project loading already in progress, skipping duplicate call");
       return [];
     }
 
     projectLoadingInProgress = true;
-    window.__projectLoadingInProgress = true;
+    window.__projectLoadingInProgress = true; // Optional global flag used by other modules
 
     const validFilters = ["all", "pinned", "archived", "active"];
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
 
-    // Show loading state immediately
-    emitEvent("projectsLoading", {
-      filter: cleanFilter,
-      source: "projectManager"
-    });
+    // Emit an event to show loading state
+    emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
-      // Use centralized auth check
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      // Use centralized auth check from window.auth
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
-        // Rate-limit repeated warning logs
-        const now = Date.now();
-        const operationKey = "loadProjects_not_authenticated";
-        if (!lastAuthLogTimestamps[operationKey] || now - lastAuthLogTimestamps[operationKey] > AUTH_LOG_INTERVAL) {
-          console.warn("[projectManager] loadProjects requires login, showing login prompt");
-          lastAuthLogTimestamps[operationKey] = now;
-        }
-        emitEvent("showLoginPrompt", { reason: "loadProjects" });
+        console.warn("[projectManager] loadProjects skipped: User not authenticated.");
+        emitEvent("showLoginPrompt", { reason: "loadProjects" }); // Let UI show login
         emitEvent("projectsLoaded", {
           projects: [],
           count: 0,
           filter: { type: cleanFilter },
           error: true,
-          reason: 'auth_required',
-          source: "projectManager"
+          reason: 'auth_required'
         });
-        emitEvent("projectAuthError", {
-          reason: 'load_projects',
-          error: new Error("Authentication required"),
-          source: "projectManager"
-        });
+        emitEvent("projectAuthError", { reason: 'load_projects', error: new Error("Authentication required") });
         return [];
       }
 
@@ -109,49 +101,44 @@
       const params = new URLSearchParams();
       params.append("filter", cleanFilter);
       params.append("skip", "0");
-      params.append("limit", "100");
+      params.append("limit", "100"); // Consider pagination
 
-      const endpoint = `/api/projects?${params.toString()}`.replace(/^https?:\/\/[^/]+/i, '');
+      const endpoint = `/api/projects?${params.toString()}`;
 
-      const response = await window.apiRequest(endpoint, "GET", null);
+      // Use global apiRequest which should handle CSRF via window.auth
+      const response = await window.apiRequest(endpoint, "GET");
 
       // Standardize response format
-      let projects = [];
-      if (response?.data?.projects) {
-        projects = response.data.projects;
-      } else if (Array.isArray(response?.data)) {
-        projects = response.data;
-      } else if (Array.isArray(response)) {
-        projects = response;
-      } else if (response?.projects) {
-        projects = response.projects;
-      }
+      let projects = response?.data?.projects ||
+                     response?.projects ||
+                     (Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : []));
 
       if (!Array.isArray(projects)) {
+        console.warn("[projectManager] Unexpected project list format:", response);
         projects = [];
       }
 
       emitEvent("projectsLoaded", {
         projects,
         count: projects.length,
-        filter: { type: cleanFilter },
-        source: "projectManager"
+        filter: { type: cleanFilter }
       });
 
       return projects;
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
-      window.ChatUtils.handleError('Loading projects', error);
       emitEvent("projectsLoaded", {
         projects: [],
         count: 0,
-        filter: { type: filter },
+        filter: { type: cleanFilter },
         error: true,
-        source: "projectManager"
+        message: error.message
       });
+      if (error.status === 401) {
+        emitEvent("projectAuthError", { reason: 'load_projects', error });
+      }
       return [];
     } finally {
-      // Reset the guard flags after completion
       projectLoadingInProgress = false;
       window.__projectLoadingInProgress = false;
     }
@@ -165,66 +152,64 @@
    * @returns {Promise<Object|null>} - Project data or null on failure
    */
   async function loadProjectDetails(projectId) {
-    // Validate project ID format
-    try {
-      if (!projectId || typeof projectId !== 'string') {
-        throw new Error('Invalid project ID');
-      }
-      if (!window.ChatUtils.isValidUUID(projectId)) {
-        throw new Error('Malformed project ID');
-      }
-    } catch (err) {
-      emitEvent('projectDetailsError', { projectId, error: err });
-      window.ChatUtils.handleError('Validating project ID', err);
+    if (!isAuthInitialized) {
+      console.warn("[projectManager] loadProjectDetails called before auth is ready. Waiting...");
+      await new Promise(resolve => window.auth.AuthBus.addEventListener('authReady', resolve, { once: true }));
+      console.log("[projectManager] Auth is ready, proceeding with loadProjectDetails.");
+    }
+
+    // Basic UUID check
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!projectId || typeof projectId !== 'string' || !uuidRegex.test(projectId)) {
+      const error = new Error(`Invalid or malformed project ID: ${projectId}`);
+      console.error("[projectManager]", error.message);
+      emitEvent('projectDetailsError', { projectId, error });
       return null;
     }
 
     const projectEndpoint = `/api/projects/${projectId}/`;
 
     try {
-      // Clear current project while loading
-      currentProject = null;
+      currentProject = null; // Clear current while loading
       emitEvent("projectDetailsLoading", { projectId });
 
-      // Use centralized auth check
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+      // Auth check
+      const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
         console.warn(`[projectManager] loadProjectDetails (${projectId}) skipped: User not authenticated.`);
-        emitEvent("projectDetailsError", { projectId, error: new Error("Authentication required"), reason: 'auth_required' });
+        emitEvent("projectDetailsError", {
+          projectId,
+          error: new Error("Authentication required"),
+          reason: 'auth_required'
+        });
         emitEvent("projectAuthError", { reason: 'project_details', error: new Error("Authentication required") });
-        currentProject = null;
         return null;
       }
 
       const response = await window.apiRequest(projectEndpoint, "GET");
+
+      // Flexible response parsing
       let projectData = null;
+      if (response?.data?.id) projectData = response.data;
+      else if (response?.id) projectData = response;
+      else if (response?.success === true && response?.data?.id) projectData = response.data;
 
-      // Standardize response parsing
-      if (response?.data?.id) {
-        projectData = response.data;
-      } else if (response?.id) {
-        projectData = response;
-      } else if (response?.success && response?.data?.id) {
-        projectData = response.data;
-      }
-
-      if (!projectData || !projectData.id) {
-        const responseSnippet = JSON.stringify(response || {}).substring(0, 100);
-        throw new Error(`Invalid project response format. Received: ${responseSnippet}...`);
+      if (!projectData || projectData.id !== projectId) {
+        const snippet = JSON.stringify(response || {}).substring(0, 100);
+        throw new Error(`Invalid project response format or ID mismatch. Received: ${snippet}...`);
       }
 
       currentProject = projectData;
-
-      // Dispatch "projectLoaded" with a clone
       emitEvent("projectLoaded", JSON.parse(JSON.stringify(currentProject)));
 
-      // If archived, skip loading extra data
+      // If archived, skip related data
       if (currentProject.archived) {
+        console.log(`[projectManager] Project ${projectId} archived, skipping related data.`);
         emitEvent("projectArchivedNotice", { id: currentProject.id });
         return JSON.parse(JSON.stringify(currentProject));
       }
 
-      // Load stats, files, conversations, artifacts in parallel
+      // Load related data in parallel
       const results = await Promise.allSettled([
         loadProjectStats(projectId),
         loadProjectFiles(projectId),
@@ -235,20 +220,26 @@
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
           const loadType = ['stats', 'files', 'conversations', 'artifacts'][index];
-          console.warn(`[projectManager] Failed to load project ${loadType}:`, result.reason);
-          window.ChatUtils.handleError(`Loading project ${loadType}`, result.reason);
+          console.error(`[projectManager] Failed to load project ${loadType}:`, result.reason);
           emitEvent(`project${loadType.charAt(0).toUpperCase() + loadType.slice(1)}Error`, {
             projectId,
-            error: result.reason
+            error: {
+              message: result.reason?.message || 'Unknown error',
+              status: result.reason?.status
+            }
           });
         }
       });
 
       return JSON.parse(JSON.stringify(currentProject));
     } catch (err) {
-      console.error("[projectManager] Error loading project details:", err);
-      window.ChatUtils.handleError('Loading project details', err);
-      emitEvent("projectDetailsError", { projectId, error: err });
+      console.error(`[projectManager] Error loading project details for ${projectId}:`, err);
+      emitEvent("projectDetailsError", { projectId, error: { message: err.message, status: err.status } });
+      if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'project_details', error: err });
+      } else if (err.status === 404) {
+        emitEvent('projectNotFound', { projectId });
+      }
       currentProject = null;
       return null;
     }
@@ -258,44 +249,29 @@
    * Load project stats (token usage, file counts, etc.).
    * Dispatches "projectStatsLoaded" with stats.
    * @param {string} projectId
-   * @returns {Promise<Object>}
    */
   async function loadProjectStats(projectId) {
+    const defaultStats = {
+      token_usage: 0,
+      max_tokens: 0,
+      file_count: 0,
+      conversation_count: 0,
+      artifact_count: 0
+    };
     try {
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated - please login first');
-      }
-
       const response = await window.apiRequest(`/api/projects/${projectId}/stats`, "GET");
-      const stats = response.data || {};
-
-      // Ensure basic fields
-      if (typeof stats.file_count === "undefined") stats.file_count = 0;
-      if (typeof stats.conversation_count === "undefined") stats.conversation_count = 0;
-      if (typeof stats.artifact_count === "undefined") stats.artifact_count = 0;
-
-      emitEvent("projectStatsLoaded", { projectId, ...stats });
-      return stats;
+      const stats = response?.data || {};
+      const finalStats = { ...defaultStats, ...stats };
+      emitEvent("projectStatsLoaded", { projectId, ...finalStats });
+      return finalStats;
     } catch (err) {
-      console.error("[projectManager] Error loading project stats:", err);
-      window.ChatUtils.handleError('Loading project stats', err);
-      emitEvent("projectStatsLoaded", {
-        projectId,
-        token_usage: 0,
-        max_tokens: 0,
-        file_count: 0,
-        conversation_count: 0,
-        artifact_count: 0
-      });
-      emitEvent("projectStatsError", { projectId, error: err });
-      return {
-        token_usage: 0,
-        max_tokens: 0,
-        file_count: 0,
-        conversation_count: 0,
-        artifact_count: 0
-      };
+      console.error(`[projectManager] Error loading project stats for ${projectId}:`, err);
+      emitEvent("projectStatsLoaded", { projectId, ...defaultStats });
+      emitEvent("projectStatsError", { projectId, error: { message: err.message, status: err.status } });
+      if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'project_stats', error: err });
+      }
+      return defaultStats;
     }
   }
 
@@ -303,23 +279,30 @@
    * Load files for a project.
    * Dispatches "projectFilesLoaded" with { files }.
    * @param {string} projectId
-   * @returns {Promise<Array>}
    */
   async function loadProjectFiles(projectId) {
     try {
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated - please login first');
+      const endpoint = API_ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
+      const response = await window.apiRequest(endpoint, "GET");
+      const files = response?.data?.files ||
+                    response?.files ||
+                    (Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : []));
+
+      if (!Array.isArray(files)) {
+        console.warn(`[projectManager] Unexpected file list format for ${projectId}:`, response);
+        emitEvent("projectFilesLoaded", { projectId, files: [] });
+        return [];
       }
-      const response = await window.apiRequest(`/api/projects/${projectId}/files`, "GET");
-      const files = response.data?.files || response.data || [];
+
       emitEvent("projectFilesLoaded", { projectId, files });
       return files;
     } catch (err) {
-      console.error("[projectManager] Error loading project files:", err);
-      window.ChatUtils.handleError('Loading project files', err);
+      console.error(`[projectManager] Error loading project files for ${projectId}:`, err);
       emitEvent("projectFilesLoaded", { projectId, files: [] });
-      emitEvent("projectFilesError", { projectId, error: err });
+      emitEvent("projectFilesError", { projectId, error: { message: err.message, status: err.status } });
+      if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'project_files', error: err });
+      }
       return [];
     }
   }
@@ -328,36 +311,31 @@
    * Load conversations for a project.
    * Dispatches "projectConversationsLoaded" with conversations[].
    * @param {string} projectId
-   * @returns {Promise<Array>}
    */
   async function loadProjectConversations(projectId) {
     try {
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated - please login first');
-      }
-      const endpoint = `/api/projects/${projectId}/conversations`;
+      const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
       const response = await window.apiRequest(endpoint, "GET");
-      let conversations = [];
+      let conversations = response?.data?.conversations ||
+                          response?.conversations ||
+                          (Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : []));
 
-      if (response.data?.conversations) {
-        conversations = response.data.conversations;
-      } else if (response.conversations) {
-        conversations = response.conversations;
-      } else if (Array.isArray(response)) {
-        conversations = response;
-      } else if (Array.isArray(response.data)) {
-        conversations = response.data;
+      if (!Array.isArray(conversations)) {
+        console.warn(`[projectManager] Unexpected conversation list format for ${projectId}:`, response);
+        emitEvent("projectConversationsLoaded", { projectId, conversations: [] });
+        return [];
       }
 
       emitEvent("projectConversationsLoaded", { projectId, conversations });
       return conversations;
     } catch (err) {
-      console.error("[projectManager] Error loading conversations:", err);
-      window.ChatUtils.handleError('Loading project conversations', err);
+      console.error(`[projectManager] Error loading conversations for ${projectId}:`, err);
       emitEvent("projectConversationsLoaded", { projectId, conversations: [] });
-      emitEvent("projectConversationsError", { projectId, error: err });
-      throw err;
+      emitEvent("projectConversationsError", { projectId, error: { message: err.message, status: err.status } });
+      if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'project_conversations', error: err });
+      }
+      return [];
     }
   }
 
@@ -365,488 +343,542 @@
    * Load artifacts for a project.
    * Dispatches "projectArtifactsLoaded" with { artifacts }.
    * @param {string} projectId
-   * @returns {Promise<Array>}
    */
   async function loadProjectArtifacts(projectId) {
     try {
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated - please login first');
-      }
       const response = await window.apiRequest(`/api/projects/${projectId}/artifacts`, "GET");
-      const artifacts = response.data?.artifacts || response.data || [];
+      const artifacts = response?.data?.artifacts ||
+                        response?.artifacts ||
+                        (Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : []));
+
+      if (!Array.isArray(artifacts)) {
+        console.warn(`[projectManager] Unexpected artifact list format for ${projectId}:`, response);
+        emitEvent("projectArtifactsLoaded", { projectId, artifacts: [] });
+        return [];
+      }
+
       emitEvent("projectArtifactsLoaded", { projectId, artifacts });
       return artifacts;
     } catch (err) {
-      console.error("[projectManager] Error loading artifacts:", err);
-      window.ChatUtils.handleError('Loading project artifacts', err);
+      console.error(`[projectManager] Error loading artifacts for ${projectId}:`, err);
       emitEvent("projectArtifactsLoaded", { projectId, artifacts: [] });
-      emitEvent("projectArtifactsError", { projectId, error: err });
+      emitEvent("projectArtifactsError", { projectId, error: { message: err.message, status: err.status } });
 
-      if (err?.response?.status === 404) {
+      if (err.status === 404) {
         emitEvent('projectNotFound', { projectId });
-        if (currentProject?.id === projectId) {
-          currentProject = null;
-        }
+        if (currentProject?.id === projectId) currentProject = null;
+      } else if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'project_artifacts', error: err });
       } else {
-        emitEvent('projectDetailsError', { projectId, error: err });
+        emitEvent('projectDetailsError', { projectId, error: { message: err.message, status: err.status } });
       }
-      throw err;
+      return [];
     }
   }
 
   /**
-   * Create or update a project.
-   * @param {string} projectId
-   * @param {Object} formData
-   * @returns {Promise<Object>}
+   * Create or update a project. Requires authentication.
+   * @param {string|null} projectId - Project ID to update, or null/undefined to create
+   * @param {Object} projectData - Data for creation/update
    */
-  async function createOrUpdateProject(projectId, formData) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+  async function createOrUpdateProject(projectId, projectData) {
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'create_update_project', error: new Error("Authentication required") });
+      throw new Error('Authentication required to create or update projects.');
     }
-    const method = projectId ? "PATCH" : "POST";
-    const endpoint = projectId
-      ? `/api/projects/${projectId}`
-      : "/api/projects";
-    return window.apiRequest(endpoint, method, formData);
+
+    const isUpdate = !!projectId;
+    const method = isUpdate ? "PATCH" : "POST";
+    const endpoint = isUpdate ? `/api/projects/${projectId}` : "/api/projects";
+
+    try {
+      const response = await window.apiRequest(endpoint, method, projectData);
+      const resultData = response?.data || response;
+      if (!resultData || !resultData.id) {
+        throw new Error("Invalid response from server after project save.");
+      }
+
+      if (isUpdate && currentProject?.id === projectId) {
+        currentProject = { ...currentProject, ...resultData };
+        emitEvent("projectUpdated", JSON.parse(JSON.stringify(currentProject)));
+      } else if (!isUpdate) {
+        emitEvent("projectCreated", resultData);
+      }
+      return resultData;
+    } catch (error) {
+      console.error(`[projectManager] Error ${isUpdate ? 'updating' : 'creating'} project ${projectId || ''}:`, error);
+      throw error; // Let the UI handle the error
+    }
   }
 
   /**
-   * Delete a project by ID.
+   * Delete a project by ID. Requires authentication.
    * @param {string} projectId
-   * @returns {Promise<Object>}
    */
   async function deleteProject(projectId) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'delete_project', error: new Error("Authentication required") });
+      throw new Error('Authentication required to delete projects.');
     }
-    return window.apiRequest(`/api/projects/${projectId}`, "DELETE");
+    try {
+      const response = await window.apiRequest(`/api/projects/${projectId}`, "DELETE");
+      if (currentProject?.id === projectId) {
+        currentProject = null;
+      }
+      emitEvent("projectDeleted", { projectId });
+      return response;
+    } catch (error) {
+      console.error(`[projectManager] Error deleting project ${projectId}:`, error);
+      throw error;
+    }
   }
 
   /**
-   * Pin/unpin a project (toggle).
-   * @param {string} projectId
-   * @returns {Promise<Object>}
+   * Pin/unpin a project (toggle). Requires authentication.
    */
   async function togglePinProject(projectId) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'toggle_pin', error: new Error("Authentication required") });
+      throw new Error('Authentication required to pin/unpin projects.');
     }
-    return window.apiRequest(`/api/projects/${projectId}/pin`, "POST");
+    try {
+      const response = await window.apiRequest(`/api/projects/${projectId}/pin`, "POST");
+      emitEvent("projectPinToggled", { projectId, pinned: response?.pinned ?? !currentProject?.pinned });
+      return response;
+    } catch (error) {
+      console.error(`[projectManager] Error toggling pin for project ${projectId}:`, error);
+      throw error;
+    }
   }
 
   /**
-   * Archive/unarchive a project (toggle).
-   * @param {string} projectId
-   * @returns {Promise<Object>}
+   * Archive/unarchive a project (toggle). Requires authentication.
    */
   async function toggleArchiveProject(projectId) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'toggle_archive', error: new Error("Authentication required") });
+      throw new Error('Authentication required to archive/unarchive projects.');
     }
-    return window.apiRequest(`/api/projects/${projectId}/archive`, "PATCH");
+    try {
+      const response = await window.apiRequest(`/api/projects/${projectId}/archive`, "PATCH");
+      emitEvent("projectArchiveToggled", { projectId, archived: response?.archived ?? !currentProject?.archived });
+
+      // If archiving current project, optionally clear local data
+      if (response?.archived === true && currentProject?.id === projectId) {
+        // E.g. emitEvent("projectArchived", { projectId });
+      }
+      return response;
+    } catch (error) {
+      console.error(`[projectManager] Error toggling archive for project ${projectId}:`, error);
+      throw error;
+    }
   }
 
   /**
-   * Save custom instructions field on the project.
-   * @param {string} projectId
-   * @param {string} instructions
-   * @returns {Promise<Object>}
+   * Save custom instructions field on the project. Requires authentication.
    */
   async function saveCustomInstructions(projectId, instructions) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'save_instructions', error: new Error("Authentication required") });
+      throw new Error('Authentication required to save instructions.');
     }
-    return window.apiRequest(`/api/projects/${projectId}`, "PATCH", {
-      custom_instructions: instructions
-    });
+    try {
+      const response = await window.apiRequest(`/api/projects/${projectId}`, "PATCH", {
+        custom_instructions: instructions
+      });
+      if (currentProject?.id === projectId) {
+        currentProject.custom_instructions = instructions;
+      }
+      emitEvent("projectInstructionsSaved", { projectId, instructions });
+      return response;
+    } catch (error) {
+      console.error(`[projectManager] Error saving instructions for project ${projectId}:`, error);
+      throw error;
+    }
   }
 
   /* ===========================
      KNOWLEDGE BASE OPERATIONS
      =========================== */
 
-  /**
-   * Check if the project has an active knowledge base
-   * @param {string} projectId
-   * @returns {boolean} True if KB is active
-   */
-  function isKnowledgeBaseReady(projectId) {
-    if (!currentProject || currentProject.id !== projectId) {
-      return false;
-    }
+  function isKnowledgeBaseReady() {
     return isKnowledgeBaseActive(currentProject);
   }
 
   function isKnowledgeBaseActive(project) {
     if (!project) return false;
     const hasKnowledgeBase = !!project.knowledge_base_id;
-    const isActive = project.knowledge_base?.is_active !== false;
+    const isActive = project.knowledge_base ? project.knowledge_base.is_active !== false : true;
     return hasKnowledgeBase && isActive;
   }
 
   /**
-   * Validate and prepare files for upload
-   * @param {string} projectId
-   * @param {FileList} files
-   * @returns {Promise<{ validatedFiles: File[], invalidFiles: Array }>}
+   * Validate and prepare files for upload.
    */
-  function prepareFileUploads(projectId, files) {
+  function prepareFileUploads(files) {
     const allowedExtensions = [
-      ".txt", ".md", ".csv", ".json", ".pdf", ".doc",
-      ".docx", ".py", ".js", ".html", ".css"
+      ".txt", ".md", ".csv", ".json", ".pdf", ".doc", ".docx",
+      ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".scss",
+      ".java", ".c", ".cpp", ".h", ".cs", ".php", ".rb", ".go", ".swift", ".kt"
     ];
-    const maxSizeMB = 30;
-
-    if (!isKnowledgeBaseReady(projectId)) {
-      return Promise.reject("Active knowledge base is required for uploads.");
-    }
+    const maxSizeMB = 50;
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
 
     const validatedFiles = [];
     const invalidFiles = [];
 
     for (const file of files) {
-      const ext = "." + file.name.split(".").pop().toLowerCase();
-      if (!allowedExtensions.includes(ext)) {
-        invalidFiles.push({ file, reason: `Invalid type ${ext}` });
-      } else if (file.size > maxSizeMB * 1024 * 1024) {
-        invalidFiles.push({ file, reason: `Exceeds ${maxSizeMB}MB` });
+      const fileName = file.name || '';
+      const fileExt = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+
+      if (!allowedExtensions.includes(fileExt)) {
+        invalidFiles.push({ file, reason: `Invalid file type (${fileExt || 'unknown'})` });
+      } else if (file.size > maxSizeBytes) {
+        invalidFiles.push({ file, reason: `Exceeds size limit (${maxSizeMB}MB)` });
+      } else if (file.size === 0) {
+        invalidFiles.push({ file, reason: `File is empty` });
       } else {
         validatedFiles.push(file);
       }
     }
 
-    return Promise.resolve({ validatedFiles, invalidFiles });
+    return { validatedFiles, invalidFiles };
   }
 
   /**
-   * Sanitize file content by replacing dangerous patterns
-   * @param {File} file
-   * @returns {Promise<string>} - Sanitized file text
+   * Example sanitization: strip <script> tags, etc.
    */
-  async function sanitizeFileContent(file) {
-    const fileContent = await file.text();
-    // Consolidated regex for performance
-    const dangerousPatterns = /curl|<script[^>]*>.*?<\/script>|<script[^>]*>|<\/script>|eval\(.*?\)|document\.cookie|\bexec\(|\bsystem\(/gi;
-    return fileContent.replace(dangerousPatterns, "[SANITIZED]");
+  async function sanitizeFile(file) {
+    try {
+      const fileContent = await file.text();
+      const dangerousPatterns = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
+      const sanitizedContent = fileContent.replace(dangerousPatterns, "[SANITIZED SCRIPT]");
+      const sanitizedBlob = new Blob([sanitizedContent], { type: file.type || 'text/plain' });
+      return new File([sanitizedBlob], file.name, {
+        type: file.type || 'text/plain',
+        lastModified: file.lastModified
+      });
+    } catch (readError) {
+      console.error(`[projectManager] Error reading file ${file.name} for sanitization:`, readError);
+      throw new Error(`Could not read file ${file.name} for sanitization.`);
+    }
   }
 
-  /**
-   * Parse server errors to user-friendly messages
-   * @param {Error} err
-   * @returns {Error}
-   */
   function parseFileUploadError(err) {
-    const status = err?.response?.status;
-    const detail = err?.response?.data?.detail || err.message;
+    const status = err?.status;
+    const detail = err?.message || "File upload failed";
 
     if (status === 422) {
-      return new Error("File validation failed (unsupported/corrupted format)");
+      return new Error("File validation failed by server (unsupported type, corrupted, or content issues).");
     } else if (status === 413) {
-      return new Error("File too large (exceeds maximum allowed size)");
+      return new Error("File is too large (exceeds server limit).");
     } else if (status === 400) {
       if (detail.includes("token limit")) {
-        const project = getCurrentProject();
-        const maxTokens = project?.max_tokens || 200000;
+        const maxTokens = currentProject?.max_tokens || 200000;
         return new Error(
-          `File exceeds project token limit (${maxTokens.toLocaleString()} tokens). ` +
-          `Options:\n1. Increase project token limit in settings\n` +
-          `2. Split large files into smaller parts\n` +
-          `3. Delete unused files to free up tokens`
+          `File content exceeds project token limit (${maxTokens.toLocaleString()}).\n` +
+          `Try splitting the file or increasing the project limit.`
         );
       }
-      return new Error(`Bad request: ${detail}`);
+      return new Error(`Upload failed: ${detail}`);
     } else if (status === 404) {
-      return new Error("Project knowledge base not found - please configure it first");
+      return new Error("Project or knowledge base not found on server.");
     } else if (status === 403) {
-      return new Error("Knowledge base not active for this project");
+      return new Error("Permission denied or knowledge base is not active.");
     }
-    return new Error(detail || "Upload failed");
+    return new Error(detail);
   }
 
   /**
-   * Upload a file to a project (single File).
-   * @param {string} projectId
-   * @param {File} file
-   * @returns {Promise<Object>}
+   * Upload a single validated and sanitized file to the current project's KB.
    */
   async function uploadFile(projectId, file) {
-    if (!currentProject) {
-      throw new Error("No project loaded. Please select a project first.");
-    }
-
-    // If no KB, attempt to create one automatically
-    if (!currentProject.knowledge_base_id) {
-      try {
-        const defaultKb = {
-          name: "Default Knowledge Base",
-          description: "Automatically created for file uploads"
-        };
-        await window.apiRequest(`/api/projects/${projectId}/knowledge-base`, "POST", defaultKb);
-        await loadProjectDetails(projectId);
-      } catch (kbError) {
-        const error = new Error("No active Knowledge Base found. Please enable or create one in project settings before uploading files.");
-        error.code = "KB_REQUIRED";
-        emitEvent("knowledgeBaseError", { error });
-        window.ChatUtils.handleError('Creating default knowledge base', kbError);
-        throw error;
+    if (!currentProject || currentProject.id !== projectId) {
+      console.warn(`[projectManager] Current project ${currentProject?.id} doesn't match upload target ${projectId}. Reloading...`);
+      await loadProjectDetails(projectId);
+      if (!currentProject || currentProject.id !== projectId) {
+        throw new Error("Target project for upload is not loaded.");
       }
     }
 
-    if (currentProject.knowledge_base?.is_active === false) {
-      const error = new Error("Knowledge base is disabled");
-      error.code = "KB_INACTIVE";
-      emitEvent("knowledgeBaseError", { error });
+    if (!isKnowledgeBaseReady()) {
+      const error = new Error("Knowledge Base is not active or configured for this project. Please enable it.");
+      error.code = "KB_NOT_READY";
+      emitEvent("knowledgeBaseError", { projectId, error });
       throw error;
     }
 
-    // Sanitize
-    const sanitizedContent = await sanitizeFileContent(file);
-    const sanitizedBlob = new Blob([sanitizedContent], { type: file.type });
-    const sanitizedFile = new File([sanitizedBlob], file.name, { type: file.type });
-
+    // FormData usage
     const formData = new FormData();
-    formData.append("file", sanitizedFile);
-    formData.append("project_id", projectId);
+    formData.append("file", file);
 
     try {
       const endpoint = API_ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
-      const response = await window.apiRequest(
-        endpoint,
-        "POST",
-        formData
-      );
+      const response = await window.apiRequest(endpoint, "POST", formData);
 
-      if (response?.data?.processing_status === "pending") {
-        return {
-          ...response,
-          processing: {
-            status: "pending",
-            message: "File is being processed by knowledge base",
-            kb_id: currentProject.knowledge_base_id
-          }
-        };
+      emitEvent("fileUploadSuccess", {
+        projectId,
+        fileId: response?.data?.id || response?.id,
+        fileName: file.name,
+        response
+      });
+
+      // Check if response indicates background processing
+      if (response?.data?.processing_status === "pending" || response?.processing_status === "pending") {
+        emitEvent("fileProcessingStarted", {
+          projectId,
+          fileId: response?.data?.id || response?.id,
+          fileName: file.name,
+          kb_id: currentProject.knowledge_base_id
+        });
+        return response;
+      }
+      // If processing failed
+      if (response?.data?.processing_status === "failed" || response?.processing_status === "failed") {
+        const failureReason = response?.data?.error || response?.error || "Knowledge base processing failed";
+        throw new Error(failureReason);
       }
 
-      if (response?.data?.processing_status === "failed") {
-        throw new Error(response.data.error || "Knowledge base processing failed");
-      }
-
+      // Otherwise assume success
+      emitEvent("fileProcessingComplete", {
+        projectId,
+        fileId: response?.data?.id || response?.id,
+        fileName: file.name,
+        status: 'completed'
+      });
       return response;
     } catch (err) {
-      console.error("[projectManager] File upload error:", err);
-      window.ChatUtils.handleError('Uploading file', err);
-      throw parseFileUploadError(err);
-    }
-  }
-
-  /**
-   * (Optional) Upload file with basic retry logic
-   * @param {string} projectId
-   * @param {File} file
-   * @param {number} [retries=3]
-   */
-  async function uploadFileWithRetry(projectId, file, retries = 3) {
-    let attempt = 0;
-    while (attempt < retries) {
-      try {
-        return await uploadFile(projectId, file);
-      } catch (err) {
-        // If it's a KB error or final attempt, rethrow
-        if (++attempt >= retries || err.code === "KB_REQUIRED" || err.code === "KB_INACTIVE") {
-          window.ChatUtils.handleError(`Uploading file (attempt ${attempt}/${retries})`, err);
-          throw err;
-        }
-        // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, 2 ** attempt * 500));
+      console.error(`[projectManager] File upload failed for ${file.name} in project ${projectId}:`, err);
+      const parsedError = parseFileUploadError(err);
+      emitEvent("fileUploadFailed", { projectId, fileName: file.name, error: parsedError });
+      if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'file_upload', error: err });
       }
+      throw parsedError;
     }
   }
 
   /**
-   * Delete a file from a project
-   * @param {string} projectId
-   * @param {string} fileId
-   * @returns {Promise<Object>}
+   * Delete a file from a project. Requires authentication.
    */
   async function deleteFile(projectId, fileId) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'delete_file', error: new Error("Authentication required") });
+      throw new Error('Authentication required to delete files.');
     }
-    return window.apiRequest(`/api/projects/${projectId}/files/${fileId}`, "DELETE");
+    try {
+      const endpoint = API_ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
+      const response = await window.apiRequest(`${endpoint}${fileId}`, "DELETE");
+      emitEvent("fileDeleted", { projectId, fileId });
+      return response;
+    } catch (error) {
+      console.error(`[projectManager] Error deleting file ${fileId} from project ${projectId}:`, error);
+      emitEvent("fileDeleteFailed", {
+        projectId,
+        fileId,
+        error: { message: error.message, status: error.status }
+      });
+      throw error;
+    }
   }
 
   /**
-   * Delete a conversation from a project
-   * @param {string} projectId
-   * @param {string} conversationId
-   * @returns {Promise<Array>} - resolves with updated stats & conversation list
+   * Delete a conversation from a project. Requires authentication.
    */
   async function deleteProjectConversation(projectId, conversationId) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'delete_conversation', error: new Error("Authentication required") });
+      throw new Error('Authentication required to delete conversations.');
     }
-    await window.apiRequest(`/api/projects/${projectId}/conversations/${conversationId}`, "DELETE");
-    return Promise.all([
-      loadProjectStats(projectId),
-      loadProjectConversations(projectId)
-    ]);
+    try {
+      const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
+      await window.apiRequest(`${endpoint}${conversationId}`, "DELETE");
+      emitEvent("conversationDeleted", { projectId, conversationId });
+
+      // Refresh project stats & convos after deletion
+      await Promise.allSettled([
+        loadProjectStats(projectId),
+        loadProjectConversations(projectId)
+      ]);
+    } catch (error) {
+      console.error(`[projectManager] Error deleting conversation ${conversationId} in project ${projectId}:`, error);
+      emitEvent("conversationDeleteFailed", {
+        projectId,
+        conversationId,
+        error: { message: error.message, status: error.status }
+      });
+      throw error;
+    }
   }
 
   /**
-   * Delete an artifact
-   * @param {string} projectId
-   * @param {string} artifactId
-   * @returns {Promise<Object>}
+   * Delete an artifact from a project. Requires authentication.
    */
   async function deleteArtifact(projectId, artifactId) {
-    const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
     if (!isAuthenticated) {
-      throw new Error('Not authenticated - please login first');
+      emitEvent("projectAuthError", { reason: 'delete_artifact', error: new Error("Authentication required") });
+      throw new Error('Authentication required to delete artifacts.');
     }
-    return window.apiRequest(`/api/projects/${projectId}/artifacts/${artifactId}`, "DELETE");
+    try {
+      const response = await window.apiRequest(`/api/projects/${projectId}/artifacts/${artifactId}`, "DELETE");
+      emitEvent("artifactDeleted", { projectId, artifactId });
+      return response;
+    } catch (error) {
+      console.error(`[projectManager] Error deleting artifact ${artifactId} from project ${projectId}:`, error);
+      emitEvent("artifactDeleteFailed", {
+        projectId,
+        artifactId,
+        error: { message: error.message, status: error.status }
+      });
+      throw error;
+    }
   }
 
   /**
-   * Create a new conversation within a project
-   * @param {string} projectId
-   * @returns {Promise<Object>}
+   * Create a new conversation within a project. Requires authentication.
    */
-  async function createConversation(projectId) {
-    console.debug('[ProjectManager] Creating conversation for project:', projectId);
+  async function createConversation(projectId, options = {}) {
+    console.debug(`[ProjectManager] Creating conversation for project: ${projectId}`, options);
+
+    const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: true });
+    if (!isAuthenticated) {
+      emitEvent("projectAuthError", { reason: 'create_conversation', error: new Error("Authentication required") });
+      throw new Error('Authentication required to create conversations.');
+    }
+
+    if (!currentProject || currentProject.id !== projectId) {
+      console.debug(`[ProjectManager] Project ${projectId} not current, loading...`);
+      await loadProjectDetails(projectId);
+      if (!currentProject || currentProject.id !== projectId) {
+        throw new Error(`Failed to load project ${projectId} before creating conversation.`);
+      }
+    }
+
+    const payload = {
+      title: options.title || "New Conversation",
+      model: options.model || window.MODEL_CONFIG?.modelName || "claude-3-sonnet-20240229",
+      system_prompt: options.system_prompt || window.MODEL_CONFIG?.customInstructions || ""
+    };
 
     try {
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated - please login first');
+      const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
+      const response = await window.apiRequest(endpoint, "POST", payload);
+
+      const conversationData = response?.data || response;
+      if (!conversationData?.id) {
+        console.error('[ProjectManager] Invalid conversation response:', response);
+        throw new Error(`Server returned invalid conversation data: ${JSON.stringify(response)}`);
       }
 
-      // Validate project existence
-      if (!currentProject || currentProject.id !== projectId) {
-        await loadProjectDetails(projectId);
-        if (!currentProject) {
-          throw new Error("Project not loaded after refresh");
+      emitEvent("conversationCreated", { projectId, conversation: conversationData });
+
+      // Optionally link to KB if active
+      if (isKnowledgeBaseActive(currentProject)) {
+        try {
+          await linkConversationToKnowledgeBase(conversationData.id);
+        } catch (linkError) {
+          console.warn(`[ProjectManager] Conversation ${conversationData.id} created, but KB link failed:`, linkError);
+          emitEvent("knowledgeBaseLinkFailed", {
+            projectId,
+            conversationId: conversationData.id,
+            kbId: currentProject.knowledge_base_id,
+            error: linkError
+          });
         }
       }
 
-      const payload = {
-        title: "New Conversation",
-        model: window.MODEL_CONFIG?.modelName || "claude-3-sonnet-20240229",
-        system_prompt: window.MODEL_CONFIG?.customInstructions || ""
-      };
-
-      console.debug('[ProjectManager] Conversation payload:', payload);
-
-      const response = await window.apiRequest(
-        `/api/projects/${projectId}/conversations`,
-        "POST",
-        payload
-      );
-
-      // Validate response structure
-      if (!response?.data?.id) {
-        console.error('[ProjectManager] Invalid conversation response:', response);
-        throw new Error(`Server returned invalid conversation ID: ${JSON.stringify(response)}`);
-      }
-
-      console.debug('[ProjectManager] Created conversation:', response.data.id);
-
-      // Link conversation to knowledge base if available
-      if (currentProject.knowledge_base_id) {
-        await linkConversationToKnowledgeBase(response.data.id);
-      }
-
-      return response.data;
+      return conversationData;
     } catch (error) {
-      console.error('[ProjectManager] Conversation creation failed:', {
-        error: error.message,
-        projectId,
-        model: window.MODEL_CONFIG?.modelName,
-        knowledgeBase: !!currentProject?.knowledge_base_id
-      });
-      window.ChatUtils.handleError('Creating conversation', error);
-      throw new Error(`Failed to create conversation: ${formatProjectError(error)}`);
+      console.error('[ProjectManager] Conversation creation failed:', error);
+      const formattedError = formatProjectError(error);
+      emitEvent("conversationCreateFailed", { projectId, error: { message: formattedError, status: error.status } });
+      throw new Error(`Failed to create conversation: ${formattedError}`);
     }
   }
 
   /**
-   * Link conversation to project's knowledge base
-   * @param {string} conversationId
-   * @returns {Promise<void>}
+   * Link a conversation to the current project's knowledge base.
    */
   async function linkConversationToKnowledgeBase(conversationId) {
-    const kbId = currentProject?.knowledge_base_id;
-    if (!kbId) return;
+    if (!currentProject || !currentProject.id) {
+      throw new Error("No current project loaded to link conversation.");
+    }
+    const projectId = currentProject.id;
+    const kbId = currentProject.knowledge_base_id;
+
+    if (!isKnowledgeBaseActive(currentProject)) {
+      console.warn(`[ProjectManager] Skipping KB link for conversation ${conversationId}: KB ${kbId} not active.`);
+      return;
+    }
 
     try {
       console.debug(`[ProjectManager] Linking conversation ${conversationId} to KB ${kbId}`);
       await window.apiRequest(
-        `/api/projects/${currentProject?.id}/knowledge-base/conversations/${conversationId}`,
+        `/api/projects/${projectId}/knowledge-base/conversations/${conversationId}`,
         "PUT",
         { association_type: "primary" }
       );
-      console.debug('[ProjectManager] Knowledge base link successful');
+      emitEvent("knowledgeBaseLinkSuccess", { projectId, conversationId, kbId });
     } catch (linkError) {
-      console.error('[ProjectManager] KB linking failed:', {
-        conversationId,
-        kbId,
-        error: linkError.message,
-        response: linkError?.response?.data
-      });
-      window.ChatUtils.handleError('Linking conversation to knowledge base', linkError);
-      throw new Error("Created conversation but failed to connect knowledge base");
+      console.error(`[ProjectManager] KB linking failed for conversation ${conversationId}:`, linkError);
+      throw new Error(`Failed to link conversation to knowledge base: ${linkError.message}`);
     }
   }
 
   /**
-   * Format project-related errors for user display
-   * @param {Error} error
-   * @returns {string}
+   * Format project-related errors for user display.
    */
   function formatProjectError(error) {
-    const status = error?.response?.status;
-    const serverMessage = error?.response?.data?.error;
-
+    const status = error?.status;
+    const serverMessage = error?.message || "An unknown error occurred";
     if (status === 403) {
-      return "You don't have permissions to create conversations in this project";
+      return "Permission denied for this project operation.";
     } else if (status === 404) {
-      return "Project not found or unavailable";
+      return "Project not found or resource is missing.";
+    } else if (status === 401) {
+      return "Authentication failed or session expired. Please log in again.";
+    } else if (status === 400) {
+      return `Invalid request: ${serverMessage}`;
+    } else if (status >= 500) {
+      return `Server error (${status}). Please try again later.`;
     }
-    return serverMessage || error.message || "Unknown project error";
+    return serverMessage;
   }
 
   /**
-   * Load knowledge base details
-   * @param {string} knowledgeBaseId
-   * @returns {Promise<Object>}
+   * Load knowledge base details for the current project.
    */
-  async function loadKnowledgeBaseDetails(knowledgeBaseId) {
+  async function loadKnowledgeBaseDetails() {
+    if (!currentProject || !currentProject.knowledge_base_id) {
+      return null;
+    }
+    const projectId = currentProject.id;
+    const kbId = currentProject.knowledge_base_id;
+
     try {
-      const isAuthenticated = await window.ChatUtils.isAuthenticated({ forceVerify: false });
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated - please login first');
+      const response = await window.apiRequest(`/api/knowledge-bases/${kbId}`, "GET");
+      const kbData = response?.data || response;
+      if (!kbData || kbData.id !== kbId) {
+        throw new Error("Invalid KB details response.");
       }
-      // Use the correct endpoint that exists in the API
-      const kbData = await window.apiRequest(`/api/knowledge-bases/${knowledgeBaseId}`, "GET");
-      // Attach to currentProject if relevant
-      if (currentProject) {
-        currentProject.knowledge_base = kbData.data || kbData;
-      }
-      emitEvent("knowledgeBaseLoaded", { kb: kbData.data || kbData });
-      return currentProject?.knowledge_base;
+      currentProject.knowledge_base = kbData;
+      emitEvent("knowledgeBaseLoaded", { projectId, kb: kbData });
+      return kbData;
     } catch (err) {
-      console.error("[projectManager] Failed to load knowledge base details:", err);
-      window.ChatUtils.handleError('Loading knowledge base details', err);
-      emitEvent("knowledgeBaseError", { error: err });
-      throw err;
+      console.error(`[projectManager] Failed to load KB details for ${kbId}:`, err);
+      emitEvent("knowledgeBaseError", { projectId, error: { message: err.message, status: err.status } });
+      if (err.status === 401) {
+        emitEvent("projectAuthError", { reason: 'load_kb_details', error: err });
+      }
+      return null;
     }
   }
 
@@ -855,68 +887,110 @@
      =========================== */
 
   /**
-   * Get the currently loaded project data.
-   * @returns {Object|null} - A deep clone of the current project data or null
+   * Get the currently loaded project data (returns a deep clone).
    */
   function getCurrentProject() {
     return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null;
   }
 
   /**
-   * Checks API endpoint compatibility for a project with timeout and retries.
-   * @param {string} projectId
-   * @param {number} [timeout=2000]
-   * @returns {Promise<"standard"|"simple"|"unknown">}
+   * Example check to see if a project endpoint is responsive.
    */
   async function checkProjectApiEndpoint(projectId, timeout = 2000) {
     if (!projectId) throw new Error("Project ID required");
 
-    // Helper to run a GET request with a race
-    const apiCheck = (endpoint) =>
-      Promise.race([
-        window.apiRequest(endpoint, "GET"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
-      ]);
+    const apiCheck = async (endpoint) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await window.apiRequest(endpoint, "GET", null, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (e) {
+        clearTimeout(timeoutId);
+        throw e;
+      }
+    };
 
     try {
       const stdResponse = await apiCheck(`/api/projects/${projectId}/`);
       if (stdResponse?.id === projectId) {
+        console.debug(`[projectManager] Endpoint check: /api/projects/${projectId}/ is standard.`);
         return "standard";
       }
     } catch (e) {
-      console.debug("[projectManager] Standard endpoint failed:", e.message);
-    }
-
-    try {
-      const simpleResponse = await apiCheck(`/api/${projectId}`);
-      if (simpleResponse?.id === projectId) {
-        return "simple";
+      if (e.name !== 'AbortError' && e.status !== 404) {
+        console.warn("[projectManager] Standard endpoint check failed:", e.message);
       }
-    } catch (e) {
-      console.debug("[projectManager] Simple endpoint failed:", e.message);
     }
 
+    console.warn(`[projectManager] Could not determine API endpoint type for project ${projectId}.`);
     return "unknown";
   }
 
+  /* ===========================
+     INITIALIZATION
+     =========================== */
+
   /**
-   * Initialization function for projectManager
-   * @returns {Promise<void>}
+   * Initialization function for projectManager. Waits for auth to be ready,
+   * then subscribes to auth-related events via AuthBus.
    */
   async function initialize() {
     console.log("[projectManager] Initializing...");
 
-    // Wait for auth module to be ready using centralized utility
-    await window.ChatUtils.ensureAuthReady();
+    // 1. Wait for Auth Module readiness
+    if (!window.auth || !window.auth.isReady) {
+      console.log("[projectManager] Waiting for auth module to be ready...");
+      await new Promise(resolve => {
+        if (window.auth?.AuthBus) {
+          window.auth.AuthBus.addEventListener('authReady', resolve, { once: true });
+        } else {
+          // Fallback if AuthBus missing
+          const checkAuth = setInterval(() => {
+            if (window.auth?.isReady) {
+              clearInterval(checkAuth);
+              resolve();
+            }
+          }, 100);
+        }
+      });
+      console.log("[projectManager] Auth module ready.");
+      isAuthInitialized = true;
+    } else {
+      console.log("[projectManager] Auth module was already ready.");
+      isAuthInitialized = true;
+    }
 
-    // Listen for auth changes
-    document.addEventListener('authStateChanged', (event) => {
-      const isAuthenticated = event.detail?.authenticated;
-      if (!isAuthenticated) {
-        currentProject = null; // Only clear project manager state
-        emitEvent("authExpired", { message: "Authentication expired" });
-      }
-    });
+    // 2. Listen for Authentication State via AuthBus
+    if (window.auth?.AuthBus) {
+      window.auth.AuthBus.addEventListener('authStateChanged', (event) => {
+        const { authenticated } = event.detail || {};
+        console.log(`[projectManager] Received authStateChanged: ${authenticated}`);
+        if (!authenticated) {
+          // If user logs out, clear the current project
+          console.log("[projectManager] User logged out, clearing current project.");
+          currentProject = null;
+          emitEvent("currentProjectCleared", { reason: "logout" });
+        } else {
+          // If user logs in, optionally reload a remembered project
+          if (currentProject?.id) {
+            console.log(`[projectManager] User logged in, might reload project ${currentProject.id}.`);
+            // Example: loadProjectDetails(currentProject.id);
+          }
+        }
+      });
+
+      // 3. Listen for Backend Unavailability via AuthBus
+      window.auth.AuthBus.addEventListener('backendUnavailable', (event) => {
+        const { reason, until } = event.detail || {};
+        console.warn(`[projectManager] backendUnavailable (Reason: ${reason}), blocked until ${until?.toLocaleTimeString()}.`);
+        emitEvent("backendStatusChanged", { available: false, reason, until });
+      });
+
+    } else {
+      console.error("[projectManager] Could not find window.auth.AuthBus to listen for auth events.");
+    }
 
     console.log("[projectManager] Initialization complete.");
   }
@@ -924,6 +998,7 @@
   /* ===============================
      FINAL EXPORTS
      =============================== */
+  // Expose public API via window.projectManager
   window.projectManager = {
     // Initialization
     initialize,
@@ -938,7 +1013,7 @@
     createOrUpdateProject,
     deleteProject,
 
-    // Project Operations
+    // Project Actions
     togglePinProject,
     toggleArchiveProject,
     saveCustomInstructions,
@@ -948,7 +1023,6 @@
     isKnowledgeBaseActive,
     prepareFileUploads,
     uploadFile,
-    uploadFileWithRetry,
     deleteFile,
 
     // Conversations & Artifacts
@@ -963,5 +1037,5 @@
     loadKnowledgeBaseDetails
   };
 
-  console.log('[ProjectManager] projectManager.js loaded and aligned with chat system');
+  console.log('[ProjectManager] projectManager.js loaded and aligned with AuthBus.');
 })();

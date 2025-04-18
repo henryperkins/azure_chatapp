@@ -42,33 +42,13 @@ window.ChatUtils = (function () {
      */
     async init() {
       await InitUtils.initModule('ChatUtils', () => {
-        // Setup auth state listener
-        document.addEventListener('authStateChanged', (e) => {
-          const { authenticated } = e.detail;
-          this.broadcastAuth(authenticated);
+        // Listen via the centralized AuthBus instead of DOM events
+        window.auth?.AuthBus.addEventListener('authStateChanged', (e) => {
+          this.broadcastAuth(e.detail.authenticated);
         });
       });
     },
 
-    /**
-     * Check if user is authenticated using the auth module
-     * @param {Object} [options] - Options for authentication check
-     * @param {boolean} [options.forceVerify=false] - Force server verification
-     * @returns {Promise<boolean>} - Whether the user is authenticated
-     */
-    async isAuthenticated(options = { forceVerify: false }) {
-      try {
-        if (!window.auth || typeof window.auth.isAuthenticated !== 'function') {
-          console.error('[ChatUtils] Auth module is missing or incomplete.');
-          return false;
-        }
-        return await window.auth.isAuthenticated(options);
-      } catch (error) {
-        console.error('[ChatUtils] Authentication check failed:', error);
-        this.handleError('Authentication check', error);
-        return false;
-      }
-    },
 
     /**
      * Ensure auth module is ready before proceeding, with a timeout
@@ -87,7 +67,7 @@ window.ChatUtils = (function () {
               console.log('[ChatUtils] Received authReady event.');
               resolve();
             };
-            document.addEventListener('authReady', listener, { once: true });
+            window.auth.AuthBus.addEventListener('authReady', listener, { once: true });
             // Safety timeout in case event never fires
             setTimeout(() => {
               console.warn('[ChatUtils] Timeout waiting for authReady event.');
@@ -149,14 +129,9 @@ window.ChatUtils = (function () {
         console.error(`${context} error:`, message);
       }
 
-      // For authentication errors, trigger auth state change
-      if (isAuthError) {
-        if (window.auth && typeof window.auth.clear === 'function') {
-          window.auth.clear();
-        }
-        window.dispatchEvent(new CustomEvent('authStateChanged', {
-          detail: { authenticated: false }
-        }));
+      // For authentication errors, clear tokens (AuthBus will broadcast state)
+      if (isAuthError && window.auth?.clear) {
+        window.auth.clear();
       }
     },
 

@@ -72,7 +72,7 @@
               <button id="registerTab" type="button"
                 class="px-2 py-1 text-xs font-medium text-base-content/60">Register</button>
             </div>
-            <form id="loginForm" method="POST">
+            <form id="loginForm" method="POST" onsubmit="return false;" novalidate>
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" id="login-username" placeholder="Username"
                   class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="username" autocorrect="off"
@@ -87,7 +87,7 @@
               </button>
             </form>
 
-            <form id="registerForm" class="hidden">
+            <form id="registerForm" method="POST" action="#" onsubmit="return false;" class="hidden">
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="username" autocorrect="off" autocapitalize="none">
@@ -398,7 +398,7 @@
         <!-- Login required message (shown when not authenticated) -->
         <div id="loginRequiredMessage" class="hidden text-center py-8">
           <p class="text-lg">Please log in to access projects</p>
-          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4">
+          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4" onclick="document.getElementById('authButton').click();">
             Login
           </button>
         </div>

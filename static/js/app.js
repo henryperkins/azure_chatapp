@@ -4,21 +4,8 @@
  * Relies on auth.js for session cookies and integrates with chat system modules.
  */
 
-/**
- * Replace local fallback with eventHandlers-based approach.
- * If eventHandlers is missing, do nothing special (no fallback).
- */
-function debounce(func, wait) {
-  if (!window.eventHandlers?.debounce) {
-    console.warn("[app.js] eventHandlers.debounce not found. Using custom fallback debounce implementation.");
-    let timeout;
-    return function (...args) {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-  }
-  return window.eventHandlers.debounce(func, wait);
-}
+// Re‑export debounce from the central eventHandlers utility
+const debounce = window.eventHandlers?.debounce ?? ((fn) => fn);   // should never hit fallback
 
 // PHASE-BASED INITIALIZATION
 const AppPhase = {
@@ -127,33 +114,9 @@ function isValidUUID(uuid) {
   return window.ChatUtils.isValidUUID(uuid);
 }
 
-// AUTHENTICATION FUNCTIONS
-function clearAuthState() {
-  if (window.auth?.clear) window.auth.clear();
-  else {
-    API_CONFIG.isAuthenticated = false;
-    document.dispatchEvent(new CustomEvent('authStateChanged', { detail: { authenticated: false } }));
-  }
-}
-
-function ensureAuthenticated(options = {}) {
-  if (window.auth?.verifyAuthState) {
-    return window.auth.verifyAuthState(options.forceVerify);
-  }
-
-  // Fallback if auth.js not initialized
-  API_CONFIG.authCheckInProgress = true;
-  return window.ChatUtils.isAuthenticated(options).then(isAuth => {
-    API_CONFIG.isAuthenticated = isAuth;
-    API_CONFIG.authCheckInProgress = false;
-    return isAuth;
-  }).catch(err => {
-    console.error('[ensureAuthenticated] Auth check failed:', err);
-    API_CONFIG.isAuthenticated = false;
-    API_CONFIG.authCheckInProgress = false;
-    return false;
-  });
-}
+// --- Authentication helpers now delegate *only* to auth.js -----------------
+const clearAuthState       = () => window.auth?.clear?.();
+const ensureAuthenticated  = (opts = {}) => window.auth.isAuthenticated(opts);
 
 // API REQUEST FUNCTIONS
 const pendingRequests = new Map();
@@ -192,21 +155,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         });
         finalUrl += (cleanEndpoint.includes('?') ? '&' : '?') + queryParams.toString();
       }
-      let csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-      if (!csrfToken || !csrfToken.trim()) {
-        console.warn('[API] CSRF token missing. Attempting to retrieve a new CSRF token...');
-        if (window.getCSRFTokenAsync && typeof window.getCSRFTokenAsync === 'function') {
-          csrfToken = await window.getCSRFTokenAsync();
-        }
-        if (!csrfToken || !csrfToken.trim()) {
-          console.error('[API] CSRF token still missing after retrieval - triggering auth refresh');
-          await verifyAuthState(true);
-          throw new Error('CSRF token missing - please refresh page');
-        }
-        // Cache the retrieved token in the meta tag for future use
-        const metaTag = document.querySelector('meta[name="csrf-token"]');
-        if (metaTag) metaTag.content = csrfToken;
-      }
+      const csrfToken = await window.auth.getCSRFTokenAsync();
       const requestOptions = {
         method: uppercaseMethod,
         credentials: 'include',
@@ -640,14 +589,14 @@ const appListeners = new Set();
 
 function setupEventListeners() {
   // Document-level listeners
-  const authStateHandler = (e) => handleAuthStateChange(e);
+  const authStateHandler         = (e) => handleAuthStateChange(e);
   const backendUnavailableHandler = (e) => handleBackendUnavailable(e);
 
-  document.addEventListener('authStateChanged', authStateHandler);
-  document.addEventListener('backendUnavailable', backendUnavailableHandler);
+  window.auth.AuthBus.addEventListener('authStateChanged', authStateHandler);
+  window.auth.AuthBus.addEventListener('backendUnavailable', backendUnavailableHandler);
 
-  appListeners.add({ element: document, type: 'authStateChanged', handler: authStateHandler });
-  appListeners.add({ element: document, type: 'backendUnavailable', handler: backendUnavailableHandler });
+  appListeners.add({ element: window.auth.AuthBus, type: 'authStateChanged', handler: authStateHandler });
+  appListeners.add({ element: window.auth.AuthBus, type: 'backendUnavailable', handler: backendUnavailableHandler });
 
   // Window-level listeners
   const resizeHandler = () => setViewportHeight();
@@ -838,7 +787,6 @@ function handleAuthStateChange(e) {
   API_CONFIG.isAuthenticated = authenticated;
 
   // Update auth UI if available
-  if (window.auth?.updateAuthUI) window.auth.updateAuthUI(authenticated, username);
 
   if (authenticated) {
     // Prevent redundant data loads when auth check is already in progress
@@ -976,7 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.dispatchEvent(new CustomEvent('appJsReady'));
 });
 
-document.addEventListener('authReady', (evt) => {
+window.auth.AuthBus.addEventListener('authReady', (evt) => {
   if (evt.detail.authenticated) {
     log("[app.js] 'authReady' => user is authenticated. Forcing initial load of data.");
     refreshAppData();

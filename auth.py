@@ -275,6 +275,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     refresh_token: str | None = None
+    username: str | None = None     # newly added to match returned value
     message: str | None = None
 
 
@@ -471,7 +472,7 @@ async def login_user(
     logger.info("User '%s' logged in. Access & refresh tokens issued.", lower_username)
     return LoginResponse(
         access_token=access_token,
-        token_type="bearer", 
+        token_type="bearer",
         refresh_token=refresh_token,
         username=lower_username,
         message="Login successful"

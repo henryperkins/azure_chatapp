@@ -802,8 +802,8 @@ function setupEventListeners() {
     // Setup key shortcuts
     trackListener(document, 'keydown', handleKeyDown);
 
-    // Listen for backend unavailability events
-    trackListener(document, 'backendUnavailable', handleBackendUnavailable);
+    // Listen for backend unavailability events from the central AuthBus
+    window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
 
     // Set up sidebar components if they exist
     setupSidebarToggle();
@@ -882,5 +882,5 @@ window.eventHandlers = {
     setupCollapsibleSections: setupCollapsibleSections,
     setupPinningSidebar: setupPinningSidebar,
     setupCustomInstructions: setupCustomInstructions,
-    debounce // Export debounce function
+    debounce // re‑exported debounce
 };
