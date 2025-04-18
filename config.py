@@ -25,11 +25,18 @@ class Settings:
     4. All API access requires session cookies from same domain
     """
 
+    # Application Version
+    APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+
     # Debug/Environment
     DEBUG = (
         os.getenv("DEBUG", "False").lower() == "true"
     )  # True if DEBUG= true/TRUE/True
     ENV = os.getenv("ENV", "development")
+
+    # Sentry Configuration
+    SENTRY_DSN = os.getenv("SENTRY_DSN", "")  # Set empty string by default
+    SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "False").lower() == "true"
 
     # Session
     SESSION_SECRET = os.getenv(
