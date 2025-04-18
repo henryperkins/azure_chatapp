@@ -470,7 +470,11 @@ async def login_user(
 
     logger.info("User '%s' logged in. Access & refresh tokens issued.", lower_username)
     return LoginResponse(
-        access_token=access_token, token_type="bearer", refresh_token=refresh_token
+        access_token=access_token,
+        token_type="bearer", 
+        refresh_token=refresh_token,
+        username=lower_username,
+        message="Login successful"
     )
 
 
