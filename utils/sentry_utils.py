@@ -275,6 +275,19 @@ def _filter_contexts(contexts: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def capture_critical_issue_with_logs(log_text: str):
+    """Capture a critical issue with attached log files"""
+    with configure_scope() as scope:
+        scope.add_attachment(
+            bytes=log_text.encode("utf-8"),
+            filename="server_logs.txt",
+            content_type="text/plain"
+        )
+        return sentry_sdk.capture_event({
+            "message": "Critical server issue with logs attached",
+            "level": "error",
+        })
+
 def filter_transactions(
     event: SentryEvent, hint: SentryHint = None
 ) -> Optional[SentryEvent]:

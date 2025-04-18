@@ -371,7 +371,7 @@ async def login_user(
     await rate_limit_login(request, creds.username)
 
     lower_username = creds.username.lower()
-    
+
     # Move all database operations into a single transaction block
     async with session.begin():
         # Get user with row lock to prevent concurrent updates
@@ -381,7 +381,7 @@ async def login_user(
             .with_for_update()
         )
         user = result.scalars().first()
-        
+
         if not user:
             logger.warning("Login attempt for non-existent user: %s", lower_username)
             raise HTTPException(status_code=401, detail="Invalid credentials.")
@@ -431,7 +431,7 @@ async def login_user(
     # Generate refresh token
     refresh_payload = build_jwt_payload(
         user,
-        token_type="refresh", 
+        token_type="refresh",
         expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
     refresh_token = create_access_token(refresh_payload)
@@ -671,6 +671,11 @@ async def get_server_time() -> dict[str, float]:
     """Returns the current server timestamp (UTC)."""
     return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
 
+
+@router.get("/csrf")
+async def get_csrf_token():
+    """Returns a fresh CSRF token for the session."""
+    return {"token": str(uuid.uuid4())}
 
 @router.get("/apple-touch-icon.png")
 @router.get("/apple-touch-icon-precomposed.png")
