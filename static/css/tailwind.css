@@ -119,8 +119,21 @@
     }
   }
 
+  @container (min-width: 64rem) {
+    #projectList {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   .banner {
     background: color-mix(in srgb, #1d4ed8 50%, #ffffff 50%);
+  }
+  .project-card.pinned {
+    background: color-mix(in srgb, gold 20%, #ffffff 80%);
+  }
+  .project-card.archived {
+    background: color-mix(in srgb, gray 40%, #ffffff 60%);
+    @apply opacity-70;
   }
   .line-clamp-2 {
     display: -webkit-box;
@@ -198,6 +211,12 @@
 @variants hover, focus, active {
   .btn-enhanced {
     @apply text-white bg-blue-500;
+  }
+}
+
+@variants focus {
+  .btn, .project-filter-btn, .project-tab-btn {
+    @apply ring ring-offset-2 ring-primary;
   }
 }
 
