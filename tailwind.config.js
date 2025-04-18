@@ -9,7 +9,9 @@ export default {
   ],
   // Enable container queries (Tailwind v4+)
   experimental: {
-    containerQueries: true
+    containerQueries: true,
+    // Add optional breakpoints if you want multiple container sizes:
+    // respectDefaultKeyframes: true // Example if you need keyframe merges
   },
   daisyui: {
     themes: ["light", "dark"],
