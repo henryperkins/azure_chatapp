@@ -10,8 +10,23 @@ export default {
   // Enable container queries (Tailwind v4+)
   experimental: {
     containerQueries: true,
-    // Add optional breakpoints if you want multiple container sizes:
-    // respectDefaultKeyframes: true // Example if you need keyframe merges
+    respectDefaultKeyframes: true
+  },
+  theme: {
+    extend: {
+      fontFamily: {
+        'poppins': 'var(--font-poppins)',
+      },
+      boxShadow: {
+        'custom': 'var(--shadow-custom)',
+      },
+      colors: {
+        'blue': {
+          500: 'var(--color-blue-500, #1d4ed8)',
+        },
+        'white': 'var(--color-white, #ffffff)',
+      },
+    },
   },
   daisyui: {
     themes: ["light", "dark"],
