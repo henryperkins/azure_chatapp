@@ -1,7 +1,6 @@
+@import "tailwindcss/preflight";
 /* Main Tailwind CSS file with proper configuration for Azure OpenAI Chat */
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
 @tailwind utilities;
 
 /* Custom component styles that align with the HTML structure */
@@ -169,7 +168,6 @@
   .z-modal {
     z-index: 1050;
   }
-}
 
 /* Animation keyframes */
 @keyframes slideIn {

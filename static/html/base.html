@@ -489,7 +489,7 @@
 
       // Load HTML content parallel but wait for all before initialization
       const htmlPromises = [
-        fetch('project_list.html').then(response => response.text())
+        fetch('/static/html/project_list.html').then(response => response.text())
           .then(html => {
             document.getElementById('projectListView').innerHTML = html;
             // Mark template as loaded
@@ -498,7 +498,7 @@
             }
           }).catch(err => console.error('Failed to load project_list.html:', err)),
 
-        fetch('project_details.html').then(response => response.text())
+        fetch('/static/html/project_details.html').then(response => response.text())
           .then(html => {
             document.getElementById('projectDetailsView').innerHTML = html;
             // Mark template as loaded
@@ -507,7 +507,7 @@
             }
           }).catch(err => console.error('Failed to load project_details.html:', err)),
 
-        fetch('modals.html').then(response => response.text())
+        fetch('/static/html/modals.html').then(response => response.text())
           .then(html => {
             document.getElementById('modalsContainer').innerHTML = html;
             document.getElementById('modalsContainer').classList.remove('hidden');
@@ -517,7 +517,7 @@
             }
           }).catch(err => console.error('Failed to load modals.html:', err)),
 
-        fetch('chat_ui.html').then(response => response.text())
+        fetch('/static/html/chat_ui.html').then(response => response.text())
           .then(html => {
             document.getElementById('chatUIContainer').innerHTML = html;
             document.getElementById('chatUIContainer').classList.remove('hidden');
