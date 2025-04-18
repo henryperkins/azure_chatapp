@@ -125,21 +125,3 @@ from .conversation_service import (
 from .user_service import (
     get_user_by_username,
 )
-
-# Utility services
-from .utils.error_handlers import (
-    handle_service_errors,
-    ServiceError,
-)
-
-from .utils.validation import (
-    validate_resource_exists,
-    validate_user_resource_access,
-    validate_project_resource,
-)
-
-from .utils.repository import (
-    get_by_id,
-    save_model,
-    get_all_by_condition,
-)

@@ -28,11 +28,13 @@ from utils.serializers import serialize_conversation, serialize_message
 logger = logging.getLogger(__name__)
 
 
-from services.utils.error_handlers import ServiceError
-
-class ConversationError(ServiceError):
+class ConversationError(Exception):
     """Base exception for conversation-related errors."""
-    pass
+
+    def __init__(self, message: str, status_code: int = 400):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(message)
 
 
 def validate_model_and_params(model_id: str, params: Dict[str, Any]) -> None:
@@ -105,8 +107,6 @@ class ConversationService:
         include_deleted: bool = False,
     ) -> Conversation:
         """Centralized conversation access validation."""
-        from services.utils.validation import validate_resource_exists
-        
         filters = [Conversation.id == conversation_id, Conversation.user_id == user_id]
 
         if not include_deleted:
@@ -161,16 +161,15 @@ class ConversationService:
 
     async def _validate_project_access(self, project_id: UUID, user_id: int) -> Project:
         """Validate project ownership."""
-        from services.utils.validation import validate_user_resource_access
-        
-        try:
-            return await validate_user_resource_access(
-                self.db, Project, project_id, user_id, 
-                error_message="Project not found or access denied"
+        project = await self.db.get(Project, project_id)
+        if not project:
+            raise ConversationError("Project not found", 404)
+        if project.user_id != user_id:
+            logger.warning(
+                f"User {user_id} attempted to access project {project_id} owned by {project.user_id}"
             )
-        except HTTPException as e:
-            # Convert to ConversationError with appropriate status code
-            raise ConversationError(e.detail, e.status_code) from e
+            raise ConversationError("Project access denied", 403)
+        return project
 
     async def create_conversation(
         self,

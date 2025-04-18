@@ -542,3 +542,57 @@ def get_server_version() -> str:
         return "unknown"
     except Exception:
         return "unknown"
+
+def get_mcp_status() -> Optional[Dict[str, Any]]:
+    """
+    Get the current status of the Sentry MCP server.
+
+    Returns:
+        Dictionary with server status information or None if the server is not running
+    """
+    if not check_mcp_server():
+        logger.debug("MCP server is not running")
+        return None
+
+    try:
+        # Create a span for this operation
+        with sentry_sdk.start_span(op="mcp.request", description="Get MCP Server Status") as span:
+            result = subprocess.run(
+                ["python", "-m", SERVER_CMD, "--status"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                span.set_status("internal_error")
+                logger.warning(f"Failed to get MCP server status: {result.stderr}")
+                return {
+                    "running": True,
+                    "responsive": False,
+                    "error": result.stderr.strip() if result.stderr else "Unknown error",
+                    "version": get_server_version()
+                }
+
+            try:
+                # Try to parse JSON output if available
+                data = json.loads(result.stdout)
+                span.set_status("ok")
+                return data
+            except json.JSONDecodeError:
+                # If not JSON, return basic status
+                span.set_status("ok")
+                return {
+                    "running": True,
+                    "responsive": True,
+                    "version": get_server_version(),
+                    "message": result.stdout.strip() if result.stdout else "Server running"
+                }
+    except Exception as e:
+        logger.error(f"Error checking MCP status: {e}")
+        return {
+            "running": True,
+            "responsive": False,
+            "error": str(e),
+            "version": "unknown"
+        }

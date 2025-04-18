@@ -73,7 +73,7 @@ export class ProjectDetailsComponent {
       backBtn: document.getElementById('backToProjectsBtn'),
       pinBtn: document.getElementById('pinProjectBtn'),
       archiveBtn: document.getElementById('archiveProjectBtn'),
-      tabContainer: document.getElementById('projectDetailsTabs'),
+      tabContainer: document.querySelector('.tabs[role="tablist"]'),
       dragZone: document.getElementById('dragDropZone'),
       filesList: document.getElementById('projectFilesList'),
       fileInput: document.getElementById('projectFileInput'),
@@ -902,6 +902,87 @@ export class ProjectDetailsComponent {
     }
   }
 
+  /**
+   * Try multiple methods to initialize the chat system
+   * @param {string} conversationId - Optional conversation ID to load
+   * @returns {Promise<boolean>} - Whether initialization was successful
+   * @private
+   */
+  async _tryChatInitMethods(conversationId) {
+    debugLog('[ProjectDetailsView] Trying different chat initialization methods');
+
+    try {
+      // Strategy 1: Use existing global interface if available
+      if (window.globalChatInterface) {
+        debugLog('[ProjectDetailsView] Using existing global chat interface');
+
+        if (this.state.currentProject?.id) {
+          await window.globalChatInterface.loadProject(this.state.currentProject.id);
+        }
+
+        // Store reference for component use
+        this.chatInstance = window.globalChatInterface;
+
+        // Load conversation if specified
+        if (conversationId && this.chatInstance) {
+          await this.chatInstance.loadConversation(conversationId);
+        }
+
+        return true;
+      }
+
+      // Strategy 2: Create a new global instance
+      debugLog('[ProjectDetailsView] Creating new global ChatInterface');
+      window.globalChatInterface = new window.ChatInterface({
+        containerSelector: '#projectChatUI',
+        messageContainerSelector: '#projectChatMessages',
+        inputSelector: '#projectChatInput',
+        sendButtonSelector: '#projectChatSendBtn'
+      });
+
+      await window.globalChatInterface.initialize();
+
+      // For backwards compatibility
+      window.chatInterface = window.globalChatInterface;
+      window.projectChatInterface = window.globalChatInterface;
+
+      if (this.state.currentProject?.id) {
+        await window.globalChatInterface.loadProject(this.state.currentProject.id);
+      }
+
+      // Store reference for component use
+      this.chatInstance = window.globalChatInterface;
+
+      // Load conversation if specified
+      if (conversationId && this.chatInstance) {
+        await this.chatInstance.loadConversation(conversationId);
+      }
+
+      return true;
+    } catch (error) {
+      debugLog('[ProjectDetailsView] Chat initialization failed:', error);
+
+      // Strategy 3: Last resort - try to use any project-specific method
+      try {
+        if (window.ChatManager?.initializeProjectChat) {
+          const result = await window.ChatManager.initializeProjectChat(
+            this.state.currentProject?.id,
+            conversationId
+          );
+
+          if (result?.chatInstance) {
+            this.chatInstance = result.chatInstance;
+            return true;
+          }
+        }
+      } catch (fallbackError) {
+        debugLog('[ProjectDetailsView] Fallback initialization failed:', fallbackError);
+      }
+
+      return false;
+    }
+  }
+
   async _ensureChatInterfaceLoaded() {
     if (window.ChatInterface) {
       debugLog('[ProjectDetailsView] ChatInterface is already loaded');
@@ -1012,9 +1093,9 @@ export class ProjectDetailsComponent {
    * ------------------------------------------------------------------ */
   ensureTabListeners() {
     // Make sure tab buttons have correct attributes
-    const tabButtons = document.querySelectorAll('.tab[role="tab"]');
+    const tabButtons = document.querySelectorAll('.project-tab-btn');
     if (tabButtons.length === 0) {
-      debugLog('[ProjectDetailsComponent] No tab buttons found with .tab[role="tab"] selector');
+      debugLog('[ProjectDetailsComponent] No tab buttons found with .project-tab-btn selector');
       return;
     }
 
@@ -1044,7 +1125,7 @@ export class ProjectDetailsComponent {
   }
 
   onTabClick(event) {
-    const tabBtn = event.target.closest('.tab[role="tab"]');
+    const tabBtn = event.target.closest('.project-tab-btn');
     if (!tabBtn || tabBtn.classList.contains('tab-disabled')) return;
 
     const tabName = tabBtn.dataset.tab;
@@ -1070,13 +1151,20 @@ export class ProjectDetailsComponent {
       }
     }
 
-    // Update tab button states
-    const tabButtons = document.querySelectorAll('.tab[role="tab"]');
+      // Update tab button states
+    const tabButtons = document.querySelectorAll('.project-tab-btn');
     tabButtons.forEach(btn => {
       const active = btn.dataset.tab === tabName;
       btn.classList.toggle('tab-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
+
+      // Update the content panel associated with this tab
+      const contentId = `${btn.dataset.tab}Tab`;
+      const contentPanel = document.getElementById(contentId);
+      if (contentPanel) {
+        contentPanel.classList.toggle('hidden', !active);
+      }
     });
 
     this.state.activeTab = tabName;

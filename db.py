@@ -171,6 +171,10 @@ async def validate_db_schema() -> list[str]:
                 length = getattr(column.type, "length", None)
                 if length and orm_base_type == "VARCHAR":
                     orm_type = f"character varying({length})"
+                # Special handling for TIMESTAMP type
+                elif orm_base_type == "TIMESTAMP":
+                    # SQLAlchemy's TIMESTAMP maps to PostgreSQL's timestamp without time zone
+                    orm_type = "timestamp without time zone"
                 else:
                     # Use the first equivalent for normalization
                     orm_type = type_equivalents.get(
@@ -228,12 +232,23 @@ async def validate_db_schema() -> list[str]:
                 if orm_base_type == "BOOLEAN" and udt_name.lower() == "bool":
                     type_matches = True
 
-            # (d) Timestamps
-            elif orm_type == "timestamp without time zone":
-                type_matches = db_type == "timestamp without time zone"
+            # (d) Timestamps - improved handling to match SQLAlchemy TIMESTAMP with PostgreSQL timestamp without time zone
             elif "timestamp" in db_type.lower() and "timestamp" in orm_type.lower():
-                # Might want to parse precision, but skipping for brevity
-                type_matches = True
+                # If the database and ORM type strings are identical, consider them a match
+                if db_type.lower() == orm_type.lower():
+                    type_matches = True
+                else:
+                    # Handle TIMESTAMP WITH TIME ZONE vs TIMESTAMP WITHOUT TIME ZONE
+                    # Skip precision comparisons and focus on timezone presence
+                    db_has_timezone = "with time zone" in db_type.lower()
+                    orm_has_timezone = "with time zone" in orm_type.lower()
+
+                    if db_has_timezone != orm_has_timezone:
+                        # Only consider this a mismatch if one has timezone and the other doesn't
+                        type_matches = False
+                    else:
+                        # Both have same timezone setting (either both with, or both without)
+                        type_matches = True
 
             if not type_matches:
                 mismatch_details.append(
@@ -638,6 +653,34 @@ async def fix_db_schema() -> None:
                             logger.error(
                                 f"Failed to convert {table_name}.{col_name} to TEXT: {e}"
                             )
+                    # Add handling for timestamp type conversions
+                    elif "timestamp" in orm_type_name.lower() and "timestamp" in db_type_name.lower():
+                        db_has_timezone = "with time zone" in str(db_col["type"]).lower()
+                        orm_has_timezone = "with time zone" in str(orm_col.type).lower()
+
+                        if db_has_timezone != orm_has_timezone:
+                            if orm_has_timezone:
+                                # Convert timestamp without time zone to timestamp with time zone
+                                sync_conn.execute(
+                                    text(
+                                        f"ALTER TABLE {table_name} "
+                                        f"ALTER COLUMN {col_name} TYPE TIMESTAMP WITH TIME ZONE"
+                                    )
+                                )
+                                logger.info(
+                                    f"Converted {table_name}.{col_name} from TIMESTAMP WITHOUT TIME ZONE to TIMESTAMP WITH TIME ZONE"
+                                )
+                            else:
+                                # Convert timestamp with time zone to timestamp without time zone
+                                sync_conn.execute(
+                                    text(
+                                        f"ALTER TABLE {table_name} "
+                                        f"ALTER COLUMN {col_name} TYPE TIMESTAMP WITHOUT TIME ZONE"
+                                    )
+                                )
+                                logger.info(
+                                    f"Converted {table_name}.{col_name} from TIMESTAMP WITH TIME ZONE to TIMESTAMP WITHOUT TIME ZONE"
+                                )
                     elif (
                         isinstance(orm_col.type, PG_UUID)
                         and db_type_name.lower() != "uuid"
