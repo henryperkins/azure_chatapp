@@ -1,9 +1,8 @@
 /* Main Tailwind CSS file with proper configuration for Azure OpenAI Chat */
 @import "tailwindcss";
-@plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
-  logs: true;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* Custom component styles that align with the HTML structure */
 @layer components {
@@ -110,8 +109,8 @@
 
 /* Custom utilities to support text truncation and other features */
 @layer utilities {
-  @container (min-width: 48rem) {
-    #projectList {
+  #projectList {
+    @container (min-width: 48rem) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
