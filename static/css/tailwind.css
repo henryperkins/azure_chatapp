@@ -6,12 +6,6 @@
 /* Import Tailwind's base, components, utilities */
 @import "tailwindcss";
 
-/* Import and configure daisyUI */
-@plugin "daisyui" {
-  themes: light --default, dark --prefersdark; /* Use light by default, dark if user prefers dark mode */
-  logs: false; /* Disable daisyUI console logs */
-}
-
 /* Custom project card component styles */
 @layer components {
   .project-card {
