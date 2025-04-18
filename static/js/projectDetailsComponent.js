@@ -151,6 +151,44 @@ export class ProjectDetailsComponent {
   }
 
   /**
+   * Renders a project in the details view
+   * @param {Object} project - The project object to render
+   */
+  renderProject(project) {
+    if (!project) {
+      console.error('[ProjectDetailsComponent] Cannot render null project');
+      return;
+    }
+
+    // Store current project reference
+    this.state.currentProject = project;
+
+    // Clear any previous error states
+    this._clearErrorStates();
+
+    // Update UI with project data
+    this.updateProjectHeader(project);
+    this.updateProjectMetadata(project);
+
+    // If this is a new project being loaded, switch to the default tab
+    if (!this.state.activeTab || this.state.previousProjectId !== project.id) {
+      this.switchTab(this.state.activeTab || 'files');
+    }
+
+    // Store current project ID to detect project changes
+    this.state.previousProjectId = project.id;
+
+    // Show the component if it's hidden
+    this.show();
+
+    // Ensure tab listeners are attached each time a project is loaded
+    setTimeout(() => this.ensureTabListeners(), 100);
+
+    // Return the project for chaining
+    return project;
+  }
+
+  /**
    * Initialize chat interface by ensuring the global interface is ready
    * and configured for the current project
    */
@@ -222,11 +260,8 @@ export class ProjectDetailsComponent {
     document.addEventListener("projectConversationsLoaded", this.boundHandleConversationsLoaded);
     document.addEventListener("projectArtifactsLoaded", this.boundHandleArtifactsLoaded);
 
-    // Tabs
-    if (this.elements.tabContainer && !this.elements.tabContainer.dataset.listenerAttached) {
-      this._manageListeners(this.elements.tabContainer, 'click', this.boundOnTabClick);
-      this.elements.tabContainer.dataset.listenerAttached = 'true';
-    }
+    // Explicitly ensure tab listeners are attached
+    this.ensureTabListeners();
 
     // File upload triggers
     if (this.elements.uploadBtnTrigger && this.elements.fileInput) {
@@ -975,6 +1010,39 @@ export class ProjectDetailsComponent {
   /* ------------------------------------------------------------------
    * Tab Navigation
    * ------------------------------------------------------------------ */
+  ensureTabListeners() {
+    // Make sure tab buttons have correct attributes
+    const tabButtons = document.querySelectorAll('.tab[role="tab"]');
+    if (tabButtons.length === 0) {
+      debugLog('[ProjectDetailsComponent] No tab buttons found with .tab[role="tab"] selector');
+      return;
+    }
+
+    // Remove previous listener if exists
+    if (this.elements.tabContainer && this.elements.tabContainer.dataset.listenerAttached) {
+      this._manageListeners(this.elements.tabContainer, 'click', this.boundOnTabClick, 'remove');
+      delete this.elements.tabContainer.dataset.listenerAttached;
+    }
+
+    // Attach click event to container (for delegation)
+    if (this.elements.tabContainer) {
+      this._manageListeners(this.elements.tabContainer, 'click', this.boundOnTabClick);
+      this.elements.tabContainer.dataset.listenerAttached = 'true';
+      debugLog('[ProjectDetailsComponent] Tab listeners attached successfully');
+
+      // Ensure initial active tab is properly marked
+      const initialTab = this.state.activeTab || 'files';
+      tabButtons.forEach(btn => {
+        const isActive = btn.dataset.tab === initialTab;
+        btn.classList.toggle('tab-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        btn.tabIndex = isActive ? 0 : -1;
+      });
+    } else {
+      debugLog('[ProjectDetailsComponent] Tab container not found, cannot attach listeners');
+    }
+  }
+
   onTabClick(event) {
     const tabBtn = event.target.closest('.tab[role="tab"]');
     if (!tabBtn || tabBtn.classList.contains('tab-disabled')) return;
