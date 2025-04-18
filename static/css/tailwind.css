@@ -109,8 +109,12 @@
 
 /* Custom utilities to support text truncation and other features */
 @layer utilities {
+  .container-md {
+    container-type: inline-size;
+  }
+  
   @container (min-width: 48rem) {
-    #projectList {
+    .container-md #projectList {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
