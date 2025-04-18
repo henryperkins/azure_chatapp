@@ -2,11 +2,12 @@
 main.py
 --------
 FastAPI entrypoint with consolidated routes and security configuration.
+Enhanced with better MCP integration, improved type hints, and optimized startup.
 """
 
 import os
 import logging
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Dict, Any
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -18,7 +19,12 @@ from utils.sentry_utils import (
     check_sentry_mcp_connection,
 )
 from utils.middlewares import SentryTracingMiddleware, SentryContextMiddleware
-from utils.mcp_sentry import enable_mcp_integrations
+from utils.mcp_sentry import (
+    enable_mcp_integrations,
+    check_mcp_server,
+    start_mcp_server,
+    get_mcp_status,
+)
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +32,7 @@ from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware import Middleware
+from fastapi.routing import APIRoute
 
 # Import consolidated routers
 from auth import router as auth_router, create_default_user
@@ -44,7 +51,7 @@ from utils.auth_utils import clean_expired_tokens
 from utils.db_utils import schedule_token_cleanup
 
 # Configure environment variables (with defaults)
-APP_NAME = os.getenv("APP_NAME", "Azure Chat App")  # Default app name
+APP_NAME = os.getenv("APP_NAME", "Azure Chat App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
 ENVIRONMENT = os.getenv("ENVIRONMENT", settings.ENV)
 SENTRY_ENABLED = (
@@ -55,52 +62,51 @@ TRUSTED_HOSTS = os.getenv("TRUSTED_HOSTS", ",".join(settings.ALLOWED_HOSTS)).spl
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO if ENVIRONMENT == "development" else logging.WARNING
+    level=logging.INFO if ENVIRONMENT == "development" else logging.WARNING,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Configure Sentry loggers to ignore noisy sources
-configure_sentry_loggers()
 
-# Set up Sentry integrations
-sentry_logging = LoggingIntegration(
-    level=logging.INFO,  # Breadcrumb level: capture INFO and above
-    event_level=logging.ERROR,  # Send events for ERROR level logs and above
-)
+def configure_sentry() -> None:
+    """Configure Sentry SDK with proper integrations and settings."""
+    configure_sentry_loggers()
 
-integrations = [
-    sentry_logging,
-    FastApiIntegration(transaction_style="endpoint"),
-    SqlalchemyIntegration(),
-    AsyncioIntegration(),
-]
-
-# Only initialize Sentry if enabled
-if SENTRY_ENABLED and SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        environment=ENVIRONMENT,
-        release=f"{APP_NAME}@{APP_VERSION}",
-        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
-        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.5")),
-        send_default_pii=(
-            os.getenv("SENTRY_SEND_DEFAULT_PII", "false").lower() == "true"
-        ),
-        attach_stacktrace=True,
-        integrations=integrations,
-        before_send=filter_sensitive_event,  # type: ignore
-        max_breadcrumbs=int(os.getenv("SENTRY_MAX_BREADCRUMBS", "150")),
-        propagate_traces=True,
-        trace_propagation_targets=["*"],
+    sentry_logging = LoggingIntegration(
+        level=logging.INFO,
+        event_level=logging.ERROR,
     )
 
-    # Enable MCP integrations if available
-    enable_mcp_integrations()
-    logger.info(
-        f"Sentry initialized for {APP_NAME}@{APP_VERSION} in {ENVIRONMENT} environment"
-    )
-else:
-    logger.warning("Sentry is disabled or DSN is not configured")
+    integrations = [
+        sentry_logging,
+        FastApiIntegration(transaction_style="endpoint"),
+        SqlalchemyIntegration(),
+        AsyncioIntegration(),
+    ]
+
+    if SENTRY_ENABLED and SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            environment=ENVIRONMENT,
+            release=f"{APP_NAME}@{APP_VERSION}",
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
+            profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.5")),
+            send_default_pii=os.getenv("SENTRY_SEND_DEFAULT_PII", "false").lower()
+            == "true",
+            attach_stacktrace=True,
+            integrations=integrations,
+            before_send=filter_sensitive_event,
+            max_breadcrumbs=int(os.getenv("SENTRY_MAX_BREADCRUMBS", "150")),
+            propagate_traces=True,
+            trace_propagation_targets=["*"],
+        )
+
+        if not enable_mcp_integrations():
+            logger.warning("Failed to enable Sentry MCP integrations")
+        logger.info(f"Sentry initialized for {APP_NAME}@{APP_VERSION}")
+
+
+configure_sentry()
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -123,56 +129,55 @@ app = FastAPI(
     ],
 )
 
-# Add middleware (order matters - executed in reverse order)
-if SENTRY_ENABLED and SENTRY_DSN:
+
+def setup_middleware() -> None:
+    """Configure application middleware with proper ordering."""
+    if SENTRY_ENABLED and SENTRY_DSN:
+        app.add_middleware(
+            SentryContextMiddleware,
+            app_version=APP_VERSION,
+            environment=ENVIRONMENT,
+        )
+        app.add_middleware(
+            SentryTracingMiddleware,
+            include_request_body=False,
+            record_breadcrumbs=True,
+            spans_sample_rate=float(os.getenv("SENTRY_SPANS_SAMPLE_RATE", "1.0")),
+        )
+
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
     app.add_middleware(
-        SentryContextMiddleware,
-        app_version=APP_VERSION,
-        environment=ENVIRONMENT,
-    )
-    app.add_middleware(
-        SentryTracingMiddleware,
-        include_request_body=False,
-        record_breadcrumbs=True,
-        spans_sample_rate=float(os.getenv("SENTRY_SPANS_SAMPLE_RATE", "1.0")),
+        SessionMiddleware,
+        secret_key=os.getenv("SECRET_KEY", settings.SESSION_SECRET),
+        session_cookie="session",
+        same_site="strict",
+        https_only=(ENVIRONMENT == "production"),
+        max_age=60 * 60 * 24 * 7,
     )
 
-# Add security middlewares
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.getenv("SECRET_KEY", settings.SESSION_SECRET),
-    session_cookie="session",
-    same_site="strict",
-    https_only=(ENVIRONMENT == "production"),
-    max_age=60 * 60 * 24 * 7,  # 1 week
-)
 
-# ========================
-# Startup/Shutdown Handlers
-# ========================
+setup_middleware()
+
+
+async def initialize_services() -> None:
+    """Initialize all required services during startup."""
+    await init_db()
+    await create_default_user()
+    await schedule_token_cleanup(interval_minutes=30)
+
+    if SENTRY_ENABLED and SENTRY_DSN:
+        if not check_mcp_server() and not start_mcp_server():
+            logger.error("Failed to start Sentry MCP server")
+        elif mcp_status := get_mcp_status():
+            logger.info(f"Sentry MCP server status: {mcp_status}")
 
 
 @app.on_event("startup")
-async def startup_event():
-    """Initialize application services"""
+async def startup_event() -> None:
+    """Initialize application services with proper error handling."""
     try:
-        # Initialize database
-        await init_db()
-        await create_default_user()
-        await schedule_token_cleanup(interval_minutes=30)
-
-        # Check Sentry MCP server connection if Sentry is enabled
-        if SENTRY_ENABLED and SENTRY_DSN:
-            mcp_status = check_sentry_mcp_connection()
-            if mcp_status:
-                logger.info("Sentry MCP server connection verified")
-            else:
-                logger.warning("Sentry MCP server connection test failed")
-
-        logger.info(
-            f"Application {APP_NAME} v{APP_VERSION} started in {ENVIRONMENT} environment"
-        )
+        await initialize_services()
+        logger.info(f"Application {APP_NAME} v{APP_VERSION} started in {ENVIRONMENT}")
 
         if SENTRY_ENABLED:
             sentry_sdk.add_breadcrumb(
@@ -185,7 +190,6 @@ async def startup_event():
                     "environment": ENVIRONMENT,
                 },
             )
-
     except Exception as e:
         logger.critical(f"Startup failed: {str(e)}")
         if SENTRY_ENABLED:
@@ -194,8 +198,8 @@ async def startup_event():
 
 
 @app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up resources on shutdown"""
+async def shutdown_event() -> None:
+    """Clean up resources on shutdown."""
     try:
         async with get_async_session_context() as session:
             await clean_expired_tokens(session)
@@ -204,79 +208,52 @@ async def shutdown_event():
         logger.error(f"Shutdown error: {str(e)}")
 
 
-# ========================
-# Security Middleware
-# ========================
-
 if ENVIRONMENT == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
 
+
 @app.middleware("http")
 async def add_security_headers(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ):
-        """Add security headers to all responses"""
-        response = await call_next(request)
-        response.headers.update(
-            {
-                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-                "X-Content-Type-Options": "nosniff",
-                "X-Frame-Options": "DENY",
-                "X-XSS-Protection": "1; mode=block",
-            }
-        )
-        return response
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers.update(
+        {
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "X-XSS-Protection": "1; mode=block",
+            "Content-Security-Policy": "default-src 'self'",
+        }
+    )
+    return response
 
-
-# ========================
-# Static Files and HTML Templates
-# ========================
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", include_in_schema=False)
 async def serve_frontend() -> FileResponse:
+    """Serve the main frontend application."""
     return FileResponse("static/html/base.html")
 
 
-@app.get("/project_list.html", include_in_schema=False)
-async def serve_project_list() -> FileResponse:
-    return FileResponse("static/html/project_list.html")
-
-
-@app.get("/project_details.html", include_in_schema=False)
-async def serve_project_details() -> FileResponse:
-    return FileResponse("static/html/project_details.html")
-
-
-@app.get("/modals.html", include_in_schema=False)
-async def serve_modals() -> FileResponse:
-    return FileResponse("static/html/modals.html")
-
-
-@app.get("/chat_ui.html", include_in_schema=False)
-async def serve_chat_ui() -> FileResponse:
-    return FileResponse("static/html/chat_ui.html")
-
-
-# ========================
-# Health Check
-# ========================
-
-
 @app.get("/health", tags=["system"])
-async def health_check() -> dict[str, str | bool]:
-    return {"status": "healthy", "environment": ENVIRONMENT, "debug": settings.DEBUG}
-
-
-# ========================
-# Error Handlers
-# ========================
+async def health_check() -> Dict[str, Any]:
+    """System health check endpoint with MCP status."""
+    return {
+        "status": "healthy",
+        "environment": ENVIRONMENT,
+        "debug": settings.DEBUG,
+        "sentry_enabled": SENTRY_ENABLED,
+        "mcp_status": get_mcp_status() if SENTRY_ENABLED else "disabled",
+    }
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Handle HTTP exceptions with consistent formatting."""
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
@@ -284,18 +261,18 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 @app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
+async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle unexpected exceptions with Sentry integration."""
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    if SENTRY_ENABLED:
+        sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
     )
 
 
-# ========================
-# Router Registration
-# ========================
-
+# Router registration
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(
     knowledge_base_router, prefix="/api/knowledge-bases", tags=["knowledge-bases"]
@@ -317,30 +294,28 @@ app.include_router(conversations_router, prefix="/api/projects", tags=["conversa
 if ENVIRONMENT != "production":
     app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring"])
 
-# ========================
-# Development Endpoints
-# ========================
-
 if ENVIRONMENT == "development":
 
     @app.get("/debug/routes", include_in_schema=False)
-    async def debug_routes():
-        routes = []
-        from fastapi.routing import APIRoute
-
-        for route in app.routes:
-            if isinstance(route, APIRoute):
-                routes.append(
-                    {
-                        "path": route.path,
-                        "name": route.name,
-                        "methods": list(route.methods),
-                    }
-                )
-        return routes
+    async def debug_routes() -> list[Dict[str, Any]]:
+        """List all registered routes for debugging."""
+        return [
+            {
+                "path": route.path,
+                "name": route.name,
+                "methods": list(route.methods),
+            }
+            for route in app.routes
+            if isinstance(route, APIRoute)
+        ]
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "8000")),
+        log_level="info" if ENVIRONMENT == "development" else "warning",
+    )
