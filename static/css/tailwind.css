@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @source "./static/html/*.html";
 @source "./static/js/*.js";
-@plugin "daisyui";
+
 @theme inline {
   --font-poppins: Poppins, sans-serif;
   --shadow-custom: 0 4px 10px rgba(0, 0, 0, 0.15);
@@ -249,21 +249,6 @@
   }
 }
 
-/* Optional Composable Variants */
-@variants hover, focus, active {
-  .btn-enhanced {
-    @apply text-white bg-blue-500;
-  }
-}
-
-@variants focus {
-
-  .btn,
-  .project-filter-btn,
-  .project-tab-btn {
-    @apply ring ring-offset-2 ring-primary;
-  }
-}
 
 /* Modern utility replacements */
 .grow {

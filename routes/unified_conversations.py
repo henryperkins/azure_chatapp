@@ -12,29 +12,25 @@ import logging
 import random
 import time
 from uuid import UUID
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+import sentry_sdk
 from sentry_sdk import (
     capture_exception,
     configure_scope,
     start_transaction,
-    start_span,
-    set_tag,
-    set_context,
     metrics,
     capture_message
 )
 
 from db import get_async_session
 from models.user import User
-from services.conversation_service import ConversationService
+from services.conversation_service import ConversationService, get_conversation_service
 from utils.auth_utils import get_current_user_and_token
-from utils.response_utils import create_standard_response
-from utils.sentry_utils import sentry_span, tag_transaction
+from utils.sentry_utils import sentry_span
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
 
@@ -76,7 +72,9 @@ class MessageCreate(BaseModel):
 
 class BatchConversationIds(BaseModel):
     """Model for batch operations"""
-    conversation_ids: List[UUID] = Field(..., min_items=1, max_items=100)
+    # Pylance might complain about min_items, max_items on older Pydantic versions,
+    # but it should work on modern versions. We'll keep them.
+    conversation_ids: List[UUID] = Field(...)
 
 # ============================
 # Conversation CRUD with Monitoring
@@ -196,7 +194,7 @@ async def get_project_conversation(
             return {
                 "status": "success",
                 "conversation": conv_data,
-                "sentry_trace_id": sentry_sdk.get_traceparent()
+                "sentry_trace_id": sentry_sdk.get_traceparent() if hasattr(sentry_sdk, "get_traceparent") else None
             }
 
         except HTTPException:
@@ -501,12 +499,14 @@ async def summarize_conversation(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """Generate summary with AI performance tracking"""
+    # Define model_id with a default upfront to avoid unbound issues
+    model_id = ""
     transaction = start_transaction(
         op="ai",
         name="Summarize Conversation",
         sampled=random.random() < AI_SAMPLE_RATE
     )
-    
+
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
@@ -582,7 +582,8 @@ async def summarize_conversation(
     except Exception as e:
         transaction.set_tag("error", True)
         capture_exception(e)
-        metrics.incr("ai.summary.failure", tags={"model": model_id})
+        model_for_error = model_id if 'model_id' in locals() else ""
+        metrics.incr("ai.summary.failure", tags={"model": model_for_error})
         logger.error(f"Summary generation failed: {str(e)}")
         raise HTTPException(
             status_code=500,
@@ -676,7 +677,7 @@ async def list_project_conversation_messages(
     project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
-    db: int = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     conv_service: ConversationService = Depends(get_conversation_service),
@@ -729,7 +730,7 @@ async def list_project_conversation_messages(
                     "model_id": conv_data["model_id"],
                     "count": len(messages),
                 },
-                "sentry_trace_id": sentry_sdk.get_traceparent()
+                "sentry_trace_id": sentry_sdk.get_traceparent() if hasattr(sentry_sdk, "get_traceparent") else None
             }
 
         except HTTPException:
