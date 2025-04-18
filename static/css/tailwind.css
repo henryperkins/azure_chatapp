@@ -112,18 +112,23 @@
   .container-md {
     container-type: inline-size;
   }
-  
+}
+
+@layer utilities {
   @container (min-width: 48rem) {
     .container-md #projectList {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+}
 
+@layer utilities {
   @container (min-width: 64rem) {
     #projectList {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
+}
 
   .banner {
     background: color-mix(in srgb, #1d4ed8 50%, #ffffff 50%);
