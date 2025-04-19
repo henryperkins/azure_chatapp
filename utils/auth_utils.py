@@ -71,15 +71,30 @@ async def verify_token(
     """
     decoded = None
     token_id = None
+    start_time = datetime.utcnow()
 
     try:
+        if settings.DEBUG:
+            logger.debug(
+                f"Verifying token (expected_type={expected_type}): {token[:20]}..."
+            )
+
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         token_id = decoded.get("jti")
+        token_type = decoded.get("type", "unknown")
+        username = decoded.get("sub", "unknown")
+        expires_at = datetime.utcfromtimestamp(decoded["exp"]) if decoded.get("exp") else None
+
+        if settings.DEBUG:
+            logger.debug(
+                f"Token details - jti: {token_id}, type: {token_type}, "
+                f"user: {username}, expires: {expires_at}"
+            )
 
         # If a specific token type is expected, confirm it
-        if expected_type and decoded.get("type") != expected_type:
+        if expected_type and token_type != expected_type:
             logger.warning(
-                f"Token type mismatch. Expected '{expected_type}', got '{decoded.get('type')}'"
+                f"Token type mismatch. Expected '{expected_type}', got '{token_type}'"
             )
             raise HTTPException(status_code=401, detail="Invalid token type")
 
@@ -96,10 +111,12 @@ async def verify_token(
                 logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
                 raise HTTPException(status_code=401, detail="Token is revoked")
 
-        username = decoded.get("sub") or "unknown"
-        logger.debug(
-            "Token verification successful for jti=%s, user=%s", token_id, username
-        )
+        if settings.DEBUG:
+            duration = (datetime.utcnow() - start_time).total_seconds() * 1000
+            logger.debug(
+                f"Token verification successful for jti={token_id}, "
+                f"user={username} (took {duration:.2f}ms)"
+            )
         return decoded
 
     except ExpiredSignatureError as exc:
@@ -244,5 +261,3 @@ async def get_current_user_and_token(request: Request) -> User:
     async with get_async_session_context() as db:
         user = await get_user_from_token(token, db)
     return user
-
-

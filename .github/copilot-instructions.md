@@ -1,6 +1,0 @@
-- Explain diagnostic steps before proposing code.
-- Identify related issues and side effects.
-- Prioritize addressing underlying problems.
-- Provide complete code modifications with file context.
-- Follow Azure best practices.
-- Use underscore for field names.
