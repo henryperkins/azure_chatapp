@@ -356,8 +356,12 @@ function handleBackendUnavailable(event) {
 }
 
 function toggleAuthDropdown() {
+  console.log('[toggleAuthDropdown] fired');
   const dropdown = document.getElementById('authDropdown');
-  if (!dropdown) return;
+  if (!dropdown) {
+    console.log('[toggleAuthDropdown] #authDropdown not found');
+    return;
+  }
   dropdown.classList.toggle('hidden');
 }
 
@@ -832,6 +836,7 @@ function handleAuthStateChanged(e) {
 }
 
 function setupEventListeners() {
+    console.log('[setupEventListeners] called');
     cleanupListeners(); // Clean up existing listeners to prevent duplicates
     window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChanged);
 
