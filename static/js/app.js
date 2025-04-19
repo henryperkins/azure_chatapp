@@ -876,16 +876,17 @@ function handleAuthStateChange(e) {
 }
 
 async function initApp() {
-  // Block initialization if not authenticated
-  const authenticated = await window.auth.throttledVerifyAuthState();
+  // Block initialization if not authenticated - use forceVerify for critical init checks
+  const authenticated = await window.auth.throttledVerifyAuthState(true);
   if (!authenticated) {
-    console.warn('[App] User unauthenticated during init, showing login prompt and aborting further initialization.');
-    // Clear stale client-side auth state
-    if (window.auth && typeof window.auth.clear === 'function') window.auth.clear();
-    toggleVisibility(document.getElementById('loginRequiredMessage'), true);
-    const mainContent = document.getElementById('projectManagerPanel');
-    if (mainContent) mainContent.classList.add('hidden');
-    return;
+      console.warn('[App] User unauthenticated - continuing partial init to enable login button');
+      // Show login prompt but do NOT return here,
+      // so that eventHandler.js can set up the #authButton
+      if (window.auth && typeof window.auth.clear === 'function') window.auth.clear();
+      toggleVisibility(document.getElementById('loginRequiredMessage'), true);
+      const mainContent = document.getElementById('projectManagerPanel');
+      if (mainContent) mainContent.classList.add('hidden');
+      // *DO NOT* return, continuing so #authButton event is attached
   }
   // Clean up any existing listeners first
   cleanupAppListeners();
