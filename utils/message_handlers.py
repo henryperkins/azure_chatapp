@@ -48,9 +48,6 @@ async def validate_image_data(image_data: Optional[str]) -> bool:
         logger.error(f"Invalid image data: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid image data")
 
-
-
-
 async def create_user_message(
     conversation_id: UUID, content: str, role: str, db: AsyncSession
 ) -> Message:

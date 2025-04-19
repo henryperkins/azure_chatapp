@@ -11,7 +11,7 @@ Centralized file validation utilities including:
 import os
 import re
 import logging
-from typing import Dict, Any, BinaryIO, Union, List
+from typing import Dict, Any, List
 from fastapi import UploadFile
 import mimetypes
 from config import settings
@@ -60,7 +60,6 @@ class FileValidator:
         # Debug log validation attempts
         logger.debug(f"Validating extension: {ext} in {cls.ALLOWED_EXTENSIONS.keys()}")
 
-        return ext in cls.ALLOWED_EXTENSIONS
         return ext in cls.ALLOWED_EXTENSIONS
 
     @classmethod
@@ -119,10 +118,6 @@ class FileValidator:
         - Content scanning for malicious patterns
         - Detailed error messages
         - Size validation
-        """
-        """
-        Comprehensive validation for uploaded files.
-        Returns file info dict or raises ValueError.
         """
         original_filename = file.filename or "untitled"
         file_size = file.size

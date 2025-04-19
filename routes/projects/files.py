@@ -7,8 +7,8 @@ with knowledge base integration handled separately in KB routes.
 
 import logging
 from uuid import UUID
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 

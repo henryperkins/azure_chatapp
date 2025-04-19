@@ -94,17 +94,17 @@ async def create_conversation(
         name="Create Conversation",
         sampled=random.random() < CONVERSATION_SAMPLE_RATE
     )
-    
+
     try:
         with transaction:
             # Set context from frontend trace if available
             if conversation_data.sentry_trace:
                 transaction.set_data("frontend_trace", conversation_data.sentry_trace)
-            
+
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("user.id", str(current_user.id))
             transaction.set_tag("model.id", conversation_data.model_id)
-            
+
             # Validate project access
             with sentry_span(op="access.check", description="Validate project access"):
                 await validate_project_access(project_id, current_user, db)
@@ -136,7 +136,7 @@ async def create_conversation(
                 "model": conversation_data.model_id,
                 "project_id": str(project_id)
             })
-            
+
             logger.info(f"Created conversation {conv.id} in project {project_id}")
             return {
                 "status": "success",
@@ -179,7 +179,7 @@ async def get_project_conversation(
         try:
             span.set_tag("project.id", str(project_id))
             span.set_tag("conversation.id", str(conversation_id))
-            
+
             # Validate access
             await validate_project_access(project_id, current_user, db)
 
@@ -224,15 +224,15 @@ async def update_project_conversation(
         name="Update Conversation",
         sampled=random.random() < CONVERSATION_SAMPLE_RATE
     )
-    
+
     try:
         with transaction:
             if update_data.sentry_trace:
                 transaction.set_data("frontend_trace", update_data.sentry_trace)
-                
+
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
-            
+
             # Validate access
             await validate_project_access(project_id, current_user, db)
 
@@ -305,12 +305,12 @@ async def delete_project_conversation(
         name="Delete Conversation",
         sampled=random.random() < CONVERSATION_SAMPLE_RATE
     )
-    
+
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
-            
+
             # Delete conversation
             deleted_id = await conv_service.delete_conversation(
                 conversation_id=conversation_id,
@@ -368,18 +368,18 @@ async def create_project_conversation_message(
         name="Process Message",
         sampled=random.random() < AI_SAMPLE_RATE
     )
-    
+
     try:
         with transaction:
             # Set context from frontend if available
             if new_msg.sentry_trace:
                 transaction.set_data("frontend_trace", new_msg.sentry_trace)
-                
+
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
             transaction.set_tag("message.role", new_msg.role)
             transaction.set_data("message_length", len(new_msg.content))
-            
+
             if new_msg.image_data:
                 transaction.set_tag("has_image", True)
                 transaction.set_data("vision_detail", new_msg.vision_detail)
@@ -400,7 +400,7 @@ async def create_project_conversation_message(
             message_metrics = {}
             with sentry_span(op="message.process", description="Handle message") as span:
                 start_time = time.time()
-                
+
                 response = await conv_service.create_message(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
@@ -415,7 +415,7 @@ async def create_project_conversation_message(
                     temperature=new_msg.temperature,
                     max_tokens=new_msg.max_tokens,
                 )
-                
+
                 duration = (time.time() - start_time) * 1000
                 span.set_data("processing_time_ms", duration)
                 message_metrics["processing_time_ms"] = duration
@@ -424,7 +424,7 @@ async def create_project_conversation_message(
             if new_msg.role.lower() == "user":
                 with sentry_span(op="ai.response", description="Generate AI response") as ai_span:
                     ai_start = time.time()
-                    
+
                     # Record AI-specific metrics
                     ai_duration = (time.time() - ai_start) * 1000
                     ai_span.set_data("ai_response_time_ms", ai_duration)
@@ -540,14 +540,14 @@ async def summarize_conversation(
             # Generate summary
             with sentry_span(op="ai.summarize", description="Generate summary") as span:
                 start_time = time.time()
-                
+
                 summary = await conv_service.generate_conversation_summary(
                     conversation_id=conversation_id,
                     messages=messages,
                     model_id=model_id,
                     max_length=max_length
                 )
-                
+
                 duration = (time.time() - start_time) * 1000
                 span.set_data("summary_time_ms", duration)
                 span.set_data("summary_length", len(summary))
@@ -608,18 +608,18 @@ async def batch_delete_conversations(
         name="Batch Delete Conversations",
         sampled=random.random() < CONVERSATION_SAMPLE_RATE
     )
-    
+
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("batch_size", len(batch_data.conversation_ids))
-            
+
             # Validate access
             await validate_project_access(project_id, current_user, db)
 
             deleted_ids = []
             failed_ids = []
-            
+
             for conv_id in batch_data.conversation_ids:
                 with sentry_span(op="db.delete", description=f"Delete {conv_id}") as span:
                     try:
@@ -693,7 +693,7 @@ async def list_project_conversation_messages(
             span.set_tag("conversation.id", str(conversation_id))
             span.set_data("pagination.skip", skip)
             span.set_data("pagination.limit", limit)
-            
+
             # Validate access
             await validate_project_access(project_id, current_user, db)
 
@@ -707,7 +707,7 @@ async def list_project_conversation_messages(
                 limit=limit
             )
             duration = (time.time() - start_time) * 1000
-            
+
             span.set_data("db_query_time_ms", duration)
             metrics.distribution(
                 "conversation.message_list.duration",
@@ -744,3 +744,4 @@ async def list_project_conversation_messages(
                 status_code=500,
                 detail="Failed to retrieve messages"
             ) from e
+            
