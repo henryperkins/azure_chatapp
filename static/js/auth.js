@@ -70,14 +70,14 @@ function getCookie(name) {
 function setAuthCookie(name, value, maxAgeSeconds) {
   // Decide on default SameSite & Secure for environment
   let sameSite = 'SameSite=None';
-  let secure   = 'Secure; ';
+  let secure = 'Secure; ';
 
   // If not actually on HTTPS or on localhost, fallback
   if (location.protocol !== 'https:' ||
-     location.hostname === 'localhost' ||
-     location.hostname === '127.0.0.1') {
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1') {
     sameSite = 'SameSite=Lax';
-    secure   = '';
+    secure = '';
   }
 
   const path = '/';
@@ -378,49 +378,10 @@ async function clearTokenState(options = {}) {
   authState.username = null;
   authState.lastVerified = 0;
   sessionExpiredFlag = Date.now();
-  broadcastAuth(false);
-  if (accessToken) {
-    const isValid = await checkTokenValidity(accessToken).catch(() => false);
-    if (isValid) {
-      if (AUTH_DEBUG) console.debug('[Auth] Found valid access token in cookie.');
-      return accessToken;
-    }
-  }
+  setAuthCookie('access_token', '', 0);
+  setAuthCookie('refresh_token', '', 0);
 
-  // Access token is missing/invalid, try refresh
-  const refreshTokenVal = getCookie('refresh_token');
-  if (!refreshTokenVal) {
-    if (allowEmpty) return '';
-    throw new Error('Authentication required (no refresh token)');
-  }
-
-  const isRefreshValid = await checkTokenValidity(refreshTokenVal, { allowRefresh: true }).catch(() => false);
-  if (!isRefreshValid) {
-    clearTokenState();
-    if (allowEmpty) return '';
-    throw new Error('Session expired (invalid refresh token)');
-  }
-
-  try {
-    if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
-      if (AUTH_DEBUG) console.debug('[Auth] Waiting for existing refreshTokens promise...');
-      await window.__tokenRefreshPromise;
-    } else {
-      await refreshTokens();
-    }
-    const newAccessToken = getCookie('access_token');
-    if (newAccessToken && await checkTokenValidity(newAccessToken).catch(() => false)) {
-      if (!authState.isAuthenticated) broadcastAuth(true, authState.username);
-      return newAccessToken;
-    } else {
-      if (allowEmpty) return '';
-      throw new Error('Token refresh failed to provide a valid access token');
-    }
-  } catch (err) {
-    if (AUTH_DEBUG) console.error('[Auth] Token refresh failed:', err);
-    if (allowEmpty) return '';
-    throw new Error(err.message.includes('expired') ? 'Session expired' : 'Authentication failed during refresh');
-  }
+  if (AUTH_DEBUG) console.debug('[Auth] Token state cleared.');
 }
 
 async function verifyAuthState(forceVerify = false) {
@@ -429,7 +390,7 @@ async function verifyAuthState(forceVerify = false) {
   if (!accessToken || isTokenExpired(accessToken)) {
     clearTokenState();
     return false;
-  }
+  } // <-- Added closing brace here
 
   // Check global lock to prevent concurrent verifications
   if (authCheckInProgress && !forceVerify) {
@@ -810,7 +771,7 @@ async function init() {
     // Reverify on focus if 5+ minutes have passed
     window.addEventListener('focus', () => {
       if (!window.__verifyingOnFocus &&
-          (!authState.lastVerified || (Date.now() - authState.lastVerified > 300000))) {
+        (!authState.lastVerified || (Date.now() - authState.lastVerified > 300000))) {
         window.__verifyingOnFocus = true;
         setTimeout(() => {
           verifyAuthState(false).finally(() => {
@@ -847,7 +808,7 @@ Object.assign(window.auth, {
   init,
   login: loginUser,
   logout,
-verifyAuthState,
+  verifyAuthState,
   refreshTokens,
   clear: clearTokenState,
   isInitialized: false,
@@ -899,3 +860,17 @@ export default {
   getCSRFToken,
   throttledVerifyAuthState
 };
+
+/**
+ * Utility function not originally declared in the code snippet:
+ * isTokenExpired(token) - Checks if a JWT is expired via its 'exp' claim.
+ */
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp && payload.exp < now;
+  } catch (e) {
+    return true;
+  }
+}

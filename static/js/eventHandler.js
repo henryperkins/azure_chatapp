@@ -35,6 +35,28 @@ const trackedListeners = new Set();
  */
 const eventRegistry = {
     // Document-level delegated events
+    '#loginForm': {
+        handler: (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const username = form.querySelector('#username')?.value;
+            const password = form.querySelector('#password')?.value;
+
+            if (!username || !password) {
+                window.showNotification?.('Username and password are required', 'error');
+                return;
+            }
+
+            window.auth.login(username, password)
+                .catch(err => {
+                    console.error('Login error:', err);
+                    window.showNotification?.('Login failed: ' + (err.message || 'Invalid credentials'), 'error');
+                });
+        },
+        eventType: 'submit',
+        priority: EVENT_PRIORITIES.CRITICAL,
+        description: 'Handles login form submission'
+    },
     '#newConversationBtn': {
         handler: handleNewConversationClick,
         eventType: 'click',
