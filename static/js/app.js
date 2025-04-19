@@ -844,31 +844,29 @@ function handleAuthStateChange(e) {
   API_CONFIG.isAuthenticated = authenticated;
 
   // Update auth UI if available
-
   const authButton = document.getElementById('authButton');
   const userMenu = document.getElementById('userMenu');
 
   if (authenticated) {
     authButton?.classList.add('hidden');
     userMenu?.classList.remove('hidden');
-    
+
     // Prevent redundant data loads when auth check is already in progress
     if (API_CONFIG.authCheckInProgress) {
       log("[AuthStateChange] Auth check in progress, skipping data refresh");
       return;
     }
-  } else {
-    authButton?.classList.remove('hidden');
-    userMenu?.classList.add('hidden');
 
     if (stateChanged) {
       log("[AuthStateChange] User authenticated, loading initial data...");
       refreshAppData();
     } else {
-      // Don't force refresh when state hasn't changed
       log("[AuthStateChange] Already authenticated, no state change, skipping UI refresh.");
     }
   } else {
+    authButton?.classList.remove('hidden');
+    userMenu?.classList.add('hidden');
+
     log("[AuthStateChange] User logged out, UI cleared.");
     showProjectListView();
     // Ensure chat UI is hidden on logout
