@@ -8,7 +8,6 @@ performance monitoring, and detailed request capture.
 
 import logging
 import time
-import json
 import os
 from urllib.parse import urlparse
 from typing import Dict, Any, Optional
@@ -17,13 +16,10 @@ import sentry_sdk
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
-from starlette.datastructures import Headers
 
 from utils.sentry_utils import (
     inject_sentry_trace_headers,
-    extract_sentry_trace,
-    tag_transaction,
-    filter_sensitive_event
+    extract_sentry_trace
 )
 
 logger = logging.getLogger(__name__)
@@ -295,6 +291,7 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         # Set user context if we have any data
         if user_data:
             sentry_sdk.set_user(user_data)
+            transaction.set_user(user_data)
 
     def _get_client_ip(self, request: Request) -> Optional[str]:
         """Extract client IP from request headers or connection info"""

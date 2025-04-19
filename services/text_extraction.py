@@ -63,9 +63,6 @@ except ImportError:
 class TextExtractionError(Exception):
     """Exception raised for errors during text extraction."""
 
-    pass
-
-
 class TextExtractor:
     """
     Extracts text content from various file formats.
@@ -345,7 +342,7 @@ class TextExtractor:
 
         except Exception as e:
             logger.exception(f"Error extracting text: {e}")
-            raise TextExtractionError(f"Failed to extract text: {str(e)}")
+            raise TextExtractionError(f"Failed to extract text: {str(e)}") from e
 
     def _extract_from_text(
         self, content: bytes, file_info: Dict[str, Any]
@@ -403,7 +400,7 @@ class TextExtractor:
             # Make sure pypdf is not None before using it
             if pypdf is None:
                 return (
-                    f"[PDF EXTRACTION FAILED: Library not properly imported] - Please restart the application.",
+                    "[PDF EXTRACTION FAILED: Library not properly imported] - Please restart the application.",
                     {
                         **file_info,
                         "extraction_error": "PDF library import issue",

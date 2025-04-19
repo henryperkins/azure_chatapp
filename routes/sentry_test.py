@@ -8,8 +8,8 @@ and demonstrate various Sentry features.
 
 import logging
 import sentry_sdk
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, HTTPException, Request, Response
+from typing import Dict, Any, Optional
 import random
 import time
 import uuid
@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 
 class SentryTestException(Exception):
     """Custom exception for testing Sentry integration."""
-    pass
-
 
 @router.get("/test-error", response_model=Dict[str, str])
 async def test_sentry_error():
@@ -54,7 +52,7 @@ async def test_sentry_error():
         # Capture the exception with Sentry
         sentry_sdk.capture_exception(e)
         # Re-raise for FastAPI to handle
-        raise HTTPException(status_code=500, detail=f"Test error raised with ID: {error_id}")
+        raise HTTPException(status_code=500, detail=f"Test error raised with ID: {error_id}") from e
 
 
 @router.get("/test-message", response_model=Dict[str, str])
@@ -86,7 +84,7 @@ async def test_sentry_message():
 
 
 @router.get("/test-performance", response_model=Dict[str, str])
-async def test_sentry_performance(request: Request, response: Response):
+async def test_sentry_performance(response: Response):
     """
     Test endpoint that creates spans to verify Sentry performance monitoring.
 
@@ -170,7 +168,7 @@ async def test_sentry_profiling():
         def fibonacci(n):
             if n <= 1:
                 return n
-            return fibonacci(n-1) + fibonacci(n-2)
+            return fibonacci(n - 1) + fibonacci(n - 2)
 
         # Calculate Fibonacci numbers
         results = []
@@ -189,7 +187,8 @@ async def test_sentry_profiling():
         # Sort and manipulate
         strings.sort()
         joined = "".join(strings[:100])
-        reversed_str = joined[::-1]
+        # Reverse string for demonstration
+        _ = joined[::-1]  # Result unused but operation preserved for profiling
 
     # Memory operations
     with sentry_span(op="memory.intensive", description="Memory operations"):
@@ -198,7 +197,8 @@ async def test_sentry_profiling():
 
         # Sort and manipulate
         large_list.sort()
-        sum_value = sum(large_list)
+        # Calculate sum for demonstration
+        _ = sum(large_list)  # Result unused but operation preserved for profiling
 
     logger.info(f"Completed profiling test with ID: {profile_id}")
 
@@ -281,7 +281,7 @@ async def test_sentry_mcp(issue_id: Optional[str] = None):
         raise HTTPException(
             status_code=503,
             detail=f"Sentry MCP server error: {str(e)}"
-        )
+        ) from e
     except Exception as e:
         # Capture and handle other errors
         sentry_sdk.capture_exception(e)
@@ -289,11 +289,11 @@ async def test_sentry_mcp(issue_id: Optional[str] = None):
         raise HTTPException(
             status_code=500,
             detail=f"Unexpected error during MCP test: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/test-distributed-tracing")
-async def test_distributed_tracing(request: Request, response: Response):
+async def test_distributed_tracing(response: Response):
     """
     Test endpoint for Sentry distributed tracing.
 
@@ -322,10 +322,11 @@ async def test_distributed_tracing(request: Request, response: Response):
         time.sleep(0.05)
 
         # These headers would normally be sent to the next service
-        trace_data = {
+        # Trace headers would normally be sent to next service
+        _ = {
             "sentry-trace": sentry_sdk.get_traceparent(),
             "baggage": sentry_sdk.get_baggage()
-        }
+        }  # Not used in this test but preserved for demonstration
 
     # Simulate next service in the chain
     with sentry_span(op="service.business_logic", description="Business Logic Service") as span:

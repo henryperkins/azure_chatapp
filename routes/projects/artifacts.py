@@ -68,7 +68,7 @@ async def create_artifact(
         return await create_standard_response(
             serialized_artifact, "Artifact created successfully"
         )
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         # Re-raise HTTP exceptions (e is used in the raise statement)
         raise
     except Exception as _e:
@@ -114,7 +114,7 @@ async def list_artifacts(
                 "project_id": str(project_id),
             }
         )
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         raise
     except Exception as _e:
         logger.error("Error listing artifacts", exc_info=True)
@@ -142,7 +142,7 @@ async def get_artifact(
 
         serialized_artifact = serialize_artifact(artifact)
         return await create_standard_response(serialized_artifact)
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         raise
     except Exception as _e:
         logger.error("Error retrieving artifact", exc_info=True)
@@ -174,7 +174,7 @@ async def update_artifact(
         return await create_standard_response(
             serialized_artifact, message="Artifact updated successfully"
         )
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         raise
     except Exception as _e:
         logger.error("Error updating artifact", exc_info=True)
@@ -203,7 +203,7 @@ async def delete_artifact(
         return await create_standard_response(
             result, message=result.get("message", "Artifact deleted successfully")
         )
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         raise
     except Exception as _e:
         logger.error("Error deleting artifact", exc_info=True)
@@ -234,7 +234,7 @@ async def export_artifact(
         return await create_standard_response(
             export_data, message=f"Artifact exported as {export_format} successfully"
         )
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         raise
     except Exception as _e:
         logger.error("Error exporting artifact", exc_info=True)
@@ -259,7 +259,7 @@ async def get_artifact_stats(
         )
 
         return await create_standard_response(stats)
-    except HTTPException as e:  # pylint: disable=unused-variable
+    except HTTPException:  # pylint: disable=unused-variable
         raise
     except Exception as _e:
         logger.error("Error retrieving artifact statistics", exc_info=True)

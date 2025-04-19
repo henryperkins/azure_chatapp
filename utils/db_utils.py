@@ -40,6 +40,7 @@ class BaseModelProtocol(Protocol):
     user_id: Any
     archived: bool = False
 
+
 # Type variable for generic database models
 T = TypeVar("T", bound=BaseModelProtocol)
 

@@ -226,8 +226,7 @@ class MetadataHelper:
             "filename": file_record.filename,
             "file_type": file_record.file_type,
             "file_size": file_record.file_size,
-            "created_at": file_record.created_at.isoformat()
-                         if file_record.created_at else None,
+            "created_at": file_record.created_at.isoformat() if file_record.created_at else None,
         }
 
         if include_token_count and file_record.config:
