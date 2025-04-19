@@ -835,6 +835,14 @@ function setupEventListeners() {
     cleanupListeners(); // Clean up existing listeners to prevent duplicates
     window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChanged);
 
+    // Prevent any knowledge base modals from auto-opening
+    document.querySelectorAll('[data-kb-debug="true"]').forEach(modal => {
+        if (modal.open) {
+            console.warn('Knowledge base modal was auto-opened, closing it');
+            modal.close();
+        }
+    });
+
     // Setup key shortcuts
     trackListener(document, 'keydown', handleKeyDown);
 
