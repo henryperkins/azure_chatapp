@@ -60,19 +60,67 @@
    * @returns {Promise<Array>} - Array of projects
    */
   async function loadProjects(filter = null) {
-    if (!isAuthInitialized) {
-      console.warn("[projectManager] loadProjects called before auth is ready. Waiting...");
-      await new Promise(resolve => window.auth.AuthBus.addEventListener('authReady', resolve, { once: true }));
-      console.log("[projectManager] Auth is ready, proceeding with loadProjects.");
+    console.log("[DEBUG] loadProjects called - TEST LOG");
+    // Wait for auth to be fully ready
+    if (!window.auth?.isReady) {
+      console.log("[projectManager] Waiting for auth to be ready...");
+      console.log("[DEBUG] Current auth state:", window.auth?.isReady);
+      await new Promise((resolve) => {
+        const checkAuth = () => {
+          if (window.auth?.isReady) {
+            resolve();
+          } else {
+            setTimeout(checkAuth, 100);
+          }
+        };
+        checkAuth();
+      });
     }
 
+    // Check if already loading
     if (projectLoadingInProgress || window.__projectLoadingInProgress) {
-      console.log("[projectManager] Project loading already in progress, skipping duplicate call");
+      console.log("[projectManager] Project loading already in progress");
+      return [];
+    }
+
+    // Verify auth state with proper waiting
+    let isAuthenticated;
+    try {
+      // Wait for any in-progress auth check to complete first
+      if (window.auth.authCheckInProgress) {
+        console.debug('[projectManager] Waiting for auth check to complete...');
+        while (window.auth.authCheckInProgress) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      if (!isAuthenticated) {
+        console.warn("[projectManager] User not authenticated, skipping project load");
+        emitEvent("projectAuthError", {
+          reason: 'load_projects',
+          error: new Error("Authentication required"),
+          retryAfter: 30000 // 30s cooldown
+        });
+        return [];
+      }
+    } catch (err) {
+      console.error("[projectManager] Auth verification failed:", err);
+      emitEvent("projectAuthError", {
+        reason: 'load_projects',
+        error: err,
+        retryAfter: 30000 // 30s cooldown
+      });
+      return [];
+    }
+
+    // Add cooldown check to prevent rapid retries
+    if (window.__projectLoadCooldownUntil && Date.now() < window.__projectLoadCooldownUntil) {
+      console.warn("[projectManager] Project loading in cooldown period, skipping");
       return [];
     }
 
     projectLoadingInProgress = true;
-    window.__projectLoadingInProgress = true; // Optional global flag used by other modules
+    window.__projectLoadingInProgress = true;
 
     const validFilters = ["all", "pinned", "archived", "active"];
     const cleanFilter = validFilters.includes(filter) ? filter : "all";
@@ -127,16 +175,26 @@
       return projects;
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
+
+      // Set cooldown on auth errors
+      if (error.status === 401) {
+        window.__projectLoadCooldownUntil = Date.now() + 30000; // 30s cooldown
+        emitEvent("projectAuthError", {
+          reason: 'load_projects',
+          error,
+          retryAfter: 30000
+        });
+      }
+
       emitEvent("projectsLoaded", {
         projects: [],
         count: 0,
         filter: { type: cleanFilter },
         error: true,
-        message: error.message
+        message: error.message,
+        status: error.status
       });
-      if (error.status === 401) {
-        emitEvent("projectAuthError", { reason: 'load_projects', error });
-      }
+
       return [];
     } finally {
       projectLoadingInProgress = false;

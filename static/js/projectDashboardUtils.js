@@ -81,7 +81,7 @@
         this.notificationContainer = document.createElement('div');
         this.notificationContainer.id = 'notificationContainer';
         // DaisyUI/Tailwind classes for toast placement
-        this.notificationContainer.className = 'toast toast-top toast-end z-[100]';
+        this.notificationContainer.className = 'toast toast-top toast-end z-30';
         document.body.appendChild(this.notificationContainer);
       }
     }
@@ -409,6 +409,7 @@
       // Show the modal using the dialog's showModal method
       if (typeof modalEl.showModal === 'function') {
         modalEl.showModal();
+        modalEl.style.zIndex = '2000'; /* Reduced to avoid overlap with login button */
         this.activeModal = modalId; // Track the active modal
         // Optional: Prevent body scroll while modal is open
         // document.body.style.overflow = 'hidden';

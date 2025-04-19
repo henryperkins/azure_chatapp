@@ -9,6 +9,7 @@ and provides enhanced Sentry functionality through the MCP server.
 import logging
 import json
 import os
+import re
 import time
 import subprocess
 from typing import Any, Dict, Optional, Union, List, Tuple, Callable
@@ -227,32 +228,81 @@ def start_mcp_server() -> bool:
     auth_token = os.environ.get(AUTH_TOKEN_ENV, "")
     if not auth_token:
         logger.error(f"Cannot start MCP server: {AUTH_TOKEN_ENV} environment variable not set")
+        logger.error("Please set SENTRY_AUTH_TOKEN with a valid Sentry auth token")
+        return False
+
+    # Verify the server command exists
+    try:
+        subprocess.run(
+            ["which", SERVER_CMD],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+    except subprocess.CalledProcessError:
+        logger.error(f"MCP server command not found: {SERVER_CMD}")
+        logger.error("Please install the sentry-mcp-server package")
         return False
 
     try:
-        # Start the MCP server in the background
-        logger.info("Starting Sentry MCP server")
-        subprocess.Popen(
+        # Verify server command exists and is executable
+        try:
+            cmd_path = subprocess.run(
+                ["which", SERVER_CMD],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            ).stdout.strip()
+
+            if not os.access(cmd_path, os.X_OK):
+                logger.error(f"MCP server command not executable: {cmd_path}")
+                logger.error("Please check permissions on the sentry-mcp-server package")
+                return False
+
+        except subprocess.CalledProcessError:
+            logger.error(f"MCP server command not found: {SERVER_CMD}")
+            logger.error("Please install the sentry-mcp-server package with:")
+            logger.error("pip install sentry-mcp-server")
+            return False
+
+        # Verify auth token is valid
+        if not auth_token or not re.match(r"^[a-f0-9]{32}$", auth_token):
+            logger.error(f"Invalid SENTRY_AUTH_TOKEN format - must be 32 character hex string")
+            return False
+
+        # Start the MCP server with debug logging
+        logger.info(f"Starting Sentry MCP server with command: python -m {SERVER_CMD}")
+        process = subprocess.Popen(
             [
                 "python", "-m", SERVER_CMD,
-                "--auth-token", auth_token
+                "--auth-token", auth_token,
+                "--log-level", "debug"
             ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+            text=True
         )
 
-        # Wait a moment for it to start
+        # Wait and capture output
+        time.sleep(1)
+        if process.poll() is not None:
+            stdout, stderr = process.communicate()
+            logger.error(f"MCP server failed to start. Output:\n{stdout}\nError:\n{stderr}")
+            return False
+
+        # Additional wait for full startup
         time.sleep(2)
 
-        # Check if it started
-        running = check_mcp_server()
-        if running:
-            logger.info("Sentry MCP server started successfully")
-        else:
-            logger.error("Sentry MCP server failed to start")
+        # Verify server is responding
+        if not check_mcp_server():
+            logger.error("MCP server process started but not responding")
+            process.terminate()
+            return False
 
-        return running
+        logger.info("Sentry MCP server started successfully")
+        return True
     except Exception as e:
         logger.error(f"Failed to start MCP server: {e}")
         return False

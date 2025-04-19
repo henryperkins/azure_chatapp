@@ -82,6 +82,28 @@ class ProjectDashboard {
    * @returns {Promise<boolean>} True if success
    */
   async init() {
+    // Check authentication before proceeding
+    const authenticated = await (window.auth?.throttledVerifyAuthState?.() ?? false);
+    if (!authenticated) {
+      console.warn('[ProjectDashboard] Initialization aborted: User is not authenticated.');
+      this.showInitializationProgress('Please log in to view your projects.');
+      // Optionally, show login screen or message
+      let loginMsg = document.getElementById('loginRequiredMessage');
+      if (!loginMsg) {
+        loginMsg = document.createElement('div');
+        loginMsg.id = 'loginRequiredMessage';
+        loginMsg.className = 'text-center py-10 text-base-content/70';
+        loginMsg.innerHTML = 'Please log in to view your projects';
+        document.body.appendChild(loginMsg);
+      }
+      loginMsg.classList.remove('hidden');
+      // Hide project panel if present
+      const projectPanel = document.getElementById('projectManagerPanel');
+      if (projectPanel) projectPanel.classList.add('hidden');
+      this.hideInitializationProgress();
+      return false;
+    }
+
     const initId = `init-${Date.now().toString(36)}`; // Unique ID for this init run
     console.log(`[ProjectDashboard][${initId}] Initializing... Attempt: ${this.initAttempts + 1}`);
     this.showInitializationProgress("Starting initialization...");
