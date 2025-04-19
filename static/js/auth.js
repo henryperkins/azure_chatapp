@@ -427,7 +427,7 @@ async function verifyAuthState(forceVerify = false) {
   // Client-side expiration guard
   const accessToken = getCookie('access_token');
   if (!accessToken || isTokenExpired(accessToken)) {
-    clearAuthStorage();
+    clearTokenState();
     return false;
   }
 
@@ -589,7 +589,7 @@ async function verifyAuthState(forceVerify = false) {
 }
 
 // Update throttle for auth failures
-// let lastAuthFailTimestamp = 0;
+let lastAuthFailTimestamp = 0;
 const AUTH_FAIL_THROTTLE_MS = 60000;
 
 async function throttledVerifyAuthState(forceVerify = false) {
