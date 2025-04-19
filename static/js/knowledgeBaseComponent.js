@@ -680,6 +680,8 @@ class KnowledgeBaseComponent {
     }
 
     modal.showModal(); // Use dialog method
+    console.log('[KnowledgeBase] showResultDetail triggered');
+    console.log('[KnowledgeBase] showKnowledgeBaseModal triggered');
     this._validateSelectedModelDimensions(); // Re-check warning after showing
   }
 
