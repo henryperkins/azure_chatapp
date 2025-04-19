@@ -1,3 +1,4 @@
+
 """
 utils/sentry_utils.py
 -----
@@ -15,13 +16,16 @@ import contextlib
 import re
 from typing import Dict, Any, Optional, Generator, Union, List, Set
 from fastapi import Request, Response
+import logging
+import sentry_sdk
 from sentry_sdk import configure_scope, push_scope
 from sentry_sdk.tracing import Span, Transaction
-import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
+from sentry_sdk.types import Event, Hint
 
 # Type aliases
-SentryEvent = Dict[str, Any]
-SentryHint = Optional[Dict[str, Any]]
+SentryEvent = Dict[str, Any]  # Kept for backward compatibility
+SentryHint = Optional[Dict[str, Any]]  # Kept for backward compatibility
 
 # Constants
 NOISY_LOGGERS = {
@@ -72,9 +76,42 @@ def configure_sentry_loggers(additional_ignores: Optional[Set[str]] = None) -> N
     ignored_loggers = NOISY_LOGGERS.union(additional_ignores or set())
 
     for logger_name in ignored_loggers:
-        sentry_sdk.integrations.logging.ignore_logger(logger_name)
+        ignore_logger(logger_name)
 
     logging.info(f"Configured Sentry to ignore {len(ignored_loggers)} loggers")
+
+
+def configure_sentry(
+    dsn: str,
+    environment: str = "production",
+    release: Optional[str] = None,
+    traces_sample_rate: float = 1.0,
+    additional_ignores: Optional[Set[str]] = None,
+) -> None:
+    """
+    Centralized Sentry configuration.
+
+    Args:
+        dsn: Sentry Data Source Name
+        environment: Deployment environment (e.g., production, staging)
+        release: Release version (optional)
+        traces_sample_rate: Sampling rate for performance monitoring
+        additional_ignores: Additional logger names to ignore
+    """
+    sentry_logging = LoggingIntegration(
+        level=logging.INFO,
+        event_level=logging.ERROR,
+    )
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=environment,
+        release=release,
+        traces_sample_rate=traces_sample_rate,
+        integrations=[sentry_logging],
+    )
+
+    configure_sentry_loggers(additional_ignores)
 
 
 def check_sentry_mcp_connection(timeout: float = 2.0) -> bool:
@@ -207,7 +244,18 @@ def _set_span_data(span: Union[Span, Transaction], data: Dict[str, Any]) -> None
             span.set_data(key, str(value))
 
 
-def filter_sensitive_event(event: SentryEvent, hint: SentryHint = None) -> SentryEvent:
+def filter_sensitive_event(event: Event, hint: Optional[Hint] = None) -> Optional[Event]:
+    """
+    Comprehensive sensitive data filtering for Sentry events.
+    Uses proper Sentry SDK Event and Hint types for type safety.
+
+    Args:
+        event: Raw Sentry event
+        hint: Additional event metadata
+
+    Returns:
+        Filtered Sentry event or None to drop the event
+    """
     """
     Comprehensive sensitive data filtering for Sentry events.
 

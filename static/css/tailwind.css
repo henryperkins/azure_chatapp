@@ -94,4 +94,19 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Z-index fixes */
+  #authContainer {
+      position: relative;
+      z-index: 101; /* Raise above other modals */
+  }
+
+  .knowledge-base-modal {
+    z-index: 100;
+  }
+
+  #projectListView {
+    z-index: 40;
+    position: relative;
+  }
 }

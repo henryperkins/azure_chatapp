@@ -34,6 +34,9 @@ class KnowledgeBaseComponent {
 
   // NEW: Initialize method for lazy loading/rendering
   async initialize(isVisible = false, kbData = null, projectId = null) {
+    // Add small delay to prevent overlapping with other UI elements
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     if (this.state.isInitialized && !isVisible) {
         // If already initialized but now hidden, just hide sections
         this.elements.activeSection?.classList.add('hidden');
@@ -59,6 +62,7 @@ class KnowledgeBaseComponent {
 
     // Toggle visibility based on the flag
     this.elements.container?.classList.toggle('hidden', !isVisible);
+    this.elements.container?.classList.toggle('pointer-events-none', !isVisible);
   }
 
 

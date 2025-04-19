@@ -2,6 +2,7 @@
  * sidebar.js
  * ---------
  * Handles core sidebar UI functionality:
+ */
 
 /**
  * Simple utility for consistent event binding.
@@ -358,7 +359,60 @@ function activateTab(tabName) {
   // Load data for the tab if authenticated
   const checkAuth = async () => {
     try {
-      let isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      // Use sidebar's own throttling logic independently from auth.js
+      const now = Date.now();
+      const lastSidebarAuthFailTime = window.sidebar?._lastAuthFailTimestamp || 0;
+      const AUTH_FAIL_COOLDOWN_MS = 30000; // 30 seconds cooldown
+
+      if (now - lastSidebarAuthFailTime < AUTH_FAIL_COOLDOWN_MS) {
+        console.warn('[Sidebar] Auth verification throttled due to recent failure');
+        // Return cached auth state during cooldown period
+        return window.auth.authState?.isAuthenticated || false;
+      }
+
+      // Use a local variable to track if we're in the middle of checking auth
+      let isAuthCheckInProgress = window.auth.authCheckInProgress;
+
+      if (isAuthCheckInProgress) {
+        console.debug('[Sidebar] Auth check already in progress, waiting...');
+        // Wait for existing check to complete using a timeout to prevent infinite loops
+        let waitAttempts = 0;
+        while (window.auth.authCheckInProgress && waitAttempts < 50) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          waitAttempts++;
+        }
+        if (waitAttempts >= 50) {
+          console.warn('[Sidebar] Timed out waiting for auth check to complete');
+          return false;
+        }
+      }
+
+      let isAuthenticated = false;
+      try {
+        // Explicitly check for token validity before verification
+        const accessToken = getCookie('access_token');
+        const refreshToken = getCookie('refresh_token');
+
+        // If no tokens at all, clearly not authenticated
+        if (!accessToken && !refreshToken) {
+          return false;
+        }
+
+        // If we already had an authentication failure in this component, use cached state
+        isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+      } catch (err) {
+        // Handle E401_THROTTLED error specifically
+        if (err.code === 'E401_THROTTLED') {
+          console.warn('[Sidebar] Auth verification throttled, using cached value.');
+          isAuthenticated = window.auth.authState?.isAuthenticated || false;
+        } else {
+          console.warn('[Sidebar] Auth verification failed:', err);
+          // Set the sidebar's own throttling timestamp on verification failure
+          window.sidebar._lastAuthFailTimestamp = Date.now();
+          return false;
+        }
+      }
+
       if (isAuthenticated && sidebarTabConfig[tabName].loader) {
         setTimeout(() => sidebarTabConfig[tabName].loader(), 300);
       } else if (!isAuthenticated) {
@@ -377,6 +431,9 @@ function activateTab(tabName) {
       }
     } catch (err) {
       console.warn('[Sidebar] Auth verification failed:', err);
+
+      // Set the sidebar's own throttling timestamp on verification failure
+      window.sidebar._lastAuthFailTimestamp = Date.now();
 
       // Handle authentication error gracefully
       const sectionElement = document.getElementById(sidebarTabConfig[tabName].sectionId);
@@ -800,8 +857,20 @@ window.sidebar = {
   isAnimating,
   activateTab, // Added for external use
   tabConfig: sidebarTabConfig, // Expose configuration
-  updateSidebarState // Added for external use
+  updateSidebarState, // Added for external use
+  _lastAuthFailTimestamp: 0 // Track auth failures for throttling
 };
+
+/**
+ * Get a cookie value by name
+ * @param {string} name - The name of the cookie to get
+ * @returns {string|null} The cookie value or null if not found
+ */
+function getCookie(name) {
+  const c = `; ${document.cookie}`.split(`; ${name}=`);
+  if (c.length === 2) return c.pop().split(';').shift();
+  return null;
+}
 
 // Initialize on DOMContentLoaded with proper state tracking
 let sidebarInitialized = false;

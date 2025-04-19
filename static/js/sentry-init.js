@@ -32,9 +32,8 @@
 
   // Helper to retrieve your DSN (inline, environment variable, etc.)
   function getDsn() {
-    // In production, you might read from window.ENV.SENTRY_DSN or process.env.SENTRY_DSN
-    // For now, replace with your actual DSN:
-    return 'https://js.sentry-cdn.com/YOUR_DSN_PUBLIC_KEY.min.js';
+    // Retrieve DSN from environment configuration
+    return window.ENV?.SENTRY_DSN || 'https://b03711f63d1160f48dcaeda3edae14ac@o4508070823395328.ingest.us.sentry.io/4509138383863808';
   }
 
   // Helper to detect environment

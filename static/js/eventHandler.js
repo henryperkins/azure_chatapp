@@ -353,31 +353,41 @@ function handleBackendUnavailable(event) {
  * Handle new conversation creation with authentication check
  * @returns {void}
  */
-function handleNewConversationClick() {
-    if (!window.ensureAuthenticated) {
-        console.error('Authentication check not available');
-        window.showNotification?.('Authentication service unavailable', 'error');
-        return;
-    }
-    window.ensureAuthenticated().then(isAuth => {
-        if (!isAuth) {
+async function handleNewConversationClick() {
+    try {
+        // First ensure auth system is ready
+        if (!window.auth?.isReady) {
+            await new Promise(resolve => {
+                if (window.auth?.isReady) return resolve();
+                window.auth?.AuthBus?.addEventListener('authReady', resolve, { once: true });
+            });
+        }
+
+        // Check authentication with proper error handling
+        const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
+        if (!isAuthenticated) {
             window.showNotification?.('Please log in to create a conversation', 'error');
             return;
         }
+
+        // Ensure project manager is available
         if (!window.projectManager?.createConversation) {
             console.error('No project manager or conversation creation method found');
             window.showNotification?.('Conversation creation service unavailable', 'error');
             return;
         }
-        window.projectManager
-            .createConversation(null)
-            .then(newConversation => {
-                window.location.href = '/?chatId=' + newConversation.id;
-            })
-            .catch(err => {
-                window.handleAPIError?.('creating conversation', err);
-            });
-    });
+
+        // Create conversation
+        const newConversation = await window.projectManager.createConversation(null);
+        window.location.href = '/?chatId=' + newConversation.id;
+    } catch (err) {
+        console.error('Error creating conversation:', err);
+        if (err.status === 401) {
+            window.showNotification?.('Session expired. Please log in again.', 'error');
+        } else {
+            window.showNotification?.('Failed to create conversation: ' + (err.message || 'Unknown error'), 'error');
+        }
+    }
 }
 
 /**

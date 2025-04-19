@@ -18,11 +18,12 @@ let lastVerifyFailureTime = 0;
 let tokenRefreshInProgress = false;
 let lastRefreshAttempt = null;
 let __refreshCooldownUntil = 0;  // Throttle timestamp
+let authCheckInProgress = false; // Global auth check lock
 let backendUnavailableFlag = false;
 let lastBackendUnavailableTime = 0;
 
 // Config
-const MIN_RETRY_INTERVAL = 5000; // ms between verification attempts after failure
+const MIN_RETRY_INTERVAL = 30000; // 30s between verification attempts after failure
 const MAX_REFRESH_RETRIES = 3;
 const BACKEND_UNAVAILABLE_COOLDOWN = 30000; // 30 seconds circuit-breaker
 
@@ -423,6 +424,22 @@ async function getAuthToken(options = {}) {
 }
 
 async function verifyAuthState(forceVerify = false) {
+  // Client-side expiration guard
+  const accessToken = getCookie('access_token');
+  if (!accessToken || isTokenExpired(accessToken)) {
+    clearAuthStorage();
+    return false;
+  }
+
+  // Check global lock to prevent concurrent verifications
+  if (authCheckInProgress && !forceVerify) {
+    console.debug('[Auth] Auth check already in progress, waiting...');
+    while (authCheckInProgress) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return authState.isAuthenticated;
+  }
+
   // Circuit breaker if backend is known to be down
   if (backendUnavailableFlag && (Date.now() - lastBackendUnavailableTime < BACKEND_UNAVAILABLE_COOLDOWN)) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - backend unavailable.');
@@ -432,10 +449,11 @@ async function verifyAuthState(forceVerify = false) {
         reason: 'circuit_breaker'
       }
     }));
+    authCheckInProgress = false;
     return authState.isAuthenticated;
   }
 
-  // Minimum retry interval after a failure
+  // Minimum retry interval after a failure (only for network/backend errors, not 401/session expired)
   if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - recent failure.');
     return authState.isAuthenticated;
@@ -483,8 +501,15 @@ async function verifyAuthState(forceVerify = false) {
       lastVerifyFailureTime = 0;
 
       broadcastAuth(serverAuthenticated, serverUsername);
+      authCheckInProgress = false;
       return serverAuthenticated;
     } catch (err) {
+      // Handle throttled 401 error from parseErrorResponse in app.js
+      if (err.code === 'E401_THROTTLED') {
+        if (AUTH_DEBUG) console.warn('[Auth] 401 throttled by app.js, returning false immediately.');
+        authCheckInProgress = false;
+        return false;
+      }
       lastError = err;
       if (AUTH_DEBUG) {
         console.warn(`[Auth] Verification attempt ${i} failed:`, err);
@@ -492,33 +517,30 @@ async function verifyAuthState(forceVerify = false) {
 
       // 401 or expired → try refresh
       if (err.status === 401 || err.message.includes('expired')) {
-        const refreshTokenVal = getCookie('refresh_token');
-        if (!refreshTokenVal) {
+        if (AUTH_DEBUG) console.debug('[Auth] Access token invalid, attempting refresh...');
+        try {
+          const refreshResult = await refreshTokens();
+          if (refreshResult?.success) {
+            if (AUTH_DEBUG) console.debug('[Auth] Token refresh successful, retrying verification...');
+            // Successfully refreshed, retry the verification in the next loop iteration
+            await new Promise(r => setTimeout(r, 100)); // Small delay before retry
+            continue; // Go to the next iteration to retry verify
+          } else {
+            // Refresh failed, session is truly expired
+            if (AUTH_DEBUG) console.warn('[Auth] Token refresh failed during verification.');
+            sessionExpiredFlag = Date.now();
+            clearTokenState();
+            authCheckInProgress = false; // Release lock before returning
+            return false;
+          }
+        } catch (refreshErr) {
+          // Refresh threw an error
+          if (AUTH_DEBUG) console.error('[Auth] Token refresh attempt failed:', refreshErr);
           sessionExpiredFlag = Date.now();
           clearTokenState();
+          authCheckInProgress = false; // Release lock before returning
           return false;
         }
-        const isRefreshValid = await checkTokenValidity(refreshTokenVal, { allowRefresh: true }).catch(() => false);
-        if (!isRefreshValid) {
-          sessionExpiredFlag = Date.now();
-          clearTokenState();
-          return false;
-        }
-        const refreshResult = await Promise.race([
-          refreshTokens(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 2000))
-        ]).catch(refreshErr => {
-          if (AUTH_DEBUG) console.error('[Auth] Token refresh during verify failed:', refreshErr);
-          return null;
-        });
-
-        if (refreshResult?.success) {
-          await new Promise(r => setTimeout(r, 500));
-          continue;
-        }
-        sessionExpiredFlag = Date.now();
-        clearTokenState();
-        return false;
       }
 
       // Check for network-level error
@@ -543,6 +565,8 @@ async function verifyAuthState(forceVerify = false) {
             error: err.message
           }
         }));
+        // Only set lastVerifyFailureTime for network/backend errors
+        lastVerifyFailureTime = Date.now();
       }
 
       if (i < AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS) {
@@ -551,12 +575,39 @@ async function verifyAuthState(forceVerify = false) {
       } else {
         if (AUTH_DEBUG) console.error('[Auth] Max verification attempts reached.');
         authState.lastVerified = Date.now();
-        lastVerifyFailureTime = Date.now();
+        // Only set lastVerifyFailureTime for network/backend errors, not for 401/session expired
+        if (!err.status || (err.status !== 401 && !err.message?.includes('expired'))) {
+          lastVerifyFailureTime = Date.now();
+        }
+        authCheckInProgress = false;
         throw lastError || new Error('Auth verification failed after multiple attempts');
       }
     }
   }
+  authCheckInProgress = false;
   return authState.isAuthenticated;
+}
+
+// Update throttle for auth failures
+// let lastAuthFailTimestamp = 0;
+const AUTH_FAIL_THROTTLE_MS = 60000;
+
+async function throttledVerifyAuthState(forceVerify = false) {
+  const now = Date.now();
+  if (now - lastAuthFailTimestamp < AUTH_FAIL_THROTTLE_MS) {
+    if (AUTH_DEBUG) console.warn('[Auth] Verification throttled due to recent failure.');
+    return false;
+  }
+  try {
+    const authenticated = await verifyAuthState(forceVerify);
+    if (!authenticated) {
+      lastAuthFailTimestamp = now;
+    }
+    return authenticated;
+  } catch (err) {
+    lastAuthFailTimestamp = now;
+    return false;
+  }
 }
 
 /* ----------------------------------
@@ -804,6 +855,10 @@ Object.assign(window.auth, {
   getCurrentUser: () => authState.isAuthenticated ? authState.username : null,
   isAuthenticated: async (opts = {}) => {
     try {
+      // If refresh is in progress, wait for it to complete
+      if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
+        await window.__tokenRefreshPromise;
+      }
       return await verifyAuthState(opts.forceVerify || false);
     } catch {
       return false;
@@ -814,7 +869,8 @@ Object.assign(window.auth, {
   standardizeError,
   handleAuthError,
   getCSRFTokenAsync,
-  getCSRFToken
+  getCSRFToken,
+  throttledVerifyAuthState
 });
 
 // Default export for bundlers
@@ -840,5 +896,6 @@ export default {
   },
   AuthBus,
   getCSRFTokenAsync,
-  getCSRFToken
+  getCSRFToken,
+  throttledVerifyAuthState
 };

@@ -41,7 +41,8 @@ const API_CONFIG = {
   },
   isAuthenticated: false,
   authCheckInProgress: false,
-  lastErrorStatus: null
+  lastErrorStatus: null,
+  authCheckLock: false // Global auth check coordination
 };
 
 const SELECTORS = {
@@ -186,8 +187,30 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
       }
       const response = await fetch(finalUrl, requestOptions);
       if (!response.ok) {
-        API_CONFIG.lastErrorStatus = response.status;
-        throw await parseErrorResponse(response, finalUrl);
+        const error = await parseErrorResponse(response, finalUrl);
+
+        // Special handling for 401 errors
+        if (error.status === 401) {
+          // Check if we should throttle retries
+          if (!window.__last401Time || Date.now() - window.__last401Time > 30000) {
+            window.__last401Time = Date.now();
+            throw error;
+          } else {
+            // If we're in cooldown period, throw a different error
+            throw new APIError('Authentication required (retry throttled)', {
+              status: 401,
+              code: 'E401_THROTTLED',
+              isPermanent: false
+            });
+          }
+        }
+
+        // For non-401 errors, ensure auth state is cleared if needed
+        if (error.status === 403) {
+          if (window.auth?.clear) window.auth.clear();
+        }
+
+        throw error;
       }
       if (response.status === 204) return null;
       return await response.json();
@@ -213,8 +236,42 @@ async function parseErrorResponse(response, finalUrl) {
     const text = await responseClone.text().catch(() => response.statusText);
     return new APIError(`API error (${status}): ${text || response.statusText}`, { status, code: `E${status}` });
   }
+
   const message = errData.message || errData.error || response.statusText || `HTTP ${status}`;
-  return new APIError(`API error (${status}): ${message}`, { status, code: `E${status}`, isPermanent: status === 404 });
+  const error = new APIError(`API error (${status}): ${message}`, {
+    status,
+    code: `E${status}`,
+    isPermanent: status === 404
+  });
+
+  // Special handling for 401 errors
+  if (status === 401) {
+    // Clear auth state immediately
+    if (window.auth?.clear) window.auth.clear();
+
+    // Set cooldown to prevent rapid retries
+    if (!window.__last401Time || Date.now() - window.__last401Time > 30000) {
+      window.__last401Time = Date.now();
+      console.warn('[parseErrorResponse] 401 Unauthorized - Session expired, clearing auth state');
+    }
+
+    // Update API_CONFIG
+    API_CONFIG.isAuthenticated = false;
+    API_CONFIG.lastErrorStatus = null; // Clear after handling
+
+    // Show user notification
+    if (window.showNotification) {
+      window.showNotification(MESSAGES.SESSION_EXPIRED, 'error');
+    }
+  } else {
+    // For non-401 errors, set lastErrorStatus but clear it after a delay
+    API_CONFIG.lastErrorStatus = status;
+    setTimeout(() => {
+      API_CONFIG.lastErrorStatus = null;
+    }, 5000);
+  }
+
+  return error;
 }
 
 function getBaseUrl() {
@@ -812,6 +869,17 @@ function handleAuthStateChange(e) {
 }
 
 async function initApp() {
+  // Block initialization if not authenticated
+  const authenticated = await window.auth.throttledVerifyAuthState();
+  if (!authenticated) {
+    console.warn('[App] User unauthenticated during init, showing login prompt and aborting further initialization.');
+    // Clear stale client-side auth state
+    if (window.auth && typeof window.auth.clear === 'function') window.auth.clear();
+    toggleVisibility(document.getElementById('loginRequiredMessage'), true);
+    const mainContent = document.getElementById('projectManagerPanel');
+    if (mainContent) mainContent.classList.add('hidden');
+    return;
+  }
   // Clean up any existing listeners first
   cleanupAppListeners();
   setPhase(AppPhase.BOOT);

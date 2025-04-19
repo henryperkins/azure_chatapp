@@ -101,8 +101,15 @@ def configure_sentry() -> None:
             trace_propagation_targets=["*"],
         )
 
-        if not enable_mcp_integrations():
-            logger.warning("Failed to enable Sentry MCP integrations")
+        # Only enable MCP if explicitly configured
+        if os.getenv("ENABLE_SENTRY_MCP", "false").lower() == "true":
+            if not enable_mcp_integrations():
+                logger.warning("Failed to enable Sentry MCP integrations - running without MCP features")
+            else:
+                logger.info("Sentry MCP integrations enabled successfully")
+        else:
+            logger.info("Sentry MCP integration is disabled (ENABLE_SENTRY_MCP not set)")
+
         logger.info(f"Sentry initialized for {APP_NAME}@{APP_VERSION}")
 
 
@@ -165,11 +172,18 @@ async def initialize_services() -> None:
     await create_default_user()
     await schedule_token_cleanup(interval_minutes=30)
 
-    if SENTRY_ENABLED and SENTRY_DSN:
-        if not check_mcp_server() and not start_mcp_server():
-            logger.error("Failed to start Sentry MCP server")
-        elif mcp_status := get_mcp_status():
-            logger.info(f"Sentry MCP server status: {mcp_status}")
+    if SENTRY_ENABLED and SENTRY_DSN and os.getenv("ENABLE_SENTRY_MCP", "false").lower() == "true":
+        try:
+            if not check_mcp_server():
+                logger.info("Starting Sentry MCP server...")
+                if not start_mcp_server():
+                    logger.warning("Failed to start Sentry MCP server - running without MCP features")
+                elif mcp_status := get_mcp_status():
+                    logger.info(f"Sentry MCP server started successfully: {mcp_status}")
+            elif mcp_status := get_mcp_status():
+                logger.info(f"Sentry MCP server already running: {mcp_status}")
+        except Exception as e:
+            logger.warning(f"Sentry MCP server error - running without MCP features: {str(e)}")
 
 
 @app.on_event("startup")
@@ -271,7 +285,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         return JSONResponse(
             status_code=500,
             content={
-                "detail": "Internal server error", 
+                "detail": "Internal server error",
                 "sentry_event_id": event_id
             },
         )
