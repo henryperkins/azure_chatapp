@@ -842,15 +842,12 @@ async function init() {
  * ---------------------------------- */
 
 window.auth = window.auth || {};
-function getAuthToken() {
-  return getCookie('access_token') || '';
-}
-
 Object.assign(window.auth, {
+  getAuthToken: () => getCookie('access_token') || '',
   init,
   login: loginUser,
   logout,
-  verifyAuthState,
+verifyAuthState,
   refreshTokens,
   clear: clearTokenState,
   isInitialized: false,
@@ -877,13 +874,13 @@ Object.assign(window.auth, {
 });
 
 // Default export for bundlers
+
 export default {
   init,
   login: loginUser,
   logout,
   verifyAuthState,
   refreshTokens,
-  getAuthToken,
   clear: clearTokenState,
   logFormIssue,
   standardizeError,
