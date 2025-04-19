@@ -845,12 +845,21 @@ function handleAuthStateChange(e) {
 
   // Update auth UI if available
 
+  const authButton = document.getElementById('authButton');
+  const userMenu = document.getElementById('userMenu');
+
   if (authenticated) {
+    authButton?.classList.add('hidden');
+    userMenu?.classList.remove('hidden');
+    
     // Prevent redundant data loads when auth check is already in progress
     if (API_CONFIG.authCheckInProgress) {
       log("[AuthStateChange] Auth check in progress, skipping data refresh");
       return;
     }
+  } else {
+    authButton?.classList.remove('hidden');
+    userMenu?.classList.add('hidden');
 
     if (stateChanged) {
       log("[AuthStateChange] User authenticated, loading initial data...");

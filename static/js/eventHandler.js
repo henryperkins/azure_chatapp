@@ -141,6 +141,12 @@ const eventRegistry = {
         eventType: 'click',
         priority: EVENT_PRIORITIES.LOW,
         description: 'Toggles chat container visibility'
+    },
+    '#authButton': {
+        handler: toggleAuthDropdown,
+        eventType: 'click',
+        priority: EVENT_PRIORITIES.DEFAULT,
+        description: 'Toggles the auth dropdown menu'
     }
 };
 
