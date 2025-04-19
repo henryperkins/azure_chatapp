@@ -818,8 +818,22 @@ function setupCustomInstructions() {
  * Main function for setting up all event listeners
  * @returns {void}
  */
+function handleAuthStateChanged(e) {
+    const { authenticated } = e.detail;
+    const authButton = document.getElementById('authButton');
+    const userMenu = document.getElementById('userMenu');
+    if (authenticated) {
+        authButton?.classList.add('hidden');
+        userMenu?.classList.remove('hidden');
+    } else {
+        authButton?.classList.remove('hidden');
+        userMenu?.classList.add('hidden');
+    }
+}
+
 function setupEventListeners() {
     cleanupListeners(); // Clean up existing listeners to prevent duplicates
+    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChanged);
 
     // Setup key shortcuts
     trackListener(document, 'keydown', handleKeyDown);
