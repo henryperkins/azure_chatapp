@@ -4,6 +4,7 @@
  * This script handles the dark mode toggle functionality based on daisyUI 5's theming system,
  * which uses the data-theme attribute on the HTML element.
  */
+console.log("[theme-toggle.js] Script is running...");
 
 document.addEventListener('DOMContentLoaded', () => {
   const darkModeToggle = document.getElementById('darkModeToggle');
