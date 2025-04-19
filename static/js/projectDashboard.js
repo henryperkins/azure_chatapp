@@ -82,8 +82,8 @@ class ProjectDashboard {
    * @returns {Promise<boolean>} True if success
    */
   async init() {
-    // Check authentication before proceeding
-    const authenticated = await (window.auth?.throttledVerifyAuthState?.() ?? false);
+    // Check authentication before proceeding - use forceVerify for critical init checks
+    const authenticated = await (window.auth?.throttledVerifyAuthState?.(true) ?? false);
     if (!authenticated) {
       console.warn('[ProjectDashboard] Initialization aborted: User is not authenticated.');
       this.showInitializationProgress('Please log in to view your projects.');

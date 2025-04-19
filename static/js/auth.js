@@ -365,20 +365,20 @@ async function refreshTokens() {
  *  Auth Verification & Access Token
  * ---------------------------------- */
 
-function clearTokenState() {
+let __isInitializing = false;
+
+async function clearTokenState(options = {}) {
+  // Don't clear state during initialization unless forced
+  if (__isInitializing && !options.force) {
+    if (AUTH_DEBUG) console.debug('[Auth] Skipping state clear during initialization');
+    return;
+  }
+
   authState.isAuthenticated = false;
   authState.username = null;
   authState.lastVerified = 0;
   sessionExpiredFlag = Date.now();
   broadcastAuth(false);
-  if (AUTH_DEBUG) console.debug('[Auth] Auth state cleared');
-}
-
-async function getAuthToken(options = {}) {
-  const allowEmpty = options.allowEmpty === true;
-  const accessToken = getCookie('access_token');
-
-  // If we already have a valid access token, use it
   if (accessToken) {
     const isValid = await checkTokenValidity(accessToken).catch(() => false);
     if (isValid) {
@@ -590,11 +590,11 @@ async function verifyAuthState(forceVerify = false) {
 
 // Update throttle for auth failures
 let lastAuthFailTimestamp = 0;
-const AUTH_FAIL_THROTTLE_MS = 60000;
+const AUTH_FAIL_THROTTLE_MS = 10000; // Reduced from 60s to 10s
 
 async function throttledVerifyAuthState(forceVerify = false) {
   const now = Date.now();
-  if (now - lastAuthFailTimestamp < AUTH_FAIL_THROTTLE_MS) {
+  if (!forceVerify && now - lastAuthFailTimestamp < AUTH_FAIL_THROTTLE_MS) {
     if (AUTH_DEBUG) console.warn('[Auth] Verification throttled due to recent failure.');
     return false;
   }
@@ -842,11 +842,14 @@ async function init() {
  * ---------------------------------- */
 
 window.auth = window.auth || {};
+function getAuthToken() {
+  return getCookie('access_token') || '';
+}
+
 Object.assign(window.auth, {
   init,
   login: loginUser,
   logout,
-  getAuthToken,
   verifyAuthState,
   refreshTokens,
   clear: clearTokenState,
