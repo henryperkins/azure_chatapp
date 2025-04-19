@@ -530,13 +530,13 @@ function setupSidebarToggle() {
     let touchStartX = 0;
     const threshold = 30; // Minimum horizontal swipe distance
 
-    // Track touch start position with proper passive handling
+    // Track touch start position with passive handling
     const touchStartHandler = (e) => {
         touchStartX = e.touches[0].clientX;
     };
     trackListener(document, 'touchstart', touchStartHandler, { passive: true });
 
-    // Handle edge swipe to open/close
+    // Handle edge swipe to open/close with passive: false only when needed
     const touchEndHandler = (e) => {
         const touchEndX = e.changedTouches[0].clientX;
         const deltaX = touchEndX - touchStartX;
@@ -580,7 +580,7 @@ function setupSidebarToggle() {
         });
     }
 
-    // Track window resize for responsive behavior
+    // Track window resize with passive listener since we don't preventDefault
     trackListener(window, 'resize', () => {
         const isMobile = window.innerWidth < 768;
 

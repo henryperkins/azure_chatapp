@@ -2,39 +2,36 @@
 /* Tailwind CSS v4.1 */
 /* ================ */
 
-/* 1. Core Imports (Preflight included automatically) */
+/* 1. Core import */
 @import "tailwindcss";
 
-/* 2. Theme Configuration */
+/* 2. Add daisyUI plugin */
+@plugin "daisyui";
+
+/* 3. CSS‑first theme overrides */
 @theme {
-  /* Dracula Color Palette */
-  --color-primary: #ff79c6;
+  /* Brand colors */
+  --color-primary:   #ff79c6;
   --color-secondary: #bd93f9;
-  --color-accent: #f1fa8c;
-  --color-neutral: #6272a4;
+  --color-accent:    #f1fa8c;
+  --color-neutral:   #6272a4;
 
-  --color-base-100: #1e1f28;
-  --color-base-200: #1a1b23;
-  --color-base-300: #16171e;
+  /* Base surface & content */
+  --color-base-100:   #1e1f28;
+  --color-base-200:   #1a1b23;
+  --color-base-300:   #16171e;
   --color-base-content: #f8f8f2;
-
-  /* Border Radius */
-  --radius-btn: 0.25rem;
-  --radius-box: 0.5rem;
 }
 
-/* 3. Base Layer (Extends Preflight) */
+/* 4. Your existing base/custom layers */
 @layer base {
   :root {
     color-scheme: dark;
   }
-
-  /* Add back some sensible defaults */
   body {
     @apply bg-base-100 text-base-content min-h-screen antialiased;
     line-height: 1.5;
   }
-
   /* Headings inherit font-weight */
   h1,
   h2,
@@ -58,21 +55,23 @@
   }
 }
 
-/* 4. Chat Components */
 @layer components {
   .chat-container {
     @apply flex flex-col h-[calc(100vh-6rem)] p-4 space-y-4;
 
-    /* Custom scrollbar that works with Preflight */
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-neutral) transparent;
-
-    &::-webkit-scrollbar {
-      @apply w-2;
+    /* Cross-browser scrollbar styling */
+    @supports (scrollbar-width: thin) {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-neutral) transparent; /* FIXED: use CSS variable */
     }
 
-    &::-webkit-scrollbar-thumb {
-      @apply bg-neutral rounded-full;
+    @supports selector(::-webkit-scrollbar) {
+      &::-webkit-scrollbar {
+        @apply w-2;
+      }
+      &::-webkit-scrollbar-thumb {
+        @apply bg-neutral rounded-full;
+      }
     }
   }
 
@@ -89,7 +88,7 @@
   }
 }
 
-/* 5. Custom Utilities */
+/* 5. Utilities */
 @layer utilities {
   .text-balance {
     text-wrap: balance;

@@ -71,8 +71,20 @@ function setAuthCookie(name, value, maxAgeSeconds) {
 
   let cookieString = cookieParts.join('; ');
   document.cookie = cookieString;
+
+  if (AUTH_DEBUG) {
+    console.debug(`[Auth] Setting cookie: ${name}`, {
+      value: value ? '*****' : '<empty>',
+      sameSite,
+      secure: secure.includes('Secure'),
+      maxAgeSeconds,
+      path
+    });
+  }
+
   if (!value) {
     document.cookie = `${name}=; Path=${path}; Max-Age=0; ${sameSite}; ${secure}`;
+    if (AUTH_DEBUG) console.debug(`[Auth] Clearing cookie: ${name}`);
   }
 }
 
@@ -297,14 +309,28 @@ async function clearTokenState(options = {}) {
     return;
   }
 
+  if (AUTH_DEBUG) {
+    console.groupCollapsed('[Auth] Clearing token state');
+    console.trace('Token clear call stack');
+    console.log('Clear options:', options);
+    console.log('Current auth state:', {...authState});
+  }
+
   authState.isAuthenticated = false;
   authState.username = null;
   authState.lastVerified = 0;
   sessionExpiredFlag = Date.now();
+
+  if (AUTH_DEBUG) console.debug('[Auth] Clearing access_token cookie');
   setAuthCookie('access_token', '', 0);
+
+  if (AUTH_DEBUG) console.debug('[Auth] Clearing refresh_token cookie');
   setAuthCookie('refresh_token', '', 0);
 
-  if (AUTH_DEBUG) console.debug('[Auth] Token state cleared.');
+  if (AUTH_DEBUG) {
+    console.debug('[Auth] Token state cleared');
+    console.groupEnd();
+  }
 }
 
 async function verifyAuthState(forceVerify = false) {

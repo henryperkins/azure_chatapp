@@ -27,6 +27,16 @@ window.__appInitializing = true;
 const DEBUG = false;
 function log(...args) { if (DEBUG) console.log(...args); }
 
+// Timeout configuration (in milliseconds)
+const TIMEOUT_CONFIG = {
+  INITIALIZATION: 30000, // 30s for full app initialization
+  AUTH_CHECK: 10000,    // 10s for auth verification
+  API_REQUEST: 10000,   // 10s for API requests
+  COMPONENT_LOAD: 15000, // 15s for component loading
+  CHAT_MANAGER: 20000,  // 20s for chat manager initialization
+  DOM_READY: 5000       // 5s for DOM ready check
+};
+
 const API_CONFIG = {
   _baseUrl: '',
   get baseUrl() { return this._baseUrl; },
@@ -132,8 +142,11 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
     return pendingRequests.get(requestKey);
   }
   const controller = options.signal?.controller || new AbortController();
-  const timeoutMs = options.timeout || 10000;
-  const timeoutId = options.signal ? null : setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = options.timeout || TIMEOUT_CONFIG.API_REQUEST;
+  const timeoutId = options.signal ? null : setTimeout(() => {
+    log(`[apiRequest] Aborting request after ${timeoutMs}ms timeout: ${endpoint}`);
+    controller.abort();
+  }, timeoutMs);
   const requestPromise = (async () => {
     try {
       endpoint = sanitizeUrl(endpoint);
@@ -486,9 +499,10 @@ async function ensureChatManagerAvailable() {
 
       const timeout = setTimeout(() => {
         clearInterval(checkInterval);
-        console.error('Timeout waiting for ChatManager');
-        reject(new Error('ChatManager initialization timed out'));
-      }, 10000); // Increased timeout for more patience
+        const errMsg = `ChatManager initialization timed out after ${TIMEOUT_CONFIG.CHAT_MANAGER}ms`;
+        log(errMsg);
+        reject(new Error(errMsg));
+      }, TIMEOUT_CONFIG.CHAT_MANAGER);
     });
   }
   return Promise.resolve();
@@ -517,9 +531,10 @@ async function handleNavigationChange() {
         }, 100);
         setTimeout(() => {
           clearInterval(checkInterval);
-          console.warn("Timeout waiting for app initialization during navigation");
+          const warnMsg = `Timeout waiting for app initialization during navigation (${TIMEOUT_CONFIG.INITIALIZATION}ms)`;
+          log(warnMsg);
           resolve();
-        }, 10000);
+        }, TIMEOUT_CONFIG.INITIALIZATION);
       });
     }
 
