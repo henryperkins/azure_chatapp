@@ -1,15 +1,7 @@
 /**
  * Final Remediated Authentication Module
- * --------------------------------------
- * Key Changes:
- *  - Removed "HttpOnly" from setAuthCookie (must be set by server)
- *  - Adjusted SameSite rules for localhost vs. HTTPS
- *  - Unified refresh throttling to __refreshCooldownUntil
- *  - Exported standardizeError() and logFormIssue()
- *  - Omit Max-Age if none provided
- *  - Removed old sessionStorage code entirely
+ * ... (header comment unchanged)
  */
-
 const AUTH_DEBUG = true;
 
 // Session & Retry Flags
@@ -23,9 +15,9 @@ let backendUnavailableFlag = false;
 let lastBackendUnavailableTime = 0;
 
 // Config
-const MIN_RETRY_INTERVAL = 30000; // 30s between verification attempts after failure
+const MIN_RETRY_INTERVAL = 30000; // 30s
 const MAX_REFRESH_RETRIES = 3;
-const BACKEND_UNAVAILABLE_COOLDOWN = 30000; // 30 seconds circuit-breaker
+const BACKEND_UNAVAILABLE_COOLDOWN = 30000; // 30s circuit-breaker
 
 // Auth State
 const authState = {
@@ -35,7 +27,6 @@ const authState = {
   tokenVersion: null
 };
 
-// Primary constants for timeouts & intervals
 const AUTH_CONSTANTS = {
   VERIFICATION_INTERVAL: 300000,    // 5 min
   VERIFICATION_CACHE_DURATION: 60000, // 1 min
@@ -46,40 +37,26 @@ const AUTH_CONSTANTS = {
   REFRESH_TOKEN_EXPIRE_DAYS: 1
 };
 
-/* ----------------------------------
- *  Single AuthBus for All Events
- * ---------------------------------- */
 const AuthBus = new EventTarget();
 
-/* ----------------------------------
- *  Cookie Helpers
- * ---------------------------------- */
-
-/** Returns the cookie value by name or null if missing. */
+/* Cookie Helpers */
 function getCookie(name) {
   const c = `; ${document.cookie}`.split(`; ${name}=`);
   if (c.length === 2) return c.pop().split(';').shift();
   return null;
 }
 
-/**
- * Sets or clears a cookie with standard attributes.
- * Note: "HttpOnly" cannot be set from JS; must be done in server response headers.
- * Also note that for real security, the server should set Secure + HttpOnly cookies.
- */
 function setAuthCookie(name, value, maxAgeSeconds) {
-  // Decide on default SameSite & Secure for environment
   let sameSite = 'SameSite=None';
   let secure = 'Secure; ';
-
-  // If not actually on HTTPS or on localhost, fallback
-  if (location.protocol !== 'https:' ||
+  if (
+    location.protocol !== 'https:' ||
     location.hostname === 'localhost' ||
-    location.hostname === '127.0.0.1') {
+    location.hostname === '127.0.0.1'
+  ) {
     sameSite = 'SameSite=Lax';
     secure = '';
   }
-
   const path = '/';
   const cookieParts = [
     `${name}=${value || ''}`,
@@ -88,26 +65,18 @@ function setAuthCookie(name, value, maxAgeSeconds) {
     secure
   ];
 
-  // Only add Max-Age if it's a positive number
   if (typeof maxAgeSeconds === 'number' && maxAgeSeconds > 0) {
     cookieParts.push(`Max-Age=${maxAgeSeconds}`);
   }
 
-  // Build final cookie string
   let cookieString = cookieParts.join('; ');
   document.cookie = cookieString;
-
-  // If value falsy, explicitly expire the cookie
   if (!value) {
     document.cookie = `${name}=; Path=${path}; Max-Age=0; ${sameSite}; ${secure}`;
   }
 }
 
-/* ----------------------------------
- *  JWT / Token Handling
- * ---------------------------------- */
-
-/** Fetch token expiry from JWT 'exp' claim. */
+/* JWT/Token Helpers */
 function getTokenExpiry(token) {
   if (!token) return null;
   try {
@@ -118,10 +87,6 @@ function getTokenExpiry(token) {
   }
 }
 
-/**
- * Checks if a token is valid by looking at both 'exp'
- * and a maximum allowed age derived from 'iat'.
- */
 let __cachedExpirySettings = null;
 async function fetchTokenExpirySettings() {
   if (__cachedExpirySettings) return __cachedExpirySettings;
@@ -132,21 +97,17 @@ async function fetchTokenExpirySettings() {
   return __cachedExpirySettings;
 }
 
-async function checkTokenValidity(token, { allowRefresh = false } = {}) {
+async function checkTokenValidity(token, options = {}) {
+  const { allowRefresh = false } = options;
   if (!token) return false;
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
     const now = Date.now() / 1000;
 
-    // If 'exp' is in the past, it's invalid
-    if (payload.exp && payload.exp < now) {
-      return false;
-    }
+    if (payload.exp && payload.exp < now) return false;
 
     const settings = await fetchTokenExpirySettings();
-    const maxAge = allowRefresh
-      ? settings.refresh_token_expire_days * 86400 // days -> seconds
-      : settings.access_token_expire_minutes * 60;  // minutes -> seconds
+    const maxAge = allowRefresh ? (settings.refresh_token_expire_days * 86400) : (settings.access_token_expire_minutes * 60);
 
     if (!payload.iat) return false;
     if ((now - payload.iat) > maxAge) return false;
@@ -157,14 +118,10 @@ async function checkTokenValidity(token, { allowRefresh = false } = {}) {
   }
 }
 
-/* ----------------------------------
- *  CSRF Token Utilities
- * ---------------------------------- */
-
+/* CSRF Token UTILS */
 let __csrfToken = '';
 let __csrfTokenPromise = null;
 
-/** Prime CSRF Token once at application startup. */
 async function primeCSRFToken() {
   if (__csrfToken) return __csrfToken;
   if (__csrfTokenPromise) return __csrfTokenPromise;
@@ -174,7 +131,6 @@ async function primeCSRFToken() {
       const res = await authRequest('/api/auth/csrf', 'GET');
       if (!res?.token) throw new Error('Invalid CSRF token response');
 
-      // Synchronize with <meta> tag
       let meta = document.querySelector('meta[name="csrf-token"]');
       if (!meta) {
         meta = document.createElement('meta');
@@ -193,30 +149,19 @@ async function primeCSRFToken() {
   return __csrfTokenPromise;
 }
 
-/** Returns a promise for a valid CSRF token or throws on failure. */
 async function getCSRFTokenAsync() {
   if (__csrfToken) return __csrfToken;
   return primeCSRFToken();
 }
 
-/** Synchronous fallback (may be outdated if primeCSRFToken in progress). */
 function getCSRFToken() {
   return __csrfToken;
 }
 
-/* ----------------------------------
- *  Core HTTP Functions
- * ---------------------------------- */
-
-/**
- * Lower-level auth request that always sends credentials & JSON headers.
- * If we already have a CSRF token, includes it in X-CSRF-Token.
- */
+/* HTTP Functions */
 async function authRequest(endpoint, method, body = null) {
   const headers = { 'Content-Type': 'application/json' };
-  if (__csrfToken) {
-    headers['X-CSRF-Token'] = __csrfToken;
-  }
+  if (__csrfToken) headers['X-CSRF-Token'] = __csrfToken;
 
   let resp;
   try {
@@ -229,7 +174,6 @@ async function authRequest(endpoint, method, body = null) {
   } catch (fetchError) {
     throw fetchError;
   }
-
   if (!resp.ok) {
     const errData = await resp.json().catch(() => ({ message: 'Unknown error' }));
     throw {
@@ -237,13 +181,9 @@ async function authRequest(endpoint, method, body = null) {
       message: errData.message || 'Authentication failed'
     };
   }
-
   return resp.json();
 }
 
-/**
- * If a global apiRequest override is provided, use it; else call authRequest.
- */
 async function apiRequest(url, method, data = null, options = {}) {
   if (window.apiRequest) {
     return window.apiRequest(url, method, data, options);
@@ -251,12 +191,8 @@ async function apiRequest(url, method, data = null, options = {}) {
   return authRequest(url, method, data);
 }
 
-/* ----------------------------------
- *  Token Refresh Logic
- * ---------------------------------- */
-
+/* Token Refresh Logic */
 async function refreshTokens() {
-  // Check throttle
   if (Date.now() < __refreshCooldownUntil) {
     throw new Error('Refresh attempts are temporarily throttled.');
   }
@@ -266,7 +202,6 @@ async function refreshTokens() {
     return window.__tokenRefreshPromise;
   }
 
-  // Ensure CSRF token is available first
   await getCSRFTokenAsync().catch(err => {
     if (AUTH_DEBUG) console.error('[Auth] Could not fetch CSRF token before refresh:', err);
     throw new Error('No CSRF token available for refresh');
@@ -281,7 +216,6 @@ async function refreshTokens() {
       tokenRefreshInProgress = false;
       throw new Error('No refresh token available');
     }
-
     const expiry = getTokenExpiry(refreshTokenVal);
     if (expiry && expiry < Date.now()) {
       tokenRefreshInProgress = false;
@@ -298,22 +232,24 @@ async function refreshTokens() {
         const controller = new AbortController();
         const timeoutMs = AUTH_CONSTANTS.REFRESH_TIMEOUT * Math.pow(2, attempt - 1);
 
-        const fetchPromise = apiRequest('/api/auth/refresh', 'POST', null, { signal: controller.signal });
+        const fetchPromise = apiRequest(
+          '/api/auth/refresh',
+          'POST',
+          null,
+          { signal: controller.signal }
+        );
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
         response = await fetchPromise.catch(err => {
-          if (err.name === 'AbortError') throw new Error(`Refresh timeout (${timeoutMs}ms)`);
+          if (err.name === 'AbortError')
+            throw new Error(`Refresh timeout (${timeoutMs}ms)`);
           throw err;
         });
 
         clearTimeout(timeoutId);
 
-        if (!response?.access_token) {
-          throw new Error('Invalid refresh response');
-        }
-        if (response.token_version) {
-          authState.tokenVersion = response.token_version;
-        }
+        if (!response?.access_token) throw new Error('Invalid refresh response');
+        if (response.token_version) authState.tokenVersion = response.token_version;
         break;
       } catch (err) {
         lastError = err;
@@ -329,8 +265,6 @@ async function refreshTokens() {
     }
 
     authState.lastVerified = Date.now();
-
-    // Update cookies with new tokens
     if (response.access_token) {
       setAuthCookie('access_token', response.access_token, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
     }
@@ -341,19 +275,13 @@ async function refreshTokens() {
     tokenRefreshInProgress = false;
     authState.isAuthenticated = true;
     broadcastAuth(true, authState.username);
-
     AuthBus.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: true } }));
     return { success: true, token: response.access_token };
   })().catch(err => {
-    if (AUTH_DEBUG) {
-      console.error('[Auth] Unrecoverable refresh error:', err);
-    }
+    if (AUTH_DEBUG) console.error('[Auth] Unrecoverable refresh error:', err);
     clearTokenState();
     tokenRefreshInProgress = false;
-
-    // Throttle refresh attempts for 30s
     __refreshCooldownUntil = Date.now() + 30000;
-
     AuthBus.dispatchEvent(new CustomEvent('tokenRefreshed', { detail: { success: false, error: err } }));
     throw err;
   });
@@ -361,14 +289,9 @@ async function refreshTokens() {
   return window.__tokenRefreshPromise;
 }
 
-/* ----------------------------------
- *  Auth Verification & Access Token
- * ---------------------------------- */
-
+/* Auth Verification & Access Token */
 let __isInitializing = false;
-
 async function clearTokenState(options = {}) {
-  // Don't clear state during initialization unless forced
   if (__isInitializing && !options.force) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping state clear during initialization');
     return;
@@ -390,9 +313,9 @@ async function verifyAuthState(forceVerify = false) {
   if (!accessToken || isTokenExpired(accessToken)) {
     clearTokenState();
     return false;
-  } // <-- Added closing brace here
+  }
 
-  // Check global lock to prevent concurrent verifications
+  // Prevent concurrent verifications
   if (authCheckInProgress && !forceVerify) {
     console.debug('[Auth] Auth check already in progress, waiting...');
     while (authCheckInProgress) {
@@ -401,8 +324,13 @@ async function verifyAuthState(forceVerify = false) {
     return authState.isAuthenticated;
   }
 
-  // Circuit breaker if backend is known to be down
-  if (backendUnavailableFlag && (Date.now() - lastBackendUnavailableTime < BACKEND_UNAVAILABLE_COOLDOWN)) {
+  authCheckInProgress = true;
+
+  // Circuit breaker
+  if (
+    backendUnavailableFlag &&
+    Date.now() - lastBackendUnavailableTime < BACKEND_UNAVAILABLE_COOLDOWN
+  ) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - backend unavailable.');
     AuthBus.dispatchEvent(new CustomEvent('backendUnavailable', {
       detail: {
@@ -414,18 +342,17 @@ async function verifyAuthState(forceVerify = false) {
     return authState.isAuthenticated;
   }
 
-  // Minimum retry interval after a failure (only for network/backend errors, not 401/session expired)
   if (Date.now() - lastVerifyFailureTime < MIN_RETRY_INTERVAL) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - recent failure.');
+    authCheckInProgress = false;
     return authState.isAuthenticated;
   }
 
-  // If session was marked expired, short-circuit unless 10s passed
   if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag < 10000)) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping verify - session recently expired.');
+    authCheckInProgress = false;
     return false;
   }
-
   if (sessionExpiredFlag && (Date.now() - sessionExpiredFlag >= 10000)) {
     sessionExpiredFlag = false;
   }
@@ -438,6 +365,7 @@ async function verifyAuthState(forceVerify = false) {
 
   if (!shouldVerify) {
     if (AUTH_DEBUG) console.debug('[Auth] Returning cached auth state.');
+    authCheckInProgress = false;
     return authState.isAuthenticated;
   }
 
@@ -465,7 +393,6 @@ async function verifyAuthState(forceVerify = false) {
       authCheckInProgress = false;
       return serverAuthenticated;
     } catch (err) {
-      // Handle throttled 401 error from parseErrorResponse in app.js
       if (err.code === 'E401_THROTTLED') {
         if (AUTH_DEBUG) console.warn('[Auth] 401 throttled by app.js, returning false immediately.');
         authCheckInProgress = false;
@@ -476,35 +403,30 @@ async function verifyAuthState(forceVerify = false) {
         console.warn(`[Auth] Verification attempt ${i} failed:`, err);
       }
 
-      // 401 or expired → try refresh
-      if (err.status === 401 || err.message.includes('expired')) {
+      if (err.status === 401 || (err.message && err.message.includes('expired'))) {
         if (AUTH_DEBUG) console.debug('[Auth] Access token invalid, attempting refresh...');
         try {
           const refreshResult = await refreshTokens();
           if (refreshResult?.success) {
             if (AUTH_DEBUG) console.debug('[Auth] Token refresh successful, retrying verification...');
-            // Successfully refreshed, retry the verification in the next loop iteration
-            await new Promise(r => setTimeout(r, 100)); // Small delay before retry
-            continue; // Go to the next iteration to retry verify
+            await new Promise(r => setTimeout(r, 100));
+            continue;
           } else {
-            // Refresh failed, session is truly expired
             if (AUTH_DEBUG) console.warn('[Auth] Token refresh failed during verification.');
             sessionExpiredFlag = Date.now();
             clearTokenState();
-            authCheckInProgress = false; // Release lock before returning
+            authCheckInProgress = false;
             return false;
           }
         } catch (refreshErr) {
-          // Refresh threw an error
           if (AUTH_DEBUG) console.error('[Auth] Token refresh attempt failed:', refreshErr);
           sessionExpiredFlag = Date.now();
           clearTokenState();
-          authCheckInProgress = false; // Release lock before returning
+          authCheckInProgress = false;
           return false;
         }
       }
 
-      // Check for network-level error
       const isNetworkError = [
         'ERR_CONNECTION_RESET',
         'Failed to fetch',
@@ -514,7 +436,6 @@ async function verifyAuthState(forceVerify = false) {
       ].some(netStr => err.message?.includes(netStr)) || (err.name === 'AbortError');
 
       if (isNetworkError && i >= AUTH_CONSTANTS.MAX_VERIFY_ATTEMPTS) {
-        // Mark backend unavailable
         backendUnavailableFlag = true;
         lastBackendUnavailableTime = Date.now();
         console.error('[Auth] Backend service appears to be unavailable. Circuit breaker activated.');
@@ -526,7 +447,6 @@ async function verifyAuthState(forceVerify = false) {
             error: err.message
           }
         }));
-        // Only set lastVerifyFailureTime for network/backend errors
         lastVerifyFailureTime = Date.now();
       }
 
@@ -549,10 +469,8 @@ async function verifyAuthState(forceVerify = false) {
   return authState.isAuthenticated;
 }
 
-// Update throttle for auth failures
 let lastAuthFailTimestamp = 0;
-const AUTH_FAIL_THROTTLE_MS = 10000; // Reduced from 60s to 10s
-
+const AUTH_FAIL_THROTTLE_MS = 10000;
 async function throttledVerifyAuthState(forceVerify = false) {
   const now = Date.now();
   if (!forceVerify && now - lastAuthFailTimestamp < AUTH_FAIL_THROTTLE_MS) {
@@ -561,9 +479,7 @@ async function throttledVerifyAuthState(forceVerify = false) {
   }
   try {
     const authenticated = await verifyAuthState(forceVerify);
-    if (!authenticated) {
-      lastAuthFailTimestamp = now;
-    }
+    if (!authenticated) lastAuthFailTimestamp = now;
     return authenticated;
   } catch (err) {
     lastAuthFailTimestamp = now;
@@ -571,11 +487,7 @@ async function throttledVerifyAuthState(forceVerify = false) {
   }
 }
 
-/* ----------------------------------
- *  UI / Auth State Broadcasting
- * ---------------------------------- */
-
-/** Broadcasts auth changes via the AuthBus. */
+/* UI / Auth State Broadcast */
 function broadcastAuth(authenticated, username = null) {
   const detail = {
     authenticated,
@@ -588,10 +500,7 @@ function broadcastAuth(authenticated, username = null) {
   AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail }));
 }
 
-/* ----------------------------------
- *  Login / Logout / Registration
- * ---------------------------------- */
-
+/* Login / Logout / Registration */
 async function loginUser(username, password) {
   if (window.__loginInProgress && window.__loginAbortController) {
     window.__loginAbortController.abort();
@@ -645,10 +554,7 @@ async function loginUser(username, password) {
 
 async function logout(e) {
   e?.preventDefault();
-
-  // Immediately broadcast false so UI reacts
   broadcastAuth(false);
-
   try {
     await Promise.race([
       apiRequest('/api/auth/logout', 'POST'),
@@ -656,12 +562,11 @@ async function logout(e) {
     ]);
   } catch (err) {
     if (AUTH_DEBUG) console.warn('[Auth] Logout request failed:', err);
-    // Proceed regardless
   } finally {
     clearTokenState();
     setAuthCookie('access_token', '', 0);
     setAuthCookie('refresh_token', '', 0);
-    window.location.href = '/login'; // or wherever
+    window.location.href = '/login';
   }
 }
 
@@ -689,10 +594,7 @@ async function handleRegister(formData) {
   }
 }
 
-/* ----------------------------------
- *  Utility & Error Handling
- * ---------------------------------- */
-
+/* Utilities & Error Handling */
 function logFormIssue(type, details) {
   if (AUTH_DEBUG) {
     console.warn(`[Auth][Issue] ${type}`, details);
@@ -737,10 +639,8 @@ function handleAuthError(error, context = '') {
   return false;
 }
 
-/* ----------------------------------
- *  Initialization & Monitoring
- * ---------------------------------- */
 
+/* Initialization & Monitoring */
 let __authInitializing = false;
 
 async function init() {
@@ -748,10 +648,8 @@ async function init() {
   __authInitializing = true;
 
   try {
-    // Prime CSRF up front
     await primeCSRFToken();
 
-    // If there's a cookie, let's verify
     if (getCookie('access_token')) {
       try {
         await verifyAuthState(false);
@@ -760,18 +658,18 @@ async function init() {
       }
     }
 
-    // Optional periodic verification
     const intervalMs = AUTH_CONSTANTS.VERIFICATION_INTERVAL * 3;
     const authCheckInterval = setInterval(() => {
       if (!sessionExpiredFlag) {
-        verifyAuthState(false).catch(() => { /* no-op */ });
+        verifyAuthState(false).catch(() => { });
       }
     }, intervalMs);
 
-    // Reverify on focus if 5+ minutes have passed
     window.addEventListener('focus', () => {
-      if (!window.__verifyingOnFocus &&
-        (!authState.lastVerified || (Date.now() - authState.lastVerified > 300000))) {
+      if (
+        !window.__verifyingOnFocus &&
+        (!authState.lastVerified || (Date.now() - authState.lastVerified > 300000))
+      ) {
         window.__verifyingOnFocus = true;
         setTimeout(() => {
           verifyAuthState(false).finally(() => {
@@ -782,7 +680,6 @@ async function init() {
     });
 
     window.addEventListener('beforeunload', () => clearInterval(authCheckInterval));
-
     console.log("[Auth] Module initialized");
     window.auth.isInitialized = true;
     window.auth.isReady = true;
@@ -798,10 +695,7 @@ async function init() {
   }
 }
 
-/* ----------------------------------
- *  Public API & Exports
- * ---------------------------------- */
-
+/* Public API & Exports */
 window.auth = window.auth || {};
 Object.assign(window.auth, {
   getAuthToken: () => getCookie('access_token') || '',
@@ -816,7 +710,6 @@ Object.assign(window.auth, {
   getCurrentUser: () => authState.isAuthenticated ? authState.username : null,
   isAuthenticated: async (opts = {}) => {
     try {
-      // If refresh is in progress, wait for it to complete
       if (tokenRefreshInProgress && window.__tokenRefreshPromise) {
         await window.__tokenRefreshPromise;
       }
@@ -825,7 +718,7 @@ Object.assign(window.auth, {
       return false;
     }
   },
-  AuthBus,             // For outside modules
+  AuthBus,
   logFormIssue,
   standardizeError,
   handleAuthError,
@@ -833,8 +726,6 @@ Object.assign(window.auth, {
   getCSRFToken,
   throttledVerifyAuthState
 });
-
-// Default export for bundlers
 
 export default {
   init,
@@ -861,10 +752,7 @@ export default {
   throttledVerifyAuthState
 };
 
-/**
- * Utility function not originally declared in the code snippet:
- * isTokenExpired(token) - Checks if a JWT is expired via its 'exp' claim.
- */
+// Utility: isTokenExpired
 function isTokenExpired(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
