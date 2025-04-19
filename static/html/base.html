@@ -443,7 +443,6 @@
   <!-- Core Utilities -->
   <script type="module" src="/static/js/auth.js"></script>
   <script type="module" src="/static/js/chat-utils.js"></script>
-  <script type="module" src="/static/js/eventHandler.js"></script>
   <script type="module" src="/static/js/notification-handler.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
 
@@ -468,6 +467,10 @@
 
   <!-- Main Application (load last) -->
   <script type="module" src="/static/js/app.js"></script>
+  
+  <!-- Load these last to ensure DOM elements exist -->
+  <script src="/static/js/eventHandler.js"></script>
+  <script src="/static/js/theme-toggle.js"></script>
 
   <!-- Integration script for dynamic content loading -->
   <script>

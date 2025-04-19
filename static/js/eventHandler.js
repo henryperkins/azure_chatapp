@@ -8,6 +8,7 @@
  * - Custom Events: backendUnavailable, modelConfigChanged, etc.
  * - Window Events: beforeunload, resize, etc.
  */
+console.log("[eventHandler.js] Script loaded, beginning setup...");
 
 // Priority buckets for event execution
 const EVENT_PRIORITIES = {
@@ -837,6 +838,8 @@ function handleAuthStateChanged(e) {
 
 function setupEventListeners() {
     console.log('[setupEventListeners] called');
+    console.log("[setupEventListeners] #authButton =", document.getElementById("authButton"));
+    console.log("[setupEventListeners] #darkModeToggle =", document.getElementById("darkModeToggle"));
     cleanupListeners(); // Clean up existing listeners to prevent duplicates
     window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChanged);
 
