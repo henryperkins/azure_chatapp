@@ -355,6 +355,12 @@ function handleBackendUnavailable(event) {
     }, timeoutMs);
 }
 
+function toggleAuthDropdown() {
+  const dropdown = document.getElementById('authDropdown');
+  if (!dropdown) return;
+  dropdown.classList.toggle('hidden');
+}
+
 /**
  * Handle new conversation creation with authentication check
  * @returns {void}
