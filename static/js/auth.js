@@ -321,7 +321,7 @@ async function clearTokenState(options = {}) {
     console.groupCollapsed('[Auth] Clearing token state');
     console.trace('Token clear call stack');
     console.log('Clear options:', options);
-    console.log('Current auth state:', {...authState});
+    console.log('Current auth state:', { ...authState });
   }
 
   authState.isAuthenticated = false;
@@ -585,7 +585,8 @@ async function loginUser(username, password) {
     sessionExpiredFlag = false;
 
     broadcastAuth(true, authState.username);
-
+    return response;
+  } catch (error) {
     const e = standardizeError(error, 'login_api');
     logFormIssue('LOGIN_FAILURE', { username, error: e.message });
     throw new Error(e.message || 'Login failed');
@@ -701,7 +702,6 @@ function handleAuthError(error, context = '') {
   return false;
 }
 
-
 /* Initialization & Monitoring */
 let __authInitializing = false;
 
@@ -759,15 +759,16 @@ async function init() {
 
 /* Public API & Exports */
 window.auth = window.auth || {};
-window.auth = {
+const authInstance = {
   _clearingInProgress: false,
-  clearTokenState: clearTokenState.bind({_clearingInProgress: false}),
-  verifyAuthState: verifyAuthState.bind({_clearingInProgress: false}),
+  clearTokenState: clearTokenState.bind({ _clearingInProgress: false }),
+  verifyAuthState: verifyAuthState.bind({ _clearingInProgress: false }),
   getAuthToken: () => getCookie('access_token') || '',
   init,
   login: loginUser,
   logout,
   register: handleRegister,
+  verifyAuthState,
   refreshTokens,
   clear: clearTokenState,
   isInitialized: false,
@@ -792,33 +793,6 @@ window.auth = {
   throttledVerifyAuthState
 };
 
-export default {
-  _clearingInProgress: false,
-  clearTokenState: clearTokenState.bind({_clearingInProgress: false}),
-  verifyAuthState: verifyAuthState.bind({_clearingInProgress: false}),
-  init,
-  login: loginUser,
-  logout,
-  refreshTokens,
-  clear: clearTokenState,
-  logFormIssue,
-  standardizeError,
-  handleAuthError,
-  isInitialized: () => window.auth.isInitialized,
-  isReady: () => window.auth.isReady,
-  isAuthenticated: async (opts = {}) => {
-    try {
-      return await verifyAuthState(opts.forceVerify || false);
-    } catch {
-      return false;
-    }
-  },
-  AuthBus,
-  getCSRFTokenAsync,
-  getCSRFToken,
-  throttledVerifyAuthState
-bv f };
-
 // Utility: isTokenExpired
 function isTokenExpired(token) {
   try {
@@ -829,3 +803,8 @@ function isTokenExpired(token) {
     return true;
   }
 }
+
+// Export the authInstance
+Object.assign(window.auth, authInstance);
+
+export default authInstance;
