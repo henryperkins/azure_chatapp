@@ -53,25 +53,7 @@ class ProjectDashboard {
      * A built-in notification function (console or external)
      */
     this.showNotification = (message, type = "info") => {
-      if (window.showNotification) {
-        window.showNotification(message, type);
-      } else if (window.UIUtils?.showNotification) {
-        window.UIUtils.showNotification(message, type);
-      } else if (window.Notifications) {
-        if (type === "error") {
-          window.Notifications.apiError(message);
-        } else if (type === "success") {
-          if (window.Notifications.apiSuccess) {
-            window.Notifications.apiSuccess(message);
-          } else {
-            console.log(`[SUCCESS] ${message}`);
-          }
-        } else {
-          console.log(`[${type.toUpperCase()}] ${message}`);
-        }
-      } else {
-        console.log(`[${type.toUpperCase()}] ${message}`);
-      }
+      window.notificationHandler.show(message, type);
     };
 
     /**
