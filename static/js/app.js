@@ -187,16 +187,39 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         signal: controller.signal
       };
       if (data && !['GET', 'HEAD', 'DELETE'].includes(uppercaseMethod)) {
-        if (window.auth?.isInitialized) {
+        //
+        // Define a list of auth endpoints that should NOT receive Authorization headers
+        const authEndpoints = [
+          '/api/auth/login',
+          '/api/auth/register',
+          '/api/auth/refresh',
+          '/api/auth/logout',
+          '/api/auth/csrf',
+          '/api/auth/verify'
+        ];
+        const isAuthEndpoint = authEndpoints.some(authPath =>
+          cleanEndpoint.startsWith(authPath) || finalUrl.includes(authPath)
+        );
+
+        // Only add Authorization header if auth is initialized AND it's not an auth endpoint
+        if (window.auth?.isInitialized && !isAuthEndpoint) {
           try {
-            const token = await window.auth.getAuthToken().catch(() => null);
-            if (token) requestOptions.headers['Authorization'] = 'Bearer ' + token;
+            const token = window.auth.getAuthToken(); // synchronous, returns string
+            if (token) {
+              requestOptions.headers['Authorization'] = 'Bearer ' + token;
+            } else {
+              log('[apiRequest] No auth token available for request.');
+            }
           } catch (err) {
-            console.error('[apiRequest] Auth token error:', err);
+            console.error('[apiRequest] Error retrieving auth token:', err);
           }
         }
+
+        // Prepare the request body
         requestOptions.body = data instanceof FormData ? data : JSON.stringify(data);
-        if (!(data instanceof FormData)) requestOptions.headers['Content-Type'] = 'application/json';
+        if (!(data instanceof FormData)) {
+          requestOptions.headers['Content-Type'] = 'application/json';
+        }
       }
       const response = await fetch(finalUrl, requestOptions);
       if (!response.ok) {

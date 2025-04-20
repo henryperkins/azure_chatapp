@@ -68,9 +68,11 @@
             class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-base-100 rounded-box shadow-md p-3 z-50 animate-slide-in hidden">
             <div class="flex border-b border-base-200 mb-2 justify-center">
               <button id="loginTab" type="button"
-                class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary">Login</button>
+                class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary"
+                onclick="switchAuthTab('login')">Login</button>
               <button id="registerTab" type="button"
-                class="px-2 py-1 text-xs font-medium text-base-content/60">Register</button>
+                class="px-2 py-1 text-xs font-medium text-base-content/60"
+                onclick="switchAuthTab('register')">Register</button>
             </div>
             <form id="loginForm" method="POST" onsubmit="return false;" novalidate>
               <div class="flex flex-col gap-2 mb-2">
@@ -87,7 +89,84 @@
               </button>
             </form>
 
-            <form id="registerForm" method="POST" action="#" onsubmit="return false;" class="hidden">
+            <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden">
+              <script>
+                function switchAuthTab(tab) {
+                  const loginTab = document.getElementById('loginTab');
+                  const registerTab = document.getElementById('registerTab');
+                  const loginForm = document.getElementById('loginForm');
+                  const registerForm = document.getElementById('registerForm');
+
+                  if (tab === 'login') {
+                    loginTab.classList.add('border-b-2', 'border-primary', 'text-primary');
+                    loginTab.classList.remove('text-base-content/60');
+                    registerTab.classList.remove('border-b-2', 'border-primary', 'text-primary');
+                    registerTab.classList.add('text-base-content/60');
+                    loginForm.classList.remove('hidden');
+                    registerForm.classList.add('hidden');
+                  } else {
+                    registerTab.classList.add('border-b-2', 'border-primary', 'text-primary');
+                    registerTab.classList.remove('text-base-content/60');
+                    loginTab.classList.remove('border-b-2', 'border-primary', 'text-primary');
+                    loginTab.classList.add('text-base-content/60');
+                    registerForm.classList.remove('hidden');
+                    loginForm.classList.add('hidden');
+                  }
+                }
+
+                function validatePassword(password) {
+                  if (password.length < 12) {
+                    return {valid: false, message: "Password must be at least 12 characters"};
+                  }
+
+                  const hasUpper = /[A-Z]/.test(password);
+                  const hasLower = /[a-z]/.test(password);
+                  const hasNumber = /\d/.test(password);
+                  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+                  if (!hasUpper) {
+                    return {valid: false, message: "Password must contain an uppercase letter"};
+                  }
+                  if (!hasLower) {
+                    return {valid: false, message: "Password must contain a lowercase letter"};
+                  }
+                  if (!hasNumber) {
+                    return {valid: false, message: "Password must contain a number"};
+                  }
+                  if (!hasSpecial) {
+                    return {valid: false, message: "Password must contain a special character"};
+                  }
+
+                  return {valid: true};
+                }
+
+                async function handleRegister(e) {
+                  e.preventDefault();
+                  const form = e.target;
+                  const username = form.querySelector('input[name="username"]').value.trim();
+                  const password = form.querySelector('input[name="password"]').value;
+
+                  if (!username || !password) {
+                    window.showNotification?.('Username and password are required', 'error');
+                    return false;
+                  }
+
+                  const validation = validatePassword(password);
+                  if (!validation.valid) {
+                    window.showNotification?.(validation.message, 'error');
+                    return false;
+                  }
+
+                  try {
+                    const response = await window.auth.handleRegister(new FormData(form));
+                    window.showNotification?.('Registration successful', 'success');
+                    switchAuthTab('login');
+                  } catch (error) {
+                    window.showNotification?.(error.message || 'Registration failed', 'error');
+                  }
+                  return false;
+                }
+              </script>
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border rounded-box"
                   autocomplete="username" autocorrect="off" autocapitalize="none">
@@ -467,7 +546,7 @@
 
   <!-- Main Application (load last) -->
   <script type="module" src="/static/js/app.js"></script>
-  
+
   <!-- Load these last to ensure DOM elements exist -->
   <script src="/static/js/eventHandler.js"></script>
   <script src="/static/js/theme-toggle.js"></script>

@@ -320,12 +320,16 @@ def validate_password(password: str):
 # -----------------------------------------------------------------------------
 # Registration Endpoint
 # -----------------------------------------------------------------------------
-@router.post("/register", response_model=dict)
+@router.post("/register", response_model=LoginResponse)
 async def register_user(
-    creds: UserCredentials, session: AsyncSession = Depends(get_async_session)
-) -> dict[str, str]:
+    request: Request,
+    response: Response,
+    creds: UserCredentials,
+    session: AsyncSession = Depends(get_async_session)
+) -> LoginResponse:
     """
     Registers a new user with hashed password and password policy enforcement.
+    Returns access and refresh tokens for immediate login.
     """
     lower_username = creds.username.lower()
     validate_password(creds.password)
@@ -351,8 +355,45 @@ async def register_user(
     session.add(user)
     await session.commit()
 
-    logger.info("User registered successfully: %s", lower_username)
-    return {"message": f"User '{lower_username}' registered successfully."}
+    # Generate tokens like login and set cookies
+    access_payload = build_jwt_payload(
+        user,
+        token_type="access",
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    access_token = create_access_token(access_payload)
+
+    refresh_payload = build_jwt_payload(
+        user,
+        token_type="refresh",
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    refresh_token = create_access_token(refresh_payload)
+
+    # Set secure cookies
+    set_secure_cookie(
+        response,
+        "access_token",
+        access_token,
+        ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        request,
+    )
+    set_secure_cookie(
+        response,
+        "refresh_token",
+        refresh_token,
+        60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+        request,
+    )
+
+    logger.info("User registered and logged in: %s", lower_username)
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=refresh_token,
+        username=lower_username,
+        message=f"User '{lower_username}' registered successfully"
+    )
 
 
 # -----------------------------------------------------------------------------

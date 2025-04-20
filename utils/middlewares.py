@@ -291,7 +291,6 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         # Set user context if we have any data
         if user_data:
             sentry_sdk.set_user(user_data)
-            transaction.set_user(user_data)
 
     def _get_client_ip(self, request: Request) -> Optional[str]:
         """Extract client IP from request headers or connection info"""

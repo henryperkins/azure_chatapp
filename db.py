@@ -88,15 +88,81 @@ async def _create_missing_tables(tables: list[str]):
     """
     Create missing tables with basic progress tracking
     using synchronous metadata create.
+    Handles circular dependencies in table creation.
     """
+    # Handle circular dependency between projects and knowledge_bases
+    if "projects" in tables and "knowledge_bases" in tables:
+        # Step 1: Create projects without knowledge_base_id foreign key
+        logger.info("Creating projects table (without knowledge_base_id constraint)")
+        async with async_engine.begin() as conn:
+            await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(text("""
+                    CREATE TABLE projects (
+                        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                        name VARCHAR(200) NOT NULL,
+                        goals TEXT,
+                        description TEXT,
+                        token_usage INTEGER NOT NULL DEFAULT 0,
+                        max_tokens INTEGER NOT NULL DEFAULT 200000,
+                        custom_instructions TEXT,
+                        archived BOOLEAN NOT NULL DEFAULT FALSE,
+                        pinned BOOLEAN NOT NULL DEFAULT FALSE,
+                        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                        version INTEGER NOT NULL DEFAULT 1,
+                        default_model VARCHAR(50) NOT NULL DEFAULT 'claude-3-sonnet-20240229',
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        extra_data JSONB,
+                        knowledge_base_id UUID
+                    )
+                """))
+            )
+            await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(text("""
+                    ALTER TABLE projects ADD CONSTRAINT check_token_limit
+                    CHECK (max_tokens >= token_usage)
+                """))
+            )
+            await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(text("""
+                    ALTER TABLE projects ADD CONSTRAINT check_archive_pin
+                    CHECK (NOT (archived AND pinned))
+                """))
+            )
+            await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(text("""
+                    ALTER TABLE projects ADD CONSTRAINT check_archive_default
+                    CHECK (NOT (archived AND is_default))
+                """))
+            )
+
+        # Step 2: Create knowledge_bases with its foreign key to projects
+        logger.info("Creating knowledge_bases table")
+        async with async_engine.begin() as conn:
+            await conn.run_sync(
+                lambda sync_conn: Base.metadata.tables["knowledge_bases"].create(sync_conn)
+            )
+
+        # Step 3: Add knowledge_base_id foreign key to projects
+        logger.info("Adding knowledge_base_id foreign key to projects")
+        async with async_engine.begin() as conn:
+            await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(text("""
+                    ALTER TABLE projects
+                    ADD CONSTRAINT fk_projects_knowledge_base
+                    FOREIGN KEY (knowledge_base_id)
+                    REFERENCES knowledge_bases(id) ON DELETE SET NULL;
+                """))
+            )
+
+        # Remove these tables from the list to avoid duplicate creation
+        tables = [t for t in tables if t not in ["projects", "knowledge_bases"]]
+
+    # Create remaining tables normally
     for idx, table_name in enumerate(tables, 1):
         logger.info(f"Creating table {idx}/{len(tables)}: {table_name}")
         async with async_engine.begin() as conn:
-            # Option A: run the sync create via run_sync
-            # table_obj = Base.metadata.tables[table_name]
-            # await conn.run_sync(table_obj.create)
-
-            # Option B: more direct approach (as in your code):
             await conn.run_sync(
                 lambda sync_conn: Base.metadata.tables[table_name].create(sync_conn)
             )

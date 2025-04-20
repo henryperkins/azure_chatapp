@@ -10,7 +10,6 @@
  */
 console.log("[eventHandler.js] Script loaded, beginning setup...");
 
-// Priority buckets for event execution
 const EVENT_PRIORITIES = {
     CRITICAL: 1,
     HIGH: 3,
@@ -19,7 +18,6 @@ const EVENT_PRIORITIES = {
     BACKGROUND: 9
 };
 
-// Track listeners centrally to prevent memory leaks
 const trackedListeners = new Set();
 
 /**
@@ -36,26 +34,63 @@ const trackedListeners = new Set();
 const eventRegistry = {
     // Document-level delegated events
     '#loginForm': {
-        handler: (e) => {
-            e.preventDefault();
+        handler: async (e) => {
+            if (e.cancelable) {
+                e.preventDefault();
+            }
             const form = e.target;
-            const username = form.querySelector('#username')?.value;
-            const password = form.querySelector('#password')?.value;
+            const usernameInput = form.elements['username'] || form.querySelector('#username');
+            const passwordInput = form.elements['password'] || form.querySelector('#password');
+            const username = usernameInput?.value?.trim();
+            const password = passwordInput?.value;
+
+            console.debug('[LoginForm] Values:', { username, password });
 
             if (!username || !password) {
+                console.warn('[LoginForm] Validation failed - missing fields');
                 window.showNotification?.('Username and password are required', 'error');
                 return;
             }
 
-            window.auth.login(username, password)
-                .catch(err => {
-                    console.error('Login error:', err);
-                    window.showNotification?.('Login failed: ' + (err.message || 'Invalid credentials'), 'error');
-                });
+            try {
+                // Ensure auth is initialized
+                if (!window.auth?.isReady) {
+                    await window.auth?.init();
+                }
+                await window.auth.login(username, password);
+            } catch (err) {
+                console.error('[LoginForm] Error:', err);
+                window.showNotification?.('Login failed: ' + (err.message || 'Invalid credentials'), 'error');
+            }
         },
         eventType: 'submit',
         priority: EVENT_PRIORITIES.CRITICAL,
-        description: 'Handles login form submission'
+        description: 'Handles login form submission',
+        passive: false // Add this line to override the default true setting
+    },
+    '#registerForm': {
+        handler: async (e) => {
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+            const form = e.target;
+            const formData = new FormData(form);
+
+            try {
+                // Ensure auth is initialized
+                if (!window.auth?.isReady) {
+                    await window.auth?.init();
+                }
+                await window.auth.register(formData);
+            } catch (err) {
+                console.error('[RegisterForm] Error:', err);
+                window.showNotification?.('Registration failed: ' + (err.message || 'Unknown error'), 'error');
+            }
+        },
+        eventType: 'submit',
+        priority: EVENT_PRIORITIES.CRITICAL,
+        description: 'Handles registration form submission',
+        passive: false
     },
     '#newConversationBtn': {
         handler: handleNewConversationClick,
@@ -204,8 +239,21 @@ function debounce(func, wait) {
 function trackListener(element, type, handler, options = {}) {
     if (!element) return;
 
+    // Special consideration for form submissions and link clicks that need preventDefault
+    const eventsThatNeedCancelable = ['submit', 'click'];
+
+    // If the event likely needs to be cancelable and passive isn't explicitly true, set it to false
+    if (eventsThatNeedCancelable.includes(type) && options.passive !== true) {
+        options.passive = false;
+    }
+
     // Wrap handler for performance + error capturing
     const wrappedHandler = (event) => {
+        // Early detection of preventDefault being called on a passive listener
+        if (options.passive && event.cancelable === false) {
+            console.warn(`[EventHandler] Warning: ${type} event on ${element.id || element.tagName} is passive but may need preventDefault`);
+        }
+
         const transaction = window.Sentry?.startTransaction({
             name: `event.${type}`,
             op: 'ui.interaction',
@@ -236,24 +284,37 @@ function trackListener(element, type, handler, options = {}) {
                 });
             }
         } catch (error) {
-            console.error(`Error in ${type} handler:`, error);
-            if (window.Sentry) {
-                Sentry.withScope(scope => {
-                    scope.setTag('event_type', type);
-                    scope.setContext('element', {
-                        id: element.id,
-                        class: element.className,
-                        tagName: element.tagName,
-                        html: element.outerHTML.slice(0, 1000) // Limited HTML snippet
+            // Special handling for passive listener preventDefault errors
+            if (error instanceof DOMException && error.message.includes('passive')) {
+                console.error(`[EventHandler] preventDefault called within passive listener for ${type} on ${element.id || element.tagName}. Fix by setting passive: false.`);
+
+                // Attempt to recover by retrying with passive: false if possible
+                if (event.cancelable) {
+                    console.info('[EventHandler] Attempting to recover by removing and re-adding non-passive listener');
+                    element.removeEventListener(type, wrappedHandler, listenerOptions);
+                    const recoveryOptions = { ...options, passive: false };
+                    element.addEventListener(type, wrappedHandler, recoveryOptions);
+                }
+            } else {
+                console.error(`Error in ${type} handler:`, error);
+                if (window.Sentry) {
+                    Sentry.withScope(scope => {
+                        scope.setTag('event_type', type);
+                        scope.setContext('element', {
+                            id: element.id,
+                            class: element.className,
+                            tagName: element.tagName,
+                            html: element.outerHTML.slice(0, 1000) // Limited HTML snippet
+                        });
+                        scope.setContext('handler', {
+                            description: options.description || '',
+                            originalName: handler.name || '(anonymous)',
+                            source: handler.toString().slice(0, 500) // Limited source code
+                        });
+                        scope.setLevel('error');
+                        Sentry.captureException(error);
                     });
-                    scope.setContext('handler', {
-                        description: options.description || '',
-                        originalName: handler.name || '(anonymous)',
-                        source: handler.toString().slice(0, 500) // Limited source code
-                    });
-                    scope.setLevel('error');
-                    Sentry.captureException(error);
-                });
+                }
             }
         } finally {
             const duration = performance.now() - startTime;
@@ -262,7 +323,7 @@ function trackListener(element, type, handler, options = {}) {
                 duration
             });
 
-            if (duration > 100) { // Log slow handlers
+            if (duration > 100) {
                 console.warn(`Slow ${type} handler took ${duration.toFixed(2)}ms`);
                 if (window.Sentry) {
                     Sentry.captureMessage(`Slow event handler for '${type}'`, {
@@ -280,9 +341,11 @@ function trackListener(element, type, handler, options = {}) {
         }
     };
 
+    // Determine the final options, defaulting to true if not specified
+    const finalPassive = options.passive !== undefined ? options.passive : true;
     const listenerOptions = {
-        passive: true,
-        ...options
+        ...options,
+        passive: finalPassive
     };
 
     element.addEventListener(type, wrappedHandler, listenerOptions);
@@ -396,9 +459,26 @@ async function handleNewConversationClick() {
     try {
         // First ensure auth system is ready
         if (!window.auth?.isReady) {
-            await new Promise(resolve => {
-                if (window.auth?.isReady) return resolve();
-                window.auth?.AuthBus?.addEventListener('authReady', resolve, { once: true });
+            await new Promise((resolve, reject) => {
+                // Set a timeout to avoid hanging indefinitely
+                const timeoutId = setTimeout(() => {
+                    reject(new Error('Timed out waiting for auth system to be ready'));
+                }, 5000);
+
+                // Check immediately in case it's already ready
+                if (window.auth?.isReady) {
+                    clearTimeout(timeoutId);
+                    resolve();
+                    return;
+                }
+
+                // Listen for the auth ready event
+                const authReadyHandler = () => {
+                    clearTimeout(timeoutId);
+                    resolve();
+                };
+
+                window.auth.AuthBus.addEventListener('authReady', authReadyHandler, { once: true });
             });
         }
 

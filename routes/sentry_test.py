@@ -8,7 +8,7 @@ and demonstrate various Sentry features.
 
 import logging
 import sentry_sdk
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Response
 from typing import Dict, Any, Optional
 import random
 import time

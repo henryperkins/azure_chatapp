@@ -25,8 +25,6 @@ from db import Base
 
 if TYPE_CHECKING:
     from models.project import ProjectUserAssociation
-    from .project import Project
-
 
 class UserRole(enum.Enum):
     USER = "user"
@@ -66,7 +64,7 @@ class User(Base):
         Integer, default=0, nullable=False, server_default="0"
     )
     preferences: Mapped[dict] = mapped_column(
-        JSONB, default={}, nullable=False, server_default="'{}'::jsonb"
+        JSONB, default={}, nullable=False
     )
 
     # Relationships

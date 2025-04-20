@@ -223,7 +223,6 @@
         alertDiv.innerHTML = contentHTML;
       }
 
-      this.notificationContainer.appendChild(alertDiv);
 
       // Auto-remove after timeout (unless timeout=0 -> persist)
       const timeout = options.timeout === 0 ? Infinity : (options.timeout || 5000);
@@ -242,89 +241,20 @@
         setTimeout(() => alertDiv.remove(), 300);
       });
     }
-
-    /**
-     * Confirmation Modal using a <dialog> with DaisyUI styles.
-     */
-    async confirmAction(config = {}) {
-      return new Promise((resolve) => {
-        const modalId = 'confirmActionModal';
-        const modal = document.getElementById(modalId);
-
-        // Basic check for dialog existence
-        if (!modal || typeof modal.showModal !== 'function') {
-          console.error('[UIUtils] confirmAction: Modal dialog not found or not supported.');
-          resolve(false);
-          return;
-        }
-
-        const titleEl = modal.querySelector('#confirmActionTitle');
-        const messageEl = modal.querySelector('#confirmActionMessage');
-        const confirmBtn = modal.querySelector('#confirmActionButton');
-        const cancelBtn = modal.querySelector('#cancelActionButton');
-
-        if (!titleEl || !messageEl || !confirmBtn || !cancelBtn) {
-          console.error('[UIUtils] confirmAction: Required modal elements are missing.');
-          resolve(false);
-          return;
-        }
-
-        // Populate modal content
-        titleEl.textContent = config.title || 'Confirm Action';
-        messageEl.textContent = config.message || 'Are you sure?';
-        confirmBtn.textContent = config.confirmText || 'Confirm';
-        cancelBtn.textContent = config.cancelText || 'Cancel';
-        confirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
-
-        // Remove previous handlers to prevent duplicates
-        if (confirmBtn._clickHandler) {
-          confirmBtn.removeEventListener('click', confirmBtn._clickHandler);
-        }
-
-        // Define new handlers
-        const handleConfirm = () => {
-          if (typeof config.onConfirm === 'function') config.onConfirm();
-          modal.close();
-          resolve(true);
-        };
-
-        /**
-         * Handle any cancel/close scenario.
-         * This includes clicking Cancel or closing by ESC key or backdrop,
-         * so it always resolves false except for the confirm button path.
-         */
-        const handleCancel = () => {
-          if (typeof config.onCancel === 'function' && !confirmBtn.contains(document.activeElement)) {
-            config.onCancel();
-          }
-          resolve(false);
-        };
-
-        // Attach listeners
-        confirmBtn.addEventListener('click', handleConfirm, { once: true });
-        confirmBtn._clickHandler = handleConfirm;
-
-        modal.removeEventListener('close', handleCancel);
-        modal.addEventListener('close', handleCancel, { once: true });
-
-        // Show the modal
-        modal.showModal();
-      });
-    }
   }
 
   // Create a singleton instance and assign to global
   ProjectDashboard.uiUtils = new UIUtils();
   window.uiUtilsInstance = ProjectDashboard.uiUtils;
 
-  /* =========================================================================
-   *  3. MODAL MANAGER
-   *      (Simplified, uses <dialog> elements directly with DaisyUI classes)
-   * ========================================================================= */
+  // =========================================================================
+  //  3. MODAL MANAGER
+  //      (Simplified, uses <dialog> elements directly with DaisyUI classes)
+  // =========================================================================
   class ModalManager {
     constructor() {
       // Hard-coded mapping: semantic names to actual dialog IDs in the HTML
-      this.modalMappings = {
+this.modalMappings = {
         project: 'projectFormModal',
         delete: 'deleteConfirmModal',
         confirm: 'confirmActionModal', // Assuming a generic confirm modal exists
@@ -540,19 +470,19 @@
 
 
   // Ensure dashboardUtilsReady event is fired reliably
-  function signalDashboardUtilsReady() {
-    if (!window.dashboardUtilsReady) {
-      window.dashboardUtilsReady = true;
-      document.dispatchEvent(new CustomEvent("dashboardUtilsReady"));
-      console.log("[projectDashboardUtils] dashboardUtilsReady event dispatched.");
-    }
+function triggerDashboardReady() {
+  if (!window.dashboardUtilsReady) {
+    window.dashboardUtilsReady = true;
+    document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
+    console.log('[ProjectDashboard] dashboardUtilsReady event dispatched');
   }
+}
 
   // Signal readiness after a short delay or when DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(signalDashboardUtilsReady, 50));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(triggerDashboardReady, 50));
   } else {
-    setTimeout(signalDashboardUtilsReady, 50);
+    setTimeout(triggerDashboardReady, 50);
   }
 
   // Provide a global showNotification
@@ -624,60 +554,6 @@
     type: 'unhandledrejection',
     handler: handleUnhandledRejection
   });
-    const reason = evt.reason;
-    const errorMessage = reason?.message || 'Unhandled Rejection';
-    const errorStack = reason?.stack || '';
-
-    // Check for any sign of auth errors
-    const isAuthError =
-      errorMessage.includes('Authentication required') ||
-      errorMessage.includes('Not authenticated') ||
-      errorMessage.includes('auth token') ||
-      errorMessage.includes('login') ||
-      (reason?.status === 401);
-
-    // Attempt to standardize if auth.js is loaded
-    const stdErr = window.auth?.standardizeError?.(reason) || reason;
-
-    // If authentication is required or session expired
-    if (isAuthError || stdErr?.requiresLogin || stdErr?.code === 'SESSION_EXPIRED') {
-      console.warn('[GlobalRejection] Possible Auth error:', errorMessage);
-
-      // Try to verify authentication if auth is available
-      if (window.auth?.isAuthenticated) {
-        window.auth
-          .isAuthenticated({ forceVerify: true })
-          .then((authenticated) => {
-            if (!authenticated) {
-              console.log('[GlobalRejection] Not authenticated, clearing session');
-              window.auth?.clear?.();
-
-              // Example: show login dialog if an #authButton exists
-              const authButton = document.getElementById('authButton');
-              if (authButton) {
-                setTimeout(() => {
-                  authButton.click();
-                }, 300);
-              }
-            }
-          })
-          .catch(() => {
-            window.auth?.clear?.();
-          });
-      }
-
-      // Notify user
-      const message = 'Authentication required. Please log in.';
-      window.showNotification(message, 'error', { timeout: 7000 });
-      evt.preventDefault();
-      return;
-    }
-
-    // Non-auth errors
-    console.error('[UnhandledRejection]', errorMessage, errorStack);
-    window.showNotification(`Unhandled error: ${errorMessage}`, 'error');
-    evt.preventDefault();
-  });
 
   /* =========================================================================
    *  5. HELPER FUNCTIONS
@@ -723,11 +599,6 @@
   /* =========================================================================
    *  6. FINAL SETUP & EVENT DISPATCH
    * ========================================================================= */
-  function dispatchReady() {
-    window.dashboardUtilsReady = true;
-    document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
-    console.log('[ProjectDashboard] dashboardUtilsReady event dispatched');
-  }
 
   /**
    * Setup listeners for project detail view.
@@ -853,12 +724,12 @@
 
   // Dispatch readiness event and set up any listeners
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      dispatchReady();
+document.addEventListener('DOMContentLoaded', () => {
+      triggerDashboardReady();
       setupProjectDetailButtonListeners();
     });
-  } else {
-    dispatchReady();
+} else {
+    triggerDashboardReady();
     setupProjectDetailButtonListeners();
   }
 
@@ -927,6 +798,7 @@
     templates: {
       'project_list.html': false,
       'project_details.html': false,
+      'modals.details.html': false,
       'modals.html': false
     },
     allLoaded: function() {
@@ -968,11 +840,11 @@
         resolve(false);
       }, timeoutMs);
 
-      function onTemplatesLoaded() {
-        clearTimeout(timeoutId);
-        document.removeEventListener('templatesLoaded', onTemplatesLoaded);
-        resolve(true);
-      }
+    function onTemplatesLoaded() {
+      clearTimeout(timeoutId);
+      document.removeEventListener('templatesLoaded', onTemplatesLoaded);
+      resolve(true);
+    }
 
       document.addEventListener('templatesLoaded', onTemplatesLoaded);
     });
@@ -982,3 +854,4 @@
   window.waitForTemplatesLoaded = waitForTemplatesLoaded;
 
   console.log('[ProjectDashboard] projectDashboardUtils.js loaded successfully');
+})();
