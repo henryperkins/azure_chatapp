@@ -520,6 +520,18 @@ function setupNavigation() {
  * Set up common UI elements
  */
 function setupCommonElements() {
+    // Logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        trackListener(logoutBtn, 'click', (e) => {
+            e.preventDefault();
+            window.auth.logout(e).catch(err => {
+                console.error('Logout failed:', err);
+                window.app?.showNotification?.('Logout failed', 'error');
+            });
+        });
+    }
+
     // Project form
     const projectForm = document.getElementById('projectForm');
     if (projectForm) {
