@@ -18,8 +18,7 @@ const APP_CONFIG = {
     AUTH_VERIFY: '/api/auth/verify/',
     PROJECTS: '/api/projects/',
     PROJECT_DETAILS: '/api/projects/{projectId}/',
-    PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
-    PROJECT_FILES: '/api/projects/{projectId}/files/'
+    // (Remove or adjust any endpoints you no longer need)
   },
 
   // DOM selectors
@@ -27,25 +26,20 @@ const APP_CONFIG = {
     MAIN_SIDEBAR: '#mainSidebar',
     NAV_TOGGLE_BTN: '#navToggleBtn',
     SIDEBAR_PROJECTS: '#sidebarProjects',
-    SIDEBAR_CONVERSATIONS: '#sidebarConversations',
     AUTH_BUTTON: '#authButton',
     USER_MENU: '#userMenu',
-    CHAT_UI: '#globalChatUI',
     PROJECT_LIST_VIEW: '#projectListView',
     PROJECT_DETAILS_VIEW: '#projectDetailsView',
-    NO_CHAT_SELECTED_MESSAGE: '#noChatSelectedMessage',
     LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage'
   }
 };
 
-// Global state
+// Global state (reduced)
 const appState = {
   initialized: false,
   initializing: true,
   currentPhase: 'boot',
   currentView: null,
-  currentProjectId: null,
-  currentConversationId: null,
   isAuthenticated: false
 };
 
@@ -53,7 +47,7 @@ const appState = {
 const pendingRequests = new Map();
 
 /**
- * Fetch wrapper with authentication handling
+ * Universal fetch wrapper with authentication handling
  */
 async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
   // Deduplicate identical requests
@@ -67,10 +61,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
   const timeoutMs = options.timeout || APP_CONFIG.TIMEOUTS.API_REQUEST;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Create the Promise
   const requestPromise = (async () => {
     try {
-      // Clean up endpoint
+      // Ensure initial slash
       const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
       // Build query params for GET requests
@@ -84,14 +77,12 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
             queryParams.append(key, value);
           }
         });
-
         finalUrl += (cleanEndpoint.includes('?') ? '&' : '?') + queryParams.toString();
       }
 
       // Get CSRF token
       const csrfToken = await window.auth.getCSRFTokenAsync();
 
-      // Build request options
       const requestOptions = {
         method: method.toUpperCase(),
         credentials: 'include',
@@ -104,7 +95,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         signal: controller.signal
       };
 
-      // Handle body for non-GET requests
+      // Handle request body for non-GET/HEAD
       if (data && !['GET', 'HEAD'].includes(method.toUpperCase())) {
         if (data instanceof FormData) {
           requestOptions.body = data;
@@ -117,12 +108,9 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
       // Make the request
       const response = await fetch(finalUrl, requestOptions);
 
-      // Handle errors
+      // Error handling
       if (!response.ok) {
-        const errorData = await response.json().catch(() => {
-          return { message: response.statusText };
-        });
-
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
         const error = new Error(errorData.message || `HTTP ${response.status}`);
         error.status = response.status;
         error.data = errorData;
@@ -134,12 +122,12 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         throw error;
       }
 
-      // Handle 204 No Content
+      // 204 No Content
       if (response.status === 204) {
         return null;
       }
 
-      // Parse JSON response
+      // Parse JSON by default
       return await response.json();
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -152,151 +140,31 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
     }
   })();
 
-  // Store the promise for deduplication
+  // Store promise for deduplication
   pendingRequests.set(requestKey, requestPromise);
   return requestPromise;
 }
 
 /**
- * Get proper UUID from string or other formats
- */
-function validateUUID(uuid) {
-  if (!uuid) return null;
-
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (uuidPattern.test(uuid)) {
-    return uuid;
-  }
-
-  return null;
-}
-
-/**
- * Get project ID from various sources
- */
-function getProjectId() {
-  // From localStorage
-  const storedId = localStorage.getItem('selectedProjectId');
-  if (storedId && validateUUID(storedId)) {
-    return storedId;
-  }
-
-  // From URL path
-  const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
-  if (pathMatch && pathMatch[1] && validateUUID(pathMatch[1])) {
-    return pathMatch[1];
-  }
-
-  // From URL query
-  const urlParams = new URLSearchParams(window.location.search);
-  const queryId = urlParams.get('projectId');
-  if (queryId && validateUUID(queryId)) {
-    return queryId;
-  }
-
-  return null;
-}
-
-/**
- * Load the list of conversations
- */
-async function loadConversationList() {
-  const projectId = getProjectId();
-  if (!projectId) {
-    return [];
-  }
-
-  try {
-    const url = APP_CONFIG.API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
-    const data = await apiRequest(url);
-
-    // Update sidebar with conversations
-    if (window.uiRenderer?.renderConversations) {
-      window.uiRenderer.renderConversations(data);
-    }
-
-    return data;
-  } catch (error) {
-    if (error.status === 404) {
-      // Project not found, reset selection
-      localStorage.removeItem('selectedProjectId');
-    }
-
-    if (window.uiRenderer?.renderConversations) {
-      window.uiRenderer.renderConversations({ data: { conversations: [] } });
-    }
-
-    return [];
-  }
-}
-
-/**
- * Load projects list
- */
-async function loadProjects() {
-  try {
-    const isAuthenticated = await window.auth.checkAuth();
-    if (!isAuthenticated) {
-      toggleElement('LOGIN_REQUIRED_MESSAGE', true);
-      toggleElement('PROJECT_LIST_VIEW', false);
-      return [];
-    }
-
-    toggleElement('LOGIN_REQUIRED_MESSAGE', false);
-    toggleElement('PROJECT_LIST_VIEW', true);
-
-    if (window.projectManager?.loadProjects) {
-      return await window.projectManager.loadProjects('all');
-    }
-
-    return [];
-  } catch (error) {
-    console.error('[App] Error loading projects:', error);
-    return [];
-  }
-}
-
-/**
- * Navigate to a specific conversation
+ * Navigate to a specific conversation using the new chat manager
  */
 async function navigateToConversation(conversationId) {
-  if (!validateUUID(conversationId)) {
-    throw new Error('Invalid conversation ID');
-  }
-
-  // Update URL
-  window.history.pushState({}, '', `/?chatId=${conversationId}`);
-
   try {
-    const projectId = getProjectId();
-    if (!projectId) {
-      showNotification("Please select a project first", "error");
-      window.history.pushState({}, '', '/?view=projects');
-      toggleElement('CHAT_UI', false);
-      toggleElement('NO_CHAT_SELECTED_MESSAGE', true);
-      return false;
-    }
-
-    if (window.ChatManager?.loadConversation) {
-      appState.currentConversationId = conversationId;
-      return await window.ChatManager.loadConversation(conversationId);
-    } else {
-      throw new Error('Chat manager not available');
-    }
+    return await window.chatManager.loadConversation(conversationId);
   } catch (error) {
     console.error('Error navigating to conversation:', error);
-    toggleElement('CHAT_UI', false);
-    toggleElement('NO_CHAT_SELECTED_MESSAGE', true);
+    showNotification('Failed to load conversation', 'error');
     throw error;
   }
 }
 
 /**
- * Toggle element visibility
+ * Show or hide a DOM element
  */
 function toggleElement(selector, show) {
-  const element = typeof selector === 'string' ?
-    document.querySelector(APP_CONFIG.SELECTORS[selector]) : selector;
+  const element = typeof selector === 'string'
+    ? document.querySelector(APP_CONFIG.SELECTORS[selector])
+    : selector;
 
   if (element) {
     element.classList.toggle('hidden', !show);
@@ -304,7 +172,7 @@ function toggleElement(selector, show) {
 }
 
 /**
- * Show notification
+ * Show a notification (fallback to console if no handler)
  */
 function showNotification(message, type = 'info', duration = 5000) {
   if (window.notificationHandler?.show) {
@@ -315,7 +183,22 @@ function showNotification(message, type = 'info', duration = 5000) {
 }
 
 /**
- * Handle navigation changes
+ * Load projects list (assumes a projectManager)
+ */
+async function loadProjects() {
+  try {
+    if (window.projectManager?.loadProjects) {
+      return await window.projectManager.loadProjects('all');
+    }
+    return [];
+  } catch (error) {
+    console.error('[App] Error loading projects:', error);
+    return [];
+  }
+}
+
+/**
+ * Handle navigation based on URL parameters
  */
 async function handleNavigationChange() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -328,10 +211,8 @@ async function handleNavigationChange() {
     appState.isAuthenticated = isAuthenticated;
 
     if (!isAuthenticated) {
-      toggleElement('CHAT_UI', false);
       toggleElement('PROJECT_LIST_VIEW', false);
       toggleElement('PROJECT_DETAILS_VIEW', false);
-      toggleElement('NO_CHAT_SELECTED_MESSAGE', false);
       toggleElement('LOGIN_REQUIRED_MESSAGE', true);
       return;
     }
@@ -344,9 +225,6 @@ async function handleNavigationChange() {
     }
 
     if (projectId) {
-      appState.currentProjectId = projectId;
-      localStorage.setItem('selectedProjectId', projectId);
-
       if (window.projectManager?.loadProjectDetails) {
         await window.projectManager.loadProjectDetails(projectId);
       }
@@ -357,11 +235,12 @@ async function handleNavigationChange() {
     }
 
     if (chatId) {
+      // Navigate to existing conversation
       await navigateToConversation(chatId);
       return;
     }
 
-    // Default: show project list
+    // Default view is the project list
     showProjectListView();
   } catch (error) {
     console.error('Navigation error:', error);
@@ -370,17 +249,13 @@ async function handleNavigationChange() {
 }
 
 /**
- * Show project list view
+ * Show the project list view
  */
 function showProjectListView() {
   appState.currentView = 'projects';
-
   toggleElement('PROJECT_DETAILS_VIEW', false);
-  toggleElement('CHAT_UI', false);
-  toggleElement('NO_CHAT_SELECTED_MESSAGE', false);
   toggleElement('PROJECT_LIST_VIEW', true);
 
-  // Load projects if authenticated
   if (appState.isAuthenticated) {
     loadProjects().catch(error => {
       console.error('[App] Error loading projects:', error);
@@ -390,36 +265,23 @@ function showProjectListView() {
 }
 
 /**
- * Refresh all app data
- */
-function refreshAppData() {
-  console.log('[App] Refreshing application data...');
-
-  if (window.projectManager?.loadProjects) {
-    window.projectManager.loadProjects('all')
-      .then(() => loadConversationList())
-      .catch(error => {
-        console.error('[App] Error refreshing data:', error);
-      });
-  }
-}
-
-/**
- * Initialize application
+ * Initialize the application
  */
 async function initApp() {
   console.log('[App] Starting initialization...');
   appState.initializing = true;
   appState.currentPhase = 'boot';
 
-  // Wait for DOM ready
+  // Wait for DOM readiness if needed
   if (document.readyState === 'loading') {
-    await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    await new Promise(resolve =>
+      document.addEventListener('DOMContentLoaded', resolve, { once: true })
+    );
   }
 
   appState.currentPhase = 'dom_ready';
 
-  // Initialize auth
+  // Initialize authentication
   try {
     await window.auth.init();
   } catch (error) {
@@ -429,7 +291,7 @@ async function initApp() {
   appState.currentPhase = 'auth_checked';
   appState.isAuthenticated = window.auth.isAuthenticated();
 
-  // Initialize components
+  // Initialize other components
   try {
     if (window.eventHandlers?.init) {
       await window.eventHandlers.init();
@@ -439,31 +301,28 @@ async function initApp() {
       window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
     }
 
-    if (window.ChatManager?.initializeChat) {
-      await window.ChatManager.initializeChat();
+    // Initialize the new chat manager if not already done
+    if (window.chatManager && !window.chatManager.isInitialized) {
+      await window.chatManager.initialize();
     }
   } catch (error) {
     console.error('[App] Component initialization failed:', error);
   }
 
-  // Process navigation based on URL
+  // Perform initial navigation
   await handleNavigationChange();
 
-  // Mark initialization complete
   appState.initializing = false;
   appState.initialized = true;
   appState.currentPhase = 'complete';
-
-  // Refresh data if authenticated
-  if (appState.isAuthenticated) {
-    refreshAppData();
-  }
 
   console.log('[App] Initialization complete');
   return true;
 }
 
-// Register auth state change listener
+/**
+ * Listen for authentication state changes
+ */
 if (window.auth?.AuthBus) {
   window.auth.AuthBus.addEventListener('authStateChanged', event => {
     const { authenticated } = event.detail || {};
@@ -475,41 +334,32 @@ if (window.auth?.AuthBus) {
     if (authenticated) {
       if (authButton) authButton.classList.add('hidden');
       if (userMenu) userMenu.classList.remove('hidden');
-
-      // Refresh data
-      if (appState.initialized) {
-        refreshAppData();
-      }
     } else {
       if (authButton) authButton.classList.remove('hidden');
       if (userMenu) userMenu.classList.add('hidden');
-
-      // Show project list (will display login required)
       showProjectListView();
     }
   });
 }
 
-// Set up event listeners
+/**
+ * Register DOM listeners
+ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Start initialization
   initApp().catch(error => {
     console.error('[App] Critical initialization error:', error);
     showNotification('Application failed to initialize. Please refresh.', 'error');
   });
 
-  // Listen for route changes
+  // Handle back/forward navigation
   window.addEventListener('popstate', handleNavigationChange);
 });
 
-// Export to window
+// Expose some parts to the global scope if needed
 window.app = {
   apiRequest,
-  getProjectId,
-  loadConversationList,
   navigateToConversation,
   showProjectListView,
-  refreshAppData,
   showNotification,
   state: appState
 };
