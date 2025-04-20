@@ -99,40 +99,32 @@ window.ChatUtils = (function () {
 
       _lastError = errorStr;
       _lastErrorTime = now;
-      console.error(`[${context}]`, error);
 
-      // Format authentication error messages in a user-friendly way
-      let message = errorStr;
-      let isAuthError = false;
+      // Format error message
+      const message = this.extractErrorMessage(error);
+      const isAuthError = errorStr.includes('Not authenticated') || 
+                         errorStr.includes('Session expired') || 
+                         errorStr.includes('401');
 
-      if (errorStr.includes('Not authenticated') || errorStr.includes('Session expired') || errorStr.includes('401')) {
-        isAuthError = true;
-        message = 'Your session has expired. Please log in again.';
-      } else if (errorStr.includes('network') || errorStr.includes('connection') || errorStr.includes('timeout')) {
-        message = 'Network connection issue. Please check your internet connection.';
-      } else if (errorStr.includes('Invalid conversation ID')) {
-        message = 'Unable to access conversation. Please refresh the page.';
-      } else if (errorStr.includes('credit balance') || errorStr.includes('Plans & Billing')) {
-        message = 'Your Claude API credit balance is too low. Please go to Plans & Billing to upgrade or purchase credits.';
-      } else if (errorStr.includes('content policy') || errorStr.includes('moderation')) {
-        message = 'Your request was flagged by content moderation. Please modify your message and try again.';
-      } else if (errorStr.includes('rate limit') || errorStr.includes('throttling') || errorStr.includes('429')) {
-        message = 'Too many requests. Please wait a moment before trying again.';
+      // Send to Sentry if available
+      if (window.Sentry) {
+        window.Sentry.withScope(scope => {
+          scope.setTag("context", context);
+          scope.setLevel("error");
+          window.Sentry.captureException(error);
+        });
       }
 
-      // Send notification to user
-      if (typeof window.Notifications?.apiError === 'function') {
-        window.Notifications.apiError(message);
-      } else if (typeof fallbackNotify === 'function') {
-        fallbackNotify(message, 'error');
-      } else {
-        console.error(`${context} error:`, message);
-      }
+      // Show notification
+      window.notificationHandler.show(message, 'error');
 
-      // For authentication errors, clear tokens (AuthBus will broadcast state)
+      // Clear auth if needed
       if (isAuthError && window.auth?.clear) {
         window.auth.clear();
       }
+
+      // Log to console
+      console.error(`[${context}]`, error);
     },
 
     /**

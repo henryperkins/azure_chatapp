@@ -967,7 +967,13 @@ function setupEventListeners() {
     // Project form
     const projectForm = Utils.getElement("projectForm");
     if (projectForm) {
-        trackListener(projectForm, "submit", handleProjectFormSubmit);
+        trackListener(projectForm, "submit", (e) => {
+          try {
+            handleProjectFormSubmit(e);
+          } catch (error) {
+            window.ChatUtils.handleError("ProjectFormSubmit", error);
+          }
+        });
     }
 
     // Sidebar project creation
