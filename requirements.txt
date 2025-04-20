@@ -29,3 +29,4 @@ python-docx
 numpy
 slowapi
 jsonschema
+faiss-cpu

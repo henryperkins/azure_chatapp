@@ -28,10 +28,10 @@ from utils.mcp_sentry import (
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from fastapi.middleware import Middleware
 from fastapi.routing import APIRoute
 
 # Import consolidated routers
@@ -163,7 +163,24 @@ def setup_middleware() -> None:
     )
 
 
+def setup_cors() -> None:
+    """Configure CORS middleware with proper settings for credentials."""
+    origins = os.getenv("CORS_ORIGINS", "").split(",")
+    if not origins:
+        origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["*"]
+    )
+
 setup_middleware()
+
+setup_cors()
 
 
 async def initialize_services() -> None:
