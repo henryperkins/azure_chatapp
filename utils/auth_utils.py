@@ -13,9 +13,10 @@ from typing import Optional, Dict, Any, Tuple
 
 import jwt
 from jwt import PyJWTError, ExpiredSignatureError, InvalidTokenError
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request, status, Depends
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from db import get_async_session
 
 from config import settings
 from db import get_async_session_context
