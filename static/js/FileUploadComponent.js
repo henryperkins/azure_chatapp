@@ -139,7 +139,7 @@ class FileUploadComponent {
         throw new Error('Upload function not available');
       }
 
-      await window.projectManager.uploadFile(this.projectId, file);
+      await window.projectManager.uploadFileWithRetry(this.projectId, { file });
       this._updateUploadProgress(1, 0);
       window.showNotification(`${file.name} uploaded successfully`, 'success');
     } catch (error) {
