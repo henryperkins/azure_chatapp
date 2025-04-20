@@ -175,6 +175,10 @@
       return projects;
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
+if (error.status === 500) {
+    console.error("[projectManager] Server error 500 while loading projects:", error);
+    emitEvent("serverErrorOccurred", { reason: "loadProjects", code: 500, error });
+}
 
       // Set cooldown on auth errors
       if (error.status === 401) {

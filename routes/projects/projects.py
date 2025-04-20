@@ -315,8 +315,10 @@ async def update_project(
             with sentry_span(op="db.update", description="Update project record"):
                 for key, value in updates.items():
                     if getattr(project, key) != value:
+                        # Save old value for logging
+                        old_val = getattr(project, key)
                         setattr(project, key, value)
-                        changes[key] = {"old": getattr(project, key), "new": value}
+                        changes[key] = {"old": old_val, "new": value}
 
                 await save_model(db, project)
 
@@ -624,7 +626,7 @@ async def get_project_stats(
                     kb = await db.get(KnowledgeBase, project.knowledge_base_id)
                     if kb:
                         kb_info["is_active"] = kb.is_active
-                        # Fixed query: added column argument to func.count and used correct where clause
+                        # Retrieve how many files have processed_for_search = True
                         processed_result = await db.execute(
                             select(func.count(ProjectFile.id)).where(
                                 ProjectFile.project_id == project_id,

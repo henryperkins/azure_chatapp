@@ -4,8 +4,7 @@
   <div class="flex gap-2">
     <input id="projectSearchInput" type="search" placeholder="Search projects..."
       class="border px-2 py-1 rounded-box text-sm" />
-    <button id="createProjectBtn" type="button"
-      class="btn btn-primary btn-sm">
+    <button id="createProjectBtn" type="button" class="btn btn-primary btn-sm">
       New Project
     </button>
   </div>
@@ -13,8 +12,8 @@
 
 <!-- Projects filter tabs -->
 <div class="flex border-b border-base-200 mb-4" id="projectFilterTabs">
-  <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200"
-    data-filter="all" type="button" aria-current="page">
+  <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200" data-filter="all"
+    type="button" aria-current="page">
     <span class="relative py-1.5">
       <span class="block">All Projects</span>
       <span class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>
@@ -51,7 +50,7 @@
 <!-- At the end of project_list.html -->
 <script>
   // Initialize project list component once the projectManager is ready
-  document.addEventListener('appJsReady', function() {
+  document.addEventListener('appJsReady', function () {
     if (window.projectManager && window.projectManager.loadProjects) {
       // Initial project loading
       window.projectManager.loadProjects('all').catch(err => {
@@ -62,7 +61,7 @@
     // Project search
     const projectSearchInput = document.getElementById('projectSearchInput');
     if (projectSearchInput) {
-      projectSearchInput.addEventListener('input', function() {
+      projectSearchInput.addEventListener('input', function () {
         const searchTerm = this.value.toLowerCase();
         const projectCards = document.querySelectorAll('#projectList .project-card');
 
@@ -82,7 +81,7 @@
     // New project button
     const createProjectBtn = document.getElementById('createProjectBtn');
     if (createProjectBtn) {
-      createProjectBtn.addEventListener('click', function() {
+      createProjectBtn.addEventListener('click', function () {
         if (window.modalManager && window.modalManager.show) {
           window.modalManager.show('project', {
             updateContent: (modalEl) => {

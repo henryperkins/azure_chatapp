@@ -245,10 +245,10 @@ async def get_user_from_token(
 # -----------------------------------------------------------------------------
 # FastAPI Dependency for HTTP Endpoints
 # -----------------------------------------------------------------------------
-async def get_current_user_and_token(request: Request) -> User:
+async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
     """
     FastAPI dependency that extracts an 'access_token' from the request cookies,
-    verifies it, and loads the corresponding user.
+    verifies it, loads the corresponding user, and returns both.
     """
     token = extract_token(request)
     if not token:
@@ -260,4 +260,4 @@ async def get_current_user_and_token(request: Request) -> User:
 
     async with get_async_session_context() as db:
         user = await get_user_from_token(token, db)
-    return user
+    return user, token

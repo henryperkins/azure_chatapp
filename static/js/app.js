@@ -418,7 +418,9 @@ async function loadProjects() {
     // Load projects through projectManager
     if (window.projectManager?.loadProjects) {
       log("[App] Loading projects through projectManager...");
-      const projects = await window.projectManager.loadProjects('all');
+      const params = new URLSearchParams(window.location.search);
+const filter = params.get('filter') || 'all';
+const projects = await window.projectManager.loadProjects(filter);
       log(`[App] Loaded ${projects.length} projects`);
 
       // Render projects through the component
