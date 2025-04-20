@@ -221,54 +221,49 @@
       }
     }
 
-    _ensureContainerVisibility() {
-      const container = document.getElementById("projectListView");
-      const loginRequiredMessage = document.getElementById("loginRequiredMessage");
+    async _ensureContainerVisibility() {
+      // Ensures the project list or login message is shown based on auth state.
+      const projectListView = document.getElementById('projectListView');
+      const projectManagerPanel = document.getElementById('projectManagerPanel');
+      const projectGrid = document.getElementById('projectGrid'); // Assuming this is the grid container
+      const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+      const noProjectsMessage = document.getElementById('noProjectsMessage'); // Assuming an ID for this message
 
-      console.log("[ProjectListComponent] Ensuring project list visibility");
-
-      // Make container visible and hide login required message
-      if (container) {
-        container.classList.remove("hidden");
-        container.classList.add("flex", "flex-col"); // Use flex for proper display
-        console.log("[ProjectListComponent] Made projectListView visible with flex display");
-      } else {
-        console.warn("[ProjectListComponent] Failed to find projectListView container");
-        // Try to create container if missing
-        this._createContainerIfMissing();
+      if (!projectListView || !projectManagerPanel || !projectGrid || !loginRequiredMessage) {
+          console.error("[ProjectListComponent] Required elements not found for visibility check.");
+          return;
       }
 
-      // Check if projectManagerPanel is visible
-      const projectManagerPanel = document.getElementById("projectManagerPanel");
-      if (projectManagerPanel) {
-        projectManagerPanel.classList.remove("hidden");
-        projectManagerPanel.classList.add("flex");
-        console.log("[ProjectListComponent] Made projectManagerPanel visible");
-      }
+      if(AUTH_DEBUG) console.debug("[ProjectListComponent] Ensuring project list visibility");
 
-      // Check if user is authenticated
-      const isAuthenticated = window.auth?.isAuthenticated
-        ? window.auth.isAuthenticated({ forceVerify: false })
-        : Promise.resolve(false);
+      try {
+          // *** FIX: Await the result of the authentication check ***
+          const isAuthenticated = await window.auth.checkAuth(); // Returns a Promise<boolean>
+          // ********************************************************
 
-      isAuthenticated.then(authStatus => {
-        // Hide login message if authenticated
-        if (loginRequiredMessage) {
-          loginRequiredMessage.classList.toggle("hidden", authStatus);
-          console.log(`[ProjectListComponent] ${authStatus ? 'Hid' : 'Showed'} login required message based on auth status`);
-        }
-      }).catch(err => {
-        console.warn("[ProjectListComponent] Error checking auth status:", err);
-      });
-
-      // Make project list element visible
-      if (this.element) {
-        this.element.classList.add("grid"); // Ensure grid display
-        this.element.classList.remove("hidden");
-        console.log("[ProjectListComponent] Made project list grid visible");
-      } else {
-        console.warn("[ProjectListComponent] Project list element is null, cannot make visible");
-        this._setupDOMReferences(); // Try to re-acquire references
+          if (isAuthenticated) {
+              if(AUTH_DEBUG) console.debug("[ProjectListComponent] User is authenticated. Showing project panel/list.");
+              projectManagerPanel.classList.remove('hidden');
+              projectListView.style.display = 'flex'; // Or 'block' depending on layout
+              projectGrid.classList.remove('hidden'); // Show the grid
+              loginRequiredMessage.classList.add('hidden');
+              // Toggle noProjectsMessage based on actual project count later in renderProjects
+          } else {
+               if(AUTH_DEBUG) console.debug("[ProjectListComponent] User is not authenticated. Showing login message.");
+              projectManagerPanel.classList.add('hidden');
+              projectListView.style.display = 'none'; // Hide the list view
+              projectGrid.classList.add('hidden');    // Hide the grid
+              loginRequiredMessage.classList.remove('hidden');
+              if (noProjectsMessage) noProjectsMessage.classList.add('hidden'); // Hide no projects message too
+          }
+      } catch (error) {
+          console.error("[ProjectListComponent] Error checking authentication for visibility:", error);
+          // Fallback: show login message on error
+          projectManagerPanel.classList.add('hidden');
+          projectListView.style.display = 'none';
+          projectGrid.classList.add('hidden');
+          loginRequiredMessage.classList.remove('hidden');
+          if (noProjectsMessage) noProjectsMessage.classList.add('hidden');
       }
     }
 
