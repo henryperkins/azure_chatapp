@@ -394,6 +394,22 @@ function init() {
 
     // Set up common UI elements
     setupCommonElements();
+
+    // Listen for model configuration changes
+    if (window.modelConfig?.onConfigChange) {
+      window.modelConfig.onConfigChange((config) => {
+        // Update vision UI visibility when model changes
+        if (window.uiRenderer?.setupVisionUI) {
+          window.uiRenderer.setupVisionUI();
+        }
+
+        // Update max tokens display
+        const tokensDisplay = document.getElementById('maxTokensValue');
+        if (tokensDisplay) {
+          tokensDisplay.textContent = `${config.maxTokens} tokens`;
+        }
+      });
+    }
 }
 
 /**

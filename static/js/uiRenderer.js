@@ -145,5 +145,129 @@ function renderConversations(data) {
 // Export to window for app.js integration
 window.uiRenderer = {
   renderConversations,
-  renderProjects
+  renderProjects,
+
+  // Model configuration UI components
+  setupModelDropdown: async function() {
+    const modelSelect = document.getElementById("modelSelect");
+    if (!modelSelect) return;
+
+    const models = [
+      {
+        id: 'claude-3-opus-20240229',
+        name: 'Claude 3 Opus',
+        provider: 'anthropic',
+        maxTokens: 200000,
+        supportsVision: false
+      },
+      {
+        id: 'claude-3-sonnet-20240229',
+        name: 'Claude 3 Sonnet',
+        provider: 'anthropic',
+        maxTokens: 200000,
+        supportsVision: false
+      },
+      {
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        provider: 'openai',
+        maxTokens: 128000,
+        supportsVision: true
+      }
+    ];
+
+    // Clear existing options
+    modelSelect.innerHTML = '';
+
+    // Add models to dropdown
+    models.forEach(model => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.name;
+      if (model.description) option.title = model.description;
+      modelSelect.appendChild(option);
+    });
+
+    // Set current model
+    const currentConfig = window.modelConfig?.getConfig() || {};
+    modelSelect.value = currentConfig.modelName || 'claude-3-sonnet-20240229';
+
+    // Add change handler
+    window.eventHandlers.trackListener(modelSelect, "change", () => {
+      window.modelConfig.updateConfig({
+        modelName: modelSelect.value
+      });
+    });
+  },
+
+  setupMaxTokensUI: function() {
+    const maxTokensContainer = document.getElementById("maxTokensContainer");
+    if (!maxTokensContainer) return;
+
+    const currentConfig = window.modelConfig?.getConfig() || {};
+
+    // Create slider
+    const slider = document.createElement('input');
+    slider.type = "range";
+    slider.min = "100";
+    slider.max = "100000";
+    slider.value = currentConfig.maxTokens || 4096;
+    slider.className = "w-full mt-2";
+
+    // Create value display
+    const valueDisplay = document.createElement('div');
+    valueDisplay.className = "text-sm text-gray-600 dark:text-gray-400";
+    valueDisplay.textContent = `${currentConfig.maxTokens || 4096} tokens`;
+
+    // Update function
+    const updateMaxTokens = (value) => {
+      const tokens = Math.max(100, Math.min(100000, value));
+      valueDisplay.textContent = `${tokens} tokens`;
+      window.modelConfig.updateConfig({
+        maxTokens: tokens
+      });
+    };
+
+    // Event listeners
+    window.eventHandlers.trackListener(slider, "input", (e) => {
+      updateMaxTokens(e.target.value);
+    });
+
+    // Add to container
+    maxTokensContainer.innerHTML = '';
+    maxTokensContainer.appendChild(slider);
+    maxTokensContainer.appendChild(valueDisplay);
+  },
+
+  setupVisionUI: function() {
+    const visionPanel = document.getElementById('visionPanel');
+    if (!visionPanel) return;
+
+    const currentConfig = window.modelConfig?.getConfig() || {};
+    const supportsVision = currentConfig.modelName === 'gpt-4o';
+
+    visionPanel.classList.toggle('hidden', !supportsVision);
+    if (supportsVision) {
+      const toggle = document.createElement('input');
+      toggle.type = "checkbox";
+      toggle.id = "visionToggle";
+      toggle.checked = currentConfig.visionEnabled || false;
+      toggle.className = "mr-2";
+
+      const label = document.createElement('label');
+      label.htmlFor = "visionToggle";
+      label.textContent = "Enable Vision";
+      label.className = "text-sm";
+
+      window.eventHandlers.trackListener(toggle, "change", () => {
+        window.modelConfig.updateConfig({
+          visionEnabled: toggle.checked
+        });
+      });
+
+      visionPanel.innerHTML = '';
+      visionPanel.appendChild(toggle);
+      visionPanel.appendChild(label);
+    }
+  }
 };

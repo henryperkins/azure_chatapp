@@ -305,6 +305,13 @@ async function initApp() {
     if (window.chatManager && !window.chatManager.isInitialized) {
       await window.chatManager.initialize();
     }
+
+    // Initialize model configuration UI if available
+    if (window.uiRenderer?.setupModelDropdown) {
+      await window.uiRenderer.setupModelDropdown();
+      window.uiRenderer.setupMaxTokensUI();
+      window.uiRenderer.setupVisionUI();
+    }
   } catch (error) {
     console.error('[App] Component initialization failed:', error);
   }
