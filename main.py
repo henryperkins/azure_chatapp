@@ -255,7 +255,7 @@ async def add_security_headers(
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "X-XSS-Protection": "1; mode=block",
-            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:",
+            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://o4508070823395328.ingest.us.sentry.io; connect-src 'self' https://o4508070823395328.ingest.us.sentry.io; img-src 'self' data:",
         }
     )
     return response

@@ -225,11 +225,11 @@
       // Ensures the project list or login message is shown based on auth state.
       const projectListView = document.getElementById('projectListView');
       const projectManagerPanel = document.getElementById('projectManagerPanel');
-      const projectGrid = document.getElementById('projectGrid'); // Assuming this is the grid container
+      const projectList = document.getElementById('projectList'); // Assuming this is the grid container
       const loginRequiredMessage = document.getElementById('loginRequiredMessage');
       const noProjectsMessage = document.getElementById('noProjectsMessage'); // Assuming an ID for this message
 
-      if (!projectListView || !projectManagerPanel || !projectGrid || !loginRequiredMessage) {
+      if (!projectListView || !projectManagerPanel || !loginRequiredMessage) {
           console.error("[ProjectListComponent] Required elements not found for visibility check.");
           return;
       }
@@ -245,14 +245,14 @@
               if(AUTH_DEBUG) console.debug("[ProjectListComponent] User is authenticated. Showing project panel/list.");
               projectManagerPanel.classList.remove('hidden');
               projectListView.style.display = 'flex'; // Or 'block' depending on layout
-              projectGrid.classList.remove('hidden'); // Show the grid
+              projectList.classList.remove('hidden'); // Show the grid
               loginRequiredMessage.classList.add('hidden');
               // Toggle noProjectsMessage based on actual project count later in renderProjects
           } else {
                if(AUTH_DEBUG) console.debug("[ProjectListComponent] User is not authenticated. Showing login message.");
               projectManagerPanel.classList.add('hidden');
               projectListView.style.display = 'none'; // Hide the list view
-              projectGrid.classList.add('hidden');    // Hide the grid
+              projectList.classList.add('hidden');    // Hide the grid
               loginRequiredMessage.classList.remove('hidden');
               if (noProjectsMessage) noProjectsMessage.classList.add('hidden'); // Hide no projects message too
           }
@@ -261,7 +261,7 @@
           // Fallback: show login message on error
           projectManagerPanel.classList.add('hidden');
           projectListView.style.display = 'none';
-          projectGrid.classList.add('hidden');
+          projectList.classList.add('hidden');
           loginRequiredMessage.classList.remove('hidden');
           if (noProjectsMessage) noProjectsMessage.classList.add('hidden');
       }
@@ -322,7 +322,7 @@
 
       this.state.loading = true;
       this._showLoadingState();
-      return window.projectManager.loadProjects()
+      return window.projectManager.loadProjects(this.state.filter)
         .catch(err => {
           console.error('Project loading failed:', err);
           this._renderErrorState('Failed to load projects');
