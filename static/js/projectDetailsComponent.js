@@ -32,11 +32,8 @@ class ProjectDetailsComponent {
       loadingIndicators: {}
     };
 
-    // File upload config
-    this.fileConstants = {
-      allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'],
-      maxSizeMB: 30
-    };
+    // Initialize file upload component
+    this.fileUploadComponent = null;
 
     // Find elements
     this._findElements();
@@ -77,7 +74,7 @@ class ProjectDetailsComponent {
       artifacts: document.getElementById('artifactsLoadingIndicator')
     };
 
-    // File upload elements
+    // Initialize file upload component elements
     this.elements.fileInput = document.getElementById('projectFileInput');
     this.elements.uploadBtn = document.getElementById('uploadFileBtn');
     this.elements.dragZone = document.getElementById('dragDropZone');
@@ -107,39 +104,21 @@ class ProjectDetailsComponent {
       });
     });
 
-    // File upload
-    if (this.elements.uploadBtn && this.elements.fileInput) {
-      window.eventHandlers.trackListener(this.elements.uploadBtn, 'click', () => {
-        this.elements.fileInput.click();
-      });
-
-      window.eventHandlers.trackListener(this.elements.fileInput, 'change', (e) => {
-        this._handleFileSelection(e);
-      });
-    }
-
-    // Drag and drop
-    if (this.elements.dragZone) {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        window.eventHandlers.trackListener(this.elements.dragZone, eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          if (eventName === 'dragenter' || eventName === 'dragover') {
-            this.elements.dragZone.classList.add('border-primary');
-          } else {
-            this.elements.dragZone.classList.remove('border-primary');
-
-            if (eventName === 'drop') {
-              this._handleFileDrop(e);
-            }
+    // Initialize file upload component
+    if (window.FileUploadComponent) {
+      this.fileUploadComponent = new window.FileUploadComponent({
+        projectId: this.state.currentProject?.id,
+        fileInput: this.elements.fileInput,
+        uploadBtn: this.elements.uploadBtn,
+        dragZone: this.elements.dragZone,
+        uploadProgress: this.elements.uploadProgress,
+        progressBar: this.elements.progressBar,
+        uploadStatus: this.elements.uploadStatus,
+        onUploadComplete: () => {
+          if (this.state.currentProject?.id && window.projectManager?.loadProjectFiles) {
+            window.projectManager.loadProjectFiles(this.state.currentProject.id);
           }
-        });
-      });
-
-      // Click on drag zone
-      window.eventHandlers.trackListener(this.elements.dragZone, 'click', () => {
-        this.elements.fileInput.click();
+        }
       });
     }
 
@@ -212,7 +191,7 @@ class ProjectDetailsComponent {
 
   /**
    * Switch to a different tab
-   * @param {string} tabName - Tab to switch to
+   * @param {string} tabName - Tab name
    */
   switchTab(tabName) {
     const validTabs = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'];
@@ -284,174 +263,6 @@ class ProjectDetailsComponent {
       container.innerHTML = `
         <div class="text-center py-8 text-base-content/70">
           <p>No conversations yet</p>
-          <button class="btn btn-sm btn-primary mt-2" id="newChatFromEmptyState">Create New Chat</button>
-        </div>
-      `;
-
-      const newChatBtn = document.getElementById('newChatFromEmptyState');
-      if (newChatBtn) {
-        window.eventHandlers.trackListener(newChatBtn, 'click', () => this.createNewChat());
-      }
-
-      return;
-    }
-
-    container.innerHTML = '';
-
-    conversations.forEach(conversation => {
-      const conversationItem = this._createConversationItem(conversation);
-      container.appendChild(conversationItem);
-    });
-  }
-
-  /**
-   * Render artifacts list
-   * @param {Array} artifacts - Artifacts to render
-   */
-  renderArtifacts(artifacts = []) {
-    const container = this.elements.artifactsList;
-    if (!container) return;
-
-    if (!artifacts.length) {
-      container.innerHTML = `
-        <div class="text-center py-8 text-base-content/70">
-          <p>No artifacts generated yet.</p>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = '';
-
-    artifacts.forEach(artifact => {
-      const artifactItem = this._createArtifactItem(artifact);
-      container.appendChild(artifactItem);
-    });
-  }
-
-  /**
-   * Render project stats
-   * @param {Object} stats - Project stats
-   */
-  renderStats(stats = {}) {
-    const tokenUsageEl = document.getElementById('tokenUsage');
-    const maxTokensEl = document.getElementById('maxTokens');
-    const tokenProgressBar = document.getElementById('tokenProgressBar');
-    const conversationCountEl = document.getElementById('conversationCount');
-    const totalMessagesEl = document.getElementById('totalMessages');
-
-    // Utility for number formatting
-    const formatNumber = (num) => {
-      return new Intl.NumberFormat().format(num || 0);
-    };
-
-    // Update elements if they exist
-    if (tokenUsageEl) {
-      tokenUsageEl.textContent = formatNumber(stats.token_usage);
-    }
-
-    if (maxTokensEl) {
-      maxTokensEl.textContent = formatNumber(stats.max_tokens);
-    }
-
-    if (tokenProgressBar) {
-      const usage = stats.token_usage || 0;
-      const maxTokens = stats.max_tokens || 1;
-      const percentage = Math.min(100, Math.round((usage / maxTokens) * 100));
-
-      tokenProgressBar.value = percentage;
-      tokenProgressBar.classList.remove('progress-success', 'progress-warning', 'progress-error');
-
-      if (percentage > 90) {
-        tokenProgressBar.classList.add('progress-error');
-      } else if (percentage > 75) {
-        tokenProgressBar.classList.add('progress-warning');
-      } else {
-        tokenProgressBar.classList.add('progress-success');
-      }
-    }
-
-    if (conversationCountEl) {
-      conversationCountEl.textContent = formatNumber(stats.conversation_count);
-    }
-
-    if (totalMessagesEl) {
-      totalMessagesEl.textContent = `${formatNumber(stats.total_messages)} messages`;
-    }
-  }
-
-  /**
-   * Create a new chat
-   */
-  async createNewChat() {
-    if (!this.state.currentProject?.id) {
-      window.showNotification('No project selected', 'error');
-      return null;
-    }
-
-    try {
-      // Set project ID in localStorage
-      localStorage.setItem('selectedProjectId', this.state.currentProject.id);
-
-      // Create conversation via project manager
-      if (!window.projectManager?.createConversation) {
-        throw new Error('Project manager not available');
-      }
-
-      const conversation = await window.projectManager.createConversation(this.state.currentProject.id);
-
-      // Switch to chat tab
-      this.switchTab('chat');
-
-      // Initialize chat with the new conversation
-      await window.chatManager.initialize();
-      await window.chatManager.loadConversation(conversation.id);
-
-      // Update URL
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('chatId', conversation.id);
-      window.history.pushState({}, '', newUrl.toString());
-
-      return conversation;
-    } catch (error) {
-      console.error('[ProjectDetailsComponent] Failed to create chat:', error);
-      window.showNotification('Failed to create conversation', 'error');
-      return null;
-    }
-  }
-
-  /* =========================================================================
-   * PRIVATE METHODS - UI HELPERS
-   * ========================================================================= */
-
-  /**
-   * Update project header
-   * @param {Object} project - Project data
-   * @private
-   */
-  _updateProjectHeader(project) {
-    if (this.elements.title) {
-      this.elements.title.textContent = project.name || '';
-    }
-
-    if (this.elements.description) {
-      this.elements.description.textContent = project.description || 'No description provided.';
-    }
-
-    // Update pin status
-    const pinBtn = document.getElementById('pinProjectBtn');
-    if (pinBtn) {
-      const pinIcon = pinBtn.querySelector('svg');
-      if (pinIcon) {
-        pinIcon.setAttribute('fill', project.pinned ? 'currentColor' : 'none');
-      }
-      pinBtn.classList.toggle('text-warning', project.pinned);
-    }
-
-    // Update archive status
-    const archiveBtn = document.getElementById('archiveProjectBtn');
-    if (archiveBtn) {
-      archiveBtn.classList.toggle('text-warning', project.archived);
     }
   }
 
@@ -502,17 +313,13 @@ class ProjectDetailsComponent {
    */
   async _initializeChat() {
     try {
-      // Initialize chat manager with current project
       await window.chatManager.initialize();
-
-      // Check for chatId in URL
       const urlParams = new URLSearchParams(window.location.search);
       const chatId = urlParams.get('chatId');
 
       if (chatId) {
         await window.chatManager.loadConversation(chatId);
       } else {
-        // Create new conversation if none exists
         await this.createNewChat();
       }
     } catch (error) {
@@ -573,20 +380,6 @@ class ProjectDetailsComponent {
    * PRIVATE METHODS - FILE HANDLING
    * ========================================================================= */
 
-  /**
-   * Handle file selection from input
-   * @param {Event} e - Change event
-   * @private
-   */
-  _handleFileSelection(e) {
-    if (!this.state.currentProject?.id) return;
-
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    this._uploadFiles(files);
-    e.target.value = null; // Reset input
-  }
 
   /**
    * Handle file drop
@@ -1044,22 +837,12 @@ class ProjectDetailsComponent {
     }
 
     try {
-      // Store project ID
       localStorage.setItem('selectedProjectId', this.state.currentProject.id);
-
-      // Switch to chat tab
       this.switchTab('chat');
 
-      // Load conversation in chat manager
-      const chatManager = window.chatManager;
-      if (chatManager) {
-        await chatManager.initialize();
-        await chatManager.loadConversation(conversation.id);
-      } else {
-        throw new Error('Chat manager not available');
-      }
+      await window.chatManager.initialize();
+      await window.chatManager.loadConversation(conversation.id);
 
-      // Update URL
       const url = new URL(window.location.href);
       url.searchParams.set('chatId', conversation.id);
       window.history.pushState({}, '', url.toString());
