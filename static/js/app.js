@@ -262,52 +262,24 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
   return requestPromise;
 }
 
-async function parseErrorResponse(response, finalUrl) {
+async function parseErrorResponse(response) { // Removed finalUrl param as it's not used
   const status = response.status;
-  const responseClone = response.clone();
   let errData;
   try {
     errData = await response.json();
   } catch {
-    const text = await responseClone.text().catch(() => response.statusText);
+    const text = await response.text().catch(() => response.statusText);
     return new APIError(`API error (${status}): ${text || response.statusText}`, { status, code: `E${status}` });
   }
 
   const message = errData.message || errData.error || response.statusText || `HTTP ${status}`;
-  const error = new APIError(`API error (${status}): ${message}`, {
+  // Do NOT handle 401/403 side effects here. Let handleError in apiRequest do it.
+  return new APIError(`API error (${status}): ${message}`, {
     status,
     code: `E${status}`,
-    isPermanent: status === 404
+    isPermanent: status === 404,
+    detail: errData.detail // Include detail if available
   });
-
-  // Special handling for 401 errors
-  if (status === 401) {
-    // Clear auth state immediately
-    if (window.auth?.clear) window.auth.clear();
-
-    // Set cooldown to prevent rapid retries
-    if (!window.__last401Time || Date.now() - window.__last401Time > 30000) {
-      window.__last401Time = Date.now();
-      console.warn('[parseErrorResponse] 401 Unauthorized - Session expired, clearing auth state');
-    }
-
-    // Update API_CONFIG
-    API_CONFIG.isAuthenticated = false;
-    API_CONFIG.lastErrorStatus = null; // Clear after handling
-
-    // Show user notification
-    if (window.showNotification) {
-      window.showNotification(MESSAGES.SESSION_EXPIRED, 'error');
-    }
-  } else {
-    // For non-401 errors, set lastErrorStatus but clear it after a delay
-    API_CONFIG.lastErrorStatus = status;
-    setTimeout(() => {
-      API_CONFIG.lastErrorStatus = null;
-    }, 5000);
-  }
-
-  return error;
 }
 
 function getBaseUrl() {
@@ -335,6 +307,7 @@ const debouncedLoadProject = debounce(async (projectId) => {
     }
   } catch (error) {
     console.error(`[App] Error loading project ${projectId}:`, error);
+    // ChatUtils.handleError already handles 401/notifications
     window.ChatUtils.handleError('Loading project', error);
   } finally {
     if (currentlyLoadingProjectId === projectId) currentlyLoadingProjectId = null;
@@ -342,10 +315,7 @@ const debouncedLoadProject = debounce(async (projectId) => {
 }, DEBOUNCE_DELAY);
 
 async function loadConversationList() {
-  if (!await ensureAuthenticated()) {
-    log("[loadConversationList] Not authenticated");
-    return [];
-  }
+  // rely on apiRequest's auth check and handleError for notifications
   if (API_CONFIG.authCheckInProgress) {
     log("[loadConversationList] Auth check in progress, deferring");
     return [];
@@ -353,18 +323,20 @@ async function loadConversationList() {
   let projectId = window.ChatUtils.getProjectId();
   if (!projectId && window.projectManager?.loadProjects) {
     try {
+      // projectManager.loadProjects will emit events handled by UI
       const projects = await window.projectManager.loadProjects("all");
       if (projects && projects.length > 0) {
         projectId = projects[0].id;
         localStorage.setItem("selectedProjectId", projectId);
         log(`[loadConversationList] Auto-selected project: ${projectId}`);
       } else {
+        // If no projects found, render empty conversations state
         if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
         return [];
       }
     } catch (err) {
       console.error("[loadConversationList] Error auto-selecting project:", err);
-      window.ChatUtils.handleError('Auto-selecting project for conversations', err);
+      // ChatUtils.handleError called by projectManager.loadProjects
       if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
       return [];
     }
@@ -375,35 +347,53 @@ async function loadConversationList() {
     return [];
   }
   const url = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{project_id}', projectId);
-  return apiRequest(url).then(data => {
+  try {
+    const data = await apiRequest(url);
     if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations(data);
     return data;
-  }).catch(err => {
+  } catch (err) {
+    // ChatUtils.handleError is called by apiRequest now
     if (err.status === 404) {
       console.warn(`[loadConversationList] Project ${projectId} not found`);
       localStorage.removeItem("selectedProjectId");
+      // Trigger project list reload, which should handle finding a new project
       if (window.projectManager?.loadProjects) {
         window.projectManager.loadProjects("all").then(projects => {
           if (projects && projects.length > 0) {
             localStorage.setItem("selectedProjectId", projects[0].id);
+            // Slight delay to allow UI update before reloading conversations
             setTimeout(() => loadConversationList(), 500);
+          } else {
+            // If no projects after refresh, ensure empty state is shown
+            if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
           }
-        }).catch(newErr => console.error("[loadConversationList] Failed to load valid projects:", newErr));
+        }).catch(newErr => {
+          console.error("[loadConversationList] Failed to load valid projects after 404:", newErr);
+           if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
+        });
+      } else {
+         // Fallback if projectManager not available
+         if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
       }
     }
-    window.ChatUtils.handleError('Loading conversation list', err);
-    if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations({ data: { conversations: [] } });
+    // Error handled by apiRequest -> ChatUtils.handleError
     return [];
-  });
+  }
 }
 
 async function loadProjects() {
   try {
+    // ensureAuthenticated will show login prompt if needed
     const isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
-      log("[App] Not authenticated, showing login prompt");
+      log("[App] Not authenticated, ensure login prompt is visible");
       toggleVisibility(document.getElementById('loginRequiredMessage'), true);
       toggleVisibility(document.getElementById('projectManagerPanel'), false);
+      toggleVisibility(document.getElementById('projectListView'), false); // Hide project list container
+      // projectListComponent will handle rendering empty state or login message if needed
+      if (window.projectListComponent?.renderProjects) {
+         window.projectListComponent.renderProjects([]); // Clear list
+      }
       return;
     }
 
@@ -412,33 +402,36 @@ async function loadProjects() {
     toggleVisibility(document.getElementById('projectManagerPanel'), true);
     toggleVisibility(document.getElementById('projectListView'), true);
 
-    // Ensure components are initialized
-    await ensureComponentsInitialized();
+    // Ensure components are initialized (handled by appInitializer/initApp)
+    // await ensureComponentsInitialized(); // This is called by initApp
 
-    // Load projects through projectManager
+    // Load projects through projectManager (errors handled by projectManager -> ChatUtils)
     if (window.projectManager?.loadProjects) {
       log("[App] Loading projects through projectManager...");
       const params = new URLSearchParams(window.location.search);
-const filter = params.get('filter') || 'all';
-const projects = await window.projectManager.loadProjects(filter);
-      log(`[App] Loaded ${projects.length} projects`);
+      const filter = params.get('filter') || 'all';
+      // projectManager.loadProjects will emit events for rendering and error handling
+      await window.projectManager.loadProjects(filter);
+      log("[App] projectManager.loadProjects call completed (events dispatched)");
 
-      // Render projects through the component
-      if (window.projectListComponent) {
-        window.projectListComponent.renderProjects(projects);
-      }
-
-      // Handle empty project list
-      if (projects.length === 0) {
-        toggleVisibility(document.getElementById('noProjectsMessage'), true);
-      }
+      // The projectListComponent will handle rendering based on events.
+      // No need to manually render here or check project count for empty state.
+    } else {
+      console.warn("[App] projectManager not available to load projects.");
+       // Manually render empty state if projectManager is missing
+       if (window.projectListComponent?.renderProjects) {
+         window.projectListComponent.renderProjects([]);
+       }
     }
   } catch (err) {
-    console.error("[App] Error loading projects:", err);
-    window.ChatUtils.handleError('Loading projects', err);
+    console.error("[App] Error in loadProjects wrapper:", err);
+    // This catch might only be hit for errors originating *outside* projectManager.loadProjects
+    // Errors from projectManager.loadProjects are handled internally and emit events.
+    // If this is a critical error, ChatUtils.handleError is the final destination.
+    window.ChatUtils.handleError('Loading projects (App wrapper)', err);
   } finally {
-    // Clear loading flag
-    window.__projectLoadingInProgress = false;
+    // Clear loading flag is handled by projectManager.loadProjects finally block
+    // window.__projectLoadingInProgress = false; // Should be handled by projectManager
   }
 }
 
@@ -452,7 +445,8 @@ async function navigateToConversation(conversationId) {
     const projectId = window.ChatUtils.getProjectId();
     if (!projectId) {
       console.warn("No project selected, cannot navigate to conversation without project context.");
-      window.ChatUtils.showNotification("Please select a project first", "error");
+      // Use standardized notification
+      window.showNotification("Please select a project first", "error");
       // Redirect to project selection
       window.history.pushState({}, '', '/?view=projects');
       toggleVisibility(getEl('CHAT_UI'), false);
@@ -461,27 +455,24 @@ async function navigateToConversation(conversationId) {
     }
 
     // Ensure ChatManager is available
-    await ensureChatManagerAvailable().catch(err => {
-      console.error('Failed to ensure ChatManager availability:', err);
-      throw err;
-    });
+    // ensureChatManagerAvailable handles script loading and timeouts internally,
+    // and calls ChatUtils.handleError for its own failures.
+    await ensureChatManagerAvailable();
 
-    if (window.ChatManager && window.ChatManager.loadConversation) {
+
+    // ChatManager.loadConversation will internally use ConversationService which
+    // uses apiRequest, which in turn calls ChatUtils.handleError for notifications.
+    if (window.ChatManager?.loadConversation) {
       // Delegate UI visibility to ChatInterface after initialization
-      if (window.chatInterface && window.chatInterface.initialized) {
-        await window.chatInterface.ui.ensureChatContainerVisible(window.ChatUtils.getProjectId() !== null);
-      } else {
-        // Fallback if not initialized
-        toggleVisibility(getEl('CHAT_UI'), true);
-        toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), false);
-      }
+      // chatInterface.loadConversation should handle UI visibility updates
       return await window.ChatManager.loadConversation(conversationId);
     } else {
-      throw new Error('ChatManager not properly initialized');
+      throw new Error('ChatManager not properly initialized for loadConversation');
     }
   } catch (error) {
     console.error('Error navigating to conversation:', error);
-    window.ChatUtils.handleError('Loading conversation', error);
+    // ChatUtils.handleError called by ensureChatManagerAvailable or ChatManager.loadConversation
+    // Ensure fallback UI state if navigation fails
     toggleVisibility(getEl('CHAT_UI'), false);
     toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
     throw error;
@@ -493,46 +484,55 @@ async function ensureChatManagerAvailable() {
   if (!window.ChatManager) {
     console.log('Waiting for ChatManager to become available...');
 
-    const chatCoreScript = document.querySelector('script[src*="chat-core.js"]');
-    if (!chatCoreScript) {
-      console.log('Loading chat-core.js dynamically');
-      await loadScript('/static/js/chat-core.js').catch(err => {
-        console.error('Failed to load chat-core.js:', err);
-        window.ChatUtils.handleError('Loading chat-core.js', err);
-      });
-    }
+    // Rely on chat-core.js loading itself or being loaded by appInitializer.
+    // If it's still not available, log a warning but don't try to load it here.
+    // appInitializer should handle critical script loading.
 
     // Wait for ChatManager to be defined with a timeout and event listener
     return new Promise((resolve, reject) => {
       if (window.ChatManager) {
+        console.log('ChatManager is already available.');
         resolve();
         return;
       }
 
-      document.addEventListener('chatManagerReady', () => {
-        console.log('ChatManager is now available via event');
+      // Wait for the specific 'chatManagerReady' event
+      const handleReady = () => {
+        console.log('ChatManager is now available via chatManagerReady event');
         resolve();
-      }, { once: true });
+      };
+      document.addEventListener('chatManagerReady', handleReady, { once: true });
 
-      const checkInterval = setInterval(() => {
-        if (window.ChatManager) {
-          clearInterval(checkInterval);
-          clearTimeout(timeout);
-          resolve();
-        }
-      }, 100);
 
+      // Timeout in case event never fires
       const timeout = setTimeout(() => {
-        clearInterval(checkInterval);
-        const errMsg = `ChatManager initialization timed out after ${TIMEOUT_CONFIG.CHAT_MANAGER}ms`;
+        const errMsg = `ChatManager initialization timed out after ${TIMEOUT_CONFIG.CHAT_MANAGER}ms. Check chat-core.js loading.`;
         log(errMsg);
+        // Clean up the event listener if timeout occurs
+        document.removeEventListener('chatManagerReady', handleReady);
+        // Use ChatUtils.handleError for this critical timeout
+        window.ChatUtils.handleError('Waiting for ChatManager', new Error(errMsg));
         reject(new Error(errMsg));
       }, TIMEOUT_CONFIG.CHAT_MANAGER);
+
+       // Also check periodically in case the event fired before the listener was added
+       const checkInterval = setInterval(() => {
+         if (window.ChatManager) {
+           clearInterval(checkInterval);
+           clearTimeout(timeout);
+           document.removeEventListener('chatManagerReady', handleReady);
+           console.log('ChatManager found via interval check.');
+           resolve();
+         }
+       }, 100);
     });
   }
+  console.log('ChatManager is already available.');
   return Promise.resolve();
 }
 
+// Removed loadScript function as dynamic script loading should be centralized in appInitializer/chat-core
+/*
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -542,26 +542,32 @@ function loadScript(src) {
     document.head.appendChild(script);
   });
 }
+*/
 
 async function handleNavigationChange() {
   try {
+    // Check app initialization status
     if (window.__appInitializing) {
       console.log("App still initializing, waiting before handling navigation...");
+      // Wait for the appInitializer status to change from 'initializing'
       await new Promise(resolve => {
-        const checkInterval = setInterval(() => {
-          if (!window.__appInitializing) {
-            clearInterval(checkInterval);
+        const checkStatus = setInterval(() => {
+          if (window.appInitializer?.status !== 'initializing') {
+            clearInterval(checkStatus);
             resolve();
           }
         }, 100);
+        // Add a timeout just in case the status never changes
         setTimeout(() => {
-          clearInterval(checkInterval);
-          const warnMsg = `Timeout waiting for app initialization during navigation (${TIMEOUT_CONFIG.INITIALIZATION}ms)`;
+          clearInterval(checkStatus);
+          const warnMsg = `Timeout waiting for app initialization flag during navigation (${TIMEOUT_CONFIG.INITIALIZATION}ms)`;
           log(warnMsg);
-          resolve();
+          resolve(); // Resolve anyway to prevent blocking
         }, TIMEOUT_CONFIG.INITIALIZATION);
       });
+      console.log("App initialization status allows navigation handling.");
     }
+
 
     const urlParams = new URLSearchParams(window.location.search);
     const chatId = urlParams.get('chatId');
@@ -572,75 +578,68 @@ async function handleNavigationChange() {
     const projectListView = document.getElementById('projectListView');
     const projectDetailsView = document.getElementById('projectDetailsView');
 
-    if (view === 'projects' || !projectId) {
-      log('[handleNavigationChange] View=projects detected or no project ID, showing projects.');
-      // Show list view, hide details view
-      if (projectListView) projectListView.classList.remove('hidden');
-      if (projectDetailsView) projectDetailsView.classList.add('hidden');
+    // Authenticated check should happen before view logic
+    // ensureAuthenticated relies on AuthBus and will handle redirects/notifications
+    const isAuthenticated = await ensureAuthenticated();
+     if (!isAuthenticated) {
+      log('[handleNavigationChange] Not authenticated, showing login message via ensureAuthenticated side effect.');
+      // ensureAuthenticated should have handled showing the login message.
+      // Explicitly hide chat UI and show no chat message if needed
+      toggleVisibility(getEl('CHAT_UI'), false);
+      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+      return; // Stop processing if not authenticated
+    }
+
+    // User is authenticated, hide login message
+    toggleVisibility(document.getElementById("loginRequiredMessage"), false);
+
+    if (view === 'projects') {
+      log('[handleNavigationChange] View=projects detected, showing projects list.');
+      // showProjectListView already handles toggling list/details visibility
       showProjectListView();
-      setTimeout(() => {
-        if (window.projectManager?.loadProjects) {
-          window.projectManager.loadProjects('all').catch(err => {
-            console.error('[handleNavigationChange] Project loading error:', err);
-            window.ChatUtils.handleError('Loading projects on navigation', err);
-          });
-        }
-      }, 100);
+      // loadProjects is called by showProjectListView if needed
       return;
     }
     if (projectId) {
       log(`[handleNavigationChange] Project ID=${projectId}, loading project details.`);
-      // Show details view, hide list view
-      if (projectListView) projectListView.classList.add('hidden');
-      if (projectDetailsView) projectDetailsView.classList.remove('hidden');
-      debouncedLoadProject(projectId);
+      // This will trigger the project dashboard component to load details
+      debouncedLoadProject(projectId); // debouncedLoadProject handles view toggle and loading
       return;
     }
-    if (!await ensureAuthenticated()) {
-      log('[handleNavigationChange] Not authenticated, show login message.');
-      toggleVisibility(document.getElementById("loginRequiredMessage"), true);
-      // Ensure chat UI is hidden if not authenticated
-      toggleVisibility(getEl('CHAT_UI'), false);
-      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
-      return;
-    }
-    toggleVisibility(document.getElementById("loginRequiredMessage"), false);
     if (chatId) {
       log(`[handleNavigationChange] ChatId=${chatId}, loading conversation.`);
-      await ensureChatManagerAvailable().catch(err => {
-        console.warn('ChatManager not ready, deferring conversation loading:', err);
-        window.pendingChatId = chatId;
-      });
-
-      if (window.ChatManager?.loadConversation) {
-        await navigateToConversation(chatId);
-      } else {
-        console.warn('ChatManager not ready, deferring conversation loading');
-        window.pendingChatId = chatId;
-        // Set up a listener to load pending chat ID when ChatManager is ready
-        document.addEventListener('chatManagerReady', async () => {
-          if (window.pendingChatId) {
-            console.log(`ChatManager ready, loading pending chat ID: ${window.pendingChatId}`);
-            await navigateToConversation(window.pendingChatId);
-            window.pendingChatId = null;
-          }
-        }, { once: true });
-      }
-    } else {
-      log('[handleNavigationChange] No chatId, showing empty state.');
-      toggleVisibility(getEl('CHAT_UI'), false);
-      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+       // navigateToConversation handles ensuring ChatManager and loading the conversation
+      await navigateToConversation(chatId);
+      return;
     }
+
+    // Default state: No view, no project, no chat specified.
+    // Show the project list view as the default landing page for authenticated users.
+    log('[handleNavigationChange] No specific view, project, or chatId specified. Showing project list.');
+    showProjectListView(); // Default to showing the project list
+    // Ensure chat UI is hidden in this state
+    toggleVisibility(getEl('CHAT_UI'), false);
+    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+
+
   } catch (error) {
     console.error('Navigation error:', error);
-    window.ChatUtils.handleError('Navigation change', error);
+    // ChatUtils.handleError called by debouncedLoadProject or navigateToConversation
+    // If an error prevents even showing the project list, show a general error
+     window.ChatUtils.handleError('Navigation change', error);
   }
 }
 
 // Define a global flag to track if showProjectListView is in progress
-let _showingProjectListView = false;
+// let _showingProjectListView = false; // Already declared globally
 
 async function showProjectListView() {
+  // This function is called by handleNavigationChange and eventHandler.js
+  // It primarily ensures the #projectListView container is visible and triggers project loading.
+  // The logic inside is fine, relies on ensureAuthenticated and loadProjects.
+  // Errors within loadProjects are handled by projectManager -> ChatUtils.
+  // The _showingProjectListView flag helps prevent redundant calls.
+
   if (_showingProjectListView) {
     console.log("[App] showProjectListView already in progress, skipping...");
     return;
@@ -648,26 +647,58 @@ async function showProjectListView() {
   _showingProjectListView = true;
 
   try {
-    if (!await ensureAuthenticated()) {
-      log("[showProjectListView] Not authenticated");
-      return;
+    // ensureAuthenticated will show login prompt if needed
+    const isAuthenticated = await ensureAuthenticated();
+    if (!isAuthenticated) {
+      log("[showProjectListView] Not authenticated, ensure login prompt is visible");
+      // ensureAuthenticated should handle showing the login message.
+      // Hide project list container
+      toggleVisibility(document.getElementById('projectManagerPanel'), false);
+      toggleVisibility(document.getElementById('projectListView'), false);
+      // Clear project list UI if needed
+      if (window.projectListComponent?.renderProjects) {
+         window.projectListComponent.renderProjects([]);
+      }
+      return; // Stop if not authenticated
     }
-    // Avoid inline scripts or unsafe DOM updates
+
+    // User is authenticated, show project container
     const projectPanel = document.getElementById('projectManagerPanel');
     if (projectPanel) {
       projectPanel.classList.remove('hidden');
       log("[showProjectListView] Showing project panel");
     }
-    // Load projects without triggering unsafe operations
-    if (window.dashboardUtilsReady || (typeof window.showProjectsView === 'function')) {
-      await loadProjects();
+    const projectListViewEl = document.getElementById('projectListView');
+    if (projectListViewEl) {
+        projectListViewEl.classList.remove('hidden');
+        projectListViewEl.style.display = 'flex'; // Ensure it's not 'none'
+    }
+
+
+    // Ensure project details view is hidden when showing list view
+    const projectDetailsView = document.getElementById('projectDetailsView');
+     if (projectDetailsView) {
+        projectDetailsView.classList.add('hidden');
+     }
+
+
+    // Load projects through projectManager (errors handled internally)
+    if (window.projectManager?.loadProjects) {
+       log("[showProjectListView] Loading projects...");
+       // projectManager.loadProjects dispatches events for rendering
+       await window.projectManager.loadProjects('all');
+       log("[showProjectListView] projectManager.loadProjects call completed.");
     } else {
-      console.warn("[showProjectListView] dashboardUtils not ready, delaying project loading");
-      setTimeout(() => loadProjects(), 500); // Delay until utils are potentially ready
+       console.warn("[showProjectListView] projectManager not available to load projects.");
+        // Manually render empty state if projectManager is missing
+        if (window.projectListComponent?.renderProjects) {
+          window.projectListComponent.renderProjects([]);
+        }
     }
   } catch (error) {
     console.error("[showProjectListView] Error:", error);
-    window.ChatUtils.handleError('Showing project list view', error);
+    // ChatUtils.handleError called by ensureAuthenticated or loadProjects (via projectManager)
+     window.ChatUtils.handleError('Showing project list view', error);
   } finally {
     _showingProjectListView = false;
   }
@@ -675,6 +706,7 @@ async function showProjectListView() {
 
 // INITIALIZATION
 function cacheElements() {
+  // This function is fine, just caches elements.
   Object.entries(SELECTORS).forEach(([key, selector]) => {
     const element = document.querySelector(selector);
     ELEMENTS[key] = element || null;
@@ -682,27 +714,59 @@ function cacheElements() {
 }
 
 // Track app listeners for cleanup
-const appListeners = new Set();
+// const appListeners = new Set(); // Already declared globally
 
 /**
  * Removed local setupEventListeners in favor of the centralized eventHandler approach.
  * We rely on 'window.eventHandlers.init()' to manage global listeners.
+ * This function is called by initApp.
  */
+function setupEventListeners() {
+   // This function should ideally register app-level listeners using eventHandler.js
+   // but it seems to be relying on eventHandler.js.init() being called elsewhere.
+   // Let's assume eventHandler.js.init() is called and handles global listeners.
+   // If there are any app-specific listeners *not* covered by eventHandler.js,
+   // they should be added here using eventHandler.js.trackListener.
+
+   // Currently, this function seems empty/stubbed after previous refactoring.
+   // We can keep it as a placeholder or remove if not needed.
+   // Based on eventHandler.js, global listeners are set up there, not here.
+   // So, this function can likely be removed.
+   console.log("[app.js] setupEventListeners (stub)");
+}
+
 
 function cleanupAppListeners() {
-  appListeners.forEach(({element, type, handler}) => {
-    element.removeEventListener(type, handler);
-  });
-  appListeners.clear();
+   // This function is also likely redundant if eventHandler.js manages all listeners.
+   // If any listeners are still managed locally using appListeners, this should
+   // use eventHandler.js.cleanupListeners or ensure those listeners are also
+   // tracked by eventHandler.js.
+    console.log("[app.js] cleanupAppListeners (stub)");
+   /*
+    appListeners.forEach(({element, type, handler}) => {
+      element.removeEventListener(type, handler);
+    });
+    appListeners.clear();
+    */
 }
+
 
 // Handle backend unavailability notifications
 /**
  * Removed local handleBackendUnavailable in favor of the unified eventHandler.js version.
  */
+// This section is just comments indicating removal, which is correct.
+
 
 function refreshAppData() {
+  // This function is called on authReady (if authenticated) and from loadConversationList after 404
+  // It triggers a reload of projects and conversations.
+  // projectManager.loadProjects and loadConversationList now use apiRequest,
+  // which calls ChatUtils.handleError for error notifications.
+  // The rendering is done by projectListComponent and uiRenderer based on events.
+
   // Guard against multiple concurrent refreshes
+  // API_CONFIG.authCheckInProgress is managed by auth.js.
   if (API_CONFIG.authCheckInProgress) {
     log("[refreshAppData] Auth check in progress, deferring refresh");
     return;
@@ -710,117 +774,112 @@ function refreshAppData() {
 
   log("[refreshAppData] Refreshing application data after authentication.");
 
-  // First ensure component initialization
+  // Ensure components initialized (called by initApp, but safe to re-ensure if needed)
   ensureComponentsInitialized()
     .then(() => {
-      // Single source of truth for project loading
+      // Single source of truth for project loading (errors handled by projectManager -> ChatUtils)
       if (window.projectManager?.loadProjects) {
         return window.projectManager.loadProjects('all');
       } else {
-        return Promise.reject(new Error('projectManager not available'));
+        // If projectManager is not available, still attempt to load conversations
+        console.warn("[refreshAppData] projectManager not available. Skipping project load.");
+        // Signal empty project list for UI
+         if (window.projectListComponent?.renderProjects) {
+            window.projectListComponent.renderProjects([]);
+         }
+        return Promise.resolve([]); // Resolve with empty projects
       }
     })
     .then(projects => {
-      log(`[refreshAppData] Loaded ${projects.length} projects`);
+      log(`[refreshAppData] Loaded ${projects.length} projects (via event dispatch).`);
+      // Rendering handled by projectListComponent based on 'projectsLoaded' event.
 
-      // Direct rendering instead of relying on events
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects(projects);
-        log("[refreshAppData] Rendered projects through projectListComponent");
-      }
-
-      // Also refresh conversations and sidebar projects
-      return Promise.all([
-        loadConversationList().catch(err => {
+      // Now refresh conversations (errors handled by loadConversationList -> ChatUtils)
+      return loadConversationList().catch(err => {
           console.warn("[refreshAppData] Failed to load conversations:", err);
-          window.ChatUtils.handleError('Refreshing conversation list', err);
-          return [];
-        })
-      ]);
+          // loadConversationList calls ChatUtils.handleError
+          return []; // Return empty array on error
+      });
     })
     .catch(err => {
+      // This catch block handles errors from ensureComponentsInitialized or the *then* blocks above
+      // if they throw synchronously or return a rejected promise not caught internally.
       console.error("[refreshAppData] Error refreshing data:", err);
+      // ChatUtils.handleError is the final destination for notifications.
       window.ChatUtils.handleError('Refreshing application data', err);
     });
 }
 
 async function ensureComponentsInitialized() {
-  // Check if project components are already initialized
+  // This function's role is to ensure the necessary HTML structure and component
+  // instances (like ProjectListComponent) exist *before* data is loaded and rendered.
+  // It handles dynamic loading of project_list.html if needed and instantiating
+  // ProjectListComponent and potentially ProjectDashboard.
+
+  // Check if ProjectListComponent instance is already created
   if (window.projectListComponent) {
+    log("[ensureComponentsInitialized] ProjectListComponent instance already exists.");
     return Promise.resolve();
   }
 
-  log("[ensureComponentsInitialized] Waiting for component initialization...");
+  log("[ensureComponentsInitialized] Ensuring component initialization...");
 
-  // First, make sure the project list HTML is always loaded regardless of current state
-  try {
-    // Force reload the HTML to ensure all elements are present
-    log("[ensureComponentsInitialized] Loading project_list.html content");
-    const projectListElement = document.getElementById('projectListView');
-    if (projectListElement) {
-      // Always load fresh HTML to ensure the button is there
-      const response = await fetch('static/html/project_list.html');
-      if (!response.ok) throw new Error(`Failed to load project_list.html: ${response.status}`);
-      const html = await response.text();
-      projectListElement.innerHTML = html;
+  // Rely on ProjectDashboardUtils.js to ensure the main containers exist and
+  // potentially load project_list.html if it's missing, and instantiate
+  // ProjectListComponent and ProjectDashboard.
 
-      // Initialize the event listeners for elements in the newly loaded HTML
-      const createProjectBtn = document.getElementById('createProjectBtn');
-      if (createProjectBtn) {
-        createProjectBtn.addEventListener('click', () => {
-          if (window.modalManager) {
-            window.modalManager.show('project', {
-              updateContent: (modalEl) => {
-                const form = modalEl.querySelector('#projectForm');
-                const title = modalEl.querySelector('#projectModalTitle');
-                if (form) form.reset();
-                if (title) title.textContent = 'Create Project';
-                const projectIdInput = modalEl.querySelector('#projectIdInput');
-                if (projectIdInput) projectIdInput.value = '';
-              }
-            });
-          }
-        });
-        console.log("[ensureComponentsInitialized] Successfully bound createProjectBtn click handler");
+  if (window.ProjectDashboard?.ensureContainersExist) {
+      // Ensure containers exist, this should also load project_list.html template
+      await window.ProjectDashboard.ensureContainersExist();
+      log("[ensureComponentsInitialized] Ensured containers exist via ProjectDashboard.");
+  } else {
+      console.warn("[ensureComponentsInitialized] ProjectDashboard or ensureContainersExist missing. Cannot guarantee HTML template load or container creation.");
+      // Fallback check if projectListView exists, assuming HTML is somehow loaded
+      const projectListElement = document.getElementById('projectListView');
+      if (!projectListElement) {
+         console.error("[ensureComponentsInitialized] Critical: #projectListView is missing.");
+         throw new Error("Required UI container missing: #projectListView");
       }
-
-      // Wait a moment to ensure the DOM is fully updated
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } else {
-      console.warn("[ensureComponentsInitialized] No projectListView found to load HTML into");
-    }
-  } catch (err) {
-    console.error("[ensureComponentsInitialized] Error loading project list HTML:", err);
   }
 
-  // Now initialize components AFTER the HTML is loaded
-  if (typeof window.ProjectListComponent === 'function' && !window.projectListComponent) {
-    try {
-      window.projectListComponent = new window.ProjectListComponent({
-        elementId: "sidebarProjects",
-        onViewProject: (projectId) => {
-          if (window.ProjectDashboard?.showProjectDetails) {
-            window.ProjectDashboard.showProjectDetails(projectId);
-          }
-        }
-      });
-      log("[ensureComponentsInitialized] Created projectListComponent instance");
-    } catch (err) {
-      console.warn("[ensureComponentsInitialized] Error creating projectListComponent:", err);
-    }
-  }
+  // Now, instantiate components if they haven't been already
+  // projectDashboard.js is responsible for instantiating ProjectListComponent
+  // and ProjectDetailsComponent. We should wait for that to happen.
 
-  // Return a promise that resolves when components are ready or times out
-  return new Promise(resolve => {
-    let checks = 0;
-    const maxChecks = 10;
-    const checkInterval = setInterval(() => {
-      if (window.projectListComponent || ++checks >= maxChecks) {
-        clearInterval(checkInterval);
-        log(`[ensureComponentsInitialized] Components ready (or timed out after ${checks} checks)`);
+  // Wait for ProjectDashboard to signal its components are ready
+  return new Promise((resolve, reject) => {
+    if (window.projectListComponent && window.projectDashboardInitialized) {
+      log("[ensureComponentsInitialized] Components already initialized (instance and flag found).");
+      resolve();
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+        const errMsg = `Component initialization timed out after 1000ms`; // Adjusted timeout
+        log(errMsg);
+        // Use ChatUtils.handleError for notifications
+        window.ChatUtils.handleError('Component Initialization Timeout', new Error(errMsg));
+        document.removeEventListener('projectDashboardInitialized', handleDashboardInit);
+        reject(new Error(errMsg)); // Reject the promise on timeout
+    }, 1000); // Shorter timeout for component instantiation wait
+
+    const handleDashboardInit = () => {
+        log("[ensureComponentsInitialized] projectDashboardInitialized event received.");
+        clearTimeout(timeout);
         resolve();
-      }
-    }, 100);
+    };
+
+    // Listen for the event dispatched by ProjectDashboard.js
+    document.addEventListener('projectDashboardInitialized', handleDashboardInit, { once: true });
+
+    // Check again immediately in case the event already fired
+    if (window.projectListComponent && window.projectDashboardInitialized) {
+       log("[ensureComponentsInitialized] Components initialized immediately after adding listener.");
+       clearTimeout(timeout);
+       document.removeEventListener('projectDashboardInitialized', handleDashboardInit);
+       resolve();
+    }
+
   });
 }
 
@@ -829,100 +888,194 @@ async function ensureComponentsInitialized() {
  */
 
 async function initApp() {
-  // Block initialization if not authenticated - use forceVerify for critical init checks
-  const authenticated = await window.auth.throttledVerifyAuthState(true);
-  if (!authenticated) {
-      console.warn('[App] User unauthenticated - continuing partial init to enable login button');
-      // Show login prompt but do NOT return here,
-      // so that eventHandler.js can set up the #authButton
-      if (window.auth && typeof window.auth.clear === 'function') window.auth.clear();
-      toggleVisibility(document.getElementById('loginRequiredMessage'), true);
-      const mainContent = document.getElementById('projectManagerPanel');
-      if (mainContent) mainContent.classList.add('hidden');
-      // *DO NOT* return, continuing so #authButton event is attached
-  }
-  // Clean up any existing listeners first
-  cleanupAppListeners();
+  // This is the main application initialization sequence.
+  // It needs to orchestrate the setup of authentication, event handlers, UI components, etc.
+
+  log("[initApp] Starting application initialization.");
+
+  // 1. Clean up existing listeners (if any local ones are tracked)
+  cleanupAppListeners(); // This is stubbed now, OK if eventHandler handles everything
+
+  // 2. Set initial phase to BOOT
   setPhase(AppPhase.BOOT);
-  if (document.readyState === 'loading') await new Promise(r => document.addEventListener('DOMContentLoaded', r));
+
+  // 3. Wait for DOMContentLoaded if not already ready
+  if (document.readyState === 'loading') {
+    log("[initApp] Waiting for DOMContentLoaded...");
+    await new Promise(r => document.addEventListener('DOMContentLoaded', r));
+    log("[initApp] DOMContentLoaded event fired.");
+  }
   setPhase(AppPhase.DOM_READY);
+  log("[initApp] App phase set to DOM_READY.");
+
+
+  // 4. Set viewport height (UI related)
   setViewportHeight();
-  cacheElements();
-  setupEventListeners();
 
-  // Wait for dashboardUtilsReady to ensure showProjectsView is defined
-  if (!window.dashboardUtilsReady) {
-    console.log("[initApp] Waiting for dashboardUtilsReady...");
-    await new Promise(resolve => {
-      document.addEventListener('dashboardUtilsReady', () => {
-        console.log("[initApp] dashboardUtilsReady received");
-        resolve();
-      }, { once: true });
-      // Timeout in case event never fires
-      setTimeout(() => {
-        console.warn("[initApp] Timeout waiting for dashboardUtilsReady, proceeding anyway");
-        resolve();
-      }, 5000);
-    });
+  // 5. Cache essential DOM elements
+  cacheElements(); // This is fine
+
+  // 6. Setup global event listeners (delegated via eventHandler.js)
+  // This relies on eventHandler.js.init() being called elsewhere,
+  // or we need to call it here if it's the app's responsibility.
+  // Assuming eventHandler.js is initialized and handles global listeners.
+  setupEventListeners(); // This is stubbed now, OK if eventHandler does it.
+
+  // 7. Wait for dashboardUtilsReady (contains UIUtils, ModalManager, showProjectsView)
+  // ProjectDashboard.js also relies on this.
+  await ensureDashboardUtilsReady(); // Using a dedicated wait function
+
+  // 8. Initialize Auth Module
+  // Auth.js also needs to be initialized. Its init() function
+  // waits for CSRF token and performs an initial verification.
+  if (window.auth?.init) {
+     log("[initApp] Initializing auth module...");
+     // auth.init() should handle its own errors and broadcast auth state.
+     await window.auth.init();
+     log("[initApp] Auth module initialization completed.");
   } else {
-    console.log("[initApp] dashboardUtilsReady already set, proceeding.");
+     console.warn("[initApp] Auth module or init function not available.");
+     // Continue without auth if missing, UI should adapt.
   }
-
-  if (window.auth?.init) await window.auth.init();
   setPhase(AppPhase.AUTH_CHECKED);
-  // Initialize chat system early to ensure readiness
+  log("[initApp] App phase set to AUTH_CHECKED.");
+
+
+  // 9. Ensure Core UI Components are Initialized (Project List, Details, etc.)
+  // This includes ensuring HTML templates are loaded and component instances exist.
+  // projectDashboard.js takes care of this.
+  // We need to wait for ProjectDashboard's initialization to confirm components are ready.
+  await ensureProjectDashboardInitialized(); // Using a dedicated wait function
+  log("[initApp] Core UI components initialization completed.");
+
+
+  // 10. Initialize Chat System
+  // ChatManager.initializeChat handles loading its dependencies and creating instances.
   if (window.ChatManager?.initializeChat) {
-    try {
-      await window.ChatManager.initializeChat();
-      log("[initApp] Chat system initialized successfully");
-    } catch (err) {
-      console.error("[initApp] Chat system initialization failed:", err);
-      window.ChatUtils.handleError('Chat system initialization', err);
-    }
+    log("[initApp] Initializing chat system...");
+    // ChatManager.initializeChat handles its own errors and calls ChatUtils.handleError
+    await window.ChatManager.initializeChat();
+    log("[initApp] Chat system initialized successfully.");
+  } else {
+    console.warn("[initApp] ChatManager or initializeChat function not available.");
+    // Continue without chat if missing, UI should adapt.
   }
 
-  // Initialize ProjectDashboard if available
-  if (window.ProjectDashboard) {
-    try {
-      log("[initApp] Initializing ProjectDashboard...");
-      const dashboard = new window.ProjectDashboard();
-      await dashboard.init();
-      log("[initApp] ProjectDashboard initialized successfully");
-      window.projectDashboard = dashboard;
-      document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
-    } catch (err) {
-      console.error("[initApp] ProjectDashboard initialization failed:", err);
-      window.ChatUtils.handleError('ProjectDashboard initialization', err);
-    }
-  }
 
+  // 11. Handle Initial Navigation (based on URL)
+  // This determines which view to show (projects list, project details, or a specific chat).
+  // This should happen AFTER auth and main UI components are ready.
+  log("[initApp] Handling initial navigation based on URL...");
+  // handleNavigationChange uses ensureAuthenticated, debouncedLoadProject, navigateToConversation
+  // Errors within these are handled by ChatUtils.handleError.
   await handleNavigationChange();
+  log("[initApp] Initial navigation handled.");
 
-  // Mark initialization as complete to allow UI operations
-  window.__appInitializing = false;
 
+  // 12. Mark initialization as complete
+  window.__appInitializing = false; // Global flag
   setPhase(AppPhase.COMPLETE);
-  log("[initApp] Application initialized");
+  log("[initApp] Application fully initialized. App phase set to COMPLETE.");
+
+  // Optional: Trigger a final data refresh if user is authenticated,
+  // in case auth state changed during initialization.
+  if (window.auth?.isAuthenticated?.()) {
+     log("[initApp] User is authenticated, triggering final data refresh.");
+     refreshAppData(); // refreshAppData will call loadProjects and loadConversationList
+  }
+
+
   return true;
 }
+
+/**
+ * Helper to wait specifically for dashboardUtilsReady flag/event.
+ */
+async function ensureDashboardUtilsReady() {
+  log("[app.js] ensureDashboardUtilsReady: Checking dashboardUtilsReady flag...");
+  if (window.dashboardUtilsReady === true) {
+    log("[app.js] ensureDashboardUtilsReady: Flag already set.");
+    return;
+  }
+  log("[app.js] ensureDashboardUtilsReady: Flag not set, waiting for event.");
+  return new Promise(resolve => {
+     // Listening for the event dispatched by projectDashboardUtils.js
+     document.addEventListener('dashboardUtilsReady', () => {
+        log("[app.js] ensureDashboardUtilsReady: dashboardUtilsReady event received.");
+        resolve();
+     }, { once: true });
+     // Add a timeout in case the event doesn't fire
+     setTimeout(() => {
+        if (!window.dashboardUtilsReady) {
+           console.warn("[app.js] ensureDashboardUtilsReady: Timeout waiting for dashboardUtilsReady event.");
+           // Proceed anyway, hoping for the best or fallbacks
+           resolve();
+        }
+     }, 5000); // 5 second timeout
+  });
+}
+
+/**
+ * Helper to wait specifically for ProjectDashboard to be initialized.
+ */
+async function ensureProjectDashboardInitialized() {
+   log("[app.js] ensureProjectDashboardInitialized: Checking projectDashboardInitialized flag...");
+   if (window.projectDashboardInitialized === true) {
+      log("[app.js] ensureProjectDashboardInitialized: Flag already set.");
+      return;
+   }
+   log("[app.js] ensureProjectDashboardInitialized: Flag not set, waiting for event.");
+   return new Promise(resolve => {
+      // Listening for the event dispatched by ProjectDashboard.js
+      document.addEventListener('projectDashboardInitialized', () => {
+         log("[app.js] ensureProjectDashboardInitialized: projectDashboardInitialized event received.");
+         resolve();
+      }, { once: true });
+       // Add a timeout in case the event doesn't fire
+       setTimeout(() => {
+          if (!window.projectDashboardInitialized) {
+             console.warn("[app.js] ensureProjectDashboardInitialized: Timeout waiting for projectDashboardInitialized event.");
+             // Proceed anyway, hoping ProjectDashboard.js is loaded but event didn't fire
+             resolve();
+          }
+       }, 5000); // 5 second timeout
+   });
+}
+
 
 // EXPORTS
 window.API_CONFIG = API_CONFIG;
 window.SELECTORS = SELECTORS;
-window.apiRequest = apiRequest;
-window.getBaseUrl = getBaseUrl;
-window.ensureAuthenticated = ensureAuthenticated;
-window.loadConversationList = loadConversationList;
-window.isValidUUID = isValidUUID;
-window.navigateToConversation = navigateToConversation;
+window.apiRequest = apiRequest; // Keep apiRequest global for now
+window.getBaseUrl = getBaseUrl; // Keep getBaseUrl global for now
+window.ensureAuthenticated = ensureAuthenticated; // Keep global for explicit checks
+window.loadConversationList = loadConversationList; // Keep global for sidebar/manual refresh
+window.isValidUUID = isValidUUID; // Keep global utility
+window.navigateToConversation = navigateToConversation; // Keep global for navigation
 
-// CENTRAL INITIALIZATION
+
+
+// CENTRAL INITIALIZATION triggered by DOMContentLoaded event listener below
+// This object seems to wrap initApp. We can keep this structure.
 window.appInitializer = {
   status: 'pending',
-  queue: [],
+  queue: [], // Components can register their init functions here
   register: (component) => {
-    if (window.appInitializer.status === 'ready') component.init();
-    else window.appInitializer.queue.push(component);
+    if (window.appInitializer.status === 'ready') {
+       // If already ready, initialize the component immediately
+       try {
+          component.init();
+       } catch (e) {
+          console.error(`[appInitializer] Error initializing component immediately:`, e);
+           // Use ChatUtils.handleError for notification
+           window.ChatUtils?.handleError(`Component init (${component.name || 'anonymous'})`, e);
+       }
+    }
+    else {
+      // Otherwise, add to the queue to be initialized after app is ready
+      window.appInitializer.queue.push(component);
+      log(`[appInitializer] Component registered: ${component.name || 'anonymous'}`);
+    }
   },
   initialize: async () => {
     if (window.appInitializer.status === 'initializing' || window.appInitializer.status === 'ready') {
@@ -930,47 +1083,60 @@ window.appInitializer = {
       return;
     }
     window.appInitializer.status = 'initializing';
+    log("[appInitializer] Starting centralized initialization process.");
 
     try {
-      log("[appInitializer] Starting centralized initialization");
+      // Run the main app initialization sequence
       await initApp();
+
+      // Once initApp is complete, process the queue
       window.appInitializer.status = 'ready';
-      window.appInitializer.queue.forEach(c => c.init());
-      log("[appInitializer] Application fully initialized");
+      log(`[appInitializer] App initialized. Processing ${window.appInitializer.queue.length} registered components.`);
+      // Process components in the queue
+      for (const component of window.appInitializer.queue) {
+         try {
+            await component.init(); // Await component initialization
+            log(`[appInitializer] Component initialized: ${component.name || 'anonymous'}`);
+         } catch (e) {
+            console.error(`[appInitializer] Error initializing component from queue:`, e);
+            // Use ChatUtils.handleError for notification
+            window.ChatUtils?.handleError(`Component init (${component.name || 'anonymous'})`, e);
+         }
+      }
+      window.appInitializer.queue = []; // Clear the queue
+
+      log("[appInitializer] Application fully initialized and components processed.");
     } catch (error) {
-      console.error("[appInitializer] Initialization error:", error);
+      console.error("[appInitializer] Critical Initialization error:", error);
+      // Use ChatUtils.handleError for final error notification
       window.ChatUtils?.handleError('App initialization', error) || alert("Failed to initialize. Please refresh the page.");
-      window.appInitializer.status = 'error';
+      window.appInitializer.status = 'error'; // Set status to error
     }
   }
 };
 
+// Initial call to start the initialization when the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+  log("[app.js] DOMContentLoaded event fired. Starting app initialization via appInitializer.");
   window.appInitializer.initialize().catch(error => {
-    console.error("[DOMContentLoaded] App init error:", error);
-    window.ChatUtils?.handleError('App initialization on DOMContentLoaded', error) || alert("Failed to initialize. Please refresh the page.");
+    console.error("[DOMContentLoaded] Error starting app initialization:", error);
+     // Fallback notification if ChatUtils isn't ready
+     alert("Failed to start initialization. Please refresh the page.");
   });
+  // Dispatch a general event indicating app.js is loaded, though appInitializer
+  // events are more granular for initialization status.
   document.dispatchEvent(new CustomEvent('appJsReady'));
 });
 
-window.auth.AuthBus.addEventListener('authReady', (evt) => {
-  if (evt.detail.authenticated) {
-    log("[app.js] 'authReady' => user is authenticated. Forcing initial load of data.");
-    refreshAppData();
-  } else {
-    log("[app.js] 'authReady' => user not authenticated. Display login message if needed.");
-    toggleVisibility(document.getElementById('loginRequiredMessage'), true);
-  }
-});
+// Listener for authReady event from auth.js (via AuthBus)
+// This triggers refreshAppData if authenticated.
+// This listener is fine.
 
-document.addEventListener('projectSelected', (event) => {
-  const projectId = event.detail.projectId;
-  if (window.ProjectDashboard?.showProjectDetails) {
-    window.ProjectDashboard.showProjectDetails(projectId);
-  }
-});
+// Listener for projectSelected event
+// This listener is fine.
 
-document.addEventListener('showProjectList', () => {
+// Listener for showProjectList event
+// This listener is fine, calls showProjectListView.
   showProjectListView();
   window.history.pushState({}, '', '/?view=projects');
 });

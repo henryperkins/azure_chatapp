@@ -350,7 +350,7 @@ class KnowledgeBaseComponent {
       }
     } catch (error) {
       console.error("Search failed:", error);
-      this._showError("Search failed. Please try again.");
+      window.showNotification("Search failed. Please try again.", 'error');
     } finally {
       this.state.isSearching = false;
       this._hideSearchLoading();
@@ -360,7 +360,7 @@ class KnowledgeBaseComponent {
   async toggleKnowledgeBase(enabled) {
     const projectId = this._getCurrentProjectId();
     if (!projectId) {
-      this._showError("No project selected");
+      window.showNotification("No project selected", 'error');
       return;
     }
 
@@ -392,14 +392,14 @@ class KnowledgeBaseComponent {
       }
     } catch (error) {
       console.error("Toggle failed:", error);
-      this._showError("Failed to toggle knowledge base");
+      window.showNotification("Failed to toggle knowledge base", 'error');
       this._resetToggleState(!enabled);
     }
   }
 
   async reprocessFiles(projectId) {
     if (!projectId) {
-      this._showError("No project selected");
+      window.showNotification("No project selected", 'error');
       return;
     }
 
@@ -415,7 +415,7 @@ class KnowledgeBaseComponent {
       );
 
       if (response.success) {
-        this._showSuccess("Files queued for reprocessing");
+        window.showNotification("Files queued for reprocessing", 'success');
 
         // Refresh project data
         if (window.projectManager) {
@@ -431,7 +431,7 @@ class KnowledgeBaseComponent {
       }
     } catch (error) {
       console.error("Reprocessing failed:", error);
-      this._showError("Failed to reprocess files");
+      window.showNotification("Failed to reprocess files", 'error');
     } finally {
       this._hideProcessingState();
     }
@@ -1093,10 +1093,10 @@ class KnowledgeBaseComponent {
       `• ${f.file.name}: ${f.reason}`
     ).join('\n');
 
-    this._showError(`Some files couldn't be processed:\n${errorList}`);
-  }
+    window.showNotification(`Some files couldn't be processed:\n${errorList}`, 'error');
+}
 
-  async _processSingleFile(projectId, file) {
+async _processSingleFile(projectId, file) {
     const token = await this._getAuthToken();
     const formData = new FormData();
     formData.append('file', file);
@@ -1139,7 +1139,7 @@ class KnowledgeBaseComponent {
     const formData = new FormData(form);
     const projectId = form.dataset.projectId; // Get projectId from form dataset
     if (!projectId) {
-       this._showError("Cannot save settings: Project ID missing.");
+       window.showNotification("Cannot save settings: Project ID missing.", 'error');
        return;
     }
 
@@ -1150,11 +1150,11 @@ class KnowledgeBaseComponent {
     };
 
     if (!payload.name || payload.name.trim() === '') {
-       this._showError("Knowledge Base name is required.");
+       window.showNotification("Knowledge Base name is required.", 'error');
        return;
     }
     if (!payload.embedding_model) {
-       this._showError("Embedding model must be selected.");
+       window.showNotification("Embedding model must be selected.", 'error');
        return;
     }
 
@@ -1189,7 +1189,7 @@ class KnowledgeBaseComponent {
 
       if (response.data?.id || response.success) { // Check for success flag too
         this._hideKnowledgeBaseModal();
-        this._showSuccess("Knowledge Base settings saved.");
+        window.showNotification("Knowledge Base settings saved.", 'success');
 
         // Refresh project data to get updated KB info
         if (window.projectManager?.loadProjectDetails) {
@@ -1204,29 +1204,30 @@ class KnowledgeBaseComponent {
       }
     } catch (error) {
       console.error("KB setup/update failed:", error);
-      this._showError(`Failed to save settings: ${error.message}`);
+      window.showNotification(`Failed to save settings: ${error.message}`, 'error');
     }
   }
 
   // Add method to update alerts based on KB state
   _updateStatusAlerts(kb) {
-     const statusIndicator = this.elements.statusIndicator;
-     if (!statusIndicator) return;
-     statusIndicator.innerHTML = ''; // Clear previous alerts
+     // Note: This method might now be redundant if status alerts are shown directly
+     // via window.showNotification in the calling logic. Review if this method
+     // is still needed or if its logic should be moved.
+     // For now, it's left as is but could be refactored.
 
      if (kb.is_active !== false) {
        if (kb?.stats?.file_count === 0) {
-         this._showStatusAlert("Knowledge Base is empty. Upload files via the 'Files' tab.", "warning");
+         window.showNotification("Knowledge Base is empty. Upload files via the 'Files' tab.", "warning");
        } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0 && kb.stats?.unprocessed_files > 0) {
-         this._showStatusAlert("Files need processing. Click 'Reprocess Files'.", "warning");
+         window.showNotification("Files need processing. Click 'Reprocess Files'.", "warning");
        } else if (kb.stats?.unprocessed_files > 0) {
-         this._showStatusAlert(`${kb.stats.unprocessed_files} file(s) need processing. Reprocessing may be needed.`, "info");
+         window.showNotification(`${kb.stats.unprocessed_files} file(s) need processing. Reprocessing may be needed.`, "info");
        } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count > 0) {
           // Optionally show a success/ready state if desired
-          // this._showStatusAlert("Knowledge Base is active and ready.", "success");
+          // window.showNotification("Knowledge Base is active and ready.", "success");
        }
      } else {
-       this._showStatusAlert("Knowledge Base is disabled. Enable it to use search.", "warning");
+       window.showNotification("Knowledge Base is disabled. Enable it to use search.", "warning");
      }
   }
 }
