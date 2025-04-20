@@ -234,7 +234,7 @@
           return;
       }
 
-      if(AUTH_DEBUG) console.debug("[ProjectListComponent] Ensuring project list visibility");
+      if(window.AUTH_DEBUG) console.debug("[ProjectListComponent] Ensuring project list visibility");
 
       try {
           // *** FIX: Await the result of the authentication check ***
@@ -242,14 +242,14 @@
           // ********************************************************
 
           if (isAuthenticated) {
-              if(AUTH_DEBUG) console.debug("[ProjectListComponent] User is authenticated. Showing project panel/list.");
+              if(window.AUTH_DEBUG) console.debug("[ProjectListComponent] User is authenticated. Showing project panel/list.");
               projectManagerPanel.classList.remove('hidden');
               projectListView.style.display = 'flex'; // Or 'block' depending on layout
               projectList.classList.remove('hidden'); // Show the grid
               loginRequiredMessage.classList.add('hidden');
               // Toggle noProjectsMessage based on actual project count later in renderProjects
           } else {
-               if(AUTH_DEBUG) console.debug("[ProjectListComponent] User is not authenticated. Showing login message.");
+               if(window.AUTH_DEBUG) console.debug("[ProjectListComponent] User is not authenticated. Showing login message.");
               projectManagerPanel.classList.add('hidden');
               projectListView.style.display = 'none'; // Hide the list view
               projectList.classList.add('hidden');    // Hide the grid

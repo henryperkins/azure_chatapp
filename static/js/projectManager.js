@@ -59,22 +59,39 @@
    * @param {string} [filter] - Optional filter ("all", "pinned", "archived", "active")
    * @returns {Promise<Array>} - Array of projects
    */
+  // Track retry state
+  let __projectLoadRetryCount = 0;
+  let __projectLoadLastAttempt = 0;
+  let __projectLoadCooldownUntil = 0;
+  let __projectLoadBackendUnavailable = false;
+
   async function loadProjects(filter = null) {
-    console.log("[DEBUG] loadProjects called - TEST LOG");
+    // Check backend availability
+    if (__projectLoadBackendUnavailable) {
+      console.warn("[projectManager] Backend unavailable, skipping project load");
+      return [];
+    }
+
     // Wait for auth to be fully ready
     if (!window.auth?.isReady) {
       console.log("[projectManager] Waiting for auth to be ready...");
-      console.log("[DEBUG] Current auth state:", window.auth?.isReady);
-      await new Promise((resolve) => {
-        const checkAuth = () => {
-          if (window.auth?.isReady) {
-            resolve();
-          } else {
-            setTimeout(checkAuth, 100);
-          }
-        };
-        checkAuth();
-      });
+      try {
+        await new Promise((resolve, reject) => {
+          const checkAuth = () => {
+            if (window.auth?.isReady) {
+              resolve();
+            } else if (Date.now() - __projectLoadLastAttempt > 30000) { // 30s timeout
+              reject(new Error("Auth initialization timeout"));
+            } else {
+              setTimeout(checkAuth, 100);
+            }
+          };
+          checkAuth();
+        });
+      } catch (err) {
+        console.error("[projectManager] Auth wait timeout:", err);
+        return [];
+      }
     }
 
     // Check if already loading
@@ -113,9 +130,11 @@
       return [];
     }
 
-    // Add cooldown check to prevent rapid retries
-    if (window.__projectLoadCooldownUntil && Date.now() < window.__projectLoadCooldownUntil) {
-      console.warn("[projectManager] Project loading in cooldown period, skipping");
+    // Check cooldown with exponential backoff
+    const now = Date.now();
+    if (now < __projectLoadCooldownUntil) {
+      const remaining = Math.ceil((__projectLoadCooldownUntil - now) / 1000);
+      console.warn(`[projectManager] Project loading in cooldown (${remaining}s remaining)`);
       return [];
     }
 
@@ -129,6 +148,10 @@
     emitEvent("projectsLoading", { filter: cleanFilter });
 
     try {
+      // Track attempt time
+      __projectLoadLastAttempt = Date.now();
+      __projectLoadRetryCount++;
+
       // Use centralized auth check from window.auth
       const isAuthenticated = await window.auth.isAuthenticated({ forceVerify: false });
       if (!isAuthenticated) {
@@ -176,19 +199,32 @@
     } catch (error) {
       console.error("[projectManager] Error loading projects:", error);
 if (error.status === 500) {
-    console.error("[projectManager] Server error 500 while loading projects:", error);
-    emitEvent("serverErrorOccurred", { reason: "loadProjects", code: 500, error });
+  console.error("[projectManager] Server error 500 while loading projects:", error);
+  emitEvent("serverErrorOccurred", { reason: "loadProjects", code: 500, error });
+
+  // Implement circuit breaker pattern
+  if (__projectLoadRetryCount > 3) {
+    __projectLoadBackendUnavailable = true;
+    setTimeout(() => {
+      __projectLoadBackendUnavailable = false;
+      __projectLoadRetryCount = 0;
+    }, 300000); // 5 minute cooldown after repeated failures
+  }
 }
 
-      // Set cooldown on auth errors
-      if (error.status === 401) {
-        window.__projectLoadCooldownUntil = Date.now() + 30000; // 30s cooldown
-        emitEvent("projectAuthError", {
-          reason: 'load_projects',
-          error,
-          retryAfter: 30000
-        });
-      }
+// Set cooldown with exponential backoff
+const baseDelay = 1000; // 1 second base
+const maxDelay = 300000; // 5 minutes max
+const delay = Math.min(baseDelay * Math.pow(2, __projectLoadRetryCount), maxDelay);
+
+__projectLoadCooldownUntil = Date.now() + delay;
+console.warn(`[projectManager] Setting cooldown for ${delay}ms after attempt ${__projectLoadRetryCount}`);
+
+emitEvent("projectAuthError", {
+  reason: 'load_projects',
+  error,
+  retryAfter: delay
+});
 
       emitEvent("projectsLoaded", {
         projects: [],
