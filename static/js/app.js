@@ -684,34 +684,10 @@ function cacheElements() {
 // Track app listeners for cleanup
 const appListeners = new Set();
 
-function setupEventListeners() {
-  // Document-level listeners
-  const authStateHandler         = (e) => handleAuthStateChange(e);
-  const backendUnavailableHandler = (e) => handleBackendUnavailable(e);
-
-  window.auth.AuthBus.addEventListener('authStateChanged', authStateHandler);
-  window.auth.AuthBus.addEventListener('backendUnavailable', backendUnavailableHandler);
-
-  appListeners.add({ element: window.auth.AuthBus, type: 'authStateChanged', handler: authStateHandler });
-  appListeners.add({ element: window.auth.AuthBus, type: 'backendUnavailable', handler: backendUnavailableHandler });
-
-  // Window-level listeners
-  const resizeHandler = () => setViewportHeight();
-  const orientationHandler = () => window.dispatchEvent(new Event('resize'));
-
-  window.addEventListener('resize', resizeHandler);
-  window.addEventListener('orientationchange', orientationHandler);
-
-  appListeners.add({ element: window, type: 'resize', handler: resizeHandler });
-  appListeners.add({ element: window, type: 'orientationchange', handler: orientationHandler });
-
-  // Initialize event handlers if available
-  if (window.eventHandlers?.init) {
-    window.eventHandlers.init();
-  } else {
-    console.warn('[setupEventListeners] Event handlers module not loaded');
-  }
-}
+/**
+ * Removed local setupEventListeners in favor of the centralized eventHandler approach.
+ * We rely on 'window.eventHandlers.init()' to manage global listeners.
+ */
 
 function cleanupAppListeners() {
   appListeners.forEach(({element, type, handler}) => {
@@ -721,37 +697,9 @@ function cleanupAppListeners() {
 }
 
 // Handle backend unavailability notifications
-function handleBackendUnavailable(event) {
-  const { until, reason, error } = event.detail || {};
-  console.warn(`[App] Backend service unavailable: ${reason || 'unknown reason'}, circuit breaker active until ${until?.toLocaleTimeString?.() || 'unknown'}`);
-
-  // Show user-friendly notification
-  if (window.showNotification) {
-    window.showNotification(
-      "Backend service is temporarily unavailable. Please check your server connection.",
-      "warning"
-    );
-  }
-
-  // Display a banner message in key UI locations
-  const errorMessage = `
-    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
-      <p class="font-bold">⚠️ Connection Issue</p>
-      <p>The backend service is currently unreachable. Please check if the server is running.</p>
-    </div>
-  `;
-
-  // Add error message to key UI areas
-  ['projectsSection', 'recentChatsSection', 'starredChatsSection'].forEach(sectionId => {
-    const section = document.getElementById(sectionId);
-    if (section && !section.querySelector('.border-yellow-500')) {
-      // Only add if not already present
-      const tempEl = document.createElement('div');
-      tempEl.innerHTML = errorMessage;
-      section.prepend(tempEl.firstElementChild);
-    }
-  });
-}
+/**
+ * Removed local handleBackendUnavailable in favor of the unified eventHandler.js version.
+ */
 
 function refreshAppData() {
   // Guard against multiple concurrent refreshes
@@ -876,44 +824,9 @@ async function ensureComponentsInitialized() {
   });
 }
 
-let lastKnownAuthState = null;
-function handleAuthStateChange(e) {
-  const { authenticated, username } = e.detail;
-  const stateChanged = authenticated !== lastKnownAuthState;
-  lastKnownAuthState = authenticated;
-  API_CONFIG.isAuthenticated = authenticated;
-
-  // Update auth UI if available
-  const authButton = document.getElementById('authButton');
-  const userMenu = document.getElementById('userMenu');
-
-  if (authenticated) {
-    authButton?.classList.add('hidden');
-    userMenu?.classList.remove('hidden');
-
-    // Prevent redundant data loads when auth check is already in progress
-    if (API_CONFIG.authCheckInProgress) {
-      log("[AuthStateChange] Auth check in progress, skipping data refresh");
-      return;
-    }
-
-    if (stateChanged) {
-      log("[AuthStateChange] User authenticated, loading initial data...");
-      refreshAppData();
-    } else {
-      log("[AuthStateChange] Already authenticated, no state change, skipping UI refresh.");
-    }
-  } else {
-    authButton?.classList.remove('hidden');
-    userMenu?.classList.add('hidden');
-
-    log("[AuthStateChange] User logged out, UI cleared.");
-    showProjectListView();
-    // Ensure chat UI is hidden on logout
-    toggleVisibility(getEl('CHAT_UI'), false);
-    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
-  }
-}
+/**
+ * Removed local handleAuthStateChange in favor of the unified eventHandler.js version.
+ */
 
 async function initApp() {
   // Block initialization if not authenticated - use forceVerify for critical init checks

@@ -11,7 +11,7 @@ import logging
 import random
 import time
 from uuid import UUID
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
@@ -97,10 +97,11 @@ class ProjectFilter(str, Enum):
 @router.post("/", response_model=Dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
     project_data: ProjectCreate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Create a new project with full monitoring"""
+    current_user = current_user_tuple[0]
     transaction = start_transaction(
         op="project",
         name="Create Project",
@@ -163,21 +164,22 @@ async def create_project(
 @router.get("/", response_model=Dict)
 async def list_projects(
     request: Request,
-    filter_param: ProjectFilter = Query(ProjectFilter.all, description="Filter type"),
+    filter_type: ProjectFilter = Query(ProjectFilter.all, alias="filter", description="Filter type"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """List projects with performance tracing"""
+    current_user = current_user_tuple[0]
     with sentry_span(
         op="project",
         name="List Projects",
-        description=f"List projects with filter: {filter_param.value}",
+        description=f"List projects with filter: {filter_type.value}",
     ) as span:
         try:
             span.set_tag("user.id", str(current_user.id))
-            span.set_data("filter", filter_param.value)
+            span.set_data("filter", filter_type.value)
             span.set_data("pagination.skip", skip)
             span.set_data("pagination.limit", limit)
 
@@ -196,11 +198,11 @@ async def list_projects(
             )
 
             # Apply filters
-            if filter_param == ProjectFilter.pinned:
+            if filter_type == ProjectFilter.pinned:
                 projects = [p for p in projects if p.pinned]
-            elif filter_param == ProjectFilter.archived:
+            elif filter_type == ProjectFilter.archived:
                 projects = [p for p in projects if p.archived]
-            elif filter_param == ProjectFilter.active:
+            elif filter_type == ProjectFilter.active:
                 projects = [p for p in projects if not p.archived]
 
             # Record success
@@ -208,17 +210,17 @@ async def list_projects(
             metrics.distribution("project.list.duration", duration, unit="millisecond")
             metrics.incr(
                 "project.list.success",
-                tags={"count": len(projects), "filter": filter_param.value},
+                tags={"count": len(projects), "filter": filter_type.value},
             )
 
             return {
                 "projects": [serialize_project(p) for p in projects],
                 "count": len(projects),
                 "filter": {
-                    "type": filter_param.value,
+                    "type": filter_type.value,
                     "applied": {
-                        "archived": filter_param == ProjectFilter.archived,
-                        "pinned": filter_param == ProjectFilter.pinned,
+                        "archived": filter_type == ProjectFilter.archived,
+                        "pinned": filter_type == ProjectFilter.pinned,
                     },
                 },
             }
@@ -227,7 +229,7 @@ async def list_projects(
             span.set_tag("error", True)
             capture_exception(e)
             metrics.incr("project.list.failure")
-            logger.error(f"Failed to list projects: {str(e)}")
+            logger.exception("Failed to list projects")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to retrieve projects",
@@ -237,10 +239,11 @@ async def list_projects(
 @router.get("/{project_id}/", response_model=Dict)
 async def get_project(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get project details with monitoring"""
+    current_user = current_user_tuple[0]
     with sentry_span(
         op="project", name="Get Project", description=f"Get project {project_id}"
     ) as span:
@@ -281,10 +284,11 @@ async def get_project(
 async def update_project(
     project_id: UUID,
     update_data: ProjectUpdate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Update project with change tracking"""
+    current_user = current_user_tuple[0]
     transaction = start_transaction(
         op="project",
         name="Update Project",
@@ -363,10 +367,11 @@ async def update_project(
 @router.delete("/{project_id}/", response_model=Dict)
 async def delete_project(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Delete project with resource cleanup tracking"""
+    current_user = current_user_tuple[0]
     transaction = start_transaction(
         op="project",
         name="Delete Project",
@@ -462,10 +467,11 @@ async def delete_project(
 @router.patch("/{project_id}/archive", response_model=Dict)
 async def toggle_archive_project(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Toggle archive status with state tracking"""
+    current_user = current_user_tuple[0]
     with sentry_span(
         op="project",
         name="Toggle Archive",
@@ -514,10 +520,11 @@ async def toggle_archive_project(
 @router.post("/{project_id}/pin", response_model=Dict)
 async def toggle_pin_project(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Toggle pin status with validation"""
+    current_user = current_user_tuple[0]
     with sentry_span(
         op="project",
         name="Toggle Pin",
@@ -573,10 +580,12 @@ async def toggle_pin_project(
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get project statistics with performance tracing"""
+    current_user = current_user_tuple[0]
+    current_user = current_user_tuple[0]
     with sentry_span(
         op="project",
         name="Get Stats",
