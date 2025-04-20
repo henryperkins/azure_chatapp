@@ -1,3 +1,7 @@
+/*
+// @ts-nocheck
+*/
+
 /**
  * projectDashboard.js
  * --------------------
@@ -74,9 +78,24 @@ class ProjectDashboard {
      * Flag to prevent duplicate auth change handling
      * @private
      */
-    this._handlingAuthChange = false;
-  }
+     this._handlingAuthChange = false;
+     this._wasAuthenticated = false;
+     if (window.auth?.AuthBus) {
+         window.auth.AuthBus.addEventListener('authStateChanged', (e) => {
+             const { authenticated } = e.detail || {};
+             if (authenticated) {
+                 if (!this._wasAuthenticated) {
+                     this._wasAuthenticated = true;
+                     this.init();
+                 }
+             } else {
+                 this._wasAuthenticated = false;
+             }
+         });
+     }
+     } // End of constructor block
 
+     // Keep the rest including the docblock for init()
   /**
    * Initialize the dashboard with retry logic
    * @returns {Promise<boolean>} True if success

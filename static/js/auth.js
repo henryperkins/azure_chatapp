@@ -304,8 +304,16 @@ async function refreshTokens() {
 /* Auth Verification & Access Token */
 let __isInitializing = false;
 async function clearTokenState(options = {}) {
+  if (!this) {
+    console.error('[Auth] Context lost in clearTokenState');
+    return;
+  }
+  if (this._clearingInProgress) return;
+  this._clearingInProgress = true;
+
   if (__isInitializing && !options.force) {
     if (AUTH_DEBUG) console.debug('[Auth] Skipping state clear during initialization');
+    this._clearingInProgress = false;
     return;
   }
 
@@ -334,9 +342,19 @@ async function clearTokenState(options = {}) {
 }
 
 async function verifyAuthState(forceVerify = false) {
+  if (!this) {
+    console.error('[Auth] Context lost in verifyAuthState');
+    return false;
+  }
+  console.log('[Auth] verifyAuthState called', {
+    currentState: authState,
+    tokensExist: !!getCookie('access_token')
+  });
+
   // Client-side expiration guard
   const accessToken = getCookie('access_token');
   if (!accessToken || isTokenExpired(accessToken)) {
+    console.log('[Auth] Token expired or missing, clearing state');
     clearTokenState();
     return false;
   }
@@ -548,6 +566,12 @@ async function loginUser(username, password) {
       password
     });
 
+    console.log('[Auth] Login response:', {
+      access_token: !!response.access_token,
+      refresh_token: !!response.refresh_token,
+      username: response.username
+    });
+
     if (!response.access_token) throw new Error('No access token received');
     setAuthCookie('access_token', response.access_token, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
 
@@ -562,12 +586,6 @@ async function loginUser(username, password) {
 
     broadcastAuth(true, authState.username);
 
-    AuthBus.dispatchEvent(new CustomEvent('authStateConfirmed', {
-      detail: { isAuthenticated: true, username: authState.username }
-    }));
-
-    return { ...response, success: true };
-  } catch (error) {
     const e = standardizeError(error, 'login_api');
     logFormIssue('LOGIN_FAILURE', { username, error: e.message });
     throw new Error(e.message || 'Login failed');
@@ -609,10 +627,28 @@ async function handleRegister(formData) {
   }
 
   try {
-    await apiRequest('/api/auth/register', 'POST', { username: username.trim(), password });
-    const result = await loginUser(username, password);
-    notify("Registration successful", "success");
-    return result;
+    const response = await apiRequest('/api/auth/register', 'POST', {
+      username: username.trim(),
+      password
+    });
+
+    if (response.access_token) {
+      setAuthCookie('access_token', response.access_token, 60 * AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRE_MINUTES);
+      if (response.refresh_token) {
+        setAuthCookie('refresh_token', response.refresh_token, 60 * 60 * 24 * AUTH_CONSTANTS.REFRESH_TOKEN_EXPIRE_DAYS);
+      }
+
+      authState.isAuthenticated = true;
+      authState.username = response.username || username;
+      authState.lastVerified = Date.now();
+      sessionExpiredFlag = false;
+
+      broadcastAuth(true, authState.username);
+      notify("Registration successful", "success");
+      return response;
+    }
+
+    throw new Error("Registration succeeded but no tokens received");
   } catch (error) {
     logFormIssue('REGISTER_FAILURE', { username, error: error.message });
     notify(error.message || "Registration failed", "error");
@@ -723,12 +759,15 @@ async function init() {
 
 /* Public API & Exports */
 window.auth = window.auth || {};
-Object.assign(window.auth, {
+window.auth = {
+  _clearingInProgress: false,
+  clearTokenState: clearTokenState.bind({_clearingInProgress: false}),
+  verifyAuthState: verifyAuthState.bind({_clearingInProgress: false}),
   getAuthToken: () => getCookie('access_token') || '',
   init,
   login: loginUser,
   logout,
-  verifyAuthState,
+  register: handleRegister,
   refreshTokens,
   clear: clearTokenState,
   isInitialized: false,
@@ -751,13 +790,15 @@ Object.assign(window.auth, {
   getCSRFTokenAsync,
   getCSRFToken,
   throttledVerifyAuthState
-});
+};
 
 export default {
+  _clearingInProgress: false,
+  clearTokenState: clearTokenState.bind({_clearingInProgress: false}),
+  verifyAuthState: verifyAuthState.bind({_clearingInProgress: false}),
   init,
   login: loginUser,
   logout,
-  verifyAuthState,
   refreshTokens,
   clear: clearTokenState,
   logFormIssue,
@@ -776,7 +817,7 @@ export default {
   getCSRFTokenAsync,
   getCSRFToken,
   throttledVerifyAuthState
-};
+bv f };
 
 // Utility: isTokenExpired
 function isTokenExpired(token) {

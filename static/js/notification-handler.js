@@ -152,9 +152,10 @@
   }
 
   // Message event handler for notifications
-  function handleNotificationMessages(event) {
+  async function handleNotificationMessages(event) {
     try {
       const message = event.data;
+      let handled = false;
 
       // Handle hide-notification messages - these were causing the errors
       if (typeof message === 'string' && message.includes('<hide-notification>')) {
@@ -166,23 +167,41 @@
 
         if (id) {
           // Hide specific notification
-          hideNotification(id);
+          await hideNotification(id);
         } else {
           // Hide all notifications if no ID specified
-          clearAllNotifications();
+          await clearAllNotifications();
         }
-        return;
+        handled = true;
+      }
+      // Process other notification types
+      else if (message && typeof message === 'object') {
+        if (message.type === 'notification') {
+          await showNotification(message.text, message.level || 'info', message.options || {});
+          handled = true;
+        }
       }
 
-      // Process other notification types
-      if (message && typeof message === 'object') {
-        if (message.type === 'notification') {
-          showNotification(message.text, message.level || 'info', message.options || {});
-        }
+      // Send response if this is a MessageEvent from another window
+      if (handled && event.source && event.origin) {
+        event.source.postMessage({
+          type: 'notification-handled',
+          success: true,
+          messageId: message.id || null
+        }, event.origin);
       }
     } catch (err) {
       console.warn('Error handling notification message:', err);
-      // Don't rethrow - this was the source of the original error
+
+      // Send error response if possible
+      if (event.source && event.origin) {
+        event.source.postMessage({
+          type: 'notification-error',
+          success: false,
+          error: err.message,
+          messageId: event.data.id || null
+        }, event.origin);
+      }
     }
   }
 

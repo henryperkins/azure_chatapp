@@ -11,17 +11,10 @@ import logging
 import random
 import time
 from uuid import UUID
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from enum import Enum
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    status,
-    Request,
-    Query
-)
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -32,7 +25,7 @@ from sentry_sdk import (
     set_tag,
     set_context,
     metrics,
-    capture_message
+    capture_message,
 )
 
 from db import get_async_session
@@ -62,16 +55,20 @@ METRICS_SAMPLE_RATE = 0.3  # Sample 30% of metrics-heavy operations
 # Pydantic Schemas
 # ============================
 
+
 class ProjectCreate(BaseModel):
     """Schema for creating a new project"""
+
     name: str = Field(..., min_length=1, max_length=200)
     goals: Optional[str] = Field(None, max_length=1000)
     description: Optional[str] = Field(None, max_length=2000)
     custom_instructions: Optional[str] = Field(None, max_length=5000)
     max_tokens: int = Field(default=200000, ge=50000, le=500000)
 
+
 class ProjectUpdate(BaseModel):
     """Schema for updating a project"""
+
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     goals: Optional[str] = Field(None, max_length=1000)
@@ -82,16 +79,20 @@ class ProjectUpdate(BaseModel):
     extra_data: Optional[dict]
     max_tokens: Optional[int] = Field(default=None, ge=50000, le=500000)
 
+
 class ProjectFilter(str, Enum):
     """Filter options for listing projects"""
+
     all = "all"
     pinned = "pinned"
     archived = "archived"
     active = "active"
 
+
 # ============================
 # Core Project CRUD with Sentry
 # ============================
+
 
 @router.post("/", response_model=Dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
@@ -103,16 +104,16 @@ async def create_project(
     transaction = start_transaction(
         op="project",
         name="Create Project",
-        sampled=random.random() < PROJECT_SAMPLE_RATE
+        sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
-    
+
     try:
         with transaction:
             # Set context
             transaction.set_tag("user.id", str(current_user.id))
             transaction.set_data("project.name", project_data.name)
             transaction.set_data("max_tokens", project_data.max_tokens)
-            
+
             # Track metrics
             metrics.incr("project.create.attempt")
             start_time = time.time()
@@ -128,24 +129,24 @@ async def create_project(
             # Record success
             duration = (time.time() - start_time) * 1000
             metrics.distribution(
-                "project.create.duration",
-                duration,
-                unit="millisecond"
+                "project.create.duration", duration, unit="millisecond"
             )
             metrics.incr("project.create.success")
 
             # Set user context
             with configure_scope() as scope:
-                scope.set_context("project", {
-                    "id": str(project.id),
-                    "name": project.name,
-                    "created_at": project.created_at.isoformat()
-                })
+                scope.set_context(
+                    "project",
+                    {
+                        "id": str(project.id),
+                        "name": project.name,
+                        "created_at": project.created_at.isoformat(),
+                    },
+                )
 
             logger.info(f"Created project {project.id}")
             return await create_standard_response(
-                serialize_project(project),
-                "Project created successfully"
+                serialize_project(project), "Project created successfully"
             )
 
     except Exception as e:
@@ -155,8 +156,9 @@ async def create_project(
         logger.error(f"Project creation failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Project creation failed: {str(e)}"
+            detail=f"Project creation failed: {str(e)}",
         ) from e
+
 
 @router.get("/", response_model=Dict)
 async def list_projects(
@@ -171,7 +173,7 @@ async def list_projects(
     with sentry_span(
         op="project",
         name="List Projects",
-        description=f"List projects with filter: {filter_param.value}"
+        description=f"List projects with filter: {filter_param.value}",
     ) as span:
         try:
             span.set_tag("user.id", str(current_user.id))
@@ -203,15 +205,11 @@ async def list_projects(
 
             # Record success
             duration = (time.time() - start_time) * 1000
-            metrics.distribution(
-                "project.list.duration",
-                duration,
-                unit="millisecond"
+            metrics.distribution("project.list.duration", duration, unit="millisecond")
+            metrics.incr(
+                "project.list.success",
+                tags={"count": len(projects), "filter": filter_param.value},
             )
-            metrics.incr("project.list.success", tags={
-                "count": len(projects),
-                "filter": filter_param.value
-            })
 
             return {
                 "projects": [serialize_project(p) for p in projects],
@@ -221,8 +219,8 @@ async def list_projects(
                     "applied": {
                         "archived": filter_param == ProjectFilter.archived,
                         "pinned": filter_param == ProjectFilter.pinned,
-                    }
-                }
+                    },
+                },
             }
 
         except Exception as e:
@@ -232,8 +230,9 @@ async def list_projects(
             logger.error(f"Failed to list projects: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve projects"
+                detail="Failed to retrieve projects",
             ) from e
+
 
 @router.get("/{project_id}/", response_model=Dict)
 async def get_project(
@@ -243,9 +242,7 @@ async def get_project(
 ):
     """Get project details with monitoring"""
     with sentry_span(
-        op="project", 
-        name="Get Project",
-        description=f"Get project {project_id}"
+        op="project", name="Get Project", description=f"Get project {project_id}"
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
@@ -264,10 +261,10 @@ async def get_project(
         except HTTPException as http_exc:
             span.set_tag("error.type", "http")
             span.set_data("status_code", http_exc.status_code)
-            metrics.incr("project.view.failure", tags={
-                "reason": "access_denied",
-                "status_code": http_exc.status_code
-            })
+            metrics.incr(
+                "project.view.failure",
+                tags={"reason": "access_denied", "status_code": http_exc.status_code},
+            )
             raise
         except Exception as e:
             span.set_tag("error", True)
@@ -276,8 +273,9 @@ async def get_project(
             logger.error(f"Failed to get project {project_id}: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve project"
+                detail="Failed to retrieve project",
             ) from e
+
 
 @router.patch("/{project_id}/", response_model=Dict)
 async def update_project(
@@ -290,9 +288,9 @@ async def update_project(
     transaction = start_transaction(
         op="project",
         name="Update Project",
-        sampled=random.random() < PROJECT_SAMPLE_RATE
+        sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
-    
+
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
@@ -310,7 +308,7 @@ async def update_project(
             if "max_tokens" in updates and updates["max_tokens"] < project.token_usage:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Token limit below current usage"
+                    detail="Token limit below current usage",
                 )
 
             # Apply updates
@@ -318,11 +316,8 @@ async def update_project(
                 for key, value in updates.items():
                     if getattr(project, key) != value:
                         setattr(project, key, value)
-                        changes[key] = {
-                            "old": getattr(project, key),
-                            "new": value
-                        }
-                
+                        changes[key] = {"old": getattr(project, key), "new": value}
+
                 await save_model(db, project)
 
             # Record metrics
@@ -330,31 +325,27 @@ async def update_project(
             metrics.distribution(
                 "project.update.field_count",
                 len(changes),
-                tags={"project_id": str(project_id)}
+                tags={"project_id": str(project_id)},
             )
-            
+
             if changes:
                 capture_message(
                     "Project updated",
                     level="info",
-                    data={
-                        "project_id": str(project_id),
-                        "changes": changes
-                    }
+                    data={"project_id": str(project_id), "changes": changes},
                 )
 
             return await create_standard_response(
-                serialize_project(project),
-                "Project updated successfully"
+                serialize_project(project), "Project updated successfully"
             )
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
         transaction.set_data("status_code", http_exc.status_code)
-        metrics.incr("project.update.failure", tags={
-            "reason": "validation",
-            "status_code": http_exc.status_code
-        })
+        metrics.incr(
+            "project.update.failure",
+            tags={"reason": "validation", "status_code": http_exc.status_code},
+        )
         raise
     except Exception as e:
         transaction.set_tag("error", True)
@@ -363,8 +354,9 @@ async def update_project(
         logger.error(f"Project update failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update project: {str(e)}"
+            detail=f"Failed to update project: {str(e)}",
         ) from e
+
 
 @router.delete("/{project_id}/", response_model=Dict)
 async def delete_project(
@@ -376,9 +368,9 @@ async def delete_project(
     transaction = start_transaction(
         op="project",
         name="Delete Project",
-        sampled=random.random() < PROJECT_SAMPLE_RATE
+        sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
-    
+
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
@@ -386,25 +378,25 @@ async def delete_project(
 
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
-            
+
             # Initialize storage
-            storage = get_file_storage({
-                "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-                "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-            })
+            storage = get_file_storage(
+                {
+                    "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+                    "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
+                }
+            )
 
             # File deletion tracking
             files_deleted = 0
             files_failed = 0
             total_size = 0
-            
+
             with sentry_span(op="storage", description="Delete project files"):
                 files = await get_all_by_condition(
-                    db,
-                    ProjectFile,
-                    ProjectFile.project_id == project_id
+                    db, ProjectFile, ProjectFile.project_id == project_id
                 )
-                
+
                 for file in files:
                     try:
                         await storage.delete_file(file.file_path)
@@ -415,11 +407,14 @@ async def delete_project(
                         capture_exception(file_err)
                         logger.warning(f"Failed to delete file {file.id}: {file_err}")
 
-            transaction.set_data("files", {
-                "deleted": files_deleted,
-                "failed": files_failed,
-                "total_size": total_size
-            })
+            transaction.set_data(
+                "files",
+                {
+                    "deleted": files_deleted,
+                    "failed": files_failed,
+                    "total_size": total_size,
+                },
+            )
 
             # Delete project
             with sentry_span(op="db.delete", description="Delete project record"):
@@ -427,24 +422,23 @@ async def delete_project(
                 await db.commit()
 
             # Record metrics
-            metrics.incr("project.delete.success", tags={
-                "files_deleted": files_deleted,
-                "files_failed": files_failed
-            })
-            
+            metrics.incr(
+                "project.delete.success",
+                tags={"files_deleted": files_deleted, "files_failed": files_failed},
+            )
+
             capture_message(
                 "Project deleted",
                 level="info",
                 data={
                     "project_id": str(project_id),
                     "files_deleted": files_deleted,
-                    "storage_freed": total_size
-                }
+                    "storage_freed": total_size,
+                },
             )
-            
+
             return await create_standard_response(
-                {"id": str(project_id)},
-                "Project deleted successfully"
+                {"id": str(project_id)}, "Project deleted successfully"
             )
 
     except Exception as e:
@@ -454,12 +448,14 @@ async def delete_project(
         logger.error(f"Project deletion failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete project: {str(e)}"
+            detail=f"Failed to delete project: {str(e)}",
         ) from e
+
 
 # ============================
 # Project Actions with Monitoring
 # ============================
+
 
 @router.patch("/{project_id}/archive", response_model=Dict)
 async def toggle_archive_project(
@@ -471,11 +467,11 @@ async def toggle_archive_project(
     with sentry_span(
         op="project",
         name="Toggle Archive",
-        description=f"Toggle archive for project {project_id}"
+        description=f"Toggle archive for project {project_id}",
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
-            
+
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
 
@@ -489,14 +485,17 @@ async def toggle_archive_project(
             await save_model(db, project)
 
             # Record metrics
-            metrics.incr("project.archive.toggle", tags={
-                "new_state": str(project.archived),
-                "was_pinned": str(old_state and project.pinned)
-            })
-            
+            metrics.incr(
+                "project.archive.toggle",
+                tags={
+                    "new_state": str(project.archived),
+                    "was_pinned": str(old_state and project.pinned),
+                },
+            )
+
             return await create_standard_response(
                 serialize_project(project),
-                f"Project {'archived' if project.archived else 'unarchived'}"
+                f"Project {'archived' if project.archived else 'unarchived'}",
             )
 
         except Exception as e:
@@ -506,8 +505,9 @@ async def toggle_archive_project(
             logger.error(f"Archive toggle failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to toggle archive status"
+                detail="Failed to toggle archive status",
             ) from e
+
 
 @router.post("/{project_id}/pin", response_model=Dict)
 async def toggle_pin_project(
@@ -519,7 +519,7 @@ async def toggle_pin_project(
     with sentry_span(
         op="project",
         name="Toggle Pin",
-        description=f"Toggle pin for project {project_id}"
+        description=f"Toggle pin for project {project_id}",
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
@@ -530,29 +530,27 @@ async def toggle_pin_project(
             if project.archived and not project.pinned:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Cannot pin archived projects"
+                    detail="Cannot pin archived projects",
                 )
 
             project.pinned = not project.pinned
             await save_model(db, project)
 
             # Record metrics
-            metrics.incr("project.pin.toggle", tags={
-                "new_state": str(project.pinned)
-            })
-            
+            metrics.incr("project.pin.toggle", tags={"new_state": str(project.pinned)})
+
             return await create_standard_response(
                 serialize_project(project),
-                f"Project {'pinned' if project.pinned else 'unpinned'}"
+                f"Project {'pinned' if project.pinned else 'unpinned'}",
             )
 
         except HTTPException as http_exc:
             span.set_tag("error.type", "http")
             span.set_data("status_code", http_exc.status_code)
-            metrics.incr("project.pin.failure", tags={
-                "reason": "validation",
-                "status_code": http_exc.status_code
-            })
+            metrics.incr(
+                "project.pin.failure",
+                tags={"reason": "validation", "status_code": http_exc.status_code},
+            )
             raise
         except Exception as e:
             span.set_tag("error", True)
@@ -561,12 +559,14 @@ async def toggle_pin_project(
             logger.error(f"Pin toggle failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to toggle pin status"
+                detail="Failed to toggle pin status",
             ) from e
+
 
 # ============================
 # Project Stats with Monitoring
 # ============================
+
 
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
@@ -579,11 +579,11 @@ async def get_project_stats(
         op="project",
         name="Get Stats",
         description=f"Get stats for project {project_id}",
-        sampled=random.random() < METRICS_SAMPLE_RATE
+        sampled=random.random() < METRICS_SAMPLE_RATE,
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
-            
+
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
 
@@ -602,8 +602,7 @@ async def get_project_stats(
             # Get file statistics
             files_result = await db.execute(
                 select(
-                    func.count(ProjectFile.id),
-                    func.sum(ProjectFile.file_size)
+                    func.count(ProjectFile.id), func.sum(ProjectFile.file_size)
                 ).where(ProjectFile.project_id == project_id)
             )
             file_count, total_size = files_result.first() or (0, 0)
@@ -619,33 +618,35 @@ async def get_project_stats(
                 kb_info = {
                     "id": str(project.knowledge_base_id),
                     "is_active": False,
-                    "indexed_files": 0
+                    "indexed_files": 0,
                 }
                 try:
                     kb = await db.get(KnowledgeBase, project.knowledge_base_id)
                     if kb:
                         kb_info["is_active"] = kb.is_active
-                        processed = await db.scalar(
+                        # Fixed query: added column argument to func.count and used correct where clause
+                        processed_result = await db.execute(
                             select(func.count(ProjectFile.id)).where(
                                 ProjectFile.project_id == project_id,
-                                ProjectFile.processed_for_search == True  # noqa
+                                ProjectFile.processed_for_search == True,  # noqa
                             )
                         )
-                        kb_info["indexed_files"] = processed or 0
+                        processed = processed_result.scalar() or 0
+                        kb_info["indexed_files"] = processed
                 except Exception as kb_err:
                     capture_exception(kb_err)
                     kb_info["error"] = str(kb_err)
 
             # Calculate usage
-            usage_percentage = (project.token_usage / project.max_tokens * 100) if project.max_tokens > 0 else 0
+            usage_percentage = (
+                (project.token_usage / project.max_tokens * 100)
+                if project.max_tokens > 0
+                else 0
+            )
 
             # Record performance
             duration = (time.time() - start_time) * 1000
-            metrics.distribution(
-                "project.stats.duration",
-                duration,
-                unit="millisecond"
-            )
+            metrics.distribution("project.stats.duration", duration, unit="millisecond")
             metrics.incr("project.stats.success")
 
             return {
@@ -656,7 +657,7 @@ async def get_project_stats(
                 "file_count": file_count,
                 "total_file_size": total_size or 0,
                 "artifact_count": len(artifacts),
-                "knowledge_base": kb_info
+                "knowledge_base": kb_info,
             }
 
         except Exception as e:
@@ -666,5 +667,5 @@ async def get_project_stats(
             logger.error(f"Failed to get project stats: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve project statistics"
+                detail="Failed to retrieve project statistics",
             ) from e
