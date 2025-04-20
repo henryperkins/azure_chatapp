@@ -4,6 +4,7 @@ auth_utils.py
 Centralized authentication utilities for the application.
 Handles JWT token creation/verification, blacklisted token cleanup,
 and user authentication via HTTP or WebSocket using cookie-based tokens.
+Includes improved logging, diagnostics, and detailed error messages.
 """
 
 import logging
@@ -37,22 +38,26 @@ def create_access_token(data: dict) -> str:
     Encodes a JWT token from the given payload `data`.
     Assumes 'data' already contains all necessary claims, including 'exp'.
     """
-    token = jwt.encode(
-        data,
-        JWT_SECRET,
-        algorithm=JWT_ALGORITHM,
-        headers={
-            "kid": settings.JWT_KEY_ID,  # For key rotation if desired
-            "alg": JWT_ALGORITHM,
-        },
-    )
-    logger.debug(
-        "Created token with jti=%s for sub=%s, type=%s",
-        data.get("jti"),
-        data.get("sub"),
-        data.get("type"),
-    )
-    return token
+    try:
+        token = jwt.encode(
+            data,
+            JWT_SECRET,
+            algorithm=JWT_ALGORITHM,
+            headers={
+                "kid": getattr(settings, "JWT_KEY_ID", None),
+                "alg": JWT_ALGORITHM,
+            },
+        )
+        logger.debug(
+            "Created token with jti=%s for sub=%s, type=%s",
+            data.get("jti"),
+            data.get("sub"),
+            data.get("type"),
+        )
+        return token
+    except Exception as exc:
+        logger.error("Failed to create JWT: %s", exc)
+        raise
 
 
 # -----------------------------------------------------------------------------
@@ -68,6 +73,7 @@ async def verify_token(
     - Checks if token is blacklisted.
     - Optionally enforces a specific token type (e.g., 'access', 'refresh').
     - Raises HTTPException(401) if invalid, expired, or revoked.
+    Provides detailed logging for all stages.
     """
     decoded = None
     token_id = None
@@ -83,7 +89,9 @@ async def verify_token(
         token_id = decoded.get("jti")
         token_type = decoded.get("type", "unknown")
         username = decoded.get("sub", "unknown")
-        expires_at = datetime.utcfromtimestamp(decoded["exp"]) if decoded.get("exp") else None
+        expires_at = (
+            datetime.utcfromtimestamp(decoded["exp"]) if decoded.get("exp") else None
+        )
 
         if settings.DEBUG:
             logger.debug(
@@ -132,6 +140,11 @@ async def verify_token(
     except PyJWTError as e:
         logger.error("JWT error for jti=%s: %s", token_id, str(e))
         raise HTTPException(status_code=401, detail="Token error") from e
+    except Exception as e:
+        logger.exception(
+            "Unexpected error during token verification for jti=%s", token_id
+        )
+        raise HTTPException(status_code=500, detail="Token verification failed") from e
 
 
 # -----------------------------------------------------------------------------
@@ -153,7 +166,7 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
     # Log active token counts by type
     token_count_query = (
-        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))  # pylint: disable=not-callable
+        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))
         .where(TokenBlacklist.expires >= now)
         .group_by(TokenBlacklist.token_type)
     )
@@ -252,6 +265,7 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
     """
     token = extract_token(request)
     if not token:
+        logger.warning("Access token not found in request cookies")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",

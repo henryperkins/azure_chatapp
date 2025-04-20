@@ -1,275 +1,145 @@
 /**
- * app.js
- * - Cookie-based auth (no CORS/origin usage).
- * - Maintains API_CONFIG, uses a fetch wrapper, manages UI based on auth state.
- * - Integrates with chat system modules (ChatManager, projectManager, etc.).
+ * app.js - Core application initialization
+ * Manages the app startup, routing, and global state
  */
 
-const debounce = window.eventHandlers?.debounce ?? (fn => fn);
-
-// PHASE-BASED INITIALIZATION
-const AppPhase = {
-  BOOT: 'boot',
-  DOM_READY: 'dom_ready',
-  AUTH_CHECKED: 'auth_checked',
-  COMPLETE: 'complete'
-};
-
-let currentPhase = AppPhase.BOOT;
-function setPhase(phase) {
-  currentPhase = phase;
-  document.dispatchEvent(new CustomEvent('phasechange', { detail: { phase } }));
-}
-
-// GLOBAL APP CONFIG & CONSTANTS
-window.__appStartTime = Date.now();
-window.__appInitializing = true;
-
-const DEBUG = false;
-function log(...args) { if (DEBUG) console.log(...args); }
-
-// Timeout config (milliseconds)
-const TIMEOUT_CONFIG = {
-  INITIALIZATION: 30000,
-  AUTH_CHECK: 10000,
-  API_REQUEST: 10000,
-  COMPONENT_LOAD: 15000,
-  CHAT_MANAGER: 20000,
-  DOM_READY: 5000
-};
-
-const API_CONFIG = {
-  _baseUrl: '',
-  get baseUrl() { return this._baseUrl; },
-  set baseUrl(value) {
-    if (value !== this._baseUrl) {
-      if (value && value.includes('put.photo')) {
-        console.error('Prevented setting incorrect domain (put.photo) as API baseUrl');
-        return;
-      }
-      this._baseUrl = value;
-    }
+// Configuration
+const APP_CONFIG = {
+  // Timeout values (ms)
+  TIMEOUTS: {
+    INITIALIZATION: 10000,
+    AUTH_CHECK: 5000,
+    API_REQUEST: 8000,
+    COMPONENT_LOAD: 5000
   },
-  isAuthenticated: false,
-  authCheckInProgress: false,
-  lastErrorStatus: null,
-  authCheckLock: false
-};
 
-const SELECTORS = {
-  MAIN_SIDEBAR: '#mainSidebar',
-  NAV_TOGGLE_BTN: '#navToggleBtn',
-  USER_STATUS: '#userStatus',
-  NOTIFICATION_AREA: '#notificationArea',
-  SIDEBAR_PROJECT_SEARCH: '#sidebarProjectSearch',
-  SIDEBAR_PROJECTS: '#sidebarProjects',
-  SIDEBAR_NEW_PROJECT_BTN: '#sidebarNewProjectBtn',
-  SIDEBAR_CONVERSATIONS: '#sidebarConversations',
-  SIDEBAR_ACTIONS: '#sidebarActions',
-  AUTH_STATUS: '#authStatus',
-  USER_MENU: '#userMenu',
-  AUTH_BUTTON: '#authButton',
-  CHAT_UI: '#globalChatUI',
-  NO_CHAT_SELECTED_MESSAGE: '#noChatSelectedMessage',
-  LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
-  PROJECT_MANAGER_PANEL: '#projectManagerPanel',
-  CONVERSATION_AREA: '#conversationArea',
-  CHAT_TITLE: '#chatTitle',
-  CREATE_PROJECT_BTN: '#createProjectBtn',
-  SHOW_LOGIN_BTN: '#showLoginBtn',
-  NEW_CONVERSATION_BTN: '#newConversationBtn',
-  UPLOAD_FILE_BTN: '#uploadFileBtn',
-  FILE_INPUT: '#fileInput'
-};
+  // API endpoints
+  API_ENDPOINTS: {
+    AUTH_VERIFY: '/api/auth/verify/',
+    PROJECTS: '/api/projects/',
+    PROJECT_DETAILS: '/api/projects/{projectId}/',
+    PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
+    PROJECT_FILES: '/api/projects/{projectId}/files/'
+  },
 
-const MESSAGES = {
-  NO_PROJECTS: 'No projects found',
-  NO_CONVERSATIONS: 'No conversations yet—Begin now!',
-  SESSION_EXPIRED: 'Your session has expired. Please log in again.',
-  LOGIN_REQUIRED: 'Please log in to use the application',
-  PROJECT_NOT_FOUND: 'Selected project not found or inaccessible.'
-};
-
-const API_ENDPOINTS = {
-  AUTH_VERIFY: '/api/auth/verify/',
-  PROJECTS: '/api/projects/',
-  PROJECT_DETAILS: '/api/projects/{projectId}/',
-  PROJECT_CONVERSATIONS: '/api/projects/{project_id}/conversations',
-  PROJECT_FILES: '/api/projects/{projectId}/files/'
-};
-
-const ELEMENTS = {};
-
-// CUSTOM ERROR CLASS
-class APIError extends Error {
-  constructor(message, { status, code, isPermanent } = {}) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.isPermanent = !!isPermanent;
+  // DOM selectors
+  SELECTORS: {
+    MAIN_SIDEBAR: '#mainSidebar',
+    NAV_TOGGLE_BTN: '#navToggleBtn',
+    SIDEBAR_PROJECTS: '#sidebarProjects',
+    SIDEBAR_CONVERSATIONS: '#sidebarConversations',
+    AUTH_BUTTON: '#authButton',
+    USER_MENU: '#userMenu',
+    CHAT_UI: '#globalChatUI',
+    PROJECT_LIST_VIEW: '#projectListView',
+    PROJECT_DETAILS_VIEW: '#projectDetailsView',
+    NO_CHAT_SELECTED_MESSAGE: '#noChatSelectedMessage',
+    LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage'
   }
-}
+};
 
-// UTILITY FUNCTIONS
-function toggleVisibility(el, show) { el?.classList.toggle('hidden', !show); }
-function getEl(key) { return ELEMENTS[key] || (ELEMENTS[key] = document.querySelector(SELECTORS[key])); }
-function getRequiredElement(selector) {
-  const el = document.querySelector(selector);
-  if (!el) throw new Error(`Required element not found: ${selector}`);
-  return el;
-}
-function setViewportHeight() {
-  const vh = window.innerHeight * 0.01;
-  document.documentElement.style.setProperty('--vh', `${vh}px`);
-}
-function isValidUUID(uuid) {
-  return window.ChatUtils.isValidUUID(uuid);
-}
+// Global state
+const appState = {
+  initialized: false,
+  initializing: true,
+  currentPhase: 'boot',
+  currentView: null,
+  currentProjectId: null,
+  currentConversationId: null,
+  isAuthenticated: false
+};
 
-const clearAuthState = () => window.auth?.clear?.();
-const ensureAuthenticated = (opts = {}) => window.auth.isAuthenticated(opts);
-
-// API REQUEST FUNCTIONS
+// Pending requests tracking for deduplication
 const pendingRequests = new Map();
-function sanitizeUrl(url) {
-  return url.replace(/\s+/g, '').replace(/\/+/g, '/');
-}
 
-async function parseErrorResponse(response) {
-  const status = response.status;
-  try {
-    const errData = await response.json();
-    const message = errData.message || errData.error || response.statusText || `HTTP ${status}`;
-    return new APIError(`API error (${status}): ${message}`, {
-      status,
-      code: `E${status}`,
-      isPermanent: status === 404,
-      detail: errData.detail
-    });
-  } catch (e) {
-    const text = await response.text().catch(() => response.statusText);
-    return new APIError(`API error (${status}): ${text || response.statusText}`, {
-      status,
-      code: `E${status}`
-    });
-  }
-}
-
-function getBaseUrl() {
-  if (API_CONFIG.baseUrl && API_CONFIG.baseUrl.includes('put.photo')) {
-    console.warn('Detected incorrect API domain (put.photo). Resetting to relative paths.');
-    API_CONFIG.baseUrl = '';
-  }
-  if (!API_CONFIG.baseUrl) API_CONFIG.baseUrl = '';
-  return API_CONFIG.baseUrl;
-}
-
+/**
+ * Fetch wrapper with authentication handling
+ */
 async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
+  // Deduplicate identical requests
   const requestKey = `${method}:${endpoint}:${JSON.stringify(data)}`;
   if (pendingRequests.has(requestKey)) {
-    log(`[apiRequest] Deduplicating: ${requestKey}`);
     return pendingRequests.get(requestKey);
   }
 
+  // Set up request controller and timeout
   const controller = options.signal?.controller || new AbortController();
-  const timeoutMs = options.timeout || TIMEOUT_CONFIG.API_REQUEST;
-  const timeoutId = options.signal
-    ? null
-    : setTimeout(() => {
-      log(`[apiRequest] Aborting after ${timeoutMs}ms: ${endpoint}`);
-      controller.abort();
-    }, timeoutMs);
+  const timeoutMs = options.timeout || APP_CONFIG.TIMEOUTS.API_REQUEST;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Create the Promise
   const requestPromise = (async () => {
     try {
-      endpoint = sanitizeUrl(endpoint);
-      if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
-        const urlObj = new URL(endpoint);
-        if (urlObj.hostname.includes('put.photo')) throw new Error('Prohibited domain detected in URL');
-        endpoint = urlObj.pathname + urlObj.search;
-      }
-      const cleanEndpoint = endpoint.replace(/^https?:\/\/[^/]+/, '').replace(/\/+/g, '/');
-      const baseUrl = getBaseUrl();
-      const uppercaseMethod = method.toUpperCase();
-      let finalUrl = cleanEndpoint.startsWith('/')
-        ? `${baseUrl}${cleanEndpoint}`
-        : `${baseUrl}/${cleanEndpoint}`;
+      // Clean up endpoint
+      const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
-      if (data && ['GET', 'HEAD'].includes(uppercaseMethod)) {
+      // Build query params for GET requests
+      let finalUrl = cleanEndpoint;
+      if (data && ['GET', 'HEAD'].includes(method.toUpperCase())) {
         const queryParams = new URLSearchParams();
         Object.entries(data).forEach(([key, value]) => {
-          if (Array.isArray(value)) value.forEach(v => queryParams.append(key, v));
-          else queryParams.append(key, value);
+          if (Array.isArray(value)) {
+            value.forEach(v => queryParams.append(key, v));
+          } else {
+            queryParams.append(key, value);
+          }
         });
+
         finalUrl += (cleanEndpoint.includes('?') ? '&' : '?') + queryParams.toString();
       }
 
+      // Get CSRF token
       const csrfToken = await window.auth.getCSRFTokenAsync();
+
+      // Build request options
       const requestOptions = {
-        method: uppercaseMethod,
+        method: method.toUpperCase(),
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-Token': csrfToken,
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-          'X-Forwarded-Host': window.location.host,
-          'X-Request-Domain': window.location.hostname
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
         },
-        cache: 'no-store',
-        redirect: 'follow',
         signal: controller.signal
       };
 
-      if (data && !['GET', 'HEAD', 'DELETE'].includes(uppercaseMethod)) {
-        const authEndpoints = [
-          '/api/auth/login',
-          '/api/auth/register',
-          '/api/auth/refresh',
-          '/api/auth/logout',
-          '/api/auth/csrf',
-          '/api/auth/verify'
-        ];
-        const isAuthEndpoint = authEndpoints.some(authPath =>
-          cleanEndpoint.startsWith(authPath) || finalUrl.includes(authPath)
-        );
-        if (window.auth?.isInitialized && !isAuthEndpoint) {
-          try {
-            const token = window.auth.getAuthToken();
-            if (token) {
-              requestOptions.headers.Authorization = 'Bearer ' + token;
-            }
-          } catch (err) {
-            console.error('[apiRequest] Error retrieving token:', err);
-          }
-        }
-        requestOptions.body = data instanceof FormData ? data : JSON.stringify(data);
-        if (!(data instanceof FormData)) {
-          requestOptions.headers['Content-Type'] = 'application/json';
+      // Handle body for non-GET requests
+      if (data && !['GET', 'HEAD'].includes(method.toUpperCase())) {
+        if (data instanceof FormData) {
+          requestOptions.body = data;
+          delete requestOptions.headers['Content-Type'];
+        } else {
+          requestOptions.body = JSON.stringify(data);
         }
       }
 
+      // Make the request
       const response = await fetch(finalUrl, requestOptions);
+
+      // Handle errors
       if (!response.ok) {
-        const error = await parseErrorResponse(response);
+        const errorData = await response.json().catch(() => {
+          return { message: response.statusText };
+        });
+
+        const error = new Error(errorData.message || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.data = errorData;
+
         if (error.status === 401) {
-          if (!window.__last401Time || Date.now() - window.__last401Time > 30000) {
-            window.__last401Time = Date.now();
-            throw error;
-          } else {
-            throw new APIError('Authentication required (retry throttled)', {
-              status: 401,
-              code: 'E401_THROTTLED'
-            });
-          }
+          window.auth.clearTokenState({ source: 'api_401' });
         }
-        if (error.status === 403) {
-          window.auth?.clear?.();
-        }
+
         throw error;
       }
-      if (response.status === 204) return null;
+
+      // Handle 204 No Content
+      if (response.status === 204) {
+        return null;
+      }
+
+      // Parse JSON response
       return await response.json();
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -282,495 +152,366 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
     }
   })();
 
+  // Store the promise for deduplication
   pendingRequests.set(requestKey, requestPromise);
   return requestPromise;
 }
 
-// DATA LOADING & RENDERING
-let currentlyLoadingProjectId = null;
-const DEBOUNCE_DELAY = 300;
-const debouncedLoadProject = debounce(async (projectId) => {
-  if (currentlyLoadingProjectId === projectId) return;
-  currentlyLoadingProjectId = projectId;
-  try {
-    if (window.ProjectDashboard?.showProjectDetails) {
-      await window.ProjectDashboard.showProjectDetails(projectId);
-    } else if (window.projectManager?.loadProjectDetails) {
-      await window.projectManager.loadProjectDetails(projectId);
-    } else {
-      console.warn(`[App] No function found to load project details for ${projectId}`);
-    }
-  } catch (error) {
-    console.error(`[App] Error loading project ${projectId}:`, error);
-    window.ChatUtils.handleError('Loading project', error);
-  } finally {
-    if (currentlyLoadingProjectId === projectId) currentlyLoadingProjectId = null;
-  }
-}, DEBOUNCE_DELAY);
+/**
+ * Get proper UUID from string or other formats
+ */
+function validateUUID(uuid) {
+  if (!uuid) return null;
 
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidPattern.test(uuid)) {
+    return uuid;
+  }
+
+  return null;
+}
+
+/**
+ * Get project ID from various sources
+ */
+function getProjectId() {
+  // From localStorage
+  const storedId = localStorage.getItem('selectedProjectId');
+  if (storedId && validateUUID(storedId)) {
+    return storedId;
+  }
+
+  // From URL path
+  const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
+  if (pathMatch && pathMatch[1] && validateUUID(pathMatch[1])) {
+    return pathMatch[1];
+  }
+
+  // From URL query
+  const urlParams = new URLSearchParams(window.location.search);
+  const queryId = urlParams.get('projectId');
+  if (queryId && validateUUID(queryId)) {
+    return queryId;
+  }
+
+  return null;
+}
+
+/**
+ * Load the list of conversations
+ */
 async function loadConversationList() {
-  if (API_CONFIG.authCheckInProgress) {
-    log("[loadConversationList] Auth check in progress, deferring");
+  const projectId = getProjectId();
+  if (!projectId) {
     return [];
   }
-  let projectId = window.ChatUtils.getProjectId();
-  if (!projectId && window.projectManager?.loadProjects) {
-    try {
-      const projects = await window.projectManager.loadProjects("all");
-      if (projects && projects.length > 0) {
-        projectId = projects[0].id;
-        localStorage.setItem("selectedProjectId", projectId);
-      } else {
-        if (window.uiRenderer?.renderConversations) {
-          window.uiRenderer.renderConversations({ data: { conversations: [] } });
-        }
-        return [];
-      }
-    } catch (err) {
-      console.error("[loadConversationList] Error auto-selecting project:", err);
-      if (window.uiRenderer?.renderConversations) {
-        window.uiRenderer.renderConversations({ data: { conversations: [] } });
-      }
-      return [];
+
+  try {
+    const url = APP_CONFIG.API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
+    const data = await apiRequest(url);
+
+    // Update sidebar with conversations
+    if (window.uiRenderer?.renderConversations) {
+      window.uiRenderer.renderConversations(data);
     }
-  }
-  if (!projectId || !isValidUUID(projectId)) {
-    console.error('[loadConversationList] Invalid project ID:', projectId);
+
+    return data;
+  } catch (error) {
+    if (error.status === 404) {
+      // Project not found, reset selection
+      localStorage.removeItem('selectedProjectId');
+    }
+
     if (window.uiRenderer?.renderConversations) {
       window.uiRenderer.renderConversations({ data: { conversations: [] } });
     }
-    return [];
-  }
-  const url = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{project_id}', projectId);
-  try {
-    const data = await apiRequest(url);
-    if (window.uiRenderer?.renderConversations) window.uiRenderer.renderConversations(data);
-    return data;
-  } catch (err) {
-    if (err.status === 404) {
-      localStorage.removeItem("selectedProjectId");
-      if (window.projectManager?.loadProjects) {
-        window.projectManager.loadProjects("all")
-          .then(projects => {
-            if (projects && projects.length > 0) {
-              localStorage.setItem("selectedProjectId", projects[0].id);
-              setTimeout(() => loadConversationList(), 500);
-            } else {
-              if (window.uiRenderer?.renderConversations) {
-                window.uiRenderer.renderConversations({ data: { conversations: [] } });
-              }
-            }
-          })
-          .catch(newErr => {
-            console.error("[loadConversationList] Failed to load valid projects after 404:", newErr);
-            if (window.uiRenderer?.renderConversations) {
-              window.uiRenderer.renderConversations({ data: { conversations: [] } });
-            }
-          });
-      } else {
-        if (window.uiRenderer?.renderConversations) {
-          window.uiRenderer.renderConversations({ data: { conversations: [] } });
-        }
-      }
-    }
+
     return [];
   }
 }
 
+/**
+ * Load projects list
+ */
 async function loadProjects() {
   try {
-    const isAuthenticated = await ensureAuthenticated();
+    const isAuthenticated = await window.auth.checkAuth();
     if (!isAuthenticated) {
-      toggleVisibility(document.getElementById('loginRequiredMessage'), true);
-      toggleVisibility(document.getElementById('projectManagerPanel'), false);
-      toggleVisibility(document.getElementById('projectListView'), false);
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects([]);
-      }
-      return;
+      toggleElement('LOGIN_REQUIRED_MESSAGE', true);
+      toggleElement('PROJECT_LIST_VIEW', false);
+      return [];
     }
-    toggleVisibility(document.getElementById('loginRequiredMessage'), false);
-    toggleVisibility(document.getElementById('projectManagerPanel'), true);
-    toggleVisibility(document.getElementById('projectListView'), true);
+
+    toggleElement('LOGIN_REQUIRED_MESSAGE', false);
+    toggleElement('PROJECT_LIST_VIEW', true);
 
     if (window.projectManager?.loadProjects) {
-      const params = new URLSearchParams(window.location.search);
-      const filter = params.get('filter') || 'all';
-      await window.projectManager.loadProjects(filter);
-    } else {
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects([]);
-      }
+      return await window.projectManager.loadProjects('all');
     }
-  } catch (err) {
-    console.error("[App] Error in loadProjects:", err);
-    window.ChatUtils.handleError('Loading projects (App wrapper)', err);
+
+    return [];
+  } catch (error) {
+    console.error('[App] Error loading projects:', error);
+    return [];
   }
 }
 
-// NAVIGATION & STATE
+/**
+ * Navigate to a specific conversation
+ */
 async function navigateToConversation(conversationId) {
+  if (!validateUUID(conversationId)) {
+    throw new Error('Invalid conversation ID');
+  }
+
+  // Update URL
   window.history.pushState({}, '', `/?chatId=${conversationId}`);
+
   try {
-    const projectId = window.ChatUtils.getProjectId();
+    const projectId = getProjectId();
     if (!projectId) {
-      window.showNotification("Please select a project first", "error");
+      showNotification("Please select a project first", "error");
       window.history.pushState({}, '', '/?view=projects');
-      toggleVisibility(getEl('CHAT_UI'), false);
-      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+      toggleElement('CHAT_UI', false);
+      toggleElement('NO_CHAT_SELECTED_MESSAGE', true);
       return false;
     }
-    await ensureChatManagerAvailable();
+
     if (window.ChatManager?.loadConversation) {
+      appState.currentConversationId = conversationId;
       return await window.ChatManager.loadConversation(conversationId);
     } else {
-      throw new Error('ChatManager not initialized for loadConversation');
+      throw new Error('Chat manager not available');
     }
   } catch (error) {
     console.error('Error navigating to conversation:', error);
-    toggleVisibility(getEl('CHAT_UI'), false);
-    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+    toggleElement('CHAT_UI', false);
+    toggleElement('NO_CHAT_SELECTED_MESSAGE', true);
     throw error;
   }
 }
 
-async function ensureChatManagerAvailable() {
-  if (!window.ChatManager) {
-    log('Waiting for ChatManager...');
-    return new Promise((resolve, reject) => {
-      const handleReady = () => {
-        log('ChatManager ready event fired');
-        resolve();
-      };
-      document.addEventListener('chatManagerReady', handleReady, { once: true });
+/**
+ * Toggle element visibility
+ */
+function toggleElement(selector, show) {
+  const element = typeof selector === 'string' ?
+    document.querySelector(APP_CONFIG.SELECTORS[selector]) : selector;
 
-      const timeout = setTimeout(() => {
-        const errMsg = `ChatManager init timed out after ${TIMEOUT_CONFIG.CHAT_MANAGER}ms.`;
-        log(errMsg);
-        document.removeEventListener('chatManagerReady', handleReady);
-        window.ChatUtils.handleError('Waiting for ChatManager', new Error(errMsg));
-        reject(new Error(errMsg));
-      }, TIMEOUT_CONFIG.CHAT_MANAGER);
-
-      const checkInterval = setInterval(() => {
-        if (window.ChatManager) {
-          clearInterval(checkInterval);
-          clearTimeout(timeout);
-          document.removeEventListener('chatManagerReady', handleReady);
-          log('ChatManager found via interval check.');
-          resolve();
-        }
-      }, 100);
-    });
+  if (element) {
+    element.classList.toggle('hidden', !show);
   }
-  return Promise.resolve();
 }
 
+/**
+ * Show notification
+ */
+function showNotification(message, type = 'info', duration = 5000) {
+  if (window.notificationHandler?.show) {
+    window.notificationHandler.show(message, type, { timeout: duration });
+  } else {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+  }
+}
+
+/**
+ * Handle navigation changes
+ */
 async function handleNavigationChange() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const chatId = urlParams.get('chatId');
+  const view = urlParams.get('view');
+  const projectId = urlParams.get('project');
+
   try {
-    if (window.__appInitializing) {
-      log("App still initializing, waiting...");
-      await new Promise(resolve => {
-        const checkStatus = setInterval(() => {
-          if (window.appInitializer?.status !== 'initializing') {
-            clearInterval(checkStatus);
-            resolve();
-          }
-        }, 100);
-        setTimeout(() => {
-          clearInterval(checkStatus);
-          log(`Timeout waiting for app initialization (${TIMEOUT_CONFIG.INITIALIZATION}ms)`);
-          resolve();
-        }, TIMEOUT_CONFIG.INITIALIZATION);
-      });
-    }
+    const isAuthenticated = await window.auth.checkAuth();
+    appState.isAuthenticated = isAuthenticated;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const chatId = urlParams.get('chatId');
-    const view = urlParams.get('view');
-    const projectId = urlParams.get('project');
-
-    const isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
-      toggleVisibility(getEl('CHAT_UI'), false);
-      toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
+      toggleElement('CHAT_UI', false);
+      toggleElement('PROJECT_LIST_VIEW', false);
+      toggleElement('PROJECT_DETAILS_VIEW', false);
+      toggleElement('NO_CHAT_SELECTED_MESSAGE', false);
+      toggleElement('LOGIN_REQUIRED_MESSAGE', true);
       return;
     }
 
-    toggleVisibility(document.getElementById("loginRequiredMessage"), false);
+    toggleElement('LOGIN_REQUIRED_MESSAGE', false);
 
     if (view === 'projects') {
       showProjectListView();
       return;
     }
+
     if (projectId) {
-      debouncedLoadProject(projectId);
+      appState.currentProjectId = projectId;
+      localStorage.setItem('selectedProjectId', projectId);
+
+      if (window.projectManager?.loadProjectDetails) {
+        await window.projectManager.loadProjectDetails(projectId);
+      }
+
+      toggleElement('PROJECT_LIST_VIEW', false);
+      toggleElement('PROJECT_DETAILS_VIEW', true);
       return;
     }
+
     if (chatId) {
       await navigateToConversation(chatId);
       return;
     }
+
+    // Default: show project list
     showProjectListView();
-    toggleVisibility(getEl('CHAT_UI'), false);
-    toggleVisibility(getEl('NO_CHAT_SELECTED_MESSAGE'), true);
   } catch (error) {
     console.error('Navigation error:', error);
-    window.ChatUtils.handleError('Navigation change', error);
+    showNotification('Navigation error: ' + error.message, 'error');
   }
 }
 
-let _showingProjectListView = false;
-async function showProjectListView() {
-  if (_showingProjectListView) {
-    return;
+/**
+ * Show project list view
+ */
+function showProjectListView() {
+  appState.currentView = 'projects';
+
+  toggleElement('PROJECT_DETAILS_VIEW', false);
+  toggleElement('CHAT_UI', false);
+  toggleElement('NO_CHAT_SELECTED_MESSAGE', false);
+  toggleElement('PROJECT_LIST_VIEW', true);
+
+  // Load projects if authenticated
+  if (appState.isAuthenticated) {
+    loadProjects().catch(error => {
+      console.error('[App] Error loading projects:', error);
+      showNotification('Failed to load projects', 'error');
+    });
   }
-  _showingProjectListView = true;
+}
 
+/**
+ * Refresh all app data
+ */
+function refreshAppData() {
+  console.log('[App] Refreshing application data...');
+
+  if (window.projectManager?.loadProjects) {
+    window.projectManager.loadProjects('all')
+      .then(() => loadConversationList())
+      .catch(error => {
+        console.error('[App] Error refreshing data:', error);
+      });
+  }
+}
+
+/**
+ * Initialize application
+ */
+async function initApp() {
+  console.log('[App] Starting initialization...');
+  appState.initializing = true;
+  appState.currentPhase = 'boot';
+
+  // Wait for DOM ready
+  if (document.readyState === 'loading') {
+    await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+  }
+
+  appState.currentPhase = 'dom_ready';
+
+  // Initialize auth
   try {
-    const isAuthenticated = await ensureAuthenticated();
-    if (!isAuthenticated) {
-      toggleVisibility(document.getElementById('projectManagerPanel'), false);
-      toggleVisibility(document.getElementById('projectListView'), false);
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects([]);
-      }
-      return;
-    }
-    const projectPanel = document.getElementById('projectManagerPanel');
-    const projectListViewEl = document.getElementById('projectListView');
-    const projectDetailsView = document.getElementById('projectDetailsView');
-    if (projectPanel) projectPanel.classList.remove('hidden');
-    if (projectListViewEl) {
-      projectListViewEl.classList.remove('hidden');
-      projectListViewEl.style.display = 'flex';
-    }
-    if (projectDetailsView) projectDetailsView.classList.add('hidden');
+    await window.auth.init();
+  } catch (error) {
+    console.error('[App] Auth initialization failed:', error);
+  }
 
-    if (window.projectManager?.loadProjects) {
-      await window.projectManager.loadProjects('all');
-    } else if (window.projectListComponent?.renderProjects) {
-      window.projectListComponent.renderProjects([]);
+  appState.currentPhase = 'auth_checked';
+  appState.isAuthenticated = window.auth.isAuthenticated();
+
+  // Initialize components
+  try {
+    if (window.eventHandlers?.init) {
+      await window.eventHandlers.init();
+    }
+
+    if (window.sidebar) {
+      window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
+    }
+
+    if (window.ChatManager?.initializeChat) {
+      await window.ChatManager.initializeChat();
     }
   } catch (error) {
-    console.error("[showProjectListView] Error:", error);
-    window.ChatUtils.handleError('Showing project list view', error);
-  } finally {
-    _showingProjectListView = false;
+    console.error('[App] Component initialization failed:', error);
   }
-}
 
-// INITIALIZATION
-function cacheElements() {
-  Object.entries(SELECTORS).forEach(([key, selector]) => {
-    const element = document.querySelector(selector);
-    ELEMENTS[key] = element || null;
-  });
-}
-
-function setupEventListeners() {
-  // Global listeners might be initialized elsewhere; minimal here.
-  log("[app.js] setupEventListeners");
-}
-
-function cleanupAppListeners() {
-  log("[app.js] cleanupAppListeners");
-}
-
-function refreshAppData() {
-  if (API_CONFIG.authCheckInProgress) {
-    log("[refreshAppData] Auth check in progress, deferring");
-    return;
-  }
-  log("[refreshAppData] Reloading projects & conversations.");
-
-  ensureComponentsInitialized()
-    .then(() => {
-      if (window.projectManager?.loadProjects) {
-        return window.projectManager.loadProjects('all');
-      }
-      if (window.projectListComponent?.renderProjects) {
-        window.projectListComponent.renderProjects([]);
-      }
-      return [];
-    })
-    .then(() => loadConversationList().catch(err => {
-      console.warn("[refreshAppData] Failed to load conversations:", err);
-      return [];
-    }))
-    .catch(err => {
-      console.error("[refreshAppData] Error:", err);
-      window.ChatUtils.handleError('Refreshing application data', err);
-    });
-}
-
-async function ensureComponentsInitialized() {
-  if (window.projectListComponent) {
-    return;
-  }
-  log("[ensureComponentsInitialized] Ensuring components...");
-
-  if (window.ProjectDashboard?.ensureContainersExist) {
-    await window.ProjectDashboard.ensureContainersExist();
-  } else {
-    const projectListElement = document.getElementById('projectListView');
-    if (!projectListElement) {
-      throw new Error("Required UI container missing: #projectListView");
-    }
-  }
-  return new Promise((resolve, reject) => {
-    if (window.projectListComponent && window.projectDashboardInitialized) {
-      resolve();
-      return;
-    }
-    const timeout = setTimeout(() => {
-      const errMsg = `Component initialization timed out`;
-      window.ChatUtils.handleError('Component Initialization Timeout', new Error(errMsg));
-      document.removeEventListener('projectDashboardInitialized', handleDashboardInit);
-      reject(new Error(errMsg));
-    }, 1000);
-    const handleDashboardInit = () => {
-      clearTimeout(timeout);
-      resolve();
-    };
-    document.addEventListener('projectDashboardInitialized', handleDashboardInit, { once: true });
-    if (window.projectListComponent && window.projectDashboardInitialized) {
-      clearTimeout(timeout);
-      document.removeEventListener('projectDashboardInitialized', handleDashboardInit);
-      resolve();
-    }
-  });
-}
-
-async function initApp() {
-  log("[initApp] Starting initialization.");
-  cleanupAppListeners();
-  setPhase(AppPhase.BOOT);
-
-  if (document.readyState === 'loading') {
-    await new Promise(r => document.addEventListener('DOMContentLoaded', r));
-  }
-  setPhase(AppPhase.DOM_READY);
-  setViewportHeight();
-  cacheElements();
-  setupEventListeners();
-
-  await ensureDashboardUtilsReady();
-
-  if (window.auth?.init) {
-    await window.auth.init();
-  }
-  setPhase(AppPhase.AUTH_CHECKED);
-
-  await ensureProjectDashboardInitialized();
-
-  if (window.ChatManager?.initializeChat) {
-    await window.ChatManager.initializeChat();
-  }
+  // Process navigation based on URL
   await handleNavigationChange();
 
-  window.__appInitializing = false;
-  setPhase(AppPhase.COMPLETE);
+  // Mark initialization complete
+  appState.initializing = false;
+  appState.initialized = true;
+  appState.currentPhase = 'complete';
 
-  if (window.auth?.isAuthenticated?.()) {
+  // Refresh data if authenticated
+  if (appState.isAuthenticated) {
     refreshAppData();
   }
+
+  console.log('[App] Initialization complete');
   return true;
 }
 
-async function ensureDashboardUtilsReady() {
-  if (window.dashboardUtilsReady === true) return;
-  return new Promise(resolve => {
-    document.addEventListener('dashboardUtilsReady', () => resolve(), { once: true });
-    setTimeout(() => {
-      if (!window.dashboardUtilsReady) {
-        console.warn("[app.js] Timeout waiting for dashboardUtilsReady");
-        resolve();
-      }
-    }, 5000);
-  });
-}
+// Register auth state change listener
+if (window.auth?.AuthBus) {
+  window.auth.AuthBus.addEventListener('authStateChanged', event => {
+    const { authenticated } = event.detail || {};
+    appState.isAuthenticated = authenticated;
 
-async function ensureProjectDashboardInitialized() {
-  if (window.projectDashboardInitialized === true) return;
-  return new Promise(resolve => {
-    document.addEventListener('projectDashboardInitialized', () => resolve(), { once: true });
-    setTimeout(() => {
-      if (!window.projectDashboardInitialized) {
-        console.warn("[app.js] Timeout waiting for projectDashboardInitialized");
-        resolve();
-      }
-    }, 5000);
-  });
-}
+    const authButton = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON);
+    const userMenu = document.querySelector(APP_CONFIG.SELECTORS.USER_MENU);
 
-// GLOBAL EXPORTS
-window.API_CONFIG = API_CONFIG;
-window.SELECTORS = SELECTORS;
-window.apiRequest = apiRequest;
-window.getBaseUrl = getBaseUrl;
-window.ensureAuthenticated = ensureAuthenticated;
-window.loadConversationList = loadConversationList;
-window.isValidUUID = isValidUUID;
-window.navigateToConversation = navigateToConversation;
+    if (authenticated) {
+      if (authButton) authButton.classList.add('hidden');
+      if (userMenu) userMenu.classList.remove('hidden');
 
-// CENTRAL INITIALIZATION
-window.appInitializer = {
-  status: 'pending',
-  queue: [],
-  register: (component) => {
-    if (window.appInitializer.status === 'ready') {
-      try {
-        component.init();
-      } catch (e) {
-        console.error(`[appInitializer] Immediate init error:`, e);
-        window.ChatUtils?.handleError(`Component init (${component.name || 'anonymous'})`, e);
+      // Refresh data
+      if (appState.initialized) {
+        refreshAppData();
       }
     } else {
-      window.appInitializer.queue.push(component);
-      log(`[appInitializer] Registered component: ${component.name || 'anonymous'}`);
+      if (authButton) authButton.classList.remove('hidden');
+      if (userMenu) userMenu.classList.add('hidden');
+
+      // Show project list (will display login required)
+      showProjectListView();
     }
-  },
-  initialize: async () => {
-    if (['initializing', 'ready'].includes(window.appInitializer.status)) {
-      console.log("[appInitializer] Already initializing or ready, skipping...");
-      return;
-    }
-    window.appInitializer.status = 'initializing';
-    try {
-      await initApp();
-      window.appInitializer.status = 'ready';
-      for (const component of window.appInitializer.queue) {
-        try {
-          await component.init();
-        } catch (e) {
-          console.error("[appInitializer] Queue init error:", e);
-          window.ChatUtils?.handleError(`Component init (${component.name || 'anonymous'})`, e);
-        }
-      }
-      window.appInitializer.queue = [];
-    } catch (error) {
-      console.error("[appInitializer] Critical init error:", error);
-      window.ChatUtils?.handleError('App initialization', error) ||
-        alert("Failed to initialize. Please refresh.");
-      window.appInitializer.status = 'error';
-    }
-  }
+  });
+}
+
+// Set up event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  // Start initialization
+  initApp().catch(error => {
+    console.error('[App] Critical initialization error:', error);
+    showNotification('Application failed to initialize. Please refresh.', 'error');
+  });
+
+  // Listen for route changes
+  window.addEventListener('popstate', handleNavigationChange);
+});
+
+// Export to window
+window.app = {
+  apiRequest,
+  getProjectId,
+  loadConversationList,
+  navigateToConversation,
+  showProjectListView,
+  refreshAppData,
+  showNotification,
+  state: appState
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  log("[app.js] DOMContentLoaded - starting app initialization.");
-  window.appInitializer.initialize().catch(error => {
-    console.error("[DOMContentLoaded] Initialization error:", error);
-    alert("Failed to start initialization. Please refresh.");
-  });
-  document.dispatchEvent(new CustomEvent('appJsReady'));
-
-  // Example listeners (if needed):
-  // document.addEventListener('authReady', () => { if (window.auth?.isAuthenticated?.()) refreshAppData(); });
-  // document.addEventListener('projectSelected', e => debouncedLoadProject(e.detail.projectId));
-  // document.addEventListener('showProjectList', () => {
-  //   showProjectListView();
-  //   window.history.pushState({}, '', '/?view=projects');
-  // });
-});
+export default window.app;
