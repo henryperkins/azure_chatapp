@@ -17,8 +17,7 @@ const APP_CONFIG = {
   API_ENDPOINTS: {
     AUTH_VERIFY: '/api/auth/verify/',
     PROJECTS: '/api/projects/',
-    PROJECT_DETAILS: '/api/projects/{projectId}/',
-    // (Remove or adjust any endpoints you no longer need)
+    PROJECT_DETAILS: '/api/projects/{projectId}/'
   },
 
   // DOM selectors
@@ -370,5 +369,8 @@ window.app = {
   showNotification,
   state: appState
 };
+
+// Provide a global alias so that chat.js calls to window.showNotification still work
+window.showNotification = showNotification;
 
 export default window.app;

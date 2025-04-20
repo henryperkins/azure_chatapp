@@ -31,18 +31,20 @@ class ChatManager {
     this.sendButton = null;
     this.titleElement = null;
 
-    // Event callbacks
+    // Event callbacks (unused in this snippet but could be used externally)
     this._eventHandlers = {};
 
     // Model configuration
+    // Pull initial model config from window.modelConfig if available, else fallback
+    const globalConfig = window.modelConfig?.getConfig?.() || {};
     this.modelConfig = {
-      modelName: localStorage.getItem("modelName") || CHAT_CONFIG.DEFAULT_MODEL,
-      maxTokens: parseInt(localStorage.getItem("maxTokens") || CHAT_CONFIG.MAX_TOKENS, 10),
-      extendedThinking: localStorage.getItem("extendedThinking") === "true",
-      thinkingBudget: parseInt(localStorage.getItem("thinkingBudget") || CHAT_CONFIG.THINKING_BUDGET, 10),
-      reasoningEffort: localStorage.getItem("reasoningEffort") || CHAT_CONFIG.REASONING_EFFORT,
-      visionEnabled: localStorage.getItem("visionEnabled") === "true",
-      visionDetail: localStorage.getItem("visionDetail") || "auto"
+      modelName: globalConfig.modelName || localStorage.getItem("modelName") || CHAT_CONFIG.DEFAULT_MODEL,
+      maxTokens: globalConfig.maxTokens || parseInt(localStorage.getItem("maxTokens") || CHAT_CONFIG.MAX_TOKENS, 10),
+      extendedThinking: globalConfig.extendedThinking ?? (localStorage.getItem("extendedThinking") === "true"),
+      thinkingBudget: globalConfig.thinkingBudget || parseInt(localStorage.getItem("thinkingBudget") || CHAT_CONFIG.THINKING_BUDGET, 10),
+      reasoningEffort: globalConfig.reasoningEffort || localStorage.getItem("reasoningEffort") || CHAT_CONFIG.REASONING_EFFORT,
+      visionEnabled: globalConfig.visionEnabled ?? (localStorage.getItem("visionEnabled") === "true"),
+      visionDetail: globalConfig.visionDetail || localStorage.getItem("visionDetail") || "auto"
     };
   }
 
@@ -374,78 +376,26 @@ class ChatManager {
    * @param {Object} config - New configuration
    */
   updateModelConfig(config) {
-    this.modelConfig = {
-      ...this.modelConfig,
-      ...config
-    };
+    // Delegate to modelConfig.js to avoid duplication
+    window.modelConfig.updateConfig(config);
 
-    // Save to localStorage
-    if (config.modelName) localStorage.setItem("modelName", config.modelName);
-    if (config.maxTokens) localStorage.setItem("maxTokens", config.maxTokens);
-    if (config.extendedThinking !== undefined) localStorage.setItem("extendedThinking", config.extendedThinking);
-    if (config.thinkingBudget) localStorage.setItem("thinkingBudget", config.thinkingBudget);
-    if (config.reasoningEffort) localStorage.setItem("reasoningEffort", config.reasoningEffort);
-    if (config.visionEnabled !== undefined) localStorage.setItem("visionEnabled", config.visionEnabled);
-    if (config.visionDetail) localStorage.setItem("visionDetail", config.visionDetail);
+    // Re-sync local modelConfig
+    this.modelConfig = window.modelConfig.getConfig();
 
-    // Update UI elements if they exist
+    // Update UI elements
     const modelSelect = document.getElementById("modelSelect");
+    if (modelSelect && this.modelConfig.modelName) {
+      modelSelect.value = this.modelConfig.modelName;
+    }
+
     const visionToggle = document.getElementById("visionToggle");
+    if (visionToggle && this.modelConfig.visionEnabled !== undefined) {
+      visionToggle.checked = this.modelConfig.visionEnabled;
+    }
+
     const tokensDisplay = document.getElementById("maxTokensValue");
-
-    if (modelSelect && config.modelName) {
-      modelSelect.value = config.modelName;
-    }
-    if (visionToggle && config.visionEnabled !== undefined) {
-      visionToggle.checked = config.visionEnabled;
-    }
-    if (tokensDisplay && config.maxTokens) {
-      tokensDisplay.textContent = `${config.maxTokens} tokens`;
-    }
-  }
-    // Update UI elements if they exist
-    var modelSelect = document.getElementById("modelSelect");
-    if (modelSelect && config.modelName) {
-      modelSelect.value = config.modelName;
-    }
-
-    var visionToggle = document.getElementById("visionToggle");
-    if (visionToggle && config.visionEnabled !== undefined) {
-      visionToggle.checked = config.visionEnabled;
-    }
-
-    // Update tokens display
-    var tokensDisplay = document.getElementById("maxTokensValue");
-    if (tokensDisplay && config.maxTokens) {
-      tokensDisplay.textContent = config.maxTokens + " tokens";
-    }
-
-    // Update UI elements if they exist
-    const modelSelect = document.getElementById("modelSelect");
-    if (modelSelect && config.modelName) {
-      modelSelect.value = config.modelName;
-    }
-
-    const visionToggle = document.getElementById("visionToggle");
-    if (visionToggle && config.visionEnabled !== undefined) {
-      visionToggle.checked = config.visionEnabled;
-    }
-
-    // Update tokens display
-    const tokensDisplay = document.getElementById("maxTokensValue");
-    if (tokensDisplay && config.maxTokens) {
-      tokensDisplay.textContent = `${config.maxTokens} tokens`;
-    }
-
-    // Update UI elements if they exist
-    const modelSelect = document.getElementById("modelSelect");
-    if (modelSelect && config.modelName) {
-      modelSelect.value = config.modelName;
-    }
-
-    const visionToggle = document.getElementById("visionToggle");
-    if (visionToggle && config.visionEnabled !== undefined) {
-      visionToggle.checked = config.visionEnabled;
+    if (tokensDisplay && this.modelConfig.maxTokens) {
+      tokensDisplay.textContent = `${this.modelConfig.maxTokens} tokens`;
     }
   }
 
@@ -524,25 +474,31 @@ class ChatManager {
    * @private
    */
   _bindEvents() {
+    // For demonstration, use trackListener from eventHandler if available:
+    const trackListener = window.eventHandlers?.trackListener ?? ((el, type, fn, opts) => {
+      el.addEventListener(type, fn, opts);
+      return fn;
+    });
+
     // Input field
     if (this.inputField) {
-      this.inputField.addEventListener('keydown', (e) => {
+      trackListener(this.inputField, 'keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           this.sendMessage(this.inputField.value);
         }
-      });
+      }, { passive: false });
     }
 
     // Send button
     if (this.sendButton) {
-      this.sendButton.addEventListener('click', () => {
+      trackListener(this.sendButton, 'click', () => {
         this.sendMessage(this.inputField.value);
       });
     }
 
-    // Regenerate button
-    document.addEventListener('regenerateChat', () => {
+    // Regenerate button (custom event)
+    trackListener(document, 'regenerateChat', () => {
       if (!this.currentConversationId) return;
 
       // Find last user message
@@ -565,7 +521,7 @@ class ChatManager {
     });
 
     // Global model config changes
-    document.addEventListener('modelConfigChanged', (e) => {
+    trackListener(document, 'modelConfigChanged', (e) => {
       if (e.detail) {
         this.updateModelConfig(e.detail);
       }
@@ -618,6 +574,16 @@ class ChatManager {
 
     // Scroll to bottom
     this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
+  }
+
+  /**
+   * Use the global formatting function to keep consistency
+   * @private
+   */
+  _formatText(text) {
+    if (!text) return '';
+    // Delegate to formatting.js's window.formatText
+    return window.formatText ? window.formatText(text) : text;
   }
 
   /**
@@ -803,39 +769,6 @@ class ChatManager {
   }
 
   /**
-   * Format text for display
-   * @param {string} text - Text to format
-   * @returns {string} - Formatted HTML
-   * @private
-   */
-  _formatText(text) {
-    if (!text) return '';
-
-    // Escape HTML
-    let safe = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-
-    // Process code blocks
-    safe = safe.replace(/```([\s\S]*?)```/g, (match, code) => {
-      return `<pre class="code-block"><code>${code.trim()}</code></pre>`;
-    });
-
-    // Process inline code
-    safe = safe.replace(/`([^`]+)`/g, (match, code) => {
-      return `<code class="inline-code">${code}</code>`;
-    });
-
-    // Convert line breaks
-    safe = safe.replace(/\n/g, '<br>');
-
-    return safe;
-  }
-
-  /**
    * Get project ID from various sources
    * @returns {string|null} - Project ID
    * @private
@@ -911,7 +844,7 @@ class ChatManager {
       const isAuthenticated = await window.auth.checkAuth();
 
       if (!isAuthenticated) {
-        window.showNotification("Please log in to continue", "error");
+        window.app.showNotification("Please log in to continue", "error");
         return false;
       }
 
@@ -960,15 +893,15 @@ class ChatManager {
     const message = this._extractErrorMessage(error);
     console.error(`[Chat - ${context}]`, error);
 
-    if (window.showNotification) {
-      window.showNotification(message, "error");
+    if (window.app?.showNotification) {
+      window.app.showNotification(message, "error");
     }
 
     // For auth errors, clear state
     if (message.includes('authentication') ||
-        message.includes('not authenticated') ||
-        message.includes('login') ||
-        (error.status === 401)) {
+      message.includes('not authenticated') ||
+      message.includes('login') ||
+      (error.status === 401)) {
       window.auth?.clearTokenState?.({ source: 'chat_error' });
     }
   }
