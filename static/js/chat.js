@@ -387,6 +387,66 @@ class ChatManager {
     if (config.reasoningEffort) localStorage.setItem("reasoningEffort", config.reasoningEffort);
     if (config.visionEnabled !== undefined) localStorage.setItem("visionEnabled", config.visionEnabled);
     if (config.visionDetail) localStorage.setItem("visionDetail", config.visionDetail);
+
+    // Update UI elements if they exist
+    const modelSelect = document.getElementById("modelSelect");
+    const visionToggle = document.getElementById("visionToggle");
+    const tokensDisplay = document.getElementById("maxTokensValue");
+
+    if (modelSelect && config.modelName) {
+      modelSelect.value = config.modelName;
+    }
+    if (visionToggle && config.visionEnabled !== undefined) {
+      visionToggle.checked = config.visionEnabled;
+    }
+    if (tokensDisplay && config.maxTokens) {
+      tokensDisplay.textContent = `${config.maxTokens} tokens`;
+    }
+  }
+    // Update UI elements if they exist
+    var modelSelect = document.getElementById("modelSelect");
+    if (modelSelect && config.modelName) {
+      modelSelect.value = config.modelName;
+    }
+
+    var visionToggle = document.getElementById("visionToggle");
+    if (visionToggle && config.visionEnabled !== undefined) {
+      visionToggle.checked = config.visionEnabled;
+    }
+
+    // Update tokens display
+    var tokensDisplay = document.getElementById("maxTokensValue");
+    if (tokensDisplay && config.maxTokens) {
+      tokensDisplay.textContent = config.maxTokens + " tokens";
+    }
+
+    // Update UI elements if they exist
+    const modelSelect = document.getElementById("modelSelect");
+    if (modelSelect && config.modelName) {
+      modelSelect.value = config.modelName;
+    }
+
+    const visionToggle = document.getElementById("visionToggle");
+    if (visionToggle && config.visionEnabled !== undefined) {
+      visionToggle.checked = config.visionEnabled;
+    }
+
+    // Update tokens display
+    const tokensDisplay = document.getElementById("maxTokensValue");
+    if (tokensDisplay && config.maxTokens) {
+      tokensDisplay.textContent = `${config.maxTokens} tokens`;
+    }
+
+    // Update UI elements if they exist
+    const modelSelect = document.getElementById("modelSelect");
+    if (modelSelect && config.modelName) {
+      modelSelect.value = config.modelName;
+    }
+
+    const visionToggle = document.getElementById("visionToggle");
+    if (visionToggle && config.visionEnabled !== undefined) {
+      visionToggle.checked = config.visionEnabled;
+    }
   }
 
   // =============== PRIVATE METHODS ===============

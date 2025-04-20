@@ -5,17 +5,17 @@
 
 // Core state
 const sidebarState = {
-  isOpen: window.innerWidth >= 768, // Default: closed on mobile, open on desktop
+  isOpen: window.innerWidth >= 768, // Default: open on desktop, closed on mobile
   activeTab: localStorage.getItem('sidebarActiveTab') || 'recent',
   isAnimating: false
 };
 
-// Tab configuration
+// TABS config
 const TABS = {
   recent: {
     id: 'recentChatsTab',
     section: 'recentChatsSection',
-    loader: () => window.app.loadConversationList()
+    loader: () => window.chatManager.loadConversationList()
   },
   starred: {
     id: 'starredChatsTab',
@@ -34,9 +34,8 @@ const TABS = {
  */
 function init() {
   const sidebar = document.getElementById('mainSidebar');
-
   if (!sidebar) {
-    console.warn('Sidebar element not found');
+    console.warn('[Sidebar] mainSidebar element not found');
     return false;
   }
 
@@ -52,7 +51,7 @@ function init() {
   // Listen for auth changes
   window.auth.AuthBus.addEventListener('authStateChanged', handleAuthChange);
 
-  // Set initial state
+  // Apply initial state
   updateSidebarState();
 
   return true;
@@ -64,13 +63,12 @@ function init() {
 function setupTabs() {
   Object.entries(TABS).forEach(([name, config]) => {
     const tab = document.getElementById(config.id);
-
     if (tab) {
       window.eventHandlers.trackListener(tab, 'click', () => activateTab(name));
     }
   });
 
-  // Set initial active tab
+  // Activate initial tab
   activateTab(sidebarState.activeTab);
 }
 
@@ -84,7 +82,7 @@ function activateTab(tabName) {
   sidebarState.activeTab = tabName;
   localStorage.setItem('sidebarActiveTab', tabName);
 
-  // Update UI
+  // Update UI for each tab
   Object.entries(TABS).forEach(([name, config]) => {
     const isActive = name === tabName;
     const tab = document.getElementById(config.id);
@@ -100,7 +98,7 @@ function activateTab(tabName) {
     }
   });
 
-  // Load tab content if authenticated
+  // If authenticated, load tab content
   window.auth.checkAuth().then(isAuthenticated => {
     if (isAuthenticated && TABS[tabName].loader) {
       TABS[tabName].loader();
@@ -128,14 +126,12 @@ function setupToggleButton() {
     });
   }
 
-  // Handle window resize
+  // Respond to window resize
   window.eventHandlers.trackListener(window, 'resize', () => {
     const isMobile = window.innerWidth < 768;
-
     if (isMobile && sidebarState.isOpen) {
       toggleSidebar(false);
     }
-
     if (!isMobile && !sidebarState.isOpen) {
       sidebarState.isOpen = true;
       updateSidebarState();
@@ -145,14 +141,17 @@ function setupToggleButton() {
 
 /**
  * Toggle sidebar visibility
+ * @param {boolean} [forceState] - True to open, false to close, omit to toggle
  */
 function toggleSidebar(forceState) {
   if (sidebarState.isAnimating) return;
 
-  const newState = typeof forceState === 'boolean' ? forceState : !sidebarState.isOpen;
+  const newState = typeof forceState === 'boolean'
+    ? forceState
+    : !sidebarState.isOpen;
+
   sidebarState.isOpen = newState;
   sidebarState.isAnimating = true;
-
   updateSidebarState();
 
   // Track animation end
@@ -165,17 +164,16 @@ function toggleSidebar(forceState) {
 }
 
 /**
- * Update sidebar visibility
+ * Apply sidebar state to the DOM
  */
 function updateSidebarState() {
   const sidebar = document.getElementById('mainSidebar');
   const toggleBtn = document.getElementById('navToggleBtn');
-
   if (!sidebar) return;
 
   const isMobile = window.innerWidth < 768;
 
-  // Update sidebar transform
+  // Slide in/out on mobile
   if (isMobile) {
     sidebar.classList.toggle('-translate-x-full', !sidebarState.isOpen);
     sidebar.classList.toggle('translate-x-0', sidebarState.isOpen);
@@ -184,35 +182,30 @@ function updateSidebarState() {
     sidebar.classList.remove('-translate-x-full');
   }
 
-  // Manage body scroll on mobile
+  // Manage body scrolling on mobile
   document.body.classList.toggle('sidebar-open', sidebarState.isOpen && isMobile);
 
-  // Update backdrop
+  // Handle backdrop
   updateBackdrop(sidebarState.isOpen && isMobile);
 
-  // Update accessibility attributes
+  // Accessibility
   if (toggleBtn) {
     toggleBtn.setAttribute('aria-expanded', sidebarState.isOpen);
     toggleBtn.setAttribute('aria-label', sidebarState.isOpen ? 'Close sidebar' : 'Open sidebar');
   }
-
-  if (sidebar) {
-    sidebar.setAttribute('aria-hidden', !sidebarState.isOpen);
-  }
+  sidebar.setAttribute('aria-hidden', !sidebarState.isOpen);
 }
 
 /**
- * Create/update/remove backdrop element
+ * Create or destroy backdrop element
  */
 function updateBackdrop(show) {
   let backdrop = document.getElementById('sidebarBackdrop');
-
   if (show && !backdrop) {
     backdrop = document.createElement('div');
     backdrop.id = 'sidebarBackdrop';
     backdrop.className = 'fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden';
     backdrop.setAttribute('aria-hidden', 'true');
-
     window.eventHandlers.trackListener(backdrop, 'click', () => toggleSidebar(false));
     document.body.appendChild(backdrop);
   } else if (!show && backdrop) {
@@ -227,13 +220,13 @@ function handleAuthChange(event) {
   const { authenticated } = event.detail || {};
 
   if (authenticated) {
-    // Reload current tab content
+    // Reload content for the active tab
     const activeTab = TABS[sidebarState.activeTab];
-    if (activeTab && activeTab.loader) {
+    if (activeTab && typeof activeTab.loader === 'function') {
       activeTab.loader();
     }
   } else {
-    // Clear content sections
+    // Clear content in each tab
     Object.values(TABS).forEach(config => {
       const section = document.getElementById(config.section);
       if (section) {
@@ -248,62 +241,10 @@ function handleAuthChange(event) {
 }
 
 /**
- * Load starred conversations
- */
-async function loadStarredConversations() {
-  const container = document.getElementById('starredConversations');
-  if (!container) return [];
-
-  try {
-    const isAuthenticated = await window.auth.checkAuth();
-
-    if (!isAuthenticated) {
-      container.innerHTML = `
-        <li class="text-center p-4 text-gray-500">
-          Please log in to view starred conversations
-        </li>
-      `;
-      return [];
-    }
-
-    // Load starred preferences
-    const response = await window.app.apiRequest('/api/preferences/starred');
-    const starredIds = response.data || [];
-
-    if (starredIds.length === 0) {
-      container.innerHTML = `
-        <li class="text-center p-4 text-gray-500">
-          No starred conversations yet
-        </li>
-      `;
-      return [];
-    }
-
-    // Get all conversations from cache
-    const allConversations = window.app.state.conversations || [];
-    const starredConversations = allConversations.filter(c =>
-      starredIds.includes(c.id)
-    );
-
-    renderStarredConversations(container, starredConversations);
-    return starredConversations;
-  } catch (error) {
-    console.error('Failed to load starred conversations:', error);
-    container.innerHTML = `
-      <li class="text-center p-4 text-red-500">
-        Failed to load starred conversations
-      </li>
-    `;
-    return [];
-  }
-}
-
-/**
  * Setup search functionality
  */
 function setupSearch() {
   const searchInput = document.getElementById('sidebarSearch');
-
   if (searchInput) {
     const debouncedSearch = window.eventHandlers.debounce(searchSidebar, 300);
     window.eventHandlers.trackListener(searchInput, 'input', debouncedSearch);
@@ -311,44 +252,41 @@ function setupSearch() {
 }
 
 /**
- * Search sidebar contents
+ * Search logic based on active tab
  */
-function searchSidebar(event) {
-  const query = event.target.value.toLowerCase().trim();
+function searchSidebar(e) {
+  const query = e.target.value.toLowerCase().trim();
 
   if (sidebarState.activeTab === 'recent' || sidebarState.activeTab === 'starred') {
-    searchConversations(query);
+    filterConversations(query);
   } else if (sidebarState.activeTab === 'projects') {
-    searchProjects(query);
+    filterProjects(query);
   }
 }
 
 /**
- * Filter conversations by search query
+ * Filter conversations by text
  */
-function searchConversations(query) {
-  const container = document.getElementById(
-    sidebarState.activeTab === 'recent' ?
-      'sidebarConversations' : 'starredConversations'
-  );
-
+function filterConversations(query) {
+  const containerId = sidebarState.activeTab === 'recent'
+    ? 'sidebarConversations'
+    : 'starredConversations';
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   const items = container.querySelectorAll('li:not(.text-center)');
   let hasMatches = false;
 
   items.forEach(item => {
-    const title = item.querySelector('.truncate')?.textContent.toLowerCase() || '';
-    const isMatch = query === '' || title.includes(query);
-
+    const title = (item.querySelector('.truncate')?.textContent ?? '').toLowerCase();
+    const isMatch = !query || title.includes(query);
     item.classList.toggle('hidden', !isMatch);
     if (isMatch) hasMatches = true;
   });
 
-  // Show/hide no results message
+  // show/hide "no results"
   let noResultsMsg = container.querySelector('.no-results-message');
-
-  if (!hasMatches && query !== '') {
+  if (!hasMatches && query) {
     if (!noResultsMsg) {
       noResultsMsg = document.createElement('li');
       noResultsMsg.className = 'text-center p-4 text-gray-500 no-results-message';
@@ -361,11 +299,10 @@ function searchConversations(query) {
 }
 
 /**
- * Filter projects by search query
+ * Filter projects by text
  */
-function searchProjects(query) {
+function filterProjects(query) {
   const container = document.getElementById('sidebarProjects');
-
   if (!container) return;
 
   const items = container.querySelectorAll('li:not(.text-center)');
@@ -373,16 +310,13 @@ function searchProjects(query) {
 
   items.forEach(item => {
     const title = item.textContent.toLowerCase();
-    const isMatch = query === '' || title.includes(query);
-
+    const isMatch = !query || title.includes(query);
     item.classList.toggle('hidden', !isMatch);
     if (isMatch) hasMatches = true;
   });
 
-  // Show/hide no results message
   let noResultsMsg = container.querySelector('.no-results-message');
-
-  if (!hasMatches && query !== '') {
+  if (!hasMatches && query) {
     if (!noResultsMsg) {
       noResultsMsg = document.createElement('li');
       noResultsMsg.className = 'text-center p-4 text-gray-500 no-results-message';
@@ -395,7 +329,58 @@ function searchProjects(query) {
 }
 
 /**
- * Render starred conversations
+ * Load starred conversations (simplified)
+ */
+async function loadStarredConversations() {
+  const container = document.getElementById('starredConversations');
+  if (!container) return [];
+
+  try {
+    const isAuthenticated = await window.auth.checkAuth();
+    if (!isAuthenticated) {
+      container.innerHTML = `
+        <li class="text-center p-4 text-gray-500">
+          Please log in to view starred conversations
+        </li>
+      `;
+      return [];
+    }
+
+    // Fetch starred IDs
+    const response = await window.app.apiRequest('/api/preferences/starred');
+    const starredIds = response.data || [];
+
+    if (starredIds.length === 0) {
+      container.innerHTML = `
+        <li class="text-center p-4 text-gray-500">
+          No starred conversations yet
+        </li>
+      `;
+      return [];
+    }
+
+    // If chatManager has a getAllConversations() or you keep them in memory:
+    // let allConversations = window.chatManager.getAllConversations() || [];
+    // Temporarily, if app still uses app.state:
+    const allConversations = window.app.state?.conversations || [];
+
+    const starredConversations = allConversations.filter(c => starredIds.includes(c.id));
+    renderStarredConversations(container, starredConversations);
+
+    return starredConversations;
+  } catch (error) {
+    console.error('[Sidebar] Failed to load starred conversations:', error);
+    container.innerHTML = `
+      <li class="text-center p-4 text-red-500">
+        Failed to load starred conversations
+      </li>
+    `;
+    return [];
+  }
+}
+
+/**
+ * Render starred conversation items
  */
 function renderStarredConversations(container, conversations) {
   if (!container) return;
@@ -410,8 +395,7 @@ function renderStarredConversations(container, conversations) {
   }
 
   container.innerHTML = '';
-
-  conversations.forEach(conv => {
+  conversations.forEach((conv) => {
     const li = document.createElement('li');
     li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
 
@@ -419,28 +403,37 @@ function renderStarredConversations(container, conversations) {
       <div class="flex items-center justify-between">
         <span class="truncate">${conv.title || `Conversation ${conv.id}`}</span>
         <button class="text-yellow-500 unstar-btn ml-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915
+                 c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674
+                 c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976
+                 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0
+                 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81
+                 h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
           </svg>
         </button>
       </div>
     `;
 
-    // Add click handlers
-    window.eventHandlers.trackListener(li, 'click', (e) => {
+    // Delegate conversation load via chatManager
+    window.eventHandlers.trackListener(li, 'click', async (e) => {
       if (!e.target.closest('.unstar-btn')) {
-        window.app.navigateToConversation(conv.id);
+        try {
+          await window.chatManager.loadConversation(conv.id);
+        } catch (err) {
+          console.error('[Sidebar] Failed to load conversation:', err);
+        }
       }
     });
 
+    // Unstar button
     const unstarBtn = li.querySelector('.unstar-btn');
     window.eventHandlers.trackListener(unstarBtn, 'click', async (e) => {
       e.stopPropagation();
-
       try {
         await toggleStarConversation(conv.id);
         li.remove();
-
         if (container.children.length === 0) {
           container.innerHTML = `
             <li class="text-center p-4 text-gray-500">
@@ -449,7 +442,7 @@ function renderStarredConversations(container, conversations) {
           `;
         }
       } catch (error) {
-        console.error('Failed to unstar conversation:', error);
+        console.error('[Sidebar] Failed to unstar conversation:', error);
       }
     });
 
@@ -458,37 +451,31 @@ function renderStarredConversations(container, conversations) {
 }
 
 /**
- * Toggle star status for a conversation
+ * Toggle star for a conversation
  */
 async function toggleStarConversation(conversationId) {
   try {
     const isAuthenticated = await window.auth.checkAuth();
-
-    if (!isAuthenticated) {
-      throw new Error('Authentication required');
-    }
+    if (!isAuthenticated) throw new Error('Authentication required');
 
     // Get current starred list
-    const response = await window.app.apiRequest('/api/preferences/starred');
-    const starredIds = response.data || [];
+    const resp = await window.app.apiRequest('/api/preferences/starred');
+    const starredIds = resp.data || [];
 
-    // Toggle star status
+    // Flip star
     const isStarred = starredIds.includes(conversationId);
-    const updatedIds = isStarred
+    const updated = isStarred
       ? starredIds.filter(id => id !== conversationId)
       : [...starredIds, conversationId];
-
-    // Update on server
+    // Save to server
     await window.app.apiRequest('/api/preferences/starred', 'PUT', {
-      starred_conversations: updatedIds
+      starred_conversations: updated
     });
-
-    // Update localStorage for quick access
-    localStorage.setItem('starredConversations', JSON.stringify(updatedIds));
+    localStorage.setItem('starredConversations', JSON.stringify(updated));
 
     return !isStarred;
   } catch (error) {
-    console.error('Error toggling star status:', error);
+    console.error('[Sidebar] Error toggling star:', error);
     throw error;
   }
 }
@@ -500,15 +487,14 @@ function isConversationStarred(conversationId) {
   try {
     const starredJson = localStorage.getItem('starredConversations');
     if (!starredJson) return false;
-
     const starredIds = JSON.parse(starredJson);
     return starredIds.includes(conversationId);
-  } catch (e) {
+  } catch (err) {
     return false;
   }
 }
 
-// Export public API
+// Export public sidebar API
 window.sidebar = {
   init,
   toggleSidebar,
@@ -518,5 +504,5 @@ window.sidebar = {
   state: sidebarState
 };
 
-// Initialize when DOM is ready
+// Initialize on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', init);

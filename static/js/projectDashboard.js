@@ -1,41 +1,25 @@
 /**
  * projectDashboard.js
- * Manages the project dashboard UI and coordinates components
+ * Coordinates project dashboard components and state
  */
 
 // Project dashboard components
 const components = {
   projectList: null,
-  projectDetails: null,
-  knowledgeBase: null
+  projectDetails: null
 };
 
 // Dashboard state
 const dashboardState = {
   currentView: null,
-  currentProject: null,
-  isInitialized: false,
-  isInitializing: false
+  currentProject: null
 };
 
 /**
  * Initialize the dashboard
  */
 async function init() {
-  // Prevent duplicate initialization
-  if (dashboardState.isInitialized || dashboardState.isInitializing) {
-    return dashboardState.isInitialized;
-  }
-
-  dashboardState.isInitializing = true;
-
   try {
-    // Check authentication
-    const isAuthenticated = await window.auth.checkAuth();
-
-    // Create UI containers if needed
-    ensureContainers();
-
     // Initialize components
     await initializeComponents();
 
@@ -45,96 +29,48 @@ async function init() {
     // Set up event listeners
     setupEventListeners();
 
-    // Mark as initialized
-    dashboardState.isInitialized = true;
-    dashboardState.isInitializing = false;
-
     // Dispatch initialization event
     document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
 
     return true;
   } catch (error) {
     console.error('Dashboard initialization failed:', error);
-    dashboardState.isInitializing = false;
-
-    if (window.app?.showNotification) {
-      window.app.showNotification('Dashboard initialization failed', 'error');
-    }
-
+    window.app?.showNotification('Dashboard initialization failed', 'error');
     return false;
   }
 }
 
-/**
- * Ensure required containers exist
- */
-function ensureContainers() {
-  // Check for projectListView
-  let projectListView = document.getElementById('projectListView');
-  if (!projectListView) {
-    projectListView = document.createElement('div');
-    projectListView.id = 'projectListView';
-    projectListView.className = 'flex-1 overflow-y-auto p-4 hidden';
-    document.body.appendChild(projectListView);
-  }
-
-  // Check for projectDetailsView
-  let projectDetailsView = document.getElementById('projectDetailsView');
-  if (!projectDetailsView) {
-    projectDetailsView = document.createElement('div');
-    projectDetailsView.id = 'projectDetailsView';
-    projectDetailsView.className = 'flex-1 overflow-y-auto p-4 hidden';
-    document.body.appendChild(projectDetailsView);
-  }
-
-  // Check for login required message
-  let loginRequiredMessage = document.getElementById('loginRequiredMessage');
-  if (!loginRequiredMessage) {
-    loginRequiredMessage = document.createElement('div');
-    loginRequiredMessage.id = 'loginRequiredMessage';
-    loginRequiredMessage.className = 'text-center py-10 text-gray-500 hidden';
-    loginRequiredMessage.innerHTML = 'Please log in to view your projects';
-    document.body.appendChild(loginRequiredMessage);
-  }
-}
 
 /**
- * Initialize all dashboard components
+ * Initialize dashboard components
  */
 async function initializeComponents() {
-  // Create project list component
-  if (window.ProjectListComponent && !components.projectList) {
-    components.projectList = new window.ProjectListComponent({
-      elementId: 'projectList',
-      onViewProject: handleViewProject
-    });
-  }
+  components.projectList = new window.ProjectListComponent({
+    elementId: 'projectList',
+    onViewProject: handleViewProject
+  });
 
-  // Create project details component
-  if (window.ProjectDetailsComponent && !components.projectDetails) {
-    components.projectDetails = new window.ProjectDetailsComponent({
-      onBack: handleBackToList
-    });
-  }
+  components.projectDetails = new window.ProjectDetailsComponent({
+    onBack: handleBackToList
+  });
 }
 
 /**
  * Set up event listeners
  */
 function setupEventListeners() {
-  // Listen for authentication changes
+  // Authentication state
   window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
 
-  // Listen for project-related events
+  // Project events
   document.addEventListener('projectsLoaded', handleProjectsLoaded);
   document.addEventListener('projectLoaded', handleProjectLoaded);
   document.addEventListener('projectStatsLoaded', handleProjectStatsLoaded);
   document.addEventListener('projectFilesLoaded', handleFilesLoaded);
-  document.addEventListener('projectConversationsLoaded', handleConversationsLoaded);
   document.addEventListener('projectArtifactsLoaded', handleArtifactsLoaded);
   document.addEventListener('projectNotFound', handleProjectNotFound);
 
-  // Listen for navigation events
+  // Navigation
   window.addEventListener('popstate', handlePopState);
 }
 
@@ -366,9 +302,7 @@ function handleProjectNotFound(event) {
 window.projectDashboard = {
   init,
   showProjectList,
-  showProjectDetails,
-  state: dashboardState,
-  components
+  showProjectDetails
 };
 
 // Export showProjectsView for backward compatibility
