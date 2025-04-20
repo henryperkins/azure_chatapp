@@ -437,6 +437,39 @@ function getCurrentProject() {
   return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null;
 }
 
+// File upload utilities
+async function prepareFileUploads(projectId, fileList) {
+  const validatedFiles = [];
+  const invalidFiles = [];
+
+  for (const file of fileList) {
+    if (file.size > 30_000_000) {
+      invalidFiles.push({ file, reason: 'Max size exceeded (30MB)' });
+    } else {
+      validatedFiles.push({ file });
+    }
+  }
+  return { validatedFiles, invalidFiles };
+}
+
+async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('projectId', projectId);
+      
+      await window.app.apiRequest(`/api/projects/${projectId}/files`, 'POST', formData);
+      return true;
+    } catch (err) {
+      attempt++;
+      if (attempt >= maxRetries) throw err;
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // exponential backoff
+    }
+  }
+}
+
 // Export public API
 window.projectManager = {
   loadProjects,
@@ -451,5 +484,7 @@ window.projectManager = {
   toggleArchiveProject,
   createConversation,
   deleteProjectConversation,
-  getCurrentProject
+  getCurrentProject,
+  prepareFileUploads,
+  uploadFileWithRetry
 };

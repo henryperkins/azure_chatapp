@@ -361,16 +361,21 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('popstate', handleNavigationChange);
 });
 
-// Expose some parts to the global scope if needed
+// Consolidate global exports
 window.app = {
   apiRequest,
   navigateToConversation,
   showProjectListView,
   showNotification,
-  state: appState
+  state: appState,
+  initialize: initApp,
+  getProjectId: () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('project') || localStorage.getItem('selectedProjectId');
+  }
 };
 
-// Provide a global alias so that chat.js calls to window.showNotification still work
+// Deprecated globals - phase these out over time
 window.showNotification = showNotification;
 
 export default window.app;
