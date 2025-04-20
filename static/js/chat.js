@@ -1,10 +1,16 @@
 /**
  * chat.js
- * A consolidated chat module that handles conversation management, messaging,
- * and UI rendering for the chat system. All conversations are project-based.
+ * A refactored chat module that handles conversation management, messaging,
+ * and UI rendering for the chat system in a more standardized way:
+ *  - Reliance on window.app.state.isAuthenticated instead of direct auth checks
+ *  - Use of window.app.apiRequest for all server calls
+ *  - Centralized event handling via window.eventHandlers.trackListener
+ *  - Simplified error handling, removing direct references to window.auth where possible
  */
 
-// Configuration
+/**
+ * Configuration - retains the local config for default model, tokens, etc.
+ */
 const CHAT_CONFIG = {
   DEFAULT_MODEL: "claude-3-sonnet-20240229",
   MAX_TOKENS: 4096,
@@ -38,13 +44,33 @@ class ChatManager {
     // Pull initial model config from window.modelConfig if available, else fallback
     const globalConfig = window.modelConfig?.getConfig?.() || {};
     this.modelConfig = {
-      modelName: globalConfig.modelName || localStorage.getItem("modelName") || CHAT_CONFIG.DEFAULT_MODEL,
-      maxTokens: globalConfig.maxTokens || parseInt(localStorage.getItem("maxTokens") || CHAT_CONFIG.MAX_TOKENS, 10),
-      extendedThinking: globalConfig.extendedThinking ?? (localStorage.getItem("extendedThinking") === "true"),
-      thinkingBudget: globalConfig.thinkingBudget || parseInt(localStorage.getItem("thinkingBudget") || CHAT_CONFIG.THINKING_BUDGET, 10),
-      reasoningEffort: globalConfig.reasoningEffort || localStorage.getItem("reasoningEffort") || CHAT_CONFIG.REASONING_EFFORT,
-      visionEnabled: globalConfig.visionEnabled ?? (localStorage.getItem("visionEnabled") === "true"),
-      visionDetail: globalConfig.visionDetail || localStorage.getItem("visionDetail") || "auto"
+      modelName:
+        globalConfig.modelName ||
+        localStorage.getItem("modelName") ||
+        CHAT_CONFIG.DEFAULT_MODEL,
+      maxTokens:
+        globalConfig.maxTokens ||
+        parseInt(localStorage.getItem("maxTokens") || CHAT_CONFIG.MAX_TOKENS, 10),
+      extendedThinking:
+        globalConfig.extendedThinking ??
+        (localStorage.getItem("extendedThinking") === "true"),
+      thinkingBudget:
+        globalConfig.thinkingBudget ||
+        parseInt(
+          localStorage.getItem("thinkingBudget") || CHAT_CONFIG.THINKING_BUDGET,
+          10
+        ),
+      reasoningEffort:
+        globalConfig.reasoningEffort ||
+        localStorage.getItem("reasoningEffort") ||
+        CHAT_CONFIG.REASONING_EFFORT,
+      visionEnabled:
+        globalConfig.visionEnabled ??
+        (localStorage.getItem("visionEnabled") === "true"),
+      visionDetail:
+        globalConfig.visionDetail ||
+        localStorage.getItem("visionDetail") ||
+        "auto"
     };
   }
 
@@ -55,53 +81,61 @@ class ChatManager {
    */
   async initialize(options = {}) {
     if (this.isInitialized) {
-      console.warn("Chat system already initialized");
+      console.warn("[Chat] System already initialized");
       return true;
     }
 
-    console.log("Initializing chat system...");
+    console.log("[Chat] Initializing chat system...");
 
     try {
-      // Wait for auth to be ready
-      await this._ensureAuthReady();
+      // Use app.state.isAuthenticated to avoid multiple direct checks
+      if (!window.app?.state?.isAuthenticated) {
+        console.warn("[Chat] User not authenticated, cannot initialize chat");
+        // We can still set up UI but won't load any conversation
+      }
 
       // Setup UI elements
       this._setupUIElements(options);
 
-      // Bind events
+      // Bind events using eventHandlers
       this._bindEvents();
 
       // Check URL for conversation ID
       const urlParams = new URLSearchParams(window.location.search);
-      const chatId = urlParams.get('chatId');
+      const chatId = urlParams.get("chatId");
 
       // Get project ID from URL or localStorage
       this.projectId = this._getProjectId();
 
       if (!this.projectId) {
-        console.warn("No project selected, chat system requires a project");
+        console.warn("[Chat] No project selected, chat system requires a project");
         this._showMessage("system", "Please select a project to start a conversation");
+        this.isInitialized = true;
         return false;
       }
 
-      // Load conversation if ID present, otherwise create new
-      if (chatId) {
-        await this.loadConversation(chatId);
-      } else {
-        await this.createNewConversation();
+      // If user is authenticated, load or create conversation
+      if (window.app.state.isAuthenticated) {
+        if (chatId) {
+          await this.loadConversation(chatId);
+        } else {
+          await this.createNewConversation();
+        }
       }
 
       this.isInitialized = true;
-      console.log("Chat system initialized");
+      console.log("[Chat] System initialized");
 
       // Dispatch event
-      document.dispatchEvent(new CustomEvent('chatInitialized', {
-        detail: { instance: this }
-      }));
+      document.dispatchEvent(
+        new CustomEvent("chatInitialized", {
+          detail: { instance: this }
+        })
+      );
 
       return true;
     } catch (error) {
-      console.error("Chat initialization failed:", error);
+      console.error("[Chat] Initialization failed:", error);
       this._handleError("initialization", error);
       return false;
     }
@@ -114,12 +148,17 @@ class ChatManager {
    */
   async loadConversation(conversationId) {
     if (!conversationId) {
-      console.error("Invalid conversation ID");
+      console.error("[Chat] Invalid conversation ID given to loadConversation");
+      return false;
+    }
+
+    if (!window.app?.state?.isAuthenticated) {
+      console.warn("[Chat] loadConversation called but user not authenticated");
       return false;
     }
 
     if (this.isLoading) {
-      console.warn("Loading already in progress");
+      console.warn("[Chat] Loading already in progress");
       return false;
     }
 
@@ -127,18 +166,12 @@ class ChatManager {
     this._showLoadingIndicator();
 
     try {
-      // Verify authentication
-      const isAuthenticated = await this._checkAuth();
-      if (!isAuthenticated) return false;
-
       // Clear existing messages
       this._clearMessages();
 
-      // Load conversation from server
       const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}`;
       const conversation = await window.app.apiRequest(endpoint, "GET");
 
-      // Load messages
       const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages`;
       const messagesResponse = await window.app.apiRequest(messagesEndpoint, "GET");
       const messages = messagesResponse.data?.messages || [];
@@ -156,10 +189,10 @@ class ChatManager {
 
       // Update URL if needed
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('chatId') !== conversationId) {
+      if (urlParams.get("chatId") !== conversationId) {
         const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('chatId', conversationId);
-        window.history.pushState({}, '', newUrl.toString());
+        newUrl.searchParams.set("chatId", conversationId);
+        window.history.pushState({}, "", newUrl.toString());
       }
 
       this.isLoading = false;
@@ -179,22 +212,20 @@ class ChatManager {
    * @returns {Promise<Object>} - New conversation object
    */
   async createNewConversation() {
+    if (!window.app?.state?.isAuthenticated) {
+      console.warn("[Chat] User not authenticated, cannot create conversation");
+      throw new Error("Not authenticated");
+    }
+
+    if (!this.projectId) {
+      throw new Error("[Chat] Project ID is required to create a conversation");
+    }
+
+    // Clear existing messages
+    this._clearMessages();
+
+    // Create conversation via API
     try {
-      // Verify authentication
-      const isAuthenticated = await this._checkAuth();
-      if (!isAuthenticated) {
-        throw new Error("Not authenticated");
-      }
-
-      // Check for project ID
-      if (!this.projectId) {
-        throw new Error("Project ID is required to create a conversation");
-      }
-
-      // Clear existing messages
-      this._clearMessages();
-
-      // Create conversation via API
       const endpoint = `/api/projects/${this.projectId}/conversations`;
       const payload = {
         title: `New Chat ${new Date().toLocaleString()}`,
@@ -205,7 +236,7 @@ class ChatManager {
       const conversation = response.data || response;
 
       if (!conversation.id) {
-        throw new Error("Invalid response from server");
+        throw new Error("[Chat] Invalid response from server creating conversation");
       }
 
       // Store conversation ID
@@ -218,10 +249,10 @@ class ChatManager {
 
       // Update URL
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('chatId', conversation.id);
-      window.history.pushState({}, '', newUrl.toString());
+      newUrl.searchParams.set("chatId", conversation.id);
+      window.history.pushState({}, "", newUrl.toString());
 
-      console.log(`New conversation created: ${conversation.id}`);
+      console.log(`[Chat] New conversation created: ${conversation.id}`);
       return conversation;
     } catch (error) {
       this._handleError("creating conversation", error);
@@ -237,8 +268,14 @@ class ChatManager {
   async sendMessage(messageText) {
     if (!messageText.trim()) return;
 
+    // If not authenticated, user can't send message
+    if (!window.app?.state?.isAuthenticated) {
+      window.app?.showNotification?.("Please log in to send messages", "error");
+      return;
+    }
+
+    // Ensure there's a conversation
     if (!this.currentConversationId) {
-      // Auto-create a conversation if needed
       try {
         await this.createNewConversation();
       } catch (error) {
@@ -246,10 +283,6 @@ class ChatManager {
         return;
       }
     }
-
-    // Verify authentication
-    const isAuthenticated = await this._checkAuth();
-    if (!isAuthenticated) return;
 
     // Immediately show user message in UI
     this._showMessage("user", messageText);
@@ -293,7 +326,6 @@ class ChatManager {
       // Hide thinking indicator
       this._hideThinkingIndicator();
 
-      // Process and show response
       if (response.data?.assistant_message) {
         const assistantMessage = response.data.assistant_message;
         this._showMessage(
@@ -327,6 +359,11 @@ class ChatManager {
   async deleteConversation() {
     if (!this.currentConversationId) return false;
 
+    if (!window.app?.state?.isAuthenticated) {
+      console.warn("[Chat] Cannot delete conversation - not authenticated");
+      return false;
+    }
+
     try {
       const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}`;
       await window.app.apiRequest(endpoint, "DELETE");
@@ -338,7 +375,13 @@ class ChatManager {
       // Update URL
       const urlParams = new URLSearchParams(window.location.search);
       urlParams.delete("chatId");
-      window.history.pushState({}, "", `${window.location.pathname}${urlParams.toString() ? `?${urlParams}` : ""}`);
+      window.history.pushState(
+        {},
+        "",
+        `${window.location.pathname}${
+          urlParams.toString() ? `?${urlParams}` : ""
+        }`
+      );
 
       return true;
     } catch (error) {
@@ -355,12 +398,12 @@ class ChatManager {
     this.currentImage = base64Image;
     if (base64Image && this.messageContainer) {
       // Show image indicator in last user message if exists
-      const userMessages = this.messageContainer.querySelectorAll('.user-message');
+      const userMessages = this.messageContainer.querySelectorAll(".user-message");
       if (userMessages.length > 0) {
         const lastUserMessage = userMessages[userMessages.length - 1];
 
-        const imageIndicator = document.createElement('div');
-        imageIndicator.className = 'image-indicator';
+        const imageIndicator = document.createElement("div");
+        imageIndicator.className = "image-indicator";
         imageIndicator.innerHTML = `
           <img src="${base64Image}" alt="Attached image" class="preview-image" />
           <span>Image attached</span>
@@ -407,50 +450,51 @@ class ChatManager {
    */
   _setupUIElements(options) {
     // Find or create container
-    const containerSelector = options.containerSelector || '#chatUI';
+    const containerSelector = options.containerSelector || "#chatUI";
     this.container = document.querySelector(containerSelector);
 
     if (!this.container) {
-      console.warn(`Chat container not found: ${containerSelector}`);
+      console.warn(`[Chat] Container not found: ${containerSelector}`);
       this.container = this._createChatContainer();
     }
 
     // Set up message container
-    const messageSelector = options.messageContainerSelector || '#conversationArea';
+    const messageSelector = options.messageContainerSelector || "#conversationArea";
     this.messageContainer = document.querySelector(messageSelector);
 
     if (!this.messageContainer) {
-      this.messageContainer = document.createElement('div');
-      this.messageContainer.id = messageSelector.replace('#', '');
+      this.messageContainer = document.createElement("div");
+      this.messageContainer.id = messageSelector.replace("#", "");
       this.container.appendChild(this.messageContainer);
     }
 
     // Set up input field
-    const inputSelector = options.inputSelector || '#chatInput';
+    const inputSelector = options.inputSelector || "#chatInput";
     this.inputField = document.querySelector(inputSelector);
 
     if (!this.inputField) {
-      const inputArea = document.createElement('div');
-      inputArea.className = 'chat-input-area';
+      const inputArea = document.createElement("div");
+      inputArea.className = "chat-input-area";
 
-      this.inputField = document.createElement('input');
-      this.inputField.id = inputSelector.replace('#', '');
-      this.inputField.className = 'chat-input';
-      this.inputField.placeholder = 'Type your message...';
+      this.inputField = document.createElement("input");
+      this.inputField.id = inputSelector.replace("#", "");
+      this.inputField.className = "chat-input";
+      this.inputField.placeholder = "Type your message...";
 
-      this.sendButton = document.createElement('button');
-      this.sendButton.className = 'chat-send-button';
-      this.sendButton.textContent = 'Send';
+      this.sendButton = document.createElement("button");
+      this.sendButton.className = "chat-send-button";
+      this.sendButton.textContent = "Send";
 
       inputArea.appendChild(this.inputField);
       inputArea.appendChild(this.sendButton);
       this.container.appendChild(inputArea);
     } else {
-      this.sendButton = document.querySelector(options.sendButtonSelector || '#sendBtn');
+      // If inputField was found, find the send button
+      this.sendButton = document.querySelector(options.sendButtonSelector || "#sendBtn");
     }
 
     // Set up title element
-    this.titleElement = document.querySelector(options.titleSelector || '#chatTitle');
+    this.titleElement = document.querySelector(options.titleSelector || "#chatTitle");
   }
 
   /**
@@ -458,12 +502,11 @@ class ChatManager {
    * @private
    */
   _createChatContainer() {
-    const container = document.createElement('div');
-    container.id = 'chatUI';
-    container.className = 'chat-container';
+    const container = document.createElement("div");
+    container.id = "chatUI";
+    container.className = "chat-container";
 
-    // Add to page
-    const main = document.querySelector('main') || document.body;
+    const main = document.querySelector("main") || document.body;
     main.appendChild(container);
 
     return container;
@@ -474,54 +517,69 @@ class ChatManager {
    * @private
    */
   _bindEvents() {
-    // For demonstration, use trackListener from eventHandler if available:
-    const trackListener = window.eventHandlers?.trackListener ?? ((el, type, fn, opts) => {
-      el.addEventListener(type, fn, opts);
-      return fn;
-    });
+    // trackListener from eventHandler
+    const trackListener =
+      window.eventHandlers?.trackListener ??
+      ((el, type, fn, opts) => {
+        el.addEventListener(type, fn, opts);
+        return fn;
+      });
 
     // Input field
     if (this.inputField) {
-      trackListener(this.inputField, 'keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          this.sendMessage(this.inputField.value);
-        }
-      }, { passive: false });
+      trackListener(
+        this.inputField,
+        "keydown",
+        (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            this.sendMessage(this.inputField.value);
+          }
+        },
+        { passive: false, description: "Send on Enter" }
+      );
     }
 
     // Send button
     if (this.sendButton) {
-      trackListener(this.sendButton, 'click', () => {
+      trackListener(this.sendButton, "click", () => {
         this.sendMessage(this.inputField.value);
       });
     }
 
-    // Regenerate button (custom event)
-    trackListener(document, 'regenerateChat', () => {
-      if (!this.currentConversationId) return;
+    // Regenerate event
+    trackListener(
+      document,
+      "regenerateChat",
+      () => {
+        if (!this.currentConversationId) return;
 
-      // Find last user message
-      const userMessages = Array.from(this.messageContainer.querySelectorAll('.user-message'));
-      if (userMessages.length === 0) return;
+        const userMessages = Array.from(
+          this.messageContainer.querySelectorAll(".user-message")
+        );
+        if (userMessages.length === 0) return;
 
-      const lastUserMessage = userMessages[userMessages.length - 1];
-      const messageText = lastUserMessage.querySelector('.message-content')?.textContent;
+        const lastUserMessage = userMessages[userMessages.length - 1];
+        const messageText =
+          lastUserMessage.querySelector(".message-content")?.textContent;
 
-      if (messageText) {
-        // Remove last assistant message
-        const assistantMessages = Array.from(this.messageContainer.querySelectorAll('.assistant-message'));
-        if (assistantMessages.length > 0) {
-          assistantMessages[assistantMessages.length - 1].remove();
+        if (messageText) {
+          // Remove last assistant message
+          const assistantMessages = Array.from(
+            this.messageContainer.querySelectorAll(".assistant-message")
+          );
+          if (assistantMessages.length > 0) {
+            assistantMessages[assistantMessages.length - 1].remove();
+          }
+
+          this.sendMessage(messageText);
         }
+      },
+      { description: "Regenerate chat message" }
+    );
 
-        // Resend last user message
-        this.sendMessage(messageText);
-      }
-    });
-
-    // Global model config changes
-    trackListener(document, 'modelConfigChanged', (e) => {
+    // Model config changes
+    trackListener(document, "modelConfigChanged", (e) => {
       if (e.detail) {
         this.updateModelConfig(e.detail);
       }
@@ -541,25 +599,23 @@ class ChatManager {
   _showMessage(role, content, id = null, thinking = null, redactedThinking = false, metadata = null) {
     if (!this.messageContainer) return;
 
-    // Create message element
-    const message = document.createElement('div');
+    const message = document.createElement("div");
     message.className = `message ${role}-message`;
     if (id) message.id = id;
 
-    // Create header
-    const header = document.createElement('div');
-    header.className = 'message-header';
+    const header = document.createElement("div");
+    header.className = "message-header";
     header.innerHTML = `
-      <span class="message-role">${role === 'assistant' ? 'Claude' : role === 'user' ? 'You' : 'System'}</span>
+      <span class="message-role">
+        ${role === "assistant" ? "Claude" : role === "user" ? "You" : "System"}
+      </span>
       <span class="message-time">${new Date().toLocaleTimeString()}</span>
     `;
 
-    // Create content
-    const contentEl = document.createElement('div');
-    contentEl.className = 'message-content';
+    const contentEl = document.createElement("div");
+    contentEl.className = "message-content";
     contentEl.innerHTML = this._formatText(content);
 
-    // Assemble message
     message.appendChild(header);
     message.appendChild(contentEl);
 
@@ -569,10 +625,7 @@ class ChatManager {
       message.appendChild(thinkingContainer);
     }
 
-    // Add to container
     this.messageContainer.appendChild(message);
-
-    // Scroll to bottom
     this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
   }
 
@@ -581,43 +634,38 @@ class ChatManager {
    * @private
    */
   _sanitizeHtml(unsafe) {
-    if (!unsafe) return '';
-    const div = document.createElement('div');
+    if (!unsafe) return "";
+    const div = document.createElement("div");
     div.textContent = unsafe;
     return div.innerHTML;
   }
 
   _formatText(text) {
-    if (!text) return '';
+    if (!text) return "";
     const sanitized = this._sanitizeHtml(text);
-    // Delegate to formatting.js's window.formatText
+    // Delegate to formatting.js's window.formatText if available
     return window.formatText ? window.formatText(sanitized) : sanitized;
   }
 
   /**
    * Create a collapsible thinking block
-   * @param {string} thinking - Thinking content
-   * @param {boolean} redacted - Whether thinking was redacted
-   * @returns {HTMLElement} - Thinking block element
    * @private
    */
   _createThinkingBlock(thinking, redacted) {
-    const container = document.createElement('div');
-    container.className = 'thinking-container';
+    const container = document.createElement("div");
+    container.className = "thinking-container";
 
-    // Create toggle button
-    const toggle = document.createElement('button');
-    toggle.className = 'thinking-toggle';
+    const toggle = document.createElement("button");
+    toggle.className = "thinking-toggle";
     toggle.innerHTML = `
       <svg class="thinking-chevron" viewBox="0 0 24 24">
         <path d="M19 9l-7 7-7-7"></path>
       </svg>
-      <span>${thinking ? 'Show detailed reasoning' : 'Safety notice'}</span>
+      <span>${thinking ? "Show detailed reasoning" : "Safety notice"}</span>
     `;
 
-    // Create content div
-    const content = document.createElement('div');
-    content.className = 'thinking-content hidden';
+    const content = document.createElement("div");
+    content.className = "thinking-content hidden";
 
     if (thinking) {
       content.innerHTML = this._formatText(thinking);
@@ -625,24 +673,29 @@ class ChatManager {
       content.innerHTML = `
         <div class="redacted-notice">
           <svg viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10
+                    10 10 10-4.48 10-10S17.52 2 12 2zm1
+                    15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
           </svg>
           <span>Some reasoning was redacted for safety reasons</span>
         </div>
       `;
     }
 
-    // Add toggle behavior
-    toggle.addEventListener('click', () => {
-      content.classList.toggle('hidden');
-      const chevron = toggle.querySelector('.thinking-chevron');
+    toggle.addEventListener("click", () => {
+      content.classList.toggle("hidden");
+      const chevron = toggle.querySelector(".thinking-chevron");
 
-      if (content.classList.contains('hidden')) {
-        toggle.querySelector('span').textContent = thinking ? 'Show detailed reasoning' : 'Show safety notice';
-        if (chevron) chevron.style.transform = '';
+      if (content.classList.contains("hidden")) {
+        toggle.querySelector("span").textContent = thinking
+          ? "Show detailed reasoning"
+          : "Show safety notice";
+        if (chevron) chevron.style.transform = "";
       } else {
-        toggle.querySelector('span').textContent = thinking ? 'Hide detailed reasoning' : 'Hide safety notice';
-        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        toggle.querySelector("span").textContent = thinking
+          ? "Hide detailed reasoning"
+          : "Hide safety notice";
+        if (chevron) chevron.style.transform = "rotate(180deg)";
       }
     });
 
@@ -659,9 +712,9 @@ class ChatManager {
   _showLoadingIndicator() {
     if (!this.messageContainer) return;
 
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.id = 'chatLoadingIndicator';
-    loadingIndicator.className = 'loading-indicator';
+    const loadingIndicator = document.createElement("div");
+    loadingIndicator.id = "chatLoadingIndicator";
+    loadingIndicator.className = "loading-indicator";
     loadingIndicator.innerHTML = `
       <div class="loading-spinner"></div>
       <span>Loading conversation...</span>
@@ -675,7 +728,7 @@ class ChatManager {
    * @private
    */
   _hideLoadingIndicator() {
-    const indicator = document.getElementById('chatLoadingIndicator');
+    const indicator = document.getElementById("chatLoadingIndicator");
     if (indicator) {
       indicator.remove();
     }
@@ -688,9 +741,9 @@ class ChatManager {
   _showThinkingIndicator() {
     if (!this.messageContainer) return;
 
-    const thinkingIndicator = document.createElement('div');
-    thinkingIndicator.id = 'thinkingIndicator';
-    thinkingIndicator.className = 'thinking-indicator';
+    const thinkingIndicator = document.createElement("div");
+    thinkingIndicator.id = "thinkingIndicator";
+    thinkingIndicator.className = "thinking-indicator";
     thinkingIndicator.innerHTML = `
       <div class="thinking-dots">
         <span></span>
@@ -709,7 +762,7 @@ class ChatManager {
    * @private
    */
   _hideThinkingIndicator() {
-    const indicator = document.getElementById('thinkingIndicator');
+    const indicator = document.getElementById("thinkingIndicator");
     if (indicator) {
       indicator.remove();
     }
@@ -723,12 +776,14 @@ class ChatManager {
   _showErrorMessage(message) {
     if (!this.messageContainer) return;
 
-    const errorEl = document.createElement('div');
-    errorEl.className = 'error-message';
+    const errorEl = document.createElement("div");
+    errorEl.className = "error-message";
     errorEl.innerHTML = `
       <div class="error-icon">
         <svg viewBox="0 0 24 24">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
+          <path d="M12 2C6.48 2 2 6.48 2
+                  12s4.48 10 10 10 10-4.48
+                  10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
         </svg>
       </div>
       <div class="error-content">
@@ -747,13 +802,12 @@ class ChatManager {
    */
   _clearMessages() {
     if (this.messageContainer) {
-      this.messageContainer.innerHTML = '';
+      this.messageContainer.innerHTML = "";
     }
   }
 
   /**
    * Render multiple messages
-   * @param {Array} messages - Messages to render
    * @private
    */
   _renderMessages(messages) {
@@ -764,7 +818,7 @@ class ChatManager {
       return;
     }
 
-    messages.forEach(msg => {
+    messages.forEach((msg) => {
       this._showMessage(
         msg.role,
         msg.content,
@@ -777,26 +831,22 @@ class ChatManager {
   }
 
   /**
-   * Get project ID from various sources
-   * @returns {string|null} - Project ID
+   * Retrieve project ID from various sources
    * @private
    */
   _getProjectId() {
-    // From localStorage
-    const storedId = localStorage.getItem('selectedProjectId');
+    const storedId = localStorage.getItem("selectedProjectId");
     if (storedId && this._isValidUUID(storedId)) {
       return storedId;
     }
 
-    // From URL path
     const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
     if (pathMatch && pathMatch[1] && this._isValidUUID(pathMatch[1])) {
       return pathMatch[1];
     }
 
-    // From URL query
     const urlParams = new URLSearchParams(window.location.search);
-    const queryId = urlParams.get('project') || urlParams.get('projectId');
+    const queryId = urlParams.get("project") || urlParams.get("projectId");
     if (queryId && this._isValidUUID(queryId)) {
       return queryId;
     }
@@ -806,8 +856,8 @@ class ChatManager {
 
   /**
    * Validate UUID format
-   * @param {string} uuid - UUID to validate
-   * @returns {boolean} - Is valid UUID
+   * @param {string} uuid
+   * @returns {boolean}
    * @private
    */
   _isValidUUID(uuid) {
@@ -817,62 +867,15 @@ class ChatManager {
   }
 
   /**
-   * Ensure authentication is ready
-   * @returns {Promise<void>}
-   * @private
-   */
-  async _ensureAuthReady() {
-    if (!window.auth?.isReady) {
-      return new Promise(resolve => {
-        const authReadyCheck = () => {
-          if (window.auth?.isReady) {
-            document.removeEventListener('authReady', authReadyCheck);
-            resolve();
-          }
-        };
-
-        document.addEventListener('authReady', authReadyCheck);
-
-        // Safety timeout
-        setTimeout(() => {
-          document.removeEventListener('authReady', authReadyCheck);
-          resolve();
-        }, 5000);
-      });
-    }
-  }
-
-  /**
-   * Check authentication status
-   * @returns {Promise<boolean>} - Is authenticated
-   * @private
-   */
-  async _checkAuth() {
-    try {
-      const isAuthenticated = await window.auth.checkAuth();
-
-      if (!isAuthenticated) {
-        window.app.showNotification("Please log in to continue", "error");
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      this._handleError("authentication check", error);
-      return false;
-    }
-  }
-
-  /**
    * Extract user-friendly error message from error object
-   * @param {Object|string} error - Error object or message
-   * @returns {string} - Formatted error message
+   * @param {Object|string} error
+   * @returns {string}
    * @private
    */
   _extractErrorMessage(error) {
     if (!error) return "Unknown error occurred";
 
-    if (typeof error === 'string') {
+    if (typeof error === "string") {
       return error;
     }
 
@@ -880,7 +883,7 @@ class ChatManager {
       return error.message;
     }
 
-    if (typeof error === 'object') {
+    if (typeof error === "object") {
       try {
         return JSON.stringify(error);
       } catch (e) {
@@ -893,8 +896,6 @@ class ChatManager {
 
   /**
    * Handle errors with consistent formatting
-   * @param {string} context - Error context
-   * @param {Error|string} error - Error object or message
    * @private
    */
   _handleError(context, error) {
@@ -903,14 +904,6 @@ class ChatManager {
 
     if (window.app?.showNotification) {
       window.app.showNotification(message, "error");
-    }
-
-    // For auth errors, clear state
-    if (message.includes('authentication') ||
-      message.includes('not authenticated') ||
-      message.includes('login') ||
-      (error.status === 401)) {
-      window.auth?.clearTokenState?.({ source: 'chat_error' });
     }
   }
 }
