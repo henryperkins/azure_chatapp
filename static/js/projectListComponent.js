@@ -337,13 +337,12 @@ class ProjectListComponent {
     this.state.projects = projects;
 
     // Check authentication
-    window.auth.checkAuth().then(isAuthenticated => {
-      if (!isAuthenticated) {
-        this._showLoginRequired();
-        return;
-      }
+    if (!window.app.state.isAuthenticated) {
+      this._showLoginRequired();
+      return;
+    }
 
-      if (projects.length === 0) {
+    if (projects.length === 0) {
         this._showEmptyState();
         return;
       }
@@ -352,10 +351,9 @@ class ProjectListComponent {
       this.element.innerHTML = '';
       const fragment = document.createDocumentFragment();
 
-      projects.forEach(project => {
-        const card = this._createProjectCard(project);
-        fragment.appendChild(card);
-      });
+    projects.forEach(project => {
+      const card = this._createProjectCard(project);
+      fragment.appendChild(card);
 
       this.element.appendChild(fragment);
     });
@@ -436,7 +434,7 @@ class ProjectListComponent {
     // Date
     if (this.state.customization.showDate && project.updated_at) {
       const date = document.createElement('span');
-      date.textContent = this._formatDate(project.updated_at);
+      date.textContent = window.formatDate(project.updated_at);
       footer.appendChild(date);
     }
 

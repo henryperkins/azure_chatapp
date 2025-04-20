@@ -15,7 +15,13 @@ const TABS = {
   recent: {
     id: 'recentChatsTab',
     section: 'recentChatsSection',
-    loader: () => window.chatManager.loadConversationList()
+    loader: () => {
+      if (window.chatManager?.loadConversationList) {
+        return window.chatManager.loadConversationList();
+      }
+      console.warn('chatManager not available for loading conversations');
+      return Promise.resolve([]);
+    }
   },
   starred: {
     id: 'starredChatsTab',
@@ -25,7 +31,14 @@ const TABS = {
   projects: {
     id: 'projectsTab',
     section: 'projectsSection',
-    loader: () => window.app.loadProjects()
+    loader: () => {
+      if (window.app?.loadProjects) {
+        return window.app.loadProjects();
+      } else if (window.projectManager?.loadProjects) {
+        return window.projectManager.loadProjects('all');
+      }
+      return Promise.resolve([]);
+    }
   }
 };
 
@@ -98,12 +111,10 @@ function activateTab(tabName) {
     }
   });
 
-  // If authenticated, load tab content
-  window.auth.checkAuth().then(isAuthenticated => {
-    if (isAuthenticated && TABS[tabName].loader) {
-      TABS[tabName].loader();
-    }
-  });
+  // Load tab content if authenticated
+  if (window.app?.state?.isAuthenticated && TABS[tabName].loader) {
+    TABS[tabName].loader();
+  }
 }
 
 /**
@@ -220,11 +231,25 @@ function handleAuthChange(event) {
   const { authenticated } = event.detail || {};
 
   if (authenticated) {
-    // Reload content for the active tab
-    const activeTab = TABS[sidebarState.activeTab];
-    if (activeTab && typeof activeTab.loader === 'function') {
-      activeTab.loader();
-    }
+    // Wait briefly to ensure dependencies are loaded
+    setTimeout(() => {
+      const activeTab = TABS[sidebarState.activeTab];
+      if (activeTab && typeof activeTab.loader === 'function') {
+        try {
+          activeTab.loader();
+        } catch (err) {
+          console.error('Failed to load tab content:', err);
+          const section = document.getElementById(activeTab.section);
+          if (section) {
+            section.innerHTML = `
+              <div class="text-center p-4 text-red-500">
+                Failed to load content
+              </div>
+            `;
+          }
+        }
+      }
+    }, 100);
   } else {
     // Clear content in each tab
     Object.values(TABS).forEach(config => {
@@ -336,8 +361,7 @@ async function loadStarredConversations() {
   if (!container) return [];
 
   try {
-    const isAuthenticated = await window.auth.checkAuth();
-    if (!isAuthenticated) {
+    if (!window.app?.state?.isAuthenticated) {
       container.innerHTML = `
         <li class="text-center p-4 text-gray-500">
           Please log in to view starred conversations
@@ -455,8 +479,7 @@ function renderStarredConversations(container, conversations) {
  */
 async function toggleStarConversation(conversationId) {
   try {
-    const isAuthenticated = await window.auth.checkAuth();
-    if (!isAuthenticated) throw new Error('Authentication required');
+    if (!window.app?.state?.isAuthenticated) throw new Error('Authentication required');
 
     // Get current starred list
     const resp = await window.app.apiRequest('/api/preferences/starred');

@@ -1232,9 +1232,5 @@ async _processSingleFile(projectId, file) {
   }
 }
 
-// Export for both browser and module environments
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = KnowledgeBaseComponent;
-} else {
-  window.KnowledgeBaseComponent = KnowledgeBaseComponent;
-}
+// Export the class for controlled initialization
+export default KnowledgeBaseComponent;

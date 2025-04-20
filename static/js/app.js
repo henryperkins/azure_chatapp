@@ -207,10 +207,9 @@ async function handleNavigationChange() {
   const projectId = urlParams.get('project');
 
   try {
-    const isAuthenticated = await window.auth.checkAuth();
-    appState.isAuthenticated = isAuthenticated;
+    appState.isAuthenticated = window.app.state.isAuthenticated;
 
-    if (!isAuthenticated) {
+    if (!appState.isAuthenticated) {
       toggleElement('PROJECT_LIST_VIEW', false);
       toggleElement('PROJECT_DETAILS_VIEW', false);
       toggleElement('LOGIN_REQUIRED_MESSAGE', true);
@@ -289,22 +288,16 @@ async function initApp() {
   }
 
   appState.currentPhase = 'auth_checked';
-  appState.isAuthenticated = window.auth.isAuthenticated();
+  appState.isAuthenticated = window.app.state.isAuthenticated;
 
   // Initialize other components
   try {
-    if (window.eventHandlers?.init) {
-      await window.eventHandlers.init();
-    }
+    // Removed call to window.eventHandlers.init() - now done near the end of initApp
 
-    if (window.sidebar) {
-      window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
-    }
+    // Removed direct call to window.sidebar - moved to unified initialization near the end of initApp
 
     // Initialize the new chat manager if not already done
-    if (window.chatManager && !window.chatManager.isInitialized) {
-      await window.chatManager.initialize();
-    }
+    // Removed chatManager initialization - moved to unified initialization near the end of initApp
 
     // Initialize model configuration UI if available
     if (window.uiRenderer?.setupModelDropdown) {
@@ -316,13 +309,43 @@ async function initApp() {
     console.error('[App] Component initialization failed:', error);
   }
 
+  // 1) Initialize global modules in order
+  await window.eventHandlers?.init?.();
+  await window.modalManager?.init?.();
+  await window.chatExtensions?.initChatExtensions?.();
+
+  // Initialize knowledge base component
+  if (window.KnowledgeBaseComponent) {
+    window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+  }
+
+  // Initialize chat manager before sidebar
+  if (window.chatManager?.initialize) {
+    await window.chatManager.initialize();
+  }
+
+  // 2) Initialize dashboards, chat, etc.
+  if (window.initProjectDashboard) {
+    await window.initProjectDashboard();
+  }
+  if (window.sidebar) {
+    window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
+  }
+  if (window.chatManager && !window.chatManager.isInitialized) {
+    await window.chatManager.initialize();
+  }
+
+  // 3) If needed, unify call to project manager loading
+  if (appState.isAuthenticated && window.projectManager?.loadProjects) {
+    await window.projectManager.loadProjects('all');
+  }
+
   // Perform initial navigation
   await handleNavigationChange();
 
   appState.initializing = false;
   appState.initialized = true;
   appState.currentPhase = 'complete';
-
   console.log('[App] Initialization complete');
   return true;
 }
@@ -370,6 +393,7 @@ window.app = {
   showNotification,
   state: appState,
   initialize: initApp,
+  loadProjects,
   getProjectId: () => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('project') || localStorage.getItem('selectedProjectId');

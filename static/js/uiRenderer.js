@@ -92,6 +92,43 @@ function renderConversations(data) {
   });
 }
 
+function renderProjects(projects) {
+  const container = document.getElementById('sidebarProjects');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (!projects || projects.length === 0) {
+    const emptyMsg = document.createElement('li');
+    emptyMsg.className = 'text-center text-gray-500 py-4';
+    emptyMsg.textContent = 'No projects yet';
+    container.appendChild(emptyMsg);
+    return;
+  }
+
+  projects.forEach(project => {
+    const item = document.createElement('li');
+    item.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
+
+    const title = document.createElement('div');
+    title.className = 'font-medium truncate';
+    title.textContent = project.name || `Project ${project.id}`;
+
+    const desc = document.createElement('div');
+    desc.className = 'text-xs text-gray-500 truncate mt-1';
+    desc.textContent = project.description || 'No description';
+
+    item.appendChild(title);
+    item.appendChild(desc);
+
+    item.addEventListener('click', () => {
+      if (window.navigateToProject) window.navigateToProject(project.id);
+    });
+
+    container.appendChild(item);
+  });
+}
+
 // Export to window for app.js integration
 window.uiRenderer = {
   renderConversations,

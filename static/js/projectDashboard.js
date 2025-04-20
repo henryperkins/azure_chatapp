@@ -116,11 +116,9 @@ function showProjectList() {
   window.history.pushState({}, '', currentUrl.toString());
 
   // Load projects if authenticated
-  window.auth.checkAuth().then(isAuthenticated => {
-    if (isAuthenticated && window.projectManager?.loadProjects) {
-      window.projectManager.loadProjects('all');
-    }
-  });
+  if (window.app.state.isAuthenticated && window.projectManager?.loadProjects) {
+    window.projectManager.loadProjects('all');
+  }
 }
 
 /**
@@ -148,15 +146,15 @@ function showProjectDetails(projectId) {
   window.history.pushState({}, '', currentUrl.toString());
 
   // Load project details
-  window.auth.checkAuth().then(isAuthenticated => {
-    if (isAuthenticated && window.projectManager?.loadProjectDetails) {
-      window.projectManager.loadProjectDetails(projectId).catch(error => {
-        console.error('Failed to load project details:', error);
-        window.app?.showNotification('Failed to load project', 'error');
-        showProjectList();
-      });
-    }
-  });
+  if (window.app.state.isAuthenticated && window.projectManager?.loadProjectDetails) {
+    window.projectManager.loadProjectDetails(projectId).catch(error => {
+      console.error('Failed to load project details:', error);
+      window.app?.showNotification('Failed to load project', 'error');
+      showProjectList();
+    });
+  } else {
+    showProjectList();
+  }
 
   return true;
 }
