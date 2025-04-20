@@ -580,10 +580,18 @@ class ChatManager {
    * Use the global formatting function to keep consistency
    * @private
    */
+  _sanitizeHtml(unsafe) {
+    if (!unsafe) return '';
+    const div = document.createElement('div');
+    div.textContent = unsafe;
+    return div.innerHTML;
+  }
+
   _formatText(text) {
     if (!text) return '';
+    const sanitized = this._sanitizeHtml(text);
     // Delegate to formatting.js's window.formatText
-    return window.formatText ? window.formatText(text) : text;
+    return window.formatText ? window.formatText(sanitized) : sanitized;
   }
 
   /**

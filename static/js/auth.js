@@ -366,6 +366,11 @@ async function loginUser(username, password) {
 async function logout(e) {
   e?.preventDefault();
 
+  // Clear project-related localStorage
+  ['selectedProjectId', 'projectFilter'].forEach(key => {
+    localStorage.removeItem(key);
+  });
+
   broadcastAuth(false, null);
 
   try {

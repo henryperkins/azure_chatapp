@@ -5,6 +5,7 @@
 
 // Configuration
 const APP_CONFIG = {
+  DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
   // Timeout values (ms)
   TIMEOUTS: {
     INITIALIZATION: 10000,

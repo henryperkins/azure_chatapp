@@ -23,7 +23,7 @@ let projectLoadingInProgress = false;
  */
 async function loadProjects(filter = 'all') {
   if (projectLoadingInProgress) {
-    console.log("[projectManager] Project loading already in progress");
+    APP_CONFIG.DEBUG && console.log("[projectManager] Project loading already in progress");
     return [];
   }
 

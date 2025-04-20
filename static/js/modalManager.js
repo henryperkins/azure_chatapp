@@ -63,6 +63,11 @@
      * @param {object} options
      * @returns {boolean} success
      */
+    _manageBodyScroll(enableScroll) {
+      document.body.style.overflow = enableScroll ? '' : 'hidden';
+      document.documentElement.style.overflow = enableScroll ? '' : 'hidden';
+    }
+
     show(modalName, options = {}) {
       // If app is still initializing, optionally skip
       if (window.__appInitializing && !options.showDuringInitialization) {
@@ -102,8 +107,7 @@
         modalEl.showModal();
         modalEl.style.zIndex = '2000';
         this.activeModal = modalId;
-        // Optionally disable body scroll
-        // document.body.style.overflow = 'hidden';
+        this._manageBodyScroll(false);
       } else {
         // Fallback if no <dialog> support
         console.warn(`[ModalManager] .showModal() not available for ID='${modalId}'. Using fallback display.`);
@@ -141,7 +145,7 @@
 
       if (this.activeModal === modalId) {
         this.activeModal = null;
-        document.body.style.overflow = '';
+        this._manageBodyScroll(true);
       }
       return true;
     }
