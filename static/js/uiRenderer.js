@@ -3,56 +3,6 @@
  * Separated from app.js to reduce file size and improve modularity.
  */
 
-function createProjectListItem(project) {
-  try {
-    const projectData = project.data || project;
-    if (!projectData?.id || !projectData?.name) {
-      console.error('Invalid project data:', project);
-      return null;
-    }
-    const li = document.createElement('li');
-    li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded cursor-pointer flex items-center transition-colors duration-150';
-    li.dataset.projectId = projectData.id;
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = projectData.name;
-    nameSpan.className = 'flex-1 truncate';
-    li.appendChild(nameSpan);
-    if (projectData.pinned) {
-      const pinIcon = document.createElement('span');
-      pinIcon.textContent = '📌';
-      pinIcon.className = 'ml-1 text-yellow-600';
-      li.appendChild(pinIcon);
-    }
-    li.addEventListener('click', () => {
-      if (window.debouncedLoadProject) window.debouncedLoadProject(projectData.id);
-    });
-    return li;
-  } catch (error) {
-    console.error('Error creating project list item:', error);
-    return null;
-  }
-}
-
-function renderProjects(projectsArray) {
-  const container = document.querySelector('#sidebarProjects');
-  if (!container) {
-    console.warn('[renderProjects] Sidebar project container not found.');
-    return;
-  }
-  container.innerHTML = '';
-  if (projectsArray.length > 0) {
-    projectsArray.forEach(project => {
-      const li = createProjectListItem(project);
-      if (li) container.appendChild(li);
-    });
-  } else {
-    console.warn('[renderProjects] No projects found, showing empty state.');
-    const element = document.createElement('li');
-    element.className = 'text-gray-500 text-center py-4';
-    element.textContent = 'No projects found';
-    container.appendChild(element);
-  }
-}
 
 function createConversationListItem(item) {
   const li = document.createElement('li');

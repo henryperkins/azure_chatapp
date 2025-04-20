@@ -161,6 +161,16 @@ class FileUploadComponent {
     const invalidFiles = [];
 
     for (const file of files) {
+      // Basic filename sanitization
+      const sanitizedName = file.name.replace(/[^\w\.\-]/g, '_');
+      if (sanitizedName !== file.name) {
+        invalidFiles.push({
+          file,
+          error: `Invalid characters in filename`
+        });
+        continue;
+      }
+
       const ext = '.' + file.name.split('.').pop().toLowerCase();
       const isValidExt = this.fileConstants.allowedExtensions.includes(ext);
       const isValidSize = file.size <= this.fileConstants.maxSizeMB * 1024 * 1024;
