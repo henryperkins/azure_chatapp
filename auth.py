@@ -80,7 +80,7 @@ class CookieSettings:
         )
         if is_local_dev:
             secure = False
-            samesite = "lax"
+            samesite = "none" if settings.DEBUG else "lax"
             domain = None
         elif self.cookie_domain:
             domain = self.cookie_domain
@@ -462,8 +462,7 @@ DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 async def refresh_token(
     request: Request,
     response: Response,
-    session: DBSessionDep,
-    user: User = Depends(get_user_from_token),
+    session: DBSessionDep
 ) -> LoginResponse:
     """
     Exchanges a valid refresh token for a new access token.
@@ -472,8 +471,16 @@ async def refresh_token(
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
         logger.debug("No refresh token cookie found during refresh.")
-        raise HTTPException(status_code=401, detail="Refresh token cookie missing.")
+        # Clear any invalid tokens
+        set_secure_cookie(response, "access_token", "", 0, request)
+        set_secure_cookie(response, "refresh_token", "", 0, request)
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token missing. Please login again."
+        )
 
+    # Get user using the same session to avoid multiple sessions
+    user = await get_user_from_token(request, session, expected_type="refresh")
     logger.debug("Attempting token refresh for user: %s", user.username)
 
     try:
@@ -482,16 +489,23 @@ async def refresh_token(
             decoded = await verify_token(refresh_cookie, "refresh", request)
         except HTTPException as e:
             logger.warning("Invalid refresh token: %s", e.detail)
+            # Clear invalid tokens
+            set_secure_cookie(response, "access_token", "", 0, request)
+            set_secure_cookie(response, "refresh_token", "", 0, request)
             raise HTTPException(
                 status_code=401,
                 detail="Invalid refresh token. Please login again."
             )
 
-        # Check for existing transaction and rollback if needed
+        # Ensure we have a clean session state
         if session.in_transaction():
             await session.rollback()
+        else:
+            # Reset the session if it's dirty
+            await session.flush()
+            await session.rollback()
 
-        # Begin new transaction
+        # Begin new transaction with clear session state
         async with session.begin():
             locked_user = await session.get(User, user.id, with_for_update=True)
             if not locked_user:
@@ -553,15 +567,18 @@ class VerifyResponse(BaseModel):
     username: Optional[str] = None
     user_id: Optional[int] = None
     token_version: Optional[int] = None
-
 @router.get("/verify", response_model=VerifyResponse)
 async def verify_auth_status(
-    current_user_and_token: Tuple[User, str] = Depends(get_current_user_and_token),
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
 ) -> VerifyResponse:
     """
     Verifies an access token, returning user info.
+    Uses a single session from the request context.
     """
-    user, _ = current_user_and_token
+    # We'll retrieve (user, token) the same way get_current_user_and_token did,
+    # but now passing the same session from the endpoint:
+    user, token = await get_current_user_and_token(request)
     return VerifyResponse(
         authenticated=True,
         username=user.username,
@@ -668,12 +685,16 @@ async def set_cookies_endpoint(
 async def logout_user(
     request: Request,
     response: Response,
-    current_user: User = Depends(get_user_from_token),  # uses refresh token
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, str]:
     """
     Invalidates session by incrementing token_version, blacklists refresh, clears cookies.
+    Ensures a single session usage per request.
     """
+    # Pull user using the single session from this request,
+    # specifying 'refresh' if you want them to hold a valid refresh token.
+    current_user = await get_user_from_token(request, session, expected_type="refresh")
+
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
         logger.warning("Logout attempt without refresh token cookie")
@@ -728,7 +749,7 @@ async def logout_user(
                         logger.error("Failed to blacklist token %s: %s", token_id, e)
     except Exception as e:
         logger.error("Error during logout transaction: %s", e)
-        # Continue with cookie clearing even if transaction failed
+        # Continue with cookie clearing even if other operations fail
 
     # Always clear cookies even if other operations fail
     try:
