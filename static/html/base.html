@@ -181,7 +181,7 @@
                   }
 
                   try {
-                    const response = await window.auth.handleRegister(new FormData(form));
+                    const response = await window.auth.register(new FormData(form));
                     window.showNotification?.('Registration successful', 'success');
                     switchAuthTab('login');
                   } catch (error) {
