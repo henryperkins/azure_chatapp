@@ -18,6 +18,12 @@ class ProjectDetailsComponent {
       isLoading: {}
     };
 
+    // Provide default file constants if none were passed in.
+    this.fileConstants = options.fileConstants || {
+      allowedExtensions: ['.pdf', '.doc', '.docx', '.txt', '.csv', '.json', '.jpg', '.jpeg', '.png', '.gif', '.zip'],
+      maxSizeMB: 10
+    };
+
     // Element references
     this.elements = {
       container: null,
@@ -96,7 +102,7 @@ class ProjectDetailsComponent {
     // Tab buttons
     const tabButtons = document.querySelectorAll('.project-tab-btn');
     tabButtons.forEach(button => {
-      window.eventHandlers.trackListener(button, 'click', (e) => {
+      window.eventHandlers.trackListener(button, 'click', () => {
         const tabName = button.dataset.tab;
         if (tabName) {
           this.switchTab(tabName);
@@ -263,11 +269,101 @@ class ProjectDetailsComponent {
       container.innerHTML = `
         <div class="text-center py-8 text-base-content/70">
           <p>No conversations yet</p>
+        </div>
+      `;
+      return;
+    }
+
+    // If we have conversations, clear the container first
+    container.innerHTML = '';
+
+    // Render each conversation
+    conversations.forEach(conversation => {
+      const item = this._createConversationItem(conversation);
+      container.appendChild(item);
+    });
+  }
+
+  /**
+   * Render artifacts list
+   * @param {Array} artifacts - Artifacts to render
+   */
+  renderArtifacts(artifacts = []) {
+    const container = this.elements.artifactsList;
+    if (!container) return;
+
+    if (!artifacts.length) {
+      container.innerHTML = `
+        <div class="text-center py-8 text-base-content/70">
+          <p>No artifacts to display</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+
+    artifacts.forEach(artifact => {
+      const artifactItem = this._createArtifactItem(artifact);
+      container.appendChild(artifactItem);
+    });
+  }
+
+  /**
+   * Render stats
+   * @param {Object} stats - Stats object
+   */
+  renderStats(stats) {
+    // Example: update some displayed stats if needed
+    if (!stats || typeof stats !== 'object') return;
+    // Implement your logic here
+  }
+
+  /**
+   * Create a new chat / conversation
+   * This method might delegate to a chat manager
+   */
+  async createNewChat() {
+    try {
+      await window.chatManager.initialize();
+      const newConversationId = await window.chatManager.createConversation(this.state.currentProject?.id);
+
+      // Switch to the chat tab and load the new conversation
+      localStorage.setItem('selectedProjectId', this.state.currentProject?.id);
+      this.switchTab('chat');
+
+      await window.chatManager.loadConversation(newConversationId);
+
+      // Update URL
+      const url = new URL(window.location.href);
+      url.searchParams.set('chatId', newConversationId);
+      window.history.pushState({}, '', url.toString());
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      window.showNotification('Failed to create new conversation', 'error');
+    }
+  }
+
+  /* =========================================================================
+   * PRIVATE METHODS
+   * ========================================================================= */
+
+  /**
+   * Update project header sections
+   * @param {Object} project - Project data
+   * @private
+   */
+  _updateProjectHeader(project) {
+    if (this.elements.title) {
+      this.elements.title.textContent = project.title || 'Untitled Project';
+    }
+    if (this.elements.description) {
+      this.elements.description.textContent = project.description || '';
     }
   }
 
   /**
-   * Load content for active tab
+   * Load content for a given tab
    * @param {string} tabName - Tab name
    * @private
    */
@@ -304,6 +400,9 @@ class ProjectDetailsComponent {
       case 'chat':
         this._initializeChat();
         break;
+
+      default:
+        break;
     }
   }
 
@@ -329,6 +428,30 @@ class ProjectDetailsComponent {
   }
 
   /**
+   * Helper to perform an operation with a loading indicator
+   * @param {string} section - Section name
+   * @param {Function} fn - Async function to execute
+   * @returns {Promise<any>}
+   * @private
+   */
+  async _withLoading(section, fn) {
+    if (this.state.isLoading[section]) return;
+
+    this.state.isLoading[section] = true;
+    this._showLoading(section);
+
+    try {
+      return await fn();
+    } catch (error) {
+      console.error(`[ProjectDetailsComponent] Error in ${section}:`, error);
+      window.showNotification(`Failed to load ${section}`, 'error');
+    } finally {
+      this.state.isLoading[section] = false;
+      this._hideLoading(section);
+    }
+  }
+
+  /**
    * Show loading indicator for a section
    * @param {string} section - Section name
    * @private
@@ -350,238 +473,6 @@ class ProjectDetailsComponent {
     if (indicator) {
       indicator.classList.add('hidden');
     }
-  }
-
-  /**
-   * Helper to perform operation with loading indicator
-   * @param {string} section - Section name
-   * @param {Function} fn - Function to execute
-   * @returns {Promise<any>} - Result of the function
-   * @private
-   */
-  async _withLoading(section, fn) {
-    if (this.state.isLoading[section]) return;
-
-    this.state.isLoading[section] = true;
-    this._showLoading(section);
-
-    try {
-      return await fn();
-    } catch (error) {
-      console.error(`[ProjectDetailsComponent] Error in ${section}:`, error);
-      window.showNotification(`Failed to load ${section}`, 'error');
-    } finally {
-      this.state.isLoading[section] = false;
-      this._hideLoading(section);
-    }
-  }
-
-  /* =========================================================================
-   * PRIVATE METHODS - FILE HANDLING
-   * ========================================================================= */
-
-
-  /**
-   * Handle file drop
-   * @param {Event} e - Drop event
-   * @private
-   */
-  _handleFileDrop(e) {
-    if (!this.state.currentProject?.id) return;
-
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
-
-    this._uploadFiles(files);
-  }
-
-  /**
-   * Upload files
-   * @param {FileList} files - Files to upload
-   * @private
-   */
-  async _uploadFiles(files) {
-    if (!this.state.currentProject?.id) {
-      window.showNotification('No project selected', 'error');
-      return;
-    }
-
-    const { validFiles, invalidFiles } = this._validateFiles(files);
-
-    // Handle invalid files
-    invalidFiles.forEach(({ file, error }) => {
-      window.showNotification(`Skipped ${file.name}: ${error}`, 'error');
-    });
-
-    if (validFiles.length === 0) return;
-
-    // Show progress
-    this._setupUploadProgress(validFiles.length);
-
-    // Upload files in batches
-    const BATCH_SIZE = 3;
-    const projectId = this.state.currentProject.id;
-
-    for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
-      const batch = validFiles.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(file => this._uploadFile(projectId, file)));
-    }
-
-    // Refresh project data
-    if (window.projectManager?.loadProjectFiles) {
-      await window.projectManager.loadProjectFiles(projectId);
-    }
-  }
-
-  /**
-   * Upload a single file
-   * @param {string} projectId - Project ID
-   * @param {File} file - File to upload
-   * @returns {Promise<void>}
-   * @private
-   */
-  async _uploadFile(projectId, file) {
-    try {
-      if (!window.projectManager?.uploadFile) {
-        throw new Error('Upload function not available');
-      }
-
-      await window.projectManager.uploadFile(projectId, file);
-
-      // Update progress
-      this._updateUploadProgress(1, 0);
-
-      window.showNotification(`${file.name} uploaded successfully`, 'success');
-    } catch (error) {
-      console.error(`Upload error for ${file.name}:`, error);
-
-      // Update progress
-      this._updateUploadProgress(0, 1);
-
-      const errorMsg = this._getUploadErrorMessage(error, file.name);
-      window.showNotification(`Failed to upload ${file.name}: ${errorMsg}`, 'error');
-    }
-  }
-
-  /**
-   * Validate files
-   * @param {FileList} files - Files to validate
-   * @returns {Object} - Valid and invalid files
-   * @private
-   */
-  _validateFiles(files) {
-    const validFiles = [];
-    const invalidFiles = [];
-
-    for (const file of files) {
-      const ext = '.' + file.name.split('.').pop().toLowerCase();
-      const isValidExt = this.fileConstants.allowedExtensions.includes(ext);
-      const isValidSize = file.size <= this.fileConstants.maxSizeMB * 1024 * 1024;
-
-      if (!isValidExt) {
-        invalidFiles.push({
-          file,
-          error: `Invalid file type (${ext}). Allowed: ${this.fileConstants.allowedExtensions.join(', ')}`
-        });
-      } else if (!isValidSize) {
-        invalidFiles.push({
-          file,
-          error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${this.fileConstants.maxSizeMB}MB)`
-        });
-      } else {
-        validFiles.push(file);
-      }
-    }
-
-    return { validFiles, invalidFiles };
-  }
-
-  /**
-   * Set up upload progress
-   * @param {number} total - Total files
-   * @private
-   */
-  _setupUploadProgress(total) {
-    this.uploadStatus = { total, completed: 0, failed: 0 };
-
-    if (this.elements.uploadProgress) {
-      this.elements.uploadProgress.classList.remove('hidden');
-    }
-
-    if (this.elements.progressBar) {
-      this.elements.progressBar.value = 0;
-      this.elements.progressBar.classList.remove('progress-success', 'progress-error');
-      this.elements.progressBar.classList.add('progress-info');
-    }
-
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent = `Uploading 0/${total} files`;
-    }
-  }
-
-  /**
-   * Update upload progress
-   * @param {number} success - Successful uploads
-   * @param {number} failed - Failed uploads
-   * @private
-   */
-  _updateUploadProgress(success, failed) {
-    this.uploadStatus.completed += (success + failed);
-    this.uploadStatus.failed += failed;
-
-    const { total, completed, failed: totalFailed } = this.uploadStatus;
-
-    if (this.elements.progressBar) {
-      const percent = Math.round((completed / total) * 100);
-      this.elements.progressBar.value = percent;
-
-      this.elements.progressBar.classList.remove('progress-info', 'progress-success', 'progress-error');
-      if (totalFailed > 0) {
-        this.elements.progressBar.classList.add(totalFailed === completed ? 'progress-error' : 'progress-warning');
-      } else {
-        this.elements.progressBar.classList.add('progress-success');
-      }
-    }
-
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent = `Uploading ${completed}/${total} files${totalFailed > 0 ? ` (${totalFailed} failed)` : ''}`;
-    }
-
-    // Hide when complete
-    if (completed === total && this.elements.uploadProgress) {
-      setTimeout(() => {
-        this.elements.uploadProgress.classList.add('hidden');
-      }, 2000);
-    }
-  }
-
-  /**
-   * Get error message for upload error
-   * @param {Error} error - Error object
-   * @param {string} fileName - File name
-   * @returns {string} - Error message
-   * @private
-   */
-  _getUploadErrorMessage(error, fileName) {
-    const message = error.message || 'Unknown error';
-
-    if (message.includes('auth') || error.status === 401) {
-      return 'Authentication failed';
-    }
-
-    if (message.includes('too large') || message.includes('size')) {
-      return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;
-    }
-
-    if (message.includes('token limit')) {
-      return 'Project token limit exceeded';
-    }
-
-    if (message.includes('validation') || error.status === 422) {
-      return 'File format not supported';
-    }
-
-    return message;
   }
 
   /**
@@ -617,6 +508,7 @@ class ProjectDetailsComponent {
         }
       });
     } else {
+      // Fallback if no modal manager
       if (confirm(`Delete "${fileName}"? This cannot be undone.`)) {
         window.projectManager.deleteFile(projectId, fileId)
           .then(() => {
@@ -673,13 +565,21 @@ class ProjectDetailsComponent {
     // Add processing badge if relevant
     if (file.metadata?.search_processing) {
       const status = file.metadata.search_processing.status;
-      const badgeClass = status === 'success' ? 'badge-success' :
-        status === 'error' ? 'badge-error' :
-          status === 'pending' ? 'badge-warning' : 'badge-ghost';
+      const badgeClass = status === 'success'
+        ? 'badge-success'
+        : status === 'error'
+          ? 'badge-error'
+          : status === 'pending'
+            ? 'badge-warning'
+            : 'badge-ghost';
 
-      const badgeText = status === 'success' ? 'Ready' :
-        status === 'error' ? 'Failed' :
-          status === 'pending' ? 'Processing...' : 'Not Processed';
+      const badgeText = status === 'success'
+        ? 'Ready'
+        : status === 'error'
+          ? 'Failed'
+          : status === 'pending'
+            ? 'Processing...'
+            : 'Not Processed';
 
       const badge = document.createElement('span');
       badge.className = `badge ${badgeClass} badge-sm`;
@@ -694,24 +594,14 @@ class ProjectDetailsComponent {
     const actions = document.createElement('div');
     actions.className = 'flex gap-1';
 
-    // Delete button
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn btn-ghost btn-sm btn-square text-error hover:bg-error/10';
-    deleteBtn.title = 'Delete file';
-    deleteBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-      </svg>
-    `;
-    window.eventHandlers.trackListener(deleteBtn, 'click', () => this._confirmDeleteFile(file.id));
-
     // Download button
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'btn btn-ghost btn-sm btn-square text-info hover:bg-info/10';
     downloadBtn.title = 'Download file';
     downloadBtn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
       </svg>
     `;
     window.eventHandlers.trackListener(downloadBtn, 'click', () => {
@@ -719,6 +609,18 @@ class ProjectDetailsComponent {
         window.projectManager.downloadFile(this.state.currentProject.id, file.id);
       }
     });
+
+    // Delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-ghost btn-sm btn-square text-error hover:bg-error/10';
+    deleteBtn.title = 'Delete file';
+    deleteBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+      </svg>
+    `;
+    window.eventHandlers.trackListener(deleteBtn, 'click', () => this._confirmDeleteFile(file.id));
 
     actions.appendChild(downloadBtn);
     actions.appendChild(deleteBtn);
