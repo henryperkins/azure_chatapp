@@ -433,22 +433,8 @@
         throw new Error('[ProjectModal] projectManager not available');
       }
 
-      // If projectId is present, update; else create
-      if (projectId) {
-        // Make sure your projectManager has an updateProject method
-        if (typeof window.projectManager.updateProject === 'function') {
-          await window.projectManager.updateProject(projectId, projectData);
-        } else {
-          throw new Error('[ProjectModal] updateProject method not found on projectManager');
-        }
-      } else {
-        // createProject
-        if (typeof window.projectManager.createProject === 'function') {
-          await window.projectManager.createProject(projectData);
-        } else {
-          throw new Error('[ProjectModal] createProject method not found on projectManager');
-        }
-      }
+      // Use createOrUpdateProject which handles both cases
+      await window.projectManager.createOrUpdateProject(projectId, projectData);
 
       // Refresh the list
       if (typeof window.projectManager.loadProjects === 'function') {
