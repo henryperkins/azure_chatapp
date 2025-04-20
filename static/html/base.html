@@ -2,10 +2,9 @@
 <html lang="en" data-theme="light">
 
 <head>
-  <!-- Sentry Initialization - Must be first to capture all errors -->
-  <script src="/static/js/sentry-init.js"></script>
-
   <meta charset="UTF-8" />
+  <!-- Sentry Initialization -->
+  <script src="/static/js/sentry-init.js"></script>
   <title>Projects - Azure OpenAI Chat</title>
 
   <!-- Tailwind CSS (production build or dev) -->
@@ -23,7 +22,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
   <!-- CSRF token for API requests -->
-  <meta name="csrf-token" content="" id="csrfToken" />
+  <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
@@ -65,6 +64,8 @@
 
           <!-- Auth Dropdown (hidden by default) -->
           <div id="authDropdown"
+            aria-labelledby="authButton"
+            aria-hidden="true"
             class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-base-100 rounded-box shadow-md p-3 z-50 animate-slide-in hidden">
             <div class="flex border-b border-base-200 mb-2 justify-center">
               <button id="loginTab" type="button"
@@ -74,20 +75,42 @@
                 class="px-2 py-1 text-xs font-medium text-base-content/60"
                 onclick="switchAuthTab('register')">Register</button>
             </div>
-            <form id="loginForm" method="POST" onsubmit="return false;" novalidate>
+            <form id="loginForm" method="POST" onsubmit="handleLogin(event);" novalidate>
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" id="login-username" placeholder="Username"
                   class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="username" autocorrect="off"
-                  autocapitalize="none">
+                  autocapitalize="none" required>
                 <input type="password" name="password" id="login-password" placeholder="Password"
-                  class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="current-password">
+                  class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="current-password" required>
               </div>
               <div id="login-error" role="alert" class="text-error text-xs mb-2 hidden"></div>
-              <!-- Improved mobile login button with larger tap target -->
               <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-sm w-full">
                 Log In
               </button>
             </form>
+            <script>
+              async function handleLogin(e) {
+                e.preventDefault();
+                const form = e.target;
+                const username = form.querySelector('input[name="username"]').value.trim();
+                const password = form.querySelector('input[name="password"]').value;
+
+                if (!username || !password) {
+                  window.showNotification?.('Username and password are required', 'error');
+                  return false;
+                }
+
+                try {
+                  await window.auth.login(username, password);
+                  window.showNotification?.('Login successful', 'success');
+                  // Close dropdown if open
+                  document.getElementById('authDropdown')?.classList.add('hidden');
+                } catch (error) {
+                  window.showNotification?.(error.message || 'Login failed', 'error');
+                }
+                return false;
+              }
+            </script>
 
             <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden">
               <script>
