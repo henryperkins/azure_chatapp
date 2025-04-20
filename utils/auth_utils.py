@@ -206,16 +206,20 @@ def extract_token(request_or_websocket):
 # User Retrieval via Token
 # -----------------------------------------------------------------------------
 async def get_user_from_token(
-    token: str,
-    db: AsyncSession,
-    expected_type: Optional[str] = "access",
+    request: Request,
+    db: AsyncSession = Depends(get_async_session),
+    expected_type: str = "access",
 ) -> User:
     """
-    Decodes the given JWT, checks optional token type,
-    then loads the associated user from the database.
+    Retrieve the token from cookies, verify it, then load the user.
     Raises 401 if user not found or token is invalid/expired/revoked.
     """
-    decoded = await verify_token(token, expected_type)
+    token = extract_token(request)
+    if not token:
+        logger.warning("No token found in request")
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    decoded = await verify_token(token, expected_type, request)
 
     username = decoded.get("sub")
     if not username:
