@@ -112,12 +112,18 @@ async function authRequest(endpoint, method, body = null) {
   }
 
   // Fallback implementation
-  const token = await getCSRFTokenAsync();
   const headers = {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-CSRF-Token': token
+    'Accept': 'application/json'
   };
+
+  // Skip CSRF for local development
+  const isLocalDev = window.location.hostname === 'localhost' ||
+                    window.location.hostname === '127.0.0.1';
+  if (!isLocalDev) {
+    const token = await getCSRFTokenAsync();
+    headers['X-CSRF-Token'] = token;
+  }
 
   const options = {
     method: method.toUpperCase(),

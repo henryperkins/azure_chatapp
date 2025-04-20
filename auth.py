@@ -462,8 +462,8 @@ DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 async def refresh_token(
     request: Request,
     response: Response,
-    session: DBSessionDep,  # Dependency is already defined in DBSessionDep
-    user: User = Depends(get_user_from_token),  # expecting 'refresh' token type
+    session: DBSessionDep,
+    user: User = Depends(get_user_from_token),
 ) -> LoginResponse:
     """
     Exchanges a valid refresh token for a new access token.
@@ -477,6 +477,21 @@ async def refresh_token(
     logger.debug("Attempting token refresh for user: %s", user.username)
 
     try:
+        # Verify token first before locking user
+        try:
+            decoded = await verify_token(refresh_cookie, "refresh", request)
+        except HTTPException as e:
+            logger.warning("Invalid refresh token: %s", e.detail)
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid refresh token. Please login again."
+            )
+
+        # Check for existing transaction and rollback if needed
+        if session.in_transaction():
+            await session.rollback()
+
+        # Begin new transaction
         async with session.begin():
             locked_user = await session.get(User, user.id, with_for_update=True)
             if not locked_user:
@@ -486,9 +501,16 @@ async def refresh_token(
                 logger.warning("Refresh attempt for disabled user: %s", locked_user.username)
                 raise HTTPException(status_code=403, detail="Account disabled.")
 
+            # Check token version
             if locked_user.token_version is None:
                 locked_user.token_version = 0
                 logger.warning("User '%s' had NULL token_version, set to 0 during refresh.", locked_user.username)
+            elif decoded.get("version", 0) != locked_user.token_version:
+                logger.warning("Token version mismatch for user '%s'", locked_user.username)
+                raise HTTPException(
+                    status_code=401,
+                    detail="Token version mismatch. Please login again."
+                )
 
             locked_user.last_activity = naive_utc_now()
 
@@ -506,11 +528,21 @@ async def refresh_token(
             token_version=locked_user.token_version,
         )
 
-    except HTTPException:
+    except HTTPException as e:
+        # Clear invalid tokens
+        if e.status_code in (401, 403):
+            try:
+                set_secure_cookie(response, "access_token", "", 0, request)
+                set_secure_cookie(response, "refresh_token", "", 0, request)
+            except Exception as clear_error:
+                logger.error("Failed to clear cookies during error handling: %s", clear_error)
         raise
     except Exception as e:
         logger.error("Error during token refresh for user '%s': %s", user.username, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error during token refresh.")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error during token refresh."
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -644,7 +676,14 @@ async def logout_user(
     """
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
-        raise HTTPException(status_code=401, detail="Missing refresh token for logout")
+        logger.warning("Logout attempt without refresh token cookie")
+        # Still proceed with cookie clearing
+        try:
+            set_secure_cookie(response, "access_token", "", 0, request)
+            set_secure_cookie(response, "refresh_token", "", 0, request)
+        except Exception as e:
+            logger.error("Failed to clear cookies during logout: %s", e)
+        return {"status": "logged out"}
 
     token_id = None
     expires_timestamp = None
@@ -657,41 +696,46 @@ async def logout_user(
     except Exception as e:
         logger.error("Unexpected error verifying refresh token during logout: %s", e, exc_info=True)
 
-    async with session.begin():
-        locked_user = await session.get(User, current_user.id, with_for_update=True)
-        if not locked_user:
-            logger.error("User not found during logout lock: %s", current_user.id)
-            raise HTTPException(status_code=404, detail="User not found on logout")
-
-        old_version = locked_user.token_version or 0
-        locked_user.token_version = old_version + 1
-        logger.info(
-            "User '%s' token_version from %d to %d on logout",
-            locked_user.username,
-            old_version,
-            locked_user.token_version
-        )
-
-        # Blacklist the refresh token if possible
-        if token_id and expires_timestamp:
-            try:
-                exp_datetime = datetime.fromtimestamp(float(expires_timestamp), tz=timezone.utc)
-                blacklisted = TokenBlacklist(
-                    jti=token_id,
-                    expires=exp_datetime.replace(tzinfo=None),
-                    user_id=locked_user.id,
-                    token_type="refresh",
-                    creation_reason="logout"
+    try:
+        async with session.begin():
+            locked_user = await session.get(User, current_user.id, with_for_update=True)
+            if not locked_user:
+                logger.error("User not found during logout lock: %s", current_user.id)
+            else:
+                old_version = locked_user.token_version or 0
+                locked_user.token_version = old_version + 1
+                logger.info(
+                    "User '%s' token_version from %d to %d on logout",
+                    locked_user.username,
+                    old_version,
+                    locked_user.token_version
                 )
-                session.add(blacklisted)
-                logger.debug("Blacklisted refresh token %s on logout", token_id)
-            except Exception as e:
-                logger.error("Failed to blacklist token %s: %s", token_id, e)
 
-    # Clear cookies
-    set_secure_cookie(response, "access_token", "", 0, request)
-    set_secure_cookie(response, "refresh_token", "", 0, request)
+                # Blacklist the refresh token if possible
+                if token_id and expires_timestamp:
+                    try:
+                        exp_datetime = datetime.fromtimestamp(float(expires_timestamp), tz=timezone.utc)
+                        blacklisted = TokenBlacklist(
+                            jti=token_id,
+                            expires=exp_datetime.replace(tzinfo=None),
+                            user_id=locked_user.id,
+                            token_type="refresh",
+                            creation_reason="logout"
+                        )
+                        session.add(blacklisted)
+                        logger.debug("Blacklisted refresh token %s on logout", token_id)
+                    except Exception as e:
+                        logger.error("Failed to blacklist token %s: %s", token_id, e)
+    except Exception as e:
+        logger.error("Error during logout transaction: %s", e)
+        # Continue with cookie clearing even if transaction failed
 
-    logger.info("User '%s' logged out successfully.", locked_user.username)
+    # Always clear cookies even if other operations fail
+    try:
+        set_secure_cookie(response, "access_token", "", 0, request)
+        set_secure_cookie(response, "refresh_token", "", 0, request)
+    except Exception as e:
+        logger.error("Failed to clear cookies during logout: %s", e)
+
+    logger.info("User logged out successfully.")
     return {"status": "logged out"}
-

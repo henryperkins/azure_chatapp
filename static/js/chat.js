@@ -907,12 +907,5 @@ class ChatManager {
     }
   }
 }
-
-// Create global instance
-window.chatManager = new ChatManager();
-
-// Export methods for backward compatibility
-window.initializeChat = () => window.chatManager.initialize();
-window.loadConversation = (chatId) => window.chatManager.loadConversation(chatId);
 window.createNewChat = () => window.chatManager.createNewConversation();
 window.sendMessage = (message) => window.chatManager.sendMessage(message);

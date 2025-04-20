@@ -28,9 +28,8 @@ async function loadProjects(filter = 'all') {
   }
 
   try {
-    // Check auth
-    const isAuthenticated = await window.auth.checkAuth();
-    if (!isAuthenticated) {
+    // Check auth state
+    if (!window.app?.state?.isAuthenticated) {
       console.warn("[projectManager] Not authenticated, can't load projects");
       emitEvent("projectsLoaded", {
         projects: [],
@@ -109,8 +108,7 @@ async function loadProjectDetails(projectId) {
   }
 
   try {
-    const isAuthenticated = await window.auth.checkAuth();
-    if (!isAuthenticated) {
+    if (!window.app?.state?.isAuthenticated) {
       console.warn("[projectManager] Not authenticated, can't load project details");
       emitEvent("projectDetailsError", {
         projectId,
@@ -282,8 +280,7 @@ async function loadProjectArtifacts(projectId) {
  * Create or update a project
  */
 async function createOrUpdateProject(projectId, projectData) {
-  const isAuthenticated = await window.auth.checkAuth({ forceVerify: true });
-  if (!isAuthenticated) {
+  if (!window.app?.state?.isAuthenticated) {
     throw new Error("Authentication required");
   }
 
@@ -319,8 +316,7 @@ async function createOrUpdateProject(projectId, projectData) {
  * Delete a project
  */
 async function deleteProject(projectId) {
-  const isAuthenticated = await window.auth.checkAuth({ forceVerify: true });
-  if (!isAuthenticated) {
+  if (!window.app?.state?.isAuthenticated) {
     throw new Error("Authentication required");
   }
 
@@ -344,8 +340,7 @@ async function deleteProject(projectId) {
  * Toggle pin status for a project
  */
 async function togglePinProject(projectId) {
-  const isAuthenticated = await window.auth.checkAuth({ forceVerify: true });
-  if (!isAuthenticated) {
+  if (!window.app?.state?.isAuthenticated) {
     throw new Error("Authentication required");
   }
 
@@ -369,8 +364,7 @@ async function togglePinProject(projectId) {
  * Toggle archive status for a project
  */
 async function toggleArchiveProject(projectId) {
-  const isAuthenticated = await window.auth.checkAuth({ forceVerify: true });
-  if (!isAuthenticated) {
+  if (!window.app?.state?.isAuthenticated) {
     throw new Error("Authentication required");
   }
 
@@ -459,7 +453,7 @@ async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('projectId', projectId);
-      
+
       await window.app.apiRequest(`/api/projects/${projectId}/files`, 'POST', formData);
       return true;
     } catch (err) {
@@ -471,7 +465,8 @@ async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
 }
 
 // Export public API
-window.projectManager = {
+// Removed implicit global attachment
+export const projectManagerAPI = {
   loadProjects,
   loadProjectDetails,
   loadProjectStats,

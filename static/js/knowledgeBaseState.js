@@ -1,7 +1,7 @@
 /**
  * Lightweight knowledge base status checker
  */
-class KnowledgeBaseState {
+export class KnowledgeBaseState {
   constructor() {
     // No caching needed - ChatManager handles context
   }
@@ -57,6 +57,3 @@ class KnowledgeBaseState {
     return !kbState.exists && hasTextFiles;
   }
 }
-
-// Singleton instance
-window.knowledgeBaseState = new KnowledgeBaseState();

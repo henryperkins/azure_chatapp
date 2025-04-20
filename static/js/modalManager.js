@@ -240,9 +240,6 @@ class ModalManager {
   }
 }
 
-// Create a single global instance of ModalManager
-const modalManager = new ModalManager();
-window.modalManager = modalManager;
 
 /**
  * Provide an explicit init function to be called from app.js or similar:

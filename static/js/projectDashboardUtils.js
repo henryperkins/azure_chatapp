@@ -79,27 +79,7 @@ ProjectDashboard.UIUtils = {
    * @param {boolean} includeTime - Whether to include time
    * @returns {string} - Formatted date
    */
-  formatDate(dateString, includeTime = false) {
-    if (!dateString) return '';
-
-    try {
-      const date = new Date(dateString);
-      const options = {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      };
-
-      if (includeTime) {
-        options.hour = '2-digit';
-        options.minute = '2-digit';
-      }
-
-      return date.toLocaleString(undefined, options);
-    } catch (e) {
-      return dateString;
-    }
-  },
+  // Removed duplicated formatDate; using window.formatDate instead
 
   /**
    * Format bytes to human-readable format
@@ -107,15 +87,7 @@ ProjectDashboard.UIUtils = {
    * @param {number} decimals - Decimal places
    * @returns {string} - Formatted size
    */
-  formatBytes(bytes, decimals = 1) {
-    if (bytes === 0) return '0 Bytes';
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
-  },
+  // Removed duplicated formatBytes; using window.formatBytes instead
 
   /**
    * Get file icon based on type
@@ -224,7 +196,7 @@ ProjectDashboard.showProjectListView = () => {
   window.history.pushState({}, '', url.toString());
 
   // Check authentication and load projects
-  window.auth.checkAuth().then(isAuthenticated => {
+  Promise.resolve(window.app.state.isAuthenticated).then(isAuthenticated => {
     if (isAuthenticated && window.projectManager?.loadProjects) {
       window.projectManager.loadProjects('all');
     }

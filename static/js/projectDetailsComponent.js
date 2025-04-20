@@ -557,7 +557,7 @@ class ProjectDetailsComponent {
 
     const fileInfo = document.createElement('div');
     fileInfo.className = 'text-xs text-base-content/70';
-    fileInfo.textContent = `${this._formatBytes(file.file_size)} · ${this._formatDate(file.created_at)}`;
+    fileInfo.textContent = `${window.formatBytes(file.file_size)} · ${window.formatDate(file.created_at)}`;
 
     detailDiv.appendChild(fileName);
     detailDiv.appendChild(fileInfo);
@@ -656,7 +656,7 @@ class ProjectDetailsComponent {
     footer.className = 'flex justify-between mt-1 text-xs text-base-content/60';
 
     const date = document.createElement('span');
-    date.textContent = this._formatDate(conversation.updated_at);
+    date.textContent = window.formatDate(conversation.updated_at);
 
     const messageCount = document.createElement('span');
     messageCount.className = 'badge badge-ghost badge-sm';
@@ -695,7 +695,7 @@ class ProjectDetailsComponent {
 
     const date = document.createElement('span');
     date.className = 'text-xs text-base-content/60';
-    date.textContent = this._formatDate(artifact.created_at);
+    date.textContent = window.formatDate(artifact.created_at);
 
     header.appendChild(title);
     header.appendChild(date);
