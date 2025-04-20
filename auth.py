@@ -462,7 +462,7 @@ DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 async def refresh_token(
     request: Request,
     response: Response,
-    session: DBSessionDep,  # Reordered: session before user
+    session: DBSessionDep = Depends(),  # Now properly marked as dependency
     user: User = Depends(get_user_from_token),  # expecting 'refresh' token type
 ) -> LoginResponse:
     """
