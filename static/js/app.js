@@ -326,8 +326,8 @@ async function initApp() {
   }
 
   // 2) Initialize dashboards, chat, etc.
-  if (window.initProjectDashboard) {
-    await window.initProjectDashboard();
+  if (window.projectDashboard?.init) {
+    await window.projectDashboard.init();
   }
   if (window.sidebar) {
     window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
@@ -376,15 +376,24 @@ if (window.auth?.AuthBus) {
 /**
  * Register DOM listeners
  */
-document.addEventListener('DOMContentLoaded', () => {
-  initApp().catch(error => {
-    console.error('[App] Critical initialization error:', error);
-    showNotification('Application failed to initialize. Please refresh.', 'error');
-  });
-
+function registerAppListeners() {
   // Handle back/forward navigation
   window.addEventListener('popstate', handleNavigationChange);
-});
+}
+
+// Start initialization if DOM is already ready
+if (document.readyState !== 'loading') {
+  initApp().catch(handleInitError);
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    initApp().catch(handleInitError);
+  });
+}
+
+function handleInitError(error) {
+  console.error('[App] Critical initialization error:', error);
+  showNotification('Application failed to initialize. Please refresh.', 'error');
+}
 
 // Consolidate global exports
 window.app = {

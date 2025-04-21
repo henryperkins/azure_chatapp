@@ -753,77 +753,71 @@ async def logout_user(
 ) -> dict[str, str]:
     """
     Invalidates session by incrementing token_version, blacklists refresh, clears cookies.
-    Ensures a single session usage per request.
+    More resilient to missing/invalid tokens.
     """
-    # Attempt refresh token first, then fallback to access token
-    try:
-        current_user = await get_user_from_token(
-            request, session, expected_type="refresh"
-        )
-    except HTTPException:
-        current_user = await get_user_from_token(
-            request, session, expected_type="access"
-        )
-
+    current_user = None
     refresh_cookie = request.cookies.get("refresh_token")
-    if not refresh_cookie:
-        logger.warning("Logout attempt without refresh token cookie")
+
+    try:
+        # Try to get user from refresh token first
         try:
-            set_secure_cookie(response, "access_token", "", 0, request)
-            set_secure_cookie(response, "refresh_token", "", 0, request)
-        except Exception as e:
-            logger.error("Failed to clear cookies during logout: %s", e)
-        return {"status": "logged out"}
-
-    token_id = None
-    expires_timestamp = None
-    try:
-        decoded = await verify_token(refresh_cookie, "refresh", request)
-        token_id = decoded.get("jti")
-        expires_timestamp = decoded.get("exp")
-    except HTTPException as e:
-        logger.warning("Logout with invalid refresh token: %s", e.detail)
-    except Exception as e:
-        logger.error(
-            "Unexpected error verifying refresh token during logout: %s",
-            e,
-            exc_info=True,
-        )
-
-    try:
-        async with session.begin():
-            locked_user = await session.get(User, current_user.id, with_for_update=True)
-            if not locked_user:
-                logger.error("User not found during logout lock: %s", current_user.id)
-            else:
-                old_version = locked_user.token_version or 0
-                locked_user.token_version = old_version + 1
-                logger.info(
-                    "User '%s' token_version from %d to %d on logout",
-                    locked_user.username,
-                    old_version,
-                    locked_user.token_version,
+            refresh_token = request.cookies.get("refresh_token")
+            if refresh_token:
+                current_user = await get_user_from_token(
+                    refresh_token, session, expected_type="refresh"
                 )
+        except HTTPException:
+            # Fallback to access token if refresh fails
+            try:
+                access_token = request.cookies.get("access_token")
+                if access_token:
+                    current_user = await get_user_from_token(
+                        access_token, session, expected_type="access"
+                    )
+            except HTTPException:
+                logger.debug("No valid tokens found during logout - proceeding with cookie clearing")
 
-                # Blacklist the refresh token if we have enough info
-                if token_id and expires_timestamp:
-                    try:
-                        exp_datetime = datetime.fromtimestamp(
-                            float(expires_timestamp), tz=timezone.utc
+        # If we have a user, increment their token version
+        if current_user:
+            try:
+                async with session.begin():
+                    locked_user = await session.get(User, current_user.id, with_for_update=True)
+                    if locked_user:
+                        old_version = locked_user.token_version or 0
+                        locked_user.token_version = old_version + 1
+                        logger.info(
+                            "User '%s' token_version from %d to %d on logout",
+                            locked_user.username,
+                            old_version,
+                            locked_user.token_version,
                         )
-                        blacklisted = TokenBlacklist(
-                            jti=token_id,
-                            expires=exp_datetime.replace(tzinfo=None),
-                            user_id=locked_user.id,
-                            token_type="refresh",
-                            creation_reason="logout",
-                        )
-                        session.add(blacklisted)
-                        logger.debug("Blacklisted refresh token %s on logout", token_id)
-                    except Exception as e:
-                        logger.error("Failed to blacklist token %s: %s", token_id, e)
+
+                        # Blacklist the refresh token if available
+                        if refresh_cookie:
+                            try:
+                                decoded = await verify_token(refresh_cookie, "refresh", request)
+                                token_id = decoded.get("jti")
+                                expires_timestamp = decoded.get("exp")
+                                if token_id and expires_timestamp:
+                                    exp_datetime = datetime.fromtimestamp(
+                                        float(expires_timestamp), tz=timezone.utc
+                                    )
+                                    blacklisted = TokenBlacklist(
+                                        jti=token_id,
+                                        expires=exp_datetime.replace(tzinfo=None),
+                                        user_id=locked_user.id,
+                                        token_type="refresh",
+                                        creation_reason="logout",
+                                    )
+                                    session.add(blacklisted)
+                                    logger.debug("Blacklisted refresh token %s on logout", token_id)
+                            except Exception as e:
+                                logger.debug("Failed to blacklist token during logout: %s", e)
+            except Exception as e:
+                logger.error("Error during logout transaction: %s", e)
+
     except Exception as e:
-        logger.error("Error during logout transaction: %s", e)
+        logger.error("Unexpected error during logout: %s", e)
 
     # Always clear cookies
     try:
