@@ -61,13 +61,12 @@ class ProjectListComponent {
     // Tabs and filtering
     this._bindFilterEvents();
 
-    // Create project button
-    const createBtn = document.getElementById('createProjectBtn');
+    // Create project button - now handled by projectListInit.js
+    // We'll still track the listener for analytics
+    const createBtn = document.getElementById('projectListCreateBtn');
     if (createBtn) {
       window.eventHandlers.trackListener(createBtn, 'click', () => {
-        if (window.modalManager) {
-          window.modalManager.show('project');
-        }
+        // Actual click handling is in projectListInit.js
       });
     }
 
@@ -99,7 +98,18 @@ class ProjectListComponent {
     // Listen for auth changes
     window.auth.AuthBus.addEventListener('authStateChanged', (e) => {
       if (e.detail.authenticated) {
-        this._loadProjects();
+        if (window.projectManager?.loadProjects) {
+          this._loadProjects();
+        } else {
+          // If projectManager isn't ready yet, wait for appJsReady event
+          const tryLoad = () => {
+            if (window.projectManager?.loadProjects) {
+              this._loadProjects();
+              document.removeEventListener('appJsReady', tryLoad);
+            }
+          };
+          document.addEventListener('appJsReady', tryLoad);
+        }
       }
     });
   }
@@ -166,24 +176,30 @@ class ProjectListComponent {
    * Load projects via projectManager
    * @private
    */
-  _loadProjects() {
+  async _loadProjects() {
     if (this.state.loading) return;
 
     this.state.loading = true;
     this._showLoadingState();
 
-    if (window.projectManager?.loadProjects) {
-      window.projectManager.loadProjects(this.state.filter)
-        .catch(error => {
-          console.error('[ProjectListComponent] Error loading projects:', error);
-          this._showErrorState('Failed to load projects');
-        })
-        .finally(() => {
-          this.state.loading = false;
-          this._hideLoadingState();
-        });
-    } else {
-      console.error('[ProjectListComponent] projectManager not available');
+    if (!window.projectManager?.loadProjects) {
+      console.warn('[ProjectListComponent] projectManager not available - waiting for initialization');
+      const checkManager = () => {
+        if (window.projectManager?.loadProjects) {
+          this._loadProjects();
+          document.removeEventListener('appJsReady', checkManager);
+        }
+      };
+      document.addEventListener('appJsReady', checkManager);
+      return;
+    }
+
+    try {
+      await window.projectManager.loadProjects(this.state.filter);
+    } catch (error) {
+      console.error('[ProjectListComponent] Error loading projects:', error);
+      this._showErrorState('Failed to load projects');
+    } finally {
       this.state.loading = false;
       this._hideLoadingState();
     }
