@@ -1,4 +1,15 @@
-# config.py
+"""
+config_insecure.py
+------------------
+Insecure/Debug configuration class that disables or relaxes strong security defaults.
+Suitable ONLY for local development or debugging. Not for production!
+
+Key changes from the secure version:
+1. Disables strict same-origin policies in docstring and stance.
+2. Uses open/default values for ALLOWED_HOSTS.
+3. Allows empty or insecure cookies (no forced domain or secure flags).
+4. Leaves other model/config items untouched for debugging convenience.
+"""
 
 import os
 from dotenv import load_dotenv
@@ -11,80 +22,79 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 class Settings:
     """
-    Central configuration class with strict security defaults.
+    Insecure / Debug Configuration Class
 
-    Security Principles:
-    1. Same-origin enforcement - no CORS support
-    2. Cookie security:
-       - SameSite=Strict
-       - Secure flag (HTTPS required)
-       - HttpOnly to prevent JS access
-    3. No token/JWT support for cross-domain use
-    4. All API access requires session cookies from same domain
+    Security Principles (RELAXED):
+    1. CORS allowed from all or multiple domains.
+    2. Cookie security relaxed:
+       - SameSite=None or Lax (instead of Strict)
+       - Secure flag not enforced (HTTP allowed)
+       - HttpOnly still recommended but not strictly enforced
+    3. Cross-domain usage of tokens/JWT is possible (no strict domain checks).
+    4. All API access can occur over HTTP. This is insecure, only for local dev!
     """
 
     # Application Version
     APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 
     # Debug/Environment
-    DEBUG = (
-        os.getenv("DEBUG", "False").lower() == "true"
-    )  # True if DEBUG= true/TRUE/True
-    ENV = os.getenv("ENV", "development")
+    DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+    ENV = os.getenv("ENV", "development")  # Force 'development' for insecure mode
 
-    # Sentry Configuration
-    SENTRY_DSN = os.getenv("SENTRY_DSN", "https://o4508070823395328.ingest.us.sentry.io")  # Default DSN
-    SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "True").lower() == "true"
-    SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0" if ENV == "development" else "0.1"))
-    SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "1.0" if ENV == "development" else "0.1"))
-    SENTRY_REPLAY_SESSION_SAMPLE_RATE = float(os.getenv("SENTRY_REPLAY_SESSION_SAMPLE_RATE", "0.15"))
-    SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE = float(os.getenv("SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE", "1.0"))
-    SENTRY_MCP_SERVER_ENABLED = os.getenv("SENTRY_MCP_SERVER_ENABLED", "True").lower() == "true"
+    # Sentry Configuration (still optional in debug)
+    SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+    SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "False").lower() == "true"
+    SENTRY_TRACES_SAMPLE_RATE = float(
+        os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")
+    )  # high for debug
+    SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "1.0"))
+    SENTRY_REPLAY_SESSION_SAMPLE_RATE = float(
+        os.getenv("SENTRY_REPLAY_SESSION_SAMPLE_RATE", "1.0")
+    )
+    SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE = float(
+        os.getenv("SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE", "1.0")
+    )
+    SENTRY_MCP_SERVER_ENABLED = (
+        os.getenv("SENTRY_MCP_SERVER_ENABLED", "False").lower() == "true"
+    )
     SENTRY_MCP_SERVER_URL = os.getenv("SENTRY_MCP_SERVER_URL", "http://localhost:8001")
 
-    # Session
-    SESSION_SECRET = os.getenv(
-        "SESSION_SECRET", "default-secret-key-change-in-production"
-    )
+    # Session secret (insecure default)
+    SESSION_SECRET = os.getenv("SESSION_SECRET", "dev_insecure_key")
 
     # Database
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp",
+        "postgresql+asyncpg://username:password@localhost:5432/dev_db",
     )
-    # Format: postgresql+asyncpg://username:password@host:port/dbname
 
     # JWT Configuration
-    JWT_SECRET = os.getenv("JWT_SECRET", "")
+    JWT_SECRET = os.getenv("JWT_SECRET", "insecure-debug-jwt-secret")
     JWT_ALGORITHM = "HS256"
-    JWT_KEY_ID = os.getenv("JWT_KEY_ID", "default-key-id")  # For key rotation support
-    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    JWT_KEY_ID = os.getenv("JWT_KEY_ID", "debug-key-id")
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
+    )  # 1 day
+    REFRESH_TOKEN_EXPIRE_DAYS = int(
+        os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")
+    )  # 30 days
 
     # Cookie domain for the application
-    # Use "put.photo" in production, empty string otherwise for local dev
-    COOKIE_DOMAIN: str = "put.photo" if ENV == "production" else ""
+    # Insecure: often left empty to skip domain restrictions or secure flags
+    COOKIE_DOMAIN: str = ""
 
-    # Allowed hosts - security setting for host header validation
-    ALLOWED_HOSTS: list[str] = (
-        ["put.photo"]
-        if ENV == "production"
-        else ["localhost", "127.0.0.1", "0.0.0.0", "put.photo"]
-    )
+    # Allowed hosts - wide open to facilitate local dev / debugging
+    ALLOWED_HOSTS: list[str] = ["*", "localhost", "127.0.0.1", "0.0.0.0"]
 
-    # --- Unified Model Configurations ---
+    # --- Unified Model Configurations (unchanged or debug-friendly) ---
 
-    # Azure/OpenAI
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")  # Standard OpenAI key if needed
+    # Azure / OpenAI
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-    AZURE_O1_MAX_IMAGES = int(
-        os.getenv("AZURE_O1_MAX_IMAGES", "10")
-    )  # Max images for o1
-    AZURE_DEFAULT_API_VERSION = "2025-03-01-preview"  # Default for non-reasoning
-    AZURE_REASONING_API_VERSION = (
-        "2025-03-01-preview"  # Recommended for reasoning models
-    )
+    AZURE_O1_MAX_IMAGES = int(os.getenv("AZURE_O1_MAX_IMAGES", "10"))
+    AZURE_DEFAULT_API_VERSION = "2025-03-01-preview"
+    AZURE_REASONING_API_VERSION = "2025-03-01-preview"
 
     AZURE_OPENAI_MODELS: dict[str, dict[str, Any]] = {
         "o1": {
@@ -102,8 +112,8 @@ class Settings:
                 "vision_detail": ["low", "high"],
                 "reasoning_effort": ["low", "medium", "high"],
             },
-            "max_context_tokens": 200000,  # Input context window
-            "max_completion_tokens": 100000,  # Max output tokens for the model itself
+            "max_context_tokens": 200000,
+            "max_completion_tokens": 100000,
             "max_images": AZURE_O1_MAX_IMAGES,
             "api_version": AZURE_REASONING_API_VERSION,
             "unsupported_params": [
@@ -115,7 +125,7 @@ class Settings:
                 "top_logprobs",
                 "logit_bias",
                 "max_tokens",
-            ],  # Params NOT to send
+            ],
         },
         "o3-mini": {
             "provider": "azure",
@@ -130,8 +140,8 @@ class Settings:
             "parameters": {
                 "reasoning_effort": ["low", "medium", "high"],
             },
-            "max_context_tokens": 200000,  # Input context window
-            "max_completion_tokens": 100000,  # Max output tokens for the model itself
+            "max_context_tokens": 200000,
+            "max_completion_tokens": 100000,
             "api_version": AZURE_REASONING_API_VERSION,
             "unsupported_params": [
                 "temperature",
@@ -142,7 +152,7 @@ class Settings:
                 "top_logprobs",
                 "logit_bias",
                 "max_tokens",
-            ],  # Params NOT to send
+            ],
         },
         "gpt-4o": {
             "provider": "azure",
@@ -152,12 +162,11 @@ class Settings:
             "parameters": {
                 "vision_detail": ["auto", "low", "high"],
             },
-            "max_context_tokens": 128000,  # Total token limit (input + output)
-            "max_tokens": 4096,  # Default completion limit, can be overridden up to context limit minus prompt
+            "max_context_tokens": 128000,
+            "max_tokens": 4096,
             "max_images": 10,
             "api_version": AZURE_DEFAULT_API_VERSION,
         },
-        # Add other Azure models like gpt-4, gpt-3.5-turbo if used
         "gpt-4": {
             "provider": "azure",
             "type": "text",
@@ -167,30 +176,27 @@ class Settings:
             "max_tokens": 4096,
             "api_version": AZURE_DEFAULT_API_VERSION,
         },
-        "gpt-35-turbo": {  # Match deployment name used in gpt4completions.md example
+        "gpt-35-turbo": {
             "provider": "azure",
             "type": "text",
             "description": "Fast text model",
             "capabilities": ["functions", "streaming"],
-            "max_context_tokens": 4096,  # Or 16k depending on deployment
+            "max_context_tokens": 4096,
             "max_tokens": 4096,
             "api_version": AZURE_DEFAULT_API_VERSION,
         },
     }
 
-    # Azure-specific vision configuration
-    AZURE_MAX_IMAGE_TOKENS = int(
-        os.getenv("AZURE_MAX_IMAGE_TOKENS", "2000")
-    )  # Generic token cost estimate per image
-    AZURE_VISION_DETAIL_LEVELS = {  # Token cost per image based on detail (from docs)
-        "low": 85,  # Typically 85 tokens
-        "high": 170,  # Can be more with multiple tiles, but base cost is 2*low
-        "auto": 128,  # Estimate, depends on model decision
+    AZURE_MAX_IMAGE_TOKENS = int(os.getenv("AZURE_MAX_IMAGE_TOKENS", "2000"))
+    AZURE_VISION_DETAIL_LEVELS = {
+        "low": 85,
+        "high": 170,
+        "auto": 128,
     }
 
     # Claude
     CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-    CLAUDE_API_VERSION = "2023-06-01"  # API version for headers
+    CLAUDE_API_VERSION = "2023-06-01"
     CLAUDE_BASE_URL = "https://api.anthropic.com/v1/messages"
     CLAUDE_EXTENDED_THINKING_ENABLED = (
         os.getenv("CLAUDE_EXTENDED_THINKING_ENABLED", "True").lower() == "true"
@@ -206,9 +212,9 @@ class Settings:
             "description": "Most powerful Claude model",
             "capabilities": ["extended_thinking"],
             "max_context_tokens": 200000,
-            "max_tokens": 4096,  # Default API limit unless specified higher
+            "max_tokens": 4096,
             "extended_thinking_config": {"min_budget": 1024, "default_budget": 8000},
-            "streaming_threshold": 21333,  # Max tokens requiring streaming
+            "streaming_threshold": 21333,
         },
         "claude-3-sonnet-20240229": {
             "provider": "anthropic",
@@ -233,11 +239,11 @@ class Settings:
             "type": "multimodal",
             "description": "Latest Sonnet with Vision & Extended Thinking (Beta)",
             "capabilities": ["vision", "extended_thinking"],
-            "max_context_tokens": 128000,  # Specific context limit for this beta model
-            "max_tokens": 4096,  # Default API limit
+            "max_context_tokens": 128000,
+            "max_tokens": 4096,
             "extended_thinking_config": {"min_budget": 1024, "default_budget": 16000},
             "streaming_threshold": 21333,
-            "beta_headers": {  # Headers for beta features
+            "beta_headers": {
                 "anthropic-beta": "output-128k-2025-02-19",
                 "anthropic-features": "extended-thinking-2025-02-19,long-context-2025-02-19",
             },
@@ -245,17 +251,16 @@ class Settings:
     }
 
     # Embedding/Knowledge Base
-    EMBEDDING_API = os.getenv(
-        "EMBEDDING_API", ""
-    )  # Could be Cohere, Azure, OpenAI etc.
-    COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")  # Example if using Cohere
+    EMBEDDING_API = os.getenv("EMBEDDING_API", "")
+    COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
 
-    # Migration control
+    # Migration control (if any)
     ALWAYS_APPLY_MIGRATIONS = (
         os.getenv("ALWAYS_APPLY_MIGRATIONS", "false").lower() == "true"
     )
 
 
+# Instantiate insecure settings
 settings = Settings()
 
 __all__ = ["settings"]

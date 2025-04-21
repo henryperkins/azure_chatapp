@@ -26,33 +26,32 @@ from utils.auth_utils import clean_expired_tokens  # If used for scheduled clean
 logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
-# Global/Environment Settings
+# WARNING / DISCLAIMER:
+# THIS FILE IS INSECURE BY DESIGN FOR LOCAL DEBUGGING / TROUBLESHOOTING ONLY!
+# DO NOT USE THIS CONFIGURATION IN PRODUCTION!
 # -----------------------------------------------------------------------------
-AUTH_DEBUG = os.getenv("AUTH_DEBUG", "True").lower() == "true"
+
+AUTH_DEBUG = True  # Force debug mode or set from env if you like
 
 DEFAULT_ADMIN = {
     "username": os.getenv("DEFAULT_ADMIN_USERNAME", "admin"),
     "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Admin123!@#dev"),
 }
 
-# Extended token lifetimes in development
-if os.getenv("ENVIRONMENT") == "development":
-    ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
-    REFRESH_TOKEN_EXPIRE_DAYS = 30  # 1 month
-else:
-    ACCESS_TOKEN_EXPIRE_MINUTES = getattr(settings, "ACCESS_TOKEN_EXPIRE_MINUTES", 30)
-    REFRESH_TOKEN_EXPIRE_DAYS = getattr(settings, "REFRESH_TOKEN_EXPIRE_DAYS", 1)
+# For simplicity, let's set these with "relaxed" or bigger expiry times
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+REFRESH_TOKEN_EXPIRE_DAYS = 30  # 1 month
 
 router = APIRouter()
 
 
 # -----------------------------------------------------------------------------
-# Cookie Settings
+# Cookie Settings (Insecure / Relaxed)
 # -----------------------------------------------------------------------------
 class CookieSettings:
     """
-    Centralized cookie configuration based on environment and domain.
-    Adjusts secure and samesite flags for production vs. local testing.
+    Centralized cookie configuration but with "relaxed" security for debugging.
+    Always returns samesite='none', secure=False in all environments.
     """
 
     def __init__(self, env: str, cookie_domain: Optional[str]):
@@ -61,46 +60,16 @@ class CookieSettings:
 
     def get_attributes(self, request: Request) -> dict[str, Any]:
         """
-        Determines cookie attributes based on request and environment.
-        Returns a dictionary with 'secure', 'domain', 'samesite'.
+        WARNING: Returns SameSite=None and secure=False unconditionally.
+        This is accepted by many browsers ONLY if you disable certain security flags
+        or use older versions. Modern Chrome might still reject it by default if on HTTP.
         """
-        hostname = request.url.hostname
-        scheme = request.url.scheme
-
-        # Simplified cookie settings in development
-        if self.env == "development":
-            return {
-                "secure": False,
-                "domain": None,
-                "samesite": "none"
-            }
-
-        # Production settings
-        secure = True
-        samesite: Literal["lax", "strict", "none"] = "lax"
-        domain = self.cookie_domain
-
-        # Adjust for local dev (fallback)
-        is_local_dev = (
-            scheme == "http"
-            and (
-                not hostname
-                or hostname in {"localhost", "127.0.0.1"}
-                or hostname.startswith("192.168.")
-                or hostname.startswith("10.")
-            )
-        )
-        if is_local_dev:
-            secure = False
-            samesite = "none"
-            domain = None
-        elif hostname and "." in hostname:
-            if hostname in settings.ALLOWED_HOSTS:
-                domain = hostname
-            else:
-                domain = self.cookie_domain
-
-        return {"secure": secure, "domain": domain, "samesite": samesite}
+        # Force insecure attributes
+        return {
+            "secure": False,  # Not using HTTPS
+            "domain": None,  # No custom domain
+            "samesite": "none",  # Allows cross-site usage
+        }
 
 
 cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
@@ -109,15 +78,24 @@ cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
 def set_secure_cookie(
     response: Response, key: str, value: str, max_age: Optional[int], request: Request
 ):
-    """Sets a secure HttpOnly cookie with consistent environment-based config."""
+    """
+    Sets an HttpOnly cookie with extremely relaxed flags:
+    - samesite='none'
+    - secure=False
+    - domain=None
+    """
+
     cookie_attrs = cookie_config_helper.get_attributes(request)
     secure = cookie_attrs["secure"]
     domain = cookie_attrs["domain"]
     samesite = cookie_attrs["samesite"]
 
+    # We skip the usual check that "SameSite=None requires secure=True".
+    # This will cause Chrome/Firefox to likely warn or reject over HTTP,
+    # but user specifically asked to keep security "relaxed".
     if AUTH_DEBUG:
         logger.debug(
-            "Setting cookie [%s]: domain=%s, secure=%s, samesite=%s, max_age=%s, httpOnly=True",
+            "Setting INSECURE cookie [%s]: domain=%s, secure=%s, samesite=%s, max_age=%s, httpOnly=True",
             key,
             domain,
             secure,
@@ -132,18 +110,19 @@ def set_secure_cookie(
             max_age=max_age if max_age else None,
             expires=max_age if max_age else None,
             path="/",
-            domain=domain,
-            secure=secure,
+            domain=domain,  # None means host-only
+            secure=secure,  # False in dev
             httponly=True,
-            samesite=samesite,
+            samesite=samesite,  # 'none'
         )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to set cookie: {key}")
+        # Shallow error swallow
+        # raise HTTPException(status_code=500, detail=f"Failed to set cookie: {key}")
 
 
 # -----------------------------------------------------------------------------
-# Simple In-Memory Rate Limiter
+# Simple In-Memory Rate Limiter (Optional)
 # -----------------------------------------------------------------------------
 LOGIN_ATTEMPTS = {}
 MAX_ATTEMPTS = 5
@@ -152,19 +131,15 @@ WINDOW_SECONDS = 300  # 5 minutes
 
 async def rate_limit_login(request: Request, username: str):
     """
-    In-memory rate limiter for login attempts.
-    Disabled in development mode.
+    Insecure mode: you can bypass rate limiting by returning immediately.
+    If you want minimal friction, uncomment 'return'.
     """
-    if os.getenv("ENVIRONMENT") == "development" or settings.DEBUG:
-        if AUTH_DEBUG:
-            logger.debug("Skipping rate-limit in development.")
-        return
+    # return  # Uncomment to disable rate limiting entirely
 
     client_ip = request.client.host if request.client else "unknown"
     key = f"{client_ip}:{username}"
     now = datetime.now().timestamp()
 
-    # Prune old attempts
     attempts = [ts for ts in LOGIN_ATTEMPTS.get(key, []) if now - ts < WINDOW_SECONDS]
     attempts.append(now)
     LOGIN_ATTEMPTS[key] = attempts
@@ -217,7 +192,7 @@ async def create_default_user():
     Creates a default admin user if the database has no users.
     """
     try:
-        logger.info("Checking for default user creation...")
+        logger.info("Checking for default user creation (Insecure debug mode)...")
         async with get_async_session_context() as session:
             result = await session.execute(select(User).limit(1))
             if not result.scalars().first():
@@ -237,9 +212,10 @@ async def create_default_user():
                 await session.commit()
 
                 logger.info(
-                    "Default admin user '%s' created.", DEFAULT_ADMIN["username"]
+                    "Default admin user '%s' created (INSECURE DEBUG).",
+                    DEFAULT_ADMIN["username"],
                 )
-                if settings.DEBUG:
+                if AUTH_DEBUG:
                     logger.info(
                         "DEV LOGIN -> username=%s password=%s",
                         DEFAULT_ADMIN["username"],
@@ -274,38 +250,20 @@ class LoginResponse(BaseModel):
 
 
 # -----------------------------------------------------------------------------
-# Password Validation
+# Password Validation (Relaxed)
 # -----------------------------------------------------------------------------
 def validate_password(password: str):
     """
-    Enforces:
-    - length >= 12
-    - uppercase, lowercase, digit, special char
+    WARNING: This is a 'relaxed' placeholder.
+    If you want to skip password checks entirely, comment out everything inside.
     """
-    if len(password) < 12:
-        raise ValueError("Password must be at least 12 characters.")
-    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?~"
-    has_upper = has_lower = has_digit = has_special = False
-    for c in password:
-        if c.isupper():
-            has_upper = True
-        elif c.islower():
-            has_lower = True
-        elif c.isdigit():
-            has_digit = True
-        elif c in special_chars:
-            has_special = True
-        if has_upper and has_lower and has_digit and has_special:
-            return
+    # For full security:
+    # - length >= 12
+    # - uppercase, lowercase, digit, special char
 
-    if not has_upper:
-        raise ValueError("Password must contain uppercase.")
-    if not has_lower:
-        raise ValueError("Password must contain lowercase.")
-    if not has_digit:
-        raise ValueError("Password must contain digits.")
-    if not has_special:
-        raise ValueError("Password must contain a special character.")
+    if len(password) < 4:
+        raise ValueError("Password must be at least 4 characters (relaxed).")
+    # Skipping checks for uppercase, digit, etc. purely for debug.
 
 
 # -----------------------------------------------------------------------------
@@ -318,9 +276,6 @@ async def register_user(
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
-    """
-    Creates new user, enforces password policy, returns tokens in cookies.
-    """
     lower_username = creds.username.strip().lower()
     if not lower_username:
         raise HTTPException(status_code=400, detail="Username cannot be empty.")
@@ -337,7 +292,7 @@ async def register_user(
     )
     if existing_user:
         logger.warning(
-            "User registration attempt with taken username: %s", lower_username
+            "Registration attempt with existing username: %s", lower_username
         )
         raise HTTPException(status_code=400, detail="Username already taken.")
 
@@ -354,11 +309,9 @@ async def register_user(
     )
     session.add(new_user)
     await session.flush()
-    # Explicitly commit so the user is fully persisted
     await session.commit()
     await session.refresh(new_user)
 
-    # Token issuance
     access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     refresh_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -383,13 +336,13 @@ async def register_user(
         request,
     )
 
-    logger.info("User registered and logged in: %s", lower_username)
+    logger.info("User registered and logged in (insecure debug): %s", lower_username)
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         username=lower_username,
         token_version=new_user.token_version,
-        message=f"User '{lower_username}' registered successfully",
+        message=f"Registered user '{lower_username}' successfully.",
     )
 
 
@@ -403,10 +356,6 @@ async def login_user(
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
-    """
-    Authenticates user, issues tokens, sets them in cookies.
-    Logs detailed reasons for failures to assist debugging.
-    """
     await rate_limit_login(request, creds.username)
     lower_username = creds.username.strip().lower()
 
@@ -444,18 +393,14 @@ async def login_user(
 
         if not valid_password:
             logger.warning("Invalid password for user: %s", lower_username)
-            await asyncio.sleep(0.5)  # small delay to deter brute force
+            await asyncio.sleep(0.2)  # minor delay
             raise HTTPException(status_code=401, detail="Invalid credentials.")
 
         # Update last login
         db_user.last_login = naive_utc_now()
         if db_user.token_version is None:
             db_user.token_version = 0
-            logger.warning(
-                "User '%s' had NULL token_version, set to 0.", db_user.username
-            )
 
-    # Generate tokens
     access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     refresh_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -490,7 +435,7 @@ async def login_user(
             message="Login success but cookie setting failed.",
         )
 
-    logger.info("User '%s' logged in and tokens set.", lower_username)
+    logger.info("User '%s' logged in (insecure debug).", lower_username)
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -510,55 +455,38 @@ DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 async def refresh_token(
     request: Request, response: Response, session: DBSessionDep
 ) -> LoginResponse:
-    """
-    Exchanges a valid refresh token for a new access token.
-    Updates last_activity. Returns newly issued 'access_token' in cookie.
-    """
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
         logger.debug("No refresh token cookie found during refresh.")
-        # Clear any invalid tokens
         set_secure_cookie(response, "access_token", "", 0, request)
         set_secure_cookie(response, "refresh_token", "", 0, request)
         raise HTTPException(
             status_code=401, detail="Refresh token missing. Please login again."
         )
 
-    # Get user using the same session to avoid multiple sessions
-    refresh_token = request.cookies.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(status_code=401, detail="Refresh token missing")
-    user = await get_user_from_token(refresh_token, session, expected_type="refresh")
+    refresh_token_value = request.cookies.get("refresh_token")
+    if not refresh_token_value:
+        raise HTTPException(status_code=401, detail="Refresh token missing.")
+
+    user = await get_user_from_token(
+        refresh_token_value, session, expected_type="refresh"
+    )
     logger.debug("Attempting token refresh for user: %s", user.username)
 
     try:
-        # Verify token before locking user rows
-        try:
-            decoded = await verify_token(refresh_cookie, "refresh", request)
-        except HTTPException as e:
-            logger.warning("Invalid refresh token: %s", e.detail)
-            # Clear invalid tokens
-            set_secure_cookie(response, "access_token", "", 0, request)
-            set_secure_cookie(response, "refresh_token", "", 0, request)
-            raise HTTPException(
-                status_code=401, detail="Invalid refresh token. Please login again."
-            )
+        decoded = await verify_token(refresh_cookie, "refresh", request)
 
-        # Begin a rollback before we lock to ensure a clean transaction
         await session.rollback()
         result = await session.execute(
             select(User).where(User.username == decoded.get("sub")).with_for_update()
         )
         locked_user = result.scalars().first()
 
-        # If still not found, attempt a fallback by ID (should be rare)
         if not locked_user:
-            logger.error(
-                "User not found for refresh by username: %s", decoded.get("sub")
-            )
+            logger.error("User not found for refresh: %s", decoded.get("sub"))
             locked_user = await session.get(User, user.id, with_for_update=True)
             if not locked_user:
-                logger.error("User not found for refresh by ID: %s", user.id)
+                logger.error("User not found by ID: %s", user.id)
                 raise HTTPException(status_code=404, detail="User not found (refresh).")
 
         if not locked_user.is_active:
@@ -567,28 +495,21 @@ async def refresh_token(
             )
             raise HTTPException(status_code=403, detail="Account disabled.")
 
-        # Ensure token version matches
         if locked_user.token_version is None:
             locked_user.token_version = 0
-            logger.warning(
-                "User '%s' had NULL token_version, set to 0 during refresh.",
-                locked_user.username,
-            )
 
         if decoded.get("version", 0) != locked_user.token_version:
-            logger.warning("Token version mismatch for user '%s'", locked_user.username)
+            logger.warning("Token version mismatch for '%s'", locked_user.username)
             raise HTTPException(
-                status_code=401, detail="Token version mismatch. Please login again."
+                status_code=401, detail="Token version mismatch. Re-login."
             )
 
         locked_user.last_activity = naive_utc_now()
 
-        # Issue new access token
         access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_payload = build_jwt_payload(locked_user, "access", access_expires)
         new_access_token = create_access_token(access_payload)
 
-        # Set new access token cookie
         set_secure_cookie(
             response,
             "access_token",
@@ -597,7 +518,9 @@ async def refresh_token(
             request,
         )
 
-        logger.info("Refreshed access token for user '%s'.", locked_user.username)
+        logger.info(
+            "Refreshed token for user '%s' (insecure debug).", locked_user.username
+        )
         return LoginResponse(
             access_token=new_access_token,
             username=locked_user.username,
@@ -605,7 +528,6 @@ async def refresh_token(
         )
 
     except HTTPException as e:
-        # Clear tokens if we return 401 or 403
         if e.status_code in (401, 403):
             try:
                 set_secure_cookie(response, "access_token", "", 0, request)
@@ -617,10 +539,7 @@ async def refresh_token(
         raise
     except Exception as e:
         logger.error(
-            "Error during token refresh for user '%s': %s",
-            user.username,
-            e,
-            exc_info=True,
+            "Error during refresh for '%s': %s", user.username, e, exc_info=True
         )
         raise HTTPException(
             status_code=500, detail="Internal server error during token refresh."
@@ -628,7 +547,7 @@ async def refresh_token(
 
 
 # -----------------------------------------------------------------------------
-# Token Info / Verification
+# Token Verification
 # -----------------------------------------------------------------------------
 class VerifyResponse(BaseModel):
     authenticated: bool
@@ -642,10 +561,6 @@ async def verify_auth_status(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
 ) -> VerifyResponse:
-    """
-    Verifies an access token, returning user info.
-    Uses a single session from the request context.
-    """
     user, token = await get_current_user_and_token(request)
     return VerifyResponse(
         authenticated=True,
@@ -656,7 +571,7 @@ async def verify_auth_status(
 
 
 # -----------------------------------------------------------------------------
-# Token Expiry
+# Token Expiry Info
 # -----------------------------------------------------------------------------
 class TokenExpirySettings(BaseModel):
     access_token_expire_minutes: int
@@ -665,9 +580,6 @@ class TokenExpirySettings(BaseModel):
 
 @router.get("/settings/token-expiry", response_model=TokenExpirySettings)
 async def get_token_expiry_settings() -> TokenExpirySettings:
-    """
-    Expose current token expiry to front-end.
-    """
     return TokenExpirySettings(
         access_token_expire_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
         refresh_token_expire_days=REFRESH_TOKEN_EXPIRE_DAYS,
@@ -679,20 +591,14 @@ async def get_token_expiry_settings() -> TokenExpirySettings:
 # -----------------------------------------------------------------------------
 @router.get("/timestamp", response_model=dict[str, float])
 async def get_server_time() -> dict[str, float]:
-    """
-    Returns current UTC in epoch seconds.
-    """
     return {"serverTimestamp": datetime.now(timezone.utc).timestamp()}
 
 
 @router.get("/csrf", response_model=dict[str, str])
 async def get_csrf_token(request: Request, response: Response):
-    """
-    Dummy CSRF token endpoint. Real CSRF protection would rely on middleware.
-    """
     csrf_token = str(uuid.uuid4())
     if AUTH_DEBUG:
-        logger.debug("Providing dummy CSRF token for dev/test.")
+        logger.debug("Providing dummy CSRF token.")
     return {"token": csrf_token}
 
 
@@ -700,20 +606,17 @@ async def get_csrf_token(request: Request, response: Response):
 @router.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
 @router.get("/favicon.ico", include_in_schema=False)
 async def ignore_common_requests():
-    """Avoid excessive logs for common icon requests."""
+    """Avoid logs for icon requests."""
     return Response(status_code=204)
 
 
 # -----------------------------------------------------------------------------
-# Legacy set-cookies Endpoint (Optional / Dev Only)
+# Dev-only set-cookies Endpoint
 # -----------------------------------------------------------------------------
 @router.post("/set-cookies", include_in_schema=False)
 async def set_cookies_endpoint(
     request: Request, response: Response, token_req: TokenRequest
 ):
-    """
-    Not recommended for production. Manually sets non-HttpOnly cookies for testing.
-    """
     logger.warning(
         "Manual cookie set from %s, not recommended for production.",
         request.client.host if request.client else "unknown",
@@ -726,24 +629,24 @@ async def set_cookies_endpoint(
             token_req.access_token,
             max_age=int(access_expires.total_seconds()),
             path="/",
-            domain=cookie_config_helper.get_attributes(request)["domain"],
-            secure=cookie_config_helper.get_attributes(request)["secure"],
+            domain=None,
+            secure=False,
             httponly=False,
-            samesite=cookie_config_helper.get_attributes(request)["samesite"],
+            samesite="none",
         )
-        logger.warning("Set non-HttpOnly access_token.")
+        logger.warning("Set non-HttpOnly access_token (INSECURE).")
         if token_req.refresh_token:
             response.set_cookie(
                 "refresh_token",
                 token_req.refresh_token,
                 max_age=int(refresh_expires.total_seconds()),
                 path="/",
-                domain=cookie_config_helper.get_attributes(request)["domain"],
-                secure=cookie_config_helper.get_attributes(request)["secure"],
+                domain=None,
+                secure=False,
                 httponly=False,
-                samesite=cookie_config_helper.get_attributes(request)["samesite"],
+                samesite="none",
             )
-            logger.warning("Set non-HttpOnly refresh_token.")
+            logger.warning("Set non-HttpOnly refresh_token (INSECURE).")
     except Exception as e:
         logger.error("Cookie set endpoint error: %s", e)
         return {"status": "error", "message": str(e)}
@@ -759,70 +662,70 @@ async def logout_user(
     response: Response,
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, str]:
-    """
-    Invalidates session by incrementing token_version, blacklists refresh, clears cookies.
-    More resilient to missing/invalid tokens.
-    """
     current_user = None
     refresh_cookie = request.cookies.get("refresh_token")
 
     try:
-        # Try to get user from refresh token first
+        # Attempt to find user from refresh token
         try:
-            refresh_token = request.cookies.get("refresh_token")
-            if refresh_token:
+            refresh_token_val = request.cookies.get("refresh_token")
+            if refresh_token_val:
                 current_user = await get_user_from_token(
-                    refresh_token, session, expected_type="refresh"
+                    refresh_token_val, session, expected_type="refresh"
                 )
         except HTTPException:
-            # Fallback to access token if refresh fails
+            # fallback to access token
             try:
-                access_token = request.cookies.get("access_token")
-                if access_token:
+                access_token_val = request.cookies.get("access_token")
+                if access_token_val:
                     current_user = await get_user_from_token(
-                        access_token, session, expected_type="access"
+                        access_token_val, session, expected_type="access"
                     )
             except HTTPException:
-                logger.debug("No valid tokens found during logout - proceeding with cookie clearing")
+                logger.debug(
+                    "No valid tokens found during logout, just clearing cookies"
+                )
 
-        # If we have a user, increment their token version
         if current_user:
-            try:
-                async with session.begin():
-                    locked_user = await session.get(User, current_user.id, with_for_update=True)
-                    if locked_user:
-                        old_version = locked_user.token_version or 0
-                        locked_user.token_version = old_version + 1
-                        logger.info(
-                            "User '%s' token_version from %d to %d on logout",
-                            locked_user.username,
-                            old_version,
-                            locked_user.token_version,
-                        )
-
-                        # Blacklist the refresh token if available
-                        if refresh_cookie:
-                            try:
-                                decoded = await verify_token(refresh_cookie, "refresh", request)
-                                token_id = decoded.get("jti")
-                                expires_timestamp = decoded.get("exp")
-                                if token_id and expires_timestamp:
-                                    exp_datetime = datetime.fromtimestamp(
-                                        float(expires_timestamp), tz=timezone.utc
-                                    )
-                                    blacklisted = TokenBlacklist(
-                                        jti=token_id,
-                                        expires=exp_datetime.replace(tzinfo=None),
-                                        user_id=locked_user.id,
-                                        token_type="refresh",
-                                        creation_reason="logout",
-                                    )
-                                    session.add(blacklisted)
-                                    logger.debug("Blacklisted refresh token %s on logout", token_id)
-                            except Exception as e:
-                                logger.debug("Failed to blacklist token during logout: %s", e)
-            except Exception as e:
-                logger.error("Error during logout transaction: %s", e)
+            async with session.begin():
+                locked_user = await session.get(
+                    User, current_user.id, with_for_update=True
+                )
+                if locked_user:
+                    old_version = locked_user.token_version or 0
+                    locked_user.token_version = old_version + 1
+                    logger.info(
+                        "User '%s' token_version incremented from %d to %d on logout (insecure debug).",
+                        locked_user.username,
+                        old_version,
+                        locked_user.token_version,
+                    )
+                    # Insecure mode: attempt blacklisting if you like
+                    if refresh_cookie:
+                        try:
+                            decoded = await verify_token(
+                                refresh_cookie, "refresh", request
+                            )
+                            token_id = decoded.get("jti")
+                            expires_timestamp = decoded.get("exp")
+                            if token_id and expires_timestamp:
+                                exp_datetime = datetime.fromtimestamp(
+                                    float(expires_timestamp), tz=timezone.utc
+                                )
+                                blacklisted = TokenBlacklist(
+                                    jti=token_id,
+                                    expires=exp_datetime.replace(tzinfo=None),
+                                    user_id=locked_user.id,
+                                    token_type="refresh",
+                                    creation_reason="logout",
+                                )
+                                session.add(blacklisted)
+                                logger.debug(
+                                    "Blacklisted refresh token %s on logout (insecure debug)",
+                                    token_id,
+                                )
+                        except Exception as e:
+                            logger.debug("Failed to blacklist refresh token: %s", e)
 
     except Exception as e:
         logger.error("Unexpected error during logout: %s", e)
@@ -834,5 +737,5 @@ async def logout_user(
     except Exception as e:
         logger.error("Failed to clear cookies during logout: %s", e)
 
-    logger.info("User logged out successfully.")
+    logger.info("User logged out (insecure debug).")
     return {"status": "logged out"}
