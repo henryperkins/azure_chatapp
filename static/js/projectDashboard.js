@@ -15,60 +15,99 @@ const dashboardState = {
   currentProject: null
 };
 
-/**
- * Initialize the dashboard
- */
 async function init() {
+  // Prevent multiple initializations
+  if (window.projectDashboardInitialized) {
+    console.log('[projectDashboard] Already initialized.');
+    return true;
+  }
+  window.projectDashboardInitialized = true; // Set flag early
+  console.log('[projectDashboard] Initializing...');
+
   try {
     // Initialize components
-    await initializeComponents();
+    await initializeComponents(); // Wait for components including HTML loading
 
-    // Process URL for initial view
+    // Process URL parameters for initial view
     processUrlParameters();
 
     // Set up event listeners
     setupEventListeners();
 
     // Dispatch initialization event
-    document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
-
+    document.dispatchEvent(
+      new CustomEvent('projectDashboardInitializedEvent', { detail: { success: true } })
+    );
+    console.log('[projectDashboard] Initialization complete.');
     return true;
   } catch (error) {
-    console.error('Dashboard initialization failed:', error);
+    console.error('[projectDashboard] Initialization failed:', error);
     window.app?.showNotification('Dashboard initialization failed', 'error');
+    window.projectDashboardInitialized = false; // Reset flag on failure
+    document.dispatchEvent(
+      new CustomEvent('projectDashboardInitializedEvent', { detail: { success: false, error } })
+    );
     return false;
   }
 }
-
 
 /**
  * Initialize dashboard components
  */
 async function initializeComponents() {
+  console.log('[projectDashboard] Initializing components...');
+  // Ensure project_list.html is loaded BEFORE creating ProjectListComponent
   await loadProjectListHtml();
-  components.projectList = new window.ProjectListComponent({
-    elementId: 'projectList',
-    onViewProject: handleViewProject
-  });
 
-  components.projectDetails = new window.ProjectDetailsComponent({
-    onBack: handleBackToList
-  });
+  // Now it's safe to create the list component
+  if (window.ProjectListComponent) {
+    components.projectList = new window.ProjectListComponent({
+      elementId: 'projectList', // ID inside project_list.html
+      onViewProject: handleViewProject
+    });
+    console.log('[projectDashboard] ProjectListComponent created.');
+  } else {
+    console.error('[projectDashboard] ProjectListComponent class not found.');
+  }
+
+  // Initialize details component
+  if (window.ProjectDetailsComponent) {
+    components.projectDetails = new window.ProjectDetailsComponent({
+      onBack: handleBackToList
+    });
+    console.log('[projectDashboard] ProjectDetailsComponent created.');
+  } else {
+    console.error('[projectDashboard] ProjectDetailsComponent class not found.');
+  }
+  console.log('[projectDashboard] Components initialized.');
 }
 
 async function loadProjectListHtml() {
   const container = document.getElementById('projectListView');
-  if (!container) return;
+  if (!container) {
+    console.error('[projectDashboard] projectListView container not found in DOM.');
+    return;
+  }
+  // Avoid reloading if already populated
+  if (container.querySelector('#projectList')) {
+    console.log('[projectDashboard] project_list.html seems already loaded.');
+    return;
+  }
+
+  console.log('[projectDashboard] Loading project_list.html...');
   try {
     const response = await fetch('/static/html/project_list.html');
     if (response.ok) {
       const html = await response.text();
       container.innerHTML = html;
+      console.log('[projectDashboard] project_list.html loaded successfully.');
     } else {
-      console.warn('[projectDashboard] Failed to load project_list.html. Status:', response.status);
+      console.error('[projectDashboard] Failed to load project_list.html. Status:', response.status);
+      container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
     }
   } catch (err) {
-    console.error('[projectDashboard] Error loading project_list.html:', err);
+    console.error('[projectDashboard] Error fetching project_list.html:', err);
+    container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
   }
 }
 
@@ -106,7 +145,7 @@ function processUrlParameters() {
 }
 
 /**
- * Handle pop state events
+ * Handle popstate (back/forward)
  */
 function handlePopState() {
   processUrlParameters();
@@ -148,6 +187,7 @@ function showProjectDetails(projectId) {
   }
 
   dashboardState.currentView = 'details';
+  dashboardState.currentProject = projectId;
 
   if (components.projectList) {
     components.projectList.hide();
@@ -191,7 +231,7 @@ function handleBackToList() {
 }
 
 /**
- * Handle authentication state changes
+ * Handle auth state changes
  */
 function handleAuthStateChange(event) {
   const { authenticated } = event.detail || {};
@@ -228,24 +268,30 @@ function handleAuthStateChange(event) {
  * Handle projects loaded event
  */
 function handleProjectsLoaded(event) {
-  // Skip if event is from another source
-  if (event.detail?.source && event.detail.source !== 'projectManager') {
+  const { projects = [], error = false } = event.detail || {};
+
+  if (error) {
+    console.error('[projectDashboard] Received projectsLoaded event with error:', event.detail.message);
+    if (components.projectList?._showErrorState) {
+      components.projectList._showErrorState(event.detail.message || 'Failed to load projects');
+    }
     return;
   }
 
-  const { projects = [], count = 0, filter = { type: 'all' }, error = false } = event.detail || {};
-
   if (components.projectList) {
+    console.log(`[projectDashboard] Rendering ${projects.length} projects.`);
     components.projectList.renderProjects(projects);
+  } else {
+    console.warn('[projectDashboard] ProjectListComponent not available to render projects.');
   }
 }
 
 /**
- * Handle project loaded event
+ * Handle single project loaded event
  */
 function handleProjectLoaded(event) {
   const project = event.detail;
-  dashboardState.currentProject = project;
+  dashboardState.currentProject = project?.id || null;
 
   if (components.projectDetails) {
     components.projectDetails.renderProject(project);
@@ -257,37 +303,17 @@ function handleProjectLoaded(event) {
  */
 function handleProjectStatsLoaded(event) {
   const stats = event.detail;
-
   if (components.projectDetails) {
     components.projectDetails.renderStats(stats);
   }
 }
 
 /**
- * Handle files loaded event
+ * Handle project files loaded event
  */
 function handleFilesLoaded(event) {
   if (components.projectDetails) {
     components.projectDetails.renderFiles(event.detail.files);
-  }
-}
-
-/**
- * Handle conversations loaded event
- */
-function handleConversationsLoaded(event) {
-  let conversations = [];
-
-  if (Array.isArray(event.detail)) {
-    conversations = event.detail;
-  } else if (event.detail?.conversations) {
-    conversations = event.detail.conversations;
-  } else if (event.detail?.data?.conversations) {
-    conversations = event.detail.data.conversations;
-  }
-
-  if (components.projectDetails) {
-    components.projectDetails.renderConversations(conversations);
   }
 }
 
@@ -319,6 +345,3 @@ window.projectDashboard = {
   showProjectList,
   showProjectDetails
 };
-
-// Export showProjectsView for backward compatibility
-window.showProjectsView = showProjectList;

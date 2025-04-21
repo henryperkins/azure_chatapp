@@ -506,11 +506,6 @@ class ProjectModal {
 
     // Use createOrUpdateProject which handles both create and update
     await window.projectManager.createOrUpdateProject(projectId, projectData);
-
-    // Refresh the project list if possible
-    if (typeof window.projectManager.loadProjects === "function") {
-      await window.projectManager.loadProjects();
-    }
   }
 
   setLoading(isLoading) {
