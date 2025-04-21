@@ -62,8 +62,8 @@ class CookieSettings:
         hostname = request.url.hostname
         scheme = request.url.scheme
 
-        # Default to secure settings
-        secure = True
+        # Default to secure settings (only in production)
+        secure = (self.env == "production")
         samesite: Literal["lax", "strict", "none"] = "lax"
         domain = self.cookie_domain
 
@@ -83,7 +83,10 @@ class CookieSettings:
             samesite = "none"
             domain = None
         elif hostname and "." in hostname and not is_local_dev:
-            if hostname in settings.ALLOWED_HOSTS:
+            # Force domain=None if not production
+            if self.env != "production":
+                domain = None
+            elif hostname in settings.ALLOWED_HOSTS:
                 domain = hostname
             else:
                 domain = self.cookie_domain
