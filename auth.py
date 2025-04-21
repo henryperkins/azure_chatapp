@@ -78,12 +78,9 @@ class CookieSettings:
                 or hostname.startswith("10.")
             )
         )
-        if is_local_dev:
-            secure = False
-            samesite = "none"
-            domain = None
-        elif self.cookie_domain:
-            domain = self.cookie_domain
+        secure = False
+        samesite = "none"
+        domain = None
         elif hostname and "." in hostname and not is_local_dev:
             if hostname in settings.ALLOWED_HOSTS:
                 domain = hostname
