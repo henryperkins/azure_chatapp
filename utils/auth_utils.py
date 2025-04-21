@@ -68,12 +68,14 @@ async def verify_token(
     token: str,
     expected_type: Optional[str] = None,
     request: Optional[Request] = None,
+    db_session: Optional[AsyncSession] = None
 ) -> Dict[str, Any]:
     """
     Verifies and decodes a JWT token.
     - Checks if token is blacklisted.
     - Optionally enforces a specific token type (e.g., 'access', 'refresh').
     - Raises HTTPException(401) if invalid, expired, or revoked.
+    - Can reuse an existing database session if provided.
     Provides detailed logging for all stages.
     """
     decoded = None
@@ -111,14 +113,20 @@ async def verify_token(
             logger.warning("Token missing required 'jti' claim")
             raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-        # Check if token is blacklisted
-        async with get_async_session_context() as db:
+        # Check if token is blacklisted - using the provided session if available
+        if db_session:
             query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
-            result = await db.execute(query)
+            result = await db_session.execute(query)
             blacklisted = result.scalar_one_or_none()
-            if blacklisted:
-                logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
-                raise HTTPException(status_code=401, detail="Token is revoked")
+        else:
+            async with get_async_session_context() as db:
+                query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
+                result = await db.execute(query)
+                blacklisted = result.scalar_one_or_none()
+                
+        if blacklisted:
+            logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
+            raise HTTPException(status_code=401, detail="Token is revoked")
 
         if settings.DEBUG:
             duration = (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -214,13 +222,14 @@ def extract_token(request_or_websocket, token_type="access"):
 # -----------------------------------------------------------------------------
 async def get_user_from_token(
     request: Request,
+    Uses the same database session for both token verification and user retrieval.
     db: AsyncSession = Depends(get_async_session),
     expected_type: str = "access",
 ) -> User:
     """
     Retrieve the token from cookies, verify it, then load the user.
     Raises 401 if user not found or token is invalid/expired/revoked.
-    """
+    decoded = await verify_token(token, expected_type, request, db_session=db)
     token = extract_token(request, token_type=expected_type)
     if not token:
         logger.warning(f"No {expected_type} token found in request")
