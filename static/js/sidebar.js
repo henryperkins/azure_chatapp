@@ -54,6 +54,28 @@
       });
     }
 
+    // --- START: Added Tab Click Listeners ---
+    const tabButtons = [
+      { id: 'recentChatsTab', name: 'recent' },
+      { id: 'starredChatsTab', name: 'starred' },
+      { id: 'projectsTab', name: 'projects' }
+    ];
+
+    tabButtons.forEach(tabInfo => {
+      const button = document.getElementById(tabInfo.id);
+      if (button) {
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          activateTab(tabInfo.name);
+          // Store the active tab preference
+          localStorage.setItem('sidebarActiveTab', tabInfo.name);
+        });
+      } else {
+        console.warn(`[sidebar.js] Tab button not found: ${tabInfo.id}`);
+      }
+    });
+    // --- END: Added Tab Click Listeners ---
+
     // Optional: handle a pinned sidebar from localStorage
     const pinned = localStorage.getItem('sidebarPinned');
     if (pinned === 'true') {
@@ -169,42 +191,70 @@
         tabName = 'recent';
       }
 
+      let foundMissingElements = false;
       // Ensure all tab elements exist
       for (const [name, tab] of Object.entries(tabs)) {
         if (!tab.button || !tab.section) {
           console.warn(`[sidebar] Missing elements for tab: ${name}`);
-          return;
+          foundMissingElements = true;
         }
+      }
+      // If the target tab is missing elements, we can't proceed reliably
+      if (
+        foundMissingElements &&
+        (!tabs[tabName].button || !tabs[tabName].section)
+      ) {
+        console.error(
+          `[sidebar] Critical elements missing for target tab: ${tabName}. Aborting tab activation.`
+        );
+        return;
       }
 
       // Update all tabs
       Object.entries(tabs).forEach(([name, tab]) => {
-        if (name === tabName) {
-          // Activate current tab
-          tab.button.classList.add('border-b-2', 'border-primary', 'text-primary');
-          tab.button.classList.remove('text-base-content/60');
-          tab.button.setAttribute('aria-selected', 'true');
-          tab.button.removeAttribute('tabindex');
-          tab.section.classList.remove('hidden');
-        } else {
-          // Deactivate other tabs
-          tab.button.classList.remove('border-b-2', 'border-primary', 'text-primary');
-          tab.button.classList.add('text-base-content/60');
-          tab.button.setAttribute('aria-selected', 'false');
-          tab.button.setAttribute('tabindex', '-1');
-          tab.section.classList.add('hidden');
+        if (tab.button && tab.section) {
+          if (name === tabName) {
+            // Activate current tab
+            tab.button.classList.add('border-b-2', 'border-primary', 'text-primary');
+            tab.button.classList.remove('text-base-content/60');
+            tab.button.setAttribute('aria-selected', 'true');
+            tab.button.removeAttribute('tabindex');
+            tab.section.classList.remove('hidden');
+          } else {
+            // Deactivate other tabs
+            tab.button.classList.remove('border-b-2', 'border-primary', 'text-primary');
+            tab.button.classList.add('text-base-content/60');
+            tab.button.setAttribute('aria-selected', 'false');
+            tab.button.setAttribute('tabindex', '-1');
+            tab.section.classList.add('hidden');
+          }
         }
       });
 
       // Special handling for projects tab
       if (tabName === 'projects') {
         // Initialize dashboard if not already done
-        if (!window.projectDashboardInitialized) {
-          window.projectDashboard?.init().then(success => {
-            if (!success) {
-              console.error('[sidebar] Failed to initialize project dashboard');
+        const projectSection = document.getElementById('projectsSection');
+        if (projectSection && !projectSection.dataset.initialized) {
+          window.projectDashboard?.init().then((success) => {
+            if (success) {
+              projectSection.dataset.initialized = 'true';
+              console.log('[sidebar] Project dashboard initialized via tab activation.');
+              // Optionally trigger project load if needed
+              if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
+                window.projectManager.loadProjects('all');
+              }
+            } else {
+              console.error('[sidebar] Failed to initialize project dashboard on tab activation');
             }
+          }).catch(err => {
+            console.error('[sidebar] Error initializing project dashboard on tab activation:', err);
           });
+        } else if (projectSection?.dataset.initialized === 'true') {
+          // Re-load projects if needed when switching back
+          if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
+            window.projectManager.loadProjects('all');
+          }
         }
       }
     } catch (err) {
