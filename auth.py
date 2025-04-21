@@ -692,8 +692,12 @@ async def logout_user(
     Ensures a single session usage per request.
     """
     # Pull user using the single session from this request,
-    # specifying 'refresh' if you want them to hold a valid refresh token.
-    current_user = await get_user_from_token(request, session, expected_type="refresh")
+    # First try to use refresh token, fall back to access token if needed
+    try:
+        current_user = await get_user_from_token(request, session, expected_type="refresh")
+    except HTTPException:
+        # Fall back to access token if refresh token fails
+        current_user = await get_user_from_token(request, session, expected_type="access")
 
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
