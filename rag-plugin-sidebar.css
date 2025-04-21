@@ -1,0 +1,13 @@
+.rag-plugin-sidebar-content {
+    padding: 1rem;
+}
+.rag-plugin-sidebar-content .components-panel__body {
+    margin-bottom: 1rem;
+}
+.rag-plugin-sidebar-content .components-button {
+    margin-top: 1rem;
+}
+.rag-plugin-sidebar-content p {
+    margin-top: 1rem;
+    font-style: italic;
+}
