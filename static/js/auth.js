@@ -276,7 +276,9 @@ async function verifyAuthState(forceVerify = false) {
 
   try {
     await getCSRFTokenAsync();
-    const res = await authRequest('/api/auth/verify', 'GET');
+    const res = await authRequest('/api/auth/verify', 'GET', null, {
+      timeout: AUTH_CONFIG.VERIFY_TIMEOUT
+    });
 
     const serverAuthenticated = !!res?.authenticated;
     const serverUsername = res?.username || null;
