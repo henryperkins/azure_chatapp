@@ -112,8 +112,28 @@
         }
       });
 
-      // Add global tags
-      Sentry.setTag('app_version', '1.0.0'); // Adjust as needed
+      // Enhanced context capture
+      Sentry.setTag('app_version', window.APP_VERSION || 'unknown');
+      Sentry.setTag('browser', navigator.userAgent);
+      Sentry.setTag('screen_resolution', `${window.screen.width}x${window.screen.height}`);
+
+      // Capture initial environment details
+      Sentry.setContext('environment', {
+        browser: {
+          name: navigator.userAgent,
+          online: navigator.onLine,
+          language: navigator.language
+        },
+        screen: {
+          width: window.screen.width,
+          height: window.screen.height,
+          colorDepth: window.screen.colorDepth
+        },
+        document: {
+          referrer: document.referrer,
+          url: window.location.href
+        }
+      });
 
       // Monitor auth changes for user identification
       document.addEventListener('authStateChanged', function (event) {
@@ -166,23 +186,110 @@
     if (window.Sentry && typeof Sentry.captureException === 'function') {
       Sentry.captureException(error, { extra: context });
     }
-    console.error('[Error]', error, context);
+     console.error('[Error]', error, context);
   };
+
+  // Enhanced global error handlers
+  function captureError(error, context = {}) {
+    if (window.Sentry && typeof Sentry.captureException === 'function') {
+      Sentry.withScope(scope => {
+        scope.setLevel('error');
+        scope.setExtras(context);
+        Sentry.captureException(error);
+      });
+    }
+    console.error('[Captured Error]', error, context);
+  }
 
   // Global unhandled promise rejection handler
   window.addEventListener('unhandledrejection', function (event) {
     const error = event.reason || new Error('Unhandled Promise Rejection');
-    const errorInfo = {
-      message: error?.message || 'Unhandled Promise Rejection',
-      stack: error?.stack,
-      additional: 'Captured via unhandledrejection event'
-    };
-
-    console.error('[Unhandled Promise Rejection]', errorInfo);
-    if (window.Sentry && typeof Sentry.captureException === 'function') {
-      Sentry.captureException(error, {
-        extra: { unhandledRejection: true }
-      });
-    }
+    captureError(error, {
+      type: 'unhandledrejection',
+      promise: event.promise.toString(),
+      stack: error?.stack
+    });
   });
+
+  // Global error handler
+  window.addEventListener('error', function (event) {
+    captureError(event.error || new Error(event.message), {
+      type: 'window.onerror',
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno
+    });
+  });
+
+  // Console error interception
+  const originalConsoleError = console.error;
+  console.error = function() {
+    const error = arguments[0] instanceof Error ? arguments[0] : new Error(Array.from(arguments).join(' '));
+    captureError(error, {
+      type: 'console.error',
+      args: Array.from(arguments).slice(1)
+    });
+    originalConsoleError.apply(console, arguments);
+  };
+
+      // User interaction tracking
+      document.addEventListener('click', function(event) {
+        if (event.target && event.target !== document) {
+          Sentry.addBreadcrumb({
+            category: 'ui.click',
+            message: `Clicked: ${event.target.tagName.toLowerCase()}`,
+            level: 'info',
+            data: {
+              id: event.target.id || null,
+              class: event.target.className || null,
+              text: event.target.textContent?.trim().slice(0, 100) || null
+            }
+          });
+        }
+      });
+
+      // Navigation tracking
+      let lastHref = window.location.href;
+      const navigationObserver = new MutationObserver(function() {
+        if (window.location.href !== lastHref) {
+          Sentry.addBreadcrumb({
+            category: 'navigation',
+            message: `Navigated to: ${window.location.href}`,
+            level: 'info'
+          });
+          lastHref = window.location.href;
+        }
+      });
+      navigationObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+
+      // Network error tracking
+      const originalFetch = window.fetch;
+  window.fetch = async function() {
+    try {
+      const response = await originalFetch.apply(this, arguments);
+      if (!response.ok) {
+        Sentry.addBreadcrumb({
+          category: 'fetch',
+          message: `Fetch failed: ${response.status} ${response.statusText}`,
+          level: 'error',
+          data: {
+            url: arguments[0],
+            status: response.status,
+            method: arguments[1]?.method || 'GET'
+          }
+        });
+      }
+      return response;
+    } catch (error) {
+      captureError(error, {
+        type: 'fetch',
+        url: arguments[0],
+        method: arguments[1]?.method || 'GET'
+      });
+      throw error;
+    }
+  };
 })();
