@@ -3,7 +3,7 @@
     const { registerPlugin } = wp.plugins;
     const { __ } = wp.i18n; // For translations
     const { PluginSidebar, PluginSidebarMoreMenuItem } = wp.editPost;
-    const { Button, TextControl, Spinner, PanelBody } = wp.components;
+    const { Button, TextControl, Spinner, PanelBody, SelectControl } = wp.components;
 
     function RAGSidebarInterface() {
         // Local state for demonstration
@@ -16,13 +16,13 @@
             setLoading(true);
             setResponseData('');
             try {
-                const resp = await fetch('<YOUR_RAG_API_ENDPOINT>', {
+                const resp = await fetch('/wp-json/rag-plugin/v1/queries', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: userInput })
                 });
                 const data = await resp.json();
-                setResponseData(data?.ragContent || __('No data returned', 'rag-plugin'));
+                setResponseData(data?.response || __('No data returned', 'rag-plugin'));
             } catch (error) {
                 setResponseData(__('Error: ', 'rag-plugin') + error.message);
             }
