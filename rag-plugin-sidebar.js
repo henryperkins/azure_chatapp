@@ -6,10 +6,10 @@
     const { Button, TextControl, Spinner, PanelBody, SelectControl } = wp.components;
 
     function RAGSidebarInterface() {
-        // Local state for demonstration
         const [ userInput, setUserInput ] = useState('');
         const [ loading, setLoading ] = useState(false);
         const [ responseData, setResponseData ] = useState('');
+        const [ history, setHistory ] = useState([]);
 
         // Example function to call your external RAG endpoint
         async function handleRAGRequest() {
@@ -54,6 +54,20 @@
                 }, __('Send to RAG', 'rag-plugin')),
                 loading && el(Spinner, null),
                 responseData && el('p', null, responseData)
+            ),
+            el(PanelBody, { title: __('RAG History', 'rag-plugin'), initialOpen: false },
+                el(Button, { onClick: loadHistory }, __('Load Recent Queries', 'rag-plugin')),
+                loading && el(Spinner, null),
+                history && history.length > 0 && el('div', null,
+                    history.map((item) => (
+                        el('div', { key: item.id, className: 'rag-query-item' },
+                            el('p', null, __('Query:', 'rag-plugin') + ' ' + item.query_text),
+                            el('p', null, __('Response:', 'rag-plugin') + ' ' + (item.response_text || '...')),
+                            el('p', null, __('Created At:', 'rag-plugin') + ' ' + item.created_at),
+                            el('hr', null)
+                        )
+                    ))
+                )
             )
         );
     }

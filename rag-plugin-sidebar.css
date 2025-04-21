@@ -11,3 +11,15 @@
     margin-top: 1rem;
     font-style: italic;
 }
+
+.rag-query-item {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: #f6f7f7;
+    border-radius: 2px;
+}
+
+.rag-query-item p {
+    margin: 0.5rem 0;
+    font-style: normal;
+}
