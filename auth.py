@@ -9,7 +9,7 @@ from typing import Any, Literal, Optional, Tuple, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings  # Use settings directly from config
@@ -496,6 +496,9 @@ async def refresh_token(
                 status_code=401,
                 detail="Invalid refresh token. Please login again."
             )
+            
+        # Validate database connection with a simple health check
+        await session.execute(text("SELECT 1"))
 
         # Ensure we have a clean session state
         if session.in_transaction():

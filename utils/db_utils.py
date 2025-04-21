@@ -23,7 +23,7 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import BinaryExpression
 from sqlalchemy.sql import ColumnElement
@@ -98,7 +98,7 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
     Args:
         interval_minutes: Time in minutes between cleanup runs
     """
-    # Start the task in the background
+    # Start the token cleanup task in the background
     asyncio.create_task(
         run_periodic_task(
             interval_minutes * 60,  # Convert to seconds
@@ -107,6 +107,37 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
         )
     )
     logger.info(f"Scheduled token cleanup to run every {interval_minutes} minutes")
+    
+    # Start the database health check task in the background
+    asyncio.create_task(
+        run_periodic_task(
+            60,  # Run every minute
+            periodic_health_check,
+            "db_health_check",
+        )
+    )
+    logger.info("Scheduled database health check to run every minute")
+
+async def periodic_health_check(session: AsyncSession) -> str:
+    """
+    Periodic database health check to ensure connectivity.
+    
+    Args:
+        session: Database session
+        
+    Returns:
+        Status message
+    """
+    try:
+        result = await session.execute(text("SELECT 1"))
+        if result.scalar() == 1:
+            return "Database connection healthy"
+        else:
+            logger.warning("Database health check returned unexpected result")
+            return "Database connection returned unexpected result"
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        return f"Database connection failed: {str(e)}"
 
 async def save_model(db: AsyncSession, model_instance: Any) -> Optional[Any]:
     """
