@@ -35,8 +35,13 @@ DEFAULT_ADMIN = {
     "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Admin123!@#dev"),
 }
 
-ACCESS_TOKEN_EXPIRE_MINUTES = getattr(settings, "ACCESS_TOKEN_EXPIRE_MINUTES", 30)
-REFRESH_TOKEN_EXPIRE_DAYS = getattr(settings, "REFRESH_TOKEN_EXPIRE_DAYS", 1)
+# Extended token lifetimes in development
+if os.getenv("ENVIRONMENT") == "development":
+    ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+    REFRESH_TOKEN_EXPIRE_DAYS = 30  # 1 month
+else:
+    ACCESS_TOKEN_EXPIRE_MINUTES = getattr(settings, "ACCESS_TOKEN_EXPIRE_MINUTES", 30)
+    REFRESH_TOKEN_EXPIRE_DAYS = getattr(settings, "REFRESH_TOKEN_EXPIRE_DAYS", 1)
 
 router = APIRouter()
 
@@ -62,15 +67,22 @@ class CookieSettings:
         hostname = request.url.hostname
         scheme = request.url.scheme
 
-        # Default to secure settings (only in production)
-        secure = (self.env == "production")
+        # Simplified cookie settings in development
+        if self.env == "development":
+            return {
+                "secure": False,
+                "domain": None,
+                "samesite": "none"
+            }
+
+        # Production settings
+        secure = True
         samesite: Literal["lax", "strict", "none"] = "lax"
         domain = self.cookie_domain
 
-        # Adjust for local dev
+        # Adjust for local dev (fallback)
         is_local_dev = (
-            self.env != "production"
-            and scheme == "http"
+            scheme == "http"
             and (
                 not hostname
                 or hostname in {"localhost", "127.0.0.1"}
@@ -82,16 +94,11 @@ class CookieSettings:
             secure = False
             samesite = "none"
             domain = None
-        elif hostname and "." in hostname and not is_local_dev:
-            # Force domain=None if not production
-            if self.env != "production":
-                domain = None
-            elif hostname in settings.ALLOWED_HOSTS:
+        elif hostname and "." in hostname:
+            if hostname in settings.ALLOWED_HOSTS:
                 domain = hostname
             else:
                 domain = self.cookie_domain
-
-        # Ensure SameSite=None is only used with Secure
 
         return {"secure": secure, "domain": domain, "samesite": samesite}
 
@@ -146,11 +153,11 @@ WINDOW_SECONDS = 300  # 5 minutes
 async def rate_limit_login(request: Request, username: str):
     """
     In-memory rate limiter for login attempts.
-    Skips if in DEBUG mode.
+    Disabled in development mode.
     """
-    if settings.DEBUG:
+    if os.getenv("ENVIRONMENT") == "development" or settings.DEBUG:
         if AUTH_DEBUG:
-            logger.debug("Skipping rate-limit in development (DEBUG).")
+            logger.debug("Skipping rate-limit in development.")
         return
 
     client_ip = request.client.host if request.client else "unknown"
@@ -518,7 +525,10 @@ async def refresh_token(
         )
 
     # Get user using the same session to avoid multiple sessions
-    user = await get_user_from_token(request, session, expected_type="refresh")
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+    user = await get_user_from_token(refresh_token, session, expected_type="refresh")
     logger.debug("Attempting token refresh for user: %s", user.username)
 
     try:
