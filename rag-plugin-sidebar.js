@@ -3,35 +3,95 @@
     const { registerPlugin } = wp.plugins;
     const { __ } = wp.i18n; // For translations
     const { PluginSidebar, PluginSidebarMoreMenuItem } = wp.editPost;
-    const { Button, TextControl, Spinner, PanelBody, SelectControl } = wp.components;
+    const { 
+        Button, 
+        TextControl, 
+        Spinner, 
+        PanelBody, 
+        SelectControl,
+        Notice,
+        Card,
+        CardBody,
+        CardHeader
+    } = wp.components;
 
     function RAGSidebarInterface() {
         const [ userInput, setUserInput ] = useState('');
         const [ loading, setLoading ] = useState(false);
+        const [ historyLoading, setHistoryLoading ] = useState(false);
         const [ responseData, setResponseData ] = useState('');
+        const [ responseFormat, setResponseFormat ] = useState('text');
         const [ history, setHistory ] = useState([]);
+        const [ notice, setNotice ] = useState(null);
 
         // Example function to call your external RAG endpoint
         async function handleRAGRequest() {
+            if (!userInput.trim()) {
+                setNotice({
+                    message: __('Please enter a query first', 'rag-plugin'),
+                    status: 'error'
+                });
+                return;
+            }
+
             setLoading(true);
             setResponseData('');
             try {
                 const resp = await fetch('/wp-json/rag-plugin/v1/queries', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: userInput })
+                    body: JSON.stringify({ 
+                        query: userInput,
+                        format: responseFormat 
+                    })
                 });
                 const data = await resp.json();
-                setResponseData(data?.response || __('No data returned', 'rag-plugin'));
+                
+                if (data.success) {
+                    setResponseData(data.response);
+                    setNotice({
+                        message: __('Query successful!', 'rag-plugin'),
+                        status: 'success'
+                    });
+                } else {
+                    setNotice({
+                        message: data.message || __('Request failed', 'rag-plugin'),
+                        status: 'error'
+                    });
+                }
             } catch (error) {
-                setResponseData(__('Error: ', 'rag-plugin') + error.message);
+                setNotice({
+                    message: __('Error: ', 'rag-plugin') + error.message,
+                    status: 'error'
+                });
             }
             setLoading(false);
+        }
+
+        async function loadHistory() {
+            setHistoryLoading(true);
+            try {
+                const resp = await fetch('/wp-json/rag-plugin/v1/queries?limit=5');
+                const data = await resp.json();
+                if (data.success) {
+                    setHistory(data.data);
+                }
+            } catch (error) {
+                setNotice({
+                    message: __('Failed to load history: ', 'rag-plugin') + error.message,
+                    status: 'error'
+                });
+            }
+            setHistoryLoading(false);
         }
 
         return el(
             'div',
             { className: 'rag-plugin-sidebar-content' },
+            notice && el(Notice, {
+                status: notice.status,
+                onRemove: () => setNotice(null)
+            }, notice.message),
             el(PanelBody, { title: __('Ask the RAG Service', 'rag-plugin'), initialOpen: true },
                 el(TextControl, {
                     label: __('User Query', 'rag-plugin'),
@@ -58,13 +118,19 @@
             el(PanelBody, { title: __('RAG History', 'rag-plugin'), initialOpen: false },
                 el(Button, { onClick: loadHistory }, __('Load Recent Queries', 'rag-plugin')),
                 loading && el(Spinner, null),
+                historyLoading && el(Spinner, null),
                 history && history.length > 0 && el('div', null,
                     history.map((item) => (
-                        el('div', { key: item.id, className: 'rag-query-item' },
-                            el('p', null, __('Query:', 'rag-plugin') + ' ' + item.query_text),
-                            el('p', null, __('Response:', 'rag-plugin') + ' ' + (item.response_text || '...')),
-                            el('p', null, __('Created At:', 'rag-plugin') + ' ' + item.created_at),
-                            el('hr', null)
+                        el(Card, { key: item.id, className: 'rag-query-item' },
+                            el(CardHeader, null, 
+                                el('strong', null, __('Query:', 'rag-plugin') + ' ' + item.query_text)
+                            ),
+                            el(CardBody, null,
+                                el('p', null, __('Response:', 'rag-plugin') + ' ' + (item.response_text || '...')),
+                                el('p', null, 
+                                    el('small', null, __('Created At:', 'rag-plugin') + ' ' + item.created_at)
+                                )
+                            )
                         )
                     ))
                 )
