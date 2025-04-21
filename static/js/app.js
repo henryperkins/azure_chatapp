@@ -227,7 +227,6 @@ async function handleNavigationChange() {
       if (window.projectManager?.loadProjectDetails) {
         await window.projectManager.loadProjectDetails(projectId);
       }
-
       toggleElement('PROJECT_LIST_VIEW', false);
       toggleElement('PROJECT_DETAILS_VIEW', true);
       return;
@@ -331,25 +330,39 @@ async function initApp() {
     async () => {
       while (!window.modalManager) await new Promise(resolve => setTimeout(resolve, 100));
       window.modalManager.init();
+      console.log('[App] ModalManager initialized.');
+      // --- START: Initialize ProjectModal ---
+      if (window.projectModal?.init) {
+        window.projectModal.init();
+        console.log('[App] ProjectModal initialized.');
+      } else {
+        console.warn('[App] window.projectModal or its init method not found.');
+      }
+      // --- END: Initialize ProjectModal ---
     },
-    // Then project system
+    // Then sidebar
     async () => {
-      while (!window.projectManager) await new Promise(resolve => setTimeout(resolve, 100));
-      await window.projectManager.init();
+      while (!window.sidebar?.init) await new Promise(resolve => setTimeout(resolve, 100));
+      window.sidebar.init(); // Sidebar init now handles default tab
+      console.log('[App] Sidebar initialized.');
     },
-    // Then sidebar with active tab
+    // Then project dashboard
     async () => {
-      while (!window.sidebar) await new Promise(resolve => setTimeout(resolve, 100));
-      window.sidebar.init();
-      const defaultTab = localStorage.getItem('sidebarActiveTab') || 'recent';
-      window.sidebar.activateTab(defaultTab);
+      while (!window.projectDashboard?.init) await new Promise(resolve => setTimeout(resolve, 100));
+      await window.projectDashboard.init(); // Ensure dashboard init is awaited
+      console.log('[App] ProjectDashboard initialized.');
     },
     // Then other components
     () => window.chatExtensions?.initChatExtensions?.(),
     () => window.KnowledgeBaseComponent &&
       (window.knowledgeBaseComponent = new window.KnowledgeBaseComponent()),
     () => window.chatManager?.initialize?.(),
-    () => window.projectDashboard?.init?.()
+    // Initialize project list after dashboard
+    async () => {
+      while (!window.initProjectList) await new Promise(resolve => setTimeout(resolve, 100));
+      window.initProjectList();
+      console.log('[App] ProjectListInit executed.');
+    }
   ];
 
   // Execute initialization sequence with error handling
@@ -357,28 +370,43 @@ async function initApp() {
     try {
       await initFn();
     } catch (error) {
-      console.error('[App] Initialization error:', error);
+      console.error('[App] Initialization error during sequence:', error);
+      showNotification(`Initialization step failed: ${error.message}`, 'error');
     }
   }
 
   // Load initial data if authenticated
   if (appState.isAuthenticated) {
+    console.log('[App] User authenticated, loading initial project data...');
     try {
-      if (window.projectManager?.loadProjects) {
-        await window.projectManager.loadProjects('all');
+      if (window.projectManagerAPI?.loadProjects) {
+        const currentFilter = localStorage.getItem('projectFilter') || 'all';
+        await window.projectManagerAPI.loadProjects(currentFilter);
+        console.log('[App] Initial project data loaded.');
+      } else {
+        console.warn('[App] projectManagerAPI.loadProjects not found.');
       }
     } catch (error) {
-      console.error('[App] Error loading initial data:', error);
+      console.error('[App] Error loading initial project data:', error);
+      showNotification('Failed to load initial project data', 'error');
     }
+  } else {
+    console.log('[App] User not authenticated, skipping initial data load.');
   }
 
   // Perform initial navigation
   await handleNavigationChange();
+  console.log('[App] Initial navigation handled.');
 
   appState.initializing = false;
   appState.initialized = true;
   appState.currentPhase = 'complete';
   console.log('[App] Initialization complete');
+
+  // Register listeners after init is complete
+  registerAppListeners();
+  console.log('[App] Global listeners registered.');
+
   return true;
 }
 
@@ -412,6 +440,17 @@ function registerAppListeners() {
   window.addEventListener('popstate', handleNavigationChange);
 }
 
+function handleInitError(error) {
+  console.error('[App] Critical initialization error:', error);
+  console.debug('[App] Diagnostics:', {
+    authAvailable: !!window.auth,
+    appState: JSON.stringify(appState),
+    documentReady: document.readyState,
+    eventHandlersAvailable: !!window.eventHandlers
+  });
+  showNotification('Application failed to initialize. Please refresh.', 'error');
+}
+
 // Start initialization if DOM is already ready
 if (document.readyState !== 'loading') {
   initApp().catch(handleInitError);
@@ -419,20 +458,6 @@ if (document.readyState !== 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initApp().catch(handleInitError);
   });
-}
-
-function handleInitError(error) {
-  console.error('[App] Critical initialization error:', error);
-
-  // Send detailed diagnostics to console
-  console.debug('[App] Diagnostics:', {
-    authAvailable: !!window.auth,
-    appState: JSON.stringify(appState),
-    documentReady: document.readyState,
-    eventHandlersAvailable: !!window.eventHandlers
-  });
-
-  showNotification('Application failed to initialize. Please refresh.', 'error');
 }
 
 // Consolidate global exports
