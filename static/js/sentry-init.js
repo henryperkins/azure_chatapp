@@ -170,7 +170,7 @@
     // Configuration is now handled by the loader script in base.html
     // We just need to ensure our custom config is applied
     if (window.Sentry) {
-      window.sentryOnLoad();
+      // window.sentryOnLoad();
     }
   }
 
@@ -262,11 +262,21 @@
         subtree: true
       });
 
-      // Network error tracking
-      const originalFetch = window.fetch;
+  // Network tracing and error tracking
+  const originalFetch = window.fetch;
   window.fetch = async function() {
+    const transaction = Sentry.getCurrentHub().getScope().getTransaction();
+    const span = transaction?.startChild({
+      op: 'http.client',
+      description: `fetch ${arguments[0]}`
+    });
+
     try {
       const response = await originalFetch.apply(this, arguments);
+      if (span) {
+        span.setHttpStatus(response.status);
+        span.finish();
+      }
       if (!response.ok) {
         Sentry.addBreadcrumb({
           category: 'fetch',

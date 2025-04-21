@@ -255,7 +255,7 @@ async def add_security_headers(
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "X-XSS-Protection": "1; mode=block",
-            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://o4508070823395328.ingest.us.sentry.io; connect-src 'self' https://o4508070823395328.ingest.us.sentry.io; img-src 'self' data:",
+            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com; connect-src 'self' https://o4508070823395328.ingest.us.sentry.io; img-src 'self' data:",
         }
     )
     return response
@@ -270,6 +270,17 @@ async def serve_frontend(request: Request) -> Response:
     response = FileResponse("static/html/base.html")
     response.set_cookie("APP_VERSION", APP_VERSION)
     return response
+
+@app.get("/login", include_in_schema=False)
+async def serve_login(request: Request) -> Response:
+    """Serve a login page so /login?loggedout=true doesn't 404."""
+    # Use an absolute path so the runtime can locate the file properly
+    import os
+    # Move one directory up from this file's directory, then into static/html/login.html
+    base_dir = os.path.dirname(__file__)
+    parent_dir = os.path.join(base_dir, "..")
+    login_path = os.path.abspath(os.path.join(parent_dir, "static", "html", "login.html"))
+    return FileResponse(login_path)
 
 
 @app.get("/health", tags=["system"])
