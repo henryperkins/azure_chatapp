@@ -167,14 +167,11 @@
       };
     };
 
-    // Dynamically insert Sentry loader script
-    const script = document.createElement('script');
-    script.src = getDsn(); // e.g. 'https://js.sentry-cdn.com/YOUR_DSN_PUBLIC_KEY.min.js'
-    script.crossOrigin = 'anonymous';
-
-    // Insert script into the document
-    const firstScript = document.getElementsByTagName('script')[0];
-    firstScript.parentNode.insertBefore(script, firstScript);
+    // Configuration is now handled by the loader script in base.html
+    // We just need to ensure our custom config is applied
+    if (window.Sentry) {
+      window.sentryOnLoad();
+    }
   }
 
   /**
