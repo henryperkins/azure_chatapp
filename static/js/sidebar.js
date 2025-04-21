@@ -31,6 +31,10 @@
       return;
     }
 
+    // Activate default tab from localStorage or fallback to 'recent'
+    const defaultTab = localStorage.getItem('sidebarActiveTab') || 'recent';
+    activateTab(defaultTab);
+
     // If close button doesn't exist, it's not critical, but log it
     if (!sidebarCloseBtn) {
       console.warn('[sidebar.js] closeSidebarBtn not found; ignoring close event binding.');
@@ -127,9 +131,8 @@
     backdropEl.style.cursor = 'pointer';
     document.body.appendChild(backdropEl);
 
-    backdropEl.addEventListener('click', () => {
-      closeSidebar();
-    });
+    // Attach the click listener directly to closeSidebar
+    backdropEl.addEventListener('click', closeSidebar);
   }
 
   function removeBackdrop() {
@@ -140,73 +143,72 @@
     }
   }
 
-  // Optionally, you can add a pinSidebar function or other features
-  // p.s. This would require a UI element that calls it
-  /*
-  function pinSidebar() {
-    sidebarPinned = true;
-    localStorage.setItem('sidebarPinned', 'true');
-    sidebarEl.classList.remove('-translate-x-full');
-    removeBackdrop();
-    sidebarEl.classList.add('sidebar-pinned');
-  }
-  */
+  /**
+   * activateTab - handles tab switching in the sidebar
+   */
+  function activateTab(tabName) {
+    try {
+      const tabs = {
+        'recent': {
+          button: document.getElementById('recentChatsTab'),
+          section: document.getElementById('recentChatsSection')
+        },
+        'starred': {
+          button: document.getElementById('starredChatsTab'),
+          section: document.getElementById('starredChatsSection')
+        },
+        'projects': {
+          button: document.getElementById('projectsTab'),
+          section: document.getElementById('projectsSection')
+        }
+      };
 
-/**
- * activateTab - handles tab switching in the sidebar
- */
-function activateTab(tabName) {
-  const tabs = {
-    'recent': {
-      button: document.getElementById('recentChatsTab'),
-      section: document.getElementById('recentChatsSection')
-    },
-    'starred': {
-      button: document.getElementById('starredChatsTab'),
-      section: document.getElementById('starredChatsSection')
-    },
-    'projects': {
-      button: document.getElementById('projectsTab'),
-      section: document.getElementById('projectsSection')
-    }
-  };
+      // Validate tab name and fallback to default if invalid
+      if (!tabs[tabName]) {
+        console.warn(`[sidebar] Unknown tab requested: ${tabName}`);
+        tabName = 'recent';
+      }
 
-  // Validate tab name
-  if (!tabs[tabName]) {
-    console.warn(`[sidebar] Unknown tab requested: ${tabName}`);
-    return;
-  }
+      // Ensure all tab elements exist
+      for (const [name, tab] of Object.entries(tabs)) {
+        if (!tab.button || !tab.section) {
+          console.warn(`[sidebar] Missing elements for tab: ${name}`);
+          return;
+        }
+      }
 
-  // Update all tabs
-  Object.entries(tabs).forEach(([name, tab]) => {
-    if (name === tabName) {
-      // Activate current tab
-      tab.button.classList.add('border-b-2', 'border-primary', 'text-primary');
-      tab.button.classList.remove('text-base-content/60');
-      tab.button.setAttribute('aria-selected', 'true');
-      tab.button.removeAttribute('tabindex');
-      tab.section.classList.remove('hidden');
-    } else {
-      // Deactivate other tabs
-      tab.button.classList.remove('border-b-2', 'border-primary', 'text-primary');
-      tab.button.classList.add('text-base-content/60');
-      tab.button.setAttribute('aria-selected', 'false');
-      tab.button.setAttribute('tabindex', '-1');
-      tab.section.classList.add('hidden');
-    }
-  });
-
-  // Special handling for projects tab
-  if (tabName === 'projects') {
-    // Initialize dashboard if not already done
-    if (!window.projectDashboardInitialized) {
-      window.projectDashboard?.init().then(success => {
-        if (!success) {
-          console.error('[sidebar] Failed to initialize project dashboard');
+      // Update all tabs
+      Object.entries(tabs).forEach(([name, tab]) => {
+        if (name === tabName) {
+          // Activate current tab
+          tab.button.classList.add('border-b-2', 'border-primary', 'text-primary');
+          tab.button.classList.remove('text-base-content/60');
+          tab.button.setAttribute('aria-selected', 'true');
+          tab.button.removeAttribute('tabindex');
+          tab.section.classList.remove('hidden');
+        } else {
+          // Deactivate other tabs
+          tab.button.classList.remove('border-b-2', 'border-primary', 'text-primary');
+          tab.button.classList.add('text-base-content/60');
+          tab.button.setAttribute('aria-selected', 'false');
+          tab.button.setAttribute('tabindex', '-1');
+          tab.section.classList.add('hidden');
         }
       });
+
+      // Special handling for projects tab
+      if (tabName === 'projects') {
+        // Initialize dashboard if not already done
+        if (!window.projectDashboardInitialized) {
+          window.projectDashboard?.init().then(success => {
+            if (!success) {
+              console.error('[sidebar] Failed to initialize project dashboard');
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[sidebar.js] Error in activateTab:', err);
     }
   }
-}
-
 })();

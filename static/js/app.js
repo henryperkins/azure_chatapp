@@ -290,44 +290,49 @@ async function initApp() {
   appState.currentPhase = 'auth_checked';
   appState.isAuthenticated = window.app.state.isAuthenticated;
 
-  // Initialize other components
+  // Initialize event system FIRST
   try {
-    // Removed call to window.eventHandlers.init() - now done near the end of initApp
-
-    // Removed direct call to window.sidebar - moved to unified initialization near the end of initApp
-
-    // Initialize the new chat manager if not already done
-    // Removed chatManager initialization - moved to unified initialization near the end of initApp
-
-    // Initialize model configuration UI if available
-    if (window.uiRenderer?.setupModelDropdown) {
-      await window.uiRenderer.setupModelDropdown();
-      window.uiRenderer.setupMaxTokensUI();
-      window.uiRenderer.setupVisionUI();
+    while (!window.eventHandlers) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
+    window.eventHandlers.init();
   } catch (error) {
-    console.error('[App] Component initialization failed:', error);
+    console.error('[App] Failed to initialize event handlers:', error);
+    throw error;
   }
 
-  // Initialize core modules in proper sequence
+  // Initialize model configuration UI if available
+  if (window.uiRenderer?.setupModelDropdown) {
+    await window.uiRenderer.setupModelDropdown();
+    window.uiRenderer.setupMaxTokensUI();
+    window.uiRenderer.setupVisionUI();
+  }
+
+  // Initialize core modules in proper sequence with dependency checks
   const initSequence = [
-    () => window.eventHandlers?.init?.(),
-    () => window.modalManager?.init?.(),
-    () => window.projectManager?.init?.(),
-    () => window.chatExtensions?.initChatExtensions?.(),
-    () => window.sidebar?.init?.(),
-    () => {
-      if (window.KnowledgeBaseComponent) {
-        window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
-      }
+    // Then modal manager
+    async () => {
+      while (!window.modalManager) await new Promise(resolve => setTimeout(resolve, 100));
+      window.modalManager.init();
     },
+    // Then project system
+    async () => {
+      while (!window.projectManager) await new Promise(resolve => setTimeout(resolve, 100));
+      await window.projectManager.init();
+    },
+    // Then sidebar with active tab
+    async () => {
+      while (!window.sidebar) await new Promise(resolve => setTimeout(resolve, 100));
+      window.sidebar.init();
+      const defaultTab = localStorage.getItem('sidebarActiveTab') || 'recent';
+      window.sidebar.activateTab(defaultTab);
+    },
+    // Then other components
+    () => window.chatExtensions?.initChatExtensions?.(),
+    () => window.KnowledgeBaseComponent &&
+      (window.knowledgeBaseComponent = new window.KnowledgeBaseComponent()),
     () => window.chatManager?.initialize?.(),
-    () => window.projectDashboard?.init?.(),
-    () => {
-      if (window.sidebar) {
-        window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
-      }
-    }
+    () => window.projectDashboard?.init?.()
   ];
 
   // Execute initialization sequence with error handling

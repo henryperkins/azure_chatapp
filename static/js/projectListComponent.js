@@ -98,18 +98,14 @@ class ProjectListComponent {
     // Listen for auth changes
     window.auth.AuthBus.addEventListener('authStateChanged', (e) => {
       if (e.detail.authenticated) {
-        if (window.projectManager?.loadProjects) {
-          this._loadProjects();
-        } else {
-          // If projectManager isn't ready yet, wait for appJsReady event
-          const tryLoad = () => {
-            if (window.projectManager?.loadProjects) {
-              this._loadProjects();
-              document.removeEventListener('appJsReady', tryLoad);
-            }
-          };
-          document.addEventListener('appJsReady', tryLoad);
-        }
+    const tryLoad = () => {
+      if (window.projectManager?.loadProjects) {
+        this._loadProjects();
+      } else {
+        setTimeout(tryLoad, 100);
+      }
+    };
+    tryLoad();
       }
     });
   }
@@ -182,27 +178,24 @@ class ProjectListComponent {
     this.state.loading = true;
     this._showLoadingState();
 
-    if (!window.projectManager?.loadProjects) {
-      console.warn('[ProjectListComponent] projectManager not available - waiting for initialization');
-      const checkManager = () => {
-        if (window.projectManager?.loadProjects) {
-          this._loadProjects();
-          document.removeEventListener('appJsReady', checkManager);
-        }
-      };
-      document.addEventListener('appJsReady', checkManager);
-      return;
-    }
+    const tryLoad = async () => {
+      if (!window.projectManager?.loadProjects) {
+        setTimeout(tryLoad, 100);
+        return;
+      }
 
-    try {
-      await window.projectManager.loadProjects(this.state.filter);
-    } catch (error) {
-      console.error('[ProjectListComponent] Error loading projects:', error);
-      this._showErrorState('Failed to load projects');
-    } finally {
-      this.state.loading = false;
-      this._hideLoadingState();
-    }
+      try {
+        await window.projectManager.loadProjects(this.state.filter);
+      } catch (error) {
+        console.error('[ProjectListComponent] Error loading projects:', error);
+        this._showErrorState('Failed to load projects');
+      } finally {
+        this.state.loading = false;
+        this._hideLoadingState();
+      }
+    };
+
+    tryLoad();
   }
 
   /**

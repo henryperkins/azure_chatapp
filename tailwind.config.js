@@ -22,6 +22,10 @@ export default {
       }
     }],
     darkTheme: "dracula",
-    base: false // Disable DaisyUI base to avoid Preflight conflicts
+    base: true, // Enable DaisyUI base styles
+    styled: true, // Enable DaisyUI component styles
+    utils: true, // Enable responsive utility classes
+    prefix: "", // No prefix for DaisyUI classes
+    logs: true // Show build logs
   }
 }
