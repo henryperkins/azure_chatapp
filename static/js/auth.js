@@ -5,10 +5,10 @@
 
 // Configuration
 const AUTH_CONFIG = {
-  VERIFICATION_INTERVAL: 300000,    // 5 min
+  VERIFICATION_INTERVAL: 300000,     // 5 min
   VERIFICATION_CACHE_DURATION: 60000, // 1 min
-  REFRESH_TIMEOUT: 10000,           // 10s
-  VERIFY_TIMEOUT: 5000,             // 5s
+  REFRESH_TIMEOUT: 10000,            // 10s
+  VERIFY_TIMEOUT: 5000,              // 5s
   MAX_VERIFY_ATTEMPTS: 3,
   TOKEN_EXPIRY: {
     ACCESS_MINUTES: 30,
@@ -35,7 +35,52 @@ let csrfToken = '';
 let csrfTokenPromise = null;
 
 /**
- * Get CSRF token - uses dedicated fetch to avoid recursion
+ * Persist the current auth state in localStorage
+ */
+function persistAuthState() {
+  try {
+    localStorage.setItem('authState', JSON.stringify({
+      isAuthenticated: authState.isAuthenticated,
+      username: authState.username,
+      lastVerified: authState.lastVerified,
+      tokenVersion: authState.tokenVersion
+    }));
+  } catch (e) {
+    console.warn('[Auth] Failed to persist auth state:', e);
+  }
+}
+
+/**
+ * Load the persisted auth state from localStorage
+ */
+function loadPersistedAuthState() {
+  try {
+    const savedState = localStorage.getItem('authState');
+    if (savedState) {
+      const parsed = JSON.parse(savedState);
+      authState.isAuthenticated = parsed.isAuthenticated || false;
+      authState.username = parsed.username || null;
+      authState.lastVerified = parsed.lastVerified || 0;
+      authState.tokenVersion = parsed.tokenVersion || null;
+      return true;
+    }
+  } catch (e) {
+    console.warn('[Auth] Failed to load persisted auth state:', e);
+  }
+  return false;
+}
+
+/**
+ * Returns any locally stored tokens (development fallback).
+ */
+function getStoredTokens() {
+  const accessToken = localStorage.getItem('access_token');
+  const refreshToken = localStorage.getItem('refresh_token');
+  return { accessToken, refreshToken };
+}
+
+/**
+ * Fetch a CSRF token from the server
  */
 async function fetchCsrfToken() {
   try {
@@ -117,9 +162,15 @@ async function authRequest(endpoint, method, body = null) {
     'Accept': 'application/json'
   };
 
+  // Try to use a locally stored token for dev
+  const { accessToken } = getStoredTokens();
+  if (accessToken && endpoint !== '/api/auth/csrf') {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
   // Skip CSRF for local development
   const isLocalDev = window.location.hostname === 'localhost' ||
-                    window.location.hostname === '127.0.0.1';
+    window.location.hostname === '127.0.0.1';
   if (!isLocalDev) {
     const token = await getCSRFTokenAsync();
     headers['X-CSRF-Token'] = token;
@@ -133,7 +184,6 @@ async function authRequest(endpoint, method, body = null) {
 
   if (body && !['GET', 'HEAD'].includes(method.toUpperCase())) {
     options.body = body instanceof FormData ? body : JSON.stringify(body);
-
     if (body instanceof FormData) {
       delete headers['Content-Type'];
     }
@@ -193,11 +243,24 @@ async function refreshTokens() {
       // Update auth state
       authState.isAuthenticated = true;
       authState.lastVerified = Date.now();
-      if (response.token_version) authState.tokenVersion = response.token_version;
-      if (response.username) authState.username = response.username;
+      if (response.token_version) {
+        authState.tokenVersion = response.token_version;
+      }
+      if (response.username) {
+        authState.username = response.username;
+      }
 
-      // Broadcast auth state change
+      // Store new tokens in localStorage
+      if (response.access_token) {
+        localStorage.setItem('access_token', response.access_token);
+      }
+      if (response.refresh_token) {
+        localStorage.setItem('refresh_token', response.refresh_token);
+      }
+
+      // Broadcast auth state
       broadcastAuth(true, authState.username);
+
       AuthBus.dispatchEvent(new CustomEvent('tokenRefreshed', {
         detail: { success: true }
       }));
@@ -228,24 +291,32 @@ async function refreshTokens() {
 /**
  * Clear all auth state
  */
-async function clearTokenState(options = { source: 'unknown' }) {
+async function clearTokenState(options = { source: 'unknown', preserveCookies: false }) {
   authState.isAuthenticated = false;
   authState.username = null;
   authState.lastVerified = 0;
   authState.tokenVersion = null;
 
-  // Clear cookies by setting expiry in the past
-  document.cookie = 'access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-  document.cookie = 'refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+  // Also clear localStorage tokens
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
 
-  // Signal logout to server if not already logging out
-  if (options.source !== 'logout') {
-    try {
-      const csrf = await getCSRFTokenAsync();
-      if (csrf) {
-        await authRequest('/api/auth/logout', 'POST').catch(() => { });
+  // Conditionally clear cookies if preserveCookies is false
+  if (!options.preserveCookies) {
+    document.cookie = 'access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie = 'refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+
+    // If we're not explicitly logging out, we also notify server
+    if (options.source !== 'logout') {
+      try {
+        const csrf = await getCSRFTokenAsync();
+        if (csrf) {
+          await authRequest('/api/auth/logout', 'POST').catch(() => { });
+        }
+      } catch (e) {
+        console.warn('[Auth] logout call to server failed:', e);
       }
-    } catch (e) { }
+    }
   }
 
   broadcastAuth(false, null);
@@ -287,7 +358,7 @@ async function verifyAuthState(forceVerify = false) {
       authState.isAuthenticated = true;
       authState.username = serverUsername;
       authState.lastVerified = Date.now();
-      authState.tokenVersion = res?.version || authState.tokenVersion;
+      authState.tokenVersion = res?.token_version || authState.tokenVersion;
       broadcastAuth(true, serverUsername);
     } else {
       await clearTokenState({ source: 'verify_negative_response' });
@@ -332,6 +403,9 @@ function broadcastAuth(authenticated, username = null) {
   authState.isAuthenticated = authenticated;
   authState.username = username;
 
+  // Persist the updated state
+  persistAuthState();
+
   const detail = {
     authenticated,
     username,
@@ -354,6 +428,14 @@ async function loginUser(username, password) {
       username: username.trim(),
       password
     });
+
+    // Store tokens in localStorage
+    if (response.access_token) {
+      localStorage.setItem('access_token', response.access_token);
+    }
+    if (response.refresh_token) {
+      localStorage.setItem('refresh_token', response.refresh_token);
+    }
 
     // Ensure all state updates are complete before broadcasting
     authState.isAuthenticated = true;
@@ -412,6 +494,9 @@ async function logout(e) {
  */
 async function init() {
   try {
+    // Load any persisted auth state from localStorage first
+    loadPersistedAuthState();
+
     await getCSRFTokenAsync();
     await verifyAuthState(false);
 
@@ -461,17 +546,26 @@ async function registerUser(formData) {
   try {
     await getCSRFTokenAsync();
 
-    const data = formData instanceof FormData ?
-      {
+    const data = formData instanceof FormData
+      ? {
         username: formData.get('username')?.trim(),
         password: formData.get('password')
-      } : formData;
+      }
+      : formData;
 
     if (!data.username || !data.password) {
       throw new Error('Username and password are required');
     }
 
     const response = await authRequest('/api/auth/register', 'POST', data);
+
+    // If registration succeeded, store tokens
+    if (response.access_token) {
+      localStorage.setItem('access_token', response.access_token);
+    }
+    if (response.refresh_token) {
+      localStorage.setItem('refresh_token', response.refresh_token);
+    }
 
     if (response.access_token && response.username) {
       authState.isAuthenticated = true;
