@@ -51,7 +51,7 @@ router = APIRouter()
 class CookieSettings:
     """
     Centralized cookie configuration but with "relaxed" security for debugging.
-    Always returns samesite='none', secure=False in all environments.
+    Always returns samesite='none', secure=False in all environments (overridden below).
     """
 
     def __init__(self, env: str, cookie_domain: Optional[str]):
@@ -60,15 +60,15 @@ class CookieSettings:
 
     def get_attributes(self, request: Request) -> dict[str, Any]:
         """
-        WARNING: Returns SameSite=None and secure=False unconditionally.
+        WARNING: By default, returns SameSite=None and secure=False.
         This is accepted by many browsers ONLY if you disable certain security flags
-        or use older versions. Modern Chrome might still reject it by default if on HTTP.
+        or are on older versions. Modern browsers may block these cookies over HTTP.
         """
         # Force insecure attributes
         return {
             "secure": False,  # Not using HTTPS
             "domain": None,  # No custom domain
-            "samesite": "none",  # Allows cross-site usage
+            "samesite": "none",  # Typically blocked in modern browsers unless secure=true
         }
 
 
@@ -79,29 +79,11 @@ def set_secure_cookie(
     response: Response, key: str, value: str, max_age: Optional[int], request: Request
 ):
     """
-    Sets an HttpOnly cookie with extremely relaxed flags:
-    - samesite='none'
-    - secure=False
-    - domain=None
+    Sets cookies with development-friendly settings:
+      - httponly=False so JS can read them if needed
+      - samesite='lax' for fewer cross-site restrictions
+      - secure=False for local HTTP usage
     """
-
-    cookie_attrs = cookie_config_helper.get_attributes(request)
-    secure = cookie_attrs["secure"]
-    domain = cookie_attrs["domain"]
-    samesite = cookie_attrs["samesite"]
-
-    # We skip the usual check that "SameSite=None requires secure=True".
-    # This will cause Chrome/Firefox to likely warn or reject over HTTP,
-    # but user specifically asked to keep security "relaxed".
-    if AUTH_DEBUG:
-        logger.debug(
-            "Setting INSECURE cookie [%s]: domain=%s, secure=%s, samesite=%s, max_age=%s, httpOnly=True",
-            key,
-            domain,
-            secure,
-            samesite,
-            max_age,
-        )
 
     try:
         response.set_cookie(
@@ -110,15 +92,19 @@ def set_secure_cookie(
             max_age=max_age if max_age else None,
             expires=max_age if max_age else None,
             path="/",
-            domain=domain,  # None means host-only
-            secure=secure,  # False in dev
-            httponly=True,
-            samesite=samesite,  # 'none'
+            domain=None,  # Force host-only domain in dev
+            secure=False,  # Not using HTTPS in dev
+            httponly=False,  # Allow JS to read for dev fallback
+            samesite="lax",  # More likely to work in dev than 'none'
         )
+        if AUTH_DEBUG:
+            logger.debug(
+                f"[Dev Cookie] Set cookie: {key}, httponly=False, samesite='lax', secure=False"
+            )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
-        # Shallow error swallow
-        # raise HTTPException(status_code=500, detail=f"Failed to set cookie: {key}")
+        # Provide better debugging
+        raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}")
 
 
 # -----------------------------------------------------------------------------
@@ -132,7 +118,7 @@ WINDOW_SECONDS = 300  # 5 minutes
 async def rate_limit_login(request: Request, username: str):
     """
     Insecure mode: you can bypass rate limiting by returning immediately.
-    If you want minimal friction, uncomment 'return'.
+    If you want minimal friction, uncomment 'return' below.
     """
     # return  # Uncomment to disable rate limiting entirely
 
@@ -257,13 +243,9 @@ def validate_password(password: str):
     WARNING: This is a 'relaxed' placeholder.
     If you want to skip password checks entirely, comment out everything inside.
     """
-    # For full security:
-    # - length >= 12
-    # - uppercase, lowercase, digit, special char
-
+    # Minimal check for demonstration
     if len(password) < 4:
         raise ValueError("Password must be at least 4 characters (relaxed).")
-    # Skipping checks for uppercase, digit, etc. purely for debug.
 
 
 # -----------------------------------------------------------------------------
@@ -464,13 +446,10 @@ async def refresh_token(
             status_code=401, detail="Refresh token missing. Please login again."
         )
 
-    refresh_token_value = request.cookies.get("refresh_token")
-    if not refresh_token_value:
+    if not refresh_cookie:
         raise HTTPException(status_code=401, detail="Refresh token missing.")
 
-    user = await get_user_from_token(
-        refresh_token_value, session, expected_type="refresh"
-    )
+    user = await get_user_from_token(refresh_cookie, session, expected_type="refresh")
     logger.debug("Attempting token refresh for user: %s", user.username)
 
     try:
