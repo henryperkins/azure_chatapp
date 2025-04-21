@@ -59,17 +59,20 @@ class CookieSettings:
         self.cookie_domain = cookie_domain
 
     def get_attributes(self, request: Request) -> dict[str, Any]:
-        """
-        WARNING: By default, returns SameSite=None and secure=False.
-        This is accepted by many browsers ONLY if you disable certain security flags
-        or are on older versions. Modern browsers may block these cookies over HTTP.
-        """
-        # Force insecure attributes
-        return {
-            "secure": False,  # Not using HTTPS
-            "domain": None,  # No custom domain
-            "samesite": "none",  # Typically blocked in modern browsers unless secure=true
-        }
+        hostname = request.url.hostname
+        scheme = request.url.scheme
+
+        if self.env == "development" or hostname in ["localhost", "127.0.0.1"]:
+            return {"secure": False, "domain": None, "samesite": "lax"}
+
+        secure = (scheme == "https")
+        samesite = "lax"
+        domain = self.cookie_domain
+
+        if not secure:
+            samesite = "lax"
+
+        return {"secure": secure, "domain": domain, "samesite": samesite}
 
 
 cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
@@ -79,11 +82,26 @@ def set_secure_cookie(
     response: Response, key: str, value: str, max_age: Optional[int], request: Request
 ):
     """
-    Sets cookies with development-friendly settings:
-      - httponly=False so JS can read them if needed
-      - samesite='lax' for fewer cross-site restrictions
-      - secure=False for local HTTP usage
+    Sets a secure HttpOnly cookie with consistent environment-based config.
     """
+    cookie_attrs = cookie_config_helper.get_attributes(request)
+    secure = cookie_attrs["secure"]
+    domain = cookie_attrs["domain"]
+    samesite = cookie_attrs["samesite"]
+
+    # Fallback if samesite='none' but not secure
+    if samesite == "none" and not secure:
+        samesite = "lax"
+
+    if AUTH_DEBUG:
+        logger.debug(
+            "Setting cookie [%s]: domain=%s, secure=%s, samesite=%s, max_age=%s",
+            key,
+            domain or "Not Set",
+            secure,
+            samesite,
+            max_age,
+        )
 
     try:
         response.set_cookie(
@@ -92,18 +110,13 @@ def set_secure_cookie(
             max_age=max_age if max_age else None,
             expires=max_age if max_age else None,
             path="/",
-            domain=None,  # Force host-only domain in dev
-            secure=False,  # Not using HTTPS in dev
-            httponly=False,  # Allow JS to read for dev fallback
-            samesite="lax",  # More likely to work in dev than 'none'
+            domain=domain,
+            secure=secure,
+            httponly=True,
+            samesite=samesite,
         )
-        if AUTH_DEBUG:
-            logger.debug(
-                f"[Dev Cookie] Set cookie: {key}, httponly=False, samesite='lax', secure=False"
-            )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
-        # Provide better debugging
         raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}")
 
 
