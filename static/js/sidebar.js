@@ -97,15 +97,10 @@
     const isHidden = sidebarEl.classList.contains('-translate-x-full');
     const isPinned = sidebarPinned;
 
-    if (isPinned) {
-      // If pinned, unpin and hide
-      sidebarPinned = false;
-      localStorage.setItem('sidebarPinned', 'false');
-      sidebarEl.classList.add('-translate-x-full');
-      sidebarEl.setAttribute('aria-hidden', 'true');
-      removeBackdrop();
-      return;
-    }
+    sidebarPinned = !sidebarPinned;
+    localStorage.setItem('sidebarPinned', sidebarPinned ? 'true' : 'false');
+    sidebarEl.classList.toggle('-translate-x-full', !sidebarPinned);
+    sidebarEl.setAttribute('aria-hidden', sidebarPinned ? 'false' : 'true');
 
     // If currently hidden, show it
     if (isHidden) {
