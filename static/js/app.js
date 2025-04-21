@@ -296,20 +296,28 @@ async function initApp() {
     }
     clearTimeout(authTimeout);
 
+    // Initialize auth but don't wait for server verification
     await window.auth.init();
+
+    // Trust the local auth state for initial UI rendering
+    appState.isAuthenticated = window.auth.isAuthenticated();
+    console.log('[App] Initial auth state:', appState.isAuthenticated);
+
+    // Verify in the background - won't block UI rendering
+    window.auth.checkAuth({ forceVerify: true })
+      .then(verified => {
+        if (verified !== appState.isAuthenticated) {
+          console.log('[App] Auth state updated after verification');
+          appState.isAuthenticated = verified;
+          // If you need to refresh or adjust the UI, do it here
+        }
+      })
+      .catch(err => console.warn('[App] Background auth verification error:', err));
   } catch (error) {
     console.error('[App] Auth initialization failed:', error);
   }
 
   appState.currentPhase = 'auth_checked';
-
-  // Safe authentication state access
-  if (window.auth) {
-    appState.isAuthenticated = window.auth.isAuthenticated();
-  } else {
-    appState.isAuthenticated = false;
-    console.warn('[App] Auth module unavailable, defaulting to unauthenticated state');
-  }
 
   // Initialize event system FIRST
   try {
@@ -329,7 +337,7 @@ async function initApp() {
     window.uiRenderer.setupVisionUI();
   }
 
-  // Initialize core modules in proper sequence with dependency checks
+  // Initialize core modules in the proper sequence
   const initSequence = [
     // Then modal manager
     async () => {
