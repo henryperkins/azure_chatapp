@@ -35,6 +35,12 @@ class Settings:
     # Sentry Configuration
     SENTRY_DSN = os.getenv("SENTRY_DSN", "")  # Set empty string by default
     SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "False").lower() == "true"
+    SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0" if ENV == "development" else "0.1"))
+    SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.5" if ENV == "development" else "0.1"))
+    SENTRY_REPLAY_SESSION_SAMPLE_RATE = float(os.getenv("SENTRY_REPLAY_SESSION_SAMPLE_RATE", "0.15"))
+    SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE = float(os.getenv("SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE", "1.0"))
+    SENTRY_MCP_SERVER_ENABLED = os.getenv("SENTRY_MCP_SERVER_ENABLED", "False").lower() == "true"
+    SENTRY_MCP_SERVER_URL = os.getenv("SENTRY_MCP_SERVER_URL", "http://localhost:8001")
 
     # Session
     SESSION_SECRET = os.getenv(
