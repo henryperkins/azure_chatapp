@@ -76,6 +76,7 @@
       sidebarPinned = false;
       localStorage.setItem('sidebarPinned', 'false');
       sidebarEl.classList.add('-translate-x-full');
+      sidebarEl.setAttribute('aria-hidden', 'true');
       removeBackdrop();
       return;
     }
@@ -83,12 +84,14 @@
     // If currently hidden, show it
     if (isHidden) {
       sidebarEl.classList.remove('-translate-x-full');
-      sidebarEl.classList.add('translate-x-0'); // ensure it’s visible
+      sidebarEl.classList.add('translate-x-0');
+      sidebarEl.setAttribute('aria-hidden', 'false');
       createBackdrop();
     } else {
       // Otherwise, hide it
       sidebarEl.classList.remove('translate-x-0');
       sidebarEl.classList.add('-translate-x-full');
+      sidebarEl.setAttribute('aria-hidden', 'true');
       removeBackdrop();
     }
   }
