@@ -487,7 +487,7 @@ function setupNavigation() {
     if (newConversationBtn) {
         trackListener(newConversationBtn, 'click', async () => {
             try {
-                const isAuthenticated = await window.auth.checkAuth();
+                const isAuthenticated = window.app?.state?.isAuthenticated;
                 if (!isAuthenticated) {
                     window.app?.showNotification('Please log in to create a conversation', 'error');
                     return;
