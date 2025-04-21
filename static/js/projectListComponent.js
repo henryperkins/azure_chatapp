@@ -95,6 +95,23 @@ class ProjectListComponent {
     // Listen for project updates
     document.addEventListener('projectsLoaded', (e) => this.renderProjects(e.detail));
 
+    // Listen for individual project updates
+    document.addEventListener('projectCreated', (e) => {
+      if (e.detail) {
+        this.state.projects.unshift(e.detail);
+        this.renderProjects(this.state.projects);
+      }
+    });
+    document.addEventListener('projectUpdated', (e) => {
+      if (e.detail) {
+        const idx = this.state.projects.findIndex(p => p.id === e.detail.id);
+        if (idx >= 0) {
+          this.state.projects[idx] = e.detail;
+          this.renderProjects(this.state.projects);
+        }
+      }
+    });
+
     // Listen for auth changes
     window.auth.AuthBus.addEventListener('authStateChanged', (e) => {
       if (e.detail.authenticated) {
