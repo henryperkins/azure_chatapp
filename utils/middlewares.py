@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 from typing import Dict, Any, Optional, Tuple
 
 import sentry_sdk
-from fastapi import Request
+from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response, JSONResponse
 from starlette.types import ASGIApp
@@ -37,11 +37,18 @@ DEFAULT_CSP = (
     "default-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
-    "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
+    "script-src-elem 'self' 'unsafe-inline' blob: https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
     "worker-src 'self' blob:; "
     "child-src 'self' blob:; "
-    "connect-src 'self' https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
-    "img-src 'self' data: blob:;"
+    "connect-src 'self' http://localhost:8000 https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
+    "img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com; "
+    "frame-src 'self'; "
+    "font-src 'self' data:; "
+    "media-src 'self' blob:; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none';"
 )
 
 # Headers configuration
@@ -372,10 +379,22 @@ class SentryContextMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def setup_middlewares(app: ASGIApp) -> ASGIApp:
+def setup_middlewares(app: FastAPI) -> FastAPI:
     """Configure all middlewares with proper ordering"""
-    # Security headers first
-    app.add_middleware(SecurityHeadersMiddleware)
+    # CORS + no security headers in development
+    if os.getenv("ENVIRONMENT") == "development":
+        from fastapi.middleware.cors import CORSMiddleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        # Skip all other security headers (CSP, HSTS, etc.) in dev
+    else:
+        # Production: apply strict security headers
+        app.add_middleware(SecurityHeadersMiddleware, csp=DEFAULT_CSP)
 
     # Sentry context before tracing
     app.add_middleware(
