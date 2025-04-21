@@ -91,9 +91,6 @@ class CookieSettings:
                 domain = self.cookie_domain
 
         # Ensure SameSite=None is only used with Secure
-        if samesite == "none" and not secure:
-            logger.warning("SameSite=None requires Secure=True. Forcing Lax instead.")
-            samesite = "lax"
 
         return {"secure": secure, "domain": domain, "samesite": samesite}
 
