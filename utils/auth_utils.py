@@ -123,7 +123,7 @@ async def verify_token(
                 query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
                 result = await db.execute(query)
                 blacklisted = result.scalar_one_or_none()
-                
+
         if blacklisted:
             logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
             raise HTTPException(status_code=401, detail="Token is revoked")
@@ -195,13 +195,13 @@ def extract_token(request_or_websocket, token_type="access"):
     """
     Retrieves the specified token type from cookies.
     Works with both HTTP (Request) and WebSocket objects.
-    
+
     Args:
         request_or_websocket: The request or websocket object
         token_type: The type of token to extract ('access' or 'refresh')
     """
     cookie_name = f"{token_type}_token"
-    
+
     if hasattr(request_or_websocket, "cookies"):
         # Likely an HTTP Request
         return request_or_websocket.cookies.get(cookie_name)
@@ -217,49 +217,77 @@ def extract_token(request_or_websocket, token_type="access"):
     return None  # Fallback for unexpected types
 
 
-# -----------------------------------------------------------------------------
-# User Retrieval via Token
-# -----------------------------------------------------------------------------
 async def get_user_from_token(
-    request: Request,
-    Uses the same database session for both token verification and user retrieval.
-    db: AsyncSession = Depends(get_async_session),
+    token: str,
+    db: AsyncSession,
+    *,
+    request: Request | None = None,
     expected_type: str = "access",
 ) -> User:
     """
-    Retrieve the token from cookies, verify it, then load the user.
-    Raises 401 if user not found or token is invalid/expired/revoked.
-    decoded = await verify_token(token, expected_type, request, db_session=db)
-    token = extract_token(request, token_type=expected_type)
+    Retrieve and verify a JWT token, then load the user from the database.
+
+    :param token: The raw JWT token string extracted from headers or cookies.
+    :param db: The SQLAlchemy AsyncSession to use for DB operations.
+    :param request: (Optional) The FastAPI Request object, if needed during token verification.
+    :param expected_type: The expected token type (e.g. "access" or "refresh").
+    :return: The authenticated User instance.
+    :raises HTTPException: If the token is invalid, expired, revoked, or the user is not found/disabled.
+    """
     if not token:
         logger.warning(f"No {expected_type} token found in request")
-        raise HTTPException(status_code=401, detail=f"Missing {expected_type} token")
+        raise HTTPException(
+            status_code=401,
+            detail=f"Missing {expected_type} token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    decoded = await verify_token(token, expected_type, request)
+    # Verify token and decode payload
+    decoded = await verify_token(token, expected_type, request, db_session=db)
+    if not decoded:
+        logger.warning("Token verification failed or token was None")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     username = decoded.get("sub")
     if not username:
-        logger.warning("Token missing 'sub' claim")
+        logger.warning("Token missing 'sub' (subject) claim")
         raise HTTPException(
-            status_code=401, detail="Invalid token payload: missing subject"
+            status_code=401,
+            detail="Invalid token payload: missing subject",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Fetch user from DB
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalars().first()
+
     if not user:
         logger.warning(f"User '{username}' from token not found in database")
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(
+            status_code=401,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     if not user.is_active:
         logger.warning(f"Attempt to use token for disabled account: {username}")
-        raise HTTPException(status_code=403, detail="Account disabled")
+        raise HTTPException(
+            status_code=403,
+            detail="Account disabled",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Check session inactivity if relevant
     if hasattr(user, "last_activity") and user.last_activity:
         inactive_duration = (datetime.utcnow() - user.last_activity).total_seconds()
         if inactive_duration > 86400:  # 1 day in seconds
             logger.warning(
-                f"Session expired due to inactivity for {username} "
-                f"({inactive_duration} seconds since last activity)."
+                f"Session expired due to inactivity for {username}; "
+                f"{inactive_duration:.0f} seconds since last activity."
             )
             raise HTTPException(
                 status_code=401,
@@ -267,7 +295,7 @@ async def get_user_from_token(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    # Inject token details into the user object if needed
+    # Optionally attach token metadata to the user object
     user.jti = decoded.get("jti")
     user.exp = decoded.get("exp")
     user.active_project_id = decoded.get("project_context")
@@ -275,23 +303,26 @@ async def get_user_from_token(
     return user
 
 
-# -----------------------------------------------------------------------------
-# FastAPI Dependency for HTTP Endpoints
-# -----------------------------------------------------------------------------
 async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
     """
-    FastAPI dependency that extracts an 'access_token' from the request cookies,
-    verifies it, loads the corresponding user, and returns both.
+    FastAPI dependency that:
+      1. Extracts an 'access' token from the request (cookies or headers).
+      2. Verifies it and loads the corresponding user.
+      3. Returns a tuple of (User, token).
     """
     token = extract_token(request)
     if not token:
-        logger.warning("Access token not found in request cookies")
+        logger.warning("Access token not found in request")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Use a single DB session context for token verification + user load
     async with get_async_session_context() as db:
-        user = await get_user_from_token(token, db)
+        user = await get_user_from_token(
+            token=token, db=db, request=request, expected_type="access"
+        )
+
     return user, token

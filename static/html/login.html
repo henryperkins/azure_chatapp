@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Login</title>
+</head>
+<body class="bg-base-100 text-base-content min-h-screen flex items-center justify-center">
+  <!-- Container -->
+  <div class="w-full max-w-xs p-4 bg-base-200 rounded shadow-md">
+    <h1 class="text-2xl font-bold text-center mb-4">Login</h1>
+    <p class="text-sm text-center mb-6">
+      This is a placeholder login page. Replace or enhance as needed.
+    </p>
+    <!-- Form -->
+    <form id="loginForm" action="/api/auth/login" method="POST" class="space-y-4">
+      <div>
+        <label for="username" class="block text-sm font-medium mb-1">Username</label>
+        <input
+          id="username"
+          name="username"
+          type="text"
+          class="w-full px-3 py-2 rounded border border-base-300 bg-base-100 text-base-content focus:outline-none focus:border-primary"
+        />
+      </div>
+      <div>
+        <label for="password" class="block text-sm font-medium mb-1">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          class="w-full px-3 py-2 rounded border border-base-300 bg-base-100 text-base-content focus:outline-none focus:border-primary"
+        />
+      </div>
+      <button
+        type="submit"
+        class="w-full py-2 px-4 bg-primary text-base-content rounded font-semibold shadow hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-base-200"
+      >
+        Sign In
+      </button>
+    </form>
+  </div>
+</body>
+</html>
