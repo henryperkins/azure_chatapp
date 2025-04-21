@@ -185,6 +185,11 @@ function showNotification(message, type = 'info', duration = 5000) {
 /**
  * Load projects list (assumes a projectManager)
  */
+if (!window.projectManager) {
+  window.projectManager = window.projectManagerAPI;
+  console.log('[App] Bound projectManagerAPI to window.projectManager');
+}
+
 async function loadProjects() {
   try {
     if (window.projectManager?.loadProjects) {
