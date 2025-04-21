@@ -27,9 +27,14 @@
                frame-src 'self';">
   <title>Projects - Azure OpenAI Chat</title>
 
-  <!-- Tailwind CSS (production build or dev) -->
+  <!-- Tailwind CSS with DaisyUI -->
   <link rel="stylesheet" href="/static/css/dist/tailwind.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+
+  <!-- Initialize DaisyUI theme -->
+  <script>
+    document.documentElement.setAttribute('data-theme', 'dracula');
+  </script>
 
   <style>
     /* Add transition for project list visibility */
@@ -562,33 +567,97 @@
 
   <!-- Knowledge Base components (loaded only when needed) -->
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
-  <!-- Core Utilities -->
-  <script type="module" src="/static/js/eventHandler.js"></script>
-  <script type="module" src="/static/js/auth.js"></script>
-  <script type="module" src="/static/js/notification-handler.js"></script>
-  <script type="module" src="/static/js/modelConfig.js"></script>
-  <script type="module" src="/static/js/projectManager.js"></script>
-  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
+  <!-- Loading indicator -->
+  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+      <p class="text-lg">Loading application...</p>
+    </div>
+  </div>
 
-  <!-- UI Framework -->
-  <script type="module" src="/static/js/uiRenderer.js"></script>
-  <script type="module" src="/static/js/projectDashboard.js"></script>
-  <script type="module" src="/static/js/projectListComponent.js"></script>
-  <script type="module" src="/static/js/projectDetailsComponent.js"></script>
+  <!-- Core Utilities -->
+  <script type="module">
+    try {
+      await import('/static/js/eventHandler.js');
+      await import('/static/js/auth.js');
+      await import('/static/js/notification-handler.js');
+    } catch (err) {
+      console.error('Failed to load core utilities:', err);
+      document.getElementById('appLoading').innerHTML = `
+        <div class="text-error p-4">
+          <p class="font-bold">Failed to load core components</p>
+          <p class="text-sm">${err.message}</p>
+          <button onclick="window.location.reload()" class="btn btn-error btn-sm mt-2">
+            Reload Page
+          </button>
+        </div>
+      `;
+      throw err;
+    }
+  </script>
 
   <!-- UI Components -->
-  <script type="module" src="/static/js/sidebar.js"></script>
-  <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
-  <script type="module" src="/static/js/projectListInit.js"></script>
+  <script type="module">
+    try {
+      await Promise.all([
+        import('/static/js/modelConfig.js'),
+        import('/static/js/knowledgeBaseState.js'),
+        import('/static/js/uiRenderer.js'),
+        import('/static/js/projectDashboardUtils.js'),
+        import('/static/js/projectManager.js'),
+        import('/static/js/projectDashboard.js'),
+        import('/static/js/projectListComponent.js'),
+        import('/static/js/projectDetailsComponent.js'),
+        import('/static/js/sidebar.js'),
+        import('/static/js/knowledgeBaseComponent.js'),
+        import('/static/js/projectListInit.js')
+      ]);
+    } catch (err) {
+      console.error('Failed to load UI components:', err);
+      document.getElementById('appLoading').innerHTML = `
+        <div class="text-error p-4">
+          <p class="font-bold">Failed to load UI components</p>
+          <p class="text-sm">${err.message}</p>
+          <button onclick="window.location.reload()" class="btn btn-error btn-sm mt-2">
+            Reload Page
+          </button>
+        </div>
+      `;
+      throw err;
+    }
+  </script>
 
   <!-- Theme toggle functionality -->
-  <script src="/static/js/theme-toggle.js"></script>
+  <script type="module" src="/static/js/theme-toggle.js"></script>
 
   <!-- Main Application (load last) -->
-  <script type="module" src="/static/js/app.js"></script>
-
-  <!-- Consolidated initialization -->
   <script type="module">
+    try {
+      await import('/static/js/app.js');
+      document.getElementById('appLoading').classList.add('hidden');
+    } catch (err) {
+      console.error('Failed to load application:', err);
+      document.getElementById('appLoading').innerHTML = `
+        <div class="text-error p-4">
+          <p class="font-bold">Failed to initialize application</p>
+          <p class="text-sm">${err.message}</p>
+          <button onclick="window.location.reload()" class="btn btn-error btn-sm mt-2">
+            Reload Page
+          </button>
+        </div>
+      `;
+      throw err;
+    }
+  </script>
+
+  <!-- Initialize app after all modules are loaded -->
+  <script type="module">
+    // Ensure all dependencies are loaded first
+    await Promise.all([
+      customElements.whenDefined('project-list-component'),
+      customElements.whenDefined('knowledge-base-component')
+    ]);
+
     document.addEventListener('DOMContentLoaded', async () => {
       try {
         if (window.app?.initialize) {
