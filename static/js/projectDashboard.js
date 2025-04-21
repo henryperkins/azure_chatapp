@@ -45,6 +45,7 @@ async function init() {
  * Initialize dashboard components
  */
 async function initializeComponents() {
+  await loadProjectListHtml();
   components.projectList = new window.ProjectListComponent({
     elementId: 'projectList',
     onViewProject: handleViewProject
@@ -53,6 +54,22 @@ async function initializeComponents() {
   components.projectDetails = new window.ProjectDetailsComponent({
     onBack: handleBackToList
   });
+}
+
+async function loadProjectListHtml() {
+  const container = document.getElementById('projectListView');
+  if (!container) return;
+  try {
+    const response = await fetch('/static/html/project_list.html');
+    if (response.ok) {
+      const html = await response.text();
+      container.innerHTML = html;
+    } else {
+      console.warn('[projectDashboard] Failed to load project_list.html. Status:', response.status);
+    }
+  } catch (err) {
+    console.error('[projectDashboard] Error loading project_list.html:', err);
+  }
 }
 
 /**
