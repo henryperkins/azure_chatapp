@@ -38,6 +38,16 @@
                     value: userInput,
                     onChange: (val) => setUserInput(val)
                 }),
+                el(SelectControl, {
+                    label: __('Response Format', 'rag-plugin'),
+                    value: responseFormat,
+                    options: [
+                        { label: __('Plain Text', 'rag-plugin'), value: 'text' },
+                        { label: __('HTML', 'rag-plugin'), value: 'html' },
+                        { label: __('Markdown', 'rag-plugin'), value: 'markdown' },
+                    ],
+                    onChange: (val) => setResponseFormat(val)
+                }),
                 el(Button, {
                     isPrimary: true,
                     onClick: handleRAGRequest

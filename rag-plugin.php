@@ -34,6 +34,19 @@ function rag_plugin_enqueue_assets() {
 add_action( 'enqueue_block_editor_assets', 'rag_plugin_enqueue_assets' );
 
 /**
- * Optional: If you need to store or retrieve data from the WP database,
- * you can define REST routes or handle form inputs here as needed.
+ * Register REST endpoint for storing/retrieving RAG queries
  */
+function rag_plugin_register_rest_routes() {
+    register_rest_route('rag-plugin/v1', '/queries', array(
+        'methods' => 'POST',
+        'callback' => function($request) {
+            $params = $request->get_json_params();
+            // Store query and response logic here
+            return new WP_REST_Response(['success' => true], 200);
+        },
+        'permission_callback' => function() {
+            return current_user_can('edit_posts');
+        }
+    ));
+}
+add_action('rest_api_init', 'rag_plugin_register_rest_routes');
