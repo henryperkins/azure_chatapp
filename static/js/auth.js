@@ -355,12 +355,16 @@ async function loginUser(username, password) {
       password
     });
 
+    // Ensure all state updates are complete before broadcasting
     authState.isAuthenticated = true;
     authState.username = response.username || username;
     authState.lastVerified = Date.now();
     authState.tokenVersion = response.token_version || null;
 
+    // Use microtask to ensure state is fully updated
+    await Promise.resolve();
     broadcastAuth(true, authState.username);
+
     return response;
   } catch (error) {
     await clearTokenState({ source: 'login_error' });

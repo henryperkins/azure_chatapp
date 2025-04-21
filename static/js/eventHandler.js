@@ -40,28 +40,28 @@ function trackListener(element, type, handler, options = {}) {
     };
 
     // Create wrapped handler with error handling
-    const wrappedHandler = function (event) {
+    const wrappedHandler = async function (event) {  // Make async
         try {
-            // Performance measurement in development
             const startTime = performance.now();
 
-            // Execute the original handler
-            handler.call(this, event);
+            // Handle potential async handlers
+            const result = handler.call(this, event);
+            if (result && typeof result.then === 'function') {
+                await result; // Wait for async handlers
+            }
 
-            // Measure execution time
             const duration = performance.now() - startTime;
             if (duration > 100) {
                 console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
             }
         } catch (error) {
             console.error(`Error in ${type} event handler:`, error);
-
-            // If error was triggered by a passive event trying to call preventDefault
             if (error.name === 'TypeError' &&
                 error.message.includes('passive') &&
                 finalOptions.passive) {
-                console.warn(`preventDefault() called on a passive ${type} listener. Consider setting passive: false`);
+                console.warn(`preventDefault() called on a passive ${type} listener`);
             }
+            throw error; // Re-throw to maintain behavior
         }
     };
 
