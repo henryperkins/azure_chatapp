@@ -4,8 +4,16 @@
 <head>
   <meta charset="UTF-8" />
   <!-- Sentry Loader Script - Must be first! -->
-  <!-- Sentry loader temporarily removed until DSN is updated -->
-  <script src="https://js.sentry-cdn.com/b03711f63d1160f48dcaeda3edae14ac.min.js" crossorigin="anonymous"></script>
+  <script>
+    // Only load Sentry in production or if explicitly enabled in development
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      const script = document.createElement('script');
+      script.src = 'https://js.sentry-cdn.com/b03711f63d1160f48dcaeda3edae14ac.min.js';
+      script.crossOrigin = 'anonymous';
+      script.integrity = 'sha384-ABC123...'; // Add integrity hash if available
+      document.head.appendChild(script);
+    }
+  </script>
   <script>
     window.sentryOnLoad = function() {
       // Configuration will be handled by sentry-init.js

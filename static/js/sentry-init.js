@@ -19,18 +19,27 @@
    * - localhost or 127.0.0.1 environment
    * @returns {boolean}
    */
-  function shouldDisableSentry() {
-    try {
-      return (
-        localStorage.getItem('disable_monitoring') === 'true' ||
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1'
-      );
-    } catch (e) {
-      // If localStorage is inaccessible (private mode, etc.), default to enabled
-      return false;
+    function shouldDisableSentry() {
+        try {
+            // Check if we're in development mode
+            const isDevelopment = window.location.hostname === 'localhost' ||
+                               window.location.hostname === '127.0.0.1';
+
+            // Check if user has explicitly disabled monitoring
+            const userDisabled = localStorage.getItem('disable_monitoring') === 'true';
+
+            // In development, only enable if explicitly requested
+            if (isDevelopment) {
+                return !(localStorage.getItem('enable_monitoring') === 'true');
+            }
+
+            // In production, respect user preference
+            return userDisabled;
+        } catch (e) {
+            // If localStorage is inaccessible (private mode, etc.), default to enabled
+            return false;
+        }
     }
-  }
 
   /**
    * Returns the DSN to use. Replace with your own logic:
@@ -39,7 +48,7 @@
    */
     function getDsn() {
         // Get DSN from environment variables or window config
-        return window.ENV?.SENTRY_DSN || window.SENTRY_DSN || '';
+        return window.ENV?.SENTRY_DSN || window.SENTRY_DSN || 'https://o4508070823395328.ingest.us.sentry.io';
     }
 
   /**

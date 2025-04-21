@@ -87,8 +87,8 @@ def configure_sentry() -> None:
         dsn=settings.SENTRY_DSN,
         environment=ENVIRONMENT,
         release=f"{APP_NAME}@{APP_VERSION}",
-        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-        profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
+        traces_sample_rate=1.0 if ENVIRONMENT == "development" else 0.1,
+        profiles_sample_rate=1.0 if ENVIRONMENT == "development" else 0.1,
         send_default_pii=False,
         attach_stacktrace=True,
         integrations=integrations,
@@ -96,7 +96,12 @@ def configure_sentry() -> None:
         max_breadcrumbs=150,
         propagate_traces=True,
         trace_propagation_targets=["*"],
+        debug=ENVIRONMENT == "development",
     )
+
+    # Set global tags
+    sentry_sdk.set_tag("app", APP_NAME)
+    sentry_sdk.set_tag("environment", ENVIRONMENT)
 
     # Initialize MCP server if enabled
     if settings.SENTRY_MCP_SERVER_ENABLED:
@@ -164,13 +169,15 @@ app = FastAPI(
 setup_middlewares(app)
 
 # Add additional middleware
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
+"""Only enforce host‑header checking in non‑development."""
+if ENVIRONMENT != "development":
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SECRET_KEY", settings.SESSION_SECRET),
     session_cookie="session",
-    same_site="strict",
-    https_only=(ENVIRONMENT == "production"),
+    same_site="none" if ENVIRONMENT == "development" else "strict",
+    https_only=False if ENVIRONMENT == "development" else True,
     max_age=60 * 60 * 24 * 7,
 )
 

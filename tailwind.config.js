@@ -1,5 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  corePlugins: {
+    // Disable vendor prefixes since we're targeting modern browsers
+    // This will remove -webkit, -moz, -ms prefixes from the output
+    transform: false,
+    transitionProperty: false,
+    transitionDuration: false,
+    transitionDelay: false,
+    transitionTimingFunction: false,
+    userSelect: false,
+    appearance: false
+  },
   content: [
     "./static/html/**/*.html",
     "./static/js/**/*.js"
