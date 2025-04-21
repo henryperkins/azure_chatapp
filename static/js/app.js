@@ -309,36 +309,45 @@ async function initApp() {
     console.error('[App] Component initialization failed:', error);
   }
 
-  // 1) Initialize global modules in order
-  await window.eventHandlers?.init?.();
-  await window.modalManager?.init?.();
-  await window.chatExtensions?.initChatExtensions?.();
-  await window.sidebar?.init?.();
+  // Initialize core modules in proper sequence
+  const initSequence = [
+    () => window.eventHandlers?.init?.(),
+    () => window.modalManager?.init?.(),
+    () => window.projectManager?.init?.(),
+    () => window.chatExtensions?.initChatExtensions?.(),
+    () => window.sidebar?.init?.(),
+    () => {
+      if (window.KnowledgeBaseComponent) {
+        window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+      }
+    },
+    () => window.chatManager?.initialize?.(),
+    () => window.projectDashboard?.init?.(),
+    () => {
+      if (window.sidebar) {
+        window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
+      }
+    }
+  ];
 
-  // Initialize knowledge base component
-  if (window.KnowledgeBaseComponent) {
-    window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+  // Execute initialization sequence with error handling
+  for (const initFn of initSequence) {
+    try {
+      await initFn();
+    } catch (error) {
+      console.error('[App] Initialization error:', error);
+    }
   }
 
-  // Initialize chat manager before sidebar
-  if (window.chatManager?.initialize) {
-    await window.chatManager.initialize();
-  }
-
-  // 2) Initialize dashboards, chat, etc.
-  if (window.projectDashboard?.init) {
-    await window.projectDashboard.init();
-  }
-  if (window.sidebar) {
-    window.sidebar.activateTab(localStorage.getItem('sidebarActiveTab') || 'recent');
-  }
-  if (window.chatManager && !window.chatManager.isInitialized) {
-    await window.chatManager.initialize();
-  }
-
-  // 3) If needed, unify call to project manager loading
-  if (appState.isAuthenticated && window.projectManager?.loadProjects) {
-    await window.projectManager.loadProjects('all');
+  // Load initial data if authenticated
+  if (appState.isAuthenticated) {
+    try {
+      if (window.projectManager?.loadProjects) {
+        await window.projectManager.loadProjects('all');
+      }
+    } catch (error) {
+      console.error('[App] Error loading initial data:', error);
+    }
   }
 
   // Perform initial navigation

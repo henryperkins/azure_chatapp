@@ -568,17 +568,18 @@
   <script type="module" src="/static/js/notification-handler.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
   <script type="module" src="/static/js/projectManager.js"></script>
+  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
 
   <!-- UI Framework -->
   <script type="module" src="/static/js/uiRenderer.js"></script>
+  <script type="module" src="/static/js/projectDashboard.js"></script>
   <script type="module" src="/static/js/projectListComponent.js"></script>
   <script type="module" src="/static/js/projectDetailsComponent.js"></script>
-  <script type="module" src="/static/js/projectDashboard.js"></script>
-  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
 
   <!-- UI Components -->
   <script type="module" src="/static/js/sidebar.js"></script>
   <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
+  <script type="module" src="/static/js/projectListInit.js"></script>
 
   <!-- Theme toggle functionality -->
   <script src="/static/js/theme-toggle.js"></script>
@@ -587,53 +588,16 @@
   <script type="module" src="/static/js/app.js"></script>
 
   <!-- Consolidated initialization -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.app?.initialize) {
-        window.app.initialize().catch(err => {
-          console.error("App initialization failed:", err);
-          window.app?.showNotification?.('Failed to initialize app', 'error');
-        });
+  <script type="module">
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        if (window.app?.initialize) {
+          await window.app.initialize();
+        }
+      } catch (err) {
+        console.error("App initialization failed:", err);
+        window.app?.showNotification?.('Failed to initialize app', 'error');
       }
-    });
-  </script>
-
-  <script>
-    // Global safety - Ensure dashboard is available after 10 seconds max
-    setTimeout(() => {
-      if (!window.projectDashboardInitialized && !window.dashboardUtilsReady) {
-        console.warn('Dashboard not initialized after timeout, triggering fallback');
-        window.dashboardUtilsReady = true;
-        document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
-        document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
-      }
-    }, 10000);
-  </script>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('[Initialization] DOM content loaded, initializing components...');
-
-      // Safety delay to ensure all elements are available
-      setTimeout(() => {
-        // Initialize auth dropdown positioning with JavaScript
-        const authDropdowns = document.querySelectorAll('.auth-dropdown-adjusted');
-        authDropdowns.forEach(dropdown => {
-          const button = dropdown.previousElementSibling;
-          if (button) {
-            dropdown.style.top = (button.offsetTop + button.offsetHeight + 5) + 'px';
-            dropdown.style.right = '1rem';
-          }
-        });
-
-        // Initialize component controllers
-        if (window.initProjectModal) window.initProjectModal();
-        if (window.initProjectDashboard) window.initProjectDashboard();
-
-        // Dispatch central "ready" event for all components to listen for
-        console.log('[Initialization] Dispatching appJsReady event');
-        document.dispatchEvent(new CustomEvent('appJsReady'));
-      }, 300);
     });
   </script>
 </body>
