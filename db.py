@@ -96,7 +96,9 @@ async def _create_missing_tables(tables: list[str]):
         logger.info("Creating projects table (without knowledge_base_id constraint)")
         async with async_engine.begin() as conn:
             await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(text("""
+                lambda sync_conn: sync_conn.execute(
+                    text(
+                        """
                     CREATE TABLE projects (
                         id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                         name VARCHAR(200) NOT NULL,
@@ -116,44 +118,64 @@ async def _create_missing_tables(tables: list[str]):
                         extra_data JSONB,
                         knowledge_base_id UUID
                     )
-                """))
+                """
+                    )
+                )
             )
             await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(text("""
+                lambda sync_conn: sync_conn.execute(
+                    text(
+                        """
                     ALTER TABLE projects ADD CONSTRAINT check_token_limit
                     CHECK (max_tokens >= token_usage)
-                """))
+                """
+                    )
+                )
             )
             await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(text("""
+                lambda sync_conn: sync_conn.execute(
+                    text(
+                        """
                     ALTER TABLE projects ADD CONSTRAINT check_archive_pin
                     CHECK (NOT (archived AND pinned))
-                """))
+                """
+                    )
+                )
             )
             await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(text("""
+                lambda sync_conn: sync_conn.execute(
+                    text(
+                        """
                     ALTER TABLE projects ADD CONSTRAINT check_archive_default
                     CHECK (NOT (archived AND is_default))
-                """))
+                """
+                    )
+                )
             )
 
         # Step 2: Create knowledge_bases with its foreign key to projects
         logger.info("Creating knowledge_bases table")
         async with async_engine.begin() as conn:
             await conn.run_sync(
-                lambda sync_conn: Base.metadata.tables["knowledge_bases"].create(sync_conn)
+                lambda sync_conn: Base.metadata.tables["knowledge_bases"].create(
+                    sync_conn
+                )
             )
 
         # Step 3: Add knowledge_base_id foreign key to projects
         logger.info("Adding knowledge_base_id foreign key to projects")
         async with async_engine.begin() as conn:
             await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(text("""
+                lambda sync_conn: sync_conn.execute(
+                    text(
+                        """
                     ALTER TABLE projects
                     ADD CONSTRAINT fk_projects_knowledge_base
                     FOREIGN KEY (knowledge_base_id)
                     REFERENCES knowledge_bases(id) ON DELETE SET NULL;
-                """))
+                """
+                    )
+                )
             )
 
         # Remove these tables from the list to avoid duplicate creation
@@ -233,16 +255,13 @@ async def validate_db_schema() -> list[str]:
         for table in Base.metadata.tables.values():
             for column in table.columns:
                 orm_base_type = str(column.type).split("(")[0].upper()
-                # Check if it's a VARCHAR with length
                 length = getattr(column.type, "length", None)
                 if length and orm_base_type == "VARCHAR":
                     orm_type = f"character varying({length})"
-                # Special handling for TIMESTAMP type
                 elif orm_base_type == "TIMESTAMP":
-                    # SQLAlchemy's TIMESTAMP maps to PostgreSQL's timestamp without time zone
                     orm_type = "timestamp without time zone"
                 else:
-                    # Use the first equivalent for normalization
+                    # Use the first equivalent for normalization if available
                     orm_type = type_equivalents.get(
                         orm_base_type, [orm_base_type.lower()]
                     )[0]
@@ -261,13 +280,11 @@ async def validate_db_schema() -> list[str]:
             udt_name = db_info["udt_name"]
             db_max_length = db_info["max_length"]
 
-            # Original column type object:
             table_obj = Base.metadata.tables[table]
             column_obj = table_obj.columns[column]
             orm_base_type = str(column_obj.type).split("(")[0].upper()
             equivalents = type_equivalents.get(orm_base_type, [orm_base_type.lower()])
 
-            # Decide if types match
             type_matches = False
 
             # (a) Specialized checks for VARCHAR
@@ -282,7 +299,6 @@ async def validate_db_schema() -> list[str]:
                             f"DB: varchar({db_max_length}) vs ORM: varchar({actor_length})"
                         )
                     else:
-                        # If length omitted in ORM or matches, we consider them okay
                         type_matches = True
 
             # (b) TEXT check
@@ -294,26 +310,19 @@ async def validate_db_schema() -> list[str]:
                 # Check DB UDT name vs recognized equivalents
                 if udt_name.lower() in [e.lower() for e in equivalents]:
                     type_matches = True
-                # Special boolean alias
                 if orm_base_type == "BOOLEAN" and udt_name.lower() == "bool":
                     type_matches = True
 
-            # (d) Timestamps - improved handling to match SQLAlchemy TIMESTAMP with PostgreSQL timestamp without time zone
+            # (d) Timestamps
             elif "timestamp" in db_type.lower() and "timestamp" in orm_type.lower():
-                # If the database and ORM type strings are identical, consider them a match
                 if db_type.lower() == orm_type.lower():
                     type_matches = True
                 else:
-                    # Handle TIMESTAMP WITH TIME ZONE vs TIMESTAMP WITHOUT TIME ZONE
-                    # Skip precision comparisons and focus on timezone presence
                     db_has_timezone = "with time zone" in db_type.lower()
                     orm_has_timezone = "with time zone" in orm_type.lower()
-
                     if db_has_timezone != orm_has_timezone:
-                        # Only consider this a mismatch if one has timezone and the other doesn't
                         type_matches = False
                     else:
-                        # Both have same timezone setting (either both with, or both without)
                         type_matches = True
 
             if not type_matches:
@@ -333,8 +342,8 @@ async def validate_db_schema() -> list[str]:
             orm_col = Base.metadata.tables[table].columns[column]
             if orm_col.server_default is not None or orm_col.nullable:
                 logger.debug(
-                    f"Skipping missing column {table}.{column} "
-                    f"because it's nullable or has a default."
+                    f"Skipping missing column {table}.{column} because it's "
+                    f"nullable or has a default."
                 )
                 continue
             mismatch_details.append(f"Missing column: {table}.{column}")
@@ -396,17 +405,15 @@ async def validate_db_schema() -> list[str]:
                     for u in db_uniques
                     if u["column_names"]
                 }
-                # Check single-column unique
                 for col in table.columns:
                     if col.unique:
                         if (col.name,) not in db_unique_columns_set:
                             mismatch_details.append(
                                 f"Missing or incorrect unique constraint on {table_name}.{col.name}"
                             )
-                # Check multi-column unique constraints
                 for constraint in table.constraints:
                     if constraint.__class__.__name__ == "UniqueConstraint":
-                        orm_cols = tuple(sorted([c.name for c in constraint.columns]))
+                        orm_cols = tuple(sorted(c.name for c in constraint.columns))
                         if orm_cols not in db_unique_columns_set:
                             mismatch_details.append(
                                 f"Missing or incorrect multi-column unique constraint "
@@ -423,25 +430,19 @@ async def validate_db_schema() -> list[str]:
         for table in Base.metadata.tables.values():
             for col in table.columns:
                 if col.server_default is not None:
-                    # Extract the default argument (may be string or SQL expression)
                     orm_default_arg = col.server_default.arg
-
-                    # Convert the arg to a string to safely compare or log
                     orm_default_str = str(orm_default_arg)
-
-                    # You can now do your normalization / comparison
                     normalized_orm_def = orm_default_str.strip("('").lower()
 
-                    # Now compare with the DB default
                     default_sql = await conn.execute(
                         text(
                             f"""
-                        SELECT column_default
-                        FROM information_schema.columns
-                        WHERE table_name='{table.name}'
-                        AND column_name='{col.name}'
-                        AND table_schema='public'
-                    """
+                            SELECT column_default
+                            FROM information_schema.columns
+                            WHERE table_name='{table.name}'
+                            AND column_name='{col.name}'
+                            AND table_schema='public'
+                        """
                         )
                     )
                     db_row = default_sql.fetchone()
@@ -453,8 +454,6 @@ async def validate_db_schema() -> list[str]:
                                 f"Default mismatch on {table.name}.{col.name}: "
                                 f"DB={db_default} vs ORM={orm_default_str}"
                             )
-
-        # Relationship checks are somewhat covered by foreign keys above
 
     return mismatch_details
 
@@ -474,7 +473,6 @@ def _retry_foreign_key_add(
     """
     Try adding a foreign key constraint up to `max_retries` times,
     handling potential deadlocks by sleeping briefly between attempts.
-    Reduces nested blocks by flattening logic for reattempt.
     """
     constraint_name = f"fk_{table_name}_{col_name}_{referred_table}"
     ondelete_sql = f" ON DELETE {ondelete_clause}" if ondelete_clause else ""
@@ -496,11 +494,10 @@ def _retry_foreign_key_add(
             )
             return
         except Exception as e:
-            # Flattening the deadlock retry logic to reduce nested blocks
             if "deadlock" in str(e).lower() and attempt < max_retries - 1:
                 sleep_time = 0.3 * (attempt + 1)
                 logger.warning(
-                    f"Deadlock detected adding foreign key {constraint_name}, retrying in {sleep_time}s... "
+                    f"Deadlock detected adding FK {constraint_name}, retrying in {sleep_time}s... "
                     f"(Attempt {attempt + 1}/{max_retries})"
                 )
                 time.sleep(sleep_time)
@@ -524,10 +521,9 @@ async def fix_db_schema() -> None:
 
     with sync_engine.begin() as sync_conn:
         inspector = inspect(sync_conn)
-        # Add statement timeout to prevent indefinite blocking
         sync_conn.execute(text("SET statement_timeout = 30000"))
 
-        # 1. Create missing tables using the simpler approach
+        # 1. Create missing tables
         existing_tables = set(inspector.get_table_names())
         total_tables = len(Base.metadata.tables)
         for idx, (table_name, table) in enumerate(Base.metadata.tables.items(), 1):
@@ -535,47 +531,47 @@ async def fix_db_schema() -> None:
                 logger.info(
                     f"({idx}/{total_tables}) Creating missing table: {table_name}"
                 )
-                table.create(sync_conn)  # or table.create(bind=sync_conn)
+                table.create(sync_conn)
             else:
                 logger.debug(
                     f"({idx}/{total_tables}) Table already exists: {table_name}"
                 )
 
-        # Special handling for token_blacklist as in your code
+        # Special handling for token_blacklist
         if inspector.has_table("token_blacklist"):
             sync_conn.execute(
                 text(
                     """
-                ALTER TABLE token_blacklist
-                ADD COLUMN IF NOT EXISTS creation_reason VARCHAR(50) NOT NULL DEFAULT ''
-            """
+                    ALTER TABLE token_blacklist
+                    ADD COLUMN IF NOT EXISTS creation_reason VARCHAR(50) NOT NULL DEFAULT ''
+                """
                 )
             )
             sync_conn.execute(
                 text(
                     """
-                ALTER TABLE token_blacklist
-                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP
-                NOT NULL DEFAULT CURRENT_TIMESTAMP
-            """
+                    ALTER TABLE token_blacklist
+                    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP
+                    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                """
                 )
             )
             sync_conn.execute(
                 text(
                     """
-                DO $$
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'token_blacklist'
-                        AND column_name = 'created_at'
-                        AND data_type = 'timestamp with time zone'
-                    ) THEN
-                        ALTER TABLE token_blacklist
-                        ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE;
-                    END IF;
-                END $$;
-            """
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'token_blacklist'
+                              AND column_name = 'created_at'
+                              AND data_type = 'timestamp with time zone'
+                        ) THEN
+                            ALTER TABLE token_blacklist
+                            ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE;
+                        END IF;
+                    END $$;
+                """
                 )
             )
             logger.info("Ensured token_blacklist schema compliance")
@@ -583,24 +579,16 @@ async def fix_db_schema() -> None:
         # 2. Add or create missing columns
         for table_name, table in Base.metadata.tables.items():
             if not inspector.has_table(table_name):
-                # If the table doesn't exist yet, we've just created it above
                 continue
 
             db_cols = {c["name"] for c in inspector.get_columns(table_name)}
             orm_cols = set(table.columns.keys())
-
             missing = orm_cols - db_cols
             for col_name in missing:
                 col = table.columns[col_name]
-                # You can let SQLAlchemy generate the DDL:
-                #
-                # col.create(sync_conn)
-                #
-                # Or do the explicit approach with text-based DDL:
                 col_type_str = col.type.compile(sync_engine.dialect)
                 col_spec = f"{col_name} {col_type_str}"
 
-                # Provide a fallback default for NOT NULL columns with no server default
                 if not col.nullable and col.server_default is None:
                     if str(col.type) == "JSONB":
                         col_spec += " DEFAULT '{}'::jsonb"
@@ -611,7 +599,6 @@ async def fix_db_schema() -> None:
                     elif str(col.type).startswith("BIGINT"):
                         col_spec += " DEFAULT 0"
                     elif "UUID" in str(col.type).upper():
-                        # gen_random_uuid() requires 'pgcrypto' extension in some Postgres versions
                         col_spec += " DEFAULT gen_random_uuid()"
                     elif (
                         col_name == "created_at"
@@ -619,17 +606,12 @@ async def fix_db_schema() -> None:
                     ):
                         col_spec += " DEFAULT CURRENT_TIMESTAMP"
                     else:
-                        # Fallback default
                         col_spec += " DEFAULT ''"
-
                 col_spec += " NOT NULL" if not col.nullable else " NULL"
 
-                # If the ORM column has a default, you can attempt to incorporate it
                 if col.server_default is not None:
                     col_spec += f" DEFAULT {col.server_default.arg}"
 
-                # Avoid issues with unquoted or special defaults
-                # Adjust as needed for your domain
                 ddl = f"""
                 DO $$
                 BEGIN
@@ -655,7 +637,6 @@ async def fix_db_schema() -> None:
             db_indexes = {idx["name"] for idx in inspector.get_indexes(table_name)}
             for idx in table.indexes:
                 if idx.name not in db_indexes:
-                    # Verify the index's columns exist
                     index_col_names = {col.name for col in idx.columns}
                     existing_col_names = {
                         c["name"] for c in inspector.get_columns(table_name)
@@ -669,16 +650,11 @@ async def fix_db_schema() -> None:
                         continue
                     logger.info(f"Creating index {idx.name} on {table_name}")
                     try:
-                        # If you prefer concurrency:
-                        # if idx.dialect_kwargs.get('postgresql_concurrently'):
-                        #     sync_conn.execute(text(f"CREATE INDEX CONCURRENTLY {idx.name} "
-                        #                            f"ON {table_name} ({','.join(index_col_names)})"))
-                        # else:
                         idx.create(sync_conn)
                     except Exception as e:
                         logger.error(f"Failed to create index {idx.name}: {e}")
 
-        # 4. Column type alterations if needed
+        # 4. Column type alterations
         db_tables = inspector.get_table_names()
         for table_name, table in Base.metadata.tables.items():
             if table_name not in db_tables:
@@ -695,9 +671,9 @@ async def fix_db_schema() -> None:
 
                 if db_type_name != orm_type_name:
                     logger.warning(
-                        f"Potential type mismatch: {table_name}.{col_name} (DB: {db_type_name} vs ORM: {orm_type_name})"
+                        f"Potential type mismatch: {table_name}.{col_name} "
+                        f"(DB: {db_type_name} vs ORM: {orm_type_name})"
                     )
-                    # Attempt some safe conversions
                     if "VARCHAR" in db_type_name and "TEXT" in orm_type_name:
                         sync_conn.execute(
                             text(
@@ -719,14 +695,16 @@ async def fix_db_schema() -> None:
                             logger.error(
                                 f"Failed to convert {table_name}.{col_name} to TEXT: {e}"
                             )
-                    # Add handling for timestamp type conversions
-                    elif "timestamp" in orm_type_name.lower() and "timestamp" in db_type_name.lower():
-                        db_has_timezone = "with time zone" in str(db_col["type"]).lower()
+                    elif (
+                        "timestamp" in orm_type_name.lower()
+                        and "timestamp" in db_type_name.lower()
+                    ):
+                        db_has_timezone = (
+                            "with time zone" in str(db_col["type"]).lower()
+                        )
                         orm_has_timezone = "with time zone" in str(orm_col.type).lower()
-
                         if db_has_timezone != orm_has_timezone:
                             if orm_has_timezone:
-                                # Convert timestamp without time zone to timestamp with time zone
                                 sync_conn.execute(
                                     text(
                                         f"ALTER TABLE {table_name} "
@@ -734,10 +712,10 @@ async def fix_db_schema() -> None:
                                     )
                                 )
                                 logger.info(
-                                    f"Converted {table_name}.{col_name} from TIMESTAMP WITHOUT TIME ZONE to TIMESTAMP WITH TIME ZONE"
+                                    f"Converted {table_name}.{col_name} from TIMESTAMP WITHOUT TIME ZONE "
+                                    f"to TIMESTAMP WITH TIME ZONE"
                                 )
                             else:
-                                # Convert timestamp with time zone to timestamp without time zone
                                 sync_conn.execute(
                                     text(
                                         f"ALTER TABLE {table_name} "
@@ -745,13 +723,13 @@ async def fix_db_schema() -> None:
                                     )
                                 )
                                 logger.info(
-                                    f"Converted {table_name}.{col_name} from TIMESTAMP WITH TIME ZONE to TIMESTAMP WITHOUT TIME ZONE"
+                                    f"Converted {table_name}.{col_name} from TIMESTAMP WITH TIME ZONE "
+                                    f"to TIMESTAMP WITHOUT TIME ZONE"
                                 )
                     elif (
                         isinstance(orm_col.type, PG_UUID)
                         and db_type_name.lower() != "uuid"
                     ):
-                        # Convert from char/varchar to UUID
                         try:
                             sync_conn.execute(
                                 text(
@@ -762,7 +740,6 @@ async def fix_db_schema() -> None:
                             logger.info(f"Converted {table_name}.{col_name} to UUID")
                         except Exception as e:
                             logger.error(f"Direct alter to UUID failed: {e}")
-                            # Fallback approach: create temp column, copy, drop old, rename
                             temp_col_name = f"{col_name}_new"
                             sync_conn.execute(
                                 text(
@@ -776,7 +753,6 @@ async def fix_db_schema() -> None:
                                     f"WHERE {col_name} ~ '^[0-9a-fA-F-]{{36}}$'"
                                 )
                             )
-                            # The above `WHERE` tries to filter valid UUID strings
                             sync_conn.execute(
                                 text(f"ALTER TABLE {table_name} DROP COLUMN {col_name}")
                             )
@@ -806,17 +782,13 @@ async def fix_db_schema() -> None:
                 referred_table = fk.column.table.name
                 referred_col = fk.column.name
                 ondelete = None
-                # Gather ondelete from the foreign key if present
                 for c in table.columns:
                     if c.name == col_name:
                         for fk_constraint in c.foreign_keys:
                             if fk_constraint.ondelete:
                                 ondelete = fk_constraint.ondelete.upper()
-
                 tuple_check = (col_name, referred_table, ondelete)
                 if tuple_check not in db_fk_cols:
-                    # Possibly we have an existing constraint with different ondelete
-                    # or none at all. We'll drop any that partially match if needed:
                     for existing_fk in db_fks:
                         if (
                             existing_fk["constrained_columns"]
@@ -830,7 +802,8 @@ async def fix_db_schema() -> None:
                                     )
                                 )
                                 logger.info(
-                                    f"Dropped existing FK {existing_fk['name']} to update with correct cascade rules"
+                                    f"Dropped existing FK {existing_fk['name']} "
+                                    f"to update with correct cascade rules"
                                 )
                             except Exception as drop_err:
                                 logger.warning(
@@ -883,7 +856,6 @@ async def init_db() -> None:
             logger.warning(
                 f"Schema validation completed with {len(mismatch_details)} issue(s)."
             )
-            # Log just the first few
             for issue in mismatch_details[:7]:
                 logger.warning(f"  - {issue}")
         else:

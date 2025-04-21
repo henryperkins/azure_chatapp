@@ -3,8 +3,16 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- Sentry Initialization -->
-  <script src="/static/js/sentry-init.js"></script>
+  <!-- Sentry Loader Script - Must be first! -->
+  <script src="https://js.sentry-cdn.com/YOUR_DSN_PUBLIC_KEY.min.js" crossorigin="anonymous"></script>
+  <script>
+    window.sentryOnLoad = function() {
+      // Configuration will be handled by sentry-init.js
+      const script = document.createElement('script');
+      script.src = '/static/js/sentry-init.js';
+      document.head.appendChild(script);
+    };
+  </script>
   <title>Projects - Azure OpenAI Chat</title>
 
   <!-- Tailwind CSS (production build or dev) -->
