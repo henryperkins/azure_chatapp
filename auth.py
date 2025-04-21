@@ -497,19 +497,14 @@ async def refresh_token(
                 detail="Invalid refresh token. Please login again."
             )
             
-        # Validate database connection with a simple health check
-        await session.execute(text("SELECT 1"))
-
-        # Ensure we have a clean session state
-        if session.in_transaction():
+        # Begin new transaction with a direct query based on the decoded token
             await session.rollback()
-        else:
-            # Reset the session if it's dirty
-            await session.flush()
-            await session.rollback()
-
+            result = await session.execute(
+                select(User).where(User.username == decoded.get("sub")).with_for_update()
+            )
+            locked_user = result.scalars().first()
         # Begin new transaction with clear session state
-        async with session.begin():
+                logger.error("User not found for refresh: %s", decoded.get("sub"))
             locked_user = await session.get(User, user.id, with_for_update=True)
             if not locked_user:
                 logger.error("User not found for refresh: %s", user.id)
