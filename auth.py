@@ -80,7 +80,7 @@ class CookieSettings:
         )
         if is_local_dev:
             secure = False
-            samesite = "none" if settings.DEBUG else "lax"
+            samesite = "none"
             domain = None
         elif self.cookie_domain:
             domain = self.cookie_domain
