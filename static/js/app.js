@@ -280,15 +280,32 @@ async function initApp() {
 
   appState.currentPhase = 'dom_ready';
 
-  // Initialize authentication
+  // Initialize authentication with proper dependency check
   try {
+    // Wait for auth module to be available
+    const authTimeout = setTimeout(() => {
+      console.warn('[App] Auth module not available after timeout');
+    }, APP_CONFIG.TIMEOUTS.AUTH_CHECK);
+
+    while (!window.auth) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    clearTimeout(authTimeout);
+
     await window.auth.init();
   } catch (error) {
     console.error('[App] Auth initialization failed:', error);
   }
 
   appState.currentPhase = 'auth_checked';
-  appState.isAuthenticated = window.app.state.isAuthenticated;
+
+  // Safe authentication state access
+  if (window.auth) {
+    appState.isAuthenticated = window.auth.isAuthenticated();
+  } else {
+    appState.isAuthenticated = false;
+    console.warn('[App] Auth module unavailable, defaulting to unauthenticated state');
+  }
 
   // Initialize event system FIRST
   try {
@@ -406,6 +423,15 @@ if (document.readyState !== 'loading') {
 
 function handleInitError(error) {
   console.error('[App] Critical initialization error:', error);
+
+  // Send detailed diagnostics to console
+  console.debug('[App] Diagnostics:', {
+    authAvailable: !!window.auth,
+    appState: JSON.stringify(appState),
+    documentReady: document.readyState,
+    eventHandlersAvailable: !!window.eventHandlers
+  });
+
   showNotification('Application failed to initialize. Please refresh.', 'error');
 }
 
