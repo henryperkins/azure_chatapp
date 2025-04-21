@@ -1,15 +1,9 @@
 """
-utils/middlewares.py
---------------------
-Enhanced FastAPI middleware components with comprehensive security headers,
-Sentry integration, and Content Security Policy (CSP) configuration.
-
-Key Features:
-- Sentry request tracing with distributed tracing support
-- Performance monitoring and detailed request capture
-- Strict security headers including CSP with worker support
-- Request context enrichment
-- Error handling and logging
+utils/middlewares.py (insecure/debug version)
+--------------------------------------------
+Middleware components with relaxed or removed security headers.
+Maintains the same class and function names as the original for easy drop-in replacement.
+Use ONLY for local development or debugging, not for production.
 """
 
 import logging
@@ -24,34 +18,23 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response, JSONResponse
 from starlette.types import ASGIApp
 
+# If you rely on these from your original Sentry utilities, import them unchanged:
+# If not, remove or comment out as needed.
 from utils.sentry_utils import (
     inject_sentry_trace_headers,
     extract_sentry_trace,
-    filter_sensitive_event,
+    filter_sensitive_event,  # Possibly used in Sentry or other components
 )
 
 logger = logging.getLogger(__name__)
 
-# Security configuration
-DEFAULT_CSP = (
-    "default-src 'self' blob:; "
-    "style-src 'self' 'unsafe-inline'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
-    "script-src-elem 'self' 'unsafe-inline' blob: https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
-    "worker-src 'self' blob:; "
-    "child-src 'self' blob:; "
-    "connect-src 'self' http://localhost:8000 https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
-    "img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com; "
-    "frame-src 'self'; "
-    "font-src 'self' data:; "
-    "media-src 'self' blob:; "
-    "object-src 'none'; "
-    "base-uri 'self'; "
-    "form-action 'self'; "
-    "frame-ancestors 'none';"
-)
+# ------------------------------------------------------------------
+# The original code had a DEFAULT_CSP and a set of strict headers.
+# We will remove or ignore these to make it insecure.
+# ------------------------------------------------------------------
+DEFAULT_CSP = ""  # Ignored or set to empty to disable CSP
 
-# Headers configuration
+# Example sets of headers to filter or include. Adjust as needed.
 INCLUDE_HEADERS = {
     "content-type",
     "content-length",
@@ -67,48 +50,45 @@ INCLUDE_HEADERS = {
     "x-correlation-id",
     "x-api-version",
 }
-
 SENSITIVE_HEADERS = {"cookie", "authorization", "x-api-key", "x-auth-token"}
-
 NORMALIZE_PATHS = ["/api/users/", "/api/projects/", "/api/items/"]
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware for setting security headers including CSP with worker support"""
+    """
+    Middleware for setting security headers, but in this INSECURE/DEBUG version,
+    we skip or relax the strict headers (CSP, HSTS, etc.).
+
+    WARNING: Do not use in production. This sets minimal or no security headers.
+    """
 
     def __init__(self, app: ASGIApp, csp: str = DEFAULT_CSP):
         super().__init__(app)
-        self.csp = csp
+        self.csp = csp  # For compatibility only; we won't use it in debug mode.
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
+        # Proceed with the request
         response = await call_next(request)
 
-        security_headers = {
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
-            "X-XSS-Protection": "1; mode=block",
-            "Content-Security-Policy": self.csp,
-            "Referrer-Policy": "strict-origin-when-cross-origin",
-            "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
-            "Cross-Origin-Opener-Policy": "same-origin",
-            "Cross-Origin-Resource-Policy": "same-origin",
-            "Cross-Origin-Embedder-Policy": "require-corp",
-        }
+        # In the original secure version, we set many headers (HSTS, CSP, etc.).
+        # Here, we either skip them altogether or set minimal placeholders.
+        response.headers["X-Debug-Insecure"] = "true"
 
-        response.headers.update(security_headers)
+        # Example: we do NOT set these:
+        #   Strict-Transport-Security, X-Frame-Options, X-XSS-Protection, etc.
+        #   or Content-Security-Policy with a real CSP directive.
+
         return response
 
 
 class SentryTracingMiddleware(BaseHTTPMiddleware):
     """
-    Enhanced Sentry middleware with:
-    - Distributed tracing support
-    - Performance monitoring
-    - Detailed request context
-    - Error handling
+    Enhanced Sentry middleware with distributed tracing, performance monitoring,
+    request context, and error handling.
+
+    Kept mostly the same, as requested, but still "insecure" from a headers perspective.
     """
 
     def __init__(
@@ -162,7 +142,7 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
                 sentry_sdk.capture_exception(e)
             return JSONResponse(
                 status_code=500,
-                content={"detail": "Internal server error"},
+                content={"detail": "Internal server error (debug mode)"},
             )
 
     async def _process_request(
@@ -179,42 +159,31 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         if self.record_breadcrumbs:
             self._add_request_breadcrumb(request)
 
-        self._process_queue_time(request, transaction, request_received_time)
+        # In a secure version, we might track queue time or do robust analysis.
+        # For debug, we skip advanced metrics or partial calls.
 
-        try:
-            route_start_time = time.time()
-            response = await call_next(request)
+        route_start_time = time.time()
+        response = await call_next(request)
 
-            route_duration_ms = (time.time() - route_start_time) * 1000
-            transaction.set_data("route_processing_ms", route_duration_ms)
+        route_duration_ms = (time.time() - route_start_time) * 1000
+        transaction.set_data("route_processing_ms", route_duration_ms)
+        transaction.set_tag("http.status_code", response.status_code)
+        transaction.set_data(
+            "http.response_content_type", response.headers.get("content-type", "")
+        )
 
-            transaction.set_tag("http.status_code", response.status_code)
-            transaction.set_data(
-                "http.response_content_type", response.headers.get("content-type", "")
-            )
-
-            if response.status_code < 400:
-                transaction.set_status("ok")
-            elif response.status_code < 500:
-                transaction.set_status("invalid_argument")
-            else:
-                transaction.set_status("internal_error")
-
-            elapsed_ms = (time.time() - start_time) * 1000
-            transaction.set_data("response_time_ms", elapsed_ms)
-            inject_sentry_trace_headers(response)
-
-            return response
-        except Exception as e:
+        if response.status_code < 400:
+            transaction.set_status("ok")
+        elif response.status_code < 500:
+            transaction.set_status("invalid_argument")
+        else:
             transaction.set_status("internal_error")
-            transaction.set_data("exception_type", type(e).__name__)
-            transaction.set_data("exception_value", str(e))
 
-            with sentry_sdk.push_scope() as scope:
-                scope.set_tag("handled", "false")
-                scope.set_context("request", self._get_request_context(request))
-                sentry_sdk.capture_exception(e)
-            raise
+        elapsed_ms = (time.time() - start_time) * 1000
+        transaction.set_data("response_time_ms", elapsed_ms)
+        inject_sentry_trace_headers(response)
+
+        return response
 
     def _get_transaction_name(self, request: Request) -> str:
         method = request.method
@@ -243,15 +212,15 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         if parsed_url.query:
             transaction.set_data("http.query", parsed_url.query)
 
-        headers = {}
+        filtered_headers = {}
         for name, value in request.headers.items():
             name_lower = name.lower()
             if name_lower in INCLUDE_HEADERS:
-                headers[name] = value
+                filtered_headers[name] = value
             elif name_lower in SENSITIVE_HEADERS:
-                headers[name] = "[FILTERED]"
+                filtered_headers[name] = "[FILTERED]"
 
-        transaction.set_data("http.request_headers", headers)
+        transaction.set_data("http.request_headers", filtered_headers)
         transaction.set_tag("environment", self.environment)
 
         user_agent = request.headers.get("user-agent", "")
@@ -290,7 +259,6 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         client = request.scope.get("client")
         if client and len(client) >= 2:
             return client[0]
-
         return None
 
     def _add_request_breadcrumb(self, request: Request) -> None:
@@ -305,48 +273,14 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
             },
         )
 
-    def _process_queue_time(
-        self, request: Request, transaction: Any, request_received_time: float
-    ) -> None:
-        request_start = request.headers.get("x-request-start")
-        if request_start and request_start.isdigit():
-            try:
-                start_time_ms = float(request_start) / 1000.0
-                queue_time_ms = (request_received_time - start_time_ms) * 1000
-                if 0 <= queue_time_ms <= 60000:
-                    transaction.set_data("queue_time_ms", queue_time_ms)
-                    with sentry_sdk.start_span(
-                        op="queue", description="Request queue time"
-                    ) as span:
-                        span.set_data("queue_time_ms", queue_time_ms)
-            except (ValueError, TypeError):
-                pass
-
-    def _get_request_context(self, request: Request) -> Dict[str, Any]:
-        headers_dict = {}
-        if request.headers:
-            try:
-                headers_dict = dict(request.headers.items())
-                for header in SENSITIVE_HEADERS:
-                    if header in headers_dict:
-                        headers_dict[header] = "[FILTERED]"
-            except Exception:
-                headers_dict = {"error": "Could not process headers"}
-
-        return {
-            "method": request.method,
-            "url": str(request.url),
-            "headers": headers_dict,
-            "client_ip": self._get_client_ip(request),
-            "path_params": getattr(request, "path_params", {}) or {},
-            "query_params": (
-                dict(request.query_params.items()) if request.query_params else {}
-            ),
-        }
-
 
 class SentryContextMiddleware(BaseHTTPMiddleware):
-    """Middleware for adding global context to Sentry events"""
+    """
+    Middleware for adding global context to Sentry events.
+
+    Retains the same name, but remains minimal.
+    Used for debug or local dev: sets environment, server name, etc.
+    """
 
     def __init__(
         self,
@@ -380,30 +314,35 @@ class SentryContextMiddleware(BaseHTTPMiddleware):
 
 
 def setup_middlewares(app: FastAPI) -> FastAPI:
-    """Configure all middlewares with proper ordering"""
-    # CORS + no security headers in development
-    if os.getenv("ENVIRONMENT") == "development":
-        from fastapi.middleware.cors import CORSMiddleware
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-        # Skip all other security headers (CSP, HSTS, etc.) in dev
-    else:
-        # Production: apply strict security headers
-        app.add_middleware(SecurityHeadersMiddleware, csp=DEFAULT_CSP)
+    """
+    Configure all middlewares with minimal or insecure defaults.
+    - Wide-open CORS in development
+    - Very little in production, ignoring advanced security headers
+    - Retains function name for compatibility
+    """
 
-    # Sentry context before tracing
+    from fastapi.middleware.cors import CORSMiddleware
+
+    # Insecure wide-open CORS in all environments
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Insecure: any domain
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Insecure security headers
+    app.add_middleware(SecurityHeadersMiddleware, csp=DEFAULT_CSP)
+
+    # Sentry context
     app.add_middleware(
         SentryContextMiddleware,
-        app_version=os.getenv("APP_VERSION", "1.0.0"),
+        app_version=os.getenv("APP_VERSION", "debug"),
         environment=os.getenv("ENVIRONMENT", "development"),
     )
 
-    # Tracing middleware last
+    # Sentry tracing
     app.add_middleware(
         SentryTracingMiddleware,
         include_request_body=False,
