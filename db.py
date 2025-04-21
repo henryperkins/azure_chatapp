@@ -27,7 +27,7 @@ DATABASE_URL = settings.DATABASE_URL
 # Async engine/session: for normal runtime usage
 # ---------------------------------------------------------
 
-async_engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+async_engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=False)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine, autocommit=False, autoflush=False, expire_on_commit=False
