@@ -183,14 +183,20 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 # -----------------------------------------------------------------------------
 # Cookie Extraction for HTTP / WebSocket
 # -----------------------------------------------------------------------------
-def extract_token(request_or_websocket):
+def extract_token(request_or_websocket, token_type="access"):
     """
-    Retrieves the 'access_token' from cookies.
+    Retrieves the specified token type from cookies.
     Works with both HTTP (Request) and WebSocket objects.
+    
+    Args:
+        request_or_websocket: The request or websocket object
+        token_type: The type of token to extract ('access' or 'refresh')
     """
+    cookie_name = f"{token_type}_token"
+    
     if hasattr(request_or_websocket, "cookies"):
         # Likely an HTTP Request
-        return request_or_websocket.cookies.get("access_token")
+        return request_or_websocket.cookies.get(cookie_name)
     if hasattr(request_or_websocket, "headers"):
         # WebSocket scenario
         cookie_header = request_or_websocket.headers.get("cookie", "")
@@ -199,7 +205,7 @@ def extract_token(request_or_websocket):
             if "=" in c:
                 k, v = c.split("=", 1)
                 cookies[k.strip()] = v.strip()
-        return cookies.get("access_token")
+        return cookies.get(cookie_name)
     return None  # Fallback for unexpected types
 
 
@@ -215,10 +221,10 @@ async def get_user_from_token(
     Retrieve the token from cookies, verify it, then load the user.
     Raises 401 if user not found or token is invalid/expired/revoked.
     """
-    token = extract_token(request)
+    token = extract_token(request, token_type=expected_type)
     if not token:
-        logger.warning("No token found in request")
-        raise HTTPException(status_code=401, detail="Missing token")
+        logger.warning(f"No {expected_type} token found in request")
+        raise HTTPException(status_code=401, detail=f"Missing {expected_type} token")
 
     decoded = await verify_token(token, expected_type, request)
 
