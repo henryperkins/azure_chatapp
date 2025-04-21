@@ -79,25 +79,42 @@
    */
   function initializeSentry() {
     if (shouldDisableSentry()) {
+      console.log('[Sentry] Disabled based on environment or user preference');
       return;
     }
 
-    // Attempt to load Sentry if not present (optional dynamic script injection)
-    // If you already include Sentry via <script> tag or bundler, you can skip this step.
-    if (!window.Sentry) {
-      const script = document.createElement('script');
-      // URL below is an example for the @sentry/browser SDK version 7.x
-      script.src = 'https://browser.sentry-cdn.com/7.50.0/bundle.min.js';
-      script.crossOrigin = 'anonymous';
-
-      script.onload = function () {
-        setupSentry();
-      };
-      document.head.appendChild(script);
-    } else {
-      // If already loaded, just set it up
-      setupSentry();
+    const dsn = getDsn();
+    if (!dsn) {
+      console.warn('[Sentry] No DSN configured - skipping initialization');
+      return;
     }
+
+    // Check if Sentry is already loaded
+    if (window.Sentry) {
+      setupSentry();
+      return;
+    }
+
+    // Load Sentry SDK dynamically with error handling
+    const script = document.createElement('script');
+    script.src = 'https://browser.sentry-cdn.com/7.50.0/bundle.min.js';
+    script.crossOrigin = 'anonymous';
+    script.integrity = 'sha384-ABC123...'; // Add integrity hash if available
+    script.referrerPolicy = 'strict-origin-when-cross-origin';
+
+    script.onload = function() {
+      if (window.Sentry) {
+        setupSentry();
+      } else {
+        console.error('[Sentry] SDK failed to load properly');
+      }
+    };
+
+    script.onerror = function() {
+      console.error('[Sentry] Failed to load SDK from CDN');
+    };
+
+    document.head.appendChild(script);
   }
 
   /**

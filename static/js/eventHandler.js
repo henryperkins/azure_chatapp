@@ -527,7 +527,7 @@ function setupCommonElements() {
       window.auth.logout(e).catch(err => {
         console.error('Logout failed:', err);
       });
-    });
+    }, { passive: false });
   }
 
   // Login button toggle

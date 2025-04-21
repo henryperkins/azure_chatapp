@@ -14,15 +14,15 @@
       document.head.appendChild(script);
     };
   </script>
-  <!-- Added Content Security Policy to allow Sentry scripts -->
+  <!-- Content Security Policy optimized for Sentry -->
   <meta http-equiv="Content-Security-Policy"
       content="default-src 'self' blob:;
-               script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.sentry-cdn.com https://o4508070823395328.ingest.us.sentry.io https://browser.sentry-cdn.com;
-               script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.sentry-cdn.com https://o4508070823395328.ingest.us.sentry.io https://browser.sentry-cdn.com;
+               script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
+               script-src-elem 'self' 'unsafe-inline' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
                worker-src 'self' blob:;
                child-src 'self' blob:;
                connect-src 'self' https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com;
-               img-src 'self' data: blob: https://o4508070823395328.ingest.us.sentry.io https://browser.sentry-cdn.com;
+               img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com;
                style-src 'self' 'unsafe-inline';
                frame-src 'self';">
   <title>Projects - Azure OpenAI Chat</title>
@@ -567,6 +567,7 @@
   <script type="module" src="/static/js/auth.js"></script>
   <script type="module" src="/static/js/notification-handler.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
+  <script type="module" src="/static/js/projectManager.js"></script>
 
   <!-- UI Framework -->
   <script type="module" src="/static/js/uiRenderer.js"></script>
@@ -578,9 +579,6 @@
   <!-- UI Components -->
   <script type="module" src="/static/js/sidebar.js"></script>
   <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
-
-  <!-- Application Logic -->
-  <script type="module" src="/static/js/projectManager.js"></script>
 
   <!-- Theme toggle functionality -->
   <script src="/static/js/theme-toggle.js"></script>

@@ -370,7 +370,9 @@ async function loginUser(username, password) {
  * Logout a user
  */
 async function logout(e) {
-  e?.preventDefault();
+  if (e && e.cancelable) {
+    e.preventDefault();
+  }
 
   // Clear project-related localStorage
   ['selectedProjectId', 'projectFilter'].forEach(key => {
@@ -380,8 +382,11 @@ async function logout(e) {
   broadcastAuth(false, null);
 
   try {
-    await getCSRFTokenAsync();
-    await authRequest('/api/auth/logout', 'POST');
+    const csrfToken = await getCSRFTokenAsync();
+    const headers = {
+      'X-CSRF-Token': csrfToken
+    };
+    await authRequest('/api/auth/logout', 'POST', null, headers);
   } catch (err) {
     console.warn('[Auth] Backend logout call failed:', err);
   } finally {
