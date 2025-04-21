@@ -47,6 +47,21 @@ const appState = {
 const pendingRequests = new Map();
 
 /**
+ * Helper: Wait until a global dependency is available on window
+ * @param {string} name - The global name to wait for (e.g. 'eventHandlers')
+ * @param {number} timeout - How long to wait before failing
+ */
+async function waitForDependency(name, timeout = 5000) {
+  const startTime = Date.now();
+  while (!window[name]) {
+    if (Date.now() - startTime > timeout) {
+      throw new Error(`Dependency "${name}" not found after ${timeout}ms`);
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+}
+
+/**
  * Universal fetch wrapper with authentication handling
  */
 async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
@@ -268,6 +283,85 @@ function showProjectListView() {
 }
 
 /**
+ * Revised initialization sequence using waitForDependency
+ * and organizing components by phases.
+ */
+const initSequence = [
+  // Phase 1: Wait for the eventHandlers, then init
+  async () => {
+    await waitForDependency('eventHandlers');
+    window.eventHandlers.init();
+    console.log('[App] Event handlers initialized.');
+  },
+
+  // Phase 2: Modal manager + projectModal
+  async () => {
+    await waitForDependency('modalManager');
+    window.modalManager.init();
+    console.log('[App] ModalManager initialized.');
+
+    if (window.projectModal?.init) {
+      window.projectModal.init();
+      console.log('[App] ProjectModal initialized.');
+    }
+  },
+
+  // Phase 3: Project manager (data) must be ready
+  async () => {
+    // If not already bound, bind here (fallback)
+    if (!window.projectManager && window.projectManagerAPI) {
+      window.projectManager = window.projectManagerAPI;
+      console.log('[App] Bound projectManagerAPI to window.projectManager');
+    }
+    await waitForDependency('projectManager');
+    console.log('[App] ProjectManager ready.');
+  },
+
+  // Phase 4: Initialize main UI components concurrently
+  async () => {
+    await Promise.all([
+      (async () => {
+        console.log('[App] Waiting for sidebar...');
+        await waitForDependency('sidebar');
+        window.sidebar.init();
+        console.log('[App] Sidebar initialized.');
+      })(),
+      (async () => {
+        console.log('[App] Waiting for projectDashboard...');
+        await waitForDependency('projectDashboard');
+        await window.projectDashboard.init();
+        console.log('[App] ProjectDashboard initialized.');
+      })()
+    ]);
+  },
+
+  // Phase 5: Other downstream components or features
+  // (chatExtensions, KnowledgeBaseComponent, chatManager, etc.)
+  async () => {
+    if (window.chatExtensions?.initChatExtensions) {
+      window.chatExtensions.initChatExtensions();
+      console.log('[App] chatExtensions initialized.');
+    }
+    if (window.KnowledgeBaseComponent) {
+      window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+      console.log('[App] KnowledgeBaseComponent initialized.');
+    }
+    if (window.chatManager?.initialize) {
+      window.chatManager.initialize();
+      console.log('[App] chatManager initialized.');
+    }
+  },
+
+  // Phase 6: Project List Initialization
+  async () => {
+    console.log('[App] Waiting for initProjectList...');
+    await waitForDependency('initProjectList');
+    window.initProjectList();
+    console.log('[App] ProjectListInit executed.');
+  }
+];
+
+/**
  * Initialize the application
  */
 async function initApp() {
@@ -319,66 +413,7 @@ async function initApp() {
 
   appState.currentPhase = 'auth_checked';
 
-  // Initialize event system FIRST
-  try {
-    while (!window.eventHandlers) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    window.eventHandlers.init();
-  } catch (error) {
-    console.error('[App] Failed to initialize event handlers:', error);
-    throw error;
-  }
-
-  // Initialize model configuration UI if available
-  if (window.uiRenderer?.setupModelDropdown) {
-    await window.uiRenderer.setupModelDropdown();
-    window.uiRenderer.setupMaxTokensUI();
-    window.uiRenderer.setupVisionUI();
-  }
-
-  // Initialize core modules in the proper sequence
-  const initSequence = [
-    // Then modal manager
-    async () => {
-      while (!window.modalManager) await new Promise(resolve => setTimeout(resolve, 100));
-      window.modalManager.init();
-      console.log('[App] ModalManager initialized.');
-      // --- START: Initialize ProjectModal ---
-      if (window.projectModal?.init) {
-        window.projectModal.init();
-        console.log('[App] ProjectModal initialized.');
-      } else {
-        console.warn('[App] window.projectModal or its init method not found.');
-      }
-      // --- END: Initialize ProjectModal ---
-    },
-    // Then sidebar
-    async () => {
-      while (!window.sidebar?.init) await new Promise(resolve => setTimeout(resolve, 100));
-      window.sidebar.init(); // Sidebar init now handles default tab
-      console.log('[App] Sidebar initialized.');
-    },
-    // Then project dashboard
-    async () => {
-      while (!window.projectDashboard?.init) await new Promise(resolve => setTimeout(resolve, 100));
-      await window.projectDashboard.init(); // Ensure dashboard init is awaited
-      console.log('[App] ProjectDashboard initialized.');
-    },
-    // Then other components
-    () => window.chatExtensions?.initChatExtensions?.(),
-    () => window.KnowledgeBaseComponent &&
-      (window.knowledgeBaseComponent = new window.KnowledgeBaseComponent()),
-    () => window.chatManager?.initialize?.(),
-    // Initialize project list after dashboard
-    async () => {
-      while (!window.initProjectList) await new Promise(resolve => setTimeout(resolve, 100));
-      window.initProjectList();
-      console.log('[App] ProjectListInit executed.');
-    }
-  ];
-
-  // Execute initialization sequence with error handling
+  // Execute the revised initialization sequence
   for (const initFn of initSequence) {
     try {
       await initFn();
@@ -483,7 +518,7 @@ window.app = {
   initialize: initApp,
   loadProjects,
   getProjectId: () => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(window.location.search)
     return urlParams.get('project') || localStorage.getItem('selectedProjectId');
   }
 };

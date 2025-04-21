@@ -3,13 +3,12 @@
  * Coordinates project dashboard components and state
  */
 
-// Project dashboard components
+// Locally track our components and state
 const components = {
   projectList: null,
   projectDetails: null
 };
 
-// Dashboard state
 const dashboardState = {
   currentView: null,
   currentProject: null
@@ -21,12 +20,23 @@ async function init() {
     console.log('[projectDashboard] Already initialized.');
     return true;
   }
+
   window.projectDashboardInitialized = true; // Set flag early
   console.log('[projectDashboard] Initializing...');
 
   try {
-    // Initialize components
-    await initializeComponents(); // Wait for components including HTML loading
+    // Ensure DOM is ready
+    if (document.readyState === 'loading') {
+      await new Promise(resolve =>
+        document.addEventListener('DOMContentLoaded', resolve, { once: true })
+      );
+    }
+
+    // Load HTML for the project list view
+    await loadProjectListHtml();
+
+    // Initialize components after HTML is loaded
+    await initializeComponents();
 
     // Process URL parameters for initial view
     processUrlParameters();
@@ -38,6 +48,7 @@ async function init() {
     document.dispatchEvent(
       new CustomEvent('projectDashboardInitializedEvent', { detail: { success: true } })
     );
+
     console.log('[projectDashboard] Initialization complete.');
     return true;
   } catch (error) {
@@ -52,43 +63,16 @@ async function init() {
 }
 
 /**
- * Initialize dashboard components
+ * Loads the project_list.html content if not already present
  */
-async function initializeComponents() {
-  console.log('[projectDashboard] Initializing components...');
-  // Ensure project_list.html is loaded BEFORE creating ProjectListComponent
-  await loadProjectListHtml();
-
-  // Now it's safe to create the list component
-  if (window.ProjectListComponent) {
-    components.projectList = new window.ProjectListComponent({
-      elementId: 'projectList', // ID inside project_list.html
-      onViewProject: handleViewProject
-    });
-    console.log('[projectDashboard] ProjectListComponent created.');
-  } else {
-    console.error('[projectDashboard] ProjectListComponent class not found.');
-  }
-
-  // Initialize details component
-  if (window.ProjectDetailsComponent) {
-    components.projectDetails = new window.ProjectDetailsComponent({
-      onBack: handleBackToList
-    });
-    console.log('[projectDashboard] ProjectDetailsComponent created.');
-  } else {
-    console.error('[projectDashboard] ProjectDetailsComponent class not found.');
-  }
-  console.log('[projectDashboard] Components initialized.');
-}
-
 async function loadProjectListHtml() {
   const container = document.getElementById('projectListView');
   if (!container) {
     console.error('[projectDashboard] projectListView container not found in DOM.');
-    return;
+    throw new Error('Missing projectListView container');
   }
-  // Avoid reloading if already populated
+
+  // Avoid reloading if there's already a #projectList element
   if (container.querySelector('#projectList')) {
     console.log('[projectDashboard] project_list.html seems already loaded.');
     return;
@@ -97,41 +81,54 @@ async function loadProjectListHtml() {
   console.log('[projectDashboard] Loading project_list.html...');
   try {
     const response = await fetch('/static/html/project_list.html');
-    if (response.ok) {
-      const html = await response.text();
-      container.innerHTML = html;
-      console.log('[projectDashboard] project_list.html loaded successfully.');
-    } else {
+    if (!response.ok) {
       console.error('[projectDashboard] Failed to load project_list.html. Status:', response.status);
       container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
+      throw new Error(`HTTP ${response.status}`);
     }
+
+    const html = await response.text();
+    container.innerHTML = html;
+    console.log('[projectDashboard] project_list.html loaded successfully.');
   } catch (err) {
     console.error('[projectDashboard] Error fetching project_list.html:', err);
     container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
+    throw err;
   }
 }
 
 /**
- * Set up event listeners
+ * Initialize individual dashboard components
  */
-function setupEventListeners() {
-  // Authentication state
-  window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+async function initializeComponents() {
+  console.log('[projectDashboard] Initializing components...');
 
-  // Project events
-  document.addEventListener('projectsLoaded', handleProjectsLoaded);
-  document.addEventListener('projectLoaded', handleProjectLoaded);
-  document.addEventListener('projectStatsLoaded', handleProjectStatsLoaded);
-  document.addEventListener('projectFilesLoaded', handleFilesLoaded);
-  document.addEventListener('projectArtifactsLoaded', handleArtifactsLoaded);
-  document.addEventListener('projectNotFound', handleProjectNotFound);
+  // Create project list component if class is available
+  if (window.ProjectListComponent) {
+    components.projectList = new window.ProjectListComponent({
+      elementId: 'projectList', // Must match element in project_list.html
+      onViewProject: handleViewProject
+    });
+    console.log('[projectDashboard] ProjectListComponent created.');
+  } else {
+    console.error('[projectDashboard] ProjectListComponent not found on window.');
+  }
 
-  // Navigation
-  window.addEventListener('popstate', handlePopState);
+  // Create project details component if available
+  if (window.ProjectDetailsComponent) {
+    components.projectDetails = new window.ProjectDetailsComponent({
+      onBack: handleBackToList
+    });
+    console.log('[projectDashboard] ProjectDetailsComponent created.');
+  } else {
+    console.error('[projectDashboard] ProjectDetailsComponent not found on window.');
+  }
+
+  console.log('[projectDashboard] Components initialized.');
 }
 
 /**
- * Process URL parameters for initial view
+ * Interpret URL parameters to show the correct initial view
  */
 function processUrlParameters() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -145,14 +142,35 @@ function processUrlParameters() {
 }
 
 /**
- * Handle popstate (back/forward)
+ * Sets up global dashboard event listeners
+ */
+function setupEventListeners() {
+  // Authentication state changes
+  if (window.auth?.AuthBus) {
+    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+  }
+
+  // Project events
+  document.addEventListener('projectsLoaded', handleProjectsLoaded);
+  document.addEventListener('projectLoaded', handleProjectLoaded);
+  document.addEventListener('projectStatsLoaded', handleProjectStatsLoaded);
+  document.addEventListener('projectFilesLoaded', handleFilesLoaded);
+  document.addEventListener('projectArtifactsLoaded', handleArtifactsLoaded);
+  document.addEventListener('projectNotFound', handleProjectNotFound);
+
+  // URL navigation
+  window.addEventListener('popstate', handlePopState);
+}
+
+/**
+ * Handle popstate (back/forward) by re-checking URL params
  */
 function handlePopState() {
   processUrlParameters();
 }
 
 /**
- * Show project list view
+ * Show the project list view
  */
 function showProjectList() {
   dashboardState.currentView = 'list';
@@ -161,28 +179,27 @@ function showProjectList() {
   if (components.projectDetails) {
     components.projectDetails.hide();
   }
-
   if (components.projectList) {
     components.projectList.show();
   }
 
-  // Update URL without triggering popstate
+  // Update URL without triggering a full reload
   const currentUrl = new URL(window.location);
   currentUrl.searchParams.delete('project');
   window.history.pushState({}, '', currentUrl.toString());
 
   // Load projects if authenticated
-  if (window.app.state.isAuthenticated && window.projectManager?.loadProjects) {
+  if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
     window.projectManager.loadProjects('all');
   }
 }
 
 /**
- * Show project details view
+ * Show the project details view for a given project
  */
 function showProjectDetails(projectId) {
   if (!projectId) {
-    console.error('Cannot show project details: No project ID provided');
+    console.error('[projectDashboard] showProjectDetails called without a projectId.');
     return false;
   }
 
@@ -192,23 +209,24 @@ function showProjectDetails(projectId) {
   if (components.projectList) {
     components.projectList.hide();
   }
-
   if (components.projectDetails) {
     components.projectDetails.show();
   }
 
-  // Update URL without triggering popstate
+  // Update URL param
   const currentUrl = new URL(window.location);
   currentUrl.searchParams.set('project', projectId);
   window.history.pushState({}, '', currentUrl.toString());
 
   // Load project details
-  if (window.app.state.isAuthenticated && window.projectManager?.loadProjectDetails) {
-    window.projectManager.loadProjectDetails(projectId).catch(error => {
-      console.error('Failed to load project details:', error);
-      window.app?.showNotification('Failed to load project', 'error');
-      showProjectList();
-    });
+  if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjectDetails) {
+    window.projectManager
+      .loadProjectDetails(projectId)
+      .catch((error) => {
+        console.error('[projectDashboard] Failed to load project details:', error);
+        window.app?.showNotification('Failed to load project details', 'error');
+        showProjectList();
+      });
   } else {
     showProjectList();
   }
@@ -217,21 +235,21 @@ function showProjectDetails(projectId) {
 }
 
 /**
- * Handle view project event
+ * onViewProject callback used by ProjectListComponent
  */
 function handleViewProject(projectId) {
   showProjectDetails(projectId);
 }
 
 /**
- * Handle back to list event
+ * onBack callback used by ProjectDetailsComponent
  */
 function handleBackToList() {
   showProjectList();
 }
 
 /**
- * Handle auth state changes
+ * Handle authentication state changes
  */
 function handleAuthStateChange(event) {
   const { authenticated } = event.detail || {};
@@ -241,22 +259,22 @@ function handleAuthStateChange(event) {
   const projectDetailsView = document.getElementById('projectDetailsView');
 
   if (!authenticated) {
-    // Not authenticated - show login message
+    // Hide project views, show login message
     if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
     if (projectListView) projectListView.classList.add('hidden');
     if (projectDetailsView) projectDetailsView.classList.add('hidden');
   } else {
-    // Authenticated - show current view
+    // Show appropriate dashboard view
     if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
 
     if (dashboardState.currentView === 'details' && dashboardState.currentProject) {
-      if (projectListView) projectListView.classList.add('hidden');
-      if (projectDetailsView) projectDetailsView.classList.remove('hidden');
+      projectListView?.classList.add('hidden');
+      projectDetailsView?.classList.remove('hidden');
     } else {
-      if (projectListView) projectListView.classList.remove('hidden');
-      if (projectDetailsView) projectDetailsView.classList.add('hidden');
+      projectListView?.classList.remove('hidden');
+      projectDetailsView?.classList.add('hidden');
 
-      // Load projects
+      // Reload projects
       if (window.projectManager?.loadProjects) {
         window.projectManager.loadProjects('all');
       }
@@ -265,21 +283,22 @@ function handleAuthStateChange(event) {
 }
 
 /**
- * Handle projects loaded event
+ * Handle projectsLoaded event
  */
 function handleProjectsLoaded(event) {
-  const { projects = [], error = false } = event.detail || {};
+  const { projects = [], error = false, message } = event.detail || {};
 
   if (error) {
-    console.error('[projectDashboard] Received projectsLoaded event with error:', event.detail.message);
+    console.error('[projectDashboard] projectsLoaded event with error:', message);
     if (components.projectList?._showErrorState) {
-      components.projectList._showErrorState(event.detail.message || 'Failed to load projects');
+      components.projectList._showErrorState(message || 'Failed to load projects');
     }
     return;
   }
 
+  // Render using project list component
   if (components.projectList) {
-    console.log(`[projectDashboard] Rendering ${projects.length} projects.`);
+    console.log(`[projectDashboard] Rendering ${projects.length} project(s).`);
     components.projectList.renderProjects(projects);
   } else {
     console.warn('[projectDashboard] ProjectListComponent not available to render projects.');
@@ -287,7 +306,7 @@ function handleProjectsLoaded(event) {
 }
 
 /**
- * Handle single project loaded event
+ * Handle single projectLoaded event
  */
 function handleProjectLoaded(event) {
   const project = event.detail;
@@ -299,7 +318,7 @@ function handleProjectLoaded(event) {
 }
 
 /**
- * Handle project stats loaded event
+ * Handle projectStatsLoaded event
  */
 function handleProjectStatsLoaded(event) {
   const stats = event.detail;
@@ -309,7 +328,7 @@ function handleProjectStatsLoaded(event) {
 }
 
 /**
- * Handle project files loaded event
+ * Handle projectFilesLoaded event
  */
 function handleFilesLoaded(event) {
   if (components.projectDetails) {
@@ -318,28 +337,27 @@ function handleFilesLoaded(event) {
 }
 
 /**
- * Handle artifacts loaded event
+ * Handle projectArtifactsLoaded event
  */
 function handleArtifactsLoaded(event) {
-  if (components.projectDetails) {
-    components.projectDetails.renderArtifacts?.(event.detail.artifacts);
+  if (components.projectDetails?.renderArtifacts) {
+    components.projectDetails.renderArtifacts(event.detail.artifacts);
   }
 }
 
 /**
- * Handle project not found event
+ * Handle projectNotFound event
  */
 function handleProjectNotFound(event) {
-  const { projectId } = event.detail;
-  console.warn(`Project not found: ${projectId}`);
+  const { projectId } = event.detail || {};
+  console.warn(`[projectDashboard] Project not found: ${projectId}`);
 
   dashboardState.currentProject = null;
-
   window.app?.showNotification('The requested project was not found', 'error');
   showProjectList();
 }
 
-// Export to window
+// Export the dashboard to the global window object
 window.projectDashboard = {
   init,
   showProjectList,
