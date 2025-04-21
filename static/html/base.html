@@ -100,7 +100,7 @@
                 class="px-2 py-1 text-xs font-medium text-base-content/60"
                 onclick="switchAuthTab('register')">Register</button>
             </div>
-            <form id="loginForm" method="POST" onsubmit="handleLogin(event);" novalidate>
+            <form id="loginForm" method="POST" novalidate>
               <div class="flex flex-col gap-2 mb-2">
                 <input type="text" name="username" id="login-username" placeholder="Username"
                   class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="username" autocorrect="off"
@@ -113,29 +113,6 @@
                 Log In
               </button>
             </form>
-            <script>
-              async function handleLogin(e) {
-                e.preventDefault();
-                const form = e.target;
-                const username = form.querySelector('input[name="username"]').value.trim();
-                const password = form.querySelector('input[name="password"]').value;
-
-                if (!username || !password) {
-                  window.showNotification?.('Username and password are required', 'error');
-                  return false;
-                }
-
-                try {
-                  await window.auth.login(username, password);
-                  window.showNotification?.('Login successful', 'success');
-                  // Close dropdown if open
-                  document.getElementById('authDropdown')?.classList.add('hidden');
-                } catch (error) {
-                  window.showNotification?.(error.message || 'Login failed', 'error');
-                }
-                return false;
-              }
-            </script>
 
             <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden">
               <script>

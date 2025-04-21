@@ -549,46 +549,7 @@ function setupCommonElements() {
     });
   }
 
-    // Project form
-    const projectForm = document.getElementById('projectForm');
-    if (projectForm) {
-        setupForm('projectForm', async (formData) => {
-            // Extract form data
-            const projectId = formData.get('projectId');
-            const projectData = {
-                name: formData.get('name'),
-                description: formData.get('description') || '',
-                goals: formData.get('goals') || '',
-                max_tokens: parseInt(formData.get('maxTokens'), 10) || null
-            };
-
-            // Validate
-            if (!projectData.name) {
-                throw new Error('Project name is required');
-            }
-
-            // Create or update project
-            if (window.projectManager?.createOrUpdateProject) {
-                await window.projectManager.createOrUpdateProject(projectId, projectData);
-                window.app?.showNotification(
-                    projectId ? 'Project updated' : 'Project created',
-                    'success'
-                );
-
-                // Close modal
-                const modal = projectForm.closest('dialog');
-                if (modal && typeof modal.close === 'function') {
-                    modal.close();
-                }
-
-                // Refresh projects
-                if (window.projectManager?.loadProjects) {
-                    window.projectManager.loadProjects('all');
-                }
-            }
-        });
-    }
-
+    
     // Login form
     if (document.getElementById('loginForm')) {
         setupForm('loginForm', async (formData) => {
