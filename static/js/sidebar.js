@@ -150,13 +150,60 @@
   */
 
 /**
- * activateTab - stub function to avoid errors if called by external code
+ * activateTab - handles tab switching in the sidebar
  */
 function activateTab(tabName) {
-  console.log("[sidebar] activateTab() not implemented. Received:", tabName);
-}
+  const tabs = {
+    'recent': {
+      button: document.getElementById('recentChatsTab'),
+      section: document.getElementById('recentChatsSection')
+    },
+    'starred': {
+      button: document.getElementById('starredChatsTab'),
+      section: document.getElementById('starredChatsSection')
+    },
+    'projects': {
+      button: document.getElementById('projectsTab'),
+      section: document.getElementById('projectsSection')
+    }
+  };
 
-// Automatically initialize on DOM ready
-document.addEventListener('DOMContentLoaded', init);
+  // Validate tab name
+  if (!tabs[tabName]) {
+    console.warn(`[sidebar] Unknown tab requested: ${tabName}`);
+    return;
+  }
+
+  // Update all tabs
+  Object.entries(tabs).forEach(([name, tab]) => {
+    if (name === tabName) {
+      // Activate current tab
+      tab.button.classList.add('border-b-2', 'border-primary', 'text-primary');
+      tab.button.classList.remove('text-base-content/60');
+      tab.button.setAttribute('aria-selected', 'true');
+      tab.button.removeAttribute('tabindex');
+      tab.section.classList.remove('hidden');
+    } else {
+      // Deactivate other tabs
+      tab.button.classList.remove('border-b-2', 'border-primary', 'text-primary');
+      tab.button.classList.add('text-base-content/60');
+      tab.button.setAttribute('aria-selected', 'false');
+      tab.button.setAttribute('tabindex', '-1');
+      tab.section.classList.add('hidden');
+    }
+  });
+
+  // Special handling for projects tab
+  if (tabName === 'projects') {
+    // Initialize dashboard if not already done
+    if (!window.projectDashboardInitialized) {
+      window.projectDashboard?.init().then(success => {
+        if (!success) {
+          console.error('[sidebar] Failed to initialize project dashboard');
+        }
+      });
+    }
+  }
+}
 
 })();

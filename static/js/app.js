@@ -313,6 +313,7 @@ async function initApp() {
   await window.eventHandlers?.init?.();
   await window.modalManager?.init?.();
   await window.chatExtensions?.initChatExtensions?.();
+  await window.sidebar?.init?.();
 
   // Initialize knowledge base component
   if (window.KnowledgeBaseComponent) {

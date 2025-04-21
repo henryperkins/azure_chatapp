@@ -990,7 +990,7 @@ class KnowledgeBaseComponent {
     }
 
     try {
-      const isAuthenticated = await window.auth.isAuthenticated();
+      const isAuthenticated = window.app?.state?.isAuthenticated;
       if (!isAuthenticated) {
         this._showStatusAlert("Please login to check KB health", "warning");
         return null;
