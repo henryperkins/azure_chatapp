@@ -16,10 +16,12 @@
   </script>
   <script>
     window.sentryOnLoad = function () {
-      // Configuration will be handled by sentry-init.js
-      const script = document.createElement('script');
-      script.src = '/static/js/sentry-init.js';
-      document.head.appendChild(script);
+      // Sentry is loaded, we'll initialize it with our configuration
+      if (window.Sentry && typeof window.initSentry === 'function') {
+        window.initSentry();
+      } else {
+        console.warn('Sentry or initSentry function not available');
+      }
     };
   </script>
   <!-- Content Security Policy optimized for Sentry -->
@@ -56,37 +58,45 @@
   <!-- CSRF token for API requests -->
   <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
 
-  <!-- REVISED SCRIPT LOADING ORDER -->
-  <!-- Core dependencies first (no dependencies themselves) -->
-  <script type="module" src="/static/js/notification-handler.js"></script>
-  <script type="module" src="/static/js/eventHandler.js"></script>
+  <!-- SCRIPT LOADING ORDER - FINAL OPTIMIZED DEPENDENCY CHAIN -->
+  <!-- Sentry init script - must load first for error monitoring -->
+  <script src="/static/js/sentry-init.js"></script>
+  
+  <!-- Group 1: Core utilities and foundational libraries (no dependencies) -->
   <script type="module" src="/static/js/utils.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
-  <script type="module" src="/static/js/theme-toggle.js"></script>
-
-  <!-- Application framework (defines DependencySystem, depends on core utils) -->
+  <script type="module" src="/static/js/notification-handler.js"></script>
+  
+  <!-- Group 2: Application framework with DependencySystem -->
   <script type="module" src="/static/js/app.js"></script>
-
-  <!-- Service layer (depends on core only, potentially app framework) -->
+  
+  <!-- Group 3: Core infrastructure and services (depend on app.js) -->
+  <script type="module" src="/static/js/eventHandler.js"></script>
   <script type="module" src="/static/js/auth.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
-  <script type="module" src="/static/js/sentry-init.js"></script>
-
-  <!-- Application framework (depends on services) -->
-  <script type="module" src="/static/js/modalManager.js"></script>
-  <script type="module" src="/static/js/projectManager.js"></script>
+  
+  <!-- Group 4: UI Framework and rendering (depend on eventHandler) -->
   <script type="module" src="/static/js/uiRenderer.js"></script>
-
-  <!-- Components (depend on framework) -->
+  <script type="module" src="/static/js/modalManager.js"></script>
+  <script type="module" src="/static/js/theme-toggle.js"></script>
+  
+  <!-- Group 5: Domain-specific services (depend on auth, uiRenderer, and modalManager) -->
+  <script type="module" src="/static/js/projectManager.js"></script>
+  
+  <!-- Group 6: UI utility components (depend on services and core UI) -->
+  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
+  
+  <!-- Group 7: Major UI components (depend on projectManager and utils) -->
   <script type="module" src="/static/js/sidebar.js"></script>
   <script type="module" src="/static/js/knowledgeBaseState.js"></script>
-  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
   <script type="module" src="/static/js/projectListComponent.js"></script>
   <script type="module" src="/static/js/projectDetailsComponent.js"></script>
+  
+  <!-- Group 8: Feature-specific components (depend on prior UI components) -->
   <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
   <script type="module" src="/static/js/chat.js"></script>
-
-  <!-- Application layer (coordinates everything) - MUST BE LAST -->
+  
+  <!-- Group 9: Application initialization (must load last) -->
   <script type="module" src="/static/js/projectListInit.js"></script>
   <script type="module" src="/static/js/projectDashboard.js"></script>
   <script type="module" src="/static/js/chatExtensions.js"></script>
