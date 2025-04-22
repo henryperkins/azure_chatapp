@@ -529,7 +529,6 @@ function setupCommonElements() {
   if (authButton && authDropdown) {
     window.eventHandlers.trackListener(authButton, 'click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
       authDropdown.classList.toggle('hidden');
       authButton.setAttribute('aria-expanded',
         authDropdown.classList.contains('hidden') ? 'false' : 'true'
