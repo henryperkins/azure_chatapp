@@ -41,8 +41,10 @@ AsyncSessionLocal = async_sessionmaker(
 # Sync engine/session: for DDL operations
 # ---------------------------------------------------------
 sync_url = DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL else DATABASE_URL
+sync_url += "?sslmode=require" if "sslmode=" not in sync_url else ""
 sync_engine = create_engine(
-    sync_url
+    sync_url,
+    pool_pre_ping=True
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
