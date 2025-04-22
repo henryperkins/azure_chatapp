@@ -482,12 +482,31 @@ const publicAuth = {
   getCSRFToken,
 };
 
-// Register with DependencySystem if it exists
+// Register with DependencySystem *before* calling async init
 if (window.DependencySystem) {
   window.DependencySystem.register('auth', publicAuth);
 } else {
   // Fallback: attach to window if no DependencySystem
   window.auth = publicAuth;
 }
+
+// Call init *after* registration
+init().catch(error => {
+    console.error("[Auth] Initialization promise rejected:", error);
+    // Ensure authReady event still fires even on init failure
+    if (!authState.isReady) {
+        authState.isReady = true; // Mark as ready (even if failed)
+        AuthBus.dispatchEvent(
+          new CustomEvent('authReady', {
+            detail: {
+              authenticated: false,
+              username: null,
+              error: error.message,
+            },
+          })
+        );
+    }
+});
+
 
 export default publicAuth;

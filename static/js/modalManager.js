@@ -545,3 +545,8 @@ if (!window.projectModal) {
   console.log("[modalManager.js] Global projectModal instance created.");
 }
 DependencySystem.register('modalManager', window.modalManager);
+// Add registration for projectModal
+if (window.projectModal) {
+  DependencySystem.register('projectModal', window.projectModal);
+  console.log("[modalManager.js] Registered projectModal with DependencySystem.");
+}
