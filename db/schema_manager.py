@@ -134,9 +134,8 @@ class SchemaManager:
             # Create missing tables
             await conn.run_sync(Base.metadata.create_all)
         
-            # Get existing tables
-            inspector = inspect(conn.sync_connection)
-            existing_tables = inspector.get_table_names()
+            # Get existing tables using async pattern
+            existing_tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
         
             # Add missing columns/indexes using proper async methods
             # ... (rest of schema alignment logic using async connections)
