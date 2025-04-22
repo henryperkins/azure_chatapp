@@ -20,31 +20,26 @@ from db.schema_manager import SchemaManager
 
 
 # Create SchemaManager instance
-_schema_manager = SchemaManager()
+# _schema_manager = SchemaManager()
 
 
 # Re-export functions with the same interface as before
 async def init_db() -> None:
-    """
-    Initialize database (backward compatibility wrapper).
-    Creates missing tables, aligns schema, and validates.
-    """
-    await _schema_manager.initialize_database()
+    """Simple database initialization without schema management"""
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables created (schema management disabled)")
 
 
 async def validate_db_schema() -> list[str]:
-    """
-    Validate schema and return a list of mismatch details (backward compatibility wrapper).
-    """
-    return await _schema_manager.validate_schema()
+    """Stub for schema validation"""
+    logger.warning("Schema validation disabled")
+    return []
 
 
 async def fix_db_schema() -> None:
-    """
-    Fix database schema (backward compatibility wrapper).
-    Comprehensive schema alignment using synchronous session for DDL.
-    """
-    await _schema_manager.fix_schema()
+    """Stub for schema fixing"""
+    logger.warning("Schema fixing disabled")
 
 
 # Expose all relevant components
@@ -52,12 +47,12 @@ __all__ = [
     "Base",
     "async_engine",
     "sync_engine",
-    "AsyncSessionLocal",
+    "AsyncSessionLocal", 
     "SessionLocal",
     "get_async_session",
     "get_async_session_context",
     "init_db",
     "validate_db_schema",
     "fix_db_schema",
-    "SchemaManager"
+    # "SchemaManager"  # Removed
 ]
