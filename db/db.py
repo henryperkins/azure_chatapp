@@ -30,7 +30,9 @@ async_engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,
     connect_args={
-        "ssl": ssl.create_default_context(cafile="/path/to/azure-db-ca.crt")
+        "ssl": ssl.create_default_context(
+            cafile="/home/azureuser/.postgresql/root.crt"
+        )
     }
 )
 
@@ -45,10 +47,14 @@ AsyncSessionLocal = async_sessionmaker(
 # Sync engine/session: for DDL operations
 # ---------------------------------------------------------
 sync_url = DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL else DATABASE_URL
-sync_url += "?sslmode=require" if "sslmode=" not in sync_url else ""
 sync_engine = create_engine(
     sync_url,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args={
+        "ssl": ssl.create_default_context(
+            cafile="/home/azureuser/.postgresql/root.crt"
+        )
+    }
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
