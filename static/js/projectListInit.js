@@ -86,13 +86,19 @@ export function initProjectList() {
               if (form) {
                 form.reset();
                 form.querySelector('#projectIdInput').value = '';
+                // Clear validation errors
+                form.querySelectorAll('.error-message').forEach(el => el.classList.add('hidden'));
               }
               const title = modalEl.querySelector('#projectModalTitle');
               if (title) title.textContent = 'Create New Project';
             }
           });
         };
-        createProjectBtn.addEventListener('click', handler);
+        
+        // Remove existing listener to prevent duplicates
+        const newBtn = createProjectBtn.cloneNode(true);
+        createProjectBtn.parentNode.replaceChild(newBtn, createProjectBtn);
+        window.eventHandlers?.trackListener(newBtn, 'click', handler);
         console.log('[ProjectListInit] Create project button listener attached.');
       }
 
