@@ -35,7 +35,7 @@ AUTH_DEBUG = True  # Force debug mode or set from env if you like
 
 DEFAULT_ADMIN = {
     "username": os.getenv("DEFAULT_ADMIN_USERNAME", "hperkins"),
-    "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Twiohmld1234!")
+    "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Twiohmld1234!"),
 }
 
 # For simplicity, let's set these with "relaxed" or bigger expiry times
@@ -46,12 +46,12 @@ router = APIRouter()
 
 
 # -----------------------------------------------------------------------------
-# Cookie Settings (Insecure / Relaxed)
+# Cookie Settings (Updated for Review Instructions)
 # -----------------------------------------------------------------------------
 class CookieSettings:
     """
-    Centralized cookie configuration but with "relaxed" security for debugging.
-    Always returns samesite='none', secure=False in all environments (overridden below).
+    Centralized cookie configuration (relaxed for debugging).
+    Adjusted to use 'samesite=lax' instead of 'none', with secure cookies if HTTPS.
     """
 
     def __init__(self, env: str, cookie_domain: Optional[str]):
@@ -62,25 +62,23 @@ class CookieSettings:
         hostname = request.url.hostname
         scheme = request.url.scheme
 
+        # For local development
         if self.env == "development" or hostname in ["localhost", "127.0.0.1"]:
             return {
-                "secure": scheme == "https",
+                "secure": scheme == "https",  # Only secure if HTTPS
                 "domain": None,
                 "samesite": "lax",
                 "httponly": True,
-                "path": "/"
+                "path": "/",
             }
 
-        secure = (scheme == "https")
-        samesite = "lax"
-        domain = self.cookie_domain
-
+        # For production
         return {
-            "secure": secure,
-            "domain": domain,
-            "samesite": samesite,
+            "secure": scheme == "https",
+            "domain": self.cookie_domain,
+            "samesite": "lax",
             "httponly": True,
-            "path": "/"
+            "path": "/",
         }
 
 
@@ -103,7 +101,7 @@ def set_secure_cookie(
                 domain=cookie_attrs["domain"],
                 secure=cookie_attrs["secure"],
                 httponly=cookie_attrs["httponly"],
-                samesite=cookie_attrs["samesite"]
+                samesite=cookie_attrs["samesite"],
             )
             return
 
@@ -122,7 +120,7 @@ def set_secure_cookie(
             value=value,
             max_age=max_age if max_age else None,
             expires=max_age if max_age else None,
-            **cookie_attrs
+            **cookie_attrs,
         )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
@@ -388,6 +386,7 @@ async def login_user(
 
         verify_start = datetime.now(timezone.utc)
         try:
+            # Use executor for bcrypt check
             valid_password = await asyncio.get_event_loop().run_in_executor(
                 None,
                 bcrypt.checkpw,
@@ -478,9 +477,6 @@ async def refresh_token(
         raise HTTPException(
             status_code=401, detail="Refresh token missing. Please login again."
         )
-
-    if not refresh_cookie:
-        raise HTTPException(status_code=401, detail="Refresh token missing.")
 
     user = await get_user_from_token(refresh_cookie, session, expected_type="refresh")
     logger.debug("Attempting token refresh for user: %s", user.username)
@@ -573,7 +569,7 @@ async def verify_auth_status(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
 ) -> VerifyResponse:
-    user, token = await get_current_user_and_token(request)
+    user, _token = await get_current_user_and_token(request)
     return VerifyResponse(
         authenticated=True,
         username=user.username,
@@ -666,7 +662,7 @@ async def set_cookies_endpoint(
 
 
 # -----------------------------------------------------------------------------
-# Logout
+# Logout (Updated for Review Instructions)
 # -----------------------------------------------------------------------------
 @router.post("/logout", response_model=dict[str, str])
 async def logout_user(
@@ -700,6 +696,7 @@ async def logout_user(
                 pass
 
         if current_user:
+            # Increment token version to invalidate all existing tokens
             async with session.begin():
                 locked_user = await session.get(
                     User, current_user.id, with_for_update=True
@@ -708,9 +705,12 @@ async def logout_user(
                     old_version = locked_user.token_version or 0
                     locked_user.token_version = old_version + 1
 
+                    # Blacklist the refresh token if we have it
                     if refresh_token:
                         try:
-                            decoded = await verify_token(refresh_token, "refresh", request, db_session=session)
+                            decoded = await verify_token(
+                                refresh_token, "refresh", request, db_session=session
+                            )
                             token_id = decoded.get("jti")
                             expires_timestamp = decoded.get("exp")
                             if token_id and expires_timestamp:
@@ -725,12 +725,15 @@ async def logout_user(
                                     creation_reason="logout",
                                 )
                                 session.add(blacklisted)
-                                logger.info(f"Blacklisted refresh token {token_id} on logout")
+                                logger.info(
+                                    f"Blacklisted refresh token {token_id} on logout"
+                                )
                         except Exception as e:
                             logger.error(f"Failed to blacklist refresh token: {e}")
     except Exception as e:
         logger.error(f"Unexpected error during logout: {e}")
 
+    # Always clear cookies
     set_secure_cookie(response, "access_token", "", 0, request)
     set_secure_cookie(response, "refresh_token", "", 0, request)
 

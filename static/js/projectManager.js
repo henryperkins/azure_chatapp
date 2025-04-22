@@ -32,7 +32,7 @@ async function loadProjects(filter = 'all') {
 
   try {
     // Check auth state
-    if (!window.app?.state?.isAuthenticated) {
+    if (!window.auth?.isAuthenticated()) {
       console.warn("[projectManager] Not authenticated, can't load projects");
       emitEvent("projectsLoaded", {
         projects: [],
@@ -111,7 +111,7 @@ async function loadProjectDetails(projectId) {
   }
 
   try {
-    if (!window.app?.state?.isAuthenticated) {
+    if (!window.auth?.isAuthenticated()) {
       console.warn("[projectManager] Not authenticated, can't load project details");
       emitEvent("projectDetailsError", {
         projectId,
@@ -283,7 +283,7 @@ async function loadProjectArtifacts(projectId) {
  * Create or update a project
  */
 async function createOrUpdateProject(projectId, projectData) {
-  if (!window.app?.state?.isAuthenticated) {
+  if (!window.auth?.isAuthenticated()) {
     throw new Error("Authentication required");
   }
 
@@ -319,7 +319,7 @@ async function createOrUpdateProject(projectId, projectData) {
  * Delete a project
  */
 async function deleteProject(projectId) {
-  if (!window.app?.state?.isAuthenticated) {
+  if (!window.auth?.isAuthenticated()) {
     throw new Error("Authentication required");
   }
 
@@ -343,7 +343,7 @@ async function deleteProject(projectId) {
  * Toggle pin status for a project
  */
 async function togglePinProject(projectId) {
-  if (!window.app?.state?.isAuthenticated) {
+  if (!window.auth?.isAuthenticated()) {
     throw new Error("Authentication required");
   }
 
@@ -367,7 +367,7 @@ async function togglePinProject(projectId) {
  * Toggle archive status for a project
  */
 async function toggleArchiveProject(projectId) {
-  if (!window.app?.state?.isAuthenticated) {
+  if (!window.auth?.isAuthenticated()) {
     throw new Error("Authentication required");
   }
 
