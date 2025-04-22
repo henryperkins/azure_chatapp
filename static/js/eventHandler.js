@@ -544,7 +544,44 @@ function setupCommonElements() {
     });
   }
 
-  // Login form setup moved to auth.js init()
+  // Setup login form with proper CSRF handling
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) {
+    trackListener(loginForm, 'submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+      
+      try {
+        // Ensure CSRF token is set
+        const csrfToken = await window.auth?.getCSRFTokenAsync();
+        if (csrfToken) {
+          formData.set('csrf_token', csrfToken);
+        }
+
+        // Submit via fetch to ensure proper headers
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.message || 'Login failed');
+        }
+
+        // Handle successful login
+        const result = await response.json();
+        if (result.access_token) {
+          window.location.href = '/'; // Redirect on success
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        window.app?.showNotification(error.message || 'Login failed', 'error');
+      }
+    }, { passive: false });
+  }
 
   // Register form
   if (document.getElementById('registerForm')) {
