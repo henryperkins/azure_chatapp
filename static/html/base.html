@@ -569,11 +569,60 @@
       }
 
       try {
-        const response = await window.auth.register(new FormData(form));
+        // Make sure we're sending exactly what the backend expects
+        const userData = {
+          username: username,
+          password: password
+        };
+
+        console.log('Attempting registration with username:', username);
+        // Pass the data object directly to auth.register
+        const response = await window.auth.register(userData);
+
+        console.log('Registration response:', response);
         window.showNotification?.('Registration successful', 'success');
-        switchAuthTab('login');
+
+        // If successful, redirect to the main page
+        if (response && response.access_token) {
+          // Briefly delay to allow cookies to be set
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 500);
+        } else {
+          // If no redirect needed, just switch to login tab
+          switchAuthTab('login');
+        }
       } catch (error) {
-        window.showNotification?.(error.message || 'Registration failed', 'error');
+        // Extract the specific error detail from the server response
+        let errorMsg = 'Registration failed';
+
+        if (error.data && error.data.detail) {
+          // Server returned a structured error response
+          errorMsg = error.data.detail;
+        } else if (error.message && error.message.includes('API error')) {
+          // Try to parse the error message for more details
+          try {
+            // If it contains JSON-like content, try to extract it
+            const detailMatch = error.message.match(/detail":"([^"]+)"/);
+            if (detailMatch && detailMatch[1]) {
+              errorMsg = detailMatch[1];
+            } else {
+              errorMsg = error.message;
+            }
+          } catch (e) {
+            errorMsg = error.message;
+          }
+        }
+
+        console.error('Registration error:', error);
+        window.showNotification?.(errorMsg, 'error');
+
+        // If username already taken, suggest login instead
+        if (errorMsg.includes('already taken')) {
+          setTimeout(() => {
+            switchAuthTab('login');
+          }, 1500);
+        }
       }
       return false;
     }

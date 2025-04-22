@@ -62,12 +62,13 @@ class CookieSettings:
         hostname = request.url.hostname
         scheme = request.url.scheme
 
-        # Always use non-secure cookies in development/localhost
+        # For local development, we need to set secure=True when samesite=none
+        # This is required by browsers even on localhost/127.0.0.1
         if self.env == "development" or hostname in ["localhost", "127.0.0.1"]:
             return {
-                "secure": False,
+                "secure": True,  # Must be True when SameSite=None, even in development
                 "domain": None,
-                "samesite": "lax",
+                "samesite": "none",  # Changed from 'lax' to 'none' to allow cross-site requests in local dev
                 "httponly": True,
                 "path": "/"
             }
@@ -263,12 +264,23 @@ class LoginResponse(BaseModel):
 # -----------------------------------------------------------------------------
 def validate_password(password: str):
     """
-    WARNING: This is a 'relaxed' placeholder.
-    If you want to skip password checks entirely, comment out everything inside.
+    Validate password according to security requirements.
+    Matches the frontend validation in base.html.
     """
-    # Minimal check for demonstration
-    if len(password) < 4:
-        raise ValueError("Password must be at least 4 characters (relaxed).")
+    if len(password) < 12:
+        raise ValueError("Password must be at least 12 characters.")
+
+    if not any(c.isupper() for c in password):
+        raise ValueError("Password must contain at least one uppercase letter.")
+
+    if not any(c.islower() for c in password):
+        raise ValueError("Password must contain at least one lowercase letter.")
+
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Password must contain at least one number.")
+
+    if not any(c in "!@#$%^&*()_+-=[]{}|;:'\",.<>/?\\`~" for c in password):
+        raise ValueError("Password must contain at least one special character.")
 
 
 # -----------------------------------------------------------------------------
@@ -632,7 +644,7 @@ async def set_cookies_endpoint(
             max_age=int(access_expires.total_seconds()),
             path="/",
             domain=None,
-            secure=False,
+            secure=True,  # Must be True when SameSite=None
             httponly=False,
             samesite="none",
         )
@@ -644,7 +656,7 @@ async def set_cookies_endpoint(
                 max_age=int(refresh_expires.total_seconds()),
                 path="/",
                 domain=None,
-                secure=False,
+                secure=True,  # Must be True when SameSite=None
                 httponly=False,
                 samesite="none",
             )
