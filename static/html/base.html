@@ -58,43 +58,45 @@
   <!-- CSRF token for API requests -->
   <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
 
-  <!-- SCRIPT LOADING ORDER - CORRECTED DEPENDENCY CHAIN -->
-  <!-- Sentry init script - must load first for error monitoring -->
+  <!-- SCRIPT LOADING ORDER -->
+
+  <!-- Tier 0: Sentry Init -->
   <script src="/static/js/sentry-init.js"></script>
 
-  <!-- Group 1: Core utilities and foundational libraries (no dependencies on DependencySystem) -->
+  <!-- Tier 1: Core Utilities -->
   <script type="module" src="/static/js/utils.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
   <script type="module" src="/static/js/notification-handler.js"></script>
 
-  <!-- Group 2: Application framework (defines DependencySystem, depends on Group 1) -->
-  <script type="module" src="/static/js/app.js"></script>
-  <script type="module" src="/static/js/auth.js"></script> <!-- Auth depends on notifications/utils -->
-  <!-- Group 3: Modules registering with DependencySystem (depend on app.js) -->
-  <script type="module" src="/static/js/eventHandler.js"></script>
+  <!-- Tier 2: Core Framework & Auth -->
+  <script type="module" src="/static/js/app.js"></script> <!-- Defines DependencySystem -->
+  <script type="module" src="/static/js/auth.js"></script> <!-- Needs app.js -->
+
+  <!-- Tier 3: Core Managers & State -->
+  <script type="module" src="/static/js/eventHandler.js"></script> <!-- Needs app.js -->
   <script type="module" src="/static/js/modelConfig.js"></script>
-  <script type="module" src="/static/js/modalManager.js"></script> <!-- Moved AFTER app.js -->
-  <script type="module" src="/static/js/projectManager.js"></script> <!-- Moved AFTER app.js -->
-  <script type="module" src="/static/js/sidebar.js"></script> <!-- Moved AFTER app.js -->
-  <script type="module" src="/static/js/knowledgeBaseState.js"></script> <!-- Moved AFTER app.js -->
-  <script type="module" src="/static/js/projectListInit.js"></script> <!-- Moved AFTER app.js -->
-  <script type="module" src="/static/js/projectDashboard.js"></script> <!-- Moved AFTER app.js -->
-  <script type="module" src="/static/js/chatExtensions.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/modalManager.js"></script> <!-- Needs app.js, eventHandler -->
+  <script type="module" src="/static/js/projectManager.js"></script> <!-- Needs app.js, auth.js -->
+  <script type="module" src="/static/js/sidebar.js"></script> <!-- Needs app.js -->
+  <script type="module" src="/static/js/knowledgeBaseState.js"></script> <!-- Needs app.js -->
+  <script type="module" src="/static/js/chat.js"></script> <!-- Needs app.js, auth.js, modelConfig.js -->
 
-  <!-- Group 4: UI Rendering and Components (may depend on registered modules or just export classes/functions) -->
-  <script type="module" src="/static/js/uiRenderer.js"></script>
+  <!-- Tier 4: UI Utilities & Component Definitions -->
   <script type="module" src="/static/js/projectDashboardUtils.js"></script>
-  <script type="module" src="/static/js/projectListComponent.js"></script>
-  <script type="module" src="/static/js/projectDetailsComponent.js"></script>
+  <!-- Needs managers, Provides uiUtilsInstance -->
+  <script type="module" src="/static/js/projectListComponent.js"></script> <!-- Needs managers, eventHandler -->
+  <script type="module" src="/static/js/projectDetailsComponent.js"></script> <!-- Needs managers, chatManager, utils -->
   <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
-  <script type="module" src="/static/js/chat.js"></script>
+  <script type="module" src="/static/js/FileUploadComponent.js"></script>
 
-  <!-- Group 5: Standalone UI elements -->
+  <!-- Tier 5: UI Initialization & Rendering Logic -->
+  <script type="module" src="/static/js/projectDashboard.js"></script> <!-- Needs Component Classes, managers -->
+  <script type="module" src="/static/js/projectListInit.js"></script> <!-- Needs projectManager, projectModal -->
+  <script type="module" src="/static/js/uiRenderer.js"></script> <!-- Needs sidebar, modelConfig -->
+  <script type="module" src="/static/js/chatExtensions.js"></script> <!-- Needs chatManager, auth, app -->
+
+  <!-- Tier 6: Standalone UI -->
   <script type="module" src="/static/js/theme-toggle.js"></script>
-
-  <!-- NOTE: The exact order within groups 3 & 4 might need further refinement based on
-       inter-dependencies resolved via DependencySystem.waitFor, but the key fix
-       is loading app.js before modules that call DependencySystem.register. -->
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
