@@ -20,7 +20,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 # Database URL from config
-DATABASE_URL = settings.DATABASE_URL.replace("?sslmode=require", "") + "?ssl=disable"
+DATABASE_URL = settings.DATABASE_URL.replace("sslmode=require", "sslmode=disable")
 
 # ---------------------------------------------------------
 # Async engine/session: for normal runtime usage
@@ -42,7 +42,7 @@ AsyncSessionLocal = async_sessionmaker(
 # ---------------------------------------------------------
 # Sync engine/session: for DDL operations
 # ---------------------------------------------------------
-sync_url = DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL else DATABASE_URL
+sync_url = DATABASE_URL.replace("+asyncpg", "").replace("?sslmode=disable", "") if "+asyncpg" in DATABASE_URL else DATABASE_URL.replace("?sslmode=disable", "")
 sync_engine = create_engine(
     sync_url,
     pool_pre_ping=True
