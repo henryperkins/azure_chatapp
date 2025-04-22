@@ -305,3 +305,4 @@
     }
   }
 })();
+DependencySystem.register('sidebar', window.sidebar);

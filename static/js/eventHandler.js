@@ -40,7 +40,7 @@ function trackListener(element, type, handler, options = {}) {
     };
 
     // Create wrapped handler with error handling
-    const wrappedHandler = async function (event) {  // Make async
+    const wrappedHandler = async function (event) {
         try {
             const startTime = performance.now();
 
@@ -51,14 +51,18 @@ function trackListener(element, type, handler, options = {}) {
             }
 
             const duration = performance.now() - startTime;
-            if (duration > 100) {
+            // Higher threshold for submit events since they often involve network calls
+            const threshold = type === 'submit' ? 500 : 100;
+            if (duration > threshold) {
                 console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
             }
         } catch (error) {
             console.error(`Error in ${type} event handler:`, error);
-            if (error.name === 'TypeError' &&
+            if (
+                error.name === 'TypeError' &&
                 error.message.includes('passive') &&
-                finalOptions.passive) {
+                finalOptions.passive
+            ) {
                 console.warn(`preventDefault() called on a passive ${type} listener`);
             }
             throw error; // Re-throw to maintain behavior
@@ -88,14 +92,10 @@ function trackListener(element, type, handler, options = {}) {
  * @param {string} [targetType] - Optional event type to limit cleanup to
  */
 function cleanupListeners(targetElement, targetType) {
-    // Create a new set to avoid modification during iteration
     const listenersToRemove = new Set();
-
-    // Find matching listeners
     trackedListeners.forEach(listener => {
         const elementMatches = !targetElement || listener.element === targetElement;
         const typeMatches = !targetType || listener.type === targetType;
-
         if (elementMatches && typeMatches) {
             listenersToRemove.add(listener);
         }
@@ -124,10 +124,8 @@ function cleanupListeners(targetElement, targetType) {
  */
 function debounce(func, wait = 250) {
     let timeout;
-
     return function (...args) {
         clearTimeout(timeout);
-
         timeout = setTimeout(() => {
             func.apply(this, args);
         }, wait);
@@ -155,7 +153,6 @@ function delegate(container, eventType, selector, handler, options = {}) {
             }
         }
     };
-
     return trackListener(container, eventType, delegatedHandler, options);
 }
 
@@ -176,10 +173,6 @@ function toggleVisible(element, show) {
 
 /**
  * Set up a collapsible section
- * @param {string} toggleId - ID of toggle button
- * @param {string} panelId - ID of panel to collapse/expand
- * @param {string} [chevronId] - ID of chevron icon (optional)
- * @param {Function} [onExpand] - Callback on expand (optional)
  */
 function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
     const toggleButton = document.getElementById(toggleId);
@@ -188,37 +181,28 @@ function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
 
     if (!toggleButton || !panel) return;
 
-    // Prepare ARIA attributes
     toggleButton.setAttribute('role', 'button');
     toggleButton.setAttribute('aria-controls', panelId);
     toggleButton.setAttribute('aria-expanded', 'false');
 
-    // Toggle function
     const togglePanel = (expand) => {
         panel.classList.toggle('hidden', !expand);
-
         if (chevron) {
             chevron.style.transform = expand ? 'rotate(180deg)' : 'rotate(0deg)';
         }
-
         toggleButton.setAttribute('aria-expanded', expand ? 'true' : 'false');
-
         if (expand && typeof onExpand === 'function') {
             onExpand();
         }
-
-        // Save state to localStorage if ID provided
         if (toggleId) {
             localStorage.setItem(`${toggleId}_expanded`, expand ? 'true' : 'false');
         }
     };
 
-    // Initial state from localStorage
     const savedState = localStorage.getItem(`${toggleId}_expanded`);
     const initialExpand = savedState === 'true';
     togglePanel(initialExpand);
 
-    // Add click handler
     trackListener(toggleButton, 'click', () => {
         const isCurrentlyExpanded = toggleButton.getAttribute('aria-expanded') === 'true';
         togglePanel(!isCurrentlyExpanded);
@@ -227,11 +211,6 @@ function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
 
 /**
  * Set up a modal with standardized behavior
- * @param {string} modalId - ID of the modal element
- * @param {string} openBtnId - ID of button that opens modal
- * @param {string} closeBtnId - ID of button that closes modal
- * @param {Function} [onOpen] - Callback before opening
- * @param {Function} [onClose] - Callback after closing
  */
 function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
     const modal = document.getElementById(modalId);
@@ -244,7 +223,6 @@ function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
         if (typeof onOpen === 'function') {
             onOpen(modal);
         }
-
         if (typeof modal.showModal === 'function') {
             modal.showModal();
         } else {
@@ -260,30 +238,22 @@ function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
             modal.classList.add('hidden');
             modal.removeAttribute('open');
         }
-
         if (typeof onClose === 'function') {
             onClose(modal);
         }
     };
 
-    // Open button
     if (openBtn) {
         trackListener(openBtn, 'click', open);
     }
-
-    // Close button
     if (closeBtn) {
         trackListener(closeBtn, 'click', close);
     }
-
-    // Close on ESC key
     trackListener(modal, 'keydown', (e) => {
         if (e.key === 'Escape') {
             close();
         }
     });
-
-    // Close on backdrop click for dialog elements
     trackListener(modal, 'click', (e) => {
         if (e.target === modal) {
             close();
@@ -295,15 +265,11 @@ function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
 
 /**
  * Handle form submission with standardized error handling
- * @param {string} formId - ID of the form
- * @param {Function} submitHandler - Form submission handler
- * @param {Object} [options] - Additional options
  */
 function setupForm(formId, submitHandler, options = {}) {
     const form = document.getElementById(formId);
     if (!form) return;
 
-    // Default options
     const {
         validateBeforeSubmit = true,
         showLoadingState = true,
@@ -313,20 +279,15 @@ function setupForm(formId, submitHandler, options = {}) {
     trackListener(form, 'submit', async (e) => {
         e.preventDefault();
 
-        // Skip if already submitting
         if (form.classList.contains('submitting')) {
             return;
         }
-
-        // Validate if requested
         if (validateBeforeSubmit && typeof form.checkValidity === 'function') {
             if (!form.checkValidity()) {
                 form.reportValidity();
                 return;
             }
         }
-
-        // Show loading state
         if (showLoadingState) {
             form.classList.add('submitting');
             const submitBtn = form.querySelector('[type="submit"]');
@@ -341,14 +302,11 @@ function setupForm(formId, submitHandler, options = {}) {
             const formData = new FormData(form);
             await submitHandler(formData, form);
 
-            // Reset form on success if requested
             if (resetOnSuccess) {
                 form.reset();
             }
         } catch (error) {
             console.error('Form submission error:', error);
-
-            // Show error message if provided by handler
             if (options.onError) {
                 options.onError(error);
             } else if (window.app?.showNotification) {
@@ -358,7 +316,6 @@ function setupForm(formId, submitHandler, options = {}) {
                 );
             }
         } finally {
-            // Reset loading state
             if (showLoadingState) {
                 form.classList.remove('submitting');
                 const submitBtn = form.querySelector('[type="submit"]');
@@ -374,13 +331,26 @@ function setupForm(formId, submitHandler, options = {}) {
 }
 
 /**
- * Initialize all event handlers
+ * Internal helper to retry the init process multiple times if needed.
  */
-function init() {
+async function attemptInit(retries = 0) {
+    const maxRetries = 5;
+    // Wait until DOM is at least ready
+    if (document.readyState === 'loading') {
+        if (retries < maxRetries) {
+            console.log('[eventHandler] DOM not fully loaded, retrying in 300ms...');
+            setTimeout(() => attemptInit(retries + 1), 300);
+            return;
+        } else {
+            console.warn('[eventHandler] DOM not ready after multiple attempts');
+            return;
+        }
+    }
+
     // Clean up existing listeners to avoid duplicates
     cleanupListeners();
 
-    // Set up auth events
+    // Set up any global event logic here, if needed
     if (window.auth?.AuthBus) {
         window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
         window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
@@ -395,37 +365,27 @@ function init() {
     // Set up common UI elements
     setupCommonElements();
 
-    // Listen for model configuration changes
-    if (window.modelConfig?.onConfigChange) {
-      window.modelConfig.onConfigChange((config) => {
-        // Update vision UI visibility when model changes
-        if (window.uiRenderer?.setupVisionUI) {
-          window.uiRenderer.setupVisionUI();
-        }
+    console.log('[eventHandler] Initialization complete.');
+}
 
-        // Update max tokens display
-        const tokensDisplay = document.getElementById('maxTokensValue');
-        if (tokensDisplay) {
-          tokensDisplay.textContent = `${config.maxTokens} tokens`;
-        }
-      });
-    }
+/**
+ * Initialize all event handlers
+ */
+function init() {
+    attemptInit();
 }
 
 /**
  * Handle auth state changes
  */
 function handleAuthStateChange(event) {
-    const { authenticated, username } = event.detail || {};
+    const { authenticated } = event.detail || {};
 
-    // Update UI elements
     if (authenticated) {
-        // Show authenticated UI
         toggleVisible('#authButton', false);
         toggleVisible('#userMenu', true);
         toggleVisible('#loginRequiredMessage', false);
     } else {
-        // Show non-authenticated UI
         toggleVisible('#authButton', true);
         toggleVisible('#userMenu', false);
         toggleVisible('#loginRequiredMessage', true);
@@ -437,9 +397,8 @@ function handleAuthStateChange(event) {
  * Handle backend unavailable events
  */
 function handleBackendUnavailable(event) {
-    const { reason, until } = event.detail || {};
+    const { reason } = event.detail || {};
     const message = `Backend service unavailable: ${reason || 'unknown reason'}. Will retry later.`;
-
     if (window.app?.showNotification) {
         window.app.showNotification(message, 'warning', 8000);
     }
@@ -452,7 +411,6 @@ function handleKeyDown(e) {
     // Ctrl/Cmd + / => Show help
     if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault();
-        // Show help dialog if exists
         const helpModal = document.getElementById('helpModal');
         if (helpModal && typeof helpModal.showModal === 'function') {
             helpModal.showModal();
@@ -472,7 +430,6 @@ function handleKeyDown(e) {
  * Set up navigation-related events
  */
 function setupNavigation() {
-    // Project list button
     const backToProjectsBtn = document.getElementById('backToProjectsBtn');
     if (backToProjectsBtn) {
         trackListener(backToProjectsBtn, 'click', () => {
@@ -482,7 +439,6 @@ function setupNavigation() {
         });
     }
 
-    // New conversation button
     const newConversationBtn = document.getElementById('newConversationBtn');
     if (newConversationBtn) {
         trackListener(newConversationBtn, 'click', async () => {
@@ -505,7 +461,6 @@ function setupNavigation() {
         });
     }
 
-    // Create project button
     const createProjectBtn = document.getElementById('createProjectBtn');
     if (createProjectBtn) {
         trackListener(createProjectBtn, 'click', () => {
@@ -520,42 +475,37 @@ function setupNavigation() {
  * Set up common UI elements
  */
 function setupCommonElements() {
-  // Logout button
-  const logoutBtn = document.getElementById('logoutBtn');
-  if (logoutBtn) {
-    trackListener(logoutBtn, 'click', (e) => {
-      window.auth.logout(e).catch(err => {
-        console.error('Logout failed:', err);
-      });
-    }, { passive: false });
-  }
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        trackListener(logoutBtn, 'click', (e) => {
+            window.auth.logout(e).catch(err => {
+                console.error('Logout failed:', err);
+            });
+        }, { passive: false });
+    }
 
-  // Login button toggle
-  const authButton = document.getElementById('authButton');
-  const authDropdown = document.getElementById('authDropdown');
-  if (authButton && authDropdown) {
-    trackListener(authButton, 'click', (e) => {
-      e.stopPropagation();
-      const isExpanded = authDropdown.classList.toggle('hidden');
-      authButton.setAttribute('aria-expanded', !isExpanded);
-    });
+    const authButton = document.getElementById('authButton');
+    const authDropdown = document.getElementById('authDropdown');
+    if (authButton && authDropdown) {
+        trackListener(authButton, 'click', (e) => {
+            e.stopPropagation();
+            const isExpanded = authDropdown.classList.toggle('hidden');
+            authButton.setAttribute('aria-expanded', !isExpanded);
+        });
 
-    // Close dropdown when clicking outside
-    trackListener(document, 'click', (e) => {
-      if (!authDropdown.contains(e.target) && e.target !== authButton) {
-        authDropdown.classList.add('hidden');
-        authButton.setAttribute('aria-expanded', 'false');
-      }
-    });
-  }
+        trackListener(document, 'click', (e) => {
+            if (!authDropdown.contains(e.target) && e.target !== authButton) {
+                authDropdown.classList.add('hidden');
+                authButton.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
 
-    
     // Login form
     if (document.getElementById('loginForm')) {
         setupForm('loginForm', async (formData) => {
             const username = formData.get('username');
             const password = formData.get('password');
-
             if (!username || !password) {
                 throw new Error('Username and password are required');
             }
@@ -570,7 +520,6 @@ function setupCommonElements() {
         setupForm('registerForm', async (formData) => {
             const username = formData.get('username');
             const password = formData.get('password');
-
             if (!username || !password) {
                 throw new Error('Username and password are required');
             }
@@ -581,7 +530,7 @@ function setupCommonElements() {
     }
 }
 
-// Export to window
+// Export to window and as a module
 window.eventHandlers = {
     trackListener,
     cleanupListeners,
@@ -594,5 +543,23 @@ window.eventHandlers = {
     init,
     PRIORITY
 };
+
+// Register with DependencySystem when it becomes available
+if (window.DependencySystem) {
+    window.DependencySystem.register('eventHandlers', window.eventHandlers);
+} else {
+    // Wait for DependencySystem to be available
+    Object.defineProperty(window, 'DependencySystem', {
+        configurable: true,
+        set: function(value) {
+            Object.defineProperty(window, 'DependencySystem', {
+                value: value,
+                configurable: true,
+                writable: true
+            });
+            value.register('eventHandlers', window.eventHandlers);
+        }
+    });
+}
 
 export default window.eventHandlers;

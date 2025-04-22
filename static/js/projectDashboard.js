@@ -14,6 +14,15 @@ const dashboardState = {
   currentProject: null
 };
 
+/**
+ * Load projects list with debounce to prevent multiple calls
+ */
+const loadProjectList = window.eventHandlers.debounce(() => {
+  if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
+    window.projectManager.loadProjects('all');
+  }
+}, 100);
+
 async function init() {
   // Prevent multiple initializations
   if (window.projectDashboardInitialized) {
@@ -188,10 +197,8 @@ function showProjectList() {
   currentUrl.searchParams.delete('project');
   window.history.pushState({}, '', currentUrl.toString());
 
-  // Load projects if authenticated
-  if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
-    window.projectManager.loadProjects('all');
-  }
+  // Load projects if authenticated - using debounced function
+  loadProjectList();
 }
 
 /**
@@ -254,32 +261,35 @@ function handleBackToList() {
 function handleAuthStateChange(event) {
   const { authenticated } = event.detail || {};
 
-  const loginRequiredMessage = document.getElementById('loginRequiredMessage');
-  const projectListView = document.getElementById('projectListView');
-  const projectDetailsView = document.getElementById('projectDetailsView');
+  // Batch DOM updates using requestAnimationFrame
+  requestAnimationFrame(() => {
+    const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+    const projectListView = document.getElementById('projectListView');
+    const projectDetailsView = document.getElementById('projectDetailsView');
 
-  if (!authenticated) {
-    // Hide project views, show login message
-    if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
-    if (projectListView) projectListView.classList.add('hidden');
-    if (projectDetailsView) projectDetailsView.classList.add('hidden');
-  } else {
-    // Show appropriate dashboard view
-    if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
-
-    if (dashboardState.currentView === 'details' && dashboardState.currentProject) {
-      projectListView?.classList.add('hidden');
-      projectDetailsView?.classList.remove('hidden');
+    if (!authenticated) {
+      // Hide project views, show login message
+      if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
+      if (projectListView) projectListView.classList.add('hidden');
+      if (projectDetailsView) projectDetailsView.classList.add('hidden');
     } else {
-      projectListView?.classList.remove('hidden');
-      projectDetailsView?.classList.add('hidden');
+      // Show appropriate dashboard view
+      if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
 
-      // Reload projects
-      if (window.projectManager?.loadProjects) {
-        window.projectManager.loadProjects('all');
+      if (dashboardState.currentView === 'details' && dashboardState.currentProject) {
+        projectListView?.classList.add('hidden');
+        projectDetailsView?.classList.remove('hidden');
+      } else {
+        projectListView?.classList.remove('hidden');
+        projectDetailsView?.classList.add('hidden');
+
+        // Only load projects if we're showing the list view
+        if (dashboardState.currentView === 'list') {
+          loadProjectList();
+        }
       }
     }
-  }
+  });
 }
 
 /**
@@ -290,19 +300,24 @@ function handleProjectsLoaded(event) {
 
   if (error) {
     console.error('[projectDashboard] projectsLoaded event with error:', message);
-    if (components.projectList?._showErrorState) {
-      components.projectList._showErrorState(message || 'Failed to load projects');
-    }
+    // Batch error state update
+    requestAnimationFrame(() => {
+      if (components.projectList?._showErrorState) {
+        components.projectList._showErrorState(message || 'Failed to load projects');
+      }
+    });
     return;
   }
 
-  // Render using project list component
-  if (components.projectList) {
-    console.log(`[projectDashboard] Rendering ${projects.length} project(s).`);
-    components.projectList.renderProjects(projects);
-  } else {
-    console.warn('[projectDashboard] ProjectListComponent not available to render projects.');
-  }
+  // Batch render updates using requestAnimationFrame
+  requestAnimationFrame(() => {
+    if (components.projectList) {
+      console.log(`[projectDashboard] Rendering ${projects.length} project(s).`);
+      components.projectList.renderProjects(projects);
+    } else {
+      console.warn('[projectDashboard] ProjectListComponent not available to render projects.');
+    }
+  });
 }
 
 /**
@@ -312,9 +327,11 @@ function handleProjectLoaded(event) {
   const project = event.detail;
   dashboardState.currentProject = project?.id || null;
 
-  if (components.projectDetails) {
-    components.projectDetails.renderProject(project);
-  }
+  requestAnimationFrame(() => {
+    if (components.projectDetails) {
+      components.projectDetails.renderProject(project);
+    }
+  });
 }
 
 /**
@@ -322,27 +339,33 @@ function handleProjectLoaded(event) {
  */
 function handleProjectStatsLoaded(event) {
   const stats = event.detail;
-  if (components.projectDetails) {
-    components.projectDetails.renderStats(stats);
-  }
+  requestAnimationFrame(() => {
+    if (components.projectDetails) {
+      components.projectDetails.renderStats(stats);
+    }
+  });
 }
 
 /**
  * Handle projectFilesLoaded event
  */
 function handleFilesLoaded(event) {
-  if (components.projectDetails) {
-    components.projectDetails.renderFiles(event.detail.files);
-  }
+  requestAnimationFrame(() => {
+    if (components.projectDetails) {
+      components.projectDetails.renderFiles(event.detail.files);
+    }
+  });
 }
 
 /**
  * Handle projectArtifactsLoaded event
  */
 function handleArtifactsLoaded(event) {
-  if (components.projectDetails?.renderArtifacts) {
-    components.projectDetails.renderArtifacts(event.detail.artifacts);
-  }
+  requestAnimationFrame(() => {
+    if (components.projectDetails?.renderArtifacts) {
+      components.projectDetails.renderArtifacts(event.detail.artifacts);
+    }
+  });
 }
 
 /**
@@ -363,3 +386,4 @@ window.projectDashboard = {
   showProjectList,
   showProjectDetails
 };
+DependencySystem.register('projectDashboard', window.projectDashboard);

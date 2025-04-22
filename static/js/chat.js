@@ -909,3 +909,4 @@ class ChatManager {
 }
 window.createNewChat = () => window.chatManager.createNewConversation();
 window.sendMessage = (message) => window.chatManager.sendMessage(message);
+DependencySystem.register('chatManager', window.chatManager); 

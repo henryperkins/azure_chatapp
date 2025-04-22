@@ -3,6 +3,57 @@
 <head>
   <meta charset="utf-8">
   <title>Login</title>
+  <meta name="csrf-token" content="">
+  <link href="/static/css/dist/tailwind.css" rel="stylesheet">
+
+  <!-- Core dependencies -->
+  <script type="module" src="/static/js/notification-handler.js"></script>
+  <script type="module" src="/static/js/eventHandler.js"></script>
+
+  <!-- Application framework -->
+  <script type="module" src="/static/js/app.js"></script>
+
+  <!-- Auth service -->
+  <script type="module" src="/static/js/auth.js"></script>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const loginForm = document.getElementById('loginForm');
+      const loadingDiv = document.createElement('div');
+      loadingDiv.id = 'appLoading';
+      loadingDiv.className = 'fixed inset-0 bg-base-100 z-50 flex items-center justify-center';
+      loadingDiv.innerHTML = `
+        <div class="text-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p class="text-lg">Loading application...</p>
+        </div>
+      `;
+      document.body.appendChild(loadingDiv);
+
+      // Initialize dependencies and handle login
+      window.DependencySystem.waitFor(['auth', 'app'], (auth, app) => {
+        auth.init().then(() => {
+          loadingDiv.style.display = 'none';
+
+          loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+              const username = document.getElementById('username').value;
+              const password = document.getElementById('password').value;
+              await auth.login(username, password);
+              window.location.href = '/';
+            } catch (error) {
+              if (window.showNotification) {
+                window.showNotification(error.message || 'Login failed. Please try again.', 'error');
+              } else {
+                alert(error.message || 'Login failed. Please try again.');
+              }
+            }
+          });
+        });
+      });
+    });
+  </script>
 </head>
 <body class="bg-base-100 text-base-content min-h-screen flex items-center justify-center">
   <!-- Container -->
