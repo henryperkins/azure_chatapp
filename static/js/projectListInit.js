@@ -68,19 +68,54 @@ export function initProjectList() {
         console.warn('[ProjectListInit] #projectSearchInput not found.');
       }
 
+      const ensureProjectModalReady = async () => {
+        if (window.projectModal?.init && !window.projectModal.modalElement) {
+          await window.projectModal.init();
+        }
+      };
+
       // Setup create project button
       const createProjectBtn = document.getElementById('projectListCreateBtn');
       if (createProjectBtn) {
-        const handler = () => {
+        const handler = async () => {
+          await ensureProjectModalReady();
           console.log('[ProjectListInit] Create Project button clicked.');
-          // Use the ProjectModal's method directly for creating a new project
-          window.projectModal.openModal(null);
+          window.modalManager?.show('project', {
+            updateContent: (modalEl) => {
+              const form = modalEl.querySelector('#projectForm');
+              if (form) {
+                form.reset();
+                form.querySelector('#projectIdInput').value = '';
+              }
+              const title = modalEl.querySelector('#projectModalTitle');
+              if (title) title.textContent = 'Create New Project';
+            }
+          });
         };
-
         createProjectBtn.addEventListener('click', handler);
         console.log('[ProjectListInit] Create project button listener attached.');
-      } else {
-        console.warn('[ProjectListInit] #projectListCreateBtn not found.');
+      }
+
+      // Setup sidebar new project button
+      const sidebarNewProjectBtn = document.getElementById('sidebarNewProjectBtn');
+      if (sidebarNewProjectBtn) {
+        const handler = async () => {
+          await ensureProjectModalReady();
+          console.log('[ProjectListInit] Sidebar New Project button clicked.');
+          window.modalManager?.show('project', {
+            updateContent: (modalEl) => {
+              const form = modalEl.querySelector('#projectForm');
+              if (form) {
+                form.reset();
+                form.querySelector('#projectIdInput').value = '';
+              }
+              const title = modalEl.querySelector('#projectModalTitle');
+              if (title) title.textContent = 'Create New Project';
+            }
+          });
+        };
+        sidebarNewProjectBtn.addEventListener('click', handler);
+        console.log('[ProjectListInit] Sidebar new project button listener attached.');
       }
 
       initialized = true;

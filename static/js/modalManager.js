@@ -98,47 +98,38 @@ class ModalManager {
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      console.error(`[ModalManager] <dialog> element not found for ID='${modalId}'`);
-      return false;
+        console.error(`[ModalManager] <dialog> element not found for ID='${modalId}'`);
+        return false;
     }
 
-    // Hide any currently active modal if different
-    if (this.activeModal && this.activeModal !== modalId) {
-      const oldModalName = Object.keys(this.modalMappings).find(
-        (k) => this.modalMappings[k] === this.activeModal
-      );
-      if (oldModalName) {
-        this.hide(oldModalName);
-      }
+    try {
+        // Remove any hidden classes
+        modalEl.classList.remove('hidden');
+
+        // Update content if callback provided
+        if (typeof options.updateContent === 'function') {
+            options.updateContent(modalEl);
+        }
+
+        // Show using native dialog or fallback
+        if (typeof modalEl.showModal === 'function') {
+            modalEl.showModal();
+            modalEl.style.display = 'flex';  // Ensure visibility
+            this.activeModal = modalId;
+            this._manageBodyScroll(false);
+        } else {
+            console.warn(`[ModalManager] .showModal() not available for ID='${modalId}', using fallback.`);
+            modalEl.style.display = 'flex';
+            modalEl.setAttribute('open', 'true');
+            this.activeModal = modalId;
+        }
+
+        console.log(`[ModalManager] Successfully showed modal: ${modalName}`);
+        return true;
+    } catch (error) {
+        console.error(`[ModalManager] Error showing modal ${modalName}:`, error);
+        return false;
     }
-
-    // Optionally update modal content
-    if (typeof options.updateContent === "function") {
-      try {
-        options.updateContent(modalEl);
-      } catch (err) {
-        console.error(`[ModalManager] updateContent error for ${modalName}:`, err);
-      }
-    }
-
-    // --- FIX: Remove 'hidden' class before showing ---
-    modalEl.classList.remove('hidden');
-
-    // Attempt to show as a dialog
-    if (typeof modalEl.showModal === "function") {
-      modalEl.showModal();
-      modalEl.style.zIndex = "2000";
-      this.activeModal = modalId;
-      this._manageBodyScroll(false);
-    } else {
-      console.warn(
-        `[ModalManager] .showModal() not available for ID='${modalId}', using fallback display.`
-      );
-      modalEl.style.display = "block";
-      this.activeModal = modalId;
-    }
-
-    return true;
   }
 
   /**
@@ -274,15 +265,16 @@ class ProjectModal {
   }
 
   init() {
-    // Try to find #projectModal or rely on the manager if needed
-    this.modalElement = document.getElementById("projectModal");
+    console.log('[ProjectModal] Starting initialization...');
+    this.modalElement = document.getElementById('projectModal');
 
     if (!this.modalElement) {
-      this.createModalElement();
+        console.warn('[ProjectModal] Modal element not found, creating...');
+        this.createModalElement();
     }
 
     this.setupEventListeners();
-    console.log("[ProjectModal] Initialized");
+    console.log('[ProjectModal] Initialized successfully');
   }
 
   createModalElement() {

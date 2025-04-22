@@ -1,6 +1,6 @@
 <!-- Project Creation/Edit Modal -->
-<dialog id="projectModal" class="modal fade-in" aria-modal="true" aria-labelledby="projectModalTitle">
-    <div class="modal-box max-w-lg w-full max-h-[90vh] overflow-y-auto font-poppins">
+<dialog id="projectModal" class="modal modal-bottom sm:modal-middle" aria-labelledby="projectModalTitle">
+    <div class="modal-box">
         <div class="flex justify-between items-center mb-4">
             <h3 id="projectModalTitle" class="text-xl font-semibold">Create New Project</h3>
             <button id="projectCancelBtn" type="button" class="btn btn-ghost btn-sm btn-square">
@@ -61,6 +61,9 @@
             </div>
         </form>
     </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
 </dialog>
 
 <!-- Custom Instructions Modal -->
@@ -247,7 +250,7 @@
             </div>
         </form>
     </div>
-</div>
+</dialog>
 
 <!-- Knowledge Result Detail Modal -->
 <dialog id="knowledgeResultModal" class="modal" data-kb-debug="true">
