@@ -319,7 +319,7 @@ function setupForm(formId, submitHandler, options = {}) {
     }
     if (showLoadingState) {
       form.classList.add('submitting');
-      const submitBtn = form.querySelector('[type=\"submit\"]');
+      const submitBtn = form.querySelector('[type="submit"]');
       if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.dataset.originalText = submitBtn.textContent;
