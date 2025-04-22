@@ -13,6 +13,61 @@
  */
 
 (function () {
+  // Function declaration will be hoisted
+  function initializeSentry() {
+    if (shouldDisableSentry()) {
+      console.log('[Sentry] Disabled based on environment or user preference');
+      return;
+    }
+
+    const dsn = getDsn();
+    if (!dsn) {
+      console.warn('[Sentry] No DSN configured - skipping initialization');
+      return;
+    }
+
+    // Check if Sentry is already loaded via loader script in head
+    if (window.Sentry) {
+      console.log('[Sentry] SDK already available, setting up...');
+      setupSentry();
+      return;
+    }
+
+    // Load Sentry SDK dynamically with error handling
+    const script = document.createElement('script');
+    script.src = 'https://browser.sentry-cdn.com/7.50.0/bundle.min.js';
+    script.crossOrigin = 'anonymous';
+    script.integrity = 'sha384-ABC123...'; // Add integrity hash if available
+    script.referrerPolicy = 'strict-origin-when-cross-origin';
+
+    script.onload = function() {
+      if (window.Sentry) {
+        console.log('[Sentry] SDK loaded successfully');
+        setupSentry();
+      } else {
+        console.error('[Sentry] SDK failed to load properly');
+      }
+    };
+
+    script.onerror = function() {
+      console.error('[Sentry] Failed to load SDK from CDN');
+    };
+
+    document.head.appendChild(script);
+  }
+
+  // Make initSentry function available globally
+  window.initSentry = initializeSentry;
+  
+  // If the window sentryOnLoad callback is defined, it means the loader script in <head> is expecting this function
+  if (typeof window.sentryOnLoad === 'function') {
+    // We'll create a callback that will execute once this script runs
+    const originalSentryOnLoad = window.sentryOnLoad;
+    window.sentryOnLoad = function() {
+      console.log('[Sentry] Loader script calling sentryOnLoad callback');
+      originalSentryOnLoad();
+    };
+  }
   /**
    * Determines if Sentry should be disabled based on:
    * - localStorage flag (disable_monitoring)
@@ -86,45 +141,7 @@
    * Wrap references to 'Sentry' in conditionals to avoid errors if the script
    * is blocked or fails to load.
    */
-  function initializeSentry() {
-    if (shouldDisableSentry()) {
-      console.log('[Sentry] Disabled based on environment or user preference');
-      return;
-    }
-
-    const dsn = getDsn();
-    if (!dsn) {
-      console.warn('[Sentry] No DSN configured - skipping initialization');
-      return;
-    }
-
-    // Check if Sentry is already loaded
-    if (window.Sentry) {
-      setupSentry();
-      return;
-    }
-
-    // Load Sentry SDK dynamically with error handling
-    const script = document.createElement('script');
-    script.src = 'https://browser.sentry-cdn.com/7.50.0/bundle.min.js';
-    script.crossOrigin = 'anonymous';
-    script.integrity = 'sha384-ABC123...'; // Add integrity hash if available
-    script.referrerPolicy = 'strict-origin-when-cross-origin';
-
-    script.onload = function() {
-      if (window.Sentry) {
-        setupSentry();
-      } else {
-        console.error('[Sentry] SDK failed to load properly');
-      }
-    };
-
-    script.onerror = function() {
-      console.error('[Sentry] Failed to load SDK from CDN');
-    };
-
-    document.head.appendChild(script);
-  }
+  // function initializeSentry moved to the top
 
   /**
    * Once Sentry is available, configure it.
