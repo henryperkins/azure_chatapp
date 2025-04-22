@@ -27,10 +27,7 @@ DATABASE_URL = settings.DATABASE_URL
 async_engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True,
-    connect_args={
-        "ssl": True  # Force SSL but don't verify CA root certificate
-    }
+    pool_pre_ping=True
 )
 
 AsyncSessionLocal = async_sessionmaker(
