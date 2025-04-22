@@ -297,7 +297,7 @@ const initSequence = [
   // Phase 2: Modal manager + projectModal
   async () => {
     await waitForDependency('modalManager');
-    window.modalManager.init();
+    window.initModalManager();
     console.log('[App] ModalManager initialized.');
 
     if (window.projectModal?.init) {
