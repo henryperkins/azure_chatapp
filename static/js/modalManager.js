@@ -94,17 +94,13 @@ class ModalManager {
 
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      console.error(
-        `[ModalManager] No ID mapping for modalName='${modalName}'`
-      );
+      console.error(`[ModalManager] Modal mapping missing for: ${modalName}`);
       return false;
     }
 
     let modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      console.error(
-        `[ModalManager] <dialog> element not found for ID='${modalId}'`
-      );
+      console.error(`[ModalManager] Modal element missing: ${modalId}`);
       return false;
     }
 
@@ -300,7 +296,10 @@ class ProjectModal {
     this.formElement = document.getElementById("projectModalForm");
 
     if (!this.modalElement || !this.formElement) {
-      console.error("[ProjectModal] Required elements not found");
+      console.error("[ProjectModal] Required elements not found", {
+        modal: !!this.modalElement,
+        form: !!this.formElement
+      });
       return;
     }
 

@@ -82,10 +82,10 @@ export function initProjectList() {
           console.log('[ProjectListInit] Create Project button clicked.');
           window.modalManager?.show('project', {
             updateContent: (modalEl) => {
-              const form = modalEl.querySelector('#projectForm');
+              const form = modalEl.querySelector('#projectModalForm');
               if (form) {
                 form.reset();
-                form.querySelector('#projectIdInput').value = '';
+                form.querySelector('#projectModalIdInput').value = '';
                 // Clear validation errors
                 form.querySelectorAll('.error-message').forEach(el => el.classList.add('hidden'));
               }

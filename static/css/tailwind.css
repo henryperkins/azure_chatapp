@@ -118,5 +118,13 @@
   
   .modal[open] {
     display: flex !important;
+    opacity: 1;
+    z-index: 99999;
+  }
+
+  #projectModal[open] {
+    display: flex !important;
+    opacity: 1;
+    z-index: 99999;
   }
 }
