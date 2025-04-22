@@ -65,7 +65,7 @@ class Settings:
     # Database
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://username:password@localhost:5432/dev_db",
+        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?ssl=true&sslmode=verify-full&sslrootcert=DigiCertGlobalRootCA.crt",
     )
 
     # JWT Configuration

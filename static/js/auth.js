@@ -497,10 +497,22 @@ async function init() {
     // Load any persisted auth state from localStorage first
     loadPersistedAuthState();
 
-    await getCSRFTokenAsync();
+    // Get initial CSRF token and wait for it to complete
+    const csrfPromise = getCSRFTokenAsync().catch(err => {
+      console.warn('[Auth] Initial CSRF fetch failed:', err);
+      return null;
+    });
+
+    // Show a more specific message while verifying
+    const loadingDiv = document.getElementById('appLoading');
+    if (loadingDiv) {
+      loadingDiv.querySelector('p').textContent = 'Verifying authentication...';
+    }
+
+    await csrfPromise;
     await verifyAuthState(false);
 
-    // Setup periodic verification
+    // Setup periodic verification - but don't block init on it
     setInterval(() => {
       if (authState.isAuthenticated && !document.hidden) {
         verifyAuthState(false).catch(console.warn);
@@ -610,3 +622,4 @@ window.auth = {
 };
 
 export default window.auth;
+DependencySystem.register('auth', window.auth);

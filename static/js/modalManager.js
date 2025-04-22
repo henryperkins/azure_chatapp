@@ -544,3 +544,4 @@ if (!window.projectModal) {
   // We'll rely on app.js or external code to call window.projectModal.init() as needed
   console.log("[modalManager.js] Global projectModal instance created.");
 }
+DependencySystem.register('modalManager', window.modalManager);
