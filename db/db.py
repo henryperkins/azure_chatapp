@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Database URL from config
 DATABASE_URL = settings.DATABASE_URL.split("?")[0]  # Remove any existing query parameters
-DATABASE_URL += "?sslmode=disable"  # Explicitly add sslmode=disable
+DATABASE_URL += "?sslmode=disable"  # Explicitly disable SSL
 
 # ---------------------------------------------------------
 # Async engine/session: for normal runtime usage
