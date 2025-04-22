@@ -18,6 +18,9 @@ from db.db import (
 
 from db.schema_manager import SchemaManager
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # Create SchemaManager instance
 # _schema_manager = SchemaManager()
