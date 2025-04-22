@@ -193,7 +193,7 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 # -----------------------------------------------------------------------------
 def extract_token(request_or_websocket, token_type="access"):
     """
-    Retrieves the specified token type from cookies.
+    Retrieves the specified token type from cookies or from the Authorization header.
     Works with both HTTP (Request) and WebSocket objects.
 
     Args:
@@ -201,20 +201,47 @@ def extract_token(request_or_websocket, token_type="access"):
         token_type: The type of token to extract ('access' or 'refresh')
     """
     cookie_name = f"{token_type}_token"
+    token = None
+    source = None
 
+    # Debug mode
+    debugging = hasattr(settings, 'DEBUG') and settings.DEBUG
+
+    # First try cookies
     if hasattr(request_or_websocket, "cookies"):
         # Likely an HTTP Request
-        return request_or_websocket.cookies.get(cookie_name)
-    if hasattr(request_or_websocket, "headers"):
-        # WebSocket scenario
-        cookie_header = request_or_websocket.headers.get("cookie", "")
-        cookies = {}
-        for c in cookie_header.split(";"):
-            if "=" in c:
-                k, v = c.split("=", 1)
-                cookies[k.strip()] = v.strip()
-        return cookies.get(cookie_name)
-    return None  # Fallback for unexpected types
+        token = request_or_websocket.cookies.get(cookie_name)
+        if token:
+            source = "cookie"
+
+    # Try header if cookie not found
+    if not token and hasattr(request_or_websocket, "headers"):
+        # Check for Authorization header (both HTTP and WebSocket)
+        auth_header = request_or_websocket.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer ") and token_type == "access":
+            token = auth_header[7:]
+            source = "auth_header"
+
+        # Also check cookie header for WebSockets
+        if not token:
+            cookie_header = request_or_websocket.headers.get("cookie", "")
+            cookies = {}
+            for c in cookie_header.split(";"):
+                if "=" in c:
+                    k, v = c.split("=", 1)
+                    cookies[k.strip()] = v.strip()
+            if cookie_name in cookies:
+                token = cookies.get(cookie_name)
+                source = "ws_cookie_header"
+
+    # Log token status in debug mode
+    if debugging:
+        if token:
+            logger.debug(f"Token ({token_type}) found in {source}: {token[:10]}...")
+        else:
+            logger.debug(f"No {token_type} token found in request")
+
+    return token
 
 
 async def get_user_from_token(
@@ -310,9 +337,16 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
       2. Verifies it and loads the corresponding user.
       3. Returns a tuple of (User, token).
     """
+    debugging = hasattr(settings, 'DEBUG') and settings.DEBUG
+
     token = extract_token(request)
     if not token:
-        logger.warning("Access token not found in request")
+        if debugging:
+            logger.warning("Access token not found in request cookies or headers")
+            # Log cookie details
+            logger.debug(f"Request cookies: {request.cookies}")
+            logger.debug(f"Authorization header: {request.headers.get('authorization', 'None')}")
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
