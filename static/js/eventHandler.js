@@ -410,27 +410,25 @@ function init() {
 function handleAuthStateChange(event) {
   const { authenticated } = event.detail || {};
 
-  if (authenticated) {
-    toggleVisible('#authButton', false);
-    toggleVisible('#userMenu', true);
-    toggleVisible('#loginRequiredMessage', false);
+  // Close auth dropdown
+  const authDropdown = document.getElementById('authDropdown');
+  if (authDropdown) authDropdown.classList.add('hidden');
 
-    // Show project content when authenticated
-    const projectListView = document.getElementById('projectListView');
-    if (projectListView) {
-      projectListView.classList.remove('opacity-0');
-    }
-  } else {
-    toggleVisible('#authButton', true);
-    toggleVisible('#userMenu', false);
-    toggleVisible('#loginRequiredMessage', true);
-    toggleVisible('#globalChatUI', false);
+  // Update UI visibility
+  toggleVisible('#authButton', !authenticated);
+  toggleVisible('#userMenu', authenticated);
+  toggleVisible('#loginRequiredMessage', !authenticated);
+  toggleVisible('#globalChatUI', authenticated);
 
-    // Hide project content when not authenticated
-    const projectListView = document.getElementById('projectListView');
-    if (projectListView) {
-      projectListView.classList.add('opacity-0');
-    }
+  // Handle project view state
+  const projectListView = document.getElementById('projectListView');
+  if (projectListView) {
+    projectListView.classList.toggle('opacity-0', !authenticated);
+  }
+
+  // Redirect if on login page
+  if (authenticated && window.location.pathname === '/login') {
+    window.location.href = '/';
   }
 }
 
@@ -547,70 +545,7 @@ function setupCommonElements() {
     });
   }
 
-  // Login form
-  if (document.getElementById('loginForm')) {
-    setupForm('loginForm', async (formData) => {
-      const username = formData.get('username');
-      const password = formData.get('password');
-      if (!username || !password) {
-        throw new Error('Username and password are required');
-      }
-
-      // Ensure window.auth and login method exist
-      if (!window.auth || typeof window.auth.login !== 'function') {
-        throw new Error('Authentication module not loaded. Cannot login.');
-      }
-
-      try {
-        // Login and get response
-        const response = await window.auth.login(username, password);
-        window.app?.showNotification('Login successful', 'success');
-
-        // Close auth dropdown
-        const authDropdown = document.getElementById('authDropdown');
-        if (authDropdown) {
-          authDropdown.classList.add('hidden');
-        }
-
-        // If we got a token back, ensure cookies are set before redirect
-        if (response && response.access_token) {
-          setTimeout(() => {
-            // Redirect to homepage if not already there
-            if (window.location.pathname !== '/') {
-              window.location.href = '/';
-            } else {
-              // Already on homepage, trigger a UI refresh
-              if (window.projectManager?.refreshProjects) {
-                window.projectManager.refreshProjects();
-              }
-            }
-          }, 100);
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        let errorMsg = 'Login failed';
-
-        if (error.data && error.data.detail) {
-          errorMsg = error.data.detail;
-        } else if (error.message) {
-          errorMsg = error.message;
-        }
-
-        // Show error in form
-        const loginError = document.getElementById('login-error');
-        if (loginError) {
-          loginError.textContent = errorMsg;
-          loginError.classList.remove('hidden');
-        } else {
-          window.app?.showNotification(errorMsg, 'error');
-        }
-
-        throw error; // Re-throw to prevent form reset
-      }
-    }, {
-      resetOnSuccess: false
-    });
-  }
+  // Login form setup moved to auth.js init()
 
   // Register form
   if (document.getElementById('registerForm')) {

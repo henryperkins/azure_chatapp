@@ -426,6 +426,23 @@ async function init() {
   }
   console.log('[Auth] Initializing auth module...');
 
+  // Set up login form handler
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) {
+    window.eventHandlers?.trackListener(loginForm, 'submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(loginForm);
+      try {
+        await publicAuth.login(
+          formData.get('username'),
+          formData.get('password')
+        );
+      } catch (error) {
+        window.showNotification?.('Login failed: ' + error.message, 'error');
+      }
+    });
+  }
+
   try {
     // First get CSRF token - this doesn't require auth
     await getCSRFTokenAsync();
