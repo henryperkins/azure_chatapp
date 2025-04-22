@@ -265,12 +265,12 @@ class ProjectListComponent {
         }
         window.modalManager.show('project', {
             updateContent: (modalEl) => {
-                const form = modalEl.querySelector('#projectForm');
+                const form = modalEl.querySelector('#projectModalForm');
                 const title = modalEl.querySelector('#projectModalTitle');
                 if (form) {
-                    const idInput = form.querySelector('#projectIdInput');
-                    const nameInput = form.querySelector('#projectNameInput');
-                    const descInput = form.querySelector('#projectDescInput');
+                    const idInput = form.querySelector('#projectModalIdInput');
+                    const nameInput = form.querySelector('#projectModalNameInput');
+                    const descInput = form.querySelector('#projectModalDescInput');
                     if (idInput) idInput.value = project.id || '';
                     if (nameInput) nameInput.value = project.name || '';
                     if (descInput) descInput.value = project.description || '';

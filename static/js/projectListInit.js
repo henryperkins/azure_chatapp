@@ -110,10 +110,10 @@ export function initProjectList() {
           console.log('[ProjectListInit] Sidebar New Project button clicked.');
           window.modalManager?.show('project', {
             updateContent: (modalEl) => {
-              const form = modalEl.querySelector('#projectForm');
+              const form = modalEl.querySelector('#projectModalForm');
               if (form) {
                 form.reset();
-                form.querySelector('#projectIdInput').value = '';
+                form.querySelector('#projectModalIdInput').value = '';
               }
               const title = modalEl.querySelector('#projectModalTitle');
               if (title) title.textContent = 'Create New Project';
