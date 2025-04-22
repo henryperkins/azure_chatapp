@@ -161,7 +161,7 @@ class SchemaManager:
                     if index.name not in db_indexes:
                         logger.info(f"Creating index: {table.name}.{index.name}")
                         try:
-                            index.create(conn)
+                            await conn.run_sync(lambda sync_conn: index.create(sync_conn))
                         except Exception as e:
                             logger.error(f"Failed to create index {index.name}: {e}")
 
@@ -281,7 +281,7 @@ class SchemaManager:
                 return True
         return False
 
-    def _add_column(self, conn: Connection, table_name: str, column) -> None:
+    async def _add_column(self, conn: AsyncConnection, table_name: str, column) -> None:
         """Add a column to a table."""
         column_spec = f"{column.name} {column.type.compile(sync_engine.dialect)}"
 
@@ -306,10 +306,10 @@ class SchemaManager:
         if column.server_default is not None:
             column_spec += f" DEFAULT {column.server_default.arg}"
 
-        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_spec}"))
+        await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_spec}"))
 
-    def _add_foreign_key(
-        self, conn: Connection, table_name: str, column_name: str, fk
+    async def _add_foreign_key(
+        self, conn: AsyncConnection, table_name: str, column_name: str, fk
     ) -> None:
         """Add a foreign key constraint."""
         fk_name = f"fk_{table_name}_{column_name}_{fk.column.table.name}"
@@ -317,7 +317,7 @@ class SchemaManager:
 
         for attempt in range(3):  # Retry up to 3 times
             try:
-                conn.execute(
+                await conn.execute(
                     text(
                         f"ALTER TABLE {table_name} "
                         f"ADD CONSTRAINT {fk_name} "
