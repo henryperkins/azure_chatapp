@@ -433,20 +433,40 @@
 
   // Track SPA navigations by observing changes in window.location.href
   let lastHref = window.location.href;
-  const navigationObserver = new MutationObserver(() => {
-    if (window.location.href !== lastHref && window.Sentry) {
-      Sentry.addBreadcrumb({
-        category: 'navigation',
-        message: `Navigated to: ${window.location.href}`,
-        level: 'info',
-      });
-      lastHref = window.location.href;
+  
+  function initNavigationTracking() {
+    if (!document.body || !window.Sentry) {
+      console.warn('[Sentry] Cannot initialize navigation tracking: DOM not ready or Sentry not loaded');
+      return;
     }
-  });
-  navigationObserver.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
+
+    const navigationObserver = new MutationObserver(() => {
+      if (window.location.href !== lastHref && window.Sentry) {
+        Sentry.addBreadcrumb({
+          category: 'navigation',
+          message: `Navigated to: ${window.location.href}`,
+          level: 'info',
+        });
+        lastHref = window.location.href;
+      }
+    });
+
+    try {
+      navigationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    } catch (error) {
+      console.error('[Sentry] Failed to initialize navigation tracking:', error);
+    }
+  }
+
+  // Initialize navigation tracking based on DOM readiness
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initNavigationTracking);
+  } else {
+    initNavigationTracking();
+  }
 
   // Monkey-patch fetch for custom instrumentation & error capturing
   if (window.fetch) {
