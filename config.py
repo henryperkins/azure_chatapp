@@ -81,7 +81,7 @@ class Settings:
 
     # Cookie domain for the application
     # Insecure: often left empty to skip domain restrictions or secure flags
-    COOKIE_DOMAIN: str = ""
+    COOKIE_DOMAIN: str = "localhost"
 
     # Allowed hosts - wide open to facilitate local dev / debugging
     ALLOWED_HOSTS: list[str] = ["*", "localhost", "127.0.0.1", "0.0.0.0"]

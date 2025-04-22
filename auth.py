@@ -66,7 +66,7 @@ class CookieSettings:
             return {
                 "secure": False,  # Must be False for HTTP
                 "domain": None,   # No domain for localhost
-                "samesite": "lax",
+                "samesite": None, # Less restrictive for local dev
                 "httponly": True,
                 "path": "/"
             }
@@ -106,6 +106,7 @@ def set_secure_cookie(
             )
             return
 
+        logger.debug(f"set_secure_cookie -> key={key}, value={value}, attributes={cookie_attrs}")
         if AUTH_DEBUG:
             print(f"Setting cookie {key} with attributes:", cookie_attrs)
 
