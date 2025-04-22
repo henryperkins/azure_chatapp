@@ -62,13 +62,11 @@ class CookieSettings:
         hostname = request.url.hostname
         scheme = request.url.scheme
 
-        # For local development, we need to set secure=True when samesite=none
-        # This is required by browsers even on localhost/127.0.0.1
         if self.env == "development" or hostname in ["localhost", "127.0.0.1"]:
             return {
-                "secure": True,  # Must be True when SameSite=None, even in development
+                "secure": scheme == "https",
                 "domain": None,
-                "samesite": "none",  # Changed from 'lax' to 'none' to allow cross-site requests in local dev
+                "samesite": "lax",
                 "httponly": True,
                 "path": "/"
             }
@@ -677,28 +675,29 @@ async def logout_user(
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, str]:
     current_user = None
-    refresh_cookie = request.cookies.get("refresh_token")
+    access_token = request.cookies.get("access_token")
+    refresh_token = request.cookies.get("refresh_token")
 
     try:
-        # Attempt to find user from refresh token
-        try:
-            refresh_token_val = request.cookies.get("refresh_token")
-            if refresh_token_val:
-                current_user = await get_user_from_token(
-                    refresh_token_val, session, expected_type="refresh"
-                )
-        except HTTPException:
-            # fallback to access token
+        # First try to get user from access token
+        if access_token:
             try:
-                access_token_val = request.cookies.get("access_token")
-                if access_token_val:
-                    current_user = await get_user_from_token(
-                        access_token_val, session, expected_type="access"
-                    )
-            except HTTPException:
-                logger.debug(
-                    "No valid tokens found during logout, just clearing cookies"
+                current_user = await get_user_from_token(
+                    access_token, session, request=request, expected_type="access"
                 )
+                logger.info(f"User from access token: {current_user.username}")
+            except HTTPException:
+                pass
+
+        # If that fails, try refresh token
+        if not current_user and refresh_token:
+            try:
+                current_user = await get_user_from_token(
+                    refresh_token, session, request=request, expected_type="refresh"
+                )
+                logger.info(f"User from refresh token: {current_user.username}")
+            except HTTPException:
+                pass
 
         if current_user:
             async with session.begin():
@@ -708,18 +707,10 @@ async def logout_user(
                 if locked_user:
                     old_version = locked_user.token_version or 0
                     locked_user.token_version = old_version + 1
-                    logger.info(
-                        "User '%s' token_version incremented from %d to %d on logout (insecure debug).",
-                        locked_user.username,
-                        old_version,
-                        locked_user.token_version,
-                    )
-                    # Insecure mode: attempt blacklisting if you like
-                    if refresh_cookie:
+
+                    if refresh_token:
                         try:
-                            decoded = await verify_token(
-                                refresh_cookie, "refresh", request
-                            )
+                            decoded = await verify_token(refresh_token, "refresh", request, db_session=session)
                             token_id = decoded.get("jti")
                             expires_timestamp = decoded.get("exp")
                             if token_id and expires_timestamp:
@@ -734,22 +725,13 @@ async def logout_user(
                                     creation_reason="logout",
                                 )
                                 session.add(blacklisted)
-                                logger.debug(
-                                    "Blacklisted refresh token %s on logout (insecure debug)",
-                                    token_id,
-                                )
+                                logger.info(f"Blacklisted refresh token {token_id} on logout")
                         except Exception as e:
-                            logger.debug("Failed to blacklist refresh token: %s", e)
-
+                            logger.error(f"Failed to blacklist refresh token: {e}")
     except Exception as e:
-        logger.error("Unexpected error during logout: %s", e)
+        logger.error(f"Unexpected error during logout: {e}")
 
-    # Always clear cookies
-    try:
-        set_secure_cookie(response, "access_token", "", 0, request)
-        set_secure_cookie(response, "refresh_token", "", 0, request)
-    except Exception as e:
-        logger.error("Failed to clear cookies during logout: %s", e)
+    set_secure_cookie(response, "access_token", "", 0, request)
+    set_secure_cookie(response, "refresh_token", "", 0, request)
 
-    logger.info("User logged out (insecure debug).")
     return {"status": "logged out"}
