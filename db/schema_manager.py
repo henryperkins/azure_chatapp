@@ -145,7 +145,7 @@ class SchemaManager:
             for column in table.columns:
                 if column.name not in db_columns:
                     logger.info(f"Adding column: {table.name}.{column.name}")
-                        self._add_column(conn, table.name, column)
+                    self._add_column(conn, table.name, column)
 
             # 3. Create missing indexes
             for table in Base.metadata.tables.values():
