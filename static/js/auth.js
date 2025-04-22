@@ -430,32 +430,57 @@ async function init() {
     // First get CSRF token - this doesn't require auth
     await getCSRFTokenAsync();
 
-    // Skip immediate verify if we have no reason to believe we're authenticated
-    if (!document.cookie.includes('access_token')) {
-      console.log('[Auth] No auth cookies detected, skipping initial verify');
-      broadcastAuth(false, null, 'init_no_cookies');
-      return true; // Still return true since initialization completed
-    }
+    // REMOVED: Check for document.cookie - This is unreliable with HttpOnly cookies.
+    // Always attempt to verify the session with the backend.
+    // if (!document.cookie.includes('access_token')) {
+    //   console.log('[Auth] No auth cookies detected, skipping initial verify');
+    //   broadcastAuth(false, null, 'init_no_cookies');
+    //   authState.isReady = true; // Mark as ready even if skipped
+    //   return true; // Still return true since initialization completed
+    // }
 
     // Proceed with verification
-    const verified = await verifyAuthState(true);
+    console.log('[Auth] Attempting initial verification with backend...');
+    const verified = await verifyAuthState(true); // Use forceVerify=true for initial load
     authState.isReady = true;
+    console.log(`[Auth] Initial verification result: ${verified}`);
     return verified;
 
   } catch (error) {
-    console.error('[Auth] Initialization failed:', error);
+    console.error('[Auth] Initialization failed during verify/CSRF:', error);
+    // Ensure state is cleared if verification fails critically during init
     await clearTokenState({ source: 'init_fail', isError: true });
     authState.isReady = true; // Mark as ready even if failed
+    broadcastAuth(false, null, 'init_error'); // Ensure auth state is false
     return false;
   } finally {
-    // Setup periodic checks only if we have auth cookies
-    if (document.cookie.includes('access_token')) {
-      setInterval(() => {
-        if (!document.hidden && authState.isAuthenticated) {
-          verifyAuthState(false).catch(console.warn);
-        }
-      }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+    // Setup periodic checks AFTER initial verification attempt completes
+    // Only set interval if the initial check was successful OR if we think we might have cookies (best effort)
+    // A more robust approach might rely purely on the 'verified' status from the try block.
+    // For now, keep the original logic for periodic checks.
+    if (document.cookie.includes('access_token') || authState.isAuthenticated) {
+       console.log('[Auth] Setting up periodic verification interval.');
+       setInterval(() => {
+         // Only verify if authenticated and tab is visible
+         if (!document.hidden && authState.isAuthenticated) {
+           console.debug('[Auth] Periodic verification triggered.');
+           verifyAuthState(false).catch(console.warn);
+         }
+       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+    } else {
+        console.log('[Auth] Skipping periodic verification setup (no initial auth).');
     }
+
+    // Dispatch an event indicating auth readiness, regardless of success/failure
+    AuthBus.dispatchEvent(
+        new CustomEvent('authReady', {
+            detail: {
+                authenticated: authState.isAuthenticated,
+                username: authState.username,
+                error: null // Or pass error if needed
+            }
+        })
+    );
   }
 }
 
@@ -497,20 +522,10 @@ if (window.DependencySystem) {
 }
 
 // --- Call init after registration ---
+// Ensure the init promise rejection is handled, but the authReady event is always fired in the finally block of init.
 init().catch(error => {
   console.error("[Auth] Initialization promise rejected:", error);
-  if (!authState.isReady) {
-    authState.isReady = true;
-    AuthBus.dispatchEvent(
-      new CustomEvent('authReady', {
-        detail: {
-          authenticated: false,
-          username: null,
-          error: error.message,
-        },
-      })
-    );
-  }
+  // The 'authReady' event is now dispatched within the finally block of init()
 });
 
 export default publicAuth;
