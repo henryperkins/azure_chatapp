@@ -2,47 +2,15 @@
 <html lang="en" data-theme="light">
 
 <head>
+  <!-- Sentry Initialization - Must be first to capture all errors -->
+  <script src="/static/js/sentry-init.js"></script>
+
   <meta charset="UTF-8" />
-  <!-- Sentry Loader Script - Must be first! -->
-  <script>
-    // Only load Sentry in production or if explicitly enabled in development
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      const script = document.createElement('script');
-      script.src = 'https://js.sentry-cdn.com/b03711f63d1160f48dcaeda3edae14ac.min.js';
-      script.crossOrigin = 'anonymous';
-      script.integrity = 'sha384-ABC123...'; // Add integrity hash if available
-      document.head.appendChild(script);
-    }
-  </script>
-  <script>
-    window.sentryOnLoad = function() {
-      // Configuration will be handled by sentry-init.js
-      const script = document.createElement('script');
-      script.src = '/static/js/sentry-init.js';
-      document.head.appendChild(script);
-    };
-  </script>
-  <!-- Content Security Policy optimized for Sentry -->
-  <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self' blob:;
-               script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
-               script-src-elem 'self' 'unsafe-inline' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
-               worker-src 'self' blob:;
-               child-src 'self' blob:;
-               connect-src 'self' https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com;
-               img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com;
-               style-src 'self' 'unsafe-inline';
-               frame-src 'self';">
   <title>Projects - Azure OpenAI Chat</title>
 
-  <!-- Tailwind CSS with DaisyUI -->
+  <!-- Tailwind CSS (production build or dev) -->
   <link rel="stylesheet" href="/static/css/dist/tailwind.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
-
-  <!-- Initialize DaisyUI theme (must remain non-module) -->
-  <script>
-    document.documentElement.setAttribute('data-theme', 'dracula');
-  </script>
 
   <style>
     /* Add transition for project list visibility */
@@ -54,44 +22,8 @@
   <!-- Ensure responsive, mobile-friendly behavior -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-  <!-- CSRF token for API requests -->
-  <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
-
-  <!-- Recommended script loading order -->
-  <!-- Layer 1 (Foundation) -->
-  <script type="module" src="/static/js/sentry-init.js" defer></script>
-  <script type="module" src="/static/js/notification-handler.js" defer></script>
-  <script type="module" src="/static/js/eventHandler.js" defer></script>
-
-  <!-- Layer 2 (Core Services) -->
-  <script type="module" src="/static/js/auth.js" defer></script>
-  <script type="module" src="/static/js/modelConfig.js" defer></script>
-
-  <!-- Layer 3 (Application Core) -->
-  <script type="module" src="/static/js/modalManager.js" defer></script>
-  <script type="module" src="/static/js/projectManager.js" defer></script>
-  <script type="module" src="/static/js/app.js" defer></script>
-
-  <!-- Layer 4 (UI Framework) -->
-  <script type="module" src="/static/js/uiRenderer.js" defer></script>
-
-  <!-- Layer 5 (Data Management) -->
-  <script type="module" src="/static/js/projectManager.js" defer></script>
-
-  <!-- Layer 6 (Components) -->
-  <script type="module" src="/static/js/knowledgeBaseState.js" defer></script>
-  <script type="module" src="/static/js/projectDashboardUtils.js" defer></script>
-  <script type="module" src="/static/js/projectDashboard.js" defer></script> <!-- FIRST: loads HTML & orchestrates -->
-  <script type="module" src="/static/js/projectDetailsComponent.js" defer></script> <!-- After dashboard -->
-  <script type="module" src="/static/js/projectListComponent.js" defer></script> <!-- After dashboard -->
-  <script type="module" src="/static/js/sidebar.js" defer></script> <!-- LAST: depends on all others -->
-
-  <!-- Layer 7 (Component Implementations) -->
-  <script type="module" src="/static/js/projectListInit.js" defer></script>
-  <script type="module" src="/static/js/chat.js" defer></script>
-
-  <!-- Theme script as a module -->
-  <script type="module" src="/static/js/theme-toggle.js"></script>
+  <!-- CSRF token will be set by auth.js during initialization -->
+  <meta name="csrf-token" content="{{ csrf_token() }}" id="csrfToken" />
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
@@ -127,58 +59,43 @@
         <!-- Auth container -->
         <div class="relative" id="authContainer">
           <!-- When logged out: Auth Button -->
-          <button id="authButton" type="button" class="btn btn-primary btn-sm" aria-haspopup="true" aria-expanded="false">
+          <button id="authButton" type="button" class="btn btn-primary btn-sm">
             Login
           </button>
 
-          <!-- Auth Dropdown -->
+          <!-- Auth Dropdown (hidden by default) -->
           <div id="authDropdown"
-            role="menu"
-            aria-labelledby="authButton"
-            aria-hidden="true"
             class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-base-100 rounded-box shadow-md p-3 z-50 animate-slide-in hidden">
-            <div class="flex border-b border-base-200 mb-2 justify-center" role="tablist">
+            <div class="flex border-b border-base-200 mb-2 justify-center">
               <button id="loginTab" type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="loginForm"
-                class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary"
-                onclick="switchAuthTab('login')">Login</button>
+                class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary">Login</button>
               <button id="registerTab" type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="registerForm"
-                class="px-2 py-1 text-xs font-medium text-base-content/60"
-                onclick="switchAuthTab('register')">Register</button>
+                class="px-2 py-1 text-xs font-medium text-base-content/60">Register</button>
             </div>
-            <form id="loginForm" method="POST" novalidate role="tabpanel" aria-labelledby="loginTab">
+            <form id="loginForm" method="POST" onsubmit="event.preventDefault(); return false;">
               <div class="flex flex-col gap-2 mb-2">
-                <label for="login-username" class="sr-only">Username</label>
                 <input type="text" name="username" id="login-username" placeholder="Username"
                   class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="username" autocorrect="off"
-                  autocapitalize="none" required>
-                <label for="login-password" class="sr-only">Password</label>
+                  autocapitalize="none">
                 <input type="password" name="password" id="login-password" placeholder="Password"
-                  class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="current-password" required>
+                  class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="current-password">
               </div>
-              <div id="login-error" role="alert" aria-live="assertive" class="text-error text-xs mb-2 hidden"></div>
+              <div id="login-error" class="text-error text-xs mb-2 hidden"></div>
+              <!-- Improved mobile login button with larger tap target -->
               <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-sm w-full">
                 Log In
               </button>
             </form>
 
-            <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden" role="tabpanel" aria-labelledby="registerTab">
+            <form id="registerForm" class="hidden">
               <div class="flex flex-col gap-2 mb-2">
-                <label for="register-username" class="sr-only">Username</label>
-                <input type="text" name="username" id="register-username" placeholder="Username" 
-                  class="px-2 py-1 text-xs border rounded-box" autocomplete="username" autocorrect="off" autocapitalize="none" required>
-                <label for="register-password" class="sr-only">Password</label>
-                <input type="password" name="password" id="register-password" placeholder="Password"
-                  class="px-2 py-1 text-xs border rounded-box" autocomplete="new-password" required>
+                <input type="text" name="username" placeholder="Username" class="px-2 py-1 text-xs border rounded-box"
+                  autocomplete="username" autocorrect="off" autocapitalize="none">
+                <input type="password" name="password" placeholder="Password"
+                  class="px-2 py-1 text-xs border rounded-box" autocomplete="new-password">
               </div>
               <div class="relative mb-2 group">
-                <button type="button" aria-describedby="passwordRequirementsDesc" 
-                  class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
+                <button type="button" class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m-1-4h.01M21 12a9
@@ -186,7 +103,7 @@
                   </svg>
                   Password requirements
                 </button>
-                <div id="passwordRequirementsDesc" role="tooltip" 
+                <div
                   class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-neutral text-neutral-content text-xs rounded-box py-1 px-2 w-full z-10">
                   Password must be 12+ characters with uppercase, lowercase, number, and special character.
                 </div>
@@ -209,12 +126,14 @@
 
   <!-- Main Container -->
   <div class="flex flex-1 overflow-hidden container-md">
-    <!-- Enhanced Sidebar -->
+    <!-- Enhanced Sidebar with improved accessibility attributes -->
     <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-base-100 shadow-custom md:shadow-none
                 transform transition-transform duration-300 ease-in-out
                 -translate-x-full md:translate-x-0 overflow-y-auto h-full sidebar">
+      <!-- Accessible heading for screen readers -->
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
 
+      <!-- Improve close button accessibility -->
       <button id="closeSidebarBtn" type="button"
         class="md:hidden absolute top-2 right-2 p-2 btn btn-ghost btn-sm btn-square" aria-label="Close sidebar">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
@@ -224,8 +143,8 @@
       </button>
 
       <div class="p-4 flex flex-col h-full">
-        <!-- New Chat Button -->
-        <a href="/" class="w-full btn btn-neutral mb-4 flex items-center justify-center" role="button">
+        <!-- New Chat Button (Prominent) -->
+        <a href="/" class="w-full btn btn-neutral mb-4 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -234,7 +153,7 @@
           Back to Chat
         </a>
 
-        <!-- Tab navigation -->
+        <!-- Tab navigation for sidebar sections - Improved accessibility -->
         <div class="flex mb-4 border-b border-base-200" role="tablist">
           <button id="recentChatsTab" type="button"
             class="flex-1 py-2 px-1 text-base-content/60 hover:text-base-content font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
@@ -253,9 +172,10 @@
           </button>
         </div>
 
-        <!-- Recent Chats Section -->
+        <!-- Recent Chats Section (hidden by default) -->
         <div id="recentChatsSection" class="hidden flex-1 flex-col overflow-hidden" role="tabpanel"
           aria-labelledby="recentChatsTab" tabindex="0">
+          <!-- Search and pin sidebar controls -->
           <div class="mb-3 flex items-center">
             <div class="relative flex-grow">
               <label for="chatSearchInput" class="sr-only">Search conversations</label>
@@ -270,19 +190,20 @@
               </svg>
             </div>
             <button id="pinSidebarBtn" type="button" class="ml-2 p-1.5 btn btn-ghost btn-sm btn-circle"
-              title="Pin sidebar open" aria-label="Pin sidebar">
+              title="Pin sidebar open">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2
-                      2 0 012 2v16l-7-3.5L5 21V5z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012
+                      2v16l-7-3.5L5 21V5z" />
               </svg>
             </button>
           </div>
 
+          <!-- Conversations list -->
           <ul id="sidebarConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list"></ul>
         </div>
 
-        <!-- Starred Chats Section -->
+        <!-- Starred Chats Section (hidden by default) -->
         <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
           aria-labelledby="starredChatsTab" tabindex="0">
           <p class="text-xs text-base-content/60 mb-3">Starred chats are conversations you've marked as important for
@@ -295,11 +216,12 @@
           </ul>
         </div>
 
-        <!-- Projects Section -->
+        <!-- Projects Section (visible by default on projects page) -->
         <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
           aria-labelledby="projectsTab" tabindex="0">
+          <!-- Projects actions -->
           <div class="mb-3 flex gap-2">
-            <button id="manageProjectsLink" role="button"
+            <a href="#" id="manageProjectsLink"
               class="flex-1 btn btn-primary btn-outline btn-sm flex items-center justify-center font-medium">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
@@ -308,7 +230,7 @@
                   2 0 00-2 2z" />
               </svg>
               Manage Projects
-            </button>
+            </a>
             <button id="sidebarNewProjectBtn" type="button"
               class="flex-1 btn btn-primary btn-sm flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
@@ -320,6 +242,7 @@
             </button>
           </div>
 
+          <!-- Projects search input -->
           <div class="relative mb-2">
             <label for="sidebarProjectSearch" class="sr-only">Search projects</label>
             <input type="search" id="sidebarProjectSearch" aria-label="Search projects" placeholder="Search projects..."
@@ -332,14 +255,17 @@
             </svg>
           </div>
 
-          <ul id="sidebarProjects" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list"></ul>
+          <ul id="sidebarProjects" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
+            <!-- Projects will be loaded dynamically -->
+          </ul>
         </div>
 
-        <!-- Settings section -->
+        <!-- Settings section (collapsible) -->
         <div class="mt-auto pt-4 border-t border-base-200">
+          <!-- Model configuration toggle button -->
           <button id="toggleModelConfig" type="button"
             class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-            aria-expanded="false" aria-controls="modelConfigPanel">
+            aria-expanded="false" aria-controls="modelConfigPanel" role="button">
             <span>Model Configuration</span>
             <svg id="modelConfigChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -347,10 +273,12 @@
             </svg>
           </button>
 
+          <!-- Model Configuration UI (collapsible) -->
           <div id="modelConfigPanel"
             class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
             aria-labelledby="toggleModelConfig">
             <div class="pt-2 pb-1">
+              <!-- Model Selection -->
               <div class="mb-3">
                 <label for="modelSelect" class="block font-medium text-base-content text-xs">Select Model</label>
                 <select id="modelSelect"
@@ -362,12 +290,18 @@
                 </select>
               </div>
 
+              <!-- Max Tokens Input Group -->
               <div id="maxTokensContainer" class="mb-3">
                 <label class="block font-medium text-xs">Max Completion Tokens</label>
+                <!-- Slider and input will be injected by modelConfig.js -->
               </div>
 
-              <div id="reasoningPanel" class="bg-base-200 p-2 rounded-box mt-2 mb-3"></div>
+              <!-- Reasoning Effort Panel (slider) -->
+              <div id="reasoningPanel" class="bg-base-200 p-2 rounded-box mt-2 mb-3">
+                <!-- Slider is injected by modelConfig.js -->
+              </div>
 
+              <!-- Extended Thinking Panel -->
               <div id="extendedThinkingPanel" class="hidden mb-3">
                 <label class="block font-medium text-xs">Extended Thinking</label>
                 <div class="flex items-center mt-2">
@@ -392,16 +326,20 @@
                 </p>
               </div>
 
+              <!-- Vision Panel (for image upload) -->
               <div id="visionPanel" class="hidden mb-3">
                 <label class="block font-medium text-xs">Image Upload (o1 Vision)</label>
                 <input type="file" accept="image/png,image/jpeg" class="mt-2 text-sm" id="visionFileInput" />
                 <p class="text-xs text-base-content/60 mt-1">
                   Upload JPEG or PNG (≤4 MB).
                 </p>
-                <div id="visionStatus" class="mt-2 text-sm text-base-content/80"></div>
+                <div id="visionStatus" class="mt-2 text-sm text-base-content/80">
+                  <!-- Filled dynamically: "Analyzing..." or error messages -->
+                </div>
                 <div id="visionPreview" class="mt-2"></div>
               </div>
 
+              <!-- Live region for model config display -->
               <div id="modelConfigDisplay" class="mt-4 p-2 bg-base-200 rounded-box text-xs" aria-live="polite">
                 <p><span class="font-medium">Selected Model:</span> <span id="currentModelName">o3-mini</span></p>
                 <p><span class="font-medium">Max Tokens:</span> <span id="currentMaxTokens">500</span></p>
@@ -409,6 +347,7 @@
                 <p><span class="font-medium">Vision:</span> <span id="visionEnabledStatus">Disabled</span></p>
               </div>
 
+              <!-- Loading indicator for config changes -->
               <div id="modelConfigLoading" class="mt-3 text-primary flex items-center text-xs" aria-hidden="true">
                 <svg class="animate-spin h-4 w-4 mr-2 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none"
                   viewBox="0 0 24 24" aria-hidden="true">
@@ -420,9 +359,10 @@
             </div>
           </div>
 
+          <!-- Custom Instructions toggle button -->
           <button id="toggleCustomInstructions" type="button"
             class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-            aria-expanded="false" aria-controls="customInstructionsPanel">
+            aria-expanded="false" aria-controls="customInstructionsPanel" role="button">
             <span>Custom Instructions</span>
             <svg id="customInstructionsChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -430,11 +370,12 @@
             </svg>
           </button>
 
+          <!-- Custom Instructions panel (collapsible) -->
           <div id="customInstructionsPanel"
             class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
             aria-labelledby="toggleCustomInstructions">
             <div class="pt-2 pb-1">
-              <label for="globalCustomInstructions" class="sr-only">Custom Instructions</label>
+              <p class="text-xs text-base-content/60 mb-2">Set default instructions for how the AI should respond.</p>
               <textarea id="globalCustomInstructions"
                 class="w-full px-3 py-2 text-sm border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
                 placeholder="Enter instructions for the AI to follow (e.g., response style, format preferences)..."></textarea>
@@ -449,136 +390,205 @@
 
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col overflow-hidden">
-      <h2 class="sr-only">Project Management Dashboard</h2>
-      
-      <div id="notificationArea" role="status" aria-live="polite" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
+      <!-- Notification area for ephemeral toasts -->
+      <div id="notificationArea" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
 
+      <!-- Scroll container -->
       <div class="flex-1 overflow-y-auto p-4 md:p-6">
+        <!-- Login required message (shown when not authenticated) -->
         <div id="loginRequiredMessage" class="hidden text-center py-8">
           <p class="text-lg">Please log in to access projects</p>
-          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4" onclick="document.getElementById('authButton').click();">
+          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4">
             Login
           </button>
         </div>
 
+        <!-- Project Manager Section (shown when authenticated) -->
         <section id="projectManagerPanel"
           class="bg-base-100 rounded-box shadow-xs p-4 mb-6 flex flex-col min-h-0 border border-base-200">
-          <div id="projectListView" class="flex-1 flex flex-col min-h-0"></div>
-          <div id="projectDetailsView" class="hidden"></div>
+          <!-- Placeholder for Project List View -->
+          <div id="projectListView" class="flex-1 flex flex-col min-h-0">
+            <!-- Content will be loaded dynamically from project_list.html -->
+          </div>
+
+          <!-- Placeholder for Project Details View -->
+          <div id="projectDetailsView" class="hidden">
+            <!-- Content will be loaded dynamically from project_details.html -->
+          </div>
         </section>
       </div>
     </main>
   </div>
 
-  <div id="modalsContainer" class="hidden" aria-live="polite" role="complementary"></div>
-  <div id="chatUIContainer" class="hidden" data-requires-chat="true"></div>
-  
-  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" 
-       role="status" aria-live="polite">
-    <div class="text-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" 
-           aria-hidden="true"></div>
-      <p class="text-lg">Loading application...</p>
-    </div>
+  <!-- Placeholder for Modals (to be loaded from modals.html) -->
+  <div id="modalsContainer" class="hidden">
+    <!-- Modals will be injected here -->
   </div>
 
+  <!-- Placeholder for Chat UI (loaded only when needed) -->
+  <div id="chatUIContainer" class="hidden" data-requires-chat="true">
+    <!-- Chat UI will be injected here when needed -->
+  </div>
+
+  <!-- Conditional UI elements -->
   <div id="sidebarActions" class="hidden" data-requires-chat="true"></div>
   <div id="chatUI" class="hidden" data-requires-chat="true"></div>
   <div id="noChatSelectedMessage" class="hidden" data-requires-chat="true">No chat selected</div>
   <div id="conversationArea" class="hidden" data-requires-chat="true"></div>
   <div id="chatTitle" class="hidden" data-requires-chat="true">Chat Title</div>
   <button id="newConversationBtn" class="hidden" data-requires-chat="true">New Conversation</button>
+
+  <!-- Knowledge Base components (loaded only when needed) -->
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
+  <!-- Core Utilities -->
+  <script type="module" src="/static/js/auth.js"></script>
+  <script type="module" src="/static/js/chat-utils.js"></script>
+  <script type="module" src="/static/js/eventHandler.js"></script>
+  <script type="module" src="/static/js/notification-handler.js"></script>
+  <script type="module" src="/static/js/modelConfig.js"></script>
+
+  <!-- UI Framework -->
+  <script type="module" src="/static/js/chat-ui.js"></script>
+  <script type="module" src="/static/js/uiRenderer.js"></script>
+  <script type="module" src="/static/js/projectListComponent.js"></script>
+  <script type="module" src="/static/js/projectDetailsComponent.js"></script>
+  <script type="module" src="/static/js/projectDashboard.js"></script>
+  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
+
+  <!-- UI Components -->
+  <script type="module" src="/static/js/sidebar.js"></script>
+  <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
+  <script type="module" src="/static/js/projectModal.js"></script>
+
+  <!-- Application Logic -->
+  <script type="module" src="/static/js/projectManager.js"></script>
+
+  <!-- Theme toggle functionality -->
+  <script src="/static/js/theme-toggle.js"></script>
+
+  <!-- Main Application (load last) -->
+  <script type="module" src="/static/js/app.js"></script>
+
+  <!-- Integration script for dynamic content loading -->
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Initialize auth first to ensure login state is available
+      if (window.auth && typeof window.auth.init === 'function') {
+        try {
+          await window.auth.init();
+          console.log("Authentication initialized");
+        } catch (err) {
+          console.error("Authentication initialization failed:", err);
+        }
+      }
+
+      // Wait a short time for auth to be fully processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Reset template tracker
+      if (window.templateLoadTracker) {
+        window.templateLoadTracker.reset();
+      }
+
+      // Load HTML content parallel but wait for all before initialization
+      const htmlPromises = [
+        fetch('/static/html/project_list.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('projectListView').innerHTML = html;
+            // Mark template as loaded
+            if (window.templateLoadTracker) {
+              window.templateLoadTracker.markLoaded('project_list.html');
+            }
+          }).catch(err => console.error('Failed to load project_list.html:', err)),
+
+        fetch('/static/html/project_details.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('projectDetailsView').innerHTML = html;
+            // Mark template as loaded
+            if (window.templateLoadTracker) {
+              window.templateLoadTracker.markLoaded('project_details.html');
+            }
+          }).catch(err => console.error('Failed to load project_details.html:', err)),
+
+        fetch('/static/html/modals.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('modalsContainer').innerHTML = html;
+            document.getElementById('modalsContainer').classList.remove('hidden');
+            // Mark template as loaded
+            if (window.templateLoadTracker) {
+              window.templateLoadTracker.markLoaded('modals.html');
+            }
+          }).catch(err => console.error('Failed to load modals.html:', err)),
+
+        fetch('/static/html/chat_ui.html').then(response => response.text())
+          .then(html => {
+            document.getElementById('chatUIContainer').innerHTML = html;
+            document.getElementById('chatUIContainer').classList.remove('hidden');
+          }).catch(err => console.error('Failed to load chat_ui.html:', err))
+      ];
+
+      // Wait for all HTML content to load
+      await Promise.all(htmlPromises);
+
+      // Set a flag to indicate DOM is updated with templates
+      window.templatesLoadedInDOM = true;
+      console.log("[TemplateLoader] All template HTML has been loaded into DOM");
+
+      // Initialize modals if needed
+      if (window.initProjectModal) window.initProjectModal();
+
+      // Wait for DOM to be updated with templates before initializing app
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Initialize app with increased timeouts
+      if (window.appInitializer?.initialize) {
+        try {
+          await window.appInitializer.initialize();
+          console.log("App initialization complete");
+        } catch (err) {
+          console.error("App initialization failed:", err);
+        }
+      }
+    });
+  </script>
 
   <script>
-    // Auth tab switching functionality
-    function switchAuthTab(tab) {
-      const loginTab = document.getElementById('loginTab');
-      const registerTab = document.getElementById('registerTab');
-      const loginForm = document.getElementById('loginForm');
-      const registerForm = document.getElementById('registerForm');
-
-      if (tab === 'login') {
-        loginTab.classList.add('border-b-2', 'border-primary', 'text-primary');
-        loginTab.classList.remove('text-base-content/60');
-        registerTab.classList.remove('border-b-2', 'border-primary', 'text-primary');
-        registerTab.classList.add('text-base-content/60');
-        loginForm.classList.remove('hidden');
-        registerForm.classList.add('hidden');
-        
-        // Update ARIA attributes
-        loginTab.setAttribute('aria-selected', 'true');
-        registerTab.setAttribute('aria-selected', 'false');
-        loginTab.tabIndex = 0;
-        registerTab.tabIndex = -1;
-      } else {
-        registerTab.classList.add('border-b-2', 'border-primary', 'text-primary');
-        registerTab.classList.remove('text-base-content/60');
-        loginTab.classList.remove('border-b-2', 'border-primary', 'text-primary');
-        loginTab.classList.add('text-base-content/60');
-        registerForm.classList.remove('hidden');
-        loginForm.classList.add('hidden');
-        
-        // Update ARIA attributes
-        registerTab.setAttribute('aria-selected', 'true');
-        loginTab.setAttribute('aria-selected', 'false');
-        registerTab.tabIndex = 0;
-        loginTab.tabIndex = -1;
+    // Global safety - Ensure dashboard is available after 10 seconds max
+    setTimeout(() => {
+      if (!window.projectDashboardInitialized && !window.dashboardUtilsReady) {
+        console.warn('Dashboard not initialized after timeout, triggering fallback');
+        window.dashboardUtilsReady = true;
+        document.dispatchEvent(new CustomEvent('dashboardUtilsReady'));
+        document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
       }
-    }
+    }, 10000);
+  </script>
 
-    function validatePassword(password) {
-      if (password.length < 12) {
-        return {valid: false, message: "Password must be at least 12 characters"};
-      }
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('[Initialization] DOM content loaded, initializing components...');
 
-      const hasUpper = /[A-Z]/.test(password);
-      const hasLower = /[a-z]/.test(password);
-      const hasNumber = /\d/.test(password);
-      const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+      // Safety delay to ensure all elements are available
+      setTimeout(() => {
+        // Initialize auth dropdown positioning with JavaScript
+        const authDropdowns = document.querySelectorAll('.auth-dropdown-adjusted');
+        authDropdowns.forEach(dropdown => {
+          const button = dropdown.previousElementSibling;
+          if (button) {
+            dropdown.style.top = (button.offsetTop + button.offsetHeight + 5) + 'px';
+            dropdown.style.right = '1rem';
+          }
+        });
 
-      if (!hasUpper) {
-        return {valid: false, message: "Password must contain an uppercase letter"};
-      }
-      if (!hasLower) {
-        return {valid: false, message: "Password must contain a lowercase letter"};
-      }
-      if (!hasNumber) {
-        return {valid: false, message: "Password must contain a number"};
-      }
-      if (!hasSpecial) {
-        return {valid: false, message: "Password must contain a special character"};
-      }
+        // Initialize component controllers
+        if (window.initProjectModal) window.initProjectModal();
+        if (window.initProjectDashboard) window.initProjectDashboard();
 
-      return {valid: true};
-    }
-
-    async function handleRegister(e) {
-      e.preventDefault();
-      const form = e.target;
-      const username = form.querySelector('input[name="username"]').value.trim();
-      const password = form.querySelector('input[name="password"]').value;
-
-      if (!username || !password) {
-        window.showNotification?.('Username and password are required', 'error');
-        return false;
-      }
-
-      const validation = validatePassword(password);
-      if (!validation.valid) {
-        window.showNotification?.(validation.message, 'error');
-        return false;
-      }
-
-      try {
-        const response = await window.auth.register(new FormData(form));
-        window.showNotification?.('Registration successful', 'success');
-        switchAuthTab('login');
-      } catch (error) {
-        window.showNotification?.(error.message || 'Registration failed', 'error');
-      }
-      return false;
-    }
+        // Dispatch central "ready" event for all components to listen for
+        console.log('[Initialization] Dispatching appJsReady event');
+        document.dispatchEvent(new CustomEvent('appJsReady'));
+      }, 300);
+    });
   </script>
 </body>
 </html>
