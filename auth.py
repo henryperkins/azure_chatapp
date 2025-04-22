@@ -469,6 +469,7 @@ DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 async def refresh_token(
     request: Request, response: Response, session: DBSessionDep
 ) -> LoginResponse:
+    logger.debug(f"Received refresh request with cookies: {request.cookies}")
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
         logger.debug("No refresh token cookie found during refresh.")
@@ -505,6 +506,12 @@ async def refresh_token(
 
         if locked_user.token_version is None:
             locked_user.token_version = 0
+
+        logger.debug(
+            "Decoded token version: %s, User token_version: %s",
+            decoded.get("version", 0),
+            locked_user.token_version,
+        )
 
         if decoded.get("version", 0) != locked_user.token_version:
             logger.warning("Token version mismatch for '%s'", locked_user.username)

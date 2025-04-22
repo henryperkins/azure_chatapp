@@ -1,19 +1,16 @@
-/**
- * eventHandler.js
- * A centralized event management system for tracking,
- * delegating, and cleaning up event listeners
- */
+// eventHandler.js
+// A centralized event management system for tracking, delegating, and cleaning up event listeners
 
 // Set of tracked event listeners for cleanup
 const trackedListeners = new Set();
 
 // Event priority levels
 const PRIORITY = {
-    CRITICAL: 1,
-    HIGH: 3,
-    NORMAL: 5,
-    LOW: 7,
-    BACKGROUND: 9
+  CRITICAL: 1,
+  HIGH: 3,
+  NORMAL: 5,
+  LOW: 7,
+  BACKGROUND: 9
 };
 
 /**
@@ -24,66 +21,66 @@ const PRIORITY = {
  * @param {Object} options - Additional options including passive, capture, etc.
  */
 function trackListener(element, type, handler, options = {}) {
-    if (!element) return;
+  if (!element) return;
 
-    // Set appropriate defaults for passive option
-    let usePassive = options.passive;
-    if (usePassive === undefined) {
-        // Events that typically need preventDefault()
-        const nonPassiveEvents = ['submit', 'wheel', 'touchstart', 'touchmove'];
-        usePassive = !nonPassiveEvents.includes(type);
+  // Set appropriate defaults for passive option
+  let usePassive = options.passive;
+  if (usePassive === undefined) {
+    // Events that typically need preventDefault()
+    const nonPassiveEvents = ['submit', 'wheel', 'touchstart', 'touchmove'];
+    usePassive = !nonPassiveEvents.includes(type);
+  }
+
+  const finalOptions = {
+    ...options,
+    passive: usePassive
+  };
+
+  // Create wrapped handler with error handling
+  const wrappedHandler = async function (event) {
+    try {
+      const startTime = performance.now();
+
+      // Handle potential async handlers
+      const result = handler.call(this, event);
+      if (result && typeof result.then === 'function') {
+        await result; // Wait for async handlers
+      }
+
+      const duration = performance.now() - startTime;
+      // Higher threshold for submit events since they often involve network calls
+      const threshold = type === 'submit' ? 500 : 100;
+      if (duration > threshold) {
+        console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+      }
+    } catch (error) {
+      console.error(`Error in ${type} event handler:`, error);
+      if (
+        error.name === 'TypeError' &&
+        error.message.includes('passive') &&
+        finalOptions.passive
+      ) {
+        console.warn(`preventDefault() called on a passive ${type} listener`);
+      }
+      throw error; // Re-throw to maintain behavior
     }
+  };
 
-    const finalOptions = {
-        ...options,
-        passive: usePassive
-    };
+  // Add the listener
+  element.addEventListener(type, wrappedHandler, finalOptions);
 
-    // Create wrapped handler with error handling
-    const wrappedHandler = async function (event) {
-        try {
-            const startTime = performance.now();
+  // Store for later cleanup
+  trackedListeners.add({
+    element,
+    type,
+    handler: wrappedHandler,
+    options: finalOptions,
+    originalHandler: handler,
+    description: options.description || '',
+    priority: options.priority || PRIORITY.NORMAL
+  });
 
-            // Handle potential async handlers
-            const result = handler.call(this, event);
-            if (result && typeof result.then === 'function') {
-                await result; // Wait for async handlers
-            }
-
-            const duration = performance.now() - startTime;
-            // Higher threshold for submit events since they often involve network calls
-            const threshold = type === 'submit' ? 500 : 100;
-            if (duration > threshold) {
-                console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
-            }
-        } catch (error) {
-            console.error(`Error in ${type} event handler:`, error);
-            if (
-                error.name === 'TypeError' &&
-                error.message.includes('passive') &&
-                finalOptions.passive
-            ) {
-                console.warn(`preventDefault() called on a passive ${type} listener`);
-            }
-            throw error; // Re-throw to maintain behavior
-        }
-    };
-
-    // Add the listener
-    element.addEventListener(type, wrappedHandler, finalOptions);
-
-    // Store for later cleanup
-    trackedListeners.add({
-        element,
-        type,
-        handler: wrappedHandler,
-        options: finalOptions,
-        originalHandler: handler,
-        description: options.description || '',
-        priority: options.priority || PRIORITY.NORMAL
-    });
-
-    return wrappedHandler;
+  return wrappedHandler;
 }
 
 /**
@@ -92,28 +89,28 @@ function trackListener(element, type, handler, options = {}) {
  * @param {string} [targetType] - Optional event type to limit cleanup to
  */
 function cleanupListeners(targetElement, targetType) {
-    const listenersToRemove = new Set();
-    trackedListeners.forEach(listener => {
-        const elementMatches = !targetElement || listener.element === targetElement;
-        const typeMatches = !targetType || listener.type === targetType;
-        if (elementMatches && typeMatches) {
-            listenersToRemove.add(listener);
-        }
-    });
+  const listenersToRemove = new Set();
+  trackedListeners.forEach(listener => {
+    const elementMatches = !targetElement || listener.element === targetElement;
+    const typeMatches = !targetType || listener.type === targetType;
+    if (elementMatches && typeMatches) {
+      listenersToRemove.add(listener);
+    }
+  });
 
-    // Remove the matched listeners
-    listenersToRemove.forEach(listener => {
-        try {
-            listener.element.removeEventListener(
-                listener.type,
-                listener.handler,
-                listener.options
-            );
-            trackedListeners.delete(listener);
-        } catch (error) {
-            console.warn(`Error removing ${listener.type} listener:`, error);
-        }
-    });
+  // Remove the matched listeners
+  listenersToRemove.forEach(listener => {
+    try {
+      listener.element.removeEventListener(
+        listener.type,
+        listener.handler,
+        listener.options
+      );
+      trackedListeners.delete(listener);
+    } catch (error) {
+      console.warn(`Error removing ${listener.type} listener:`, error);
+    }
+  });
 }
 
 /**
@@ -123,13 +120,13 @@ function cleanupListeners(targetElement, targetType) {
  * @returns {Function} Debounced function
  */
 function debounce(func, wait = 250) {
-    let timeout;
-    return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => {
-            func.apply(this, args);
-        }, wait);
-    };
+  let timeout;
+  return function (...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func.apply(this, args);
+    }, wait);
+  };
 }
 
 /**
@@ -141,19 +138,19 @@ function debounce(func, wait = 250) {
  * @param {Object} options - Event listener options
  */
 function delegate(container, eventType, selector, handler, options = {}) {
-    if (!container) return;
+  if (!container) return;
 
-    const delegatedHandler = function (event) {
-        const target = event.target.closest(selector);
-        if (target) {
-            try {
-                handler.call(target, event, target);
-            } catch (error) {
-                console.error(`Error in delegated ${eventType} handler for ${selector}:`, error);
-            }
-        }
-    };
-    return trackListener(container, eventType, delegatedHandler, options);
+  const delegatedHandler = function (event) {
+    const target = event.target.closest(selector);
+    if (target) {
+      try {
+        handler.call(target, event, target);
+      } catch (error) {
+        console.error(`Error in delegated ${eventType} handler for ${selector}:`, error);
+      }
+    }
+  };
+  return trackListener(container, eventType, delegatedHandler, options);
 }
 
 /**
@@ -162,504 +159,525 @@ function delegate(container, eventType, selector, handler, options = {}) {
  * @param {boolean} show - Whether to show the element
  */
 function toggleVisible(element, show) {
-    if (typeof element === 'string') {
-        document.querySelectorAll(element).forEach(el => {
-            el.classList.toggle('hidden', !show);
-        });
-    } else if (element) {
-        element.classList.toggle('hidden', !show);
-    }
+  if (typeof element === 'string') {
+    document.querySelectorAll(element).forEach(el => {
+      el.classList.toggle('hidden', !show);
+    });
+  } else if (element) {
+    element.classList.toggle('hidden', !show);
+  }
 }
 
 /**
  * Set up a collapsible section
  */
 function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
-    const toggleButton = document.getElementById(toggleId);
-    const panel = document.getElementById(panelId);
-    const chevron = chevronId ? document.getElementById(chevronId) : null;
+  const toggleButton = document.getElementById(toggleId);
+  const panel = document.getElementById(panelId);
+  const chevron = chevronId ? document.getElementById(chevronId) : null;
 
-    if (!toggleButton || !panel) return;
+  if (!toggleButton || !panel) return;
 
-    toggleButton.setAttribute('role', 'button');
-    toggleButton.setAttribute('aria-controls', panelId);
-    toggleButton.setAttribute('aria-expanded', 'false');
+  toggleButton.setAttribute('role', 'button');
+  toggleButton.setAttribute('aria-controls', panelId);
+  toggleButton.setAttribute('aria-expanded', 'false');
 
-    const togglePanel = (expand) => {
-        panel.classList.toggle('hidden', !expand);
-        if (chevron) {
-            chevron.style.transform = expand ? 'rotate(180deg)' : 'rotate(0deg)';
-        }
-        toggleButton.setAttribute('aria-expanded', expand ? 'true' : 'false');
-        if (expand && typeof onExpand === 'function') {
-            onExpand();
-        }
-        if (toggleId) {
-            localStorage.setItem(`${toggleId}_expanded`, expand ? 'true' : 'false');
-        }
-    };
+  const togglePanel = (expand) => {
+    panel.classList.toggle('hidden', !expand);
+    if (chevron) {
+      chevron.style.transform = expand ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+    toggleButton.setAttribute('aria-expanded', expand ? 'true' : 'false');
+    if (expand && typeof onExpand === 'function') {
+      onExpand();
+    }
+    if (toggleId) {
+      localStorage.setItem(`${toggleId}_expanded`, expand ? 'true' : 'false');
+    }
+  };
 
-    const savedState = localStorage.getItem(`${toggleId}_expanded`);
-    const initialExpand = savedState === 'true';
-    togglePanel(initialExpand);
+  const savedState = localStorage.getItem(`${toggleId}_expanded`);
+  const initialExpand = savedState === 'true';
+  togglePanel(initialExpand);
 
-    trackListener(toggleButton, 'click', () => {
-        const isCurrentlyExpanded = toggleButton.getAttribute('aria-expanded') === 'true';
-        togglePanel(!isCurrentlyExpanded);
-    });
+  trackListener(toggleButton, 'click', () => {
+    const isCurrentlyExpanded = toggleButton.getAttribute('aria-expanded') === 'true';
+    togglePanel(!isCurrentlyExpanded);
+  });
 }
 
 /**
  * Set up a modal with standardized behavior
  */
 function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
-    const modal = document.getElementById(modalId);
-    const openBtn = document.getElementById(openBtnId);
-    const closeBtn = document.getElementById(closeBtnId);
+  const modal = document.getElementById(modalId);
+  const openBtn = document.getElementById(openBtnId);
+  const closeBtn = document.getElementById(closeBtnId);
 
-    if (!modal) return;
+  if (!modal) return;
 
-    const open = () => {
-        if (typeof onOpen === 'function') {
-            onOpen(modal);
-        }
-        if (typeof modal.showModal === 'function') {
-            modal.showModal();
-        } else {
-            modal.classList.remove('hidden');
-            modal.setAttribute('open', 'true');
-        }
-    };
-
-    const close = () => {
-        if (typeof modal.close === 'function') {
-            modal.close();
-        } else {
-            modal.classList.add('hidden');
-            modal.removeAttribute('open');
-        }
-        if (typeof onClose === 'function') {
-            onClose(modal);
-        }
-    };
-
-    if (openBtn) {
-        trackListener(openBtn, 'click', open);
+  const open = () => {
+    if (typeof onOpen === 'function') {
+      onOpen(modal);
     }
-    if (closeBtn) {
-        trackListener(closeBtn, 'click', close);
+    if (typeof modal.showModal === 'function') {
+      modal.showModal();
+    } else {
+      modal.classList.remove('hidden');
+      modal.setAttribute('open', 'true');
     }
-    trackListener(modal, 'keydown', (e) => {
-        if (e.key === 'Escape') {
-            close();
-        }
-    });
-    trackListener(modal, 'click', (e) => {
-        if (e.target === modal) {
-            close();
-        }
-    });
+  };
 
-    return { open, close };
+  const close = () => {
+    if (typeof modal.close === 'function') {
+      modal.close();
+    } else {
+      modal.classList.add('hidden');
+      modal.removeAttribute('open');
+    }
+    if (typeof onClose === 'function') {
+      onClose(modal);
+    }
+  };
+
+  if (openBtn) {
+    trackListener(openBtn, 'click', open);
+  }
+  if (closeBtn) {
+    trackListener(closeBtn, 'click', close);
+  }
+  trackListener(modal, 'keydown', (e) => {
+    if (e.key === 'Escape') {
+      close();
+    }
+  });
+  trackListener(modal, 'click', (e) => {
+    if (e.target === modal) {
+      close();
+    }
+  });
+
+  return { open, close };
 }
 
 /**
  * Handle form submission with standardized error handling
  */
 function setupForm(formId, submitHandler, options = {}) {
-    const form = document.getElementById(formId);
-    if (!form) return;
+  const form = document.getElementById(formId);
+  if (!form) return;
 
-    const {
-        validateBeforeSubmit = true,
-        showLoadingState = true,
-        resetOnSuccess = true
-    } = options;
+  const {
+    validateBeforeSubmit = true,
+    showLoadingState = true,
+    resetOnSuccess = true
+  } = options;
 
-    trackListener(form, 'submit', async (e) => {
-        e.preventDefault();
+  trackListener(form, 'submit', async (e) => {
+    e.preventDefault();
 
-        if (form.classList.contains('submitting')) {
-            return;
+    if (form.classList.contains('submitting')) {
+      return;
+    }
+    if (validateBeforeSubmit && typeof form.checkValidity === 'function') {
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+    }
+    if (showLoadingState) {
+      form.classList.add('submitting');
+      const submitBtn = form.querySelector('[type=\"submit\"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Submitting...';
+      }
+    }
+
+    try {
+      const formData = new FormData(form);
+      await submitHandler(formData, form);
+
+      if (resetOnSuccess) {
+        form.reset();
+      }
+    } catch (error) {
+      console.error('Form submission error:', error);
+      if (options.onError) {
+        options.onError(error);
+      } else if (window.app?.showNotification) {
+        window.app.showNotification(
+          error.message || 'Form submission failed',
+          'error'
+        );
+      }
+    } finally {
+      if (showLoadingState) {
+        form.classList.remove('submitting');
+        const submitBtn = form.querySelector('[type=\"submit\"]');
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          if (submitBtn.dataset.originalText) {
+            submitBtn.textContent = submitBtn.dataset.originalText;
+          }
         }
-        if (validateBeforeSubmit && typeof form.checkValidity === 'function') {
-            if (!form.checkValidity()) {
-                form.reportValidity();
-                return;
-            }
-        }
-        if (showLoadingState) {
-            form.classList.add('submitting');
-            const submitBtn = form.querySelector('[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.dataset.originalText = submitBtn.textContent;
-                submitBtn.textContent = 'Submitting...';
-            }
-        }
-
-        try {
-            const formData = new FormData(form);
-            await submitHandler(formData, form);
-
-            if (resetOnSuccess) {
-                form.reset();
-            }
-        } catch (error) {
-            console.error('Form submission error:', error);
-            if (options.onError) {
-                options.onError(error);
-            } else if (window.app?.showNotification) {
-                window.app.showNotification(
-                    error.message || 'Form submission failed',
-                    'error'
-                );
-            }
-        } finally {
-            if (showLoadingState) {
-                form.classList.remove('submitting');
-                const submitBtn = form.querySelector('[type="submit"]');
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    if (submitBtn.dataset.originalText) {
-                        submitBtn.textContent = submitBtn.dataset.originalText;
-                    }
-                }
-            }
-        }
-    }, { passive: false });
+      }
+    }
+  }, { passive: false });
 }
 
 /**
  * Internal helper to retry the init process multiple times if needed.
  */
 async function attemptInit(retries = 0) {
-    const maxRetries = 5;
-    // Wait until DOM is at least ready
-    if (document.readyState === 'loading') {
-        if (retries < maxRetries) {
-            console.log('[eventHandler] DOM not fully loaded, retrying in 300ms...');
-            setTimeout(() => attemptInit(retries + 1), 300);
-            return;
-        } else {
-            console.warn('[eventHandler] DOM not ready after multiple attempts');
-            return;
-        }
+  const maxRetries = 5;
+  // Wait until DOM is at least ready
+  if (document.readyState === 'loading') {
+    if (retries < maxRetries) {
+      console.log('[eventHandler] DOM not fully loaded, retrying in 300ms...');
+      setTimeout(() => attemptInit(retries + 1), 300);
+      return;
+    } else {
+      console.warn('[eventHandler] DOM not ready after multiple attempts');
+      return;
     }
+  }
 
-    // Clean up existing listeners to avoid duplicates
-    cleanupListeners();
+  // Clean up existing listeners to avoid duplicates
+  cleanupListeners();
 
-    // Set up any global event logic here, if needed
-    if (window.auth?.AuthBus) {
-        window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
-        window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
-    }
+  // Set up any global event logic here, if needed
+  if (window.auth?.AuthBus) {
+    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+    window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
+  }
 
-    // Set up global key bindings
-    trackListener(document, 'keydown', handleKeyDown);
+  // Set up global key bindings
+  trackListener(document, 'keydown', handleKeyDown);
 
-    // Set up navigation
-    setupNavigation();
+  // Set up navigation
+  setupNavigation();
 
-    // Set up common UI elements
-    setupCommonElements();
+  // Set up common UI elements
+  setupCommonElements();
 
-    console.log('[eventHandler] Initialization complete.');
+  console.log('[eventHandler] Initialization complete.');
 }
 
 /**
  * Initialize all event handlers
  */
 function init() {
-    attemptInit();
+  attemptInit();
 }
 
 /**
  * Handle auth state changes
  */
 function handleAuthStateChange(event) {
-    const { authenticated } = event.detail || {};
+  const { authenticated } = event.detail || {};
 
-    if (authenticated) {
-        toggleVisible('#authButton', false);
-        toggleVisible('#userMenu', true);
-        toggleVisible('#loginRequiredMessage', false);
+  if (authenticated) {
+    toggleVisible('#authButton', false);
+    toggleVisible('#userMenu', true);
+    toggleVisible('#loginRequiredMessage', false);
 
-        // Show project content when authenticated
-        const projectListView = document.getElementById('projectListView');
-        if (projectListView) {
-            projectListView.classList.remove('opacity-0');
-        }
-    } else {
-        toggleVisible('#authButton', true);
-        toggleVisible('#userMenu', false);
-        toggleVisible('#loginRequiredMessage', true);
-        toggleVisible('#globalChatUI', false);
-
-        // Hide project content when not authenticated
-        const projectListView = document.getElementById('projectListView');
-        if (projectListView) {
-            projectListView.classList.add('opacity-0');
-        }
+    // Show project content when authenticated
+    const projectListView = document.getElementById('projectListView');
+    if (projectListView) {
+      projectListView.classList.remove('opacity-0');
     }
+  } else {
+    toggleVisible('#authButton', true);
+    toggleVisible('#userMenu', false);
+    toggleVisible('#loginRequiredMessage', true);
+    toggleVisible('#globalChatUI', false);
+
+    // Hide project content when not authenticated
+    const projectListView = document.getElementById('projectListView');
+    if (projectListView) {
+      projectListView.classList.add('opacity-0');
+    }
+  }
 }
 
 /**
  * Handle backend unavailable events
  */
 function handleBackendUnavailable(event) {
-    const { reason } = event.detail || {};
-    const message = `Backend service unavailable: ${reason || 'unknown reason'}. Will retry later.`;
-    if (window.app?.showNotification) {
-        window.app.showNotification(message, 'warning', 8000);
-    }
+  const { reason } = event.detail || {};
+  const message = `Backend service unavailable: ${reason || 'unknown reason'}. Will retry later.`;
+  if (window.app?.showNotification) {
+    window.app.showNotification(message, 'warning', 8000);
+  }
 }
 
 /**
  * Handle global keyboard shortcuts
  */
 function handleKeyDown(e) {
-    // Ctrl/Cmd + / => Show help
-    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault();
-        const helpModal = document.getElementById('helpModal');
-        if (helpModal && typeof helpModal.showModal === 'function') {
-            helpModal.showModal();
-        }
+  // Ctrl/Cmd + / => Show help
+  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    e.preventDefault();
+    const helpModal = document.getElementById('helpModal');
+    if (helpModal && typeof helpModal.showModal === 'function') {
+      helpModal.showModal();
     }
+  }
 
-    // Ctrl/Cmd + . => Toggle sidebar
-    if ((e.ctrlKey || e.metaKey) && e.key === '.') {
-        e.preventDefault();
-        if (window.sidebar) {
-            window.sidebar.toggle();
-        }
+  // Ctrl/Cmd + . => Toggle sidebar
+  if ((e.ctrlKey || e.metaKey) && e.key === '.') {
+    e.preventDefault();
+    if (window.sidebar) {
+      window.sidebar.toggle();
     }
+  }
 }
 
 /**
  * Set up navigation-related events
  */
 function setupNavigation() {
-    const backToProjectsBtn = document.getElementById('backToProjectsBtn');
-    if (backToProjectsBtn) {
-        trackListener(backToProjectsBtn, 'click', () => {
-            if (window.app?.showProjectListView) {
-                window.app.showProjectListView();
-            }
-        });
-    }
+  const backToProjectsBtn = document.getElementById('backToProjectsBtn');
+  if (backToProjectsBtn) {
+    trackListener(backToProjectsBtn, 'click', () => {
+      if (window.app?.showProjectListView) {
+        window.app.showProjectListView();
+      }
+    });
+  }
 
-    const newConversationBtn = document.getElementById('newConversationBtn');
-    if (newConversationBtn) {
-        trackListener(newConversationBtn, 'click', async () => {
-            try {
-                const isAuthenticated = window.auth?.isAuthenticated();
-                if (!isAuthenticated) {
-                    window.app?.showNotification('Please log in to create a conversation', 'error');
-                    return;
-                }
+  const newConversationBtn = document.getElementById('newConversationBtn');
+  if (newConversationBtn) {
+    trackListener(newConversationBtn, 'click', async () => {
+      try {
+        const isAuthenticated = window.auth?.isAuthenticated();
+        if (!isAuthenticated) {
+          window.app?.showNotification('Please log in to create a conversation', 'error');
+          return;
+        }
 
-                if (window.projectManager?.createConversation) {
-                    const projectId = window.app?.getProjectId();
-                    const conversation = await window.projectManager.createConversation(projectId);
-                    window.location.href = `/?chatId=${conversation.id}`;
-                }
-            } catch (error) {
-                console.error('Failed to create conversation:', error);
-                window.app?.showNotification('Failed to create conversation', 'error');
-            }
-        });
-    }
+        if (window.projectManager?.createConversation) {
+          const projectId = window.app?.getProjectId();
+          const conversation = await window.projectManager.createConversation(projectId);
+          window.location.href = `/?chatId=${conversation.id}`;
+        }
+      } catch (error) {
+        console.error('Failed to create conversation:', error);
+        window.app?.showNotification('Failed to create conversation', 'error');
+      }
+    });
+  }
 
-    const createProjectBtn = document.getElementById('createProjectBtn');
-    if (createProjectBtn) {
-        trackListener(createProjectBtn, 'click', () => {
-            if (window.modalManager?.show) {
-                window.modalManager.show('project');
-            }
-        });
-    }
+  const createProjectBtn = document.getElementById('createProjectBtn');
+  if (createProjectBtn) {
+    trackListener(createProjectBtn, 'click', () => {
+      if (window.modalManager?.show) {
+        window.modalManager.show('project');
+      }
+    });
+  }
 }
 
 /**
  * Set up common UI elements
  */
 function setupCommonElements() {
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        trackListener(logoutBtn, 'click', (e) => {
-            window.auth.logout(e).catch(err => {
-                console.error('Logout failed:', err);
-            });
-        }, { passive: false });
-    }
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    trackListener(logoutBtn, 'click', (e) => {
+      window.auth.logout(e).catch(err => {
+        console.error('Logout failed:', err);
+      });
+    }, { passive: false });
+  }
 
-    const authButton = document.getElementById('authButton');
-    const authDropdown = document.getElementById('authDropdown');
-    if (authButton && authDropdown) {
-        trackListener(authButton, 'click', (e) => {
-            e.stopPropagation();
-            const isExpanded = authDropdown.classList.toggle('hidden');
-            authButton.setAttribute('aria-expanded', !isExpanded);
-        });
+  const authButton = document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  if (authButton && authDropdown) {
+    trackListener(authButton, 'click', (e) => {
+      e.stopPropagation();
+      const isExpanded = authDropdown.classList.toggle('hidden');
+      authButton.setAttribute('aria-expanded', !isExpanded);
+    });
 
-        trackListener(document, 'click', (e) => {
-            if (!authDropdown.contains(e.target) && e.target !== authButton) {
-                authDropdown.classList.add('hidden');
-                authButton.setAttribute('aria-expanded', 'false');
+    trackListener(document, 'click', (e) => {
+      if (!authDropdown.contains(e.target) && e.target !== authButton) {
+        authDropdown.classList.add('hidden');
+        authButton.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  // Login form
+  if (document.getElementById('loginForm')) {
+    setupForm('loginForm', async (formData) => {
+      const username = formData.get('username');
+      const password = formData.get('password');
+      if (!username || !password) {
+        throw new Error('Username and password are required');
+      }
+
+      // Ensure window.auth and login method exist
+      if (!window.auth || typeof window.auth.login !== 'function') {
+        throw new Error('Authentication module not loaded. Cannot login.');
+      }
+
+      try {
+        // Login and get response
+        const response = await window.auth.login(username, password);
+        window.app?.showNotification('Login successful', 'success');
+
+        // Close auth dropdown
+        const authDropdown = document.getElementById('authDropdown');
+        if (authDropdown) {
+          authDropdown.classList.add('hidden');
+        }
+
+        // If we got a token back, ensure cookies are set before redirect
+        if (response && response.access_token) {
+          setTimeout(() => {
+            // Redirect to homepage if not already there
+            if (window.location.pathname !== '/') {
+              window.location.href = '/';
+            } else {
+              // Already on homepage, trigger a UI refresh
+              if (window.projectManager?.refreshProjects) {
+                window.projectManager.refreshProjects();
+              }
             }
-        });
-    }
+          }, 100);
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        let errorMsg = 'Login failed';
 
-    // Login form
-    if (document.getElementById('loginForm')) {
-        setupForm('loginForm', async (formData) => {
-            const username = formData.get('username');
-            const password = formData.get('password');
-            if (!username || !password) {
-                throw new Error('Username and password are required');
-            }
+        if (error.data && error.data.detail) {
+          errorMsg = error.data.detail;
+        } else if (error.message) {
+          errorMsg = error.message;
+        }
 
-            try {
-                // Login and get response
-                const response = await window.auth.login(username, password);
-                window.app?.showNotification('Login successful', 'success');
+        // Show error in form
+        const loginError = document.getElementById('login-error');
+        if (loginError) {
+          loginError.textContent = errorMsg;
+          loginError.classList.remove('hidden');
+        } else {
+          window.app?.showNotification(errorMsg, 'error');
+        }
 
-                // Close auth dropdown
-                const authDropdown = document.getElementById('authDropdown');
-                if (authDropdown) {
-                    authDropdown.classList.add('hidden');
-                }
+        throw error; // Re-throw to prevent form reset
+      }
+    }, {
+      resetOnSuccess: false
+    });
+  }
 
-                // If we got a token back, ensure cookies are set before redirect
-                if (response && response.access_token) {
-                    // Brief delay to ensure cookies are processed
-                    setTimeout(() => {
-                        // Redirect to homepage if not already there
-                        if (window.location.pathname !== '/') {
-                            window.location.href = '/';
-                        } else {
-                            // Already on homepage, trigger a UI refresh
-                            if (window.projectManager?.refreshProjects) {
-                                window.projectManager.refreshProjects();
-                            }
-                        }
-                    }, 100); // 100ms is sufficient for cookie processing
-                }
-            } catch (error) {
-                console.error('Login error:', error);
-                let errorMsg = 'Login failed';
+  // Register form
+  if (document.getElementById('registerForm')) {
+    setupForm('registerForm', async (formData) => {
+      const username = formData.get('username');
+      const password = formData.get('password');
+      if (!username || !password) {
+        throw new Error('Username and password are required');
+      }
 
-                if (error.data && error.data.detail) {
-                    errorMsg = error.data.detail;
-                } else if (error.message) {
-                    errorMsg = error.message;
-                }
+      // Ensure window.auth and register method exist
+      if (!window.auth || typeof window.auth.register !== 'function') {
+        throw new Error('Authentication module not loaded. Cannot register.');
+      }
 
-                // Show error in form
-                const loginError = document.getElementById('login-error');
-                if (loginError) {
-                    loginError.textContent = errorMsg;
-                    loginError.classList.remove('hidden');
-                } else {
-                    window.app?.showNotification(errorMsg, 'error');
-                }
+      try {
+        // Validate password requirements
+        const validation = validatePassword(password);
+        if (!validation.valid) {
+          throw new Error(validation.message);
+        }
 
-                throw error; // Re-throw to prevent form reset
-            }
-        }, {
-            resetOnSuccess: false // Don't reset on success since we're redirecting
-        });
-    }
+        // Register and get response
+        const response = await window.auth.register(formData);
+        window.app?.showNotification('Registration successful', 'success');
 
-    // Register form
-    if (document.getElementById('registerForm')) {
-        setupForm('registerForm', async (formData) => {
-            const username = formData.get('username');
-            const password = formData.get('password');
-            if (!username || !password) {
-                throw new Error('Username and password are required');
-            }
+        // Close auth dropdown
+        const authDropdown = document.getElementById('authDropdown');
+        if (authDropdown) {
+          authDropdown.classList.add('hidden');
+        }
 
-            try {
-                // Validate password requirements
-                const validation = validatePassword(password);
-                if (!validation.valid) {
-                    throw new Error(validation.message);
-                }
+        // If we got a token back, ensure cookies are set before redirect
+        if (response && response.access_token) {
+          setTimeout(() => {
+            // Redirect to homepage
+            window.location.href = '/';
+          }, 100);
+        } else {
+          // Switch to login tab if no auto-login
+          switchAuthTab('login');
+        }
+      } catch (error) {
+        console.error('Registration error:', error);
+        let errorMsg = 'Registration failed';
 
-                // Register and get response
-                const response = await window.auth.register(formData);
-                window.app?.showNotification('Registration successful', 'success');
+        if (error.data && error.data.detail) {
+          errorMsg = error.data.detail;
+        } else if (error.message) {
+          errorMsg = error.message;
+        }
 
-                // Close auth dropdown
-                const authDropdown = document.getElementById('authDropdown');
-                if (authDropdown) {
-                    authDropdown.classList.add('hidden');
-                }
+        window.app?.showNotification(errorMsg, 'error');
+        throw error; // Re-throw to prevent form reset
+      }
+    }, {
+      resetOnSuccess: false
+    });
+  }
+}
 
-                // If we got a token back, ensure cookies are set before redirect
-                if (response && response.access_token) {
-                    // Brief delay to ensure cookies are processed
-                    setTimeout(() => {
-                        // Redirect to homepage
-                        window.location.href = '/';
-                    }, 100); // 100ms is sufficient for cookie processing
-                } else {
-                    // Switch to login tab if no auto-login
-                    switchAuthTab('login');
-                }
-            } catch (error) {
-                console.error('Registration error:', error);
-                let errorMsg = 'Registration failed';
-
-                if (error.data && error.data.detail) {
-                    errorMsg = error.data.detail;
-                } else if (error.message) {
-                    errorMsg = error.message;
-                }
-
-                window.app?.showNotification(errorMsg, 'error');
-                throw error; // Re-throw to prevent form reset
-            }
-        }, {
-            resetOnSuccess: false // Don't reset on success since we're redirecting or switching tabs
-        });
-    }
+/**
+ * Validate password (dummy version, user can replace with actual checks)
+ */
+function validatePassword(password) {
+  if (password && password.length >= 3) {
+    return { valid: true };
+  }
+  return {
+    valid: false,
+    message: 'Password must be at least 3 characters long.'
+  };
 }
 
 // Export to window and as a module
 window.eventHandlers = {
-    trackListener,
-    cleanupListeners,
-    delegate,
-    debounce,
-    toggleVisible,
-    setupCollapsible,
-    setupModal,
-    setupForm,
-    init,
-    PRIORITY
+  trackListener,
+  cleanupListeners,
+  delegate,
+  debounce,
+  toggleVisible,
+  setupCollapsible,
+  setupModal,
+  setupForm,
+  init,
+  PRIORITY
 };
 
 // Register with DependencySystem when it becomes available
 if (window.DependencySystem) {
-    window.DependencySystem.register('eventHandlers', window.eventHandlers);
+  window.DependencySystem.register('eventHandlers', window.eventHandlers);
 } else {
-    // Wait for DependencySystem to be available
-    Object.defineProperty(window, 'DependencySystem', {
+  // Wait for DependencySystem to be available
+  Object.defineProperty(window, 'DependencySystem', {
+    configurable: true,
+    set: function(value) {
+      Object.defineProperty(window, 'DependencySystem', {
+        value: value,
         configurable: true,
-        set: function(value) {
-            Object.defineProperty(window, 'DependencySystem', {
-                value: value,
-                configurable: true,
-                writable: true
-            });
-            value.register('eventHandlers', window.eventHandlers);
-        }
-    });
+        writable: true
+      });
+      value.register('eventHandlers', window.eventHandlers);
+    }
+  });
 }
 
 export default window.eventHandlers;
