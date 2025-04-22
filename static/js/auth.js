@@ -153,8 +153,11 @@ function getCSRFToken() {
 async function authRequest(endpoint, method, body = null) {
   // Use global API request if available
   if (window.apiRequest && endpoint !== '/api/auth/csrf') {
+    console.log(`[Auth Debug] Using global apiRequest for ${endpoint}`);
     return await window.apiRequest(endpoint, method, body);
   }
+
+  console.log(`[Auth Debug] Using fallback request implementation for ${endpoint}`);
 
   // Fallback implementation
   const headers = {
@@ -183,9 +186,15 @@ async function authRequest(endpoint, method, body = null) {
   };
 
   if (body && !['GET', 'HEAD'].includes(method.toUpperCase())) {
-    options.body = body instanceof FormData ? body : JSON.stringify(body);
     if (body instanceof FormData) {
-      delete headers['Content-Type'];
+      // Convert FormData to JSON for API endpoints expecting JSON
+      const formDataObj = {};
+      body.forEach((value, key) => {
+        formDataObj[key] = value;
+      });
+      options.body = JSON.stringify(formDataObj);
+    } else {
+      options.body = JSON.stringify(body);
     }
   }
 
@@ -216,15 +225,18 @@ async function authRequest(endpoint, method, body = null) {
  */
 async function refreshTokens() {
   const now = Date.now();
+  console.log('[Auth Debug] Starting token refresh');
 
   // Handle cooldown period
   if (now < refreshCooldownUntil) {
     const remaining = Math.ceil((refreshCooldownUntil - now) / 1000);
+    console.log(`[Auth Debug] Token refresh in cooldown, ${remaining}s remaining`);
     throw new Error(`Token refresh cooldown: ${remaining}s remaining`);
   }
 
   // Handle concurrent refresh attempts
   if (tokenRefreshInProgress) {
+    console.log('[Auth Debug] Token refresh already in progress, waiting for result');
     return window.__tokenRefreshPromise;
   }
 
@@ -233,6 +245,16 @@ async function refreshTokens() {
   window.__tokenRefreshPromise = (async () => {
     try {
       await getCSRFTokenAsync();
+
+      // Debug cookie presence before refresh attempt
+      const refreshCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('refresh_token='));
+
+      console.log('[Auth Debug] Before refresh request:', {
+        refreshTokenCookieExists: !!refreshCookie,
+        refreshTokenLocalStorage: !!localStorage.getItem('refresh_token')
+      });
 
       const response = await authRequest('/api/auth/refresh', 'POST');
 
@@ -347,6 +369,14 @@ async function verifyAuthState(forceVerify = false) {
 
   try {
     await getCSRFTokenAsync();
+
+    // Debug: Log cookie information
+    console.log('[Auth Debug] Current cookies:', document.cookie);
+    console.log('[Auth Debug] Local storage tokens:', {
+      accessToken: !!localStorage.getItem('access_token'),
+      refreshToken: !!localStorage.getItem('refresh_token')
+    });
+
     const res = await authRequest('/api/auth/verify', 'GET', null, {
       timeout: AUTH_CONFIG.VERIFY_TIMEOUT
     });
@@ -422,11 +452,19 @@ function broadcastAuth(authenticated, username = null) {
  */
 async function loginUser(username, password) {
   try {
+    console.log('[Auth Debug] Starting login process for user:', username);
     await getCSRFTokenAsync();
 
+    console.log('[Auth Debug] Sending login request');
     const response = await authRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password
+    });
+
+    console.log('[Auth Debug] Login response received:', {
+      hasAccessToken: !!response.access_token,
+      hasRefreshToken: !!response.refresh_token,
+      username: response.username
     });
 
     // Store tokens in localStorage
@@ -494,6 +532,13 @@ async function logout(e) {
  */
 async function init() {
   try {
+    console.log('[Auth Debug] Initializing auth module...');
+    console.log('[Auth Debug] Environment:', {
+      hostname: window.location.hostname,
+      protocol: window.location.protocol,
+      isLocalDev: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    });
+
     // Load any persisted auth state from localStorage first
     loadPersistedAuthState();
 
@@ -558,18 +603,30 @@ async function registerUser(formData) {
   try {
     await getCSRFTokenAsync();
 
-    const data = formData instanceof FormData
-      ? {
+    // Normalize the input data regardless of how it's passed
+    let userData;
+
+    if (formData instanceof FormData) {
+      userData = {
         username: formData.get('username')?.trim(),
         password: formData.get('password')
-      }
-      : formData;
+      };
+    } else {
+      userData = {
+        username: formData.username?.trim(),
+        password: formData.password
+      };
+    }
 
-    if (!data.username || !data.password) {
+    if (!userData.username || !userData.password) {
       throw new Error('Username and password are required');
     }
 
-    const response = await authRequest('/api/auth/register', 'POST', data);
+    console.log('[Auth Debug] Sending registration request to /api/auth/register with username:', userData.username);
+
+    // Use the authRequest wrapper to handle CSRF and other headers
+    const response = await authRequest('/api/auth/register', 'POST', userData);
+    console.log('[Auth Debug] Registration response received');
 
     // If registration succeeded, store tokens
     if (response.access_token) {
@@ -588,6 +645,7 @@ async function registerUser(formData) {
 
     return response;
   } catch (error) {
+    console.error('[Auth] Registration error:', error);
     throw error;
   }
 }
