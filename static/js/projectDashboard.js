@@ -197,6 +197,8 @@ function setupEventListeners() {
   // Authentication state changes
   if (window.auth?.AuthBus) {
     window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+  } else {
+    console.error('[projectDashboard] window.auth.AuthBus is not available during setupEventListeners.');
   }
 
   // Project events
