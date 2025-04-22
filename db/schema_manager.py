@@ -140,12 +140,17 @@ class SchemaManager:
             # Add missing columns/indexes using proper async methods
             # ... (rest of schema alignment logic using async connections)
             
-            db_columns = {c["name"] for c in inspector.get_columns(table.name)}
-            for column in table.columns:
-                if column.name not in db_columns:
-                    logger.info(f"Adding column: {table.name}.{column.name}")
-                    self._add_column(conn, table.name, column)
 
+            inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
+            for table in Base.metadata.tables.values():
+                if not inspector.has_table(table.name):
+                    continue
+                db_columns = {c["name"] for c in inspector.get_columns(table.name)}
+                for column in table.columns:
+                    if column.name not in db_columns:
+                        logger.info(f"Adding column: {table.name}.{column.name}")
+                        self._add_column(conn, table.name, column)
+            
             # 3. Create missing indexes
             for table in Base.metadata.tables.values():
                 if not inspector.has_table(table.name):
