@@ -270,7 +270,7 @@
               projectSection.dataset.initialized = 'true';
               console.log('[sidebar] Project dashboard initialized via tab activation.');
               // Optionally reload projects
-              if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
+              if (window.auth?.isAuthenticated() && window.projectManager?.loadProjects) {
                 await window.projectManager.loadProjects('all');
               }
             }
