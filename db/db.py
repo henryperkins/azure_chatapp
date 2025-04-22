@@ -15,7 +15,28 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
 from config import settings
+import os
 import ssl
+
+# Add certificate validation
+def create_ssl_context() -> ssl.SSLContext:
+    """Create and validate SSL context with proper error handling"""
+    cert_path = "/home/azureuser/.postgresql/root.crt"
+    
+    if not os.path.exists(cert_path):
+        raise FileNotFoundError(f"Certificate file not found at {cert_path}")
+    
+    if os.path.getsize(cert_path) == 0:
+        raise ValueError("Certificate file is empty")
+    
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(cafile=cert_path)
+    
+    # Azure PostgreSQL requires these specific settings
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    
+    return context
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +51,7 @@ async_engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,
     connect_args={
-        "ssl": ssl.create_default_context(
-            cafile="/home/azureuser/.postgresql/root.crt"
-        )
+        "ssl": create_ssl_context()
     }
 )
 
@@ -51,9 +70,7 @@ sync_engine = create_engine(
     sync_url,
     pool_pre_ping=True,
     connect_args={
-        "ssl": ssl.create_default_context(
-            cafile="/home/azureuser/.postgresql/root.crt"
-        )
+        "ssl": create_ssl_context()
     }
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
