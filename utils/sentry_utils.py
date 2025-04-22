@@ -114,6 +114,8 @@ IGNORED_TRANSACTIONS = {
     "/favicon.ico",
     "/robots.txt",
     "/metrics",
+    "/api/auth/csrf",
+    "/api/auth/verify",
 }
 
 
@@ -138,16 +140,26 @@ def configure_sentry(
     Centralized Sentry configuration.
     """
     sentry_logging = LoggingIntegration(
-        level=logging.INFO,
+        level=logging.WARNING,  # Change from INFO to WARNING
         event_level=logging.ERROR,
     )
 
     sentry_sdk.init(
         dsn=dsn,
+        debug=False,  # ← Add this
         environment=environment,
         release=release,
         traces_sample_rate=traces_sample_rate,
-        integrations=[sentry_logging],
+        default_integrations=False,  # ← Disable auto-discovery
+        integrations=[
+            sentry_logging,
+            sentry_sdk.integrations.fastapi.FastApiIntegration(),
+            sentry_sdk.integrations.sqlalchemy.SqlalchemyIntegration(),
+            sentry_sdk.integrations.asyncio.AsyncioIntegration(),
+        ],
+        _experiments={
+            "profiles_sample_rate": 0.0  # Disable profiling
+        }
     )
 
     configure_sentry_loggers(additional_ignores)
@@ -377,10 +389,6 @@ def filter_sensitive_event(
                     psutil.Process().memory_info().rss / 1024 / 1024
                 )
 
-            # REMOVED: Calling _get_active_conversations_count() here is problematic
-            # due to sync/async issues with Sentry hooks and potential performance impact.
-            # if (count := _get_active_conversations_count()) is not None:
-            #    metrics["active_conversations"] = count
 
             if metrics:
                 event.setdefault("extra", {}).update(metrics)
