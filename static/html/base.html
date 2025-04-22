@@ -157,19 +157,29 @@
               </div>
 
               <!-- Login Form -->
-              <form id="loginForm" class="space-y-4">
+              <form id="loginForm" class="space-y-4" method="POST" action="/api/auth/login">
+                <input type="hidden" name="csrf_token" id="loginCsrfToken" value="">
                 <div class="form-control">
                   <label for="loginUsername" class="label">Username</label>
                   <input type="text" id="loginUsername" name="username" required
-                         class="input input-bordered w-full" />
+                         class="input input-bordered w-full" autocomplete="username" />
                 </div>
                 <div class="form-control">
                   <label for="loginPassword" class="label">Password</label>
                   <input type="password" id="loginPassword" name="password" required
-                         class="input input-bordered w-full" />
+                         class="input input-bordered w-full" autocomplete="current-password" />
                 </div>
                 <button type="submit" class="btn btn-primary w-full">Login</button>
               </form>
+              <script>
+                // Update CSRF token when form is shown
+                document.getElementById('authButton')?.addEventListener('click', async () => {
+                  const token = await window.auth?.getCSRFTokenAsync();
+                  if (token) {
+                    document.getElementById('loginCsrfToken').value = token;
+                  }
+                });
+              </script>
 
               <!-- Register Form -->
               <form id="registerForm" class="hidden space-y-4">
