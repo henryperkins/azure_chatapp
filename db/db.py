@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
 from config import settings
+import ssl
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,10 @@ DATABASE_URL = settings.DATABASE_URL
 async_engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args={
+        "ssl": ssl.create_default_context(cafile="/path/to/azure-db-ca.crt")
+    }
 )
 
 AsyncSessionLocal = async_sessionmaker(
