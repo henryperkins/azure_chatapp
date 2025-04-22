@@ -20,7 +20,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 # Database URL from config
-DATABASE_URL = settings.DATABASE_URL
+DATABASE_URL = settings.DATABASE_URL.replace("?sslmode=require", "") + "?ssl=disable"
 
 # ---------------------------------------------------------
 # Async engine/session: for normal runtime usage
@@ -28,7 +28,8 @@ DATABASE_URL = settings.DATABASE_URL
 async_engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args={"ssl": None}  # Explicitly disable SSL
 )
 
 AsyncSessionLocal = async_sessionmaker(
