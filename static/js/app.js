@@ -254,45 +254,63 @@ async function initApp() {
   appState.currentPhase = 'boot';
 
   if (document.readyState === 'loading') {
-    await new Promise((resolve) =>
-      document.addEventListener('DOMContentLoaded', resolve, { once: true })
-    );
+    await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve));
   }
 
   appState.currentPhase = 'dom_ready';
 
   try {
-    // Start the initialization sequence
-    await initializeComponents();
+    // Initialize core systems like event handlers first
+    await DependencySystem.waitFor('eventHandlers', (eventHandlers) => {
+      eventHandlers.init();
+      console.log('[App] Event handlers initialized');
+    }, APP_CONFIG.TIMEOUTS.COMPONENT_LOAD);
 
-    // Load initial data if authenticated
-    if (appState.isAuthenticated) {
-      console.log('[App] User authenticated, loading initial project data...');
-      try {
-        if (window.projectManagerAPI?.loadProjects) {
-          const currentFilter = localStorage.getItem('projectFilter') || 'all';
-          await window.projectManagerAPI.loadProjects(currentFilter);
-          console.log('[App] Initial project data loaded.');
-        }
-      } catch (error) {
-        console.error('[App] Error loading initial project data:', error);
-        showNotification('Failed to load initial project data', 'error');
+    // Initialize authentication
+    await DependencySystem.waitFor('auth', async (auth) => {
+      if (!auth.isReady()) {
+        await auth.init(); // Ensure auth init completes if not already done
       }
-    }
+      appState.isAuthenticated = auth.isAuthenticated();
+      console.log('[App] Auth module ready. Authenticated:', appState.isAuthenticated);
+    }, APP_CONFIG.TIMEOUTS.AUTH_CHECK);
 
-    // Perform initial navigation
-    await handleNavigationChange();
+    // Initialize Modal Manager after it's registered
+    DependencySystem.waitFor('modalManager', (modalManagerInstance) => {
+      if (window.initModalManager) {
+        window.initModalManager(); // Call the init function
+        console.log('[App] Modal Manager initialized via initModalManager.');
+      } else {
+        console.warn('[App] initModalManager function not found when trying to initialize Modal Manager.');
+      }
+    }, APP_CONFIG.TIMEOUTS.COMPONENT_LOAD);
+
+
+    // Initialize other components that register themselves
+    initializeComponents(); // This function might wait for other modules
+
+    // Handle initial navigation based on URL
+    handleNavigationChange();
     console.log('[App] Initial navigation handled.');
 
     // Register global listeners
     registerAppListeners();
     console.log('[App] Global listeners registered.');
 
-    return true;
+    appState.currentPhase = 'initialized';
+    appState.initialized = true;
+    console.log('[App] Initialization complete.');
+
   } catch (error) {
-    console.error('[App] Initialization failed:', error);
-    showNotification('Application failed to initialize. Please refresh.', 'error');
-    throw error;
+    handleInitError(error);
+  } finally {
+    appState.initializing = false;
+    // Hide loading indicator
+    const loadingDiv = document.getElementById('appLoading');
+    if (loadingDiv) {
+      loadingDiv.style.display = 'none';
+    }
+    document.dispatchEvent(new CustomEvent('appInitialized'));
   }
 }
 
