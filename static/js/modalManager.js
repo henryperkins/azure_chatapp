@@ -536,7 +536,8 @@ class ProjectModal {
     }
   }
 }
-
+const modalManager = new ModalManager();
+window.modalManager = modalManager;
 // Provide a global instance for the ProjectModal, or create on demand
 if (!window.projectModal) {
   window.projectModal = new ProjectModal();
