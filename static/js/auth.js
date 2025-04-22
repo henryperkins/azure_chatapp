@@ -1,8 +1,29 @@
 /**
  * auth.js - Core authentication module (Refactored Version)
  * Handles user authentication state based *solely* on backend HttpOnly cookies and verification.
- * Removes localStorage token handling and complex frontend caching.
+/**
+ * Dependencies:
+ * - window.apiRequest (optional external dependency, for API requests)
+ * - window.DependencySystem (optional external dependency, for module registration)
+ * - document (browser built-in, for cookie access and DOM manipulation)
+ * - fetch (browser built-in, for network requests)
+ * - EventTarget (browser built-in, for AuthBus event system)
  */
+
+// Browser APIs:
+// - document (cookie access)
+// - fetch (network requests)
+// - EventTarget (event system)
+// - setTimeout (timers)
+
+// External Dependencies (Global Scope):
+// - window.apiRequest (optional API request handler)
+// - window.DependencySystem (optional module registration system)
+
+// Optional Dependencies:
+// - Falls back to internal authRequest if window.apiRequest not available
+// - Gracefully handles missing DependencySystem
+
 
 // Configuration
 const AUTH_CONFIG = {

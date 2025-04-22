@@ -1,10 +1,38 @@
 /**
  * projectListComponent.js
  * Handles rendering and interaction with the project list UI.
- * Uses eventHandlers for all event binding and delegates data
- * operations to projectManager. Includes retry mechanisms to ensure
- * DOM elements are present before proceeding.
+ * Dependencies:
+ * - window.eventHandlers (external utility, for event management)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.modalManager (external dependency, for modal dialogs)
+ * - window.showNotification (external dependency, for notifications)
+ * - window.app (external dependency, for authentication state)
+ * - window.auth (external dependency, for auth events)
+ * - document (browser built-in, for DOM manipulation)
+ * - localStorage (browser built-in, for persistent state)
+ * - URL (browser built-in, for URL manipulation)
+ * - CustomEvent (browser built-in, for custom events)
  */
+
+// Browser APIs:
+// - document (DOM access)
+// - localStorage (state persistence)
+// - URL (URL parsing/manipulation)
+// - CustomEvent (event system)
+
+// External Dependencies (Global Scope):
+// - window.eventHandlers (event management)
+// - window.projectManager (project data operations)
+// - window.modalManager (modal management)
+// - window.showNotification (notification system)
+// - window.app (application state)
+// - window.auth (authentication system)
+
+// Optional Dependencies:
+// - Notification system falls back to console
+// - Modal system has fallback to native confirm
+// - Graceful degradation when components aren't available
+
 
 class ProjectListComponent {
   /**

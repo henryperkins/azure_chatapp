@@ -1,6 +1,9 @@
 /**
  * modelConfig.js - Lightweight model configuration manager
- * Handles model selection and settings without UI concerns
+ * Dependencies:
+ * - localStorage (browser built-in)
+ * - CustomEvent (browser built-in)
+ * - window.chatManager (external dependency, expected to be available in global scope)
  */
 
 const modelConfigState = {

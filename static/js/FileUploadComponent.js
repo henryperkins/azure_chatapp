@@ -1,7 +1,28 @@
 /**
  * FileUploadComponent.js
  * Handles file upload functionality for projects
+ * Dependencies:
+ * - window.eventHandlers (external utility, for event management)
+ * - window.projectManager (external dependency, for file upload operations)
+ * - window.showNotification (external dependency, for user feedback)
+ * - document (browser built-in, for DOM manipulation)
  */
+
+// Browser APIs:
+// - document (DOM access)
+// - File API (file handling)
+// - Event system (event listeners)
+
+// External Dependencies (Global Scope):
+// - window.eventHandlers (event management)
+// - window.projectManager (file upload operations)
+// - window.showNotification (user notifications)
+
+// Optional Dependencies:
+// - Gracefully handles missing projectManager
+// - Falls back to basic error logging if showNotification not available
+// - Uses eventHandlers if available, falls back to native events
+
 class FileUploadComponent {
   constructor(options = {}) {
     this.projectId = options.projectId || null;

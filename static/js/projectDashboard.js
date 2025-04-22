@@ -1,7 +1,40 @@
 /**
  * projectDashboard.js
  * Coordinates project dashboard components and state
+ * Dependencies:
+ * - window.auth (external dependency, for authentication)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.app (external dependency, for notifications and UI management)
+ * - window.ProjectListComponent (external component, for project list rendering)
+ * - window.ProjectDetailsComponent (external component, for project details rendering)
+ * - window.eventHandlers (external utility, for debouncing)
+ * - window.DependencySystem (external dependency, for module registration)
+ * - document (browser built-in, for DOM access)
+ * - fetch (browser built-in, for HTML loading)
+ * - URL, URLSearchParams (browser built-in, for URL handling)
+ * - CustomEvent (browser built-in, for custom events)
  */
+
+// Browser APIs:
+// - document (DOM manipulation)
+// - fetch (network requests)
+// - URL/URLSearchParams (URL parsing)
+// - CustomEvent (event system)
+// - requestAnimationFrame (performance optimization)
+
+// External Dependencies (Global Scope):
+// - window.auth (authentication system with AuthBus event emitter)
+// - window.projectManager (project data operations)
+// - window.app (notification system)
+// - window.ProjectListComponent (UI component)
+// - window.ProjectDetailsComponent (UI component)
+// - window.eventHandlers.debounce (utility function)
+// - window.DependencySystem (module registration)
+
+// Optional Dependencies:
+// - Components may be missing (handled with error checking)
+// - Auth system may not be ready (handled with waiting logic)
+// - Notification system fallback to console
 
 // Locally track our components and state
 const components = {

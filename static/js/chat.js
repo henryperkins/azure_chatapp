@@ -2,11 +2,37 @@
  * chat.js
  * A refactored chat module that handles conversation management, messaging,
  * and UI rendering for the chat system in a more standardized way:
- *  - Reliance on window.app.state.isAuthenticated instead of direct auth checks
- *  - Use of window.app.apiRequest for all server calls
- *  - Centralized event handling via window.eventHandlers.trackListener
- *  - Simplified error handling, removing direct references to window.auth where possible
+ * Dependencies:
+ * - window.app (external dependency, for state management and API requests)
+ * - window.auth (external dependency, for authentication checks)
+ * - window.modelConfig (external dependency, for model configuration)
+ * - window.eventHandlers (external utility, for event management)
+ * - window.formatText (optional external utility, for text formatting)
+ * - window.DependencySystem (external dependency, for module registration)
+ * - document (browser built-in, for DOM manipulation)
+ * - localStorage (browser built-in, for persistent state)
+ * - URL, URLSearchParams (browser built-in, for URL parsing)
  */
+
+// Browser APIs:
+// - document (DOM access)
+// - localStorage (state persistence)
+// - URL/URLSearchParams (URL parsing)
+// - Event system (event listeners)
+
+// External Dependencies (Global Scope):
+// - window.app (application core)
+// - window.auth (authentication system)
+// - window.modelConfig (model settings)
+// - window.eventHandlers (event management)
+// - window.formatText (optional text formatting)
+// - window.DependencySystem (module registration)
+
+// Optional Dependencies:
+// - Gracefully falls back if formatText not available
+// - Handles missing auth module
+// - Provides basic error handling if showNotification not available
+
 
 /**
  * Configuration - retains the local config for default model, tokens, etc.

@@ -1,8 +1,15 @@
 /**
  * projectManager.js
- * Handles all project-related data operations
- * Uses the central app.apiRequest for networking
+ * Dependencies:
+ * - window.app.apiRequest (external dependency, expected to be available in global scope)
+ * - window.auth (external dependency, expected to be available in global scope)
+ * - window.chatManager (external dependency, expected to be available in global scope)
+ * - window.DependencySystem (external dependency, used for module registration)
+ * - localStorage (browser built-in)
+ * - document (browser built-in, for CustomEvent dispatch)
+ * - FormData (browser built-in, for file uploads)
  */
+
 
 // Configuration
 const PROJECT_CONFIG = {
