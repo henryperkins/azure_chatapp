@@ -245,7 +245,7 @@ class ModalManager {
  * Provide an explicit init function to be called from app.js or similar:
  */
 function initModalManager() {
-  modalManager.init();
+  window.modalManager.init();
   console.log("[modalManager.js] Global modalManager instance is initialized.");
 }
 window.initModalManager = initModalManager;
