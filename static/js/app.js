@@ -91,47 +91,47 @@ const DependencySystem = {
     waitFor(names, callback, timeout = 5000) {
         const nameArray = Array.isArray(names) ? names : [names];
 
-        // Check if all modules are already available
-        const allAvailable = nameArray.every((m) => this.modules.has(m));
-        if (allAvailable) {
-            // If a callback is provided, invoke it synchronously
-            const resolvedInstances = nameArray.map((m) => this.modules.get(m));
-            if (callback) callback(...resolvedInstances);
-            return Promise.resolve(resolvedInstances);
+        // Check if already available
+        if (nameArray.every(name => this.modules.has(name))) {
+          const modules = nameArray.map(name => this.modules.get(name));
+          if (callback) {
+            callback(...modules);
+          }
+          return Promise.resolve(modules);
         }
 
-        // Otherwise, set up a Promise and a timeout to handle waiting
         return new Promise((resolve, reject) => {
-            const missing = new Set(nameArray.filter((n) => !this.modules.has(n)));
+          const missing = nameArray.filter(name => !this.modules.has(name));
+          let resolved = false;
 
-            // For each missing module, add a waiter callback
-            missing.forEach((modName) => {
-                if (!this.waiters.has(modName)) this.waiters.set(modName, []);
-                this.waiters.get(modName).push(() => {
-                    // Check if all missing modules are now resolved
-                    missing.delete(modName);
-                    if (missing.size === 0) {
-                        // All modules available
-                        const resolvedInstances = nameArray.map((n) => this.modules.get(n));
-                        if (callback) {
-                            try {
-                                callback(...resolvedInstances);
-                            } catch (err) {
-                                reject(err);
-                                return;
-                            }
-                        }
-                        resolve(resolvedInstances);
-                    }
-                });
+          // Setup timeout
+          const timeoutId = setTimeout(() => {
+            if (!resolved) {
+              console.warn(`[DependencySystem] Timeout waiting for: ${missing.join(', ')}`);
+              resolved = true;
+              // Resolve anyway instead of rejecting
+              resolve(nameArray.map(name => this.modules.get(name) || null));
+            }
+          }, timeout);
+
+          // Setup waiters
+          missing.forEach(name => {
+            if (!this.waiters.has(name)) {
+              this.waiters.set(name, []);
+            }
+
+            this.waiters.get(name).push(() => {
+              if (nameArray.every(n => this.modules.has(n)) && !resolved) {
+                clearTimeout(timeoutId);
+                resolved = true;
+                const modules = nameArray.map(n => this.modules.get(n));
+                if (callback) {
+                  callback(...modules);
+                }
+                resolve(modules);
+              }
             });
-
-            // Set an overall timeout
-            const timer = setTimeout(() => {
-                const stillMissing = Array.from(missing);
-                stillMissing.forEach((m) => this.states.set(m, 'error'));
-                reject(new Error(`[DependencySystem] Timeout waiting for module(s): ${stillMissing.join(', ')}`));
-            }, timeout);
+          });
         });
     }
 };
@@ -261,73 +261,88 @@ async function apiRequest(url, options = {}, skipCache = false) {
 // ---------------------------------------------------------------------
 // Main App Initialization
 // ---------------------------------------------------------------------
-async function initApp() {
-    console.log('[App] Starting initialization...');
-    appState.initializing = true;
-    appState.currentPhase = 'boot';
+async function init() {
+  if (window.projectDashboardInitialized) {
+    console.log('[App] Already initialized.');
+    return true;
+  }
 
-    // Ensure DOM is ready
-    if (document.readyState === 'loading') {
-        await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve));
+  try {
+    // Register app module immediately
+    window.app = {
+      apiRequest,
+      navigateToConversation,
+      showNotification,
+      state: appState,
+      initialize: init,
+      loadProjects,
+      getProjectId: () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('project') || localStorage.getItem('selectedProjectId');
+      },
+      // Example utility function
+      validateUUID: (uuid) => {
+        if (!uuid) return false;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(uuid);
+      }
+    };
+    DependencySystem.register('app', window.app);
+    console.log('[App] Registered app module');
+
+    // Continue with normal initialization
+    await initializeCoreSystems();
+    await initializeAuthSystem();
+    await initializeUIComponents();
+
+    // Finalize app state
+    appState.currentPhase = 'initialized';
+    appState.initialized = true;
+    console.log('[App] Initialization complete.');
+
+  } catch (error) {
+    handleInitError(error);
+  } finally {
+    // Cleanup
+    appState.initializing = false;
+    const loadingDiv = document.getElementById('appLoading');
+    if (loadingDiv) {
+      loadingDiv.style.display = 'none';
     }
-    appState.currentPhase = 'dom_ready';
-
-    try {
-        // 1. Initialize core systems (e.g. eventHandlers, modals, etc.)
-        await initializeCoreSystems();
-
-        // 2. Initialize auth system
-        await initializeAuthSystem();
-
-        // 3. Initialize any additional UI and handle initial navigation
-        await initializeUIComponents();
-
-        // Finalize app state
-        appState.currentPhase = 'initialized';
-        appState.initialized = true;
-        console.log('[App] Initialization complete.');
-
-    } catch (error) {
-        handleInitError(error);
-    } finally {
-        // Cleanup
-        appState.initializing = false;
-        const loadingDiv = document.getElementById('appLoading');
-        if (loadingDiv) {
-            loadingDiv.style.display = 'none';
-        }
-        document.dispatchEvent(new CustomEvent('appInitialized'));
-        console.log('[App] Initialization ended. Phase:', appState.currentPhase);
-    }
+    document.dispatchEvent(new CustomEvent('appInitialized'));
+    console.log('[App] Initialization ended. Phase:', appState.currentPhase);
+  }
 }
 
 /**
  * Initialize core systems (e.g., event handlers, modal manager)
  */
 async function initializeCoreSystems() {
-    // Wait for eventHandlers
-    await DependencySystem.waitFor('eventHandlers',
-        (eventHandlers) => {
-            if (typeof eventHandlers.init === 'function') {
-                eventHandlers.init();
-                console.log('[App] Event handlers initialized');
-            }
-        },
-        APP_CONFIG.TIMEOUTS.COMPONENT_LOAD
-    );
-    appState.currentPhase = 'event_handlers_ready';
+  // Wait for eventHandlers first
+  await DependencySystem.waitFor('eventHandlers', null, 5000);
+  appState.currentPhase = 'event_handlers_ready';
 
-    // Wait for modalManager
-    await DependencySystem.waitFor('modalManager',
-        (modalManager) => {
-            if (window.initModalManager) {
-                window.initModalManager(); // calls modalManager.init()
-                console.log('[App] Modal Manager initialized');
-            }
-        },
-        APP_CONFIG.TIMEOUTS.COMPONENT_LOAD
-    );
+  // Register app module early
+  DependencySystem.register('app', window.app);
+  console.log('[App] Registered app module');
+
+  // Initialize modalManager
+  if (!window.modalManager) {
+    console.warn('[App] modalManager not found, attempting to initialize...');
+    if (typeof window.initModalManager === 'function') {
+      window.initModalManager();
+    }
+  }
+
+  // Now wait for modalManager
+  try {
+    await DependencySystem.waitFor('modalManager', null, 5000);
+    console.log('[App] Modal manager initialized');
     appState.currentPhase = 'modals_ready';
+  } catch (error) {
+    console.warn('[App] Modal manager initialization timed out:', error);
+    // Continue anyway - modal functionality will be degraded but app can still work
+  }
 }
 
 /**
@@ -613,10 +628,10 @@ function cleanupInitialization() {
 // Start Application Initialization
 // ---------------------------------------------------------------------
 if (document.readyState !== 'loading') {
-    initApp().catch(handleInitError);
+    init().catch(handleInitError);
 } else {
     document.addEventListener('DOMContentLoaded', () => {
-        initApp().catch(handleInitError);
+        init().catch(handleInitError);
     });
 }
 
@@ -628,7 +643,7 @@ window.app = {
     navigateToConversation,
     showNotification,
     state: appState,
-    initialize: initApp,
+    initialize: init,
     loadProjects,
     getProjectId: () => {
         const urlParams = new URLSearchParams(window.location.search);

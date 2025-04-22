@@ -3,58 +3,71 @@
     <div class="modal-box">
         <div class="flex justify-between items-center mb-4">
             <h3 id="projectModalTitle" class="text-xl font-semibold">Create New Project</h3>
-            <button id="projectCancelBtn" type="button" class="btn btn-ghost btn-sm btn-square">
+            <button id="projectModalCloseBtn" type="button" class="btn btn-ghost btn-sm btn-square">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
-        <form id="projectForm">
-            <input type="hidden" id="projectIdInput" name="projectId" value="" />
+        <form id="projectModalForm">
+            <input type="hidden" id="projectModalIdInput" name="projectId" value="" />
             <div class="mb-4">
-                <label for="projectNameInput"
+                <label for="projectModalNameInput"
                     class="block text-sm font-medium text-base-content mb-1">
                     Project Name <span class="text-red-500">*</span>
                 </label>
-                <input id="projectNameInput" name="name" type="text" required aria-required="true"
-                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"
-                    aria-describedby="projectForm-nameError" />
+                <input id="projectModalNameInput"
+                       name="name"
+                       type="text"
+                       required
+                       aria-required="true"
+                       autocomplete="off"
+                       class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"
+                       aria-describedby="projectForm-nameError" />
                 <div id="projectForm-nameError" class="text-error text-xs mt-1 hidden" role="alert">
                     Project name is required
                 </div>
             </div>
             <div class="mb-4">
-                <label for="projectDescInput" class="block text-sm font-medium text-base-content mb-1">
+                <label for="projectModalDescInput" class="block text-sm font-medium text-base-content mb-1">
                     Description
                 </label>
-                <textarea id="projectDescInput" name="description" rows="3"
-                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                <textarea id="projectModalDescInput"
+                         name="description"
+                         rows="3"
+                         class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
             <div class="mb-4">
-                <label for="projectGoalsInput" class="block text-sm font-medium text-base-content mb-1">
+                <label for="projectModalGoalsInput" class="block text-sm font-medium text-base-content mb-1">
                     Goals
                 </label>
-                <textarea id="projectGoalsInput" name="goals" rows="3"
-                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                <textarea id="projectModalGoalsInput"
+                         name="goals"
+                         rows="3"
+                         class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
             <div class="mb-4">
-                <label for="projectMaxTokensInput"
+                <label for="projectModalMaxTokensInput"
                     class="block text-sm font-medium text-base-content mb-1">
                     Maximum Tokens
                 </label>
-                <input id="projectMaxTokensInput" name="maxTokens" type="number" value="200000"
-                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary" />
+                <input id="projectModalMaxTokensInput"
+                       name="maxTokens"
+                       type="number"
+                       value="200000"
+                       autocomplete="off"
+                       class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary" />
                 <p class="text-base-content/60 text-xs mt-1">
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
             </div>
             <div class="flex justify-end gap-2 mt-6">
-                <button type="button" id="projectCancelBtn"
+                <button type="button" id="projectModalCancelBtn"
                     class="btn btn-outline">
                     Cancel
                 </button>
-                <button type="submit" id="projectSaveBtn"
+                <button type="submit" id="projectModalSaveBtn"
                     class="btn btn-primary">
                     Save Project
                 </button>

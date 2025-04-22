@@ -527,14 +527,19 @@ function setupCommonElements() {
 
   const authButton = document.getElementById('authButton');
   const authDropdown = document.getElementById('authDropdown');
+
   if (authButton && authDropdown) {
-    trackListener(authButton, 'click', (e) => {
+    window.eventHandlers.trackListener(authButton, 'click', (e) => {
+      e.preventDefault();
       e.stopPropagation();
-      const isExpanded = authDropdown.classList.toggle('hidden');
-      authButton.setAttribute('aria-expanded', !isExpanded);
+      authDropdown.classList.toggle('hidden');
+      authButton.setAttribute('aria-expanded',
+        authDropdown.classList.contains('hidden') ? 'false' : 'true'
+      );
     });
 
-    trackListener(document, 'click', (e) => {
+    // Close dropdown when clicking outside
+    window.eventHandlers.trackListener(document, 'click', (e) => {
       if (!authDropdown.contains(e.target) && e.target !== authButton) {
         authDropdown.classList.add('hidden');
         authButton.setAttribute('aria-expanded', 'false');

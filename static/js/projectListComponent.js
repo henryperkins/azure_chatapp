@@ -618,7 +618,9 @@ class ProjectListComponent {
         this.element.innerHTML = `
       <div class="col-span-3 text-center py-10">
         <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
+          </path>
         </svg>
         <p class="mt-4 text-lg">Please log in to view your projects</p>
         <button id="loginButton" class="btn btn-primary mt-4">Login</button>
@@ -629,12 +631,48 @@ class ProjectListComponent {
         const loginBtn = document.getElementById('loginButton');
         if (loginBtn) {
             if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(loginBtn, 'click', () => {
-                    window.location.href = '/login';
+                window.eventHandlers.trackListener(loginBtn, 'click', (e) => {
+                    e.preventDefault();
+                    const authButton = document.getElementById('authButton');
+                    const authDropdown = document.getElementById('authDropdown');
+                    if (authButton && authDropdown) {
+                        authDropdown.classList.remove('hidden');
+                        authButton.setAttribute('aria-expanded', 'true');
+                        // Ensure login tab is active
+                        if (typeof window.switchAuthTab === 'function') {
+                            window.switchAuthTab('login');
+                        } else if (typeof switchAuthTab === 'function') {
+                            switchAuthTab('login');
+                        }
+                    } else {
+                        // Fallback: notify user or log error
+                        if (window.showNotification) {
+                            window.showNotification('Login form is not available. Please use the login button in the header.', 'error');
+                        } else {
+                            alert('Login form is not available. Please use the login button in the header.');
+                        }
+                    }
                 });
             } else {
-                loginBtn.addEventListener('click', () => {
-                    window.location.href = '/login';
+                loginBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const authButton = document.getElementById('authButton');
+                    const authDropdown = document.getElementById('authDropdown');
+                    if (authButton && authDropdown) {
+                        authDropdown.classList.remove('hidden');
+                        authButton.setAttribute('aria-expanded', 'true');
+                        if (typeof window.switchAuthTab === 'function') {
+                            window.switchAuthTab('login');
+                        } else if (typeof switchAuthTab === 'function') {
+                            switchAuthTab('login');
+                        }
+                    } else {
+                        if (window.showNotification) {
+                            window.showNotification('Login form is not available. Please use the login button in the header.', 'error');
+                        } else {
+                            alert('Login form is not available. Please use the login button in the header.');
+                        }
+                    }
                 });
             }
         }
