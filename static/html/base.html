@@ -58,48 +58,44 @@
   <!-- CSRF token for API requests -->
   <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
 
-  <!-- SCRIPT LOADING ORDER - FINAL OPTIMIZED DEPENDENCY CHAIN -->
+  <!-- SCRIPT LOADING ORDER - CORRECTED DEPENDENCY CHAIN -->
   <!-- Sentry init script - must load first for error monitoring -->
   <script src="/static/js/sentry-init.js"></script>
-  
-  <!-- Group 1: Core utilities and foundational libraries (no dependencies) -->
+
+  <!-- Group 1: Core utilities and foundational libraries (no dependencies on DependencySystem) -->
   <script type="module" src="/static/js/utils.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
   <script type="module" src="/static/js/notification-handler.js"></script>
-  
-  <!-- Group 2: Application framework with DependencySystem -->
+  <script type="module" src="/static/js/auth.js"></script> <!-- Auth depends on notifications/utils -->
+
+  <!-- Group 2: Application framework (defines DependencySystem, depends on Group 1) -->
   <script type="module" src="/static/js/app.js"></script>
-  
-  <!-- Group 3: Core infrastructure and services (depend on app.js) -->
+
+  <!-- Group 3: Modules registering with DependencySystem (depend on app.js) -->
   <script type="module" src="/static/js/eventHandler.js"></script>
-  <script type="module" src="/static/js/auth.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
-  
-  <!-- Group 4: UI Framework and rendering (depend on eventHandler) -->
+  <script type="module" src="/static/js/modalManager.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/projectManager.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/sidebar.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/knowledgeBaseState.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/projectListInit.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/projectDashboard.js"></script> <!-- Moved AFTER app.js -->
+  <script type="module" src="/static/js/chatExtensions.js"></script> <!-- Moved AFTER app.js -->
+
+  <!-- Group 4: UI Rendering and Components (may depend on registered modules or just export classes/functions) -->
   <script type="module" src="/static/js/uiRenderer.js"></script>
-  <script type="module" src="/static/js/modalManager.js"></script>
-  <script type="module" src="/static/js/theme-toggle.js"></script>
-  
-  <!-- Group 5: Domain-specific services (depend on auth, uiRenderer, and modalManager) -->
-  <script type="module" src="/static/js/projectManager.js"></script>
-  
-  <!-- Group 6: UI utility components (depend on services and core UI) -->
   <script type="module" src="/static/js/projectDashboardUtils.js"></script>
-  
-  <!-- Group 7: Major UI components (depend on projectManager and utils) -->
-  <script type="module" src="/static/js/sidebar.js"></script>
-  <script type="module" src="/static/js/knowledgeBaseState.js"></script>
   <script type="module" src="/static/js/projectListComponent.js"></script>
   <script type="module" src="/static/js/projectDetailsComponent.js"></script>
-  
-  <!-- Group 8: Feature-specific components (depend on prior UI components) -->
   <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
   <script type="module" src="/static/js/chat.js"></script>
-  
-  <!-- Group 9: Application initialization (must load last) -->
-  <script type="module" src="/static/js/projectListInit.js"></script>
-  <script type="module" src="/static/js/projectDashboard.js"></script>
-  <script type="module" src="/static/js/chatExtensions.js"></script>
+
+  <!-- Group 5: Standalone UI elements -->
+  <script type="module" src="/static/js/theme-toggle.js"></script>
+
+  <!-- NOTE: The exact order within groups 3 & 4 might need further refinement based on
+       inter-dependencies resolved via DependencySystem.waitFor, but the key fix
+       is loading app.js before modules that call DependencySystem.register. -->
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
