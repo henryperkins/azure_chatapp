@@ -104,3 +104,6 @@ function debounce(fn, delay) {
     timeout = setTimeout(() => fn(...args), delay);
   };
 }
+
+// Register with DependencySystem
+DependencySystem.register('projectListInit', { initProjectList });

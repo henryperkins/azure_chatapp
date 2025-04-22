@@ -15,7 +15,7 @@
     }
   </script>
   <script>
-    window.sentryOnLoad = function() {
+    window.sentryOnLoad = function () {
       // Configuration will be handled by sentry-init.js
       const script = document.createElement('script');
       script.src = '/static/js/sentry-init.js';
@@ -23,8 +23,7 @@
     };
   </script>
   <!-- Content Security Policy optimized for Sentry -->
-  <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self' blob:;
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:;
                script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
                script-src-elem 'self' 'unsafe-inline' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
                worker-src 'self' blob:;
@@ -57,45 +56,43 @@
   <!-- CSRF token for API requests -->
   <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
 
-  <!-- Recommended script loading order -->
-  <!-- Layer 1 (Foundation) -->
-  <script type="module" src="/static/js/sentry-init.js" defer></script>
-  <script type="module" src="/static/js/notification-handler.js" defer></script>
-  <script type="module" src="/static/js/eventHandler.js" defer></script>
-
-  <!-- Layer 2 (Core Services) -->
-  <script type="module" src="/static/js/auth.js" defer></script>
-  <script type="module" src="/static/js/modelConfig.js" defer></script>
-
-  <!-- Layer 3 (Application Core) -->
-  <script type="module" src="/static/js/modalManager.js" defer></script>
-  <script type="module" src="/static/js/projectManager.js" defer></script>
-  <script type="module" src="/static/js/app.js" defer></script>
-
-  <!-- Layer 4 (UI Framework) -->
-  <script type="module" src="/static/js/uiRenderer.js" defer></script>
-
-  <!-- Layer 5 (Data Management) -->
-  <script type="module" src="/static/js/projectManager.js" defer></script>
-
-  <!-- Layer 6 (Components) -->
-  <script type="module" src="/static/js/knowledgeBaseState.js" defer></script>
-  <script type="module" src="/static/js/projectDashboardUtils.js" defer></script>
-  <script type="module" src="/static/js/projectDashboard.js" defer></script> <!-- FIRST: loads HTML & orchestrates -->
-  <script type="module" src="/static/js/projectDetailsComponent.js" defer></script> <!-- After dashboard -->
-  <script type="module" src="/static/js/projectListComponent.js" defer></script> <!-- After dashboard -->
-  <script type="module" src="/static/js/sidebar.js" defer></script> <!-- LAST: depends on all others -->
-
-  <!-- Layer 7 (Component Implementations) -->
-  <script type="module" src="/static/js/projectListInit.js" defer></script>
-  <script type="module" src="/static/js/chat.js" defer></script>
-
-  <!-- Theme script as a module -->
+  <!-- REVISED SCRIPT LOADING ORDER -->
+  <!-- Core dependencies first (no dependencies themselves) -->
+  <script type="module" src="/static/js/notification-handler.js"></script>
+  <script type="module" src="/static/js/eventHandler.js"></script>
+  <script type="module" src="/static/js/utils.js"></script>
+  <script type="module" src="/static/js/formatting.js"></script>
   <script type="module" src="/static/js/theme-toggle.js"></script>
+
+  <!-- Application framework (defines DependencySystem, depends on core utils) -->
+  <script type="module" src="/static/js/app.js"></script>
+
+  <!-- Service layer (depends on core only, potentially app framework) -->
+  <script type="module" src="/static/js/auth.js"></script>
+  <script type="module" src="/static/js/modelConfig.js"></script>
+  <script type="module" src="/static/js/sentry-init.js"></script>
+
+  <!-- Application framework (depends on services) -->
+  <script type="module" src="/static/js/modalManager.js"></script>
+  <script type="module" src="/static/js/projectManager.js"></script>
+  <script type="module" src="/static/js/uiRenderer.js"></script>
+
+  <!-- Components (depend on framework) -->
+  <script type="module" src="/static/js/sidebar.js"></script>
+  <script type="module" src="/static/js/knowledgeBaseState.js"></script>
+  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
+  <script type="module" src="/static/js/projectListComponent.js"></script>
+  <script type="module" src="/static/js/projectDetailsComponent.js"></script>
+  <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
+  <script type="module" src="/static/js/chat.js"></script>
+
+  <!-- Application layer (coordinates everything) - MUST BE LAST -->
+  <script type="module" src="/static/js/projectListInit.js"></script>
+  <script type="module" src="/static/js/projectDashboard.js"></script>
+  <script type="module" src="/static/js/chatExtensions.js"></script>
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col">
-
   <!-- Top Navbar -->
   <header role="banner" class="bg-base-100 shadow-xs border-b border-base-200">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
@@ -117,8 +114,10 @@
           class="dark-mode-toggle focus:outline-hidden focus:ring-2">
           <svg id="darkModeIcon" class="w-5 h-5 text-base-content" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707
-              M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364
+                 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728
+                 0l-.707.707M6.343 17.657l-.707.707M16 12a4
+                 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </button>
         <!-- User status (when logged in) -->
@@ -127,27 +126,19 @@
         <!-- Auth container -->
         <div class="relative" id="authContainer">
           <!-- When logged out: Auth Button -->
-          <button id="authButton" type="button" class="btn btn-primary btn-sm" aria-haspopup="true" aria-expanded="false">
+          <button id="authButton" type="button" class="btn btn-primary btn-sm" aria-haspopup="true"
+            aria-expanded="false">
             Login
           </button>
 
           <!-- Auth Dropdown -->
-          <div id="authDropdown"
-            role="menu"
-            aria-labelledby="authButton"
-            aria-hidden="true"
+          <div id="authDropdown" role="menu" aria-labelledby="authButton" aria-hidden="true"
             class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-base-100 rounded-box shadow-md p-3 z-50 animate-slide-in hidden">
             <div class="flex border-b border-base-200 mb-2 justify-center" role="tablist">
-              <button id="loginTab" type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="loginForm"
+              <button id="loginTab" type="button" role="tab" aria-selected="true" aria-controls="loginForm"
                 class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary"
                 onclick="switchAuthTab('login')">Login</button>
-              <button id="registerTab" type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="registerForm"
+              <button id="registerTab" type="button" role="tab" aria-selected="false" aria-controls="registerForm"
                 class="px-2 py-1 text-xs font-medium text-base-content/60"
                 onclick="switchAuthTab('register')">Register</button>
             </div>
@@ -167,26 +158,28 @@
               </button>
             </form>
 
-            <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden" role="tabpanel" aria-labelledby="registerTab">
+            <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden"
+              role="tabpanel" aria-labelledby="registerTab">
               <div class="flex flex-col gap-2 mb-2">
                 <label for="register-username" class="sr-only">Username</label>
-                <input type="text" name="username" id="register-username" placeholder="Username" 
-                  class="px-2 py-1 text-xs border rounded-box" autocomplete="username" autocorrect="off" autocapitalize="none" required>
+                <input type="text" name="username" id="register-username" placeholder="Username"
+                  class="px-2 py-1 text-xs border rounded-box" autocomplete="username" autocorrect="off"
+                  autocapitalize="none" required>
                 <label for="register-password" class="sr-only">Password</label>
                 <input type="password" name="password" id="register-password" placeholder="Password"
                   class="px-2 py-1 text-xs border rounded-box" autocomplete="new-password" required>
               </div>
               <div class="relative mb-2 group">
-                <button type="button" aria-describedby="passwordRequirementsDesc" 
+                <button type="button" aria-describedby="passwordRequirementsDesc"
                   class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m-1-4h.01M21 12a9
-                          9 0 11-18 0 9 9 0 0118 0z" />
+                         9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Password requirements
                 </button>
-                <div id="passwordRequirementsDesc" role="tooltip" 
+                <div id="passwordRequirementsDesc" role="tooltip"
                   class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-neutral text-neutral-content text-xs rounded-box py-1 px-2 w-full z-10">
                   Password must be 12+ characters with uppercase, lowercase, number, and special character.
                 </div>
@@ -266,7 +259,7 @@
                 class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
-                      7 0 11-14 0 7 7 0 0114 0z" />
+                         7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <button id="pinSidebarBtn" type="button" class="ml-2 p-1.5 btn btn-ghost btn-sm btn-circle"
@@ -274,7 +267,8 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2
-                      2 0 012 2v16l-7-3.5L5 21V5z" />
+                         2 0 012 2v16l-7-3.5L5
+                         21V5z" />
               </svg>
             </button>
           </div>
@@ -285,9 +279,9 @@
         <!-- Starred Chats Section -->
         <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
           aria-labelledby="starredChatsTab" tabindex="0">
-          <p class="text-xs text-base-content/60 mb-3">Starred chats are conversations you've marked as important for
-            quick
-            access.</p>
+          <p class="text-xs text-base-content/60 mb-3">
+            Starred chats are conversations you've marked as important for quick access.
+          </p>
           <ul id="starredConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
             <li class="text-center text-base-content/60 py-4">
               No starred conversations yet. Click the star icon on any conversation to add it here.
@@ -303,9 +297,10 @@
               class="flex-1 btn btn-primary btn-outline btn-sm flex items-center justify-center font-medium">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2
-                  2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2
-                  2 0 00-2 2z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002
+                         2h14a2 2 0 002-2V9a2
+                         2 0 00-2-2h-6l-2-2H5a2
+                         2 0 00-2 2z" />
               </svg>
               Manage Projects
             </button>
@@ -314,7 +309,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6
-                      0H6" />
+                         0H6" />
               </svg>
               New Project
             </button>
@@ -328,7 +323,8 @@
               class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
               fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
-                    7 0 11-14 0 7 7 0 0114 0z" />
+                       7 0 11-14 0 7 7 0 0114
+                       0z" />
             </svg>
           </div>
 
@@ -373,12 +369,14 @@
                 <div class="flex items-center mt-2">
                   <input type="checkbox" id="extendedThinkingToggle"
                     class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm">
-                  <label for="extendedThinkingToggle" class="ml-2 text-sm">Enable extended thinking for complex
-                    tasks</label>
+                  <label for="extendedThinkingToggle" class="ml-2 text-sm">
+                    Enable extended thinking for complex tasks
+                  </label>
                 </div>
                 <div class="mt-2">
-                  <label for="thinkingBudget" class="block text-xs text-base-content/60 mb-1">Thinking budget
-                    (tokens)</label>
+                  <label for="thinkingBudget" class="block text-xs text-base-content/60 mb-1">
+                    Thinking budget (tokens)
+                  </label>
                   <select id="thinkingBudget" class="w-full text-sm border rounded-box p-1">
                     <option value="2048">2,048 tokens (minimum)</option>
                     <option value="4096">4,096 tokens</option>
@@ -450,13 +448,14 @@
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col overflow-hidden">
       <h2 class="sr-only">Project Management Dashboard</h2>
-      
+
       <div id="notificationArea" role="status" aria-live="polite" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
 
       <div class="flex-1 overflow-y-auto p-4 md:p-6">
         <div id="loginRequiredMessage" class="hidden text-center py-8">
           <p class="text-lg">Please log in to access projects</p>
-          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4" onclick="document.getElementById('authButton').click();">
+          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4"
+            onclick="document.getElementById('authButton').click();">
             Login
           </button>
         </div>
@@ -472,12 +471,11 @@
 
   <div id="modalsContainer" class="hidden" aria-live="polite" role="complementary"></div>
   <div id="chatUIContainer" class="hidden" data-requires-chat="true"></div>
-  
-  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" 
-       role="status" aria-live="polite">
+
+  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" role="status"
+    aria-live="polite">
     <div class="text-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" 
-           aria-hidden="true"></div>
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
       <p class="text-lg">Loading application...</p>
     </div>
   </div>
@@ -505,7 +503,7 @@
         registerTab.classList.add('text-base-content/60');
         loginForm.classList.remove('hidden');
         registerForm.classList.add('hidden');
-        
+
         // Update ARIA attributes
         loginTab.setAttribute('aria-selected', 'true');
         registerTab.setAttribute('aria-selected', 'false');
@@ -518,7 +516,7 @@
         loginTab.classList.add('text-base-content/60');
         registerForm.classList.remove('hidden');
         loginForm.classList.add('hidden');
-        
+
         // Update ARIA attributes
         registerTab.setAttribute('aria-selected', 'true');
         loginTab.setAttribute('aria-selected', 'false');
@@ -529,7 +527,7 @@
 
     function validatePassword(password) {
       if (password.length < 12) {
-        return {valid: false, message: "Password must be at least 12 characters"};
+        return { valid: false, message: "Password must be at least 12 characters" };
       }
 
       const hasUpper = /[A-Z]/.test(password);
@@ -538,19 +536,19 @@
       const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
 
       if (!hasUpper) {
-        return {valid: false, message: "Password must contain an uppercase letter"};
+        return { valid: false, message: "Password must contain an uppercase letter" };
       }
       if (!hasLower) {
-        return {valid: false, message: "Password must contain a lowercase letter"};
+        return { valid: false, message: "Password must contain a lowercase letter" };
       }
       if (!hasNumber) {
-        return {valid: false, message: "Password must contain a number"};
+        return { valid: false, message: "Password must contain a number" };
       }
       if (!hasSpecial) {
-        return {valid: false, message: "Password must contain a special character"};
+        return { valid: false, message: "Password must contain a special character" };
       }
 
-      return {valid: true};
+      return { valid: true };
     }
 
     async function handleRegister(e) {
@@ -581,4 +579,5 @@
     }
   </script>
 </body>
+
 </html>

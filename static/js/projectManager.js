@@ -4,14 +4,17 @@
  * Uses the central app.apiRequest for networking
  */
 
-// API endpoint templates
-const API_ENDPOINTS = {
-  PROJECTS: '/api/projects',
-  PROJECT_DETAIL: '/api/projects/{projectId}',
-  PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
-  PROJECT_FILES: '/api/projects/{projectId}/files',
-  PROJECT_STATS: '/api/projects/{projectId}/stats',
-  PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts'
+// Configuration
+const PROJECT_CONFIG = {
+  DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
+  ENDPOINTS: {
+    PROJECTS: '/api/projects',
+    PROJECT_DETAIL: '/api/projects/{projectId}',
+    PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
+    PROJECT_FILES: '/api/projects/{projectId}/files',
+    PROJECT_STATS: '/api/projects/{projectId}/stats',
+    PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts'
+  }
 };
 
 // Current state
@@ -23,7 +26,7 @@ let projectLoadingInProgress = false;
  */
 async function loadProjects(filter = 'all') {
   if (projectLoadingInProgress) {
-    APP_CONFIG.DEBUG && console.log("[projectManager] Project loading already in progress");
+    PROJECT_CONFIG.DEBUG && console.log("[projectManager] Project loading already in progress");
     return [];
   }
 
@@ -56,7 +59,7 @@ async function loadProjects(filter = 'all') {
     params.append("skip", "0");
     params.append("limit", "100");
 
-    const endpoint = `${API_ENDPOINTS.PROJECTS}?${params.toString()}`;
+    const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
     const response = await window.app.apiRequest(endpoint);
 
     const projects =
@@ -129,7 +132,7 @@ async function loadProjectDetails(projectId) {
   emitEvent("projectDetailsLoading", { projectId });
 
   try {
-    const endpoint = API_ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
+    const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint);
 
     let projectData = null;
@@ -179,7 +182,7 @@ async function loadProjectDetails(projectId) {
  */
 async function loadProjectStats(projectId) {
   try {
-    const endpoint = API_ENDPOINTS.PROJECT_STATS.replace('{projectId}', projectId);
+    const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_STATS.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint);
 
     const stats = response?.data || {};
@@ -203,7 +206,7 @@ async function loadProjectStats(projectId) {
  */
 async function loadProjectFiles(projectId) {
   try {
-    const endpoint = API_ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
+    const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint);
 
     const files =
@@ -229,7 +232,7 @@ async function loadProjectFiles(projectId) {
  */
 async function loadProjectConversations(projectId) {
   try {
-    const endpoint = API_ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
+    const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint);
 
     const conversations =
@@ -255,7 +258,7 @@ async function loadProjectConversations(projectId) {
  */
 async function loadProjectArtifacts(projectId) {
   try {
-    const endpoint = API_ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
+    const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint);
 
     const artifacts =
@@ -287,8 +290,8 @@ async function createOrUpdateProject(projectId, projectData) {
   const isUpdate = !!projectId;
   const method = isUpdate ? "PATCH" : "POST";
   const endpoint = isUpdate
-    ? API_ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)
-    : API_ENDPOINTS.PROJECTS;
+    ? PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)
+    : PROJECT_CONFIG.ENDPOINTS.PROJECTS;
 
   try {
     const response = await window.app.apiRequest(endpoint, method, projectData);
@@ -321,7 +324,7 @@ async function deleteProject(projectId) {
   }
 
   try {
-    const endpoint = API_ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
+    const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint, "DELETE");
 
     if (currentProject?.id === projectId) {
@@ -345,7 +348,7 @@ async function togglePinProject(projectId) {
   }
 
   try {
-    const endpoint = `${API_ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/pin`;
+    const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/pin`;
     const response = await window.app.apiRequest(endpoint, "POST");
 
     emitEvent("projectPinToggled", {
@@ -369,7 +372,7 @@ async function toggleArchiveProject(projectId) {
   }
 
   try {
-    const endpoint = `${API_ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/archive`;
+    const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/archive`;
     const response = await window.app.apiRequest(endpoint, "PATCH");
 
     emitEvent("projectArchiveToggled", {
@@ -465,8 +468,7 @@ async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
 }
 
 // Export public API
-// Removed implicit global attachment
-export const projectManagerAPI = {
+const projectManagerAPI = {
   loadProjects,
   loadProjectDetails,
   loadProjectStats,
@@ -483,3 +485,26 @@ export const projectManagerAPI = {
   prepareFileUploads,
   uploadFileWithRetry
 };
+
+// Attach to window and register with DependencySystem
+window.projectManager = window.projectManager || projectManagerAPI;
+
+// Register with DependencySystem when it becomes available
+if (window.DependencySystem) {
+    window.DependencySystem.register('projectManager', window.projectManager);
+} else {
+    // Wait for DependencySystem to be available
+    Object.defineProperty(window, 'DependencySystem', {
+        configurable: true,
+        set: function(value) {
+            Object.defineProperty(window, 'DependencySystem', {
+                value: value,
+                configurable: true,
+                writable: true
+            });
+            value.register('projectManager', window.projectManager);
+        }
+    });
+}
+
+export default projectManagerAPI;

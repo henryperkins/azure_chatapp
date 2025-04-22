@@ -3,6 +3,99 @@
  * Manages the app startup, routing, and global state
  */
 
+/**
+ * Robust dependency management system
+ * Replaces the polling-based waitForDependency approach
+ */
+const DependencySystem = {
+  // Track registered modules
+  modules: new Map(),
+
+  // Track module states (unloaded, loading, loaded, error)
+  states: new Map(),
+
+  // Store callbacks waiting for modules
+  waiters: new Map(),
+
+  // Register a module when it's ready
+  register(name, instance, dependencies = []) {
+    console.log(`[DependencySystem] Registering module: ${name}`);
+
+    this.modules.set(name, instance);
+    this.states.set(name, 'loaded');
+
+    // Notify any waiters
+    this._notifyWaiters(name);
+
+    return instance;
+  },
+
+  // Notify anyone waiting for this module
+  _notifyWaiters(name) {
+    if (!this.waiters.has(name)) return;
+
+    this.waiters.get(name).forEach(callback => {
+      try {
+        callback(this.modules.get(name));
+      } catch (error) {
+        console.error(`[DependencySystem] Error in waiter callback for ${name}:`, error);
+      }
+    });
+
+    // Clear waiters for this module
+    this.waiters.delete(name);
+  },
+
+  // Wait for a module to be available
+  waitFor(names, callback, timeout = 5000) {
+    const namesArray = Array.isArray(names) ? names : [names];
+    const missingModules = namesArray.filter(name => !this.modules.has(name));
+
+    if (missingModules.length === 0) {
+      // All modules are available, call immediately
+      const modules = namesArray.map(name => this.modules.get(name));
+      callback(...modules);
+      return;
+    }
+
+    // Create timeout
+    const timeoutId = setTimeout(() => {
+      missingModules.forEach(name => {
+        if (!this.modules.has(name)) {
+          console.error(`[DependencySystem] Timeout waiting for module: ${name}`);
+          this.states.set(name, 'error');
+          // Clean up any waiters
+          if (this.waiters.has(name)) {
+            this.waiters.delete(name);
+          }
+        }
+      });
+    }, timeout);
+
+    // Register waiters for each missing module
+    missingModules.forEach(name => {
+      if (!this.waiters.has(name)) {
+        this.waiters.set(name, []);
+      }
+
+      // Add our specialized callback that handles multiple modules
+      this.waiters.get(name).push(() => {
+        // Check if all required modules are now available
+        const stillMissing = namesArray.filter(n => !this.modules.has(n));
+        if (stillMissing.length === 0) {
+          // All dependencies ready
+          clearTimeout(timeoutId);
+          const modules = namesArray.map(n => this.modules.get(n));
+          callback(...modules);
+        }
+      });
+    });
+  }
+};
+
+// Add to window for global access
+window.DependencySystem = DependencySystem;
+
 // Configuration
 const APP_CONFIG = {
   DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
@@ -47,117 +140,144 @@ const appState = {
 const pendingRequests = new Map();
 
 /**
- * Helper: Wait until a global dependency is available on window
- * @param {string} name - The global name to wait for (e.g. 'eventHandlers')
- * @param {number} timeout - How long to wait before failing
+ * Make an API request with standardized error handling and CSRF protection
+ * @param {string} url - The API endpoint URL
+ * @param {Object} options - Fetch options
+ * @param {boolean} [skipCache=false] - Whether to skip the pending request cache
+ * @returns {Promise<any>} - Parsed JSON response
  */
-async function waitForDependency(name, timeout = 5000) {
-  const startTime = Date.now();
-  while (!window[name]) {
-    if (Date.now() - startTime > timeout) {
-      throw new Error(`Dependency "${name}" not found after ${timeout}ms`);
-    }
-    await new Promise(r => setTimeout(r, 100));
-  }
-}
+async function apiRequest(url, options = {}, skipCache = false) {
+  const requestKey = `${options.method || 'GET'}-${url}-${JSON.stringify(options.body || {})}`;
 
-/**
- * Universal fetch wrapper with authentication handling
- */
-async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
-  // Deduplicate identical requests
-  const requestKey = `${method}:${endpoint}:${JSON.stringify(data)}`;
-  if (pendingRequests.has(requestKey)) {
+  // Deduplicate in-flight requests unless explicitly skipped
+  if (!skipCache && pendingRequests.has(requestKey)) {
     return pendingRequests.get(requestKey);
   }
 
-  // Set up request controller and timeout
-  const controller = options.signal?.controller || new AbortController();
-  const timeoutMs = options.timeout || APP_CONFIG.TIMEOUTS.API_REQUEST;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // Set up default headers
+  options.headers = options.headers || {};
 
+  // Add CSRF token if available
+  const csrfToken = document.getElementById('csrfToken')?.getAttribute('content');
+  if (csrfToken) {
+    options.headers['X-CSRFToken'] = csrfToken;
+  }
+
+  // Ensure JSON content type for POST/PUT/PATCH
+  if (['POST', 'PUT', 'PATCH'].includes(options.method) && !options.headers['Content-Type']) {
+    options.headers['Content-Type'] = 'application/json';
+  }
+
+  // Convert body to JSON string if it's an object
+  if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
+    options.body = JSON.stringify(options.body);
+  }
+
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, APP_CONFIG.TIMEOUTS.API_REQUEST);
+
+  options.signal = controller.signal;
+
+  // Create the promise
   const requestPromise = (async () => {
     try {
-      // Ensure initial slash
-      const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      const response = await fetch(url, options);
+      clearTimeout(timeout);
 
-      // Build query params for GET requests
-      let finalUrl = cleanEndpoint;
-      if (data && ['GET', 'HEAD'].includes(method.toUpperCase())) {
-        const queryParams = new URLSearchParams();
-        Object.entries(data).forEach(([key, value]) => {
-          if (Array.isArray(value)) {
-            value.forEach(v => queryParams.append(key, v));
-          } else {
-            queryParams.append(key, value);
-          }
-        });
-        finalUrl += (cleanEndpoint.includes('?') ? '&' : '?') + queryParams.toString();
+      // Remove from pending requests
+      if (!skipCache) {
+        pendingRequests.delete(requestKey);
       }
 
-      // Get CSRF token
-      const csrfToken = await window.auth.getCSRFTokenAsync();
-
-      const requestOptions = {
-        method: method.toUpperCase(),
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
-        },
-        signal: controller.signal
-      };
-
-      // Handle request body for non-GET/HEAD
-      if (data && !['GET', 'HEAD'].includes(method.toUpperCase())) {
-        if (data instanceof FormData) {
-          requestOptions.body = data;
-          delete requestOptions.headers['Content-Type'];
-        } else {
-          requestOptions.body = JSON.stringify(data);
-        }
-      }
-
-      // Make the request
-      const response = await fetch(finalUrl, requestOptions);
-
-      // Error handling
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        const error = new Error(errorData.message || `HTTP ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        const error = new Error(errorData.message || `API request failed with status ${response.status}`);
         error.status = response.status;
         error.data = errorData;
-
-        if (error.status === 401) {
-          window.auth.clearTokenState({ source: 'api_401' });
-        }
-
         throw error;
       }
 
-      // 204 No Content
-      if (response.status === 204) {
-        return null;
+      // Check if response is empty
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
       }
 
-      // Parse JSON by default
-      return await response.json();
+      return await response.text();
     } catch (error) {
-      if (error.name === 'AbortError') {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+      // Clean up pending request tracking
+      if (!skipCache) {
+        pendingRequests.delete(requestKey);
       }
+
+      if (error.name === 'AbortError') {
+        throw new Error(`API request timed out after ${APP_CONFIG.TIMEOUTS.API_REQUEST}ms`);
+      }
+
       throw error;
-    } finally {
-      clearTimeout(timeoutId);
-      pendingRequests.delete(requestKey);
     }
   })();
 
-  // Store promise for deduplication
-  pendingRequests.set(requestKey, requestPromise);
+  // Store the promise in pending requests
+  if (!skipCache) {
+    pendingRequests.set(requestKey, requestPromise);
+  }
+
   return requestPromise;
+}
+
+/**
+ * Initialize the application
+ */
+async function initApp() {
+  console.log('[App] Starting initialization...');
+  appState.initializing = true;
+  appState.currentPhase = 'boot';
+
+  if (document.readyState === 'loading') {
+    await new Promise(resolve =>
+      document.addEventListener('DOMContentLoaded', resolve, { once: true })
+    );
+  }
+
+  appState.currentPhase = 'dom_ready';
+
+  try {
+    // Start the initialization sequence
+    await initializeComponents();
+
+    // Load initial data if authenticated
+    if (appState.isAuthenticated) {
+      console.log('[App] User authenticated, loading initial project data...');
+      try {
+        if (window.projectManagerAPI?.loadProjects) {
+          const currentFilter = localStorage.getItem('projectFilter') || 'all';
+          await window.projectManagerAPI.loadProjects(currentFilter);
+          console.log('[App] Initial project data loaded.');
+        }
+      } catch (error) {
+        console.error('[App] Error loading initial project data:', error);
+        showNotification('Failed to load initial project data', 'error');
+      }
+    }
+
+    // Perform initial navigation
+    await handleNavigationChange();
+    console.log('[App] Initial navigation handled.');
+
+    // Register global listeners
+    registerAppListeners();
+    console.log('[App] Global listeners registered.');
+
+    return true;
+  } catch (error) {
+    console.error('[App] Initialization failed:', error);
+    showNotification('Application failed to initialize. Please refresh.', 'error');
+    throw error;
+  }
 }
 
 /**
@@ -180,7 +300,6 @@ function toggleElement(selector, show) {
   const element = typeof selector === 'string'
     ? document.querySelector(APP_CONFIG.SELECTORS[selector])
     : selector;
-
   if (element) {
     element.classList.toggle('hidden', !show);
   }
@@ -227,7 +346,8 @@ async function handleNavigationChange() {
   const projectId = urlParams.get('project');
 
   try {
-    appState.isAuthenticated = window.app.state.isAuthenticated;
+    // Use authenticated state directly from auth or appState
+    appState.isAuthenticated = window.auth?.isAuthenticated() ?? appState.isAuthenticated;
 
     if (!appState.isAuthenticated) {
       toggleElement('PROJECT_LIST_VIEW', false);
@@ -253,7 +373,6 @@ async function handleNavigationChange() {
     }
 
     if (chatId) {
-      // Navigate to existing conversation
       await navigateToConversation(chatId);
       return;
     }
@@ -283,180 +402,81 @@ function showProjectListView() {
 }
 
 /**
- * Revised initialization sequence using waitForDependency
- * and organizing components by phases.
+ * Single initialization function that dynamically adapts to dependencies
  */
-const initSequence = [
-  // Phase 1: Wait for the eventHandlers, then init
-  async () => {
-    await waitForDependency('eventHandlers');
-    window.eventHandlers.init();
-    console.log('[App] Event handlers initialized.');
-  },
-
-  // Phase 2: Modal manager + projectModal
-  async () => {
-    await waitForDependency('modalManager');
-    window.initModalManager();
-    console.log('[App] ModalManager initialized.');
-
-    if (window.projectModal?.init) {
-      window.projectModal.init();
-      console.log('[App] ProjectModal initialized.');
+async function initializeComponents() {
+  // 1. Initialize event handlers first if needed
+  DependencySystem.waitFor('eventHandlers', (eventHandlers) => {
+    if (typeof eventHandlers.init === 'function') {
+      eventHandlers.init();
+      console.log('[App] Event handlers initialized');
     }
-  },
 
-  // Phase 3: Project manager (data) must be ready
-  async () => {
-    // If not already bound, bind here (fallback)
-    if (!window.projectManager && window.projectManagerAPI) {
-      window.projectManager = window.projectManagerAPI;
-      console.log('[App] Bound projectManagerAPI to window.projectManager');
-    }
-    await waitForDependency('projectManager');
-    console.log('[App] ProjectManager ready.');
-  },
-
-  // Phase 4: Initialize main UI components concurrently
-  async () => {
-    await Promise.all([
-      (async () => {
-        console.log('[App] Waiting for sidebar...');
-        await waitForDependency('sidebar');
-        window.sidebar.init();
-        console.log('[App] Sidebar initialized.');
-      })(),
-      (async () => {
-        console.log('[App] Waiting for projectDashboard...');
-        await waitForDependency('projectDashboard');
-        await window.projectDashboard.init();
-        console.log('[App] ProjectDashboard initialized.');
-      })()
-    ]);
-  },
-
-  // Phase 5: Other downstream components or features
-  // (chatExtensions, KnowledgeBaseComponent, chatManager, etc.)
-  async () => {
-    if (window.chatExtensions?.initChatExtensions) {
-      window.chatExtensions.initChatExtensions();
-      console.log('[App] chatExtensions initialized.');
-    }
-    if (window.KnowledgeBaseComponent) {
-      window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
-      console.log('[App] KnowledgeBaseComponent initialized.');
-    }
-    if (window.chatManager?.initialize) {
-      window.chatManager.initialize();
-      console.log('[App] chatManager initialized.');
-    }
-  },
-
-  // Phase 6: Project List Initialization
-  async () => {
-    console.log('[App] Waiting for initProjectList...');
-    await waitForDependency('initProjectList');
-    window.initProjectList();
-    console.log('[App] ProjectListInit executed.');
-  }
-];
-
-/**
- * Initialize the application
- */
-async function initApp() {
-  console.log('[App] Starting initialization...');
-  appState.initializing = true;
-  appState.currentPhase = 'boot';
-
-  // Wait for DOM readiness if needed
-  if (document.readyState === 'loading') {
-    await new Promise(resolve =>
-      document.addEventListener('DOMContentLoaded', resolve, { once: true })
-    );
-  }
-
-  appState.currentPhase = 'dom_ready';
-
-  // Initialize authentication with proper dependency check
-  try {
-    // Wait for auth module to be available
-    const authTimeout = setTimeout(() => {
-      console.warn('[App] Auth module not available after timeout');
-    }, APP_CONFIG.TIMEOUTS.AUTH_CHECK);
-
-    while (!window.auth) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    clearTimeout(authTimeout);
-
-    // Initialize auth but don't wait for server verification
-    await window.auth.init();
-
-    // Trust the local auth state for initial UI rendering
-    appState.isAuthenticated = window.auth.isAuthenticated();
-    console.log('[App] Initial auth state:', appState.isAuthenticated);
-
-    // Verify in the background - won't block UI rendering
-    window.auth.checkAuth({ forceVerify: true })
-      .then(verified => {
-        if (verified !== appState.isAuthenticated) {
-          console.log('[App] Auth state updated after verification');
-          appState.isAuthenticated = verified;
-          // If you need to refresh or adjust the UI, do it here
-        }
-      })
-      .catch(err => console.warn('[App] Background auth verification error:', err));
-  } catch (error) {
-    console.error('[App] Auth initialization failed:', error);
-  }
-
-  appState.currentPhase = 'auth_checked';
-
-  // Execute the revised initialization sequence
-  for (const initFn of initSequence) {
-    try {
-      await initFn();
-    } catch (error) {
-      console.error('[App] Initialization error during sequence:', error);
-      showNotification(`Initialization step failed: ${error.message}`, 'error');
-    }
-  }
-
-  // Load initial data if authenticated
-  if (appState.isAuthenticated) {
-    console.log('[App] User authenticated, loading initial project data...');
-    try {
-      if (window.projectManagerAPI?.loadProjects) {
-        const currentFilter = localStorage.getItem('projectFilter') || 'all';
-        await window.projectManagerAPI.loadProjects(currentFilter);
-        console.log('[App] Initial project data loaded.');
-      } else {
-        console.warn('[App] projectManagerAPI.loadProjects not found.');
+    // 2. Initialize modal manager
+    DependencySystem.waitFor('modalManager', (modalManager) => {
+      if (typeof modalManager.init === 'function') {
+        modalManager.init();
+        console.log('[App] ModalManager initialized');
       }
-    } catch (error) {
-      console.error('[App] Error loading initial project data:', error);
-      showNotification('Failed to load initial project data', 'error');
-    }
-  } else {
-    console.log('[App] User not authenticated, skipping initial data load.');
-  }
 
-  // Perform initial navigation
-  await handleNavigationChange();
-  console.log('[App] Initial navigation handled.');
+      if (window.projectModal?.init) {
+        window.projectModal.init();
+        console.log('[App] ProjectModal initialized');
+      }
 
-  appState.initializing = false;
-  appState.initialized = true;
-  appState.currentPhase = 'complete';
-  console.log('[App] Initialization complete');
+      // 3. Initialize authentication system
+      DependencySystem.waitFor('auth', (auth) => {
+        auth.init().then(() => {
+          appState.isAuthenticated = auth.isAuthenticated();
+          appState.currentPhase = 'auth_checked';
+          console.log('[App] Auth initialized');
 
-  // Register listeners after init is complete
-  registerAppListeners();
-  console.log('[App] Global listeners registered.');
+          // 4. Initialize UI components
+          const uiComponents = ['sidebar', 'projectDashboard'];
+          DependencySystem.waitFor(uiComponents, () => {
+            if (window.sidebar?.init) {
+              window.sidebar.init();
+              console.log('[App] Sidebar initialized');
+            }
 
-  return true;
+            if (window.projectDashboard?.init) {
+              window.projectDashboard.init().then(() => {
+                console.log('[App] ProjectDashboard initialized');
+
+                // 5. Initialize downstream components
+                if (window.chatExtensions?.initChatExtensions) {
+                  window.chatExtensions.initChatExtensions();
+                }
+
+                if (window.chatManager?.initialize) {
+                  window.chatManager.initialize();
+                }
+
+                if (window.initProjectList) {
+                  window.initProjectList();
+                }
+
+                if (window.KnowledgeBaseComponent) {
+                  window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+                }
+
+                // Final steps
+                appState.initializing = false;
+                appState.initialized = true;
+                appState.currentPhase = 'complete';
+                console.log('[App] Initialization complete');
+              });
+            }
+          }, 10000); // Longer timeout for UI components
+        }).catch(error => {
+          console.error('[App] Auth initialization failed:', error);
+          appState.currentPhase = 'auth_error';
+        });
+      });
+    });
+  });
 }
+
 
 /**
  * Listen for authentication state changes
@@ -484,7 +504,6 @@ if (window.auth?.AuthBus) {
  * Register DOM listeners
  */
 function registerAppListeners() {
-  // Handle back/forward navigation
   window.addEventListener('popstate', handleNavigationChange);
 }
 
@@ -518,7 +537,7 @@ window.app = {
   initialize: initApp,
   loadProjects,
   getProjectId: () => {
-    const urlParams = new URLSearchParams(window.location.search)
+    const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('project') || localStorage.getItem('selectedProjectId');
   }
 };

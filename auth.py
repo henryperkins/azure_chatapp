@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 AUTH_DEBUG = True  # Force debug mode or set from env if you like
 
 DEFAULT_ADMIN = {
-    "username": os.getenv("DEFAULT_ADMIN_USERNAME", "admin"),
-    "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Admin123!@#dev"),
+    "username": os.getenv("DEFAULT_ADMIN_USERNAME", "hperkins"),
+    "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Twiohmld1234!")
 }
 
 # For simplicity, let's set these with "relaxed" or bigger expiry times
@@ -62,17 +62,27 @@ class CookieSettings:
         hostname = request.url.hostname
         scheme = request.url.scheme
 
+        # Always use non-secure cookies in development/localhost
         if self.env == "development" or hostname in ["localhost", "127.0.0.1"]:
-            return {"secure": False, "domain": None, "samesite": "lax"}
+            return {
+                "secure": False,
+                "domain": None,
+                "samesite": "lax",
+                "httponly": True,
+                "path": "/"
+            }
 
         secure = (scheme == "https")
         samesite = "lax"
         domain = self.cookie_domain
 
-        if not secure:
-            samesite = "lax"
-
-        return {"secure": secure, "domain": domain, "samesite": samesite}
+        return {
+            "secure": secure,
+            "domain": domain,
+            "samesite": samesite,
+            "httponly": True,
+            "path": "/"
+        }
 
 
 cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
@@ -85,35 +95,35 @@ def set_secure_cookie(
     Sets a secure HttpOnly cookie with consistent environment-based config.
     """
     cookie_attrs = cookie_config_helper.get_attributes(request)
-    secure = cookie_attrs["secure"]
-    domain = cookie_attrs["domain"]
-    samesite = cookie_attrs["samesite"]
-
-    # Fallback if samesite='none' but not secure
-    if samesite == "none" and not secure:
-        samesite = "lax"
-
-    if AUTH_DEBUG:
-        logger.debug(
-            "Setting cookie [%s]: domain=%s, secure=%s, samesite=%s, max_age=%s",
-            key,
-            domain or "Not Set",
-            secure,
-            samesite,
-            max_age,
-        )
 
     try:
+        if value == "":  # For logout/clearing cookies
+            response.delete_cookie(
+                key=key,
+                path=cookie_attrs["path"],
+                domain=cookie_attrs["domain"],
+                secure=cookie_attrs["secure"],
+                httponly=cookie_attrs["httponly"],
+                samesite=cookie_attrs["samesite"]
+            )
+            return
+
+        if AUTH_DEBUG:
+            logger.debug(
+                "Setting cookie [%s]: domain=%s, secure=%s, samesite=%s, max_age=%s",
+                key,
+                cookie_attrs["domain"] or "Not Set",
+                cookie_attrs["secure"],
+                cookie_attrs["samesite"],
+                max_age,
+            )
+
         response.set_cookie(
             key=key,
             value=value,
             max_age=max_age if max_age else None,
             expires=max_age if max_age else None,
-            path="/",
-            domain=domain,
-            secure=secure,
-            httponly=True,
-            samesite=samesite,
+            **cookie_attrs
         )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
