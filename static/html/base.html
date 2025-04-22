@@ -140,61 +140,55 @@
 
           <!-- Auth Dropdown -->
           <div id="authDropdown" role="menu" aria-labelledby="authButton" aria-hidden="true"
-            class="absolute right-0 top-14 md:top-auto md:mt-2 w-full md:w-48 bg-base-100 rounded-box shadow-md p-3 z-50 animate-slide-in hidden">
-            <div class="flex border-b border-base-200 mb-2 justify-center" role="tablist">
-              <button id="loginTab" type="button" role="tab" aria-selected="true" aria-controls="loginForm"
-                class="px-2 py-1 text-xs font-medium border-b-2 border-primary text-primary"
-                onclick="switchAuthTab('login')">Login</button>
-              <button id="registerTab" type="button" role="tab" aria-selected="false" aria-controls="registerForm"
-                class="px-2 py-1 text-xs font-medium text-base-content/60"
-                onclick="switchAuthTab('register')">Register</button>
-            </div>
-            <form id="loginForm" method="POST" novalidate role="tabpanel" aria-labelledby="loginTab">
-              <div class="flex flex-col gap-2 mb-2">
-                <label for="login-username" class="sr-only">Username</label>
-                <input type="text" name="username" id="login-username" placeholder="Username"
-                  class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="username" autocorrect="off"
-                  autocapitalize="none" required>
-                <label for="login-password" class="sr-only">Password</label>
-                <input type="password" name="password" id="login-password" placeholder="Password"
-                  class="px-2 py-2 text-sm border rounded-box w-full" autocomplete="current-password" required>
-              </div>
-              <div id="login-error" role="alert" aria-live="assertive" class="text-error text-xs mb-2 hidden"></div>
-              <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-sm w-full">
-                Log In
-              </button>
-            </form>
-
-            <form id="registerForm" method="POST" action="#" onsubmit="return handleRegister(event);" class="hidden"
-              role="tabpanel" aria-labelledby="registerTab">
-              <div class="flex flex-col gap-2 mb-2">
-                <label for="register-username" class="sr-only">Username</label>
-                <input type="text" name="username" id="register-username" placeholder="Username"
-                  class="px-2 py-1 text-xs border rounded-box" autocomplete="username" autocorrect="off"
-                  autocapitalize="none" required>
-                <label for="register-password" class="sr-only">Password</label>
-                <input type="password" name="password" id="register-password" placeholder="Password"
-                  class="px-2 py-1 text-xs border rounded-box" autocomplete="new-password" required>
-              </div>
-              <div class="relative mb-2 group">
-                <button type="button" aria-describedby="passwordRequirementsDesc"
-                  class="text-xs text-base-content/60 flex items-center focus:outline-hidden">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m-1-4h.01M21 12a9
-                         9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Password requirements
+               class="hidden absolute right-0 mt-2 w-80 bg-base-100 border border-base-300 rounded-box shadow-lg z-50">
+            <div class="p-4">
+              <!-- Auth Tabs -->
+              <div class="flex border-b border-base-200 mb-4" role="tablist">
+                <button id="loginTab" type="button"
+                        class="flex-1 py-2 px-1 border-b-2 border-primary text-primary font-medium text-sm"
+                        onclick="switchAuthTab('login')" role="tab" aria-selected="true" aria-controls="loginForm">
+                  Login
                 </button>
-                <div id="passwordRequirementsDesc" role="tooltip"
-                  class="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-neutral text-neutral-content text-xs rounded-box py-1 px-2 w-full z-10">
-                  Password must be 12+ characters with uppercase, lowercase, number, and special character.
-                </div>
+                <button id="registerTab" type="button"
+                        class="flex-1 py-2 px-1 text-base-content/60 font-medium text-sm"
+                        onclick="switchAuthTab('register')" role="tab" aria-selected="false" aria-controls="registerForm">
+                  Register
+                </button>
               </div>
-              <button type="submit" class="btn btn-success btn-xs w-full">
-                Register
-              </button>
-            </form>
+
+              <!-- Login Form -->
+              <form id="loginForm" class="space-y-4">
+                <div class="form-control">
+                  <label for="loginUsername" class="label">Username</label>
+                  <input type="text" id="loginUsername" name="username" required
+                         class="input input-bordered w-full" />
+                </div>
+                <div class="form-control">
+                  <label for="loginPassword" class="label">Password</label>
+                  <input type="password" id="loginPassword" name="password" required
+                         class="input input-bordered w-full" />
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Login</button>
+              </form>
+
+              <!-- Register Form -->
+              <form id="registerForm" class="hidden space-y-4">
+                <div class="form-control">
+                  <label for="registerUsername" class="label">Username</label>
+                  <input type="text" id="registerUsername" name="username" required
+                         class="input input-bordered w-full" />
+                </div>
+                <div class="form-control">
+                  <label for="registerPassword" class="label">Password</label>
+                  <input type="password" id="registerPassword" name="password" required
+                         class="input input-bordered w-full" />
+                  <p class="text-xs text-base-content/60 mt-1">
+                    Password must be at least 12 characters with uppercase, lowercase, number and special character.
+                  </p>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Register</button>
+              </form>
+            </div>
           </div>
 
           <!-- When logged in: Show username and logout -->
@@ -459,14 +453,6 @@
       <div id="notificationArea" role="status" aria-live="polite" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
 
       <div class="flex-1 overflow-y-auto p-4 md:p-6">
-        <div id="loginRequiredMessage" class="hidden text-center py-8">
-          <p class="text-lg">Please log in to access projects</p>
-          <button id="showLoginBtn" type="button" class="btn btn-primary mt-4"
-            onclick="document.getElementById('authButton').click();">
-            Login
-          </button>
-        </div>
-
         <section id="projectManagerPanel"
           class="bg-base-100 rounded-box shadow-xs p-4 mb-6 flex flex-col min-h-0 border border-base-200">
           <div id="projectListView" class="flex-1 flex flex-col min-h-0 opacity-0 transition-opacity duration-300"></div>
