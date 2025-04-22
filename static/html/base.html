@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="/static/css/dist/tailwind.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
 
-  <!-- Initialize DaisyUI theme -->
+  <!-- Initialize DaisyUI theme (must remain non-module) -->
   <script>
     document.documentElement.setAttribute('data-theme', 'dracula');
   </script>
@@ -59,37 +59,37 @@
 
   <!-- Recommended script loading order -->
   <!-- Layer 1 (Foundation) -->
-  <script src="/static/js/sentry-init.js" defer></script>
-  <script src="/static/js/notification-handler.js" defer></script>
-  <script src="/static/js/eventHandler.js" defer></script>
+  <script type="module" src="/static/js/sentry-init.js" defer></script>
+  <script type="module" src="/static/js/notification-handler.js" defer></script>
+  <script type="module" src="/static/js/eventHandler.js" defer></script>
 
   <!-- Layer 2 (Core Services) -->
-  <script src="/static/js/auth.js" defer></script>
-  <script src="/static/js/modelConfig.js" defer></script>
+  <script type="module" src="/static/js/auth.js" defer></script>
+  <script type="module" src="/static/js/modelConfig.js" defer></script>
 
   <!-- Layer 3 (Application Core) -->
-  <script src="/static/js/app.js" defer></script>
+  <script type="module" src="/static/js/app.js" defer></script>
 
   <!-- Layer 4 (UI Framework) -->
-  <script src="/static/js/uiRenderer.js" defer></script>
-  <script src="/static/js/modalManager.js" defer></script>
+  <script type="module" src="/static/js/uiRenderer.js" defer></script>
+  <script type="module" src="/static/js/modalManager.js" defer></script>
 
   <!-- Layer 5 (Data Management) -->
-  <script src="/static/js/projectManager.js" defer></script>
+  <script type="module" src="/static/js/projectManager.js" defer></script>
 
   <!-- Layer 6 (Components) -->
-  <script src="/static/js/knowledgeBaseState.js" defer></script>
-  <script src="/static/js/projectDashboardUtils.js" defer></script>
-  <script src="/static/js/projectDetailsComponent.js" defer></script>
-  <script src="/static/js/projectListComponent.js" defer></script>
-  <script src="/static/js/sidebar.js" defer></script>
-  <script src="/static/js/projectDashboard.js" defer></script>
+  <script type="module" src="/static/js/knowledgeBaseState.js" defer></script>
+  <script type="module" src="/static/js/projectDashboardUtils.js" defer></script>
+  <script type="module" src="/static/js/projectDashboard.js" defer></script> <!-- FIRST: loads HTML & orchestrates -->
+  <script type="module" src="/static/js/projectDetailsComponent.js" defer></script> <!-- After dashboard -->
+  <script type="module" src="/static/js/projectListComponent.js" defer></script> <!-- After dashboard -->
+  <script type="module" src="/static/js/sidebar.js" defer></script> <!-- LAST: depends on all others -->
 
   <!-- Layer 7 (Component Implementations) -->
-  <script src="/static/js/projectListInit.js" defer></script>
-  <script src="/static/js/chat.js" defer></script>
+  <script type="module" src="/static/js/projectListInit.js" defer></script>
+  <script type="module" src="/static/js/chat.js" defer></script>
 
-  <!-- Theme script as a module (already works well) -->
+  <!-- Theme script as a module -->
   <script type="module" src="/static/js/theme-toggle.js"></script>
 </head>
 
