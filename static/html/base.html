@@ -66,11 +66,10 @@
   <script type="module" src="/static/js/utils.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
   <script type="module" src="/static/js/notification-handler.js"></script>
-  <script type="module" src="/static/js/auth.js"></script> <!-- Auth depends on notifications/utils -->
 
   <!-- Group 2: Application framework (defines DependencySystem, depends on Group 1) -->
   <script type="module" src="/static/js/app.js"></script>
-
+  <script type="module" src="/static/js/auth.js"></script> <!-- Auth depends on notifications/utils -->
   <!-- Group 3: Modules registering with DependencySystem (depend on app.js) -->
   <script type="module" src="/static/js/eventHandler.js"></script>
   <script type="module" src="/static/js/modelConfig.js"></script>
