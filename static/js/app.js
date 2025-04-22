@@ -34,7 +34,7 @@ const DependencySystem = {
   _notifyWaiters(name) {
     if (!this.waiters.has(name)) return;
 
-    this.waiters.get(name).forEach(callback => {
+    this.waiters.get(name).forEach((callback) => {
       try {
         callback(this.modules.get(name));
       } catch (error) {
@@ -49,18 +49,18 @@ const DependencySystem = {
   // Wait for a module to be available
   waitFor(names, callback, timeout = 5000) {
     const namesArray = Array.isArray(names) ? names : [names];
-    const missingModules = namesArray.filter(name => !this.modules.has(name));
+    const missingModules = namesArray.filter((name) => !this.modules.has(name));
 
     if (missingModules.length === 0) {
       // All modules are available, call immediately
-      const modules = namesArray.map(name => this.modules.get(name));
+      const modules = namesArray.map((name) => this.modules.get(name));
       callback(...modules);
       return;
     }
 
     // Create timeout
     const timeoutId = setTimeout(() => {
-      missingModules.forEach(name => {
+      missingModules.forEach((name) => {
         if (!this.modules.has(name)) {
           console.error(`[DependencySystem] Timeout waiting for module: ${name}`);
           this.states.set(name, 'error');
@@ -73,7 +73,7 @@ const DependencySystem = {
     }, timeout);
 
     // Register waiters for each missing module
-    missingModules.forEach(name => {
+    missingModules.forEach((name) => {
       if (!this.waiters.has(name)) {
         this.waiters.set(name, []);
       }
@@ -81,11 +81,11 @@ const DependencySystem = {
       // Add our specialized callback that handles multiple modules
       this.waiters.get(name).push(() => {
         // Check if all required modules are now available
-        const stillMissing = namesArray.filter(n => !this.modules.has(n));
+        const stillMissing = namesArray.filter((n) => !this.modules.has(n));
         if (stillMissing.length === 0) {
           // All dependencies ready
           clearTimeout(timeoutId);
-          const modules = namesArray.map(n => this.modules.get(n));
+          const modules = namesArray.map((n) => this.modules.get(n));
           callback(...modules);
         }
       });
@@ -98,7 +98,9 @@ window.DependencySystem = DependencySystem;
 
 // Configuration
 const APP_CONFIG = {
-  DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
+  DEBUG:
+    window.location.hostname === 'localhost' ||
+    window.location.search.includes('debug=1'),
   // Timeout values (ms)
   TIMEOUTS: {
     INITIALIZATION: 10000,
@@ -147,7 +149,9 @@ const pendingRequests = new Map();
  * @returns {Promise<any>} - Parsed JSON response
  */
 async function apiRequest(url, options = {}, skipCache = false) {
-  const requestKey = `${options.method || 'GET'}-${url}-${JSON.stringify(options.body || {})}`;
+  const requestKey = `${options.method || 'GET'}-${url}-${JSON.stringify(
+    options.body || {}
+  )}`;
 
   // Deduplicate in-flight requests unless explicitly skipped
   if (!skipCache && pendingRequests.has(requestKey)) {
@@ -164,12 +168,19 @@ async function apiRequest(url, options = {}, skipCache = false) {
   }
 
   // Ensure JSON content type for POST/PUT/PATCH
-  if (['POST', 'PUT', 'PATCH'].includes(options.method) && !options.headers['Content-Type']) {
+  if (
+    ['POST', 'PUT', 'PATCH'].includes(options.method) &&
+    !options.headers['Content-Type']
+  ) {
     options.headers['Content-Type'] = 'application/json';
   }
 
   // Convert body to JSON string if it's an object
-  if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
+  if (
+    options.body &&
+    typeof options.body === 'object' &&
+    !(options.body instanceof FormData)
+  ) {
     options.body = JSON.stringify(options.body);
   }
 
@@ -194,7 +205,10 @@ async function apiRequest(url, options = {}, skipCache = false) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const error = new Error(errorData.message || `API request failed with status ${response.status}`);
+        const error = new Error(
+          errorData.message ||
+          `API request failed with status ${response.status}`
+        );
         error.status = response.status;
         error.data = errorData;
         throw error;
@@ -214,7 +228,9 @@ async function apiRequest(url, options = {}, skipCache = false) {
       }
 
       if (error.name === 'AbortError') {
-        throw new Error(`API request timed out after ${APP_CONFIG.TIMEOUTS.API_REQUEST}ms`);
+        throw new Error(
+          `API request timed out after ${APP_CONFIG.TIMEOUTS.API_REQUEST}ms`
+        );
       }
 
       throw error;
@@ -238,7 +254,7 @@ async function initApp() {
   appState.currentPhase = 'boot';
 
   if (document.readyState === 'loading') {
-    await new Promise(resolve =>
+    await new Promise((resolve) =>
       document.addEventListener('DOMContentLoaded', resolve, { once: true })
     );
   }
@@ -297,9 +313,10 @@ async function navigateToConversation(conversationId) {
  * Show or hide a DOM element
  */
 function toggleElement(selector, show) {
-  const element = typeof selector === 'string'
-    ? document.querySelector(APP_CONFIG.SELECTORS[selector])
-    : selector;
+  const element =
+    typeof selector === 'string'
+      ? document.querySelector(APP_CONFIG.SELECTORS[selector])
+      : selector;
   if (element) {
     element.classList.toggle('hidden', !show);
   }
@@ -394,7 +411,7 @@ function showProjectListView() {
   toggleElement('PROJECT_LIST_VIEW', true);
 
   if (appState.isAuthenticated) {
-    loadProjects().catch(error => {
+    loadProjects().catch((error) => {
       console.error('[App] Error loading projects:', error);
       showNotification('Failed to load projects', 'error');
     });
@@ -424,104 +441,115 @@ async function initializeComponents() {
         console.log('[App] ProjectModal initialized');
       }
 
-  // 3. Initialize authentication system
-  DependencySystem.waitFor('auth', async (auth) => {
-      auth.init().then(() => {
-          // IMPORTANT: Update app state with the current auth state AFTER init completes
-          appState.isAuthenticated = auth.isAuthenticated();
-          appState.username = auth.getCurrentUser();
-          appState.currentPhase = 'auth_checked';
-          console.log('[App] Auth initialization completed. User authenticated:', appState.isAuthenticated);
+      // 3. Initialize authentication system
+      DependencySystem.waitFor('auth', async (auth) => {
+        auth
+          .init()
+          .then(() => {
+            // IMPORTANT: Update app state with the current auth state AFTER init completes
+            appState.isAuthenticated = auth.isAuthenticated();
+            appState.username = auth.getCurrentUser();
+            appState.currentPhase = 'auth_checked';
+            console.log(
+              '[App] Auth initialization completed. User authenticated:',
+              appState.isAuthenticated
+            );
 
-          // Add a listener for auth state changes to keep app.state in sync
-          window.auth.AuthBus.addEventListener('authStateChanged', event => {
+            // Add a listener for auth state changes to keep app.state in sync
+            window.auth.AuthBus.addEventListener('authStateChanged', (event) => {
               const { authenticated, username } = event.detail;
 
               // Keep app state synchronized with auth state
               appState.isAuthenticated = authenticated;
               appState.username = username;
 
-              console.log(`[App] Auth state updated: authenticated=${authenticated}, username=${username}`);
+              console.log(
+                `[App] Auth state updated: authenticated=${authenticated}, username=${username}`
+              );
 
               // Update UI or trigger re-renders as needed
               handleNavigationChange();
-          });
+            });
 
-          // Wait for authReady event or definitive auth state
-          if (!appState.isAuthenticated) {
+            // Wait for authReady event or definitive auth state
+            if (!appState.isAuthenticated) {
               console.log('[App] Waiting for definitive auth state...');
-              // Use a callback approach instead of await since we're in a non-async callback
-              new Promise(resolve => {
-                  const authReadyHandler = () => {
-                      appState.isAuthenticated = auth.isAuthenticated();
-                      window.auth.AuthBus.removeEventListener('authReady', authReadyHandler);
-                      resolve();
-                  };
-                  window.auth.AuthBus.addEventListener('authReady', authReadyHandler);
-                  // Safety timeout
-                  setTimeout(resolve, 5000);
+              new Promise((resolve) => {
+                const authReadyHandler = () => {
+                  appState.isAuthenticated = auth.isAuthenticated();
+                  window.auth.AuthBus.removeEventListener('authReady', authReadyHandler);
+                  resolve();
+                };
+                window.auth.AuthBus.addEventListener('authReady', authReadyHandler);
+                // Safety timeout
+                setTimeout(resolve, 5000);
               }).then(() => {
-                  // Initialize UI components after auth state is resolved
-                  initializeUIComponents();
+                // Initialize UI components after auth state is resolved
+                initializeUIComponents();
               });
-          } else {
+            } else {
               // Auth already confirmed, initialize UI directly
               initializeUIComponents();
-          }
+            }
 
-          // Function to initialize UI components
-          function initializeUIComponents() {
+            // Function to initialize UI components
+            function initializeUIComponents() {
               const uiComponents = ['sidebar', 'projectDashboard'];
-              DependencySystem.waitFor(uiComponents, () => {
+              DependencySystem.waitFor(
+                uiComponents,
+                () => {
                   if (window.sidebar?.init) {
-                      window.sidebar.init();
-                      console.log('[App] Sidebar initialized');
+                    window.sidebar.init();
+                    console.log('[App] Sidebar initialized');
                   }
 
                   if (window.projectDashboard?.init) {
-                      window.projectDashboard.init().then(() => {
-                          console.log('[App] ProjectDashboard initialized');
+                    window.projectDashboard.init().then(() => {
+                      console.log('[App] ProjectDashboard initialized');
 
-                          // Initialize downstream components
-                          if (window.chatExtensions?.initChatExtensions) {
-                              window.chatExtensions.initChatExtensions();
-                          }
+                      // Initialize downstream components
+                      if (window.chatExtensions?.initChatExtensions) {
+                        window.chatExtensions.initChatExtensions();
+                      }
 
-                          if (window.chatManager?.initialize) {
-                              window.chatManager.initialize();
-                          }
+                      if (window.chatManager?.initialize) {
+                        window.chatManager.initialize();
+                      }
 
-                          if (window.initProjectList) {
-                              window.initProjectList();
-                          }
+                      if (window.initProjectList) {
+                        window.initProjectList();
+                      }
 
-                          if (window.KnowledgeBaseComponent) {
-                              window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
-                          }
+                      if (window.KnowledgeBaseComponent) {
+                        window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+                      }
 
-                          // Final steps
-                          appState.initializing = false;
-                          appState.initialized = true;
-                          appState.currentPhase = 'complete';
-                          console.log('[App] Initialization complete');
-                      });
+                      // Final steps
+                      appState.initializing = false;
+                      appState.initialized = true;
+                      appState.currentPhase = 'complete';
+                      console.log('[App] Initialization complete');
+                    });
                   }
-          }, 10000); // Longer timeout for UI components
-      }).catch(error => {
-          console.error('[App] Auth initialization failed:', error);
-          appState.currentPhase = 'auth_error';
+                },
+                10000 // Longer timeout for UI components
+              );
+            }
+          })
+          .catch((error) => {
+            console.error('[App] Auth initialization failed:', error);
+            appState.currentPhase = 'auth_error';
+          });
       });
-  });
     });
   });
 }
-
 
 /**
  * Listen for authentication state changes
  */
 if (window.auth?.AuthBus) {
-  window.auth.AuthBus.addEventListener('authStateChanged', event => {
+  window.auth.AuthBus.addEventListener('authStateChanged', (event) => {
     const { authenticated } = event.detail || {};
     appState.isAuthenticated = authenticated;
 
