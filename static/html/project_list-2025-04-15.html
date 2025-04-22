@@ -1,0 +1,133 @@
+<!-- Project List View -->
+<div class="mb-4 flex items-center justify-between">
+  <h2 class="text-xl font-semibold">Projects</h2>
+  <div class="flex gap-2">
+    <input id="projectSearchInput" type="search" placeholder="Search projects..."
+      class="border px-2 py-1 rounded-box text-sm" />
+    <button id="createProjectBtn" type="button"
+      class="btn btn-primary btn-sm">
+      New Project
+    </button>
+  </div>
+</div>
+
+<!-- Projects filter tabs -->
+<div class="flex border-b border-base-200 mb-4" id="projectFilterTabs">
+  <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200"
+    data-filter="all" type="button" aria-current="page" onclick="handleProjectFilterClick('all', this)">
+    <span class="relative py-1.5">
+      <span class="block">All Projects</span>
+      <span class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>
+    </span>
+  </button>
+  <button
+    class="project-filter-btn px-4 py-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors duration-200"
+    data-filter="pinned" type="button" onclick="handleProjectFilterClick('pinned', this)">
+    <span class="relative py-1.5">
+      <span class="block">Pinned</span>
+      <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
+    </span>
+  </button>
+  <button
+    class="project-filter-btn px-4 py-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors duration-200"
+    data-filter="archived" type="button" onclick="handleProjectFilterClick('archived', this)">
+    <span class="relative py-1.5">
+      <span class="block">Archived</span>
+      <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
+    </span>
+  </button>
+</div>
+
+<script>
+  function handleProjectFilterClick(filter, clickedButton) {
+    // Update active tab styling
+    const tabs = document.querySelectorAll('#projectFilterTabs .project-filter-btn');
+    tabs.forEach(tab => {
+      const span = tab.querySelector('span span:last-child');
+      if (tab === clickedButton) {
+        tab.setAttribute('aria-current', 'page');
+        span.classList.remove('bg-transparent');
+        span.classList.add('bg-blue-600');
+        tab.classList.remove('text-base-content/60');
+        tab.classList.add('text-primary');
+      } else {
+        tab.removeAttribute('aria-current');
+        span.classList.add('bg-transparent');
+        span.classList.remove('bg-blue-600');
+        tab.classList.add('text-base-content/60');
+        tab.classList.remove('text-primary');
+      }
+    });
+
+    // Load projects with selected filter
+    if (window.projectManager && window.projectManager.loadProjects) {
+      window.projectManager.loadProjects(filter);
+    } else {
+      console.error('Project manager not available');
+    }
+  }
+</script>
+
+<!-- Project list container -->
+<div id="projectList" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 h-full overflow-y-auto p-2">
+  <!-- Project cards will be dynamically inserted here using daisyUI card component -->
+</div>
+
+<!-- No projects message -->
+<div id="noProjectsMessage" class="hidden text-center py-8 text-base-content/60">
+  No projects found. Create your first project using the "New Project" button.
+</div>
+
+<!-- At the end of project_list.html -->
+<script>
+  // Initialize project list component once the projectManager is ready
+  document.addEventListener('appJsReady', function() {
+    if (window.projectManager && window.projectManager.loadProjects) {
+      // Initial project loading
+      window.projectManager.loadProjects('all').catch(err => {
+        console.error("Initial project loading failed:", err);
+      });
+    }
+
+    // Project search
+    const projectSearchInput = document.getElementById('projectSearchInput');
+    if (projectSearchInput) {
+      projectSearchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const projectCards = document.querySelectorAll('#projectList .project-card');
+
+        projectCards.forEach(card => {
+          const projectName = card.querySelector('.project-name')?.textContent.toLowerCase() || '';
+          const projectDescription = card.querySelector('.project-description')?.textContent.toLowerCase() || '';
+
+          if (projectName.includes(searchTerm) || projectDescription.includes(searchTerm)) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    }
+
+    // New project button
+    const createProjectBtn = document.getElementById('createProjectBtn');
+    if (createProjectBtn) {
+      createProjectBtn.addEventListener('click', function() {
+        if (window.modalManager && window.modalManager.show) {
+          window.modalManager.show('project', {
+            updateContent: (modalEl) => {
+              const form = modalEl.querySelector('form');
+              if (form) form.reset();
+              const projectIdInput = modalEl.querySelector('#projectIdInput');
+              if (projectIdInput) projectIdInput.value = '';
+              const title = modalEl.querySelector('.modal-title, h3');
+              if (title) title.textContent = 'Create New Project';
+            }
+          });
+        } else if (window.projectModal) {
+          window.projectModal.openModal();
+        }
+      });
+    }
+  });
+</script>
