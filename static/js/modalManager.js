@@ -24,6 +24,7 @@ class ModalManager {
       instructions: "instructionsModal",
       contentView: "contentViewModal",
     };
+    // Ensure these match the IDs in modals.html
     this.activeModal = null;
   }
 
