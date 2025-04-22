@@ -619,6 +619,22 @@ function validatePassword(password) {
   };
 }
 
+// Handle dynamic element reinitialization
+function reinitializeAuthElements() {
+  const authButton = document.getElementById('authButton');
+  const authDropdown = document.getElementById('authDropdown');
+  
+  if (authButton && authDropdown && !authButton._listenerAttached) {
+    setupCommonElements();
+    authButton._listenerAttached = true;
+    console.log('[eventHandler] Re-initialized auth elements');
+  }
+}
+
+// Set up event listeners for dynamic content
+document.addEventListener('modalsLoaded', reinitializeAuthElements);
+document.addEventListener('authStateChanged', reinitializeAuthElements);
+
 // Export to window and as a module
 window.eventHandlers = {
   trackListener,
