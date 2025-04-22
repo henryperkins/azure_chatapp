@@ -276,13 +276,12 @@ async function verifyAuthState(forceVerify = false) {
     authCheckInProgress = true;
 
     try {
-        // Always check cookies first
-        if (!document.cookie.includes('access_token')) {
-            console.log('[Auth] No auth cookies detected');
-            await clearTokenState({ source: 'no_cookies' });
-            return false;
-        }
+        // Debug cookies
+        const allCookies = document.cookie;
+        console.debug(`[Auth] All cookies: ${allCookies}`);
 
+        // For local development, skip cookie check and go directly to API verification
+        // This allows the API's cookies to be used even if they're not immediately visible to JS
         const response = await authRequest('/api/auth/verify', 'GET');
 
         if (response?.authenticated) {
