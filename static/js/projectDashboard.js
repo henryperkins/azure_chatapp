@@ -18,7 +18,8 @@ const dashboardState = {
  * Load projects list with debounce to prevent multiple calls
  */
 const loadProjectList = window.eventHandlers.debounce(() => {
-  if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
+  // FIXED: Use direct auth method for consistency rather than app.state
+  if (window.auth?.isAuthenticated() && window.projectManager?.loadProjects) {
     window.projectManager.loadProjects('all');
   }
 }, 100);
@@ -265,7 +266,7 @@ function showProjectDetails(projectId) {
   window.history.pushState({}, '', currentUrl.toString());
 
   // Load project details
-  if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjectDetails) {
+  if (window.auth?.isAuthenticated() && window.projectManager?.loadProjectDetails) {
     window.projectManager
       .loadProjectDetails(projectId)
       .catch((error) => {

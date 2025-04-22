@@ -111,6 +111,7 @@ async function loadProjectDetails(projectId) {
   }
 
   try {
+    // FIXED: Use the direct auth module check for consistency with loadProjects
     if (!window.auth?.isAuthenticated()) {
       console.warn("[projectManager] Not authenticated, can't load project details");
       emitEvent("projectDetailsError", {

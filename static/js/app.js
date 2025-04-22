@@ -425,70 +425,93 @@ async function initializeComponents() {
       }
 
   // 3. Initialize authentication system
-  DependencySystem.waitFor('auth', (auth) => {
-    auth.init().then(() => {
-      // IMPORTANT: Update app state with the current auth state AFTER init completes
-      appState.isAuthenticated = auth.isAuthenticated();
-      appState.username = auth.getCurrentUser();
-      appState.currentPhase = 'auth_checked';
-      console.log('[App] Auth initialization completed. User authenticated:', appState.isAuthenticated);
+  DependencySystem.waitFor('auth', async (auth) => {
+      auth.init().then(() => {
+          // IMPORTANT: Update app state with the current auth state AFTER init completes
+          appState.isAuthenticated = auth.isAuthenticated();
+          appState.username = auth.getCurrentUser();
+          appState.currentPhase = 'auth_checked';
+          console.log('[App] Auth initialization completed. User authenticated:', appState.isAuthenticated);
 
-      // Add a listener for auth state changes to keep app.state in sync
-      window.auth.AuthBus.addEventListener('authStateChanged', event => {
-        const { authenticated, username } = event.detail;
+          // Add a listener for auth state changes to keep app.state in sync
+          window.auth.AuthBus.addEventListener('authStateChanged', event => {
+              const { authenticated, username } = event.detail;
 
-        // Keep app state synchronized with auth state
-        appState.isAuthenticated = authenticated;
-        appState.username = username;
+              // Keep app state synchronized with auth state
+              appState.isAuthenticated = authenticated;
+              appState.username = username;
 
-        console.log(`[App] Auth state updated: authenticated=${authenticated}, username=${username}`);
+              console.log(`[App] Auth state updated: authenticated=${authenticated}, username=${username}`);
 
-        // Update UI or trigger re-renders as needed
-        handleNavigationChange();
-      });
+              // Update UI or trigger re-renders as needed
+              handleNavigationChange();
+          });
 
-      // 4. Initialize UI components
-      const uiComponents = ['sidebar', 'projectDashboard'];
-      DependencySystem.waitFor(uiComponents, () => {
-            if (window.sidebar?.init) {
-              window.sidebar.init();
-              console.log('[App] Sidebar initialized');
-            }
-
-            if (window.projectDashboard?.init) {
-              window.projectDashboard.init().then(() => {
-                console.log('[App] ProjectDashboard initialized');
-
-                // 5. Initialize downstream components
-                if (window.chatExtensions?.initChatExtensions) {
-                  window.chatExtensions.initChatExtensions();
-                }
-
-                if (window.chatManager?.initialize) {
-                  window.chatManager.initialize();
-                }
-
-                if (window.initProjectList) {
-                  window.initProjectList();
-                }
-
-                if (window.KnowledgeBaseComponent) {
-                  window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
-                }
-
-                // Final steps
-                appState.initializing = false;
-                appState.initialized = true;
-                appState.currentPhase = 'complete';
-                console.log('[App] Initialization complete');
+          // Wait for authReady event or definitive auth state
+          if (!appState.isAuthenticated) {
+              console.log('[App] Waiting for definitive auth state...');
+              // Use a callback approach instead of await since we're in a non-async callback
+              new Promise(resolve => {
+                  const authReadyHandler = () => {
+                      appState.isAuthenticated = auth.isAuthenticated();
+                      window.auth.AuthBus.removeEventListener('authReady', authReadyHandler);
+                      resolve();
+                  };
+                  window.auth.AuthBus.addEventListener('authReady', authReadyHandler);
+                  // Safety timeout
+                  setTimeout(resolve, 5000);
+              }).then(() => {
+                  // Initialize UI components after auth state is resolved
+                  initializeUIComponents();
               });
-            }
+          } else {
+              // Auth already confirmed, initialize UI directly
+              initializeUIComponents();
+          }
+
+          // Function to initialize UI components
+          function initializeUIComponents() {
+              const uiComponents = ['sidebar', 'projectDashboard'];
+              DependencySystem.waitFor(uiComponents, () => {
+                  if (window.sidebar?.init) {
+                      window.sidebar.init();
+                      console.log('[App] Sidebar initialized');
+                  }
+
+                  if (window.projectDashboard?.init) {
+                      window.projectDashboard.init().then(() => {
+                          console.log('[App] ProjectDashboard initialized');
+
+                          // Initialize downstream components
+                          if (window.chatExtensions?.initChatExtensions) {
+                              window.chatExtensions.initChatExtensions();
+                          }
+
+                          if (window.chatManager?.initialize) {
+                              window.chatManager.initialize();
+                          }
+
+                          if (window.initProjectList) {
+                              window.initProjectList();
+                          }
+
+                          if (window.KnowledgeBaseComponent) {
+                              window.knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+                          }
+
+                          // Final steps
+                          appState.initializing = false;
+                          appState.initialized = true;
+                          appState.currentPhase = 'complete';
+                          console.log('[App] Initialization complete');
+                      });
+                  }
           }, 10000); // Longer timeout for UI components
-        }).catch(error => {
+      }).catch(error => {
           console.error('[App] Auth initialization failed:', error);
           appState.currentPhase = 'auth_error';
-        });
       });
+  });
     });
   });
 }

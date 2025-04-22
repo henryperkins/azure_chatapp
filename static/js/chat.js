@@ -89,7 +89,7 @@ class ChatManager {
 
     try {
       // Use app.state.isAuthenticated to avoid multiple direct checks
-      if (!window.app?.state?.isAuthenticated) {
+      if (!window.auth?.isAuthenticated()) {
         console.warn("[Chat] User not authenticated, cannot initialize chat");
         // We can still set up UI but won't load any conversation
       }
@@ -152,7 +152,7 @@ class ChatManager {
       return false;
     }
 
-    if (!window.app?.state?.isAuthenticated) {
+    if (!window.auth?.isAuthenticated()) {
       console.warn("[Chat] loadConversation called but user not authenticated");
       return false;
     }
@@ -212,7 +212,7 @@ class ChatManager {
    * @returns {Promise<Object>} - New conversation object
    */
   async createNewConversation() {
-    if (!window.app?.state?.isAuthenticated) {
+    if (!window.auth?.isAuthenticated()) {
       console.warn("[Chat] User not authenticated, cannot create conversation");
       throw new Error("Not authenticated");
     }
@@ -269,7 +269,7 @@ class ChatManager {
     if (!messageText.trim()) return;
 
     // If not authenticated, user can't send message
-    if (!window.app?.state?.isAuthenticated) {
+    if (!window.auth?.isAuthenticated()) {
       window.app?.showNotification?.("Please log in to send messages", "error");
       return;
     }
@@ -359,7 +359,7 @@ class ChatManager {
   async deleteConversation() {
     if (!this.currentConversationId) return false;
 
-    if (!window.app?.state?.isAuthenticated) {
+    if (!window.auth?.isAuthenticated()) {
       console.warn("[Chat] Cannot delete conversation - not authenticated");
       return false;
     }
@@ -909,4 +909,4 @@ class ChatManager {
 }
 window.createNewChat = () => window.chatManager.createNewConversation();
 window.sendMessage = (message) => window.chatManager.sendMessage(message);
-DependencySystem.register('chatManager', window.chatManager); 
+DependencySystem.register('chatManager', window.chatManager);

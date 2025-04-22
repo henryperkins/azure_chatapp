@@ -123,7 +123,7 @@ async function handleTitleEditClick(editTitleBtn, chatTitleEl) {
     // Attempt to save updated title
     try {
       // Check if the user is authenticated
-      if (!window.app?.state?.isAuthenticated) {
+      if (!window.auth?.isAuthenticated()) {
         window.showNotification?.("Authentication required", "error");
         chatTitleEl.textContent = originalTitle;
         return;
