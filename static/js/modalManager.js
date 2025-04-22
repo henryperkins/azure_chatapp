@@ -89,28 +89,40 @@ class ModalManager {
       console.log(`[ModalManager] Skipping modal '${modalName}' during app init`);
       return false;
     }
-
+  
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
       console.error(`[ModalManager] No ID mapping for modalName='${modalName}'`);
       return false;
     }
-
-    const modalEl = document.getElementById(modalId);
+  
+    let modalEl = document.getElementById(modalId);
     if (!modalEl) {
         console.error(`[ModalManager] <dialog> element not found for ID='${modalId}'`);
         return false;
     }
-
+  
     try {
+        // Add error boundary for missing elements
+        if (!modalEl) {
+          console.error(`Modal element ${modalId} not found, attempting recovery`);
+          if (modalName === 'project') {
+            window.projectModal?.init();
+            modalEl = document.getElementById(modalId);
+          }
+        }
+  
+        // Force modal to top layer
+        modalEl.style.zIndex = '99999';
+  
         // Remove any hidden classes
         modalEl.classList.remove('hidden');
-
+  
         // Update content if callback provided
         if (typeof options.updateContent === 'function') {
             options.updateContent(modalEl);
         }
-
+  
         // Show using native dialog or fallback
         if (typeof modalEl.showModal === 'function') {
             modalEl.showModal();
@@ -123,7 +135,7 @@ class ModalManager {
             modalEl.setAttribute('open', 'true');
             this.activeModal = modalId;
         }
-
+  
         console.log(`[ModalManager] Successfully showed modal: ${modalName}`);
         return true;
     } catch (error) {
@@ -266,13 +278,18 @@ class ProjectModal {
 
   init() {
     console.log('[ProjectModal] Starting initialization...');
-    this.modalElement = document.getElementById('projectModal');
-
-    if (!this.modalElement) {
-        console.warn('[ProjectModal] Modal element not found, creating...');
-        this.createModalElement();
+  
+    // Force recreation of modal element if not properly initialized
+    if (!this.modalElement || !document.body.contains(this.modalElement)) {
+      this.createModalElement();
     }
-
+  
+    // Ensure form elements exist
+    this.formElement = this.modalElement.querySelector('#projectForm');
+    if (!this.formElement) {
+      this.createModalElement();
+    }
+  
     this.setupEventListeners();
     console.log('[ProjectModal] Initialized successfully');
   }

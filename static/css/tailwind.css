@@ -108,4 +108,15 @@
     z-index: 40;
     position: relative;
   }
+  
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+  }
+  
+  .modal[open] {
+    display: flex !important;
+  }
 }
