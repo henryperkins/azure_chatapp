@@ -1,8 +1,11 @@
-// Updated sidebar.js to fix unresponsive sidebar initialization and ensure
-// consistent toggle logic across all pages. This file consolidates all
-// sidebar-related event listeners, removing duplicates, and properly manages
-// the backdrop for mobile overlay. Tailwind classes are used to hide/show
-// the sidebar.
+/** sidebar.js
+ * Dependencies:
+ * - localStorage (browser built-in)
+ * - window.projectDashboard (external dependency, expected to be available in global scope)
+ * - window.auth (external dependency, expected to be available in global scope)
+ * - window.projectManager (external dependency, expected to be available in global scope)
+ * - DependencySystem (external dependency, used for module registration)
+ */
 
 (function () {
   // Attach this module to the global window object

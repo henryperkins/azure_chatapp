@@ -1,7 +1,32 @@
 /**
  * KnowledgeBaseComponent - Complete Implementation
  * A comprehensive knowledge base management component with search, file processing, and UI interactions
+ * Dependencies:
+ * - window.apiRequest (external dependency, for API requests)
+ * - window.auth (external dependency, for authentication)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.showNotification (external dependency, for user feedback)
+ * - window.uiUtilsInstance (optional external utility, for formatting)
+ * - document (browser built-in, for DOM manipulation)
+ * - localStorage (browser built-in, for persistent state)
  */
+
+// Browser APIs:
+// - document (DOM access)
+// - localStorage (state persistence)
+
+// External Dependencies (Global Scope):
+// - window.apiRequest (API requests)
+// - window.auth (authentication)
+// - window.projectManager (project management)
+// - window.showNotification (user notifications)
+// - window.uiUtilsInstance (formatting utilities)
+
+// Optional Dependencies:
+// - Gracefully falls back if uiUtilsInstance not available
+// - Handles missing auth module
+// - Provides basic error handling if showNotification not available
+
 class KnowledgeBaseComponent {
   constructor(options = {}) {
     // Configuration with defaults

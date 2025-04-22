@@ -1,9 +1,25 @@
 /**
  * projectListInit.js
  * Initializes the project list logic, including the search input
- * and the create project button. Waits for necessary dependencies,
- * then sets up event listeners.
+ * Dependencies:
+ * - window.projectManager (external dependency, for project operations)
+ * - window.projectModal (external dependency, for modal handling)
+ * - document (browser built-in, for DOM manipulation)
+ * - DependencySystem (external dependency, for module registration)
  */
+
+// Browser APIs:
+// - document (DOM access)
+
+// External Dependencies (Global Scope):
+// - window.projectManager (project data operations)
+// - window.projectModal (modal management)
+// - DependencySystem (module registration)
+
+// Optional Dependencies:
+// - Gracefully handles missing DOM elements
+// - Provides timeout for dependency loading
+// - Falls back gracefully if DependencySystem not available
 
 // Make it available globally if app.js relies on that
 window.initProjectList = initProjectList;

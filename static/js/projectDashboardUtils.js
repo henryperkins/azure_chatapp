@@ -1,8 +1,43 @@
   /**
-   * projectDashboardUtils.js
-   * Centralized utility functions for the project dashboard.
-   * Simplified to focus on core utilities and eliminate duplication.
-   */
+ * projectDashboardUtils.js
+ * Centralized utility functions for the project dashboard.
+ * Dependencies:
+ * - window.eventHandlers (external utility, for event management)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.modalManager (external dependency, for modal dialogs)
+ * - window.notificationHandler (external dependency, for notifications)
+ * - window.showNotification (fallback notification system)
+ * - window.formatDate (external utility, for date formatting)
+ * - window.formatBytes (external utility, for byte formatting)
+ * - window.app (external dependency, for authentication state)
+ * - document (browser built-in, for DOM manipulation)
+ * - localStorage (browser built-in, for persistent state)
+ * - URL (browser built-in, for URL manipulation)
+ * - CustomEvent (browser built-in, for custom events)
+ * - Intl.NumberFormat (browser built-in, for number formatting)
+ */
+
+// Browser APIs:
+// - document (DOM access)
+// - localStorage (state persistence)
+// - URL (URL parsing/manipulation)
+// - CustomEvent (event system)
+// - Intl.NumberFormat (number formatting)
+
+// External Dependencies (Global Scope):
+// - window.eventHandlers (event management)
+// - window.projectManager (project data operations)
+// - window.modalManager (modal management)
+// - window.notificationHandler (notification system)
+// - window.showNotification (fallback notifications)
+// - window.formatDate (date formatting)
+// - window.formatBytes (file size formatting)
+// - window.app (application state)
+
+// Optional Dependencies:
+// - Notification handlers fall back to console
+// - Date/bytes formatting falls back to basic implementations if globals missing
+// - Graceful degradation when components aren't available
 
   // Create the ProjectDashboard namespace
   const ProjectDashboard = window.ProjectDashboard || {};
