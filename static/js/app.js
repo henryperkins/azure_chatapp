@@ -424,16 +424,32 @@ async function initializeComponents() {
         console.log('[App] ProjectModal initialized');
       }
 
-      // 3. Initialize authentication system
-      DependencySystem.waitFor('auth', (auth) => {
-        auth.init().then(() => {
-          appState.isAuthenticated = auth.isAuthenticated();
-          appState.currentPhase = 'auth_checked';
-          console.log('[App] Auth initialized');
+  // 3. Initialize authentication system
+  DependencySystem.waitFor('auth', (auth) => {
+    auth.init().then(() => {
+      // IMPORTANT: Update app state with the current auth state AFTER init completes
+      appState.isAuthenticated = auth.isAuthenticated();
+      appState.username = auth.getCurrentUser();
+      appState.currentPhase = 'auth_checked';
+      console.log('[App] Auth initialization completed. User authenticated:', appState.isAuthenticated);
 
-          // 4. Initialize UI components
-          const uiComponents = ['sidebar', 'projectDashboard'];
-          DependencySystem.waitFor(uiComponents, () => {
+      // Add a listener for auth state changes to keep app.state in sync
+      window.auth.AuthBus.addEventListener('authStateChanged', event => {
+        const { authenticated, username } = event.detail;
+
+        // Keep app state synchronized with auth state
+        appState.isAuthenticated = authenticated;
+        appState.username = username;
+
+        console.log(`[App] Auth state updated: authenticated=${authenticated}, username=${username}`);
+
+        // Update UI or trigger re-renders as needed
+        handleNavigationChange();
+      });
+
+      // 4. Initialize UI components
+      const uiComponents = ['sidebar', 'projectDashboard'];
+      DependencySystem.waitFor(uiComponents, () => {
             if (window.sidebar?.init) {
               window.sidebar.init();
               console.log('[App] Sidebar initialized');

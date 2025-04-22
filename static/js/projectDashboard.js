@@ -34,6 +34,36 @@ async function init() {
   console.log('[projectDashboard] Initializing...');
 
   try {
+    // Ensure authentication is established before proceeding
+    if (!window.auth?.isAuthenticated()) {
+      console.log('[projectDashboard] Not authenticated yet, waiting for auth...');
+
+      // Check if auth module is still initializing
+      if (!window.auth?.isReady()) {
+        console.log('[projectDashboard] Auth module not ready, waiting for initialization...');
+        await new Promise(resolve => {
+          const authReadyHandler = (event) => {
+            window.auth.AuthBus.removeEventListener('authReady', authReadyHandler);
+            resolve();
+          };
+          window.auth.AuthBus.addEventListener('authReady', authReadyHandler);
+
+          // Safety timeout in case event never fires
+          setTimeout(resolve, 5000);
+        });
+      }
+
+      // If still not authenticated after auth is ready, wait for auth state change
+      if (!window.auth?.isAuthenticated()) {
+        console.log('[projectDashboard] Auth ready but not authenticated, waiting for login...');
+        // Handle non-authenticated state (show login prompt, etc.)
+        showLoginRequiredMessage();
+        return false;
+      }
+    }
+
+    console.log('[projectDashboard] Authentication confirmed, proceeding with initialization...');
+
     // Ensure DOM is ready
     if (document.readyState === 'loading') {
       await new Promise(resolve =>
@@ -69,6 +99,15 @@ async function init() {
     );
     return false;
   }
+}
+
+function showLoginRequiredMessage() {
+  const loginMessage = document.getElementById('loginRequiredMessage');
+  if (loginMessage) {
+    loginMessage.classList.remove('hidden');
+  }
+  const projectViews = document.querySelectorAll('#projectListView, #projectDetailsView');
+  projectViews.forEach(view => view.classList.add('hidden'));
 }
 
 /**
