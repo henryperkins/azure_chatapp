@@ -247,53 +247,57 @@ async function clearTokenState(options = { source: 'unknown', isError: false }) 
  * Verify authentication state with the backend.
  */
 async function verifyAuthState(forceVerify = false) {
-  if (authCheckInProgress && !forceVerify) {
-    console.debug('[Auth] Verification already in progress, skipping...');
-    return authState.isAuthenticated;
-  }
-
-  console.debug(`[Auth] Verifying auth state (forceVerify=${forceVerify})...`);
-  authCheckInProgress = true;
-
-  try {
-    const response = await authRequest('/api/auth/verify', 'GET');
-    if (response?.authenticated) {
-      broadcastAuth(true, response.username || null, 'verify_success');
-      return true;
-    } else {
-      await clearTokenState({ source: 'verify_negative_response' });
-      return false;
+    if (authCheckInProgress && !forceVerify) {
+        return authState.isAuthenticated;
     }
-  } catch (error) {
-    console.warn('[Auth] verifyAuthState error:', error);
-    if (error.status === 401) {
-      // Likely expired token, attempt refresh
-      console.info('[Auth] Verification 401, attempting refresh...');
-      try {
-        await refreshTokens();
-        const reVerify = await authRequest('/api/auth/verify', 'GET');
-        if (reVerify?.authenticated) {
-          broadcastAuth(true, reVerify.username || null, 'verify_post_refresh');
-          return true;
-        } else {
-          await clearTokenState({ source: 'verify_post_refresh_fail', isError: true });
-          return false;
+
+    console.debug(`[Auth] Verifying auth state (forceVerify=${forceVerify})...`);
+    authCheckInProgress = true;
+
+    try {
+        // Always check cookies first
+        if (!document.cookie.includes('access_token')) {
+            console.log('[Auth] No auth cookies detected');
+            await clearTokenState({ source: 'no_cookies' });
+            return false;
         }
-      } catch (refreshError) {
-        if (authState.isAuthenticated) {
-          await clearTokenState({ source: 'verify_refresh_exception', isError: true });
+
+        const response = await authRequest('/api/auth/verify', 'GET');
+
+        if (response?.authenticated) {
+            broadcastAuth(true, response.username, 'verify_success');
+            return true;
         }
+
+        await clearTokenState({ source: 'verify_negative' });
         return false;
-      }
-    } else if (error.status === 403) {
-      // Forbidden => user disabled or lacks permission
-      await clearTokenState({ source: 'verify_403_forbidden', isError: true });
-      return false;
+
+    } catch (error) {
+        console.warn('[Auth] verifyAuthState error:', error);
+
+        // Handle 500 errors specifically
+        if (error.status === 500) {
+          console.error('[Auth] Server error during verify, clearing state');
+          await clearTokenState({ source: 'verify_500' });
+          throw new Error('Server error during verification');
+        }
+
+        if (error.status === 401) {
+          // Try refresh if available
+          try {
+            await refreshTokens();
+            return verifyAuthState(true);
+          } catch (refreshError) {
+            await clearTokenState({ source: 'refresh_failed' });
+            return false;
+          }
+        }
+
+        // For other errors, maintain current state
+        return authState.isAuthenticated;
+    } finally {
+        authCheckInProgress = false;
     }
-    return authState.isAuthenticated; // Fallback on other unexpected errors
-  } finally {
-    authCheckInProgress = false;
-  }
 }
 
 /**
@@ -302,39 +306,37 @@ async function verifyAuthState(forceVerify = false) {
 async function loginUser(username, password) {
   console.log('[Auth] Attempting login for user:', username);
   try {
+    // Get CSRF token first
     await getCSRFTokenAsync();
+
+    // Perform login
     const response = await authRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password,
     });
     console.log('[Auth] Login API call successful.');
 
-    // CRITICAL FIX: Update auth state before verification to ensure it's available immediately
-    // This prevents race conditions with components checking auth state too early
-    authState.isAuthenticated = true;
-    authState.username = username;
+    // Verify auth state before broadcasting success
+    try {
+      const verified = await verifyAuthState(true);
+      if (!verified) {
+        console.error('[Auth] Login succeeded but verification failed');
+        await clearTokenState({ source: 'verify_failed' });
+        throw new Error('Session verification failed');
+      }
 
-    // Now verify the state with the new session cookie
-    const loggedIn = await verifyAuthState(true);
-    if (!loggedIn) {
-      console.error('[Auth] Login succeeded, but verify failed.');
-      // If verification fails, revert the auth state
-      authState.isAuthenticated = false;
-      authState.username = null;
-      throw new Error('Login succeeded but session verification failed.');
+      // Only broadcast success after verification
+      broadcastAuth(true, username, 'login_success');
+      console.log(`[Auth] User ${username} is now logged in.`);
+      return response;
+    } catch (verifyError) {
+      console.error('[Auth] Verification failed:', verifyError);
+      await clearTokenState({ source: 'verify_error' });
+      throw verifyError;
     }
-
-    // Only broadcast the auth change after everything is confirmed
-    broadcastAuth(true, response.username || username, 'login_success');
-
-    // Add a small delay to ensure state propagation across the app
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    console.log(`[Auth] User ${authState.username} is now logged in.`);
-    return response;
   } catch (error) {
     console.error('[Auth] Login failed:', error);
-    await clearTokenState({ source: 'login_error', isError: true });
+    await clearTokenState({ source: 'login_error' });
     throw error;
   }
 }
@@ -404,65 +406,41 @@ async function init() {
   }
   console.log('[Auth] Initializing auth module...');
 
-  // Optional: Update a loading UI
-  const loadingDiv = document.getElementById('appLoading');
-  if (loadingDiv) {
-    loadingDiv.querySelector('p').textContent = 'Initializing authentication...';
-  }
-
   try {
+    // First get CSRF token - this doesn't require auth
     await getCSRFTokenAsync();
-    if (loadingDiv) {
-      loadingDiv.querySelector('p').textContent = 'Verifying authentication...';
+
+    // Skip immediate verify if we have no reason to believe we're authenticated
+    if (!document.cookie.includes('access_token')) {
+      console.log('[Auth] No auth cookies detected, skipping initial verify');
+      broadcastAuth(false, null, 'init_no_cookies');
+      return true; // Still return true since initialization completed
     }
 
-    await verifyAuthState(true);
-
-    // Periodic background check
-    setInterval(() => {
-      if (!document.hidden && authState.isAuthenticated) {
-        console.debug('[Auth] Periodic verify triggered.');
-        verifyAuthState(false).catch(console.warn);
-      }
-    }, AUTH_CONFIG.VERIFICATION_INTERVAL);
-
-    // Focus-based check
-    window.addEventListener('focus', () => {
-      if (authState.isAuthenticated && !authCheckInProgress) {
-        console.debug('[Auth] Window focused, verifying auth state.');
-        verifyAuthState(false).catch(console.warn);
-      }
-    });
-
+    // Proceed with verification
+    const verified = await verifyAuthState(true);
     authState.isReady = true;
-    console.log(`[Auth] Initialization complete. Authenticated=${authState.isAuthenticated}, User=${authState.username}`);
-    AuthBus.dispatchEvent(
-      new CustomEvent('authReady', {
-        detail: {
-          authenticated: authState.isAuthenticated,
-          username: authState.username,
-        },
-      })
-    );
-    return true;
+    return verified;
+
   } catch (error) {
     console.error('[Auth] Initialization failed:', error);
-    authState.isReady = true;
     await clearTokenState({ source: 'init_fail', isError: true });
-    AuthBus.dispatchEvent(
-      new CustomEvent('authReady', {
-        detail: {
-          authenticated: false,
-          username: null,
-          error: error.message,
-        },
-      })
-    );
+    authState.isReady = true; // Mark as ready even if failed
     return false;
+  } finally {
+    // Setup periodic checks only if we have auth cookies
+    if (document.cookie.includes('access_token')) {
+      setInterval(() => {
+        if (!document.hidden && authState.isAuthenticated) {
+          verifyAuthState(false).catch(console.warn);
+        }
+      }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+    }
   }
 }
 
 // --- Public API ---
+// Define publicAuth *after* AuthBus and all methods are defined
 const publicAuth = {
   // State Accessors
   isAuthenticated: () => authState.isAuthenticated,
@@ -480,33 +458,39 @@ const publicAuth = {
   AuthBus,
   getCSRFTokenAsync,
   getCSRFToken,
+
+  // Add to auth.js public API
+  hasAuthCookies: () => {
+    return document.cookie.includes('access_token') ||
+           document.cookie.includes('refresh_token');
+  }
 };
 
-// Register with DependencySystem *before* calling async init
+// --- Register with DependencySystem synchronously ---
+window.auth = publicAuth; // Always attach to window for global access
+
 if (window.DependencySystem) {
   window.DependencySystem.register('auth', publicAuth);
+  console.log('[auth.js] Registered auth module with DependencySystem');
 } else {
-  // Fallback: attach to window if no DependencySystem
-  window.auth = publicAuth;
+  console.warn('[auth.js] DependencySystem not found, attached auth to window');
 }
 
-// Call init *after* registration
+// --- Call init after registration ---
 init().catch(error => {
-    console.error("[Auth] Initialization promise rejected:", error);
-    // Ensure authReady event still fires even on init failure
-    if (!authState.isReady) {
-        authState.isReady = true; // Mark as ready (even if failed)
-        AuthBus.dispatchEvent(
-          new CustomEvent('authReady', {
-            detail: {
-              authenticated: false,
-              username: null,
-              error: error.message,
-            },
-          })
-        );
-    }
+  console.error("[Auth] Initialization promise rejected:", error);
+  if (!authState.isReady) {
+    authState.isReady = true;
+    AuthBus.dispatchEvent(
+      new CustomEvent('authReady', {
+        detail: {
+          authenticated: false,
+          username: null,
+          error: error.message,
+        },
+      })
+    );
+  }
 });
-
 
 export default publicAuth;
