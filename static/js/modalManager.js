@@ -121,6 +121,9 @@ class ModalManager {
       }
     }
 
+    // --- FIX: Remove 'hidden' class before showing ---
+    modalEl.classList.remove('hidden');
+
     // Attempt to show as a dialog
     if (typeof modalEl.showModal === "function") {
       modalEl.showModal();
@@ -546,6 +549,15 @@ if (!window.projectModal) {
   // We'll rely on app.js or external code to call window.projectModal.init() as needed
   console.log("[modalManager.js] Global projectModal instance created.");
 }
+
+// --- ADD THIS BLOCK: Ensure ProjectModal is initialized after modals.html is loaded ---
+document.addEventListener('modalsLoaded', () => {
+  if (window.projectModal && typeof window.projectModal.init === 'function') {
+    window.projectModal.init();
+    console.log('[modalManager.js] projectModal.init() called after modalsLoaded');
+  }
+});
+
 DependencySystem.register('modalManager', window.modalManager);
 // Add registration for projectModal
 if (window.projectModal) {

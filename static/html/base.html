@@ -639,7 +639,28 @@
       }
       return false;
     }
+
+    // --- Modal HTML Loader ---
+    (function loadModalsHtml() {
+      const modalsContainer = document.getElementById('modalsContainer');
+      if (!modalsContainer) {
+        console.error('[ModalLoader] #modalsContainer not found in DOM.');
+        return;
+      }
+      fetch('/static/html/modals.html')
+        .then(resp => {
+          if (!resp.ok) throw new Error('Failed to load modals.html');
+          return resp.text();
+        })
+        .then(html => {
+          modalsContainer.innerHTML = html;
+          // Optionally, dispatch an event to signal modals are ready
+          document.dispatchEvent(new CustomEvent('modalsLoaded'));
+        })
+        .catch(err => {
+          console.error('[ModalLoader] Error loading modals.html:', err);
+        });
+    })();
   </script>
 </body>
-
 </html>
