@@ -539,10 +539,12 @@ if (window.DependencySystem) {
 }
 
 // --- Call init after registration ---
-// Ensure the init promise rejection is handled, but the authReady event is always fired in the finally block of init.
-init().catch(error => {
-  console.error("[Auth] Initialization promise rejected:", error);
-  // The 'authReady' event is now dispatched within the finally block of init()
+// Ensure init runs after DOM is ready to ensure login form exists
+document.addEventListener("DOMContentLoaded", () => {
+  init().catch((error) => {
+    console.error("[Auth] Initialization promise rejected:", error);
+    // The 'authReady' event is now dispatched within the finally block of init()
+  });
 });
 
 export default publicAuth;
