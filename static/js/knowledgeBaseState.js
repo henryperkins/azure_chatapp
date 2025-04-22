@@ -1,6 +1,20 @@
 /**
  * Lightweight knowledge base status checker
+ * Dependencies:
+ * - window.app.apiRequest (external dependency, for API requests)
+ * - localStorage (browser built-in, for persistent state)
  */
+
+// Browser APIs:
+// - localStorage (state persistence)
+
+// External Dependencies (Global Scope):
+// - window.app.apiRequest (API requests)
+
+// Optional Dependencies:
+// - Gracefully falls back if apiRequest not available
+// - Handles missing localStorage with try-catch
+
 export class KnowledgeBaseState {
   constructor() {
     // No caching needed - ChatManager handles context

@@ -4,11 +4,33 @@
 // - Chat title editing
 // - Potential for future conversation actions
 //
-// Refactored to:
-//  1. Use eventHandler.js for standardized event tracking
-//  2. Delegate authentication checks via window.app.state.isAuthenticated
-//  3. Use window.app.apiRequest for server requests
-//  4. Cleanup direct references to window.CHAT_CONFIG
+/**
+ * Dependencies:
+ * - window.eventHandlers (external utility, for event management)
+ * - window.auth (external dependency, for authentication checks)
+ * - window.chatManager (external dependency, for chat state)
+ * - window.app (external dependency, for API requests)
+ * - window.showNotification (external dependency, for user feedback)
+ * - document (browser built-in, for DOM manipulation)
+ * - window (browser built-in, for selection API)
+ */
+
+// Browser APIs:
+// - document (DOM access)
+// - window (selection API)
+
+// External Dependencies (Global Scope):
+// - window.eventHandlers (event management)
+// - window.auth (authentication system)
+// - window.chatManager (chat state management)
+// - window.app (API requests)
+// - window.showNotification (user notifications)
+
+// Optional Dependencies:
+// - Gracefully handles missing notification system
+// - Falls back if chatManager not available
+// - Handles missing auth checks
+
 
 /**
  * Initializes the chat extensions module

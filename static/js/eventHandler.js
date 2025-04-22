@@ -1,4 +1,36 @@
 // eventHandler.js
+/**
+ * Dependencies:
+ * - window.auth (external dependency, for authentication)
+ * - window.app (external dependency, for notifications and UI management)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.sidebar (external dependency, for sidebar control)
+ * - window.modalManager (external dependency, for modal control)
+ * - window.DependencySystem (external dependency, for module registration)
+ * - document (browser built-in, for DOM access)
+ * - localStorage (browser built-in, for persistent state)
+ * - Set (JavaScript built-in, for tracking listeners)
+ * - performance (browser built-in, for performance measurement)
+ */
+
+// Browser APIs:
+// - document (DOM manipulation and event handling)
+// - localStorage (persistent state storage)
+// - performance (performance timing)
+// - Set (data structure for tracking listeners)
+
+// External Dependencies (Global Scope):
+// - window.auth (authentication system)
+// - window.app (application core)
+// - window.projectManager (project management)
+// - window.sidebar (sidebar control)
+// - window.modalManager (modal dialogs)
+// - window.DependencySystem (module registration)
+
+// Optional Dependencies:
+// - Gracefully falls back if certain globals aren't available
+// - Handles missing notification system with console fallbacks
+
 // A centralized event management system for tracking, delegating, and cleaning up event listeners
 
 // Set of tracked event listeners for cleanup

@@ -1,11 +1,13 @@
-/**
- * modalManager.js
- * Refactored to:
- *  1. Remove the immediate IIFE invocation in favor of an explicit init function
- *  2. Standardize event handling via eventHandler.js (trackListener)
- *  3. Optionally integrate with window.app.state for authentication checks if needed
- *  4. Keep existing logic for showing/hiding modals and the ProjectModal class mostly intact
+/** modalManager.js
+ * Dependencies:
+ * - window.eventHandlers.trackListener (external dependency, for event management)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.showNotification (external dependency, for notifications)
+ * - window.DependencySystem (external dependency, for registration)
+ * - document (browser built-in, for element queries and events)
+ * - FormData (browser built-in, for form handling)
  */
+
 
 class ModalManager {
   constructor() {

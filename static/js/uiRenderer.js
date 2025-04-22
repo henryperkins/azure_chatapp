@@ -1,7 +1,31 @@
 /**
  * uiRenderer.js - Module for rendering UI elements like projects and conversations.
- * Separated from app.js to reduce file size and improve modularity.
+/**
+ * Dependencies:
+ * - window.sidebar (external dependency, for conversation starring)
+ * - window.navigateToConversation (external navigation function)
+ * - window.navigateToProject (external navigation function)
+ * - window.chatConfig (external configuration object)
+ * - window.modelConfig (external configuration manager)
+ * - window.eventHandlers (external event management)
+ * - document (browser built-in, for DOM manipulation)
  */
+
+// Browser APIs:
+// - document (DOM manipulation)
+// External Dependencies (Global Scope):
+// - window.sidebar (sidebar management)
+// - window.navigateToConversation (navigation)
+// - window.navigateToProject (navigation)
+// - window.chatConfig (configuration)
+// - window.modelConfig (model settings)
+// - window.eventHandlers (event management)
+
+// Optional Dependencies:
+// - Gracefully handles missing sidebar functions
+// - Falls back gracefully if navigation functions aren't available
+// - Handles missing configuration objects
+
 
 
 function createConversationListItem(item) {

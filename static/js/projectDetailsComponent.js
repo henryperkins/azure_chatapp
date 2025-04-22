@@ -1,8 +1,37 @@
 /**
  * projectDetailsComponent.js
  * Component for displaying project details, files, conversations and other content.
- * Simplified version that delegates chat functionality to chatManager.
+ * Dependencies:
+ * - window.eventHandlers (external utility, for event management)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.chatManager (external dependency, for chat functionality)
+ * - window.modalManager (external dependency, for confirmation dialogs)
+ * - window.showNotification (external dependency, for user feedback)
+ * - window.formatBytes (optional external utility, for file size formatting)
+ * - window.formatDate (optional external utility, for date formatting)
+ * - window.FileUploadComponent (external component, for file uploads)
+ * - document (browser built-in, for DOM manipulation)
+ * - localStorage (browser built-in, for persistent state)
  */
+
+// Browser APIs:
+// - document (DOM access)
+// - localStorage (state persistence)
+
+// External Dependencies (Global Scope):
+// - window.eventHandlers (event management)
+// - window.projectManager (project operations)
+// - window.chatManager (chat functionality)
+// - window.modalManager (modal dialogs)
+// - window.showNotification (user notifications)
+// - window.formatBytes (file size formatting)
+// - window.formatDate (date formatting)
+// - window.FileUploadComponent (file upload component)
+
+// Optional Dependencies:
+// - Gracefully falls back if formatBytes/formatDate not available
+// - Handles missing modalManager with native confirm
+// - Provides basic error handling if showNotification not available
 
 class ProjectDetailsComponent {
   constructor(options = {}) {

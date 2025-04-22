@@ -1,7 +1,39 @@
 /**
  * app.js - Core application initialization
  * Refactored to simplify the initialization sequence and avoid dependency timeouts.
+ * Dependencies:
+ * - window.auth (external dependency, for authentication)
+ * - window.eventHandlers (external utility, for event management)
+ * - window.modalManager (external dependency, for modal dialogs)
+ * - window.projectManager (external dependency, for project operations)
+ * - window.projectDashboard (external dependency, for project views)
+ * - window.chatManager (external dependency, for chat functionality)
+ * - window.notificationHandler (external dependency, for notifications)
+ * - document (browser built-in, for DOM manipulation)
+ * - fetch (browser built-in, for API requests)
+ * - AbortController (browser built-in, for request cancellation)
  */
+
+// Browser APIs:
+// - document (DOM access)
+// - fetch (network requests)
+// - AbortController (request cancellation)
+// - CustomEvent (event system)
+
+// External Dependencies (Global Scope):
+// - window.auth (authentication system)
+// - window.eventHandlers (event management)
+// - window.modalManager (modal management)
+// - window.projectManager (project operations)
+// - window.projectDashboard (project UI)
+// - window.chatManager (chat functionality)
+// - window.notificationHandler (user notifications)
+
+// Optional Dependencies:
+// - Gracefully falls back if notificationHandler not available
+// - Handles missing projectDashboard with basic fallbacks
+// - Provides error handling for missing auth module
+
 
 // ---------------------------------------------------------------------
 // Dependency Management System
