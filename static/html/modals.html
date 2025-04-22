@@ -3,7 +3,7 @@
     <div class="modal-box max-w-lg w-full max-h-[90vh] overflow-y-auto font-poppins">
         <div class="flex justify-between items-center mb-4">
             <h3 id="projectModalTitle" class="text-xl font-semibold">Create New Project</h3>
-            <button id="closeProjectFormBtn" type="button" class="btn btn-ghost btn-sm btn-square">
+            <button id="projectCancelBtn" type="button" class="btn btn-ghost btn-sm btn-square">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -13,11 +13,11 @@
         <form id="projectForm">
             <input type="hidden" id="projectIdInput" name="projectId" value="" />
             <div class="mb-4">
-                <label for="projectForm-nameInput"
+                <label for="projectNameInput"
                     class="block text-sm font-medium text-base-content mb-1">
                     Project Name <span class="text-red-500">*</span>
                 </label>
-                <input id="projectForm-nameInput" name="name" type="text" required aria-required="true"
+                <input id="projectNameInput" name="name" type="text" required aria-required="true"
                     class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"
                     aria-describedby="projectForm-nameError" />
                 <div id="projectForm-nameError" class="text-error text-xs mt-1 hidden" role="alert">
@@ -41,22 +41,20 @@
             <div class="mb-4">
                 <label for="projectMaxTokensInput"
                     class="block text-sm font-medium text-base-content mb-1">
-                    MaximumTokens
+                    Maximum Tokens
                 </label>
-                <div id="projectMaxTokensContainer" class="mt-2">
-                    <!-- Slider and input will be injected by projectManager.js -->
-                </div>
-                <input type="hidden" id="projectMaxTokensInput" name="max_tokens" value="200000" />
+                <input id="projectMaxTokensInput" name="maxTokens" type="number" value="200000"
+                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary" />
                 <p class="text-base-content/60 text-xs mt-1">
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
             </div>
             <div class="flex justify-end gap-2 mt-6">
-                <button type="button" id="cancelProjectFormBtn"
+                <button type="button" id="projectCancelBtn"
                     class="btn btn-outline">
                     Cancel
                 </button>
-                <button type="submit" id="submitProjectFormBtn"
+                <button type="submit" id="projectSaveBtn"
                     class="btn btn-primary">
                     Save Project
                 </button>
@@ -115,7 +113,7 @@
             </button>
         </div>
     </div>
-</div>
+</dialog>
 
 <!-- Generic Confirmation Modal (Added for ModalManager.confirmAction) -->
 <dialog id="confirmActionModal" class="modal">
@@ -284,7 +282,7 @@
             </button>
         </div>
     </div>
-</div>
+</dialog>
 
 <!-- At the end of modals.html -->
 <script>
