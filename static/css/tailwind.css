@@ -97,7 +97,11 @@
   /* Z-index fixes */
   #authContainer {
       position: relative;
-      z-index: 101; /* Raise above other modals */
+      z-index: 101 !important; /* Must be higher than modal's 9999 */
+  }
+
+  #authDropdown {
+    z-index: 102 !important; /* Ensures dropdown stays above modals */
   }
 
   .knowledge-base-modal {
@@ -113,7 +117,7 @@
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 9999;
+    z-index: 100; /* Lower than auth container */
   }
   
   .modal[open] {

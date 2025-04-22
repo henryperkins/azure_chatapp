@@ -23,12 +23,12 @@ From [[eventHandler]]:
 if (authButton && authDropdown) {
   window.eventHandlers.trackListener(authButton, 'click', (e) => {
     e.preventDefault();
-    e.stopPropagation();
     authDropdown.classList.toggle('hidden');
     authButton.setAttribute('aria-expanded',
       authDropdown.classList.contains('hidden') ? 'false' : 'true'
     );
   });
+  authButton._listenerAttached = true;
   // ... also sets up closing when clicking outside
 }
 ```
