@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 # Database URL from config
 DATABASE_URL = settings.DATABASE_URL.split("?")[0]  # Remove any existing query parameters
-DATABASE_URL += "?sslmode=disable"  # Explicitly disable SSL
 
 # ---------------------------------------------------------
 # Async engine/session: for normal runtime usage
@@ -29,7 +28,8 @@ DATABASE_URL += "?sslmode=disable"  # Explicitly disable SSL
 async_engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args={"ssl": False}  # Disable SSL properly for asyncpg
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -44,6 +44,8 @@ AsyncSessionLocal = async_sessionmaker(
 # ---------------------------------------------------------
 sync_url = DATABASE_URL.replace("+asyncpg", "")
 sync_url = sync_url.replace("postgresql://", "postgresql+psycopg2://")  # Explicit psycopg2 driver
+# For psycopg2, we can use the query parameter
+sync_url += "?sslmode=disable"  
 sync_engine = create_engine(
     sync_url,
     pool_pre_ping=True
