@@ -59,21 +59,6 @@ class ProjectListComponent {
         // We'll defer container setup & event binding until our init method
         console.log(`[ProjectListComponent] Constructing instance with elementId: ${this.elementId}`);
         this._initialize();
-
-        // Add event binding for the "New Project" button
-        const createProjectBtn = document.getElementById('projectListCreateBtn');
-        if (createProjectBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(
-                    createProjectBtn,
-                    'click',
-                    () => this._openNewProjectModal(),
-                    { description: 'Open new project modal' }
-                );
-            } else {
-                createProjectBtn.addEventListener('click', () => this._openNewProjectModal());
-            }
-        }
     }
 
     /**
@@ -399,11 +384,10 @@ class ProjectListComponent {
         if (this.element) {
             this.element.classList.remove('hidden');
         }
-
-        // Also ensure parent container is visible
+        // ALSO un‑fade the outer view
         const listView = document.getElementById('projectListView');
         if (listView) {
-            listView.classList.remove('hidden');
+            listView.classList.remove('hidden', 'opacity-0');
         }
     }
 
@@ -414,11 +398,9 @@ class ProjectListComponent {
         if (this.element) {
             this.element.classList.add('hidden');
         }
-
-        // Also hide parent container
         const listView = document.getElementById('projectListView');
         if (listView) {
-            listView.classList.add('hidden');
+            listView.classList.add('hidden', 'opacity-0');
         }
     }
 

@@ -530,23 +530,52 @@ function showProjectListView() {
 // Auth & Event Listeners
 // ---------------------------------------------------------------------
 if (window.auth?.AuthBus) {
-    window.auth.AuthBus.addEventListener('authStateChanged', (event) => {
-        const { authenticated, username } = event.detail || {};
-        appState.isAuthenticated = authenticated;
-        console.log('[App] Auth state changed:', authenticated);
+    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+}
 
-        // Toggle UI elements
-        const authButton = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON);
-        const userMenu = document.querySelector(APP_CONFIG.SELECTORS.USER_MENU);
+/**
+ * Handle auth state changes
+ */
+function handleAuthStateChange(event) {
+    const { authenticated } = event.detail || {};
 
-        if (authenticated) {
-            authButton?.classList.add('hidden');
-            userMenu?.classList.remove('hidden');
-            handleNavigationChange(); // Re-check nav
+    // Batch DOM updates using requestAnimationFrame
+    requestAnimationFrame(() => {
+        const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+        const projectListView = document.getElementById('projectListView');
+        const projectDetailsView = document.getElementById('projectDetailsView');
+
+        if (!authenticated) {
+            // Hide project views, show login message
+            if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
+            if (projectListView) {
+                projectListView.classList.add('hidden');
+                projectListView.classList.add('opacity-0');
+            }
+            if (projectDetailsView) projectDetailsView.classList.add('hidden');
         } else {
-            authButton?.classList.remove('hidden');
-            userMenu?.classList.add('hidden');
-            handleNavigationChange(); // Possibly show login screen
+            // Show appropriate dashboard view
+            if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+            if (projectListView) {
+                projectListView.classList.remove('hidden');
+                // Use a small delay to ensure smooth transition
+                setTimeout(() => {
+                    projectListView.classList.remove('opacity-0');
+                }, 100);
+            }
+
+            if (dashboardState.currentView === 'details' && dashboardState.currentProject) {
+                projectListView?.classList.add('hidden');
+                projectDetailsView?.classList.remove('hidden');
+            } else {
+                projectListView?.classList.remove('hidden');
+                projectDetailsView?.classList.add('hidden');
+
+                // Only load projects if we're showing the list view
+                if (dashboardState.currentView === 'list') {
+                    loadProjectList();
+                }
+            }
         }
     });
 }
