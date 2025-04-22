@@ -385,11 +385,23 @@ function handleAuthStateChange(event) {
         toggleVisible('#authButton', false);
         toggleVisible('#userMenu', true);
         toggleVisible('#loginRequiredMessage', false);
+
+        // Show project content when authenticated
+        const projectListView = document.getElementById('projectListView');
+        if (projectListView) {
+            projectListView.classList.remove('opacity-0');
+        }
     } else {
         toggleVisible('#authButton', true);
         toggleVisible('#userMenu', false);
         toggleVisible('#loginRequiredMessage', true);
         toggleVisible('#globalChatUI', false);
+
+        // Hide project content when not authenticated
+        const projectListView = document.getElementById('projectListView');
+        if (projectListView) {
+            projectListView.classList.add('opacity-0');
+        }
     }
 }
 
@@ -443,7 +455,7 @@ function setupNavigation() {
     if (newConversationBtn) {
         trackListener(newConversationBtn, 'click', async () => {
             try {
-                const isAuthenticated = window.app?.state?.isAuthenticated;
+                const isAuthenticated = window.auth?.isAuthenticated();
                 if (!isAuthenticated) {
                     window.app?.showNotification('Please log in to create a conversation', 'error');
                     return;
@@ -510,8 +522,55 @@ function setupCommonElements() {
                 throw new Error('Username and password are required');
             }
 
-            await window.auth.login(username, password);
-            window.app?.showNotification('Login successful', 'success');
+            try {
+                // Login and get response
+                const response = await window.auth.login(username, password);
+                window.app?.showNotification('Login successful', 'success');
+
+                // Close auth dropdown
+                const authDropdown = document.getElementById('authDropdown');
+                if (authDropdown) {
+                    authDropdown.classList.add('hidden');
+                }
+
+                // If we got a token back, ensure cookies are set before redirect
+                if (response && response.access_token) {
+                    // Brief delay to ensure cookies are processed
+                    setTimeout(() => {
+                        // Redirect to homepage if not already there
+                        if (window.location.pathname !== '/') {
+                            window.location.href = '/';
+                        } else {
+                            // Already on homepage, trigger a UI refresh
+                            if (window.projectManager?.refreshProjects) {
+                                window.projectManager.refreshProjects();
+                            }
+                        }
+                    }, 100); // 100ms is sufficient for cookie processing
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                let errorMsg = 'Login failed';
+
+                if (error.data && error.data.detail) {
+                    errorMsg = error.data.detail;
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                // Show error in form
+                const loginError = document.getElementById('login-error');
+                if (loginError) {
+                    loginError.textContent = errorMsg;
+                    loginError.classList.remove('hidden');
+                } else {
+                    window.app?.showNotification(errorMsg, 'error');
+                }
+
+                throw error; // Re-throw to prevent form reset
+            }
+        }, {
+            resetOnSuccess: false // Don't reset on success since we're redirecting
         });
     }
 
@@ -524,8 +583,49 @@ function setupCommonElements() {
                 throw new Error('Username and password are required');
             }
 
-            await window.auth.register(formData);
-            window.app?.showNotification('Registration successful', 'success');
+            try {
+                // Validate password requirements
+                const validation = validatePassword(password);
+                if (!validation.valid) {
+                    throw new Error(validation.message);
+                }
+
+                // Register and get response
+                const response = await window.auth.register(formData);
+                window.app?.showNotification('Registration successful', 'success');
+
+                // Close auth dropdown
+                const authDropdown = document.getElementById('authDropdown');
+                if (authDropdown) {
+                    authDropdown.classList.add('hidden');
+                }
+
+                // If we got a token back, ensure cookies are set before redirect
+                if (response && response.access_token) {
+                    // Brief delay to ensure cookies are processed
+                    setTimeout(() => {
+                        // Redirect to homepage
+                        window.location.href = '/';
+                    }, 100); // 100ms is sufficient for cookie processing
+                } else {
+                    // Switch to login tab if no auto-login
+                    switchAuthTab('login');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                let errorMsg = 'Registration failed';
+
+                if (error.data && error.data.detail) {
+                    errorMsg = error.data.detail;
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                window.app?.showNotification(errorMsg, 'error');
+                throw error; // Re-throw to prevent form reset
+            }
+        }, {
+            resetOnSuccess: false // Don't reset on success since we're redirecting or switching tabs
         });
     }
 }
