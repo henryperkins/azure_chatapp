@@ -101,7 +101,7 @@
   }
 
   .chat-message {
-    @apply p-3 rounded-box max-w-[80%] break-words border;
+    @apply p-3 rounded-lg max-w-[80%] break-words border;
 
     &.user {
       @apply bg-primary/10 border-primary/20 ml-auto;
