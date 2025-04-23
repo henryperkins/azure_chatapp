@@ -6,7 +6,7 @@
 @import "tailwindcss";
 
 /* 2. Add daisyUI plugin */
-/* DaisyUI is loaded via the plugins array in tailwind.config.js. No @plugin or @import needed here. */
+@plugin "daisyui";
 
 /* 3. CSS‑first theme overrides */
 @theme {
