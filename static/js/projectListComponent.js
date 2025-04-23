@@ -267,14 +267,16 @@ class ProjectListComponent {
             updateContent: (modalEl) => {
                 const form = modalEl.querySelector('#projectModalForm');
                 const title = modalEl.querySelector('#projectModalTitle');
+
                 if (form) {
-                    const idInput = form.querySelector('#projectModalIdInput');
-                    const nameInput = form.querySelector('#projectModalNameInput');
-                    const descInput = form.querySelector('#projectModalDescInput');
-                    if (idInput) idInput.value = project.id || '';
-                    if (nameInput) nameInput.value = project.name || '';
-                    if (descInput) descInput.value = project.description || '';
+                    form.reset();
+                    form.querySelector('#projectModalIdInput').value = project.id || '';
+                    form.querySelector('#projectModalNameInput').value = project.name || '';
+                    form.querySelector('#projectModalDescInput').value = project.description || '';
+                    form.querySelector('#projectModalGoalsInput').value = project.goals || '';
+                    form.querySelector('#projectModalMaxTokensInput').value = project.max_tokens || '';
                 }
+
                 if (title) {
                     title.textContent = 'Edit Project';
                 }

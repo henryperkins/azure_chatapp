@@ -34,18 +34,18 @@
                     Description
                 </label>
                 <textarea id="projectModalDescInput"
-                         name="description"
-                         rows="3"
-                         class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                          name="description"
+                          rows="3"
+                          class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
             <div class="mb-4">
                 <label for="projectModalGoalsInput" class="block text-sm font-medium text-base-content mb-1">
                     Goals
                 </label>
                 <textarea id="projectModalGoalsInput"
-                         name="goals"
-                         rows="3"
-                         class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                          name="goals"
+                          rows="3"
+                          class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
             </div>
             <div class="mb-4">
                 <label for="projectModalMaxTokensInput"
@@ -63,11 +63,11 @@
                 </p>
             </div>
             <div class="flex justify-end gap-2 mt-6">
-                <button type="button" id="projectModalCancelBtn"
+                <button type="button" id="projectCancelBtn"
                     class="btn btn-outline">
                     Cancel
                 </button>
-                <button type="submit" id="projectModalSaveBtn"
+                <button type="submit" id="projectSaveBtn"
                     class="btn btn-primary">
                     Save Project
                 </button>
@@ -429,7 +429,7 @@
     }
 
      // Project form submit (ensure it uses the manager to close)
-    const projectForm = document.getElementById('projectForm');
+    const projectForm = document.getElementById('projectModalForm');
     if (projectForm) {
         projectForm.addEventListener('submit', (e) => {
             // The handleProjectFormSubmit function in eventHandler.js

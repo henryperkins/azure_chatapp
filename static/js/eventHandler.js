@@ -385,8 +385,8 @@ async function attemptInit(retries = 0) {
     window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
   }
 
-  // Set up global key bindings
-  trackListener(document, 'keydown', handleKeyDown);
+  // Set up global key bindings with passive:false to allow preventDefault()
+  trackListener(document, 'keydown', handleKeyDown, { passive: false });
 
   // Set up navigation
   setupNavigation();
@@ -530,9 +530,13 @@ function setupCommonElements() {
     window.eventHandlers.trackListener(authButton, 'click', (e) => {
       e.preventDefault();
       authDropdown.classList.toggle('hidden');
-      authButton.setAttribute('aria-expanded',
-        authDropdown.classList.contains('hidden') ? 'false' : 'true'
-      );
+      const isHidden = authDropdown.classList.contains('hidden');
+      if (isHidden) {
+        authDropdown.setAttribute('inert', '');
+      } else {
+        authDropdown.removeAttribute('inert');
+      }
+      authButton.setAttribute('aria-expanded', isHidden ? 'false' : 'true');
     });
 
     // Close dropdown when clicking outside
@@ -544,44 +548,8 @@ function setupCommonElements() {
     });
   }
 
-  // Setup login form with proper CSRF handling
-  const loginForm = document.getElementById('loginForm');
-  if (loginForm) {
-    trackListener(loginForm, 'submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-      const formData = new FormData(form);
-      
-      try {
-        // Ensure CSRF token is set
-        const csrfToken = await window.auth?.getCSRFTokenAsync();
-        if (csrfToken) {
-          formData.set('csrf_token', csrfToken);
-        }
-
-        // Submit via fetch to ensure proper headers
-        const response = await fetch(form.action, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || 'Login failed');
-        }
-
-        // Handle successful login
-        const result = await response.json();
-        if (result.access_token) {
-          window.location.href = '/'; // Redirect on success
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        window.app?.showNotification(error.message || 'Login failed', 'error');
-      }
-    }, { passive: false });
-  }
+  // NOTE: Login form handling is managed in base.html and auth.js.
+  // Duplicate event handler removed to prevent multiple POSTs and 422 errors.
 
   // Register form
   if (document.getElementById('registerForm')) {
@@ -660,7 +628,7 @@ function validatePassword(password) {
 function reinitializeAuthElements() {
   const authButton = document.getElementById('authButton');
   const authDropdown = document.getElementById('authDropdown');
-  
+
   if (authButton && authDropdown && !authButton._listenerAttached) {
     setupCommonElements();
     authButton._listenerAttached = true;
@@ -705,4 +673,3 @@ if (window.DependencySystem) {
 }
 
 export default window.eventHandlers;
-
