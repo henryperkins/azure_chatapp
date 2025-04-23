@@ -274,235 +274,218 @@ window.modalManager = initModalManager();
  * -------------------------------------------------------------------------
  */
 class ProjectModal {
-  constructor() {
-    this.modalElement = null;
-    this.formElement = null;
-    this.isOpen = false;
-    this.currentProjectId = null;
+    init() {
+        console.log("[ProjectModal] Starting initialization...");
 
-    // Bind methods as needed
-    this.openModal = this.openModal.bind(this);
-    this.closeModal = this.closeModal.bind(this);
-    this.handleSubmit = this.handleSubmit.bind(this);
-  }
+        // Update selectors to match new IDs
+        this.modalElement = document.getElementById("projectModal");
+        this.formElement = document.getElementById("projectModalForm");
 
-  /**
-   * Updated init() method and openModal() per the snippet
-   */
-  init() {
-    console.log("[ProjectModal] Starting initialization...");
+        if (!this.modalElement || !this.formElement) {
+            console.error("[ProjectModal] Required elements not found");
+            return;
+        }
 
-    // Update selectors to use new IDs
-    this.modalElement = document.getElementById("projectModal");
-    this.formElement = document.getElementById("projectModalForm");
-
-    if (!this.modalElement || !this.formElement) {
-      console.error("[ProjectModal] Required elements not found", {
-        modal: !!this.modalElement,
-        form: !!this.formElement
-      });
-      return;
+        this.setupEventListeners();
+        console.log("[ProjectModal] Initialized successfully");
     }
 
-    this.setupEventListeners();
-    console.log("[ProjectModal] Initialized successfully");
-  }
+    openModal(project = null) {
+        if (!this.modalElement) {
+            console.error("[ProjectModal] No modalElement found!");
+            return;
+        }
 
-  openModal(project = null) {
-    if (!this.modalElement) {
-      console.error("[ProjectModal] No modalElement found!");
-      return;
+        // Reset form
+        if (this.formElement) {
+            this.formElement.reset();
+        }
+
+        const titleEl = this.modalElement.querySelector("#projectModalTitle");
+        if (titleEl) {
+            titleEl.textContent = project ? "Edit Project" : "Create Project";
+        }
+
+        if (project) {
+            this.currentProjectId = project.id;
+            // Update selectors to match new IDs
+            this.modalElement.querySelector("#projectModalIdInput").value = project.id || "";
+            this.modalElement.querySelector("#projectModalNameInput").value = project.name || "";
+            this.modalElement.querySelector("#projectModalDescInput").value = project.description || "";
+            this.modalElement.querySelector("#projectModalGoalsInput").value = project.goals || "";
+            this.modalElement.querySelector("#projectModalMaxTokensInput").value = project.max_tokens || "";
+        } else {
+            this.currentProjectId = null;
+            const idEl = this.modalElement.querySelector("#projectModalIdInput");
+            if (idEl) idEl.value = "";
+        }
+
+        // Show the dialog
+        if (typeof this.modalElement.showModal === "function") {
+            this.modalElement.showModal();
+        } else {
+            this.modalElement.style.display = "flex";
+        }
+        this.isOpen = true;
     }
 
-    // Reset form
-    if (this.formElement) {
-      this.formElement.reset();
+    /**
+     * The rest of the methods stay mostly the same.
+     * Make sure they reference the updated IDs as well (e.g., #projectModalForm).
+     */
+    setupEventListeners() {
+        if (!this.formElement) return;
+
+        // Submit listener
+        const cb = async (e) => await this.handleSubmit(e);
+        if (window.eventHandlers?.trackListener) {
+            window.eventHandlers.trackListener(this.formElement, "submit", cb, {
+                passive: false,
+                description: "ProjectModal submit",
+            });
+        } else {
+            this.formElement.addEventListener("submit", cb);
+        }
+
+        // Cancel button
+        const cancelBtn = this.modalElement.querySelector("#projectCancelBtn");
+        if (cancelBtn) {
+            const cHandler = (e) => {
+                e.preventDefault();
+                this.closeModal();
+            };
+            if (window.eventHandlers?.trackListener) {
+                window.eventHandlers.trackListener(cancelBtn, "click", cHandler, {
+                    description: "ProjectModal Cancel",
+                });
+            } else {
+                cancelBtn.addEventListener("click", cHandler);
+            }
+        }
+
+        // ESC key
+        const escHandler = (e) => {
+            if (e.key === "Escape" && this.isOpen) {
+                this.closeModal();
+            }
+        };
+        if (window.eventHandlers?.trackListener) {
+            window.eventHandlers.trackListener(document, "keydown", escHandler, {
+                description: "ProjectModal ESC handler",
+            });
+        } else {
+            document.addEventListener("keydown", escHandler);
+        }
+
+        // Clicking on the backdrop for <dialog>
+        const backdropHandler = (e) => {
+            if (e.target === this.modalElement && this.isOpen) {
+                this.closeModal();
+            }
+        };
+        if (window.eventHandlers?.trackListener) {
+            window.eventHandlers.trackListener(this.modalElement, "click", backdropHandler, {
+                description: "ProjectModal backdrop click",
+            });
+        } else {
+            this.modalElement.addEventListener("click", backdropHandler);
+        }
     }
 
-    const titleEl = this.modalElement.querySelector("#projectModalTitle");
-    if (titleEl) {
-      titleEl.textContent = project ? "Edit Project" : "Create Project";
+    closeModal() {
+        if (!this.modalElement) return;
+
+        if (typeof this.modalElement.close === "function") {
+            this.modalElement.close();
+        } else {
+            this.modalElement.style.display = "none";
+        }
+        this.isOpen = false;
+        this.currentProjectId = null;
     }
 
-    if (project) {
-      this.currentProjectId = project.id;
-      this.modalElement.querySelector("#projectModalIdInput").value = project.id || "";
-      this.modalElement.querySelector("#projectModalNameInput").value = project.name || "";
-      this.modalElement.querySelector("#projectModalDescInput").value = project.description || "";
-      this.modalElement.querySelector("#projectModalGoalsInput").value = project.goals || "";
-      this.modalElement.querySelector("#projectModalMaxTokensInput").value = project.max_tokens || "";
-    } else {
-      this.currentProjectId = null;
-      const idEl = this.modalElement.querySelector("#projectModalIdInput");
-      if (idEl) idEl.value = "";
-    }
-
-    // Show the dialog
-    if (typeof this.modalElement.showModal === "function") {
-      this.modalElement.showModal();
-    } else {
-      this.modalElement.style.display = "flex";
-    }
-    this.isOpen = true;
-  }
-
-  /**
-   * The rest of the methods stay mostly the same.
-   * Make sure they reference the updated IDs as well (e.g., #projectModalForm).
-   */
-  setupEventListeners() {
-    if (!this.formElement) return;
-
-    // Submit listener
-    const cb = async (e) => await this.handleSubmit(e);
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(this.formElement, "submit", cb, {
-        passive: false,
-        description: "ProjectModal submit",
-      });
-    } else {
-      this.formElement.addEventListener("submit", cb);
-    }
-
-    // Cancel button
-    const cancelBtn = this.modalElement.querySelector("#projectCancelBtn");
-    if (cancelBtn) {
-      const cHandler = (e) => {
+    async handleSubmit(e) {
         e.preventDefault();
-        this.closeModal();
-      };
-      if (window.eventHandlers?.trackListener) {
-        window.eventHandlers.trackListener(cancelBtn, "click", cHandler, {
-          description: "ProjectModal Cancel",
-        });
-      } else {
-        cancelBtn.addEventListener("click", cHandler);
-      }
+        if (!this.formElement) {
+            console.error("[ProjectModal] No formElement found!");
+            return;
+        }
+
+        try {
+            const formData = new FormData(this.formElement);
+            const projectData = {
+                name: formData.get("name") || "",
+                description: formData.get("description") || "",
+                goals: formData.get("goals") || "",
+                max_tokens: formData.get("maxTokens") || null,
+            };
+            const projectId = formData.get("projectId");
+
+            if (!projectData.name.trim()) {
+                this.showError("Project name is required");
+                return;
+            }
+
+            this.setLoading(true);
+            await this.saveProject(projectId, projectData);
+
+            this.closeModal();
+            this.showSuccess(projectId ? "Project updated" : "Project created");
+        } catch (error) {
+            console.error("[ProjectModal] Save error:", error);
+            this.showError("Failed to save project");
+        } finally {
+            this.setLoading(false);
+        }
     }
 
-    // ESC key
-    const escHandler = (e) => {
-      if (e.key === "Escape" && this.isOpen) {
-        this.closeModal();
-      }
-    };
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(document, "keydown", escHandler, {
-        description: "ProjectModal ESC handler",
-      });
-    } else {
-      document.addEventListener("keydown", escHandler);
+    async saveProject(projectId, projectData) {
+        if (!window.projectManager) {
+            throw new Error("[ProjectModal] projectManager not available");
+        }
+        // Use createOrUpdateProject which handles both create and update
+        await window.projectManager.createOrUpdateProject(projectId, projectData);
     }
 
-    // Clicking on the backdrop for <dialog>
-    const backdropHandler = (e) => {
-      if (e.target === this.modalElement && this.isOpen) {
-        this.closeModal();
-      }
-    };
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(this.modalElement, "click", backdropHandler, {
-        description: "ProjectModal backdrop click",
-      });
-    } else {
-      this.modalElement.addEventListener("click", backdropHandler);
-    }
-  }
-
-  closeModal() {
-    if (!this.modalElement) return;
-
-    if (typeof this.modalElement.close === "function") {
-      this.modalElement.close();
-    } else {
-      this.modalElement.style.display = "none";
-    }
-    this.isOpen = false;
-    this.currentProjectId = null;
-  }
-
-  async handleSubmit(e) {
-    e.preventDefault();
-    if (!this.formElement) {
-      console.error("[ProjectModal] No formElement found!");
-      return;
+    setLoading(isLoading) {
+        const saveBtn = this.modalElement.querySelector("#projectSaveBtn");
+        const cancelBtn = this.modalElement.querySelector("#projectCancelBtn");
+        if (saveBtn) {
+            saveBtn.disabled = isLoading;
+            saveBtn.classList.toggle("loading", isLoading);
+        }
+        if (cancelBtn) {
+            cancelBtn.disabled = isLoading;
+        }
     }
 
-    try {
-      const formData = new FormData(this.formElement);
-      const projectData = {
-        name: formData.get("name") || "",
-        description: formData.get("description") || "",
-        goals: formData.get("goals") || "",
-        max_tokens: formData.get("maxTokens") || null,
-      };
-      const projectId = formData.get("projectId");
-
-      if (!projectData.name.trim()) {
-        this.showError("Project name is required");
-        return;
-      }
-
-      this.setLoading(true);
-      await this.saveProject(projectId, projectData);
-
-      this.closeModal();
-      this.showSuccess(projectId ? "Project updated" : "Project created");
-    } catch (error) {
-      console.error("[ProjectModal] Save error:", error);
-      this.showError("Failed to save project");
-    } finally {
-      this.setLoading(false);
+    showError(message) {
+        if (window.showNotification) {
+            window.showNotification(message, "error");
+        } else {
+            alert(message);
+        }
     }
-  }
 
-  async saveProject(projectId, projectData) {
-    if (!window.projectManager) {
-      throw new Error("[ProjectModal] projectManager not available");
+    showSuccess(message) {
+        if (window.showNotification) {
+            window.showNotification(message, "success");
+        } else {
+            console.log(message);
+        }
     }
-    // Use createOrUpdateProject which handles both create and update
-    await window.projectManager.createOrUpdateProject(projectId, projectData);
-  }
-
-  setLoading(isLoading) {
-    const saveBtn = this.modalElement.querySelector("#projectSaveBtn");
-    const cancelBtn = this.modalElement.querySelector("#projectCancelBtn");
-    if (saveBtn) {
-      saveBtn.disabled = isLoading;
-      saveBtn.classList.toggle("loading", isLoading);
-    }
-    if (cancelBtn) {
-      cancelBtn.disabled = isLoading;
-    }
-  }
-
-  showError(message) {
-    if (window.showNotification) {
-      window.showNotification(message, "error");
-    } else {
-      alert(message);
-    }
-  }
-
-  showSuccess(message) {
-    if (window.showNotification) {
-      window.showNotification(message, "success");
-    } else {
-      console.log(message);
-    }
-  }
 }
 
 // Provide a global instance for the ProjectModal, or create on demand
 if (!window.projectModal) {
-  window.projectModal = new ProjectModal();
-  console.log("[modalManager.js] Global projectModal instance created.");
+    window.projectModal = new ProjectModal();
+    console.log("[modalManager.js] Global projectModal instance created.");
 }
 
 // --- Ensure ProjectModal is initialized after modals.html is loaded ---
 document.addEventListener("modalsLoaded", () => {
-  if (window.projectModal && typeof window.projectModal.init === "function") {
-    window.projectModal.init();
-    console.log("[modalManager.js] projectModal.init() called after modalsLoaded");
-  }
+    if (window.projectModal && typeof window.projectModal.init === "function") {
+        window.projectModal.init();
+        console.log("[modalManager.js] projectModal.init() called after modalsLoaded");
+    }
 });

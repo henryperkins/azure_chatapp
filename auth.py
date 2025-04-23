@@ -63,10 +63,11 @@ class CookieSettings:
 
         # Local dev environment
         if hostname in ["localhost", "127.0.0.1"] or self.env == "development":
+            # For dev, omit 'samesite' entirely (setting None in response.set_cookie actually sends 'SameSite=None' which is rejected if not secure)
             return {
-                "secure": False,  # Must be False for HTTP
-                "domain": None,   # No domain for localhost
-                "samesite": None, # Less restrictive for local dev
+                "secure": False,     # Must be False for HTTP (dev)
+                "domain": None,      # No domain for localhost
+                # 'samesite' will be omitted entirely below
                 "httponly": True,
                 "path": "/"
             }
@@ -99,27 +100,101 @@ def set_secure_cookie(
     try:
         # If value is empty, remove the cookie
         if value == "":
-            response.delete_cookie(
-                key=key,
-                path=cookie_attrs["path"],
-                domain=cookie_attrs["domain"]
-            )
+            key_arg = str(key)
+            path_arg = str(cookie_attrs["path"]) if cookie_attrs.get("path") is not None else "/"
+            if cookie_attrs.get("domain") is not None:
+                response.delete_cookie(
+                    key=key_arg,
+                    path=path_arg,
+                    domain=str(cookie_attrs["domain"])
+                )
+            else:
+                response.delete_cookie(
+                    key=key_arg,
+                    path=path_arg
+                )
             return
 
         logger.debug(f"set_secure_cookie -> key={key}, value={value}, attributes={cookie_attrs}")
         if AUTH_DEBUG:
             print(f"Setting cookie {key} with attributes:", cookie_attrs)
 
-        response.set_cookie(
-            key=key,
-            value=value,
-            httponly=cookie_attrs["httponly"],
-            secure=cookie_attrs["secure"],
-            samesite=cookie_attrs["samesite"],
-            domain=cookie_attrs["domain"],
-            path=cookie_attrs["path"],
-            max_age=max_age if value else 0
-        )
+        key_arg = str(key)
+        value_arg = str(value)
+        httponly_arg = bool(cookie_attrs["httponly"])
+        secure_arg = bool(cookie_attrs["secure"])
+        path_arg = str(cookie_attrs["path"]) if cookie_attrs.get("path") is not None else "/"
+        max_age_arg = int(max_age if value else 0) if max_age is not None else 0
+
+        samesite = cookie_attrs.get("samesite")
+        domain_arg = str(cookie_attrs["domain"]) if cookie_attrs.get("domain") is not None else None
+
+        if samesite is not None:
+            allowed = {"lax", "strict", "none"}
+            samesite_lower = str(samesite).lower()
+            if samesite_lower in allowed:
+                if domain_arg is not None:
+                    response.set_cookie(
+                        key=key_arg,
+                        value=value_arg,
+                        httponly=httponly_arg,
+                        secure=secure_arg,
+                        path=path_arg,
+                        max_age=max_age_arg,
+                        samesite=samesite_lower,  # type: ignore
+                        domain=domain_arg
+                    )
+                else:
+                    response.set_cookie(
+                        key=key_arg,
+                        value=value_arg,
+                        httponly=httponly_arg,
+                        secure=secure_arg,
+                        path=path_arg,
+                        max_age=max_age_arg,
+                        samesite=samesite_lower  # type: ignore
+                    )
+            else:
+                # samesite set but not valid; do not include
+                if domain_arg is not None:
+                    response.set_cookie(
+                        key=key_arg,
+                        value=value_arg,
+                        httponly=httponly_arg,
+                        secure=secure_arg,
+                        path=path_arg,
+                        max_age=max_age_arg,
+                        domain=domain_arg
+                    )
+                else:
+                    response.set_cookie(
+                        key=key_arg,
+                        value=value_arg,
+                        httponly=httponly_arg,
+                        secure=secure_arg,
+                        path=path_arg,
+                        max_age=max_age_arg
+                    )
+        else:
+            if domain_arg is not None:
+                response.set_cookie(
+                    key=key_arg,
+                    value=value_arg,
+                    httponly=httponly_arg,
+                    secure=secure_arg,
+                    path=path_arg,
+                    max_age=max_age_arg,
+                    domain=domain_arg
+                )
+            else:
+                response.set_cookie(
+                    key=key_arg,
+                    value=value_arg,
+                    httponly=httponly_arg,
+                    secure=secure_arg,
+                    path=path_arg,
+                    max_age=max_age_arg
+                )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
         raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}")
