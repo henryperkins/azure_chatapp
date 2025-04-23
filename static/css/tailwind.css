@@ -114,7 +114,7 @@
 
   /* Glassmorphism for modals */
   .modal-box {
-    @apply bg-base-100/80 backdrop-blur-md shadow-2xl border border-base-300 rounded-xl transition-all duration-300;
+    @apply bg-base-100/80 backdrop-blur-md shadow-2xl border border-base-300 rounded-xl transition-all duration-200 will-change-transform;
     animation: modal-fade-in 0.25s cubic-bezier(.4,0,.2,1);
   }
 
