@@ -97,7 +97,7 @@
                 Custom instructions are sent at the beginning of every conversation in this project.
             </p>
             <textarea id="customInstructionsInput" rows="8"
-                class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
+                class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
                 placeholder="Enter instructions for the AI to follow in this project..."></textarea>
         </div>
         <div class="flex justify-end gap-2">
@@ -210,7 +210,7 @@
                     Embedding Model
                 </label>
                 <select id="embeddingModelSelect" name="embedding_model"
-                    class="w-full px-3 py-2 border border-base-300 rounded-box shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary">
+                    class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary">
                     <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (384d • Fast • Default)</option>
                     <option value="text-embedding-3-small">OpenAI: text-embedding-3-small (1536d • Recommended)</option>
                     <option value="text-embedding-3-large">OpenAI: text-embedding-3-large (3072d • Largest)</option>
@@ -288,7 +288,7 @@
                 <div id="knowledgeResultScore" class="text-sm">Score</div>
             </div>
         </div>
-        <div class="bg-base-200 p-4 rounded-box overflow-x-auto">
+        <div class="bg-base-200 p-4 rounded-lg overflow-x-auto">
             <pre id="knowledgeResultContent" class="whitespace-pre-wrap text-sm" data-sanitize="true"></pre>
         </div>
         <div class="mt-4 flex justify-end">
