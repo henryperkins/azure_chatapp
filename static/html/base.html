@@ -250,7 +250,7 @@
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
 
       <button id="closeSidebarBtn" type="button"
-        class="md:hidden absolute top-2 right-2 p-2 btn btn-ghost btn-sm btn-square" aria-label="Close sidebar">
+        class="md:hidden absolute top-2 right-2 btn btn-ghost btn-sm btn-square" aria-label="Close sidebar">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
           stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -269,26 +269,20 @@
         </a>
 
         <!-- Tab navigation -->
-        <div class="flex mb-4 border-b border-base-200" role="tablist">
-          <button id="recentChatsTab" type="button"
-            class="flex-1 py-2 px-1 text-base-content/60 hover:text-base-content font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
-            role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
+        <div class="tabs tabs-boxed mb-4" role="tablist">
+          <button id="recentChatsTab" type="button" class="tab" role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
             Recent
           </button>
-          <button id="starredChatsTab" type="button"
-            class="flex-1 py-2 px-1 text-base-content/60 hover:text-base-content font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
-            role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
+          <button id="starredChatsTab" type="button" class="tab" role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
             Starred
           </button>
-          <button id="projectsTab" type="button"
-            class="flex-1 py-2 px-1 border-b-2 border-primary text-primary font-medium text-sm focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-opacity-50"
-            role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
+          <button id="projectsTab" type="button" class="tab tab-active" role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
             Projects
           </button>
         </div>
 
         <!-- Recent Chats Section -->
-        <div id="recentChatsSection" class="hidden flex-1 flex-col overflow-hidden" role="tabpanel"
+        <div id="recentChatsSection" class="hidden flex-1 flex-col overflow-hidden bg-base-200 rounded-box p-2" role="tabpanel"
           aria-labelledby="recentChatsTab" tabindex="0">
           <div class="mb-3 flex items-center">
             <div class="relative flex-grow">
@@ -318,7 +312,7 @@
         </div>
 
         <!-- Starred Chats Section -->
-        <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
+        <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden bg-base-200 rounded-box p-2" role="tabpanel"
           aria-labelledby="starredChatsTab" tabindex="0">
           <p class="text-xs text-base-content/60 mb-3">
             Starred chats are conversations you've marked as important for quick access.
@@ -331,11 +325,11 @@
         </div>
 
         <!-- Projects Section -->
-        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden" role="tabpanel"
+        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden bg-base-200 rounded-box p-2" role="tabpanel"
           aria-labelledby="projectsTab" tabindex="0">
           <div class="mb-3 flex gap-2">
-            <button id="manageProjectsLink" role="button"
-              class="flex-1 btn btn-primary btn-outline btn-sm flex items-center justify-center font-medium">
+            <button id="manageProjectsLink" type="button"
+              class="flex-1 btn btn-outline btn-primary btn-sm flex items-center justify-center font-medium">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002
@@ -369,7 +363,7 @@
             </svg>
           </div>
 
-          <ul id="sidebarProjects" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list"></ul>
+          <ul id="sidebarProjects" class="menu menu-vertical overflow-y-auto flex-1 gap-y-1 text-sm" role="list"></ul>
         </div>
 
         <!-- Settings section -->

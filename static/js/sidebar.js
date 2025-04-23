@@ -288,17 +288,15 @@
         if (tab.button && tab.section) {
           if (name === tabName) {
             // Activate current tab
-            tab.button.classList.add('border-b-2', 'border-primary', 'text-primary');
-            tab.button.classList.remove('text-base-content/60');
+            tab.button.classList.add('tab-active');
             tab.button.setAttribute('aria-selected', 'true');
-            tab.button.removeAttribute('tabindex');
+            tab.button.tabIndex = 0;
             tab.section.classList.remove('hidden');
           } else {
             // Deactivate other tabs
-            tab.button.classList.remove('border-b-2', 'border-primary', 'text-primary');
-            tab.button.classList.add('text-base-content/60');
+            tab.button.classList.remove('tab-active');
             tab.button.setAttribute('aria-selected', 'false');
-            tab.button.setAttribute('tabindex', '-1');
+            tab.button.tabIndex = -1;
             tab.section.classList.add('hidden');
           }
         }
