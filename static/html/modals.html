@@ -1,8 +1,8 @@
 <!-- Project Creation/Edit Modal -->
-<dialog id="projectModal" class="modal modal-bottom sm:modal-middle" aria-labelledby="projectModalTitle">
-    <div class="modal-box">
-        <div class="flex justify-between items-center mb-4">
-            <h3 id="projectModalTitle" class="text-xl font-semibold">Create New Project</h3>
+<dialog id="projectModal" class="modal modal-bottom sm:modal-middle" aria-labelledby="projectModalTitle" aria-modal="true">
+    <div class="modal-box max-w-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h3 id="projectModalTitle" class="text-2xl font-bold">Create New Project</h3>
             <button id="projectModalCloseBtn" type="button" class="btn btn-ghost btn-sm btn-square">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -12,10 +12,9 @@
         </div>
         <form id="projectModalForm">
             <input type="hidden" id="projectModalIdInput" name="projectId" value="" />
-            <div class="mb-4">
-                <label for="projectModalNameInput"
-                    class="block text-sm font-medium text-base-content mb-1">
-                    Project Name <span class="text-red-500">*</span>
+            <div class="form-control mb-6">
+                <label for="projectModalNameInput" class="label">
+                    <span class="label-text font-medium">Project Name <span class="text-error">*</span></span>
                 </label>
                 <input id="projectModalNameInput"
                        name="name"
@@ -23,11 +22,11 @@
                        required
                        aria-required="true"
                        autocomplete="off"
-                       class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"
+                       class="input input-bordered w-full focus:ring-2 focus:ring-primary"
                        aria-describedby="projectForm-nameError" />
-                <div id="projectForm-nameError" class="text-error text-xs mt-1 hidden" role="alert">
-                    Project name is required
-                </div>
+                <label id="projectForm-nameError" class="label hidden" role="alert">
+                    <span class="label-text-alt text-error">Project name is required</span>
+                </label>
             </div>
             <div class="mb-4">
                 <label for="projectModalDescInput" class="block text-sm font-medium text-base-content mb-1">
@@ -62,13 +61,15 @@
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
             </div>
-            <div class="flex justify-end gap-2 mt-6">
+            <div class="modal-action">
                 <button type="button" id="projectCancelBtn"
-                    class="btn btn-outline">
+                    class="btn btn-ghost"
+                    aria-label="Cancel and close dialog">
                     Cancel
                 </button>
                 <button type="submit" id="projectSaveBtn"
-                    class="btn btn-primary">
+                    class="btn btn-primary"
+                    aria-label="Save project">
                     Save Project
                 </button>
             </div>
