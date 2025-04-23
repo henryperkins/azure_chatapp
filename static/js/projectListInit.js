@@ -160,5 +160,18 @@ function debounce(fn, delay) {
     };
 }
 
+/**
+ * Re-initialize project list logic when modals are loaded asynchronously,
+ * ensuring modalManager and projectModal references are fresh.
+ */
+document.addEventListener('modalsLoaded', () => {
+    setTimeout(() => {
+        // Delay to ensure modals are in the DOM
+        if (typeof initProjectList === 'function') {
+            initProjectList();
+        }
+    }, 0);
+});
+
 // Register with DependencySystem
 DependencySystem.register('projectListInit', { initProjectList });

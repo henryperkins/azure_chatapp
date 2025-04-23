@@ -1,7 +1,7 @@
-export default {
+module.exports = {
   plugins: {
     'postcss-import': {},
     '@tailwindcss/postcss': {},
-    'autoprefixer': {}
+    'autoprefixer': {},
   }
-}
+};

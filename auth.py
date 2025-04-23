@@ -639,15 +639,16 @@ async def verify_auth_status(
         user, access_token = await get_current_user_and_token(request)
         refresh_token = request.cookies.get("refresh_token")
 
-        # If verified, we optionally re-set the cookies with the same values
-        # to ensure consistent attributes (rolling or persistent).
+        # If verified, re-set the cookies with proper expiration times
         if user and access_token:
-            # Typically, might re-issue the same expiration; here, let's just keep them
-            # or set max_age to None. Use same-lifetime approach if desired:
-            set_secure_cookie(response, "access_token", access_token, None, request)
+            # Use the original expiration times from settings
+            access_expires = int(timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES).total_seconds())
+            refresh_expires = int(timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS).total_seconds())
+
+            set_secure_cookie(response, "access_token", access_token, access_expires, request)
             if refresh_token:
                 set_secure_cookie(
-                    response, "refresh_token", refresh_token, None, request
+                    response, "refresh_token", refresh_token, refresh_expires, request
                 )
 
         return VerifyResponse(
