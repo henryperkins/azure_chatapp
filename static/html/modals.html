@@ -1,9 +1,9 @@
 <!-- Project Creation/Edit Modal -->
-<dialog id="projectModal" class="modal modal-bottom sm:modal-middle" aria-labelledby="projectModalTitle" aria-modal="true">
+<dialog id="projectModal" class="modal modal-bottom sm:modal-middle" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
     <div class="modal-box max-w-2xl">
         <div class="flex justify-between items-center mb-6">
             <h3 id="projectModalTitle" class="text-2xl font-bold">Create New Project</h3>
-            <button id="projectModalCloseBtn" type="button" class="btn btn-ghost btn-sm btn-square">
+            <button id="projectModalCloseBtn" type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close dialog">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -303,7 +303,38 @@
 
 <!-- At the end of modals.html -->
 <script>
+  function trapFocus(modal) {
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableEls = modal.querySelectorAll(focusableSelectors);
+    if (!focusableEls.length) return;
+    const firstEl = focusableEls[0];
+    const lastEl = focusableEls[focusableEls.length - 1];
+
+    modal.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') {
+        if (e.shiftKey) {
+          if (document.activeElement === firstEl) {
+            e.preventDefault();
+            lastEl.focus();
+          }
+        } else {
+          if (document.activeElement === lastEl) {
+            e.preventDefault();
+            firstEl.focus();
+          }
+        }
+      }
+      if (e.key === 'Escape') {
+        modal.close();
+      }
+    });
+    firstEl.focus();
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('dialog.modal').forEach(dialog => {
+      dialog.addEventListener('show', () => trapFocus(dialog));
+    });
     // Initialize modal close buttons
     // Helper function to find the modal name from its ID
     function getModalNameFromId(modalId) {

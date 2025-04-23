@@ -159,7 +159,19 @@ class ProjectListComponent {
         this._updateActiveTab();
 
         // Bind tab clicks
-        tabs.forEach(tab => {
+        tabs.forEach((tab, idx) => {
+            tab.tabIndex = 0;
+            tab.addEventListener('keydown', (e) => {
+              if (e.key === 'ArrowRight') {
+                tabs[(idx + 1) % tabs.length].focus();
+              } else if (e.key === 'ArrowLeft') {
+                tabs[(idx - 1 + tabs.length) % tabs.length].focus();
+              } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                tab.click();
+              }
+            });
+
             const handler = () => {
                 const filter = tab.dataset.filter;
                 if (filter === this.state.filter) return;
@@ -465,7 +477,7 @@ class ProjectListComponent {
         const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
         const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
 
-        const card = document.createElement('div');
+        const card = document.createElement('li');
         card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all duration-200 border border-base-300 rounded-box p-6 flex flex-col h-full`;
         card.dataset.projectId = project.id;
         card.setAttribute('role', 'article');
@@ -505,7 +517,7 @@ class ProjectListComponent {
 
         actionButtons.forEach(button => {
             const btn = document.createElement('button');
-            btn.className = `btn btn-ghost btn-xs btn-square ${button.className || 'hover:bg-base-200'}`;
+            btn.className = `btn btn-ghost btn-xs btn-square focus:ring-2 focus:ring-primary ${button.className || 'hover:bg-base-200'}`;
             btn.dataset.action = button.action;
             btn.title = button.title;
             btn.innerHTML = button.icon;
