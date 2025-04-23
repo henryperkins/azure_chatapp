@@ -58,7 +58,7 @@
 
   // Make initSentry function available globally
   window.initSentry = initializeSentry;
-  
+
   // If the window sentryOnLoad callback is defined, it means the loader script in <head> is expecting this function
   if (typeof window.sentryOnLoad === 'function') {
     // We'll create a callback that will execute once this script runs
@@ -450,7 +450,7 @@
 
   // Track SPA navigations by observing changes in window.location.href
   let lastHref = window.location.href;
-  
+
   function initNavigationTracking() {
     if (!document.body || !window.Sentry) {
       console.warn('[Sentry] Cannot initialize navigation tracking: DOM not ready or Sentry not loaded');
@@ -485,11 +485,85 @@
     initNavigationTracking();
   }
 
-  // Monkey-patch fetch for custom instrumentation & error capturing
-  if (window.fetch) {
+  /**
+   * Advanced distributed tracing/joined context for fetch:
+   * - Attaches latest sentry-trace/baggage headers if known (from backend or initial page)
+   * - On backend error/response, extracts X-Sentry-Event-Id and trace_id, attaching to Sentry context/tags for correlation.
+   */
+  (function enhanceFetchForSentry() {
+    if (!window.fetch) return;
+
+    // Try to hydrate trace headers from backend, window, or prior response
+    let lastTraceHeaders = {
+      "sentry-trace": null,
+      "baggage": null,
+    };
+
+    // Optionally expose this for debugging
+    window.__lastSentryTraceHeaders = lastTraceHeaders;
+
+    function updateTraceHeadersFromResponse(response) {
+      if (!response || !response.headers) return;
+      const sentryTrace = response.headers.get('sentry-trace');
+      const baggage = response.headers.get('baggage');
+      if (sentryTrace) lastTraceHeaders["sentry-trace"] = sentryTrace;
+      if (baggage) lastTraceHeaders["baggage"] = baggage;
+    }
+
+    function updateSentryContextFromErrorResponse(response) {
+      if (!response || !window.Sentry) return;
+      // Common idiom: backend returns Sentry event IDs in error JSON or as header
+      const sentryEventId =
+        response.headers.get('x-sentry-event-id') ||
+        (response.jsonBody && response.jsonBody.sentry_event_id);
+      const traceId =
+        response.headers.get('x-trace-id') ||
+        (response.jsonBody && (response.jsonBody.trace_id || response.jsonBody.traceId));
+      if (sentryEventId) Sentry.setTag("backend_sentry_event_id", sentryEventId);
+      if (traceId) Sentry.setTag("backend_trace_id", traceId);
+      if (sentryEventId || traceId) {
+        Sentry.addBreadcrumb({
+          category: "backend.error",
+          message: "Backend error event correlated",
+          level: "error",
+          data: {
+            sentryEventId,
+            traceId,
+          },
+        });
+      }
+    }
+
+    // Expose a public SPA hook for updating Sentry context in real time
+    window.setSentryContext = function({user, project, traceId, extras} = {}) {
+      if (window.Sentry) {
+        if (user) Sentry.setUser(user);
+        if (project) Sentry.setTag('project_id', project.id || project);
+        if (traceId) Sentry.setTag('frontend_trace_id', traceId);
+        if (extras && typeof extras === 'object') {
+          Object.entries(extras).forEach(([k, v]) => Sentry.setExtra(k, v));
+        }
+      }
+    };
+
+    // Set user/project/tags eagerly if available on SPA state/window
+    function setInitialSentryContext() {
+      if (!window.Sentry) return;
+      const user = window?.USER || window.USER_CONTEXT;
+      const project = window?.PROJECT || (window.app && window.app.currentProject);
+      if (user) Sentry.setUser(typeof user === "object" ? user : {id: user});
+      if (project) {
+        Sentry.setTag("project_id", project.id || project);
+        if (project.name) Sentry.setTag("project_name", project.name);
+      }
+    }
+    document.addEventListener("DOMContentLoaded", setInitialSentryContext);
+
+    // Patch fetch for distributed tracing context propagation and error context
     const originalFetch = window.fetch;
-    window.fetch = async function () {
+    window.fetch = async function(input, init = {}) {
       let span = null;
+      let reqInfo = {};
       try {
         // Attempt to create a tracing span if there's an active transaction
         if (
@@ -500,42 +574,69 @@
           const transaction = Sentry.getCurrentHub().getScope().getTransaction();
           span = transaction?.startChild({
             op: 'http.client',
-            description: `fetch ${arguments[0]}`,
+            description: `fetch ${input}`,
           });
         }
 
-        const response = await originalFetch.apply(this, arguments);
+        // Clone/init headers and attach trace propagation
+        let headers = (init.headers && typeof init.headers.append !== 'function')
+          ? {...init.headers}
+          : (init.headers || {});
 
-        if (span) {
-          span.setHttpStatus(response.status);
-          span.finish();
-        }
+        // Use last received trace headers, unless caller provided some
+        if (!headers['sentry-trace'] && lastTraceHeaders['sentry-trace']) headers['sentry-trace'] = lastTraceHeaders['sentry-trace'];
+        if (!headers['baggage'] && lastTraceHeaders['baggage']) headers['baggage'] = lastTraceHeaders['baggage'];
 
-        // If not okay, track a breadcrumb
+        // Pass down trace headers if present
+        init = {...init, headers};
+
+        // For context: keep URL, method, body
+        reqInfo = {
+          url: typeof input === 'string' ? input : (input.url || ''),
+          method: (init && init.method) || 'GET',
+        };
+
+        const response = await originalFetch.apply(this, [input, init]);
+        updateTraceHeadersFromResponse(response);
+
+        // Attach returned backend X-Sentry headers/IDs as tags and breadcrumbs if present
         if (!response.ok && window.Sentry) {
+          let jsonBody = null;
+          try {
+            // Attempt to clone and parse error JSON once for all uses
+            if (!response.bodyUsed) {
+              jsonBody = await response.clone().json();
+              response.jsonBody = jsonBody; // custom property for downstream
+            }
+          } catch (_) {}
+
+          updateSentryContextFromErrorResponse(response);
+
           Sentry.addBreadcrumb({
             category: 'fetch',
             message: `Fetch failed: ${response.status} ${response.statusText}`,
             level: 'error',
             data: {
-              url: arguments[0],
+              ...reqInfo,
               status: response.status,
-              method: arguments[1]?.method || 'GET',
+              responseBody: jsonBody,
             },
           });
         }
-        return response;
-      } catch (error) {
         if (span) {
+          span.setHttpStatus(response.status);
           span.finish();
         }
-        captureError(error, {
-          type: 'fetch',
-          url: arguments[0],
-          method: arguments[1]?.method || 'GET',
-        });
+        return response;
+      } catch (error) {
+        if (span) span.finish();
+        if (window.Sentry) {
+          Sentry.captureException(error, {
+            extra: reqInfo,
+          });
+        }
         throw error;
       }
     };
-  }
+  })();
 })();
