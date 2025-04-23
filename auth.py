@@ -45,6 +45,9 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30  # 1 month
 
 router = APIRouter()
 
+# Explicitly export our router and create_default_user for outside imports
+__all__ = ["router", "create_default_user"]
+
 
 # -----------------------------------------------------------------------------
 # Centralized Cookie Settings
@@ -58,27 +61,35 @@ class CookieSettings:
         self.cookie_domain = cookie_domain
 
     def get_attributes(self, request: Request) -> dict[str, Any]:
+        """
+        Returns cookie attributes suitable for local dev or production.
+        Always ensures a dict[str, Any] is returned on each code path.
+        """
         hostname = request.url.hostname
         scheme = request.url.scheme
 
         # Local dev environment
         if hostname in ["localhost", "127.0.0.1"] or self.env == "development":
-            # For dev, omit 'samesite' entirely (setting None in response.set_cookie actually sends 'SameSite=None' which is rejected if not secure)
             return {
-                "secure": False,     # Must be False for HTTP (dev)
-                "domain": None,      # No domain for localhost
-                # 'samesite' will be omitted entirely below
+                "secure": False,
+                "domain": None,
+                "samesite": "lax",
                 "httponly": True,
-                "path": "/"
+                "path": "/",
             }
 
         # Production settings
+        # Only set cookie domain if it's not localhost or 127.0.0.1
+        domain_value = None
+        if self.cookie_domain and self.cookie_domain.lower() not in ["localhost", "127.0.0.1"]:
+            domain_value = self.cookie_domain
+
         return {
-            "secure": scheme == "https",
-            "domain": self.cookie_domain,
+            "secure": (scheme == "https"),
+            "domain": domain_value,
             "samesite": "lax",
             "httponly": True,
-            "path": "/"
+            "path": "/",
         }
 
 
