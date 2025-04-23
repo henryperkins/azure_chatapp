@@ -40,13 +40,14 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
         allow_headers=["*"],
     )
 
-    # Session middleware with extremely relaxed cookie policy
+    # Session middleware for local development.
+    # On HTTP, SameSite must be "lax" (or "strict") and Secure flag not set
     app.add_middleware(
         SessionMiddleware,
         secret_key="DEV_DEBUG_KEY",  # Insecure: do not store real secrets here!
         session_cookie="session",
-        same_site="none",  # 'none' can be rejected by modern browsers if not over HTTPS, but aligns w/ our "insecure" stance
-        https_only=False,  # Insecure: do not require HTTPS
+        same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
+        https_only=False,  # Do not require HTTPS for local dev
         max_age=60 * 60 * 24 * 7,  # 7 days
     )
 
@@ -106,7 +107,7 @@ def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None
         attach_stacktrace=True,
         integrations=integrations,
         before_send=filter_sensitive_event,
-        debug=True,  # Debug mode
+        debug=False,  # Debug mode
     )
     sentry_sdk.set_tag("app", app_name)
     sentry_sdk.set_tag("environment", env)

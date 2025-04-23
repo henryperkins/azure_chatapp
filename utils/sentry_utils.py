@@ -15,17 +15,19 @@ import time
 import contextlib
 import re
 import asyncio
-from typing import Dict, Any, Optional, Generator, Union, Set, List, AsyncGenerator
+from typing import Dict, Any, Optional, Generator, Union, Set, AsyncGenerator, TYPE_CHECKING
 from fastapi import Request, Response
-from uuid import UUID
 
 import sentry_sdk
 from sentry_sdk import configure_scope, push_scope
 from sentry_sdk.tracing import Span, Transaction
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 from sentry_sdk.types import Event, Hint
+# Sentry SDK integrations - imported at module level for lint compliance
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
-from typing import TYPE_CHECKING
 
 # Optional imports with fallbacks
 try:
@@ -37,11 +39,9 @@ try:
     from db import get_async_session
     from services.conversation_service import ConversationService
     from sqlalchemy.ext.asyncio import AsyncSession
-
     HAS_CONVERSATION_SERVICE = True
 except ImportError:
     HAS_CONVERSATION_SERVICE = False
-    # Only import for type checking to avoid runtime errors
     if TYPE_CHECKING:
         from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore
         from services.conversation_service import ConversationService  # type: ignore
@@ -56,23 +56,7 @@ except ImportError:
         raise RuntimeError(
             "get_async_session is unavailable without conversation_service and db modules."
         )
-        yield  # type: ignore  # This yield is unreachable, but required for async generator signature
-
-    # Fallback placeholder for ConversationService (for runtime only)
-    class ConversationService:
-        def __init__(self, db: Any):
-            self.db = db
-
-        async def list_conversations(
-            self,
-            user_id: int,
-            project_id: Optional[UUID] = None,
-            skip: int = 0,
-            limit: int = 100,
-        ) -> List[Any]:
-            _ = user_id, project_id, skip, limit
-            return []
-
+        yield  # unreachable: required only for typing (see Pylint W0101 suppression)
 
 # Type aliases
 SentryEvent = Dict[str, Any]  # Kept for backward compatibility
@@ -134,33 +118,47 @@ def configure_sentry(
     environment: str = "production",
     release: Optional[str] = None,
     traces_sample_rate: float = 1.0,
+    profiles_sample_rate: Optional[float] = None,
     additional_ignores: Optional[Set[str]] = None,
+    before_send: Optional[Any] = None,
+    traces_sampler: Optional[Any] = None,
+    before_send_transaction: Optional[Any] = None,
 ) -> None:
     """
-    Centralized Sentry configuration.
+    Centralized Sentry configuration. Supports optional profiling and custom sampling.
+    Call this at app startup.
     """
     sentry_logging = LoggingIntegration(
-        level=logging.WARNING,  # Change from INFO to WARNING
+        level=logging.WARNING,  # Only capture warnings/errors
         event_level=logging.ERROR,
     )
+    init_kwargs = {}
+    init_kwargs["dsn"] = dsn
+    init_kwargs["debug"] = False
+    init_kwargs["environment"] = environment
+    init_kwargs["release"] = release
+    init_kwargs["traces_sample_rate"] = traces_sample_rate
+    init_kwargs["default_integrations"] = False
+    init_kwargs["integrations"] = [
+        sentry_logging,
+        FastApiIntegration(),
+        SqlalchemyIntegration(),
+        AsyncioIntegration(),
+    ]
+    # Only include these if not None, don't set if None
+    if profiles_sample_rate is not None:
+        init_kwargs["profiles_sample_rate"] = profiles_sample_rate
+    if before_send is not None:
+        init_kwargs["before_send"] = before_send
+    if traces_sampler is not None:
+        init_kwargs["traces_sampler"] = traces_sampler
+    if before_send_transaction is not None:
+        init_kwargs["before_send_transaction"] = before_send_transaction
 
-    sentry_sdk.init(
-        dsn=dsn,
-        debug=False,  # ← Add this
-        environment=environment,
-        release=release,
-        traces_sample_rate=traces_sample_rate,
-        default_integrations=False,  # ← Disable auto-discovery
-        integrations=[
-            sentry_logging,
-            sentry_sdk.integrations.fastapi.FastApiIntegration(),
-            sentry_sdk.integrations.sqlalchemy.SqlalchemyIntegration(),
-            sentry_sdk.integrations.asyncio.AsyncioIntegration(),
-        ],
-        _experiments={
-            "profiles_sample_rate": 0.0  # Disable profiling
-        }
-    )
+    # Remove keys whose value is None, as Sentry rejects them
+    final_kwargs = {k: v for k, v in init_kwargs.items() if v is not None}
+
+    sentry_sdk.init(**final_kwargs)
 
     configure_sentry_loggers(additional_ignores)
 
@@ -220,6 +218,49 @@ def inject_sentry_trace_headers(response: Response) -> None:
         response.headers["baggage"] = baggage
 
 
+# --- USER/TAG/CONTEXT HELPERS ---
+
+def set_sentry_user(user: Dict[str, Any]) -> None:
+    """
+    Set the current Sentry user context for the request.
+    Use in request-lifecycle middleware.
+    """
+    from sentry_sdk import set_user
+    safe_user = _filter_user_data(user)
+    set_user(safe_user)
+
+def set_sentry_tag(key: str, value: Union[str, int, float, bool]) -> None:
+    """
+    Set a custom tag on current Sentry span or global scope.
+    """
+    from sentry_sdk import set_tag as sdk_set_tag
+    try:
+        sdk_set_tag(key, value)
+    except Exception:
+        # If used outside request context
+        pass
+
+def set_sentry_context(key: str, ctx: Dict[str, Any]) -> None:
+    """
+    Attach a dict as custom context under the specified key.
+    """
+    from sentry_sdk import set_context as sdk_set_context
+    try:
+        sdk_set_context(key, ctx)
+    except Exception:
+        pass
+
+def get_current_trace_id() -> Optional[str]:
+    """
+    Returns the current Sentry trace ID, or None.
+    """
+    try:
+        curr_span = sentry_sdk.get_current_span()
+        return curr_span.trace_id if curr_span else None
+    except Exception:
+        return None
+
+
 def tag_transaction(key: str, value: Union[str, int, float, bool]) -> None:
     """
     Safely tag current transaction or scope with type validation.
@@ -257,6 +298,58 @@ def sentry_span(
     except Exception as e:
         logging.error(f"Failed to create Sentry span: {str(e)}")
         raise
+
+from typing import Literal
+
+def capture_breadcrumb(
+    category: str,
+    message: str,
+    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
+    data: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Add a manual Sentry breadcrumb. Useful for important business actions.
+    Level must be one of: fatal, critical, error, warning, info, debug
+    """
+    from sentry_sdk import add_breadcrumb
+    SENTRY_ALLOWED_LEVELS = {"fatal", "critical", "error", "warning", "info", "debug"}
+    safe_level = level.lower() if isinstance(level, str) else "info"
+    if safe_level not in SENTRY_ALLOWED_LEVELS:
+        safe_level = "info"
+    try:
+        add_breadcrumb(
+            category=category,
+            message=message,
+            level=safe_level,
+            data=data or {},
+        )
+    except Exception:
+        pass
+
+def capture_custom_message(
+    message: str,
+    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
+    extra: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """
+    Capture a custom message to Sentry with optional extra context.
+    Level must be one of: fatal, critical, error, warning, info, debug
+    """
+    from sentry_sdk import capture_message, push_scope
+    SENTRY_ALLOWED_LEVELS = {"fatal", "critical", "error", "warning", "info", "debug"}
+    safe_level = level.lower() if isinstance(level, str) else "info"
+    if safe_level not in SENTRY_ALLOWED_LEVELS:
+        safe_level = "info"
+    try:
+        if extra:
+            with push_scope() as scope:
+                for k, v in extra.items():
+                    scope.set_extra(k, v)
+                return capture_message(message, level=safe_level)  # type: ignore
+        else:
+            return capture_message(message, level=safe_level)  # type: ignore
+    except Exception:
+        return None
 
 
 def _set_span_data(span: Union[Span, Transaction], data: Dict[str, Any]) -> None:
