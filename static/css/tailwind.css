@@ -33,15 +33,17 @@
 }
 
 /* Light theme overrides */
-@theme .light {
-  --color-base-100: #f8f8f2;
-  --color-base-200: #e9e9f3;
-  --color-base-300: #d6d6e7;
-  --color-base-content: #1e1f28;
-  --color-primary: #7c3aed;
-  --color-secondary: #06b6d4;
-  --color-accent: #fbbf24;
-  --color-neutral: #64748b;
+@theme {
+  @selector .light {
+    --color-base-100: #f8f8f2;
+    --color-base-200: #e9e9f3;
+    --color-base-300: #d6d6e7;
+    --color-base-content: #1e1f28;
+    --color-primary: #7c3aed;
+    --color-secondary: #06b6d4;
+    --color-accent: #fbbf24;
+    --color-neutral: #64748b;
+  }
 }
 
 /* 4. Your existing base/custom layers */
