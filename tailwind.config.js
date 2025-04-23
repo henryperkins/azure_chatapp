@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   corePlugins: {
     // Disable vendor prefixes since we're targeting modern browsers
     // This will remove -webkit, -moz, -ms prefixes from the output
@@ -23,14 +23,17 @@ export default {
     themes: [
       {
         dracula: {
-          primary: "#ff79c6",
-          secondary: "#bd93f9",
+          primary: "#ff55a8", // More saturated pink for high-contrast
+          "primary-content": "#fff", // Explicitly force white text on primary
+          secondary: "#8be9fd", // Brighter cyan for accent
+          "secondary-content": "#191926", // Extra dark for contrast on secondary buttons
           accent: "#f1fa8c",
-          neutral: "#6272a4",
+          neutral: "#44475a", // Slightly lighter neutral for border/active
+          "neutral-content": "#fff", // White text on neutral backgrounds
           "base-100": "#1e1f28",
-          "base-200": "#1a1b23",
-          "base-300": "#16171e",
-          "base-content": "#f8f8f2"
+          "base-200": "#23243a", // More blue for section backgrounds
+          "base-300": "#191926", // True dark as fallback
+          "base-content": "#f8f8f2" // Can keep for base text
         }
       },
       "light", // enable DaisyUI's built-in light theme for fallback

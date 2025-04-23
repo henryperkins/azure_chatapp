@@ -1,193 +1,28 @@
 /* ================ */
-/* Tailwind CSS v4.1 */
+/* Tailwind CSS v4 + DaisyUI 5 Native Integration */
 /* ================ */
 
-/* 1. Core import */
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: dracula --default, light, dark, cupcake;
+  logs: true;
+}
 
-/* 2. Add daisyUI plugin */
-/* @plugin is not supported in Tailwind v4+ with PostCSS. Load DaisyUI via tailwind.config.js plugins array instead. */
+/* If you want to keep your dracula theme custom colors, add: */
+@plugin "daisyui/theme" {
+  name: "dracula";
+  default: true;
+  prefersdark: false;
 
-/* 3. CSS‑first theme overrides */
-@theme {
-  /* Brand colors */
-  --color-primary:   #ff79c6;
-  --color-secondary: #bd93f9;
-  --color-accent:    #f1fa8c;
-  --color-neutral:   #6272a4;
-
-  /* Semantic colors for notifications, badges, etc. */
-  --color-success:   #50fa7b;
-  --color-warning:   #ffb86c;
-  --color-error:     #ff5555;
-  --color-info:      #8be9fd;
-
-  /* Base surface & content */
-  --color-base-100:   #1e1f28;
-  --color-base-200:   #1a1b23;
-  --color-base-300:   #16171e;
+  --color-primary: #ff55a8;
+  --color-primary-content: #fff;
+  --color-secondary: #8be9fd;
+  --color-secondary-content: #191926;
+  --color-accent: #f1fa8c;
+  --color-neutral: #44475a;
+  --color-neutral-content: #fff;
+  --color-base-100: #1e1f28;
+  --color-base-200: #23243a;
+  --color-base-300: #191926;
   --color-base-content: #f8f8f2;
-
-  /* Font */
-  --font-sans: 'Inter', 'Segoe UI', 'Arial', sans-serif;
-}
-
-/* Light theme overrides */
-.light {
-  --color-base-100: #f8f8f2;
-  --color-base-200: #e9e9f3;
-  --color-base-300: #d6d6e7;
-  --color-base-content: #1e1f28;
-  --color-primary: #7c3aed;
-  --color-secondary: #06b6d4;
-  --color-accent: #fbbf24;
-  --color-neutral: #64748b;
-}
-
-/* 4. Your existing base/custom layers */
-@layer base {
-  :root {
-    color-scheme: dark;
-  }
-  body {
-    @apply bg-base-100 text-base-content min-h-screen antialiased font-sans;
-    font-size: 1.08rem;
-    letter-spacing: 0.01em;
-    line-height: 1.5;
-    transition: background 0.3s, color 0.3s;
-  }
-  /* Headings inherit font-weight */
-  h1,
-  h2,
-  h3,
-  h4 {
-    @apply font-bold text-inherit;
-    letter-spacing: 0.01em;
-  }
-
-  /* Links inherit color */
-  a {
-    @apply text-inherit hover:text-primary transition-colors duration-200;
-  }
-
-  /* Fix form elements reset by Preflight */
-  button,
-  input,
-  optgroup,
-  select,
-  textarea {
-    @apply font-sans;
-  }
-}
-
-@layer components {
-  .chat-container {
-    @apply flex flex-col h-[calc(100vh-6rem)] p-4 space-y-4;
-
-    /* Cross-browser scrollbar styling */
-    @supports (scrollbar-width: thin) {
-      scrollbar-width: thin;
-      scrollbar-color: var(--color-neutral) transparent;
-    }
-
-    @supports selector(::-webkit-scrollbar) {
-      &::-webkit-scrollbar {
-        @apply w-2;
-      }
-      &::-webkit-scrollbar-thumb {
-        @apply bg-neutral rounded-full;
-      }
-    }
-  }
-
-  .chat-message {
-    @apply p-3 rounded-lg max-w-[80%] break-words border;
-
-    &.user {
-      @apply bg-primary/10 border-primary/20 ml-auto;
-    }
-
-    &.assistant {
-      @apply bg-base-200 border-base-300 mr-auto;
-    }
-  }
-
-  /* Glassmorphism for modals */
-  .modal-box {
-    @apply bg-base-100/80 backdrop-blur-md shadow-2xl border border-base-300 rounded-xl transition-all duration-200 will-change-transform;
-    animation: modal-fade-in 0.25s cubic-bezier(.4,0,.2,1);
-  }
-
-  /* Project card enhancements */
-  .card {
-    @apply bg-base-100 rounded-xl shadow-lg border border-base-300 p-6 transition hover:shadow-2xl hover:-translate-y-1;
-  }
-
-  /* Notification enhancements */
-  .notification-item {
-    @apply transition-all duration-300 shadow-lg rounded-lg;
-    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.18);
-    background: var(--color-base-100, #fff);
-    color: var(--color-base-content, #222);
-  }
-}
-
-@keyframes modal-fade-in {
-  from { opacity: 0; transform: scale(0.98);}
-  to   { opacity: 1; transform: scale(1);}
-}
-
-/* 5. Utilities */
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-
-  /* Z-index fixes */
-  #authContainer {
-      position: relative;
-      z-index: 101 !important; /* Must be higher than modal's 9999 */
-  }
-
-  #authDropdown {
-    z-index: 102 !important; /* Ensures dropdown stays above modals */
-  }
-
-  .knowledge-base-modal {
-    z-index: 100;
-  }
-
-  #projectListView {
-    z-index: 40;
-    position: relative;
-  }
-  
-  .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 100; /* Lower than auth container */
-  }
-  
-  .modal[open] {
-    display: flex !important;
-    opacity: 1;
-    z-index: 99999;
-  }
-
-  #projectModal[open] {
-    display: flex !important;
-    opacity: 1;
-    z-index: 99999;
-  }
-
-  /* Custom scrollbar for all scrollable areas */
-  ::-webkit-scrollbar {
-    width: 8px;
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-neutral);
-    border-radius: 8px;
-  }
 }
