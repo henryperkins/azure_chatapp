@@ -16,11 +16,32 @@
   --color-accent:    #f1fa8c;
   --color-neutral:   #6272a4;
 
+  /* Semantic colors for notifications, badges, etc. */
+  --color-success:   #50fa7b;
+  --color-warning:   #ffb86c;
+  --color-error:     #ff5555;
+  --color-info:      #8be9fd;
+
   /* Base surface & content */
   --color-base-100:   #1e1f28;
   --color-base-200:   #1a1b23;
   --color-base-300:   #16171e;
   --color-base-content: #f8f8f2;
+
+  /* Font */
+  --font-sans: 'Inter', 'Segoe UI', 'Arial', sans-serif;
+}
+
+/* Light theme overrides */
+@theme .light {
+  --color-base-100: #f8f8f2;
+  --color-base-200: #e9e9f3;
+  --color-base-300: #d6d6e7;
+  --color-base-content: #1e1f28;
+  --color-primary: #7c3aed;
+  --color-secondary: #06b6d4;
+  --color-accent: #fbbf24;
+  --color-neutral: #64748b;
 }
 
 /* 4. Your existing base/custom layers */
@@ -29,8 +50,11 @@
     color-scheme: dark;
   }
   body {
-    @apply bg-base-100 text-base-content min-h-screen antialiased;
+    @apply bg-base-100 text-base-content min-h-screen antialiased font-sans;
+    font-size: 1.08rem;
+    letter-spacing: 0.01em;
     line-height: 1.5;
+    transition: background 0.3s, color 0.3s;
   }
   /* Headings inherit font-weight */
   h1,
@@ -38,11 +62,12 @@
   h3,
   h4 {
     @apply font-bold text-inherit;
+    letter-spacing: 0.01em;
   }
 
   /* Links inherit color */
   a {
-    @apply text-inherit hover:text-primary;
+    @apply text-inherit hover:text-primary transition-colors duration-200;
   }
 
   /* Fix form elements reset by Preflight */
@@ -62,7 +87,7 @@
     /* Cross-browser scrollbar styling */
     @supports (scrollbar-width: thin) {
       scrollbar-width: thin;
-      scrollbar-color: var(--color-neutral) transparent; /* FIXED: use CSS variable */
+      scrollbar-color: var(--color-neutral) transparent;
     }
 
     @supports selector(::-webkit-scrollbar) {
@@ -86,6 +111,30 @@
       @apply bg-base-200 border-base-300 mr-auto;
     }
   }
+
+  /* Glassmorphism for modals */
+  .modal-box {
+    @apply bg-base-100/80 backdrop-blur-md shadow-2xl border border-base-300 rounded-xl transition-all duration-300;
+    animation: modal-fade-in 0.25s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* Project card enhancements */
+  .card {
+    @apply bg-base-100 rounded-xl shadow-lg border border-base-300 p-6 transition hover:shadow-2xl hover:-translate-y-1;
+  }
+
+  /* Notification enhancements */
+  .notification-item {
+    @apply transition-all duration-300 shadow-lg rounded-lg;
+    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.18);
+    background: var(--color-base-100, #fff);
+    color: var(--color-base-content, #222);
+  }
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; transform: scale(0.98);}
+  to   { opacity: 1; transform: scale(1);}
 }
 
 /* 5. Utilities */
@@ -130,5 +179,15 @@
     display: flex !important;
     opacity: 1;
     z-index: 99999;
+  }
+
+  /* Custom scrollbar for all scrollable areas */
+  ::-webkit-scrollbar {
+    width: 8px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-neutral);
+    border-radius: 8px;
   }
 }

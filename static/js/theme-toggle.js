@@ -42,6 +42,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to set theme
   function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
+    // Also toggle .light class for Tailwind v4 @theme .light support
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
     localStorage.setItem('theme', theme);
     updateThemeUI(theme === 'dark');
   }
