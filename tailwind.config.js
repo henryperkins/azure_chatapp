@@ -20,18 +20,23 @@ export default {
     require("daisyui")
   ],
   daisyui: {
-    themes: [{
-      dracula: {
-        primary: "#ff79c6",
-        secondary: "#bd93f9",
-        accent: "#f1fa8c",
-        neutral: "#6272a4",
-        "base-100": "#1e1f28",
-        "base-200": "#1a1b23",
-        "base-300": "#16171e",
-        "base-content": "#f8f8f2"
-      }
-    }],
+    themes: [
+      {
+        dracula: {
+          primary: "#ff79c6",
+          secondary: "#bd93f9",
+          accent: "#f1fa8c",
+          neutral: "#6272a4",
+          "base-100": "#1e1f28",
+          "base-200": "#1a1b23",
+          "base-300": "#16171e",
+          "base-content": "#f8f8f2"
+        }
+      },
+      "light", // enable DaisyUI's built-in light theme for fallback
+      "dark",  // enable DaisyUI's built-in dark theme for fallback
+      "cupcake", // (optional) more built-in themes for testing
+    ],
     darkTheme: "dracula",
     base: true, // Enable DaisyUI base styles
     styled: true, // Enable DaisyUI component styles
