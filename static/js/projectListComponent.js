@@ -466,16 +466,19 @@ class ProjectListComponent {
         const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
 
         const card = document.createElement('div');
-        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-shadow border border-base-300 rounded p-4`;
+        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all duration-200 border border-base-300 rounded-box p-6 flex flex-col h-full`;
         card.dataset.projectId = project.id;
+        card.setAttribute('role', 'article');
+        card.setAttribute('aria-labelledby', `project-title-${project.id}`);
 
         // Card header
         const header = document.createElement('div');
         header.className = 'flex justify-between items-start';
 
         const title = document.createElement('h3');
-        title.className = 'font-medium text-lg truncate project-name';
+        title.className = 'font-semibold text-xl mb-3 project-name';
         title.textContent = project.name || 'Unnamed Project';
+        title.id = `project-title-${project.id}`;
 
         const actions = document.createElement('div');
         actions.className = 'flex gap-1';
