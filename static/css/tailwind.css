@@ -6,7 +6,7 @@
 @import "tailwindcss";
 
 /* 2. Add daisyUI plugin */
-@plugin "daisyui";
+/* @plugin is not supported in Tailwind v4+ with PostCSS. Load DaisyUI via tailwind.config.js plugins array instead. */
 
 /* 3. CSS‑first theme overrides */
 @theme {
