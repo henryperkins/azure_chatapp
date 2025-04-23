@@ -139,7 +139,7 @@
           </button>
 
           <!-- Auth Dropdown -->
-          <div id="authDropdown" role="menu" aria-labelledby="authButton" aria-hidden="true"
+          <div id="authDropdown" role="menu" aria-labelledby="authButton" inert
                class="hidden absolute right-0 mt-2 w-80 bg-base-100 border border-base-300 rounded-box shadow-lg z-[102]">
             <div class="p-4">
               <!-- Auth Tabs -->
@@ -157,7 +157,7 @@
               </div>
 
               <!-- Login Form -->
-              <form id="loginForm" class="space-y-4" method="POST" action="/api/auth/login">
+              <form id="loginForm" class="space-y-4">
                 <input type="hidden" name="csrf_token" id="loginCsrfToken" value="">
                 <div class="form-control">
                   <label for="loginUsername" class="label">Username</label>
@@ -177,6 +177,36 @@
                   const token = await window.auth?.getCSRFTokenAsync();
                   if (token) {
                     document.getElementById('loginCsrfToken').value = token;
+                  }
+                });
+
+                // Handle navbar modal login form with JS for JSON/XHR POST
+                document.addEventListener('DOMContentLoaded', function () {
+                  const navbarLoginForm = document.querySelector('form#loginForm');
+                  const loginInput = document.getElementById('loginUsername');
+                  const passwordInput = document.getElementById('loginPassword');
+                  if (
+                    navbarLoginForm &&
+                    loginInput &&
+                    passwordInput &&
+                    !navbarLoginForm._jsSubmitHandlerAttached
+                  ) {
+                    navbarLoginForm._jsSubmitHandlerAttached = true;
+                    navbarLoginForm.addEventListener('submit', async function (e) {
+                      e.preventDefault();
+                      const username = loginInput.value;
+                      const password = passwordInput.value;
+                      try {
+                        await window.auth.login(username, password);
+                        window.location.reload();
+                      } catch (error) {
+                        if (window.showNotification) {
+                          window.showNotification(error.message || 'Login failed. Please try again.', 'error');
+                        } else {
+                          alert(error.message || 'Login failed. Please try again.');
+                        }
+                      }
+                    });
                   }
                 });
               </script>
