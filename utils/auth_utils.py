@@ -303,20 +303,6 @@ async def get_user_from_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check optional inactivity threshold
-    if hasattr(user, "last_activity") and user.last_activity:
-        inactive_duration = (datetime.utcnow() - user.last_activity).total_seconds()
-        if inactive_duration > 86400:  # 1 day in seconds
-            logger.warning(
-                f"Session expired due to inactivity for {username}; "
-                f"{inactive_duration:.0f} seconds since last activity."
-            )
-            raise HTTPException(
-                status_code=401,
-                detail="Session expired due to inactivity",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
     # Attach token metadata to the user object (optional)
     user.jti = decoded.get("jti")
     user.exp = decoded.get("exp")
