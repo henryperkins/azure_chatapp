@@ -311,6 +311,11 @@ async def get_user_from_token(
     # --- REMOVE inactivity check entirely to prevent forced logout ---
     # (If you want to re-enable inactivity, add it back here.)
 
+    # --- PATCH: Always update last_activity on login/refresh/verify ---
+    # This prevents the backend from considering the session "inactive" if any code still checks it.
+    if hasattr(user, "last_activity"):
+        user.last_activity = datetime.utcnow()
+
     return user
 
 
