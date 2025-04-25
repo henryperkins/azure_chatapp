@@ -551,13 +551,5 @@ if (window.DependencySystem) {
   console.warn('[auth.js] DependencySystem not found, attached auth to window');
 }
 
-// --- Call init after registration ---
-// Ensure init runs after DOM is ready to ensure login form exists
-document.addEventListener("DOMContentLoaded", () => {
-  init().catch((error) => {
-    console.error("[Auth] Initialization promise rejected:", error);
-    // The 'authReady' event is now dispatched within the finally block of init()
-  });
-});
 
 export default publicAuth;
