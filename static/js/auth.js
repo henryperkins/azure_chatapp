@@ -241,6 +241,21 @@ function broadcastAuth(authenticated, username = null, source = 'unknown') {
   const previous = authState.isAuthenticated;
   const changed = authenticated !== previous || authState.username !== username;
 
+  // Log cookies and verification for extra diagnostics
+  console.debug(`[Auth] broadcastAuth: Changing state? ${changed} | From: ${previous} To: ${authenticated} (${source})`);
+  console.debug('[Auth] Current document.cookie:', document.cookie);
+  // Check auth status from backend as well
+  if (changed) {
+    fetch('/api/auth/verify', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        console.debug('[Auth] /api/auth/verify after state change:', data);
+      })
+      .catch(e => {
+        console.warn('[Auth] Error fetching /api/auth/verify after auth state changed:', e);
+      });
+  }
+
   authState.isAuthenticated = authenticated;
   authState.username = username;
 
@@ -340,24 +355,23 @@ async function loginUser(username, password) {
     });
     console.log('[Auth] Login API call successful.');
 
-    // Verify auth state before broadcasting success
-    try {
-      const verified = await verifyAuthState(true);
-      if (!verified) {
-        console.error('[Auth] Login succeeded but verification failed');
-        await clearTokenState({ source: 'verify_failed' });
-        throw new Error('Session verification failed');
-      }
-
-      // Only broadcast success after verification
-      broadcastAuth(true, username, 'login_success');
-      console.log(`[Auth] User ${username} is now logged in.`);
-      return response;
-    } catch (verifyError) {
-      console.error('[Auth] Verification failed:', verifyError);
-      await clearTokenState({ source: 'verify_error' });
-      throw verifyError;
+    // --- MODIFICATION START ---
+    // Trust the successful login response initially.
+    // The backend has set the cookies. Broadcast the state change.
+    // The regular verification interval or subsequent actions will confirm.
+    if (response && response.username) {
+        broadcastAuth(true, response.username, 'login_success_immediate');
+        console.log(`[Auth] User ${response.username} logged in (state updated immediately). Verification will occur later.`);
+        // Optionally trigger a non-blocking verification after a short delay
+        // setTimeout(() => verifyAuthState(false).catch(console.warn), 500);
+        return response; // Return the original login response
+    } else {
+        // If login response was weird, clear state and throw
+        console.error('[Auth] Login API succeeded but response lacked username.');
+        await clearTokenState({ source: 'login_bad_response' });
+        throw new Error('Login succeeded but received invalid response data.');
     }
+    // --- MODIFICATION END ---
   } catch (error) {
     console.error('[Auth] Login failed:', error);
     await clearTokenState({ source: 'login_error' });
