@@ -221,26 +221,9 @@ WINDOW_SECONDS = 300  # 5 minutes
 
 async def rate_limit_login(request: Request, username: str):
     """
-    Insecure mode: you can *bypass* rate limiting by returning early if you want to.
+    Insecure mode: rate limiting is disabled for local development.
     """
-    # return  # Uncomment to disable rate limiting entirely
-
-    client_ip = request.client.host if request.client else "unknown"
-    key = f"{client_ip}:{username}"
-    now = datetime.now().timestamp()
-
-    attempts = [ts for ts in LOGIN_ATTEMPTS.get(key, []) if now - ts < WINDOW_SECONDS]
-    attempts.append(now)
-    LOGIN_ATTEMPTS[key] = attempts
-
-    if len(attempts) > MAX_ATTEMPTS:
-        logger.warning(
-            "Rate limit exceeded for user '%s' from IP '%s'.", username, client_ip
-        )
-        raise HTTPException(
-            status_code=429,
-            detail="Too many attempts. Please wait before trying again.",
-        )
+    return  # Rate limiting fully disabled for login attempts
 
 
 # -----------------------------------------------------------------------------
