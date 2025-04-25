@@ -12,6 +12,10 @@ import os
 from urllib.parse import urlparse
 from typing import Dict, Any, Optional, Tuple
 
+from config import settings
+if not getattr(settings, 'DEBUG', False):
+    raise RuntimeError("INSECURE module loaded in non-debug/prod environment! Use only in local dev/testing.")
+
 import sentry_sdk
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -316,21 +320,9 @@ class SentryContextMiddleware(BaseHTTPMiddleware):
 def setup_middlewares(app: FastAPI) -> FastAPI:
     """
     Configure all middlewares with minimal or insecure defaults.
-    - Wide-open CORS in development
-    - Very little in production, ignoring advanced security headers
-    - Retains function name for compatibility
+    NOTE: CORS middleware must ONLY be mounted in the entrypoint/main.
+    This function does NOT add CORS; responsibility is centralized.
     """
-
-    from fastapi.middleware.cors import CORSMiddleware
-
-    # Insecure wide-open CORS in all environments
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     # Insecure security headers
     app.add_middleware(SecurityHeadersMiddleware, csp=DEFAULT_CSP)

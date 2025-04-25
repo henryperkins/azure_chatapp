@@ -60,6 +60,11 @@ class User(Base):
     last_login: Mapped[datetime] = mapped_column(
         TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=True
     )
+    # Add field for tracking last user activity (fixes login 500 error)
+    last_activity: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=True
+    )
+
     token_version: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, server_default="0"
     )

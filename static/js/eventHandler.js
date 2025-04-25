@@ -573,7 +573,10 @@ function setupCommonElements() {
         }
 
         // Register and get response
-        const response = await window.auth.register(formData);
+        const response = await window.auth.register({
+          username,
+          password
+        });
         window.app?.showNotification('Registration successful', 'success');
 
         // Close auth dropdown

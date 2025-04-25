@@ -58,7 +58,7 @@ class ProjectListComponent {
 
         // We'll defer container setup & event binding until our init method
         console.log(`[ProjectListComponent] Constructing instance with elementId: ${this.elementId}`);
-        this._initialize();
+        this._initialize().then(() => this._loadProjects());
     }
 
     /**
@@ -329,12 +329,12 @@ class ProjectListComponent {
         }
         window.projectManager.deleteProject(projectId)
             .then(() => {
-                window.showNotification('Project deleted', 'success');
+                window.app?.showNotification('Project deleted', 'success');
                 this._loadProjects();
             })
             .catch(err => {
                 console.error('[ProjectListComponent] Failed to delete project:', err);
-                window.showNotification('Failed to delete project', 'error');
+                window.app?.showNotification('Failed to delete project', 'error');
             });
     }
 

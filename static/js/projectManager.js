@@ -67,7 +67,7 @@ async function loadProjects(filter = 'all') {
     params.append("limit", "100");
 
     const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
-    const response = await window.app.apiRequest(endpoint);
+    const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
     const projects =
       response?.data?.projects ||
@@ -141,7 +141,7 @@ async function loadProjectDetails(projectId) {
 
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
-    const response = await window.app.apiRequest(endpoint);
+    const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
     let projectData = null;
     if (response?.data?.id) projectData = response.data;
@@ -191,7 +191,7 @@ async function loadProjectDetails(projectId) {
 async function loadProjectStats(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_STATS.replace('{projectId}', projectId);
-    const response = await window.app.apiRequest(endpoint);
+    const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
     const stats = response?.data || {};
     emitEvent("projectStatsLoaded", {
@@ -215,7 +215,7 @@ async function loadProjectStats(projectId) {
 async function loadProjectFiles(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
-    const response = await window.app.apiRequest(endpoint);
+    const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
     const files =
       response?.data?.files ||
@@ -241,7 +241,7 @@ async function loadProjectFiles(projectId) {
 async function loadProjectConversations(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
-    const response = await window.app.apiRequest(endpoint);
+    const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
     const conversations =
       response?.data?.conversations ||
@@ -267,7 +267,7 @@ async function loadProjectConversations(projectId) {
 async function loadProjectArtifacts(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
-    const response = await window.app.apiRequest(endpoint);
+    const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
     const artifacts =
       response?.data?.artifacts ||
@@ -302,7 +302,7 @@ async function createOrUpdateProject(projectId, projectData) {
     : PROJECT_CONFIG.ENDPOINTS.PROJECTS;
 
   try {
-    const response = await window.app.apiRequest(endpoint, method, projectData);
+    const response = await window.app.apiRequest(endpoint, { method, body: projectData });
     const resultData = response?.data || response;
 
     if (!resultData || !resultData.id) {
@@ -333,7 +333,7 @@ async function deleteProject(projectId) {
 
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
-    const response = await window.app.apiRequest(endpoint, "DELETE");
+    const response = await window.app.apiRequest(endpoint, { method: "DELETE" });
 
     if (currentProject?.id === projectId) {
       currentProject = null;
@@ -357,7 +357,7 @@ async function togglePinProject(projectId) {
 
   try {
     const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/pin`;
-    const response = await window.app.apiRequest(endpoint, "POST");
+    const response = await window.app.apiRequest(endpoint, { method: "POST" });
 
     emitEvent("projectPinToggled", {
       projectId,
@@ -381,7 +381,7 @@ async function toggleArchiveProject(projectId) {
 
   try {
     const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/archive`;
-    const response = await window.app.apiRequest(endpoint, "PATCH");
+    const response = await window.app.apiRequest(endpoint, { method: "PATCH" });
 
     emitEvent("projectArchiveToggled", {
       projectId,
@@ -465,7 +465,7 @@ async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
       formData.append('file', file);
       formData.append('projectId', projectId);
 
-      await window.app.apiRequest(`/api/projects/${projectId}/files`, 'POST', formData);
+      await window.app.apiRequest(`/api/projects/${projectId}/files`, { method: 'POST', body: formData });
       return true;
     } catch (err) {
       attempt++;

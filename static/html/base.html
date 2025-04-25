@@ -10,7 +10,7 @@
       const script = document.createElement('script');
       script.src = 'https://js.sentry-cdn.com/b03711f63d1160f48dcaeda3edae14ac.min.js';
       script.crossOrigin = 'anonymous';
-      script.integrity = 'sha384-ABC123...'; // Add integrity hash if available
+      // Removed integrity attribute since we are not injecting an actual hash
       document.head.appendChild(script);
     }
   </script>
@@ -26,7 +26,7 @@
   </script>
   <!-- Content Security Policy optimized for Sentry -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:;
-               script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
+               script-src 'self' 'unsafe-inline' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
                script-src-elem 'self' 'unsafe-inline' blob: https://js.sentry-cdn.com https://browser.sentry-cdn.com;
                worker-src 'self' blob:;
                child-src 'self' blob:;
@@ -53,10 +53,9 @@
   </style>
 
   <!-- Ensure responsive, mobile-friendly behavior -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- CSRF token for API requests -->
-  <meta name="csrf-token" content="initial-csrf-token" id="csrfToken" />
+  <!-- Removed hard-coded CSRF <meta> tag; token is set dynamically -->
 
   <!-- SCRIPT LOADING ORDER -->
 
@@ -105,7 +104,7 @@
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <!-- Enhance toggle button with proper accessibility attributes -->
-        <button id="navToggleBtn" type="button" class="focus:outline-hidden md:hidden"
+        <button id="navToggleBtn" type="button" class="focus:outline-none md:hidden"
           aria-label="Toggle sidebar navigation" aria-expanded="false" aria-controls="mainSidebar">
           <svg role="img" aria-hidden="true" class="w-6 h-6 text-base-content" fill="none" stroke="currentColor"
             viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -118,7 +117,7 @@
       <div class="flex items-center gap-4">
         <!-- Dark mode toggle with updated classes -->
         <button id="darkModeToggle" type="button" aria-label="Toggle dark mode"
-          class="dark-mode-toggle focus:outline-hidden focus:ring-2">
+          class="dark-mode-toggle focus:outline-none focus:ring-2">
           <svg id="darkModeIcon" class="w-5 h-5 text-base-content" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364
@@ -127,7 +126,6 @@
                  4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </button>
-        <!-- User status (when logged in) -->
         <span id="userStatus" class="transition-colors text-sm font-medium">Offline</span>
 
         <!-- Auth container -->
@@ -139,7 +137,8 @@
           </button>
 
           <!-- Auth Dropdown -->
-          <div id="authDropdown" role="menu" aria-labelledby="authButton" inert
+          <div id="authDropdown" role="menu" aria-labelledby="authButton"
+               aria-hidden="true"
                class="hidden absolute right-0 mt-2 w-80 bg-base-100 border border-base-300 rounded-box shadow-lg z-[102]">
             <div class="p-4">
               <!-- Auth Tabs -->
@@ -246,7 +245,7 @@
   <!-- Main Container -->
   <div class="flex flex-1 overflow-hidden container-md">
     <!-- Enhanced Sidebar -->
-    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-base-100 shadow-custom md:shadow-none
+    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-base-100 shadow-md md:shadow-none
                 transform transition-transform duration-300 ease-in-out
                 -translate-x-full md:translate-x-0 overflow-y-auto h-full sidebar">
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
@@ -355,7 +354,7 @@
           <div class="relative mb-2">
             <label for="sidebarProjectSearch" class="sr-only">Search projects</label>
             <input type="search" id="sidebarProjectSearch" aria-label="Search projects" placeholder="Search projects..."
-              class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-hidden" />
+              class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-none" />
             <svg xmlns="http://www.w3.org/2000/svg"
               class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
               fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -371,7 +370,7 @@
         <!-- Settings section -->
         <div class="mt-auto pt-4 border-t border-base-200">
           <button id="toggleModelConfig" type="button"
-            class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
             aria-expanded="false" aria-controls="modelConfigPanel">
             <span>Model Configuration</span>
             <svg id="modelConfigChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
@@ -381,13 +380,13 @@
           </button>
 
           <div id="modelConfigPanel"
-            class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
+            class="overflow-hidden duration-300 max-h-0 collapsible-panel transition-[max-height] text-sm"
             aria-labelledby="toggleModelConfig">
             <div class="pt-2 pb-1">
               <div class="mb-3">
                 <label for="modelSelect" class="block font-medium text-base-content text-xs">Select Model</label>
                 <select id="modelSelect"
-                  class="w-full mt-1 border border-base-300 rounded-sm bg-base-100 text-base-content focus:outline-hidden focus:ring-1 focus:ring-blue-500 text-sm">
+                  class="w-full mt-1 border border-base-300 rounded-sm bg-base-100 text-base-content focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
                   <option value="o3-mini">o3-mini</option>
                   <option value="o1">o1 (Vision Support)</option>
                   <option value="o1-mini">o1-mini</option>
@@ -456,7 +455,7 @@
           </div>
 
           <button id="toggleCustomInstructions" type="button"
-            class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
             aria-expanded="false" aria-controls="customInstructionsPanel">
             <span>Custom Instructions</span>
             <svg id="customInstructionsChevron" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
@@ -466,12 +465,12 @@
           </button>
 
           <div id="customInstructionsPanel"
-            class="text-sm overflow-hidden transition-all duration-300 max-h-0 collapsible-panel"
+            class="overflow-hidden duration-300 max-h-0 collapsible-panel transition-[max-height] text-sm"
             aria-labelledby="toggleCustomInstructions">
             <div class="pt-2 pb-1">
               <label for="globalCustomInstructions" class="sr-only">Custom Instructions</label>
               <textarea id="globalCustomInstructions"
-                class="w-full px-3 py-2 text-sm border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
+                class="w-full px-3 py-2 text-sm border border-base-300 rounded-lg shadow-xs focus:outline-none focus:ring-primary focus:border-primary h-20"
                 placeholder="Enter instructions for the AI to follow (e.g., response style, format preferences)..."></textarea>
               <button id="saveGlobalInstructions" class="mt-2 btn btn-primary btn-sm">
                 Save Instructions
@@ -602,6 +601,18 @@
           console.error('[ModalLoader] Error loading modals.html:', err);
         });
     })();
+
+    // Add an event listener to toggle aria-expanded on the navToggleBtn
+    document.addEventListener('DOMContentLoaded', () => {
+      const navToggleBtn = document.getElementById('navToggleBtn');
+      if (navToggleBtn) {
+        navToggleBtn.addEventListener('click', () => {
+          const isExpanded = navToggleBtn.getAttribute('aria-expanded') === 'true';
+          navToggleBtn.setAttribute('aria-expanded', !isExpanded);
+        });
+      }
+    });
   </script>
 </body>
 </html>
+]]>
