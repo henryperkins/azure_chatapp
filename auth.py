@@ -73,13 +73,12 @@ cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
 
 
 def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int], request: Request) -> None:
-    # Patch: Always set localhost/dev cookies as loosely as possible for browser persistence
-    hostname = request.url.hostname or ""
+    # Always use permissive cookie settings except in production
     env = (settings.ENV or "").lower()
-    is_local = hostname in ["localhost", "127.0.0.1"] or env == "development"
+    is_production = env == "production"
 
-    # Force permissive settings in local/dev
-    if is_local:
+    if not is_production:
+        # Always use permissive settings for dev/staging/test
         secure = False
         domain = None
         samesite = "lax"
