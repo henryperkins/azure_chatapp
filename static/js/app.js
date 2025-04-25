@@ -326,7 +326,16 @@ async function initializeCoreSystems() {
   DependencySystem.register('app', window.app);
   console.log('[App] Registered app module');
 
-  // Initialize modalManager
+  // --- Ensure required dependencies are registered before proceeding ---
+  if (DependencySystem.ensureRegistered) {
+    // Custom robust wait (if ensureRegistered is implemented)
+    await DependencySystem.ensureRegistered(['modalManager', 'auth', 'projectManager'], 5000);
+  } else {
+    // Fallback: manually wait for each
+    await DependencySystem.waitFor(['modalManager', 'auth', 'projectManager'], null, 5000);
+  }
+
+  // ModalManager explicit init (redundant safe-guard)
   if (!window.modalManager) {
     console.warn('[App] modalManager not found, attempting to initialize...');
     if (typeof window.initModalManager === 'function') {
@@ -334,7 +343,6 @@ async function initializeCoreSystems() {
     }
   }
 
-  // Now wait for modalManager
   try {
     await DependencySystem.waitFor('modalManager', null, 5000);
     console.log('[App] Modal manager initialized');
