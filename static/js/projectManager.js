@@ -67,7 +67,9 @@ async function loadProjects(filter = 'all') {
     params.append("limit", "100");
 
     const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
+    console.log(`[projectManager] Requesting projects from: ${endpoint}`); // ADDED: log endpoint
     const response = await window.app.apiRequest(endpoint, { method: 'GET' });
+    console.log('[projectManager] Raw projects response:', response); // ADDED: log raw response
 
     const projects =
       response?.data?.projects ||
