@@ -109,26 +109,38 @@ export function initProjectList() {
                 window.eventHandlers?.trackListener(createProjectBtn, 'click', handler);
             }
 
-            // Setup sidebar new project button
-            const sidebarNewProjectBtn = document.getElementById('sidebarNewProjectBtn');
-            if (sidebarNewProjectBtn) {
-                const handler = async () => {
-                    await ensureProjectModalReady();
-                    console.log('[ProjectListInit] Sidebar New Project button clicked.');
-                    window.modalManager?.show('project', {
-                        updateContent: (modalEl) => {
-                            const form = modalEl.querySelector('#projectModalForm');
-                            if (form) {
-                                form.reset();
-                                form.querySelector('#projectModalIdInput').value = '';
-                            }
-                            const title = modalEl.querySelector('#projectModalTitle');
-                            if (title) title.textContent = 'Create New Project';
-                        }
-                    });
-                };
-                window.eventHandlers?.trackListener(sidebarNewProjectBtn, 'click', handler);
+// Hoist function setupSidebarNewProjectBtn so it is defined before use and available globally
+function setupSidebarNewProjectBtn() {
+    const sidebarNewProjectBtn = document.getElementById('sidebarNewProjectBtn');
+    if (sidebarNewProjectBtn) {
+        const handler = async () => {
+            // ensureProjectModalReady is in initProjectList scope, so re-define if needed
+            if (typeof ensureProjectModalReady === 'function') {
+                await ensureProjectModalReady();
+            } else if (window.projectModal?.init && !window.projectModal.modalElement) {
+                await window.projectModal.init();
             }
+            console.log('[ProjectListInit] Sidebar New Project button clicked.');
+            window.modalManager?.show('project', {
+                updateContent: (modalEl) => {
+                    const form = modalEl.querySelector('#projectModalForm');
+                    if (form) {
+                        form.reset();
+                        form.querySelector('#projectModalIdInput').value = '';
+                    }
+                    const title = modalEl.querySelector('#projectModalTitle');
+                    if (title) title.textContent = 'Create New Project';
+                }
+            });
+        };
+        if (window.eventHandlers?.cleanupListeners) {
+            window.eventHandlers.cleanupListeners(sidebarNewProjectBtn);
+        }
+        window.eventHandlers?.trackListener(sidebarNewProjectBtn, 'click', handler);
+    }
+}
+window.setupSidebarNewProjectBtn = setupSidebarNewProjectBtn;
+setupSidebarNewProjectBtn();
 
             initialized = true;
             console.log('[ProjectListInit] Initialization complete.');
@@ -168,16 +180,10 @@ function debounce(fn, delay) {
     };
 }
 
-/**
- * Re-initialize project list logic when modals are loaded asynchronously,
- * ensuring modalManager and projectModal references are fresh.
- */
+// Re-bind the sidebar new project button after modals are loaded
 document.addEventListener('modalsLoaded', () => {
     setTimeout(() => {
-        // Delay to ensure modals are in the DOM
-        if (typeof initProjectList === 'function') {
-            initProjectList();
-        }
+        window.setupSidebarNewProjectBtn();
     }, 0);
 });
 
