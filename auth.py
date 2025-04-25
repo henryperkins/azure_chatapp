@@ -471,8 +471,9 @@ async def login_user(
             await asyncio.sleep(0.2)  # minor delay
             raise HTTPException(status_code=401, detail="Invalid credentials.")
 
-        # Update last login
+        # Update last login and last_activity
         db_user.last_login = naive_utc_now()
+        db_user.last_activity = naive_utc_now()
         if db_user.token_version is None:
             db_user.token_version = 0
 
@@ -561,6 +562,7 @@ async def refresh_token(
             )
 
         locked_user.last_activity = naive_utc_now()
+        await session.commit()
 
         # Generate a new access token
         access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
