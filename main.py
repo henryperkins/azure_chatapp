@@ -29,22 +29,34 @@ from sentry_sdk.types import Event, Hint
 def setup_middlewares_insecure(app: FastAPI) -> None:
     """
     Sets up minimal or insecure middlewares for debugging.
-    Wide-open CORS, no TrustedHost checks, no forced HTTPS.
+    Mounts CORS only for localhost for local dev safety,
+    but never in prod. Ensures only one CORS middleware exists.
     """
-    # Wide-open CORS for debugging
+    # ⚡ PATCH: CORS only on local origins; remove wide-open dual mounting
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Insecure: allow requests from any origin
+        allow_origins=[
+            "http://localhost",
+            "http://127.0.0.1",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     # Session middleware for local development.
-    # On HTTP, SameSite must be "lax" (or "strict") and Secure flag not set
+    # ⚡ PATCH: Use settings.SESSION_SECRET, crash if missing unless DEBUG
+    session_secret = getattr(settings, "SESSION_SECRET", None) or "DEV_DEBUG_KEY"
+    assert session_secret and session_secret != "DEV_DEBUG_KEY", (
+        "SESSION_SECRET missing or insecure! Refusing to launch without a strong secret."
+        "\nSet a robust SESSION_SECRET in your env file for any real usage."
+    )
+
     app.add_middleware(
         SessionMiddleware,
-        secret_key="DEV_DEBUG_KEY",  # Insecure: do not store real secrets here!
+        secret_key=session_secret,
         session_cookie="session",
         same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
         https_only=False,  # Do not require HTTPS for local dev

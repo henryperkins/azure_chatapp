@@ -49,13 +49,15 @@ export function initProjectList() {
 
             // Setup search input with retry
             const initSearchWithRetry = (attempt = 0) => {
-                const input = document.getElementById('projectSearchInput');
+                // Allow both 'projectSearchInput' and 'sidebarProjectSearch' (dual-support)
+                const input = document.getElementById('projectSearchInput') ||
+                              document.getElementById('sidebarProjectSearch');
                 if (!input) {
                     if (attempt < 5) {
                         setTimeout(() => initSearchWithRetry(attempt + 1), 100 * attempt);
                         return;
                     }
-                    console.error('Failed to find #projectSearchInput after 5 attempts');
+                    console.error('Failed to find #projectSearchInput or #sidebarProjectSearch after 5 attempts');
                     return;
                 }
                 const searchHandler = debounce((e) => {
@@ -100,10 +102,11 @@ export function initProjectList() {
                     });
                 };
 
-                // Remove existing listener to prevent duplicates
-                const newBtn = createProjectBtn.cloneNode(true);
-                createProjectBtn.parentNode.replaceChild(newBtn, createProjectBtn);
-                window.eventHandlers?.trackListener(newBtn, 'click', handler);
+                // Remove existing listeners via cleanup utility, avoid cloning node (preserves bindings)
+                if (window.eventHandlers?.cleanupListeners) {
+                    window.eventHandlers.cleanupListeners(createProjectBtn);
+                }
+                window.eventHandlers?.trackListener(createProjectBtn, 'click', handler);
             }
 
             // Setup sidebar new project button
@@ -124,7 +127,7 @@ export function initProjectList() {
                         }
                     });
                 };
-                sidebarNewProjectBtn.addEventListener('click', handler);
+                window.eventHandlers?.trackListener(sidebarNewProjectBtn, 'click', handler);
             }
 
             initialized = true;

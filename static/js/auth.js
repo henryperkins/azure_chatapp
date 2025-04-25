@@ -62,9 +62,11 @@ function isLocalDev() {
  */
 async function fetchCsrfToken() {
   try {
-    const response = await fetch('/api/auth/csrf', {
+    // PATCH: Add timestamp and no-store to ensure CSRF isn't cached
+    const response = await fetch(`/api/auth/csrf?ts=${Date.now()}`, {
       method: 'GET',
       credentials: 'include', // Important for cookies
+      cache: 'no-store',
       headers: {
         Accept: 'application/json',
         'Cache-Control': 'no-cache',
@@ -141,7 +143,9 @@ async function authRequest(endpoint, method, body = null) {
 
   // Fallback implementation
   console.debug(`[Auth] Using internal authRequest for ${endpoint}`);
-  const headers = { Accept: 'application/json' };
+  // PATCH: Clone headers per request, don't mutate shared object.
+  const baseHeaders = { Accept: 'application/json' };
+  const headers = { ...baseHeaders };
   const options = {
     method: method.toUpperCase(),
     headers,
@@ -157,7 +161,7 @@ async function authRequest(endpoint, method, body = null) {
   if (isStateChanging) {
     const token = await getCSRFTokenAsync();
     if (token) {
-      headers['X-CSRF-Token'] = token;
+      options.headers['X-CSRF-Token'] = token;
     } else {
       console.warn(`[Auth] CSRF token missing for request: ${endpoint}`);
     }
@@ -166,7 +170,7 @@ async function authRequest(endpoint, method, body = null) {
   // Add body as JSON if present
   if (body) {
     options.body = JSON.stringify(body);
-    headers['Content-Type'] = 'application/json';
+    options.headers['Content-Type'] = 'application/json';
   }
 
   try {
@@ -303,7 +307,7 @@ async function verifyAuthState(forceVerify = false) {
         }
 
         if (error.status === 401) {
-          // Try refresh if available
+          // PATCH: Wrap refresh/verify in try/catch to avoid unhandled promise rejection loops
           try {
             await refreshTokens();
             return verifyAuthState(true);
@@ -428,7 +432,7 @@ async function init() {
 
   // Ensure DOM is ready before setting up form handlers
   if (document.readyState === 'loading') {
-    await new Promise(resolve => 
+    await new Promise(resolve =>
       document.addEventListener('DOMContentLoaded', resolve, { once: true })
     );
   }
@@ -440,7 +444,7 @@ async function init() {
       loginForm._listenerAttached = true;
       loginForm.action = '/api/auth/login';
       loginForm.method = 'POST';
-      
+
       window.eventHandlers?.trackListener(loginForm, 'submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(loginForm);
@@ -488,32 +492,24 @@ async function init() {
     broadcastAuth(false, null, 'init_error'); // Ensure auth state is false
     return false;
   } finally {
-    // Setup periodic checks AFTER initial verification attempt completes
-    // Only set interval if the initial check was successful OR if we think we might have cookies (best effort)
-    // A more robust approach might rely purely on the 'verified' status from the try block.
-    // For now, keep the original logic for periodic checks.
-    if (document.cookie.includes('access_token') || authState.isAuthenticated) {
-       console.log('[Auth] Setting up periodic verification interval.');
-       setInterval(() => {
-         // Only verify if authenticated and tab is visible
-         if (!document.hidden && authState.isAuthenticated) {
-           console.debug('[Auth] Periodic verification triggered.');
-           verifyAuthState(false).catch(console.warn);
-         }
-       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
-    } else {
-        console.log('[Auth] Skipping periodic verification setup (no initial auth).');
-    }
+    // PATCH: Always set up periodic verification interval, not conditional on cookies.
+    console.log('[Auth] Setting up periodic verification interval.');
+    setInterval(() => {
+      if (!document.hidden && authState.isAuthenticated) {
+        console.debug('[Auth] Periodic verification triggered.');
+        verifyAuthState(false).catch(console.warn);
+      }
+    }, AUTH_CONFIG.VERIFICATION_INTERVAL);
 
     // Dispatch an event indicating auth readiness, regardless of success/failure
     AuthBus.dispatchEvent(
-        new CustomEvent('authReady', {
-            detail: {
-                authenticated: authState.isAuthenticated,
-                username: authState.username,
-                error: null // Or pass error if needed
-            }
-        })
+      new CustomEvent('authReady', {
+        detail: {
+          authenticated: authState.isAuthenticated,
+          username: authState.username,
+          error: null // Or pass error if needed
+        }
+      })
     );
   }
 }
