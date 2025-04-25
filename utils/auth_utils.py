@@ -308,6 +308,9 @@ async def get_user_from_token(
     user.exp = decoded.get("exp")
     user.active_project_id = decoded.get("project_context")
 
+    # --- REMOVE inactivity check entirely to prevent forced logout ---
+    # (If you want to re-enable inactivity, add it back here.)
+
     return user
 
 
