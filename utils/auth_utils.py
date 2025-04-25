@@ -313,8 +313,8 @@ async def get_user_from_token(
 
     # --- PATCH: Always update last_activity on login/refresh/verify ---
     # This prevents the backend from considering the session "inactive" if any code still checks it.
-    if hasattr(user, "last_activity"):
-        user.last_activity = datetime.utcnow()
+    # WARNING: Do NOT update last_activity here, as it is not committed to DB and may cause ORM to think user is "dirty".
+    # If you want to update last_activity, do it only on login/refresh endpoints, not on every token verify.
 
     return user
 
