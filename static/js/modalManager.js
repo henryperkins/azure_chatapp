@@ -253,12 +253,12 @@ function initModalManager() {
   if (!modalManagerInstance) {
     modalManagerInstance = new ModalManager();
     window.modalManager = modalManagerInstance;
+  }
 
-    // Register with DependencySystem immediately
-    if (window.DependencySystem) {
-      window.DependencySystem.register("modalManager", modalManagerInstance);
-      console.log("[modalManager] Registered with DependencySystem");
-    }
+  // Always register with DependencySystem if present
+  if (window.DependencySystem) {
+    window.DependencySystem.register("modalManager", modalManagerInstance);
+    console.log("[modalManager] Registered with DependencySystem");
   }
 
   modalManagerInstance.init();

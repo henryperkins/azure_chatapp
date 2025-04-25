@@ -47,13 +47,20 @@ export function initProjectList() {
 
             console.log('[ProjectListInit] Dependencies met, setting up UI...');
 
-            // Setup search input
-            const projectSearchInput = document.getElementById('projectSearchInput');
-            if (projectSearchInput) {
+            // Setup search input with retry
+            const initSearchWithRetry = (attempt = 0) => {
+                const input = document.getElementById('projectSearchInput');
+                if (!input) {
+                    if (attempt < 5) {
+                        setTimeout(() => initSearchWithRetry(attempt + 1), 100 * attempt);
+                        return;
+                    }
+                    console.error('Failed to find #projectSearchInput after 5 attempts');
+                    return;
+                }
                 const searchHandler = debounce((e) => {
                     const searchTerm = e.target.value.toLowerCase();
                     const projectCards = document.querySelectorAll('#projectList .project-card');
-
                     projectCards.forEach(card => {
                         const projectName = card.querySelector('.project-name')?.textContent.toLowerCase() || '';
                         const projectDesc = card.querySelector('.project-description')?.textContent.toLowerCase() || '';
@@ -61,12 +68,10 @@ export function initProjectList() {
                         card.classList.toggle('hidden', !matches);
                     });
                 }, 200);
-
-                projectSearchInput.addEventListener('input', searchHandler);
+                input.addEventListener('input', searchHandler);
                 console.log('[ProjectListInit] Search input listener attached.');
-            } else {
-                console.warn('[ProjectListInit] #projectSearchInput not found.');
-            }
+            };
+            initSearchWithRetry();
 
             const ensureProjectModalReady = async () => {
                 if (window.projectModal?.init && !window.projectModal.modalElement) {
