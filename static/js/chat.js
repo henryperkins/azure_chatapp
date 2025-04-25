@@ -196,10 +196,10 @@ class ChatManager {
       this._clearMessages();
 
       const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}`;
-      const conversation = await window.app.apiRequest(endpoint, "GET");
+      const conversation = await window.app.apiRequest(endpoint, { method: "GET" });
 
       const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages`;
-      const messagesResponse = await window.app.apiRequest(messagesEndpoint, "GET");
+      const messagesResponse = await window.app.apiRequest(messagesEndpoint, { method: "GET" });
       const messages = messagesResponse.data?.messages || [];
 
       // Store current conversation ID
@@ -258,7 +258,7 @@ class ChatManager {
         model_id: this.modelConfig.modelName
       };
 
-      const response = await window.app.apiRequest(endpoint, "POST", payload);
+      const response = await window.app.apiRequest(endpoint, { method: "POST", body: payload });
       const conversation = response.data || response;
 
       if (!conversation.id) {
@@ -331,8 +331,22 @@ class ChatManager {
         vision_detail: this.modelConfig.visionDetail || "auto"
       };
 
-      // Add image if present
+      // Add image if present, and validate size
       if (this.currentImage) {
+        // Accept base64 data URI or raw string; estimate size in bytes
+        let imgData = this.currentImage;
+        if (typeof imgData === "string" && imgData.startsWith("data:")) {
+          // Only count the data part (skip 'data:image/png;base64,')
+          const commaIdx = imgData.indexOf(',');
+          const b64 = commaIdx !== -1 ? imgData.slice(commaIdx + 1) : imgData;
+          // base64 -> bytes estimate: 3/4 * b64 length
+          const sizeBytes = Math.floor((b64.length * 3) / 4);
+          if (sizeBytes > 4 * 1024 * 1024) {
+            this._hideThinkingIndicator();
+            window.app?.showNotification?.("Image is too large (max 4MB). Please choose a smaller file.", "error");
+            return;
+          }
+        }
         messagePayload.image_data = this.currentImage;
         this.currentImage = null;
       }
@@ -346,8 +360,8 @@ class ChatManager {
       }
 
       // Send message
-      const endpoint = `/api/chat/projects/${this.projectId}/conversations/${this.currentConversationId}/messages`;
-      const response = await window.app.apiRequest(endpoint, "POST", messagePayload);
+      const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/messages`;
+      const response = await window.app.apiRequest(endpoint, { method: "POST", body: messagePayload });
 
       // Hide thinking indicator
       this._hideThinkingIndicator();
@@ -392,7 +406,7 @@ class ChatManager {
 
     try {
       const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}`;
-      await window.app.apiRequest(endpoint, "DELETE");
+      await window.app.apiRequest(endpoint, { method: "DELETE" });
 
       // Clear state
       this.currentConversationId = null;
@@ -933,6 +947,7 @@ class ChatManager {
     }
   }
 }
+window.chatManager = new ChatManager();
 window.createNewChat = () => window.chatManager.createNewConversation();
 window.sendMessage = (message) => window.chatManager.sendMessage(message);
 DependencySystem.register('chatManager', window.chatManager);

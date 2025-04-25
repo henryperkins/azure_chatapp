@@ -11,6 +11,10 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
 
+from config import settings
+if not getattr(settings, 'DEBUG', False):
+    raise RuntimeError("INSECURE module loaded in non-debug/prod environment! Use only in local dev/testing.")
+
 import jwt
 from jwt import PyJWTError, ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, status
@@ -18,16 +22,20 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_async_session_context
-from config import settings
 from models.user import User, TokenBlacklist
 
 
 logger = logging.getLogger(__name__)
 
+import secrets
+
 # -----------------------------------------------------------------------------
 # JWT Configuration
 # -----------------------------------------------------------------------------
-JWT_SECRET: str = settings.JWT_SECRET
+JWT_SECRET: str = getattr(settings, "JWT_SECRET", None) or secrets.token_hex(32)
+if not getattr(settings, "JWT_SECRET", None):
+    logger.warning("JWT_SECRET was not set! Using a random secret key for this session (local development ONLY).")
+
 JWT_ALGORITHM = "HS256"
 
 
@@ -72,12 +80,23 @@ async def verify_token(
 ) -> Dict[str, Any]:
     """
     Verifies and decodes a JWT token.
+
+    SECURITY NOTE:
+      - Never auto-refresh or extend token expiration in this function (only allow in `/refresh` endpoint).
+      - REQUIRE a real DB session (dependency-injected). This function will not open its own DB session.
+      - Token lifetime policies must be enforced strictly by expiration date in the JWT itself.
+      - This function is used by `/verify` and must never modify or return renewed tokens.
+
     - Checks if token is blacklisted.
     - Enforces a token type if `expected_type` is given.
     - Raises HTTPException(401) if invalid, expired, or revoked.
-    - If `db_session` is None, creates a temporary session to query blacklisted tokens.
-    Provides detailed logging for all stages.
     """
+    if db_session is None:
+        logger.error("verify_token called without required db_session argument")
+        raise RuntimeError(
+            "Database session must be supplied to verify_token - dependency-inject this, do not rely on lazy session!"
+        )
+
     decoded = None
     token_id = None
     start_time = datetime.utcnow()
@@ -113,16 +132,10 @@ async def verify_token(
             logger.warning("Token missing required 'jti' claim")
             raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-        # Check if token is blacklisted - use existing or temporary DB session
-        if db_session:
-            query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
-            result = await db_session.execute(query)
-            blacklisted = result.scalar_one_or_none()
-        else:
-            async with get_async_session_context() as db:
-                query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
-                result = await db.execute(query)
-                blacklisted = result.scalar_one_or_none()
+        # Check if token is blacklisted - must use provided DB session
+        query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
+        result = await db_session.execute(query)
+        blacklisted = result.scalar_one_or_none()
 
         if blacklisted:
             logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
@@ -223,13 +236,12 @@ def extract_token(request_or_websocket, token_type="access"):
     if not token and hasattr(request_or_websocket, "headers"):
         cookie_header = request_or_websocket.headers.get("cookie", "")
         if cookie_header:
-            cookies = {}
-            for c in cookie_header.split(";"):
-                if "=" in c:
-                    k, v = c.split("=", 1)
-                    cookies[k.strip()] = v.strip()
-            if cookie_name in cookies:
-                token = cookies.get(cookie_name)
+            # Use SimpleCookie for robust cookie parsing
+            import http.cookies
+            parsed_cookies = http.cookies.SimpleCookie()
+            parsed_cookies.load(cookie_header)
+            if cookie_name in parsed_cookies:
+                token = parsed_cookies[cookie_name].value
                 source = "ws_cookie_header"
 
     # Log outcome in debug mode

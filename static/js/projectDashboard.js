@@ -48,14 +48,14 @@ const dashboardState = {
 };
 
 /**
- * Load projects list with debounce to prevent multiple calls
+ * Load projects list (assigned debounced version later)
  */
-const loadProjectList = window.eventHandlers.debounce(() => {
-  // FIXED: Use direct auth method for consistency rather than app.state
+const loadProjectList = () => {
   if (window.auth?.isAuthenticated() && window.projectManager?.loadProjects) {
     window.projectManager.loadProjects('all');
   }
-}, 100);
+};
+// we'll debounce and assign to component.load after component creation
 
 async function init() {
   // Prevent multiple initializations
@@ -191,6 +191,8 @@ async function initializeComponents() {
       elementId: 'projectList', // Must match element in project_list.html
       onViewProject: handleViewProject
     });
+    // PATCH: Assign debounced load after component is constructed.
+    components.projectList.load = window.eventHandlers.debounce(loadProjectList, 100);
     console.log('[projectDashboard] ProjectListComponent created.');
   } else {
     console.error('[projectDashboard] ProjectListComponent not found on window.');
@@ -227,12 +229,7 @@ function processUrlParameters() {
  * Sets up global dashboard event listeners
  */
 function setupEventListeners() {
-  // Authentication state changes
-  if (window.auth?.AuthBus) {
-    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
-  } else {
-    console.error('[projectDashboard] window.auth.AuthBus is not available during setupEventListeners.');
-  }
+  // PATCH: Remove duplicate AuthBus listener (handled centrally in eventHandler.js).
 
   // Project events
   document.addEventListener('projectsLoaded', handleProjectsLoaded);
@@ -295,10 +292,11 @@ function showProjectDetails(projectId) {
     components.projectDetails.show();
   }
 
-  // Update URL param
-  const currentUrl = new URL(window.location);
+  // PATCH: preserve all other URL params and share selectedProject with chat.
+  const currentUrl = new URL(window.location.href);
   currentUrl.searchParams.set('project', projectId);
   window.history.pushState({}, '', currentUrl.toString());
+  localStorage.setItem('selectedProjectId', projectId);
 
   // Load project details
   if (window.auth?.isAuthenticated() && window.projectManager?.loadProjectDetails) {

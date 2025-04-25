@@ -200,7 +200,8 @@ async function apiRequest(url, options = {}, skipCache = false) {
 
     // Set up headers
     options.headers = options.headers || {};
-    const csrfToken = document.getElementById('csrfToken')?.getAttribute('content');
+    // PATCH: fetch live CSRF token from auth.js, not possibly stale meta.
+    const csrfToken = window.auth?.getCSRFToken();
     if (csrfToken) {
         options.headers['X-CSRFToken'] = csrfToken;
     }
@@ -323,8 +324,9 @@ async function initializeCoreSystems() {
   appState.currentPhase = 'event_handlers_ready';
 
   // Register app module early
-  DependencySystem.register('app', window.app);
-  console.log('[App] Registered app module');
+  // PATCH: Removed duplicate DependencySystem.register('app', ...)
+  // DependencySystem.register('app', window.app);
+  // console.log('[App] Registered app module');
 
   // --- Ensure required dependencies are registered before proceeding ---
   if (DependencySystem.ensureRegistered) {
@@ -379,7 +381,7 @@ async function initializeUIComponents() {
     // (Optional) If not needed, remove or adapt
     await DependencySystem.waitFor('projectDashboard',
         (dashboard) => {
-            if (typeof dashboard.init === 'function') {
+            if (dashboard && typeof dashboard.init === 'function') {
                 dashboard.init();
                 console.log('[App] projectDashboard initialized');
             }
