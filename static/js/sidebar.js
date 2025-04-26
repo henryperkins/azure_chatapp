@@ -65,17 +65,31 @@ export function createSidebar() {
       await activateTab(defaultTab);
 
       // Event listener for toggle button
-      sidebarToggleBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        toggleSidebar();
-      });
+      if (window.eventHandlers && typeof window.eventHandlers.trackListener === 'function') {
+        window.eventHandlers.trackListener(sidebarToggleBtn, 'click', (e) => {
+          e.preventDefault();
+          toggleSidebar();
+        }, { description: 'Sidebar Toggle Button' });
+      } else {
+        sidebarToggleBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          toggleSidebar();
+        });
+      }
 
       // Event listener for close button (if present)
       if (sidebarCloseBtn) {
-        sidebarCloseBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          closeSidebar();
-        });
+        if (window.eventHandlers && typeof window.eventHandlers.trackListener === 'function') {
+          window.eventHandlers.trackListener(sidebarCloseBtn, 'click', (e) => {
+            e.preventDefault();
+            closeSidebar();
+          }, { description: 'Sidebar Close Button' });
+        } else {
+          sidebarCloseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            closeSidebar();
+          });
+        }
       }
 
       // Initialize tab buttons
@@ -92,7 +106,11 @@ export function createSidebar() {
       }
 
       // On window resize, remove any leftover mobile overlay if the screen gets bigger
-      window.addEventListener('resize', handleResize);
+      if (window.eventHandlers && typeof window.eventHandlers.trackListener === 'function') {
+        window.eventHandlers.trackListener(window, 'resize', handleResize, { description: 'Sidebar Window Resize' });
+      } else {
+        window.addEventListener('resize', handleResize);
+      }
 
       console.log('[sidebar.js] Sidebar initialized successfully.');
       return true;
@@ -177,7 +195,11 @@ export function createSidebar() {
     backdropEl.style.cursor = 'pointer';
     document.body.appendChild(backdropEl);
 
-    backdropEl.addEventListener('click', closeSidebar);
+    if (window.eventHandlers && typeof window.eventHandlers.trackListener === 'function') {
+      window.eventHandlers.trackListener(backdropEl, 'click', closeSidebar, { description: 'Sidebar Backdrop Click' });
+    } else {
+      backdropEl.addEventListener('click', closeSidebar);
+    }
   }
 
   function removeBackdrop() {
@@ -257,26 +279,36 @@ export function createSidebar() {
               console.log('[sidebar] Project dashboard initialized via tab activation.');
               // Optionally reload projects
               if (isAuthenticated && window.projectManager?.loadProjects) {
-                await window.projectManager.loadProjects('all');
+                const projects = await window.projectManager.loadProjects('all');
+                if (window.uiRenderer?.renderProjects) {
+                  window.uiRenderer.renderProjects(projects);
+                }
               }
             }
+          }
+          // Always (re-)render projects list
+          if (window.projectManager?.projects && window.uiRenderer?.renderProjects) {
+            window.uiRenderer.renderProjects(window.projectManager.projects);
           }
         } catch (err) {
           console.error('[sidebar] Error initializing project dashboard on tab activation:', err);
         }
       }
 
-      // Update all tabs
+      // If 'recent' tab, render conversations
+      if (tabName === 'recent' && window.chatConfig?.conversations && window.uiRenderer?.renderConversations) {
+        window.uiRenderer.renderConversations(window.chatConfig);
+      }
+
+      // Update all tabs and ensure correct visibility as before
       Object.entries(tabs).forEach(([name, tab]) => {
         if (tab.button && tab.section) {
           if (name === tabName) {
-            // Activate current tab
             tab.button.classList.add('tab-active');
             tab.button.setAttribute('aria-selected', 'true');
             tab.button.tabIndex = 0;
             tab.section.classList.remove('hidden');
           } else {
-            // Deactivate other tabs
             tab.button.classList.remove('tab-active');
             tab.button.setAttribute('aria-selected', 'false');
             tab.button.tabIndex = -1;

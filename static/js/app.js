@@ -5,8 +5,10 @@ import { createProjectDashboard } from './projectDashboard.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createModelConfig } from './modelConfig.js';
+// ... other imports ...
 import { createChatManager } from './chat.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
+import { uiRenderer } from './uiRenderer.js';
 
 /**
  * @fileoverview
@@ -355,6 +357,10 @@ async function initializeUIComponents() {
     window.sidebar = sidebar;
     DependencySystem.register('sidebar', sidebar);
     console.log('[App] Sidebar initialized and registered');
+
+    // --- uiRenderer initialization ---
+    uiRenderer.initialize();
+    console.log('[App] uiRenderer initialized');
 
     // --- KnowledgeBaseComponent initialization/registration (Injected factory pattern) ---
     const knowledgeBaseComponent = createKnowledgeBaseComponent({

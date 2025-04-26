@@ -127,6 +127,19 @@ export function createChatManager() {
           this.titleElement.textContent = conversation.title || "New Conversation";
         this._renderMessages(messages);
 
+        // Update the conversation list in the sidebar using the central UI renderer
+        if (window.uiRenderer && typeof window.uiRenderer.renderConversations === "function") {
+          // Ensure window.chatConfig is up-to-date for uiRenderer
+          window.chatConfig = window.chatConfig || {};
+          if (Array.isArray(window.chatConfig.conversations)) {
+            // Try to update the title of the current conversation in the list for consistency
+            window.chatConfig.conversations = window.chatConfig.conversations.map(conv =>
+              conv.id === conversationId ? { ...conv, title: conversation.title } : conv
+            );
+          }
+          window.uiRenderer.renderConversations(window.chatConfig);
+        }
+
         // Update URL if needed
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get("chatId") !== conversationId) {
