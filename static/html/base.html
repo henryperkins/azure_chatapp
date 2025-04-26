@@ -157,7 +157,6 @@
 
               <!-- Login Form -->
               <form id="loginForm" class="space-y-4">
-                <input type="hidden" name="csrf_token" id="loginCsrfToken" value="">
                 <div class="form-control">
                   <label for="loginUsername" class="label">Username</label>
                   <input type="text" id="loginUsername" name="username" required
@@ -171,14 +170,6 @@
                 <button type="submit" class="btn btn-primary w-full">Login</button>
               </form>
               <script>
-                // Update CSRF token when form is shown
-                document.getElementById('authButton')?.addEventListener('click', async () => {
-                  const token = await window.auth?.getCSRFTokenAsync();
-                  if (token) {
-                    document.getElementById('loginCsrfToken').value = token;
-                  }
-                });
-
                 // Handle navbar modal login form with JS for JSON/XHR POST
                 document.addEventListener('DOMContentLoaded', function () {
                   const navbarLoginForm = document.querySelector('form#loginForm');
@@ -594,6 +585,8 @@
         })
         .then(html => {
           modalsContainer.innerHTML = html;
+          // Unhide modalsContainer so dialogs will render correctly
+          modalsContainer.classList.remove('hidden');
           // Optionally, dispatch an event to signal modals are ready
           document.dispatchEvent(new CustomEvent('modalsLoaded'));
         })

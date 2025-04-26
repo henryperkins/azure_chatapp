@@ -31,16 +31,35 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
     Sets up minimal or insecure middlewares for debugging.
     Mounts CORS only for localhost for local dev safety,
     but never in prod. Ensures only one CORS middleware exists.
+
+    If ENV is production, refuses to start with insecure CORS!
     """
-    # ⚡ PATCH: CORS only on local origins; remove wide-open dual mounting
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
+
+    is_production = getattr(settings, "ENV", "development").lower() == "production"
+    # Accept allowed origins from env for dev flexibility
+    allowed_origins = getattr(settings, "CORS_ORIGINS", None)
+    if allowed_origins:
+        if isinstance(allowed_origins, str):
+            allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+    else:
+        allowed_origins = [
             "http://localhost",
             "http://127.0.0.1",
             "http://localhost:8000",
             "http://127.0.0.1:8000",
-        ],
+        ]
+
+    if is_production:
+        # Extra hard lock—never allow this CORS in prod!
+        raise RuntimeError(
+            "Refusing to start with debug/insecure CORS settings in production!\n"
+            "Update CORS config for production or use setup_middlewares_secure()."
+        )
+
+    # ⚡ PATCH: Only add CORS if not production, no wide-open allowed.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

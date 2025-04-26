@@ -107,7 +107,7 @@ class ModalManager {
 
     try {
       // Force modal to top layer
-      modalEl.style.zIndex = "99999";
+      // modalEl.style.zIndex = "99999"; // Temporarily comment out
 
       // Remove any hidden classes
       modalEl.classList.remove("hidden");
@@ -118,12 +118,12 @@ class ModalManager {
       }
 
       // Show using native dialog or fallback
-      if (typeof modalEl.showModal === "function") {
-        modalEl.showModal();
-        modalEl.style.display = "flex"; // Ensure visibility
-        this.activeModal = modalId;
-        this._manageBodyScroll(false);
-      } else {
+          if (typeof modalEl.showModal === "function") {
+            modalEl.showModal();
+            // modalEl.style.display = "flex"; // Temporarily comment out - showModal should handle display
+            this.activeModal = modalId;
+            this._manageBodyScroll(false);
+          } else {
         console.warn(
           `[ModalManager] .showModal() not available for ID='${modalId}', using fallback.`
         );

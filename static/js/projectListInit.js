@@ -83,6 +83,24 @@ export function initProjectList() {
 
             // [Removed create project button logic – handled by ProjectListComponent]
 
+            // Instantiate and show the ProjectListComponent so projects are actually rendered
+            if (window.ProjectListComponent) {
+                const projectListCmp = new window.ProjectListComponent({
+                    elementId: 'projectList',
+                    onViewProject: (projectId) => {
+                        if (window.projectDashboard && typeof window.projectDashboard.showProjectDetails === "function") {
+                            window.projectDashboard.showProjectDetails(projectId);
+                        } else {
+                            console.warn("[ProjectListInit] projectDashboard missing or does not support showProjectDetails");
+                        }
+                    }
+                });
+                projectListCmp.show();
+                window.projectListCmp = projectListCmp;
+            } else {
+                console.warn('[ProjectListInit] ProjectListComponent not available, cannot render project list.');
+            }
+
             initialized = true;
             console.log('[ProjectListInit] Initialization complete.');
         } catch (err) {
@@ -112,4 +130,6 @@ async function waitForDependency(name, timeout = 5000) {
 // [Removed sidebar new project rebind logic – handled by ProjectListComponent]
 
 // Register with DependencySystem
-DependencySystem.register('projectListInit', { initProjectList });
+if (typeof DependencySystem !== 'undefined' && DependencySystem.register) {
+    DependencySystem.register('projectListInit', { initProjectList });
+  }
