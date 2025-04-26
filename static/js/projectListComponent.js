@@ -704,7 +704,7 @@ class ProjectListComponent {
         const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
         const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
 
-        const card = document.createElement('li');
+        const card = document.createElement('div');
         card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all duration-200 border border-base-300 rounded-box p-6 flex flex-col h-full`;
         card.dataset.projectId = project.id;
         card.setAttribute('role', 'article');
