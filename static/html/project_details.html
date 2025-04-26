@@ -554,22 +554,8 @@
       });
     });
 
-    // Back button
-    const backButton = document.getElementById('backToProjectsBtn');
-    if (backButton) {
-      backButton.addEventListener('click', function() {
-        if (window.ProjectDashboard?.showProjectsView) {
-          window.ProjectDashboard.showProjectsView();
-        } else {
-          // Fallback
-          const projectListView = document.getElementById('projectListView');
-          const projectDetailsView = document.getElementById('projectDetailsView');
-          if (projectListView) projectListView.classList.remove('hidden');
-          if (projectDetailsView) projectDetailsView.classList.add('hidden');
-          window.history.pushState({}, '', '/?view=projects');
-        }
-      });
-    }
+    // Back button HANDLING IS CONTROLLED BY ProjectDetailsComponent CLASS, DO NOT ATTACH DIRECTLY HERE.
+    // (Handler removed. See static/js/projectDetailsComponent.js for dynamic JS wiring.)
 
     // File upload handler
     const uploadButton = document.getElementById('uploadFileBtn');
