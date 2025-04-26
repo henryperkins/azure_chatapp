@@ -71,4 +71,4 @@
   /* Add any utility styles here */
 }
 
-@plugin "daisyui";
+@import "daisyui";
