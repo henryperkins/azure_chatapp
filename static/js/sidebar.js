@@ -156,10 +156,18 @@ export function createSidebar() {
       pinSidebarBtn.classList.add('text-primary');
       pinSidebarBtn.title = 'Unpin sidebar';
       pinSidebarBtn.setAttribute('aria-pressed', 'true');
+      pinSidebarBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" stroke="none">
+          <path d="M6 2a1 1 0 011 1v2.586l7.293 7.293a1 1 0 010 1.414L8.414 18.172a1 1 0 01-1.414-1.414L12.586 13H9a1 1 0 01-1-1V6a1 1 0 011-1z"/>
+        </svg>`;
     } else {
       pinSidebarBtn.classList.remove('text-primary');
       pinSidebarBtn.title = 'Pin sidebar open';
       pinSidebarBtn.setAttribute('aria-pressed', 'false');
+      pinSidebarBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+        </svg>`;
     }
   }
 
