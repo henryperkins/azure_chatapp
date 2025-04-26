@@ -38,6 +38,7 @@ export function createSidebar() {
       sidebarEl = document.getElementById('mainSidebar');
       sidebarToggleBtn = document.getElementById('navToggleBtn');
       sidebarCloseBtn = document.getElementById('closeSidebarBtn');
+      pinSidebarBtn = document.getElementById('pinSidebarBtn');
 
       // Check for required elements
       if (!sidebarEl || !sidebarToggleBtn) {
@@ -58,6 +59,36 @@ export function createSidebar() {
       // Optional close button
       if (!sidebarCloseBtn) {
         console.warn('[sidebar.js] closeSidebarBtn not found; ignoring close event binding.');
+      }
+
+      // Pin button event listener and state
+      if (pinSidebarBtn) {
+        if (window.eventHandlers && typeof window.eventHandlers.trackListener === 'function') {
+          window.eventHandlers.trackListener(pinSidebarBtn, 'click', (e) => {
+            e.preventDefault();
+            sidebarPinned = !sidebarPinned;
+            localStorage.setItem('sidebarPinned', sidebarPinned ? 'true' : 'false');
+            sidebarEl.classList.toggle('sidebar-pinned', sidebarPinned);
+            updatePinButton();
+            if (sidebarPinned) {
+              sidebarEl.classList.remove('-translate-x-full');
+              removeBackdrop();
+            }
+          }, { description: 'Sidebar Pin Button' });
+        } else {
+          pinSidebarBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            sidebarPinned = !sidebarPinned;
+            localStorage.setItem('sidebarPinned', sidebarPinned ? 'true' : 'false');
+            sidebarEl.classList.toggle('sidebar-pinned', sidebarPinned);
+            updatePinButton();
+            if (sidebarPinned) {
+              sidebarEl.classList.remove('-translate-x-full');
+              removeBackdrop();
+            }
+          });
+        }
+        updatePinButton();
       }
 
       // Activate default tab from localStorage or fallback to 'recent'
@@ -117,6 +148,19 @@ export function createSidebar() {
     };
 
     return attemptInitialization();
+  }
+
+  function updatePinButton() {
+    if (!pinSidebarBtn) return;
+    if (sidebarPinned) {
+      pinSidebarBtn.classList.add('text-primary');
+      pinSidebarBtn.title = 'Unpin sidebar';
+      pinSidebarBtn.setAttribute('aria-pressed', 'true');
+    } else {
+      pinSidebarBtn.classList.remove('text-primary');
+      pinSidebarBtn.title = 'Pin sidebar open';
+      pinSidebarBtn.setAttribute('aria-pressed', 'false');
+    }
   }
 
   function setupTabListeners() {
