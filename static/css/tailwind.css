@@ -67,4 +67,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* Add any utility styles here */
+}
+
 @plugin "daisyui";
