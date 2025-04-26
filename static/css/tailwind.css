@@ -20,11 +20,6 @@
   /* Add any utility styles here */
 }
 
-@daisyui {
-  themes: ["dracula", "light", "dark", "cupcake"];
-  logs: true;
-}
-
 /* If you want to keep your dracula theme custom colors, add: */
 @layer theme {
   :root {
@@ -63,12 +58,4 @@
   scrollbar-color: var(--color-primary, #ff55a8) var(--color-base-200, #23243a);
 }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer utilities {
-  /* Add any utility styles here */
-}
-
-@import "daisyui";
+@plugin "daisyui";
