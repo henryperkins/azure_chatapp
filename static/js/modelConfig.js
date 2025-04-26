@@ -115,10 +115,19 @@ export function createModelConfig() {
     document.addEventListener('modelConfigChanged', (e) => callback(e.detail));
   }
 
+  function initializeUI() {
+    if (window.uiRenderer) {
+      if (typeof window.uiRenderer.setupModelDropdown === "function") window.uiRenderer.setupModelDropdown();
+      if (typeof window.uiRenderer.setupMaxTokensUI === "function") window.uiRenderer.setupMaxTokensUI();
+      if (typeof window.uiRenderer.setupVisionUI === "function") window.uiRenderer.setupVisionUI();
+    }
+  }
+
   return {
     getConfig,
     updateConfig: updateModelConfig,
     getModelOptions,
-    onConfigChange
+    onConfigChange,
+    initializeUI
   };
 }

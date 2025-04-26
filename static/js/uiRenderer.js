@@ -1,32 +1,21 @@
 /**
  * uiRenderer.js - Module for rendering UI elements like projects and conversations.
-/**
- * Dependencies:
- * - window.sidebar (external dependency, for conversation starring)
- * - window.navigateToConversation (external navigation function)
- * - window.navigateToProject (external navigation function)
- * - window.chatConfig (external configuration object)
- * - window.modelConfig (external configuration manager)
- * - window.eventHandlers (external event management)
- * - document (browser built-in, for DOM manipulation)
+ * SPA Integration: Explicitly initialize with uiRenderer.initialize() from app.js.
+ * All error handling uses window.app.showNotification. Auth checks use window.app.state.isAuthenticated.
+ * No automatic global registration; call initialize() in your orchestrator.
  */
 
-// Browser APIs:
-// - document (DOM manipulation)
-// External Dependencies (Global Scope):
-// - window.sidebar (sidebar management)
-// - window.navigateToConversation (navigation)
-// - window.navigateToProject (navigation)
-// - window.chatConfig (configuration)
-// - window.modelConfig (model settings)
-// - window.eventHandlers (event management)
-
-// Optional Dependencies:
-// - Gracefully handles missing sidebar functions
-// - Falls back gracefully if navigation functions aren't available
-// - Handles missing configuration objects
-
-
+/**
+ * Dependencies:
+ * - window.sidebar (optional, for conversation starring)
+ * - window.navigateToConversation (for SPA navigation)
+ * - window.navigateToProject (for SPA navigation)
+ * - window.chatConfig, window.modelConfig (config managers)
+ * - window.eventHandlers (event management)
+ * - window.app.state.isAuthenticated (auth check)
+ * - window.app.showNotification (notifications/errors)
+ * - document (browser DOM)
+ */
 
 function createConversationListItem(item) {
   const li = document.createElement('li');
@@ -54,10 +43,16 @@ function createConversationListItem(item) {
     </svg>`;
   starBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!window.app.state.isAuthenticated) {
+      window.app.showNotification('You must be logged in to star conversations.', 'warning');
+      return;
+    }
     if (window.sidebar?.toggleStarConversation) {
       const nowStarred = window.sidebar.toggleStarConversation(item.id);
       starBtn.className = `ml-2 ${nowStarred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`;
       starBtn.querySelector('svg').setAttribute('fill', nowStarred ? 'currentColor' : 'none');
+    } else {
+      window.app.showNotification('Unable to access star conversation functionality.', 'error');
     }
   });
   firstLine.appendChild(starBtn);
@@ -85,107 +80,129 @@ function createConversationListItem(item) {
   container.appendChild(secondLine);
   li.appendChild(container);
   li.addEventListener('click', () => {
+    if (!window.app.state.isAuthenticated) {
+      window.app.showNotification('Please sign in to access conversations.', 'warning');
+      return;
+    }
     if (window.navigateToConversation) window.navigateToConversation(item.id);
+    else window.app.showNotification('Conversation navigation unavailable.', 'error');
   });
   return li;
 }
 
 function renderConversations(data) {
-  const container = document.getElementById('sidebarConversations');
-  if (!container) return;
-  container.innerHTML = '';
-  const seenIds = new Set();
-  const conversations = (data?.data?.conversations || data?.conversations || [])
-    .filter(conv => {
-      if (!conv?.id || seenIds.has(conv.id)) return false;
-      seenIds.add(conv.id);
-      return true;
+  try {
+    const container = document.getElementById('sidebarConversations');
+    if (!container) return;
+    container.innerHTML = '';
+    const seenIds = new Set();
+    const conversations = (data?.data?.conversations || data?.conversations || [])
+      .filter(conv => {
+        if (!conv?.id || seenIds.has(conv.id)) return false;
+        seenIds.add(conv.id);
+        return true;
+      });
+    window.chatConfig = window.chatConfig || {};
+    window.chatConfig.conversations = conversations;
+    if (conversations.length === 0) {
+      const element = document.createElement('li');
+      element.className = 'text-gray-500 text-center py-4';
+      element.textContent = 'No conversations yet';
+      container.appendChild(element);
+      return;
+    }
+    conversations.forEach(conv => {
+      const item = createConversationListItem(conv);
+      if (item) container.appendChild(item);
     });
-  window.chatConfig = window.chatConfig || {};
-  window.chatConfig.conversations = conversations;
-  if (conversations.length === 0) {
-    const element = document.createElement('li');
-    element.className = 'text-gray-500 text-center py-4';
-    element.textContent = 'No conversations yet';
-    container.appendChild(element);
-    return;
+  } catch (err) {
+    window.app.showNotification('Error rendering conversations sidebar.', 'error');
+    console.error(err);
   }
-  conversations.forEach(conv => {
-    const item = createConversationListItem(conv);
-    if (item) container.appendChild(item);
-  });
 }
 
 function renderProjects(projects) {
-  const container = document.getElementById('sidebarProjects');
-  if (!container) return;
+  try {
+    const container = document.getElementById('sidebarProjects');
+    if (!container) return;
 
-  container.innerHTML = '';
+    container.innerHTML = '';
 
-  if (!projects || projects.length === 0) {
-    const emptyMsg = document.createElement('li');
-    emptyMsg.className = 'text-center text-gray-500 py-4';
-    emptyMsg.textContent = 'No projects yet';
-    container.appendChild(emptyMsg);
-    return;
-  }
+    if (!projects || projects.length === 0) {
+      const emptyMsg = document.createElement('li');
+      emptyMsg.className = 'text-center text-gray-500 py-4';
+      emptyMsg.textContent = 'No projects yet';
+      container.appendChild(emptyMsg);
+      return;
+    }
 
-  projects.forEach(project => {
-    const item = document.createElement('li');
-    item.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
+    projects.forEach(project => {
+      const item = document.createElement('li');
+      item.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
 
-    const title = document.createElement('div');
-    title.className = 'font-medium truncate';
-    title.textContent = project.name || `Project ${project.id}`;
+      const title = document.createElement('div');
+      title.className = 'font-medium truncate';
+      title.textContent = project.name || `Project ${project.id}`;
 
-    const desc = document.createElement('div');
-    desc.className = 'text-xs text-gray-500 truncate mt-1';
-    desc.textContent = project.description || 'No description';
+      const desc = document.createElement('div');
+      desc.className = 'text-xs text-gray-500 truncate mt-1';
+      desc.textContent = project.description || 'No description';
 
-    item.appendChild(title);
-    item.appendChild(desc);
+      item.appendChild(title);
+      item.appendChild(desc);
 
-    item.addEventListener('click', () => {
-      if (window.navigateToProject) window.navigateToProject(project.id);
+      item.addEventListener('click', () => {
+        if (!window.app.state.isAuthenticated) {
+          window.app.showNotification('Please sign in to access projects.', 'warning');
+          return;
+        }
+        if (window.navigateToProject) window.navigateToProject(project.id);
+        else window.app.showNotification('Project navigation unavailable.', 'error');
+      });
+
+      container.appendChild(item);
     });
-
-    container.appendChild(item);
-  });
+  } catch (err) {
+    window.app.showNotification('Error rendering projects sidebar.', 'error');
+    console.error(err);
+  }
 }
 
-// Export to window for app.js integration
-window.uiRenderer = {
-  renderConversations,
-  renderProjects,
-
-  // Model configuration UI components
-  setupModelDropdown: async function() {
+// Model configuration UI components
+async function setupModelDropdown() {
+  try {
     const modelSelect = document.getElementById("modelSelect");
     if (!modelSelect) return;
 
-    const models = [
-      {
-        id: 'claude-3-opus-20240229',
-        name: 'Claude 3 Opus',
-        provider: 'anthropic',
-        maxTokens: 200000,
-        supportsVision: false
-      },
-      {
-        id: 'claude-3-sonnet-20240229',
-        name: 'Claude 3 Sonnet',
-        provider: 'anthropic',
-        maxTokens: 200000,
-        supportsVision: false
-      },
-      {
-        id: 'gpt-4o',
-        name: 'GPT-4o',
-        provider: 'openai',
-        maxTokens: 128000,
-        supportsVision: true
-      }
-    ];
+    // Use model options from window.modelConfig if available, else fallback to hardcoded list
+    let models = [];
+    if (window.modelConfig && typeof window.modelConfig.getModelOptions === "function") {
+      models = window.modelConfig.getModelOptions();
+    } else {
+      models = [
+        {
+          id: 'claude-3-opus-20240229',
+          name: 'Claude 3 Opus',
+          provider: 'anthropic',
+          maxTokens: 200000,
+          supportsVision: false
+        },
+        {
+          id: 'claude-3-sonnet-20240229',
+          name: 'Claude 3 Sonnet',
+          provider: 'anthropic',
+          maxTokens: 200000,
+          supportsVision: false
+        },
+        {
+          id: 'gpt-4o',
+          name: 'GPT-4o',
+          provider: 'openai',
+          maxTokens: 128000,
+          supportsVision: true
+        }
+      ];
+    }
 
     // Clear existing options
     modelSelect.innerHTML = '';
@@ -204,14 +221,27 @@ window.uiRenderer = {
     modelSelect.value = currentConfig.modelName || 'claude-3-sonnet-20240229';
 
     // Add change handler
-    window.eventHandlers.trackListener(modelSelect, "change", () => {
-      window.modelConfig.updateConfig({
-        modelName: modelSelect.value
+    if (window.eventHandlers && typeof window.eventHandlers.trackListener === "function") {
+      window.eventHandlers.trackListener(modelSelect, "change", () => {
+        window.modelConfig.updateConfig({
+          modelName: modelSelect.value
+        });
+      }, { description: 'uiRenderer Model Dropdown Change' });
+    } else {
+      modelSelect.addEventListener("change", () => {
+        window.modelConfig.updateConfig({
+          modelName: modelSelect.value
+        });
       });
-    });
-  },
+    }
+  } catch (err) {
+    window.app.showNotification('Error setting up model dropdown.', 'error');
+    console.error(err);
+  }
+}
 
-  setupMaxTokensUI: function() {
+function setupMaxTokensUI() {
+  try {
     const maxTokensContainer = document.getElementById("maxTokensContainer");
     if (!maxTokensContainer) return;
 
@@ -240,17 +270,28 @@ window.uiRenderer = {
     };
 
     // Event listeners
-    window.eventHandlers.trackListener(slider, "input", (e) => {
-      updateMaxTokens(e.target.value);
-    });
+    if (window.eventHandlers && typeof window.eventHandlers.trackListener === "function") {
+      window.eventHandlers.trackListener(slider, "input", (e) => {
+        updateMaxTokens(e.target.value);
+      }, { description: 'uiRenderer Max Tokens Slider' });
+    } else {
+      slider.addEventListener("input", (e) => {
+        updateMaxTokens(e.target.value);
+      });
+    }
 
     // Add to container
     maxTokensContainer.innerHTML = '';
     maxTokensContainer.appendChild(slider);
     maxTokensContainer.appendChild(valueDisplay);
-  },
+  } catch (err) {
+    window.app.showNotification('Error setting up max tokens UI.', 'error');
+    console.error(err);
+  }
+}
 
-  setupVisionUI: function() {
+function setupVisionUI() {
+  try {
     const visionPanel = document.getElementById('visionPanel');
     if (!visionPanel) return;
 
@@ -270,15 +311,39 @@ window.uiRenderer = {
       label.textContent = "Enable Vision";
       label.className = "text-sm";
 
-      window.eventHandlers.trackListener(toggle, "change", () => {
-        window.modelConfig.updateConfig({
-          visionEnabled: toggle.checked
+      if (window.eventHandlers && typeof window.eventHandlers.trackListener === "function") {
+        window.eventHandlers.trackListener(toggle, "change", () => {
+          window.modelConfig.updateConfig({
+            visionEnabled: toggle.checked
+          });
+        }, { description: 'uiRenderer Vision Checkbox' });
+      } else {
+        toggle.addEventListener("change", () => {
+          window.modelConfig.updateConfig({
+            visionEnabled: toggle.checked
+          });
         });
-      });
+      }
 
       visionPanel.innerHTML = '';
       visionPanel.appendChild(toggle);
       visionPanel.appendChild(label);
     }
+  } catch (err) {
+    window.app.showNotification('Error setting up vision UI.', 'error');
+    console.error(err);
+  }
+}
+
+// Exported renderer module
+export const uiRenderer = {
+  renderConversations,
+  renderProjects,
+  setupModelDropdown,
+  setupMaxTokensUI,
+  setupVisionUI,
+  initialize() {
+    // Attach this module to window for SPA use
+    window.uiRenderer = uiRenderer;
   }
 };

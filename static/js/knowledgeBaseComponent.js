@@ -465,11 +465,6 @@ export function createKnowledgeBaseComponent(options = {}) {
           this._updateLocalState(enabled);
           localStorage.setItem(`kb_enabled_${projectId}`, String(enabled));
 
-          // If you have a knowledgeBaseState cache, you can notify it
-          if (window.knowledgeBaseState?.invalidateCache) {
-            window.knowledgeBaseState.invalidateCache(projectId);
-          }
-
           // Refresh project data
           if (this.projectManager?.loadProjectDetails) {
             const project = await this.projectManager.loadProjectDetails(projectId);
