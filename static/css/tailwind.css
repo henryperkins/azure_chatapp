@@ -3,6 +3,8 @@
 /* ================ */
 
 @import "tailwindcss";
+@import "daisyui";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -18,9 +20,6 @@
 @layer utilities {
   /* Add any utility styles here */
 }
-
-/* DaisyUI plugin configuration */
-@import "daisyui";
 
 @daisyui {
   themes: ["dracula", "light", "dark", "cupcake"];
