@@ -100,7 +100,7 @@ async def create_project(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Create a new project with full monitoring"""
+    """Create a new project with full monitoring and always create a knowledge base"""
     current_user = current_user_tuple[0]
     transaction = start_transaction(
         op="project",
@@ -119,13 +119,39 @@ async def create_project(
             metrics.incr("project.create.attempt")
             start_time = time.time()
 
-            # Create project
+            # 1. Create project
             with sentry_span(op="db", description="Create project record"):
                 project = Project(
-                    **project_data.dict(),
                     user_id=current_user.id,
+                    name=project_data.name,
+                    goals=project_data.goals,
+                    description=project_data.description,
+                    custom_instructions=project_data.custom_instructions,
+                    max_tokens=project_data.max_tokens,
                 )
                 await save_model(db, project)
+
+            # 2. Immediately create a knowledge base for this project
+            from services.knowledgebase_service import create_knowledge_base
+            kb = await create_knowledge_base(
+                name=f"{project.name} Knowledge Base",
+                project_id=project.id,
+                description="Auto-created KB for project",
+                db=db,
+            )
+            # 3. Attach KB to project and save
+            project.knowledge_base_id = kb.id
+            await save_model(db, project)
+
+            # 4. Immediately create a default conversation for this project
+            from services.conversation_service import ConversationService
+            conv_service = ConversationService(db)
+            default_conversation = await conv_service.create_conversation(
+                user_id=current_user.id,
+                title="Default Conversation",
+                model_id="claude-3-sonnet-20240229",
+                project_id=project.id,
+            )
 
             # Record success
             duration = (time.time() - start_time) * 1000
@@ -136,18 +162,14 @@ async def create_project(
 
             # Set user context
             with configure_scope() as scope:
-                scope.set_context(
-                    "project",
-                    {
-                        "id": str(project.id),
-                        "name": project.name,
-                        "created_at": project.created_at.isoformat(),
-                    },
-                )
+                set_tag("user.id", str(current_user.id))
+                set_tag("project.id", str(project.id))
+                set_tag("kb.id", str(kb.id))
 
-            logger.info(f"Created project {project.id}")
+            logger.info(f"Created project {project.id} with KB {kb.id}")
             return await create_standard_response(
-                serialize_project(project), "Project created successfully"
+                serialize_project(project), "Project and knowledge base created successfully",
+                span_or_transaction=transaction
             )
 
     except Exception as e:
@@ -259,7 +281,10 @@ async def get_project(
                 scope.set_context("project", serialize_project(project))
 
             metrics.incr("project.view.success")
-            return await create_standard_response(serialize_project(project))
+            return await create_standard_response(
+                serialize_project(project),
+                span_or_transaction=span
+            )
 
         except HTTPException as http_exc:
             span.set_tag("error.type", "http")
@@ -342,7 +367,8 @@ async def update_project(
                 )
 
             return await create_standard_response(
-                serialize_project(project), "Project updated successfully"
+                serialize_project(project), "Project updated successfully",
+                span_or_transaction=transaction
             )
 
     except HTTPException as http_exc:
@@ -445,7 +471,8 @@ async def delete_project(
             )
 
             return await create_standard_response(
-                {"id": str(project_id)}, "Project deleted successfully"
+                {"id": str(project_id)}, "Project deleted successfully",
+                span_or_transaction=transaction
             )
 
     except Exception as e:
@@ -504,6 +531,7 @@ async def toggle_archive_project(
             return await create_standard_response(
                 serialize_project(project),
                 f"Project {'archived' if project.archived else 'unarchived'}",
+                span_or_transaction=span
             )
 
         except Exception as e:
@@ -551,6 +579,7 @@ async def toggle_pin_project(
             return await create_standard_response(
                 serialize_project(project),
                 f"Project {'pinned' if project.pinned else 'unpinned'}",
+                span_or_transaction=span
             )
 
         except HTTPException as http_exc:

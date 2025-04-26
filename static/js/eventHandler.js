@@ -427,11 +427,11 @@ function handleAuthStateChange(event) {
   if (projectListView) {
     projectListView.classList.toggle('opacity-0', !authenticated);
 
-    // Explicitly load projects when authenticated
-    if (authenticated && window.projectManager?.loadProjects) {
-      console.log('[eventHandler] Auth state changed to authenticated, loading projects');
+    // After authentication, show the project list via the dashboard (this manages project loading and DOM)
+    if (authenticated && window.projectDashboard?.showProjectList) {
+      console.log('[eventHandler] Auth state changed to authenticated, showing project dashboard list');
       setTimeout(() => {
-        window.projectManager.loadProjects('all');
+        window.projectDashboard.showProjectList();
       }, 100); // Small delay to ensure all UI components are ready
     }
   }
