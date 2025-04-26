@@ -320,13 +320,9 @@ async function initializeAuthSystem() {
 async function initializeUIComponents() {
     console.log('[App] Initializing UI components...');
 
-    // Initialize ProjectListComponent first - needed by ProjectDashboard
-    const projectListComponent = createProjectListComponent({ elementId: 'projectList' });
-    await projectListComponent.initialize();  // Make sure it's fully initialized
+    // ProjectListComponent class constructor provided for legacy DI.
     window.ProjectListComponent = ProjectListComponent; // Register the class constructor
-    window.projectListComponent = projectListComponent; // Register the instance
-    DependencySystem.register('projectListComponent', projectListComponent);
-    console.log('[App] ProjectListComponent initialized and registered');
+    // DO NOT create or initialize global projectListComponent instance in app.js; let ProjectDashboard handle SPA lifecycle.
 
     // Create and initialize the project dashboard
     const projectDashboard = createProjectDashboard();
