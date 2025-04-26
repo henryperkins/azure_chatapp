@@ -1,54 +1,67 @@
 /**
- * auth.js - Core authentication module (Refactored Version)
- * Handles user authentication state based *solely* on backend HttpOnly cookies and verification.
-/**
+ * auth.js - Core Authentication Module
+ *
+ * Handles user authentication state based solely on backend HttpOnly cookies and server verification.
+ *
+ * Features:
+ * - Secure, cookie-based authentication (no tokens in JS-accessible storage)
+ * - CSRF protection for all state-changing requests
+ * - Periodic session verification and automatic refresh
+ * - Event system for auth state changes
+ * - Graceful fallback for optional dependencies
+ *
  * Dependencies:
- * - window.apiRequest (optional external dependency, for API requests)
- * - window.DependencySystem (optional external dependency, for module registration)
- * - document (browser built-in, for cookie access and DOM manipulation)
- * - fetch (browser built-in, for network requests)
- * - EventTarget (browser built-in, for AuthBus event system)
+ * - window.apiRequest (optional, for API requests)
+ * - window.DependencySystem (optional, for module registration)
+ * - document, fetch, EventTarget (browser built-ins)
+ *
+ * Exports:
+ * - publicAuth (default): Main API for authentication actions and state
  */
 
-// Browser APIs:
-// - document (cookie access)
-// - fetch (network requests)
-// - EventTarget (event system)
-// - setTimeout (timers)
+/* =========================
+   Configuration
+   ========================= */
 
-// External Dependencies (Global Scope):
-// - window.apiRequest (optional API request handler)
-// - window.DependencySystem (optional module registration system)
-
-// Optional Dependencies:
-// - Falls back to internal authRequest if window.apiRequest not available
-// - Gracefully handles missing DependencySystem
-
-
-// Configuration
+/** @type {Object} */
 const AUTH_CONFIG = {
-  VERIFICATION_INTERVAL: 300000, // 5 min: Periodic check if user is still logged in
+  VERIFICATION_INTERVAL: 300000, // 5 minutes: How often to re-verify session
 };
 
-// Central auth state - Simplified
+/* =========================
+   Internal State
+   ========================= */
+
+/**
+ * Central authentication state.
+ * @type {{ isAuthenticated: boolean, username: string|null, isReady: boolean }}
+ */
 const authState = {
   isAuthenticated: false,
   username: null,
-  isReady: false, // Flag to indicate if initial verification is complete
+  isReady: false, // True after initial verification completes
 };
 
-// Event bus for auth events
+/**
+ * Event bus for authentication events.
+ * @type {EventTarget}
+ */
 const AuthBus = new EventTarget();
 
-// Track async operations to prevent race conditions
+// Async operation flags to prevent race conditions
 let authCheckInProgress = false;
 let tokenRefreshInProgress = false;
-let tokenRefreshPromise = null; // Stores the promise for an ongoing refresh
+let tokenRefreshPromise = null;
 let csrfToken = '';
-let csrfTokenPromise = null; // Stores the promise for an ongoing CSRF fetch
+let csrfTokenPromise = null;
+
+/* =========================
+   Utility Functions
+   ========================= */
 
 /**
- * Helper to detect local dev environment
+ * Detect if running in a local development environment.
+ * @returns {boolean}
  */
 function isLocalDev() {
   return (
@@ -57,15 +70,20 @@ function isLocalDev() {
   );
 }
 
+/* =========================
+   CSRF Token Management
+   ========================= */
+
 /**
- * Fetch a CSRF token from the server
+ * Fetch a CSRF token from the backend.
+ * Ensures token is not cached by adding a timestamp.
+ * @returns {Promise<string|null>} The CSRF token, or null on error.
  */
 async function fetchCsrfToken() {
   try {
-    // PATCH: Add timestamp and no-store to ensure CSRF isn't cached
     const response = await fetch(`/api/auth/csrf?ts=${Date.now()}`, {
       method: 'GET',
-      credentials: 'include', // Important for cookies
+      credentials: 'include',
       cache: 'no-store',
       headers: {
         Accept: 'application/json',
@@ -84,13 +102,13 @@ async function fetchCsrfToken() {
     return data.token;
   } catch (error) {
     console.error('[Auth] CSRF token fetch failed:', error);
-    // Allow app to continue but warn - state-changing actions will likely fail
     return null;
   }
 }
 
 /**
- * Get CSRF token - async safe version, ensures only one fetch runs at a time
+ * Get the CSRF token, ensuring only one fetch runs at a time.
+ * @returns {Promise<string|null>}
  */
 async function getCSRFTokenAsync() {
   if (csrfToken) return csrfToken;
@@ -101,18 +119,13 @@ async function getCSRFTokenAsync() {
       const token = await fetchCsrfToken();
       if (token) {
         csrfToken = token;
-        // Update meta tag if desired
+        // Optionally update meta tag for frameworks
         const meta = document.querySelector('meta[name="csrf-token"]');
-        if (meta) {
-          meta.content = token;
-        }
+        if (meta) meta.content = token;
       }
-      return token; // Return fetched token (or null on error)
-    } catch {
-      // Error already handled/logged in fetchCsrfToken
-      return null;
+      return token;
     } finally {
-      csrfTokenPromise = null; // Clear the promise lock
+      csrfTokenPromise = null;
     }
   })();
 
@@ -120,21 +133,31 @@ async function getCSRFTokenAsync() {
 }
 
 /**
- * Synchronous CSRF token accessor (best effort, may return empty string initially)
+ * Synchronous accessor for the CSRF token.
+ * May return empty string if token not yet fetched.
+ * Triggers async fetch if needed.
+ * @returns {string}
  */
 function getCSRFToken() {
   if (!csrfToken && !csrfTokenPromise) {
-    // Trigger async fetch but don't wait
     getCSRFTokenAsync().catch(console.error);
   }
   return csrfToken;
 }
 
+/* =========================
+   API Request Wrapper
+   ========================= */
+
 /**
- * Central API request wrapper
- * Handles credentials, CSRF, and basic error formatting.
+ * Central API request wrapper for authentication endpoints.
+ * Handles credentials, CSRF, and error formatting.
  *
- * For all auth-changing endpoints, always run internal logic to guarantee X-CSRF-Token.
+ * @param {string} endpoint - API endpoint (e.g. '/api/auth/login')
+ * @param {string} method - HTTP method ('GET', 'POST', etc.)
+ * @param {Object|null} body - Request body (for POST/PUT)
+ * @returns {Promise<any>} - Parsed JSON response or null for 204
+ * @throws {Error} - On network or API error
  */
 async function authRequest(endpoint, method, body = null) {
   const AUTH_PROTECTED_ENDPOINTS = [
@@ -144,26 +167,23 @@ async function authRequest(endpoint, method, body = null) {
     '/api/auth/refresh'
   ];
 
-  // For these endpoints, always use internal logic (never delegate to window.apiRequest)
+  // Use internal logic for protected endpoints, otherwise delegate if possible
   const isAuthProtected = AUTH_PROTECTED_ENDPOINTS.includes(endpoint);
 
   if (!isAuthProtected && window.apiRequest && endpoint !== '/api/auth/csrf') {
-    console.debug(`[Auth] Using global apiRequest for ${endpoint}`);
     return window.apiRequest(endpoint, method, body);
   }
 
-  // Internal logic for state-changing and auth endpoints
-  console.debug(`[Auth] Using internal authRequest for ${endpoint}`);
-  // PATCH: Clone headers per request, don't mutate shared object.
+  // Internal request logic
   const baseHeaders = { Accept: 'application/json' };
   const headers = { ...baseHeaders };
   const options = {
     method: method.toUpperCase(),
     headers,
-    credentials: 'include', // crucial for sending/receiving HttpOnly cookies
+    credentials: 'include',
   };
 
-  // Add CSRF token for non-GET requests if not local dev
+  // Add CSRF token for state-changing requests (except in local dev)
   const isStateChanging =
     !['GET', 'HEAD', 'OPTIONS'].includes(options.method) &&
     endpoint !== '/api/auth/csrf';
@@ -172,13 +192,12 @@ async function authRequest(endpoint, method, body = null) {
     const token = await getCSRFTokenAsync();
     if (token) {
       options.headers['X-CSRF-Token'] = token;
-      console.debug('[Auth][DEBUG] About to send X-CSRF-Token header:', token, 'All headers:', options.headers);
     } else {
       console.warn(`[Auth] CSRF token missing for request: ${endpoint}`);
     }
   }
 
-  // Add body as JSON if present
+  // Add JSON body if present
   if (body) {
     options.body = JSON.stringify(body);
     options.headers['Content-Type'] = 'application/json';
@@ -192,18 +211,17 @@ async function authRequest(endpoint, method, body = null) {
       try {
         error.data = await response.json();
       } catch {
-        error.data = await response.text();
+        error.data = { detail: await response.text() };
       }
       throw error;
     }
     if (response.status === 204) {
-      return null; // handle no-content
+      return null;
     }
-    return await response.json(); // parse JSON response
+    return await response.json();
   } catch (error) {
     console.error(`[Auth] Request failed ${method} ${endpoint}:`, error);
     if (!error.status) {
-      // Network or unknown error
       error.status = 0;
       error.data = { detail: error.message || 'Network error/CORS issue' };
     }
@@ -211,24 +229,26 @@ async function authRequest(endpoint, method, body = null) {
   }
 }
 
+/* =========================
+   Token Refresh
+   ========================= */
+
 /**
- * Refresh authentication tokens via the backend endpoint.
- * Made atomic to prevent multiple concurrent refresh attempts.
+ * Refresh authentication tokens via backend endpoint.
+ * Ensures only one refresh runs at a time.
+ * @returns {Promise<{success: boolean, response: any}>}
  */
 async function refreshTokens() {
   if (tokenRefreshInProgress) {
-    console.debug('[Auth] Token refresh in progress, awaiting previous call.');
     return tokenRefreshPromise;
   }
 
-  console.debug('[Auth] Starting token refresh...');
   tokenRefreshInProgress = true;
 
   tokenRefreshPromise = (async () => {
     try {
       await getCSRFTokenAsync();
       const response = await authRequest('/api/auth/refresh', 'POST');
-      console.debug('[Auth] Token refresh successful.');
       return { success: true, response };
     } catch (error) {
       console.error('[Auth] Refresh token failed:', error);
@@ -245,27 +265,21 @@ async function refreshTokens() {
   return tokenRefreshPromise;
 }
 
+/* =========================
+   Auth State Management
+   ========================= */
+
 /**
- * Broadcasts authentication state changes to the application.
+ * Broadcast authentication state changes to the application.
+ * Fires 'authStateChanged' event on AuthBus.
+ *
+ * @param {boolean} authenticated - New authentication state
+ * @param {string|null} username - Username, if authenticated
+ * @param {string} source - Source of the state change (for debugging)
  */
 function broadcastAuth(authenticated, username = null, source = 'unknown') {
   const previous = authState.isAuthenticated;
   const changed = authenticated !== previous || authState.username !== username;
-
-  // Log cookies and verification for extra diagnostics
-  console.debug(`[Auth] broadcastAuth: Changing state? ${changed} | From: ${previous} To: ${authenticated} (${source})`);
-  console.debug('[Auth] Current document.cookie:', document.cookie);
-  // Check auth status from backend as well
-  if (changed) {
-    fetch('/api/auth/verify', { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => {
-        console.debug('[Auth] /api/auth/verify after state change:', data);
-      })
-      .catch(e => {
-        console.warn('[Auth] Error fetching /api/auth/verify after auth state changed:', e);
-      });
-  }
 
   authState.isAuthenticated = authenticated;
   authState.username = username;
@@ -286,117 +300,115 @@ function broadcastAuth(authenticated, username = null, source = 'unknown') {
 }
 
 /**
- * Clears the frontend authentication state.
+ * Clears the frontend authentication state and broadcasts the change.
+ * @param {Object} options - Additional options (source, isError)
  */
 async function clearTokenState(options = { source: 'unknown', isError: false }) {
   console.log(`[Auth] Clearing auth state. Source: ${options.source}`);
   broadcastAuth(false, null, `clearTokenState:${options.source}`);
-  // Cookies are not directly manipulable if HttpOnly; the backend cleans them on logout.
+  // HttpOnly cookies are cleared by backend on logout
 }
+
+/* =========================
+   Auth Verification
+   ========================= */
 
 /**
  * Verify authentication state with the backend.
+ * Optionally forces verification even if a check is in progress.
+ *
+ * @param {boolean} [forceVerify=false] - Force verification even if already checking
+ * @returns {Promise<boolean>} - True if authenticated, false otherwise
  */
 async function verifyAuthState(forceVerify = false) {
-    if (authCheckInProgress && !forceVerify) {
-        return authState.isAuthenticated;
+  if (authCheckInProgress && !forceVerify) {
+    return authState.isAuthenticated;
+  }
+
+  authCheckInProgress = true;
+
+  try {
+    const response = await authRequest('/api/auth/verify', 'GET');
+
+    if (response?.authenticated) {
+      broadcastAuth(true, response.username, 'verify_success');
+      return true;
     }
 
-    console.debug(`[Auth] Verifying auth state (forceVerify=${forceVerify})...`);
-    authCheckInProgress = true;
+    await clearTokenState({ source: 'verify_negative' });
+    return false;
 
-    try {
-        // Debug cookies
-        const allCookies = document.cookie;
-        console.debug(`[Auth] All cookies: ${allCookies}`);
+  } catch (error) {
+    console.warn('[Auth] verifyAuthState error:', error);
 
-        // For local development, skip cookie check and go directly to API verification
-        // This allows the API's cookies to be used even if they're not immediately visible to JS
-        const response = await authRequest('/api/auth/verify', 'GET');
+    if (error.status === 500) {
+      await clearTokenState({ source: 'verify_500' });
+      throw new Error('Server error during verification');
+    }
 
-        if (response?.authenticated) {
-            broadcastAuth(true, response.username, 'verify_success');
-            return true;
-        }
-
-        await clearTokenState({ source: 'verify_negative' });
+    if (error.status === 401) {
+      try {
+        await refreshTokens();
+        return verifyAuthState(true);
+      } catch (refreshError) {
+        await clearTokenState({ source: 'refresh_failed' });
         return false;
-
-    } catch (error) {
-        console.warn('[Auth] verifyAuthState error:', error);
-
-        // Handle 500 errors specifically
-        if (error.status === 500) {
-          console.error('[Auth] Server error during verify, clearing state');
-          await clearTokenState({ source: 'verify_500' });
-          throw new Error('Server error during verification');
-        }
-
-        if (error.status === 401) {
-          // PATCH: Wrap refresh/verify in try/catch to avoid unhandled promise rejection loops
-          try {
-            await refreshTokens();
-            return verifyAuthState(true);
-          } catch (refreshError) {
-            await clearTokenState({ source: 'refresh_failed' });
-            return false;
-          }
-        }
-
-        // For other errors, maintain current state
-        return authState.isAuthenticated;
-    } finally {
-        authCheckInProgress = false;
+      }
     }
+
+    // For other errors, maintain current state
+    return authState.isAuthenticated;
+  } finally {
+    authCheckInProgress = false;
+  }
 }
 
+/* =========================
+   Public Auth Actions
+   ========================= */
+
 /**
- * Login user via the backend endpoint.
+ * Log in a user via the backend.
+ *
+ * @param {string} username
+ * @param {string} password
+ * @returns {Promise<any>} - Backend response
+ * @throws {Error} - On login or verification failure
  */
 async function loginUser(username, password) {
   console.log('[Auth] Attempting login for user:', username);
   try {
-    // Get CSRF token first
     await getCSRFTokenAsync();
 
-    // Perform login
     const response = await authRequest('/api/auth/login', 'POST', {
       username: username.trim(),
       password,
     });
-    console.log('[Auth] Login API call successful.');
-
-    // --- MODIFICATION START ---
-    // --- MODIFICATION START ---
-    // REMOVED: Optimistic broadcastAuth call.
-    // INSTEAD: Trigger verification immediately after successful login API call.
 
     if (response && response.username) {
-        console.log('[Auth] Triggering verification immediately after login...');
-        const verified = await verifyAuthState(true);
-        if (verified) {
-            console.log(`[Auth] Post-login verification successful for user: ${authState.username}`);
-            return response;
-        } else {
-            console.error('[Auth] Login API succeeded but immediate verification failed.');
-            await clearTokenState({ source: 'login_verify_fail' });
-            throw new Error('Login succeeded but session could not be verified immediately.');
-        }
+      const verified = await verifyAuthState(true);
+      if (verified) {
+        return response;
+      } else {
+        await clearTokenState({ source: 'login_verify_fail' });
+        throw new Error('Login succeeded but session could not be verified immediately.');
+      }
     } else {
-        console.error('[Auth] Login API succeeded but response lacked username.');
-        await clearTokenState({ source: 'login_bad_response' });
-        throw new Error('Login succeeded but received invalid response data.');
+      await clearTokenState({ source: 'login_bad_response' });
+      throw new Error('Login succeeded but received invalid response data.');
     }
-    // --- MODIFICATION END ---
   } catch (error) {
-    console.error('[Auth] Login failed:', error);
     await clearTokenState({ source: 'login_error' });
     throw error;
   }
 }
 
 /**
- * Logout user.
+ * Log out the current user.
+ * Clears frontend state and calls backend logout.
+ * Redirects to /login after completion.
+ *
+ * @returns {Promise<void>}
  */
 async function logout() {
   console.log('[Auth] Initiating logout...');
@@ -411,7 +423,6 @@ async function logout() {
   } finally {
     setTimeout(() => {
       if (window.location.pathname !== '/login') {
-        console.log('[Auth] Redirecting to /login after logout.');
         window.location.href = '/login?loggedout=true';
       }
     }, 150);
@@ -419,10 +430,13 @@ async function logout() {
 }
 
 /**
- * Register a new user.
+ * Register a new user via the backend.
+ *
+ * @param {Object} userData - { username: string, password: string }
+ * @returns {Promise<any>} - Backend response
+ * @throws {Error} - On registration or verification failure
  */
 async function registerUser(userData) {
-  console.log('[Auth] Attempting registration:', userData?.username);
   if (!userData?.username || !userData?.password) {
     throw new Error('Username and password required.');
   }
@@ -434,24 +448,27 @@ async function registerUser(userData) {
       password: userData.password,
     });
 
-    console.log('[Auth] Registration API call successful.');
     const verified = await verifyAuthState(true);
     if (!verified) {
       console.warn('[Auth] Registration succeeded but verification failed.');
-    } else {
-      console.log(`[Auth] User ${authState.username} successfully registered and verified.`);
     }
 
     return response;
   } catch (error) {
-    console.error('[Auth] Registration failed:', error);
     await clearTokenState({ source: 'register_error', isError: true });
     throw error;
   }
 }
 
+/* =========================
+   Initialization
+   ========================= */
+
 /**
- * Initialize the auth module.
+ * Initialize the authentication module.
+ * Sets up form handlers, fetches CSRF, and verifies session.
+ *
+ * @returns {Promise<boolean>} - True if authenticated, false otherwise
  */
 async function init() {
   if (authState.isReady) {
@@ -460,14 +477,14 @@ async function init() {
   }
   console.log('[Auth] Initializing auth module...');
 
-  // Ensure DOM is ready before setting up form handlers
+  // Wait for DOM ready
   if (document.readyState === 'loading') {
     await new Promise(resolve =>
       document.addEventListener('DOMContentLoaded', resolve, { once: true })
     );
   }
 
-  // Set up login form handler with proper form submission
+  // Set up login form handler (if present)
   const setupLoginForm = () => {
     const loginForm = document.getElementById('loginForm');
     if (loginForm && !loginForm._listenerAttached) {
@@ -490,89 +507,84 @@ async function init() {
     }
   };
 
-  // Initial setup and also listen for dynamic form changes
   setupLoginForm();
   document.addEventListener('modalsLoaded', setupLoginForm);
 
   try {
-    // First get CSRF token - this doesn't require auth
+    // Fetch CSRF token (does not require authentication)
     await getCSRFTokenAsync();
 
-    // REMOVED: Check for document.cookie - This is unreliable with HttpOnly cookies.
-    // Always attempt to verify the session with the backend.
-    // if (!document.cookie.includes('access_token')) {
-    //   console.log('[Auth] No auth cookies detected, skipping initial verify');
-    //   broadcastAuth(false, null, 'init_no_cookies');
-    //   authState.isReady = true; // Mark as ready even if skipped
-    //   return true; // Still return true since initialization completed
-    // }
-
-    // Proceed with verification
-    console.log('[Auth] Attempting initial verification with backend...');
-    const verified = await verifyAuthState(true); // Use forceVerify=true for initial load
+    // Always verify session with backend (HttpOnly cookies may not be visible)
+    const verified = await verifyAuthState(true);
     authState.isReady = true;
-    console.log(`[Auth] Initial verification result: ${verified}`);
     return verified;
 
   } catch (error) {
-    console.error('[Auth] Initialization failed during verify/CSRF:', error);
-    // Ensure state is cleared if verification fails critically during init
     await clearTokenState({ source: 'init_fail', isError: true });
-    authState.isReady = true; // Mark as ready even if failed
-    broadcastAuth(false, null, 'init_error'); // Ensure auth state is false
+    authState.isReady = true;
+    broadcastAuth(false, null, 'init_error');
     return false;
   } finally {
-    // PATCH: Always set up periodic verification interval, not conditional on cookies.
-    console.log('[Auth] Setting up periodic verification interval.');
+    // Set up periodic verification
     setInterval(() => {
       if (!document.hidden && authState.isAuthenticated) {
-        console.debug('[Auth] Periodic verification triggered.');
         verifyAuthState(false).catch(console.warn);
       }
     }, AUTH_CONFIG.VERIFICATION_INTERVAL);
 
-    // Dispatch an event indicating auth readiness, regardless of success/failure
+    // Notify listeners that auth is ready
     AuthBus.dispatchEvent(
       new CustomEvent('authReady', {
         detail: {
           authenticated: authState.isAuthenticated,
           username: authState.username,
-          error: null // Or pass error if needed
+          error: null
         }
       })
     );
   }
 }
 
-// --- Public API ---
-// Define publicAuth *after* AuthBus and all methods are defined
+/* =========================
+   Public API
+   ========================= */
+
+/**
+ * Main authentication API.
+ * @namespace
+ */
 const publicAuth = {
-  // State Accessors
+  /** @returns {boolean} True if authenticated */
   isAuthenticated: () => authState.isAuthenticated,
+  /** @returns {string|null} Current username, or null if not authenticated */
   getCurrentUser: () => authState.username,
+  /** @returns {boolean} True if initial verification is complete */
   isReady: () => authState.isReady,
 
-  // Core Methods
+  // Core methods
   init,
   login: loginUser,
   logout,
   register: registerUser,
   verifyAuthState,
 
-  // Utilities & Events
+  // Utilities & events
   AuthBus,
   getCSRFTokenAsync,
   getCSRFToken,
 
-  // Add to auth.js public API
+  /**
+   * Check if auth cookies are present (best effort, not reliable for HttpOnly).
+   * @returns {boolean}
+   */
   hasAuthCookies: () => {
     return document.cookie.includes('access_token') ||
-           document.cookie.includes('refresh_token');
+      document.cookie.includes('refresh_token');
   }
 };
 
-// --- Register with DependencySystem synchronously ---
-window.auth = publicAuth; // Always attach to window for global access
+// Register with DependencySystem if available
+window.auth = publicAuth;
 
 if (window.DependencySystem) {
   window.DependencySystem.register('auth', publicAuth);
@@ -580,6 +592,5 @@ if (window.DependencySystem) {
 } else {
   console.warn('[auth.js] DependencySystem not found, attached auth to window');
 }
-
 
 export default publicAuth;

@@ -1,41 +1,46 @@
 /**
  * projectDashboard.js
- * Coordinates project dashboard components and state
- * Dependencies:
- * - window.auth (external dependency, for authentication)
- * - window.projectManager (external dependency, for project operations)
- * - window.app (external dependency, for notifications and UI management)
- * - window.ProjectListComponent (external component, for project list rendering)
- * - window.ProjectDetailsComponent (external component, for project details rendering)
- * - window.eventHandlers (external utility, for debouncing)
- * - window.DependencySystem (external dependency, for module registration)
- * - document (browser built-in, for DOM access)
- * - fetch (browser built-in, for HTML loading)
- * - URL, URLSearchParams (browser built-in, for URL handling)
- * - CustomEvent (browser built-in, for custom events)
+ *
+ * Coordinates project dashboard components and state.
+ *
+ * ## Dependencies:
+ * - window.auth: Authentication module.
+ * - window.projectManager: Project management API.
+ * - window.app: App-level notifications and UI helpers.
+ * - window.ProjectListComponent: Renders the project list.
+ * - window.ProjectDetailsComponent: Renders project details.
+ * - window.eventHandlers: Utility for debouncing.
+ * - window.DependencySystem: Optional dependency registration.
+ * - document, fetch, URL, URLSearchParams, CustomEvent: Browser built-ins.
  */
 
-// Locally track our components and state
+// Track dashboard components and state
 const components = {
   projectList: null,
   projectDetails: null
 };
 
 const dashboardState = {
-  currentView: null,
-  currentProject: null
+  currentView: null,      // 'list' or 'details'
+  currentProject: null    // Project ID or null
 };
 
 /**
- * Load projects list (assigned debounced version later)
+ * Loads the project list from the backend.
+ * Debounced version is assigned to the component after creation.
  */
 const loadProjectList = () => {
   if (window.auth?.isAuthenticated() && window.projectManager?.loadProjects) {
     window.projectManager.loadProjects('all');
   }
 };
-// We'll debounce and assign to component.load after component creation
 
+/**
+ * Initializes the project dashboard.
+ * Ensures authentication, loads HTML, initializes components, and sets up event listeners.
+ *
+ * @returns {Promise<boolean>} Resolves true if initialized, false if not authenticated or failed.
+ */
 async function init() {
   // Prevent multiple initializations
   if (window.projectDashboardInitialized) {
@@ -43,15 +48,14 @@ async function init() {
     return true;
   }
 
-  window.projectDashboardInitialized = true; // Set flag early
+  window.projectDashboardInitialized = true;
   console.log('[projectDashboard] Initializing...');
 
   try {
-    // Ensure authentication is established before proceeding
+    // Wait for authentication if not ready
     if (!window.auth?.isAuthenticated()) {
       console.log('[projectDashboard] Not authenticated yet, waiting for auth...');
 
-      // Check if auth module is still initializing
       if (!window.auth?.isReady()) {
         console.log('[projectDashboard] Auth module not ready, waiting for initialization...');
         await new Promise(resolve => {
@@ -60,16 +64,12 @@ async function init() {
             resolve();
           };
           window.auth.AuthBus.addEventListener('authReady', authReadyHandler);
-
-          // Safety timeout in case event never fires
-          setTimeout(resolve, 5000);
+          setTimeout(resolve, 5000); // Fallback timeout
         });
       }
 
-      // If still not authenticated after auth is ready, wait for auth state change
       if (!window.auth?.isAuthenticated()) {
         console.log('[projectDashboard] Auth ready but not authenticated, waiting for login...');
-        // Handle non-authenticated state (show login prompt, etc.)
         showLoginRequiredMessage();
         return false;
       }
@@ -77,26 +77,24 @@ async function init() {
 
     console.log('[projectDashboard] Authentication confirmed, proceeding with initialization...');
 
-    // Ensure DOM is ready
+    // Wait for DOM ready
     if (document.readyState === 'loading') {
       await new Promise(resolve =>
         document.addEventListener('DOMContentLoaded', resolve, { once: true })
       );
     }
 
-    // Load HTML for the project list view
+    // Load project list HTML and initialize components
     await loadProjectListHtml();
-
-    // Initialize components after HTML is loaded
     await initializeComponents();
 
-    // Process URL parameters for initial view
+    // Show initial view based on URL or localStorage
     processUrlParameters();
 
-    // Set up event listeners
+    // Set up event listeners for dashboard events
     setupEventListeners();
 
-    // Dispatch initialization event
+    // Dispatch dashboard initialized event
     document.dispatchEvent(
       new CustomEvent('projectDashboardInitializedEvent', { detail: { success: true } })
     );
@@ -106,7 +104,7 @@ async function init() {
   } catch (error) {
     console.error('[projectDashboard] Initialization failed:', error);
     window.app?.showNotification('Dashboard initialization failed', 'error');
-    window.projectDashboardInitialized = false; // Reset flag on failure
+    window.projectDashboardInitialized = false;
     document.dispatchEvent(
       new CustomEvent('projectDashboardInitializedEvent', { detail: { success: false, error } })
     );
@@ -114,6 +112,9 @@ async function init() {
   }
 }
 
+/**
+ * Shows a login required message and hides dashboard views.
+ */
 function showLoginRequiredMessage() {
   const loginMessage = document.getElementById('loginRequiredMessage');
   if (loginMessage) {
@@ -124,7 +125,9 @@ function showLoginRequiredMessage() {
 }
 
 /**
- * Loads the project_list.html content if not already present
+ * Loads the project list HTML into #projectListView if not already present.
+ * @returns {Promise<void>}
+ * @throws {Error} If the container is missing or fetch fails.
  */
 async function loadProjectListHtml() {
   const container = document.getElementById('projectListView');
@@ -133,7 +136,7 @@ async function loadProjectListHtml() {
     throw new Error('Missing projectListView container');
   }
 
-  // Avoid reloading if there's already a #projectList element
+  // Avoid reloading if already present
   if (container.querySelector('#projectList')) {
     console.log('[projectDashboard] project_list.html seems already loaded.');
     return;
@@ -159,7 +162,9 @@ async function loadProjectListHtml() {
 }
 
 /**
- * Loads the project_details.html content into #projectDetailsView if not already present
+ * Loads the project details HTML into #projectDetailsView if not already present.
+ * @returns {Promise<void>}
+ * @throws {Error} If the container is missing or fetch fails.
  */
 async function loadProjectDetailsHtml() {
   const container = document.getElementById('projectDetailsView');
@@ -168,7 +173,7 @@ async function loadProjectDetailsHtml() {
     throw new Error('Missing projectDetailsView container');
   }
 
-  // Avoid reloading if there's already a #detailsTab element, indicating project_details.html is loaded
+  // Avoid reloading if already present
   if (container.querySelector('#detailsTab')) {
     console.log('[projectDashboard] project_details.html is already loaded.');
     return;
@@ -193,25 +198,26 @@ async function loadProjectDetailsHtml() {
 }
 
 /**
- * Initialize individual dashboard components
+ * Initializes dashboard components (list and details).
+ * @returns {Promise<void>}
  */
 async function initializeComponents() {
   console.log('[projectDashboard] Initializing components...');
 
-  // Create project list component if class is available
+  // Project list component
   if (window.ProjectListComponent) {
     components.projectList = new window.ProjectListComponent({
-      elementId: 'projectList', // Must match element in project_list.html
+      elementId: 'projectList',
       onViewProject: handleViewProject
     });
-    // Assign debounced load after component is constructed.
+    // Assign debounced load after construction
     components.projectList.load = window.eventHandlers.debounce(loadProjectList, 100);
     console.log('[projectDashboard] ProjectListComponent created.');
   } else {
     console.error('[projectDashboard] ProjectListComponent not found on window.');
   }
 
-  // Create project details component if available
+  // Project details component
   if (window.ProjectDetailsComponent) {
     components.projectDetails = new window.ProjectDetailsComponent({
       onBack: handleBackToList
@@ -225,13 +231,13 @@ async function initializeComponents() {
 }
 
 /**
- * Interpret URL parameters to show the correct initial view
+ * Processes URL parameters and localStorage to determine initial dashboard view.
  */
 function processUrlParameters() {
   const urlParams = new URLSearchParams(window.location.search);
   let projectId = urlParams.get('project');
 
-  // Optionally, support restoring last selected project from localStorage
+  // Optionally restore last selected project from localStorage
   if (!projectId) {
     projectId = localStorage.getItem('selectedProjectId');
   }
@@ -244,7 +250,7 @@ function processUrlParameters() {
 }
 
 /**
- * Sets up global dashboard event listeners
+ * Sets up global event listeners for dashboard events and navigation.
  */
 function setupEventListeners() {
   // Project events
@@ -265,22 +271,37 @@ function setupEventListeners() {
 }
 
 /**
- * Handle popstate (back/forward) by re-checking URL params
+ * Handles browser navigation (back/forward) by re-processing URL parameters.
  */
 function handlePopState() {
   processUrlParameters();
 }
 
 /**
- * Show the project list view
+ * Shows the project list view and hides details.
  */
 function showProjectList() {
   dashboardState.currentView = 'list';
   dashboardState.currentProject = null;
 
-  // Clear selected project tracking from URL and browser storage
+  // Aggressively clear localStorage for robustness
   localStorage.removeItem('selectedProjectId');
 
+  // DOM visibility toggle - ENFORCE correct state
+  const listView = document.getElementById('projectListView');
+  const detailsView = document.getElementById('projectDetailsView');
+
+  // Make absolutely sure only one view is visible
+  if (listView) {
+    listView.classList.remove('hidden');
+    listView.style.display = ''; // Reset any inline display style
+  }
+  if (detailsView) {
+    detailsView.classList.add('hidden');
+    detailsView.style.display = 'none'; // Force hide with inline style
+  }
+
+  // Components visibility control
   if (components.projectDetails) {
     components.projectDetails.hide();
   }
@@ -288,12 +309,12 @@ function showProjectList() {
     components.projectList.show();
   }
 
-  // Update URL without triggering a full reload
+  // Update URL (remove project param)
   const currentUrl = new URL(window.location);
   currentUrl.searchParams.delete('project');
   window.history.pushState({}, '', currentUrl.toString());
 
-  // Load projects if authenticated - using debounced function
+  // Load projects (debounced if available)
   if (components.projectList?.load) {
     components.projectList.load();
   } else {
@@ -302,11 +323,18 @@ function showProjectList() {
 }
 
 /**
- * Show the project details view for a given project
+ * Shows the project details view for a given project.
+ * Loads HTML, updates URL, and triggers data load.
+ *
+ * @param {string} projectId - The project ID to show.
+ * @returns {Promise<boolean>} Resolves true if successful, false if error.
  */
 async function showProjectDetails(projectId) {
   if (!projectId) {
     console.error('[projectDashboard] showProjectDetails called without a projectId.');
+    // If no project id, forcibly clear any stale selectedProjectId and show list
+    localStorage.removeItem('selectedProjectId');
+    showProjectList();
     return false;
   }
 
@@ -314,16 +342,15 @@ async function showProjectDetails(projectId) {
   dashboardState.currentProject = projectId;
 
   try {
-    // First load the HTML
     await loadProjectDetailsHtml();
   } catch (err) {
     console.error('[projectDashboard] Error loading project details page:', err);
     window.app?.showNotification('Error loading project details UI', 'error');
+    localStorage.removeItem('selectedProjectId');
     showProjectList();
     return false;
   }
 
-  // Once HTML is loaded, ensure the UI components are ready
   if (components.projectList) {
     components.projectList.hide();
   }
@@ -331,22 +358,33 @@ async function showProjectDetails(projectId) {
     components.projectDetails.show();
   }
 
-  // Preserve other URL params
+  // Update URL and localStorage
   const currentUrl = new URL(window.location.href);
   currentUrl.searchParams.set('project', projectId);
   window.history.pushState({}, '', currentUrl.toString());
   localStorage.setItem('selectedProjectId', projectId);
 
-  // Load project data from backend
+  // Load project data
   if (window.auth?.isAuthenticated() && window.projectManager?.loadProjectDetails) {
     window.projectManager
       .loadProjectDetails(projectId)
+      .then(project => {
+        // If project load returns null/undefined, treat as not found
+        if (!project) {
+          console.warn('[projectDashboard] Project not found after details load');
+          window.app?.showNotification('Project not found', 'error');
+          localStorage.removeItem('selectedProjectId');
+          showProjectList();
+        }
+      })
       .catch((error) => {
         console.error('[projectDashboard] Failed to load project details:', error);
         window.app?.showNotification('Failed to load project details', 'error');
+        localStorage.removeItem('selectedProjectId');
         showProjectList();
       });
   } else {
+    localStorage.removeItem('selectedProjectId');
     showProjectList();
   }
 
@@ -354,48 +392,48 @@ async function showProjectDetails(projectId) {
 }
 
 /**
- * onViewProject callback used by ProjectListComponent
+ * Callback for ProjectListComponent when a project is selected.
+ * @param {string} projectId - The selected project ID.
  */
 function handleViewProject(projectId) {
   showProjectDetails(projectId);
 }
 
 /**
- * onBack callback used by ProjectDetailsComponent
+ * Callback for ProjectDetailsComponent when user navigates back.
  */
 function handleBackToList() {
   showProjectList();
 }
 
 /**
- * Handle authentication state changes
+ * Handles authentication state changes.
+ * Shows/hides dashboard views and triggers project list reload if needed.
+ * @param {CustomEvent} event - The auth state change event.
  */
 function handleAuthStateChange(event) {
   const { authenticated } = event.detail || {};
 
-  // Batch DOM updates using requestAnimationFrame
   requestAnimationFrame(() => {
     const loginRequiredMessage = document.getElementById('loginRequiredMessage');
     const projectListView = document.getElementById('projectListView');
     const projectDetailsView = document.getElementById('projectDetailsView');
 
     if (!authenticated) {
-      // Hide project views, show login message
       if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
       if (projectListView) projectListView.classList.add('hidden');
       if (projectDetailsView) projectDetailsView.classList.add('hidden');
     } else {
-      // Show appropriate dashboard view
       if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
 
       if (dashboardState.currentView === 'details' && dashboardState.currentProject) {
-        projectListView?.classList.add('hidden');
-        projectDetailsView?.classList.remove('hidden');
+        if (projectListView) projectListView.classList.add('hidden');
+        if (projectDetailsView) projectDetailsView.classList.remove('hidden');
       } else {
-        projectListView?.classList.remove('hidden');
-        projectDetailsView?.classList.add('hidden');
+        if (projectListView) projectListView.classList.remove('hidden');
+        if (projectDetailsView) projectDetailsView.classList.add('hidden');
 
-        // Only load projects if we're showing the list view
+        // Load projects if list component is available
         if (dashboardState.currentView === 'list') {
           if (components.projectList?.load) {
             components.projectList.load();
@@ -409,14 +447,15 @@ function handleAuthStateChange(event) {
 }
 
 /**
- * Handle projectsLoaded event
+ * Handles the 'projectsLoaded' event.
+ * Renders the project list or shows an error.
+ * @param {CustomEvent} event
  */
 function handleProjectsLoaded(event) {
   const { projects = [], error = false, message } = event.detail || {};
 
   if (error) {
     console.error('[projectDashboard] projectsLoaded event with error:', message);
-    // Batch error state update
     requestAnimationFrame(() => {
       if (components.projectList?._showErrorState) {
         components.projectList._showErrorState(message || 'Failed to load projects');
@@ -425,7 +464,6 @@ function handleProjectsLoaded(event) {
     return;
   }
 
-  // Batch render updates using requestAnimationFrame
   requestAnimationFrame(() => {
     if (components.projectList) {
       console.log("[projectDashboard] Rendering " + projects.length + " project(s).");
@@ -437,7 +475,9 @@ function handleProjectsLoaded(event) {
 }
 
 /**
- * Handle single projectLoaded event
+ * Handles the 'projectLoaded' event.
+ * Renders the project details.
+ * @param {CustomEvent} event
  */
 function handleProjectLoaded(event) {
   const project = event.detail;
@@ -451,7 +491,9 @@ function handleProjectLoaded(event) {
 }
 
 /**
- * Handle projectStatsLoaded event
+ * Handles the 'projectStatsLoaded' event.
+ * Renders project statistics.
+ * @param {CustomEvent} event
  */
 function handleProjectStatsLoaded(event) {
   const stats = event.detail;
@@ -463,7 +505,9 @@ function handleProjectStatsLoaded(event) {
 }
 
 /**
- * Handle projectFilesLoaded event
+ * Handles the 'projectFilesLoaded' event.
+ * Renders project files.
+ * @param {CustomEvent} event
  */
 function handleFilesLoaded(event) {
   requestAnimationFrame(() => {
@@ -474,7 +518,9 @@ function handleFilesLoaded(event) {
 }
 
 /**
- * Handle projectArtifactsLoaded event
+ * Handles the 'projectArtifactsLoaded' event.
+ * Renders project artifacts.
+ * @param {CustomEvent} event
  */
 function handleArtifactsLoaded(event) {
   requestAnimationFrame(() => {
@@ -485,23 +531,36 @@ function handleArtifactsLoaded(event) {
 }
 
 /**
- * Handle projectNotFound event
+ * Handles the 'projectNotFound' event.
+ * Shows a notification and returns to the project list.
+ * @param {CustomEvent} event
  */
 function handleProjectNotFound(event) {
   const { projectId } = event.detail || {};
   console.warn("[projectDashboard] Project not found: " + projectId);
 
   dashboardState.currentProject = null;
+  localStorage.removeItem('selectedProjectId');
+
+  // Force reset the UI
+  const detailsView = document.getElementById('projectDetailsView');
+  if (detailsView) {
+    detailsView.classList.add('hidden');
+    detailsView.style.display = 'none';
+  }
+
   window.app?.showNotification('The requested project was not found', 'error');
   showProjectList();
 }
 
-// Export the dashboard to the global window object
+// Export the dashboard API to the global window object
 window.projectDashboard = {
   init,
   showProjectList,
   showProjectDetails
 };
+
+// Register with DependencySystem if available
 if (window.DependencySystem?.register) {
   window.DependencySystem.register("projectDashboard", window.projectDashboard);
 }
