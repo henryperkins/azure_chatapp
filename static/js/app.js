@@ -1,11 +1,12 @@
 import { createModalManager } from './modalManager.js';
 import { createProjectManager } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
-import { createProjectListComponent } from './projectListComponent.js';
+// import { createProjectListComponent } from './projectListComponent.js'; // Removed unused import
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createModelConfig } from './modelConfig.js';
 import { createChatManager } from './chat.js';
+import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 
 /**
  * @fileoverview
@@ -355,12 +356,16 @@ async function initializeUIComponents() {
     DependencySystem.register('sidebar', sidebar);
     console.log('[App] Sidebar initialized and registered');
 
-    // Create other UI components as needed
-    if (window.KnowledgeBaseComponent) {
-        const knowledgeBaseComponent = new window.KnowledgeBaseComponent();
-        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
-        console.log('[App] Knowledge base component registered');
-    }
+    // --- KnowledgeBaseComponent initialization/registration (Injected factory pattern) ---
+    const knowledgeBaseComponent = createKnowledgeBaseComponent({
+        apiRequest,
+        auth: window.auth,
+        projectManager: window.projectManager,
+        showNotification,
+        uiUtilsInstance: window.uiUtilsInstance
+    });
+    DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
+    console.log('[App] KnowledgeBaseComponent initialized and registered');
 
     // Initialize chat manager if available
     if (window.chatManager && typeof window.chatManager.initialize === 'function') {
