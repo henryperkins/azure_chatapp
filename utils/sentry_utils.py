@@ -113,6 +113,8 @@ def configure_sentry_loggers(additional_ignores: Optional[Set[str]] = None) -> N
     logging.info(f"Configured Sentry to ignore {len(ignored_loggers)} loggers")
 
 
+import os
+
 def configure_sentry(
     dsn: str,
     environment: str = "production",
@@ -127,14 +129,30 @@ def configure_sentry(
     """
     Centralized Sentry configuration. Supports optional profiling and custom sampling.
     Call this at app startup.
+    Now reads SENTRY_DEBUG env variable ("1", "true" for enabled), else defaults to False.
+    Honors SENTRY_ENABLED env var (or settings.SENTRY_ENABLED, if imported) to globally disable Sentry.
     """
+    # Check SENTRY_ENABLED, prefer config if importable, otherwise env var
+    sentry_enabled_env = os.getenv("SENTRY_ENABLED", "").lower()
+    try:
+        from config import settings
+        sentry_enabled = getattr(settings, "SENTRY_ENABLED", False)
+    except Exception:
+        sentry_enabled = sentry_enabled_env in ("1", "true", "yes", "on")
+
+    if not sentry_enabled:
+        logging.info("Sentry not enabled; skipping sentry_sdk.init")
+        return
+
     sentry_logging = LoggingIntegration(
         level=logging.WARNING,  # Only capture warnings/errors
         event_level=logging.ERROR,
     )
     init_kwargs = {}
     init_kwargs["dsn"] = dsn
-    init_kwargs["debug"] = False
+    # Make debug configurable via env var SENTRY_DEBUG
+    debug_env = os.getenv("SENTRY_DEBUG", "").lower()
+    init_kwargs["debug"] = debug_env in ("1", "true", "yes", "on")
     init_kwargs["environment"] = environment
     init_kwargs["release"] = release
     init_kwargs["traces_sample_rate"] = traces_sample_rate

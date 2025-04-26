@@ -1,379 +1,196 @@
 /**
  * debug-project.js
- * -----------------
- * Debug utilities for diagnosing project loading and display issues.
- *
- * - Provides instrumentation to track authentication and project loading.
- * - Exports "window.debugProject" for on-demand debugging controls.
- * - Optionally logs all debug output (when DEBUG_ENABLED is true).
+ * Temporary debugging script to diagnose project list display issues
  */
 
-(function () {
-  // Toggle to enable/disable debug output
-  const DEBUG_ENABLED = false;
-  const PREFIX = '[ProjectDebug]';
+(function() {
+  console.log("[DEBUG-PROJECT] Initializing project debugging...");
 
-  // Track authentication lifecycle
-  let authState = {
-    checked: false,
-    authenticated: false,
-    lastCheckTime: null,
-    username: null,
-    authErrors: []
-  };
+  // Check if we already have a project in localStorage
+  const selectedProjectId = localStorage.getItem('selectedProjectId');
+  console.log(`[DEBUG-PROJECT] selectedProjectId from localStorage: ${selectedProjectId}`);
 
-  // Track project loading lifecycle
-  let projectLoadState = {
-    attempts: 0,
-    loaded: false,
-    lastAttemptTime: null,
-    projectsFound: 0,
-    errors: []
-  };
+  // Monitor response from API
+  const originalFetch = window.fetch;
+  window.fetch = function(...args) {
+    const [url, options] = args;
 
-  /**
-   * Log diagnostic messages if DEBUG_ENABLED is true.
-   * @param {string} message - Description of the debug event.
-   * @param {*} [data] - Optional data to include with the log.
-   * @param {string} [type='log'] - Console method to use ('log', 'warn', 'error', etc.).
-   */
-  function log(message, data = null, type = 'log') {
-    if (!DEBUG_ENABLED) return;
+    if (url.includes('/api/projects') && !url.includes('/files') && !url.includes('/stats')) {
+      console.log(`[DEBUG-PROJECT] Intercepted API call to ${url}`);
 
-    const timestamp = new Date().toISOString().substring(11, 23); // HH:MM:SS.mmm
-    const prefix = `${PREFIX} [${timestamp}]`;
-    if (data !== null) {
-      console[type](`${prefix} ${message}`, data);
-    } else {
-      console[type](`${prefix} ${message}`);
-    }
-  }
+      return originalFetch.apply(this, args).then(async (response) => {
+        const clone = response.clone();
+        try {
+          const data = await clone.json();
+          console.log('[DEBUG-PROJECT] API Response:', {
+            url,
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            data: data
+          });
 
-  /**
-   * Summarizes the current auth and project load states.
-   */
-  function status() {
-    console.group(`${PREFIX} Diagnostics Summary`);
-    console.log(`Auth Checked: ${authState.checked}`);
-    console.log(`Authenticated: ${authState.authenticated}`);
-    console.log(`Username: ${authState.username || 'N/A'}`);
-    console.log(
-      `Last Auth Check: ${authState.lastCheckTime
-        ? new Date(authState.lastCheckTime).toLocaleTimeString()
-        : 'Never'
-      }`
-    );
-    console.log(`Project Load Attempts: ${projectLoadState.attempts}`);
-    console.log(
-      `Projects Loaded: ${projectLoadState.loaded ? 'Yes' : 'No'}`
-    );
-    console.log(`Projects Found: ${projectLoadState.projectsFound}`);
-    console.log(
-      `Last Load Attempt: ${projectLoadState.lastAttemptTime
-        ? new Date(projectLoadState.lastAttemptTime).toLocaleTimeString()
-        : 'Never'
-      }`
-    );
+          if (data && Array.isArray(data.projects)) {
+            console.log(`[DEBUG-PROJECT] Found ${data.projects.length} projects`);
 
-    if (authState.authErrors.length > 0) {
-      console.group('Auth Errors');
-      authState.authErrors.forEach((err, i) => console.log(`${i + 1}. ${err}`));
-      console.groupEnd();
-    }
-
-    if (projectLoadState.errors.length > 0) {
-      console.group('Project Load Errors');
-      projectLoadState.errors.forEach((err, i) =>
-        console.log(`${i + 1}. ${err}`)
-      );
-      console.groupEnd();
-    }
-    console.groupEnd();
-  }
-
-  /**
-   * Forces a manual refresh of the project list.
-   * Attempts to call forceRender or loadProjects if available.
-   */
-  function forceRefreshProjects() {
-    log('Forcing project list refresh...');
-    if (window.projectListComponent && typeof window.projectListComponent.forceRender === 'function') {
-      window.projectListComponent.forceRender();
-      log('✅ Called projectListComponent.forceRender()');
-    } else if (window.projectManager?.loadProjects) {
-      window.projectManager
-        .loadProjects('all')
-        .then((projects) => {
-          log(`✅ Loaded ${projects?.length || 0} projects via projectManager`);
-          if (window.projectListComponent?.renderProjects) {
-            window.projectListComponent.renderProjects(projects);
-            log('✅ Called projectListComponent.renderProjects with projects');
+            // Log each project
+            data.projects.forEach((p, i) => {
+              console.log(`[DEBUG-PROJECT] Project ${i+1}:`, p);
+            });
+          } else {
+            console.warn('[DEBUG-PROJECT] Invalid project response format:', data);
           }
-        })
-        .catch((err) => {
-          log(`❌ Error in loadProjects: ${err.message}`, null, 'error');
-          projectLoadState.errors.push(`${new Date().toISOString()}: ${err.message}`);
-        });
-    } else {
-      log('❌ No project loading mechanism found', null, 'error');
-    }
-  }
-
-  /**
-   * Checks the DOM structure for the project list and logs details.
-   */
-  function checkProjectListDOM() {
-    const projectListView = document.getElementById('projectListView');
-    const projectList = document.getElementById('projectList');
-
-    console.group(`${PREFIX} DOM Structure Check`);
-    console.log(`projectListView exists: ${!!projectListView}`);
-    console.log(
-      `projectListView hidden: ${projectListView ? projectListView.classList.contains('hidden') : 'N/A'
-      }`
-    );
-    console.log(`projectList exists: ${!!projectList}`);
-    console.log(`projectList children: ${projectList ? projectList.children.length : 0}`);
-
-    if (projectListView) {
-      console.group('projectListView CSS');
-      const style = getComputedStyle(projectListView);
-      console.log(`display: ${style.display}`);
-      console.log(`visibility: ${style.visibility}`);
-      console.log(`opacity: ${style.opacity}`);
-      console.log(`height: ${style.height}`);
-      console.log(`overflow: ${style.overflow}`);
-      console.groupEnd();
-    }
-
-    if (projectList) {
-      console.log('Project list content:');
-      Array.from(projectList.children).forEach((child, i) => {
-        console.log(
-          `${i + 1}. ${child.tagName} - ${child.className} - ${child.textContent.substring(0, 30)
-          }...`
-        );
+        } catch (e) {
+          console.error('[DEBUG-PROJECT] Error parsing response:', e);
+        }
+        return response;
       });
     }
-    console.groupEnd();
-  }
 
-  /**
-   * Checks authentication readiness and logs relevant info.
-   * Forces a server-side auth check if available.
-   */
-  function checkAuth() {
-    console.group(`${PREFIX} Authentication Check`);
-    console.log(`window.auth exists: ${!!window.auth}`);
-    console.log(`window.auth ready: ${window.auth?.isReady}`);
-
-    if (window.auth?.isAuthenticated) {
-      window.auth
-        .isAuthenticated({ forceVerify: true })
-        .then((isAuth) => {
-          console.log(`Server auth check result: ${isAuth}`);
-          console.groupEnd();
-        })
-        .catch((err) => {
-          console.error('Auth check error:', err);
-          console.groupEnd();
-        });
-    } else {
-      console.log('No auth.isAuthenticated method available');
-      console.groupEnd();
-    }
-  }
-
-  /**
-   * Resets all debugging state to initial values.
-   */
-  function reset() {
-    authState = {
-      checked: false,
-      authenticated: false,
-      lastCheckTime: null,
-      username: null,
-      authErrors: []
-    };
-
-    projectLoadState = {
-      attempts: 0,
-      loaded: false,
-      lastAttemptTime: null,
-      projectsFound: 0,
-      errors: []
-    };
-
-    log('Debug state reset');
-  }
-
-  // Expose debugging commands
-  window.debugProject = {
-    status,
-    forceRefreshProjects,
-    checkProjectListDOM,
-    checkAuth,
-    reset
+    return originalFetch.apply(this, args);
   };
 
-  /**
-   * Instruments key project functions by wrapping them with debug logic.
-   */
-  function instrumentProjectFunctions() {
-    // Save references to original functions
-    const originalLoadProjects = window.projectManager?.loadProjects;
-    const originalRenderProjects = window.projectListComponent?.renderProjects;
-    const originalIsAuthenticated = window.auth?.isAuthenticated;
+  // Monitor projectsLoaded events
+  document.addEventListener('projectsLoaded', function(e) {
+    console.log('[DEBUG-PROJECT] projectsLoaded event fired with data:', e.detail);
 
-    // Patch loadProjects
-    if (originalLoadProjects) {
-      window.projectManager.loadProjects = async function instrumentedLoadProjects(filter) {
-        projectLoadState.attempts++;
-        projectLoadState.lastAttemptTime = Date.now();
-        log(`📋 loadProjects called with filter: ${filter}`);
+    // Wait a bit and check if projects were rendered
+    setTimeout(() => {
+      const projectListElement = document.getElementById('projectList');
+      if (projectListElement) {
+        const cards = projectListElement.querySelectorAll('.project-card');
+        console.log(`[DEBUG-PROJECT] Found ${cards.length} project cards rendered`);
+      } else {
+        console.error('[DEBUG-PROJECT] projectList element not found in DOM');
+      }
+    }, 500);
+  });
 
-        try {
-          const result = await originalLoadProjects.call(this, filter);
-          projectLoadState.projectsFound = result?.length || 0;
-          projectLoadState.loaded = projectLoadState.projectsFound > 0;
-          log(`📊 loadProjects result: ${projectLoadState.projectsFound} projects`);
-          return result;
-        } catch (err) {
-          projectLoadState.errors.push(`${new Date().toISOString()} loadProjects: ${err.message}`);
-          log(`❌ loadProjects error: ${err.message}`, err, 'error');
-          throw err;
-        }
-      };
-      log('✅ Instrumented projectManager.loadProjects');
-    }
+  // Patch the ProjectListComponent.renderProjects method
+  if (window.ProjectListComponent && window.ProjectListComponent.prototype) {
+    const originalRenderProjects = window.ProjectListComponent.prototype.renderProjects;
 
-    // Patch renderProjects
-    if (originalRenderProjects) {
-      window.projectListComponent.renderProjects = function instrumentedRenderProjects(projects) {
-        log(`🎨 renderProjects called with ${projects?.length || 0} projects`);
+    window.ProjectListComponent.prototype.renderProjects = function(data) {
+      console.log('[DEBUG-PROJECT] renderProjects called with:', data);
 
-        try {
-          const result = originalRenderProjects.call(this, projects);
-          log('✅ renderProjects completed');
-
-          // Check the DOM post-render
-          setTimeout(() => {
-            const projectList = document.getElementById('projectList');
-            if (projectList) {
-              log(`After render: projectList has ${projectList.children.length} children`);
-            } else {
-              log('❌ projectList element not found after rendering', null, 'warn');
-            }
-          }, 100);
-          return result;
-        } catch (err) {
-          projectLoadState.errors.push(`${new Date().toISOString()} renderProjects: ${err.message}`);
-          log(`❌ renderProjects error: ${err.message}`, err, 'error');
-          throw err;
-        }
-      };
-      log('✅ Instrumented projectListComponent.renderProjects');
-    }
-
-    // Patch isAuthenticated
-    if (originalIsAuthenticated) {
-      window.auth.isAuthenticated = async function instrumentedIsAuthenticated(options) {
-        authState.lastCheckTime = Date.now();
-        authState.checked = true;
-        log(`🔒 isAuthenticated called with options: ${JSON.stringify(options || {})}`);
-
-        try {
-          const result = await originalIsAuthenticated.call(this, options);
-          authState.authenticated = result;
-          log(`🔑 Auth result: ${result}`);
-          return result;
-        } catch (err) {
-          authState.authErrors.push(`${new Date().toISOString()}: ${err.message}`);
-          log(`❌ isAuthenticated error: ${err.message}`, err, 'error');
-          throw err;
-        }
-      };
-      log('✅ Instrumented auth.isAuthenticated');
-    }
-  }
-
-  /**
-   * Sets up event listeners for authentication and project loading.
-   */
-  function setupEventListeners() {
-    document.addEventListener('authStateChanged', (e) => {
-      const { authenticated, username } = e.detail || {};
-      log(`🔄 authStateChanged event: ${authenticated ? 'authenticated' : 'not authenticated'}`);
-
-      authState.authenticated = authenticated;
-      authState.username = username;
-      authState.lastCheckTime = Date.now();
-    });
-
-    document.addEventListener('projectsLoaded', (e) => {
-      const projects = e.detail?.data?.projects || e.detail?.projects || [];
-      const filter = e.detail?.data?.filter || e.detail?.filter || 'unknown';
-      const error = e.detail?.data?.error || e.detail?.error;
-
-      log(`📚 projectsLoaded event: ${projects.length} projects with filter ${filter.type || filter}`);
-      if (error) {
-        log(`❌ projectsLoaded error: ${error}`, null, 'error');
-        projectLoadState.errors.push(`${new Date().toISOString()} projectsLoaded event error`);
+      // Check if element exists
+      if (!this.element) {
+        console.error('[DEBUG-PROJECT] this.element is null in renderProjects');
       }
 
-      projectLoadState.projectsFound = projects.length;
-      projectLoadState.loaded = projects.length > 0;
-    });
+      // Call original method
+      const result = originalRenderProjects.apply(this, arguments);
 
-    // Detect changes in "projectListView" visibility
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.type === 'attributes' &&
-          mutation.attributeName === 'class' &&
-          mutation.target.id === 'projectListView'
-        ) {
-          const isHidden = mutation.target.classList.contains('hidden');
-          log(`🔄 projectListView visibility changed: ${isHidden ? 'hidden' : 'visible'}`);
-          if (!isHidden) {
-            setTimeout(window.debugProject.checkProjectListDOM, 300);
-          }
+      // Check outcome
+      setTimeout(() => {
+        if (this.element) {
+          console.log(`[DEBUG-PROJECT] After rendering, projectList contains: ${this.element.innerHTML.substring(0, 100)}...`);
+          console.log(`[DEBUG-PROJECT] state.projects length: ${this.state?.projects?.length || 0}`);
         }
-      });
-    });
+      }, 100);
 
-    const projectListView = document.getElementById('projectListView');
-    if (projectListView) {
-      observer.observe(projectListView, { attributes: true });
-      log('✅ Added observer to projectListView');
-    }
-  }
+      return result;
+    };
 
-  /**
-   * Automatically initialize the debug module once the DOM is ready.
-   */
-  function initDebugModule() {
-    log('🔧 Project Debug Module Initializing');
-
-    // Instrument functions
-    instrumentProjectFunctions();
-
-    // Setup listeners
-    setupEventListeners();
-
-    // Log initial status after short delay
-    setTimeout(status, 500);
-
-    log('✅ Debug module initialization complete');
-  }
-
-  // Initialize either now or after DOM load
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDebugModule);
+    console.log('[DEBUG-PROJECT] Patched ProjectListComponent.renderProjects');
   } else {
-    initDebugModule();
+    console.warn('[DEBUG-PROJECT] Could not patch ProjectListComponent.renderProjects - class not available');
   }
 
-  // Provide a final message about using debugProject
-  log('Debug module loaded - Use window.debugProject.* for diagnostic functions');
+  // Add debugging to projectManager's loadProjects method
+  if (window.projectManager) {
+    const originalLoadProjects = window.projectManager.loadProjects;
+
+    window.projectManager.loadProjects = function(filter) {
+      console.log(`[DEBUG-PROJECT] projectManager.loadProjects called with filter: ${filter}`);
+      console.log(`[DEBUG-PROJECT] Auth state: ${window.app?.state?.isAuthenticated}`);
+
+      // Call original method
+      return originalLoadProjects.apply(this, arguments)
+        .then(projects => {
+          console.log(`[DEBUG-PROJECT] projectManager.loadProjects returned ${projects?.length || 0} projects`);
+          return projects;
+        })
+        .catch(err => {
+          console.error('[DEBUG-PROJECT] projectManager.loadProjects error:', err);
+          throw err;
+        });
+    };
+
+    console.log('[DEBUG-PROJECT] Patched projectManager.loadProjects');
+  } else {
+    console.warn('[DEBUG-PROJECT] Could not patch projectManager.loadProjects - not available yet');
+
+    // Add a listener for when it becomes available
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(() => {
+        if (window.projectManager && window.projectManager.loadProjects) {
+          console.log('[DEBUG-PROJECT] projectManager now available - adding debugging');
+
+          const originalLoadProjects = window.projectManager.loadProjects;
+
+          window.projectManager.loadProjects = function(filter) {
+            console.log(`[DEBUG-PROJECT] projectManager.loadProjects called with filter: ${filter}`);
+
+            // Call original method
+            return originalLoadProjects.apply(this, arguments)
+              .then(projects => {
+                console.log(`[DEBUG-PROJECT] projectManager.loadProjects returned ${projects?.length || 0} projects`);
+                return projects;
+              })
+              .catch(err => {
+                console.error('[DEBUG-PROJECT] projectManager.loadProjects error:', err);
+                throw err;
+              });
+          };
+        }
+      }, 1000);
+    });
+  }
+
+  // Force a project list refresh
+  document.addEventListener('appInitialized', function() {
+    setTimeout(() => {
+      if (window.app?.state?.isAuthenticated && window.projectManager?.loadProjects) {
+        console.log('[DEBUG-PROJECT] App initialized and authenticated, forcing project list refresh');
+        window.projectManager.loadProjects('all');
+      }
+    }, 2000);
+  });
+
+  console.log('[DEBUG-PROJECT] Debugging hooks installed');
+
+  // Directly test the API endpoint
+  setTimeout(() => {
+    if (window.app?.state?.isAuthenticated) {
+      console.log('[DEBUG-PROJECT] Authentication detected, directly testing API endpoint...');
+      fetch('/api/projects?filter=all&skip=0&limit=100')
+        .then(async response => {
+          const clone = response.clone();
+          try {
+            console.log('[DEBUG-PROJECT] Direct API status:', response.status, response.statusText);
+            const rawHeaders = {};
+            response.headers.forEach((v, k) => { rawHeaders[k] = v; });
+            console.log('[DEBUG-PROJECT] Direct API headers:', rawHeaders);
+
+            const data = await clone.json();
+            console.log('[DEBUG-PROJECT] Direct API response data:', data);
+
+            if (data && Array.isArray(data.projects)) {
+              console.log(`[DEBUG-PROJECT] Direct API: Found ${data.projects.length} projects`);
+              if (data.projects.length > 0 && !document.querySelector('.project-card')) {
+                console.error('[DEBUG-PROJECT] API returns projects but none are rendered! DOM rendering issue detected');
+              }
+            } else {
+              console.warn('[DEBUG-PROJECT] Invalid/unexpected project response format from direct API call');
+            }
+          } catch (e) {
+            console.error('[DEBUG-PROJECT] Error directly testing API:', e);
+          }
+        })
+        .catch(err => {
+          console.error('[DEBUG-PROJECT] Direct API request failed:', err);
+        });
+    }
+  }, 3000);
 })();

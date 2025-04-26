@@ -9,13 +9,48 @@ and provides enhanced Sentry functionality through the MCP server.
 import logging
 import json
 import os
-import re
 import time
-import subprocess
+import importlib
 from typing import Any, Dict, Optional, Union, List, Tuple, Callable
 
 import sentry_sdk
 from sentry_sdk import configure_scope
+
+# Helper function to safely use MCP tools
+def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Safely use an MCP tool without direct imports, handling the case when the function
+    is not available in the global scope.
+
+    Args:
+        server_name: Name of the MCP server
+        tool_name: Name of the tool to call
+        arguments: Arguments to pass to the tool
+
+    Returns:
+        The result from the MCP tool
+
+    Raises:
+        ServerConnectionError: If MCP tools are not available
+    """
+    try:
+        # First try to use the global use_mcp_tool function that should be available at runtime
+        try:
+            # Access the global use_mcp_tool function that should be injected by the MCP system
+            global_use_mcp_tool = globals().get('use_mcp_tool')
+            if global_use_mcp_tool:
+                return global_use_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
+
+            # Try importing it if not in globals
+            mcp_client = importlib.import_module("mcp_client")
+            return mcp_client.use_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
+        except (ImportError, AttributeError):
+            # Fallback when running outside MCP - mainly for testing
+            logger.warning(f"MCP tools not available for call to {tool_name}")
+            raise ServerConnectionError(f"MCP tools not available for {tool_name}")
+    except Exception as e:
+        logger.error(f"Error using MCP tool {tool_name}: {e}")
+        raise ServerConnectionError(f"Failed to use MCP tool {tool_name}: {str(e)}")
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +59,7 @@ DEFAULT_TIMEOUT = 10  # seconds
 MAX_RETRIES = 3
 RETRY_DELAY = 1.5  # seconds
 AUTH_TOKEN_ENV = "SENTRY_AUTH_TOKEN"
-SERVER_CMD = "python -m mcp_server_sentry"
+MCP_SERVER_NAME = "github.com/modelcontextprotocol/servers/tree/main/src/sentry"
 
 
 class SentryMCPError(Exception):
@@ -130,10 +165,10 @@ def get_issue_details(
     Raises:
         ServerConnectionError: If the MCP server is not running or unreachable
         ServerResponseError: If the MCP server returns an error
-        CacheMissError: If use_cache is True but no cached data is available
     """
     if isinstance(issue_id_or_url, list):
         return [get_issue_details(issue, use_cache) for issue in issue_id_or_url]
+
     # Clear expired cache entries first
     _clear_expired_cache()
 
@@ -143,19 +178,8 @@ def get_issue_details(
         logger.debug(f"Returning cached data for issue: {issue_id_or_url}")
         return cached_data
 
-    if use_cache:
-        raise CacheMissError(f"No cached data available for issue: {issue_id_or_url}")
-
     # Log the attempt
     logger.info(f"Fetching issue details for {issue_id_or_url}")
-
-    # First check if the MCP server for Sentry is running
-    if not check_mcp_server():
-        # Try to start it automatically
-        if not start_mcp_server():
-            raise ServerConnectionError(
-                "Sentry MCP server is not running and could not be started"
-            )
 
     # Create a span for this operation
     with sentry_sdk.start_span(
@@ -165,161 +189,32 @@ def get_issue_details(
         span.set_data("issue_id", issue_id_or_url)
 
         try:
-            # Use subprocess to call the MCP server CLI tool
-            result = subprocess.run(
-                ["python", "-m", SERVER_CMD, "--get-issue", issue_id_or_url],
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT,
-                check=True
+            # Call the MCP tool to get issue details
+            result = _safe_use_mcp_tool(
+                server_name=MCP_SERVER_NAME,
+                tool_name="get_sentry_issue",
+                arguments={
+                    "issue_id_or_url": issue_id_or_url
+                }
             )
 
-            if result.returncode != 0:
+            if not result or "error" in result:
                 span.set_status("internal_error")
-                error_msg = f"MCP server returned error: {result.stderr}"
+                error_msg = f"MCP server returned error: {result.get('error', 'Unknown error')}"
                 span.set_data("error", error_msg)
                 raise ServerResponseError(error_msg)
 
-            # Try to parse the JSON output
-            try:
-                data = json.loads(result.stdout)
-                span.set_status("ok")
+            span.set_status("ok")
 
-                # Cache the result
-                ISSUE_CACHE[issue_id_or_url] = (data, time.time() + CACHE_TTL)
-                return data
-            except json.JSONDecodeError as e:
-                span.set_status("internal_error")
-                error_msg = (
-                    f"Failed to parse MCP server output: {result.stdout[:200]}..."
-                )
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg) from e
+            # Cache the result
+            ISSUE_CACHE[issue_id_or_url] = (result, time.time() + CACHE_TTL)
+            return result
 
-        except subprocess.TimeoutExpired as e:
-            span.set_status("internal_error")
-            span.set_data("error", "MCP server request timed out")
-            raise ServerConnectionError("MCP server request timed out") from e
         except Exception as e:
             span.set_status("internal_error")
             span.set_data("error", str(e))
-            raise
-
-
-def check_mcp_server() -> bool:
-    """
-    Check if the Sentry MCP server is running.
-
-    Returns:
-        True if the server is running, False otherwise
-    """
-    try:
-        # Try to get MCP server status
-        result = subprocess.run(
-            ["pgrep", "-f", SERVER_CMD],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False
-        )
-
-        return result.returncode == 0 and result.stdout.strip() != ""
-    except Exception as e:
-        logger.error(f"Error checking MCP server status: {e}")
-        return False
-
-
-def start_mcp_server() -> bool:
-    """
-    Attempt to start the Sentry MCP server if it's not running.
-
-    Returns:
-        True if the server was started successfully, False otherwise
-    """
-    if check_mcp_server():
-        logger.info("Sentry MCP server is already running")
-        return True
-
-    auth_token = os.environ.get(AUTH_TOKEN_ENV, "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")
-    if not auth_token:
-        logger.warning(
-            f"Using auth token from config file - set {AUTH_TOKEN_ENV} environment variable for better security"
-        )
-
-    # Verify the server command exists
-    try:
-        subprocess.run(
-            ["which", SERVER_CMD],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except subprocess.CalledProcessError:
-        logger.error(f"MCP server command not found: {SERVER_CMD}")
-        logger.error("Please install the sentry-mcp-server package")
-        return False
-
-    try:
-        # On Windows we verify the module can be run
-        result = subprocess.run(
-            ["python", "-m", "mcp_server_sentry", "--version"],
-            capture_output=True,
-            timeout=5,
-            check=False
-        )
-        if result.returncode != 0:
-            logger.error("mcp_server_sentry module not working")
-            logger.error("Please install with: pip install mcp-server-sentry")
-            return False
-
-        # Verify auth token is valid
-        if not auth_token or not re.match(r"^[a-f0-9]{32}$", auth_token):
-            logger.error(
-                "Invalid SENTRY_AUTH_TOKEN format - must be 32 character hex string"
-            )
-            return False
-
-        # Start the MCP server with debug logging
-        logger.info(f"Starting Sentry MCP server with command: python -m {SERVER_CMD}")
-        process = subprocess.Popen(
-            [
-                "python",
-                "-m",
-                SERVER_CMD,
-                "--auth-token",
-                auth_token,
-                "--log-level",
-                "debug",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-            text=True,
-        )
-
-        # Wait and capture output
-        time.sleep(1)
-        if process.poll() is not None:
-            stdout, stderr = process.communicate()
-            logger.error(
-                f"MCP server failed to start. Output:\n{stdout}\nError:\n{stderr}"
-            )
-            return False
-
-        # Additional wait for full startup
-        time.sleep(2)
-
-        # Verify server is responding
-        if not check_mcp_server():
-            logger.error("MCP server process started but not responding")
-            process.terminate()
-            return False
-
-        logger.info("Sentry MCP server started successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to start MCP server: {e}")
-        return False
+            logger.error(f"Error getting issue details: {e}")
+            raise ServerResponseError(f"Failed to get issue details: {str(e)}") from e
 
 
 @with_retry
@@ -340,12 +235,6 @@ def search_issues(query: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     logger.info("Searching issues with query: %s, limit: %s", query, limit)
 
-    # Check server and start if needed
-    if not check_mcp_server() and not start_mcp_server():
-        raise ServerConnectionError(
-            "Sentry MCP server is not running and could not be started"
-        )
-
     # Create a span for this operation
     with sentry_sdk.start_span(
         op="mcp.request", description="Search Sentry Issues"
@@ -354,49 +243,31 @@ def search_issues(query: str, limit: int = 10) -> List[Dict[str, Any]]:
         span.set_data("limit", limit)
 
         try:
-            result = subprocess.run(
-                [
-                    "python",
-                    "-m",
-                    SERVER_CMD,
-                    "--search-issues",
-                    query,
-                    "--limit",
-                    str(limit),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT,
-                check=True
+            # Use our helper function to safely call the MCP tool
+            result = _safe_use_mcp_tool(
+                server_name=MCP_SERVER_NAME,
+                tool_name="search_sentry_issues",
+                arguments={
+                    "query": query,
+                    "limit": limit
+                }
             )
 
-            if result.returncode != 0:
+            if not result or "error" in result:
                 span.set_status("internal_error")
-                error_msg = f"MCP server returned error: {result.stderr}"
+                error_msg = f"MCP server returned error: {result.get('error', 'Unknown error')}"
                 span.set_data("error", error_msg)
                 raise ServerResponseError(error_msg)
 
-            try:
-                data = json.loads(result.stdout)
-                span.set_status("ok")
-                span.set_data("result_count", len(data))
-                return data
-            except json.JSONDecodeError as e:
-                span.set_status("internal_error")
-                error_msg = (
-                    f"Failed to parse MCP server output: {result.stdout[:200]}..."
-                )
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg) from e
+            span.set_status("ok")
+            span.set_data("result_count", len(result))
+            return result
 
-        except subprocess.TimeoutExpired as e:
-            span.set_status("internal_error")
-            span.set_data("error", "MCP server request timed out")
-            raise ServerConnectionError("MCP server request timed out") from e
         except Exception as e:
             span.set_status("internal_error")
             span.set_data("error", str(e))
-            raise
+            logger.error(f"Error searching issues: {e}")
+            raise ServerResponseError(f"Failed to search issues: {str(e)}") from e
 
 
 @with_retry
@@ -417,12 +288,6 @@ def get_issue_events(issue_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     logger.info("Fetching events for issue: %s, limit: %s", issue_id, limit)
 
-    # Check server and start if needed
-    if not check_mcp_server() and not start_mcp_server():
-        raise ServerConnectionError(
-            "Sentry MCP server is not running and could not be started"
-        )
-
     # Create a span for this operation
     with sentry_sdk.start_span(
         op="mcp.request", description=f"Get Events for Issue {issue_id}"
@@ -431,118 +296,31 @@ def get_issue_events(issue_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         span.set_data("limit", limit)
 
         try:
-            result = subprocess.run(
-                [
-                    "python",
-                    "-m",
-                    SERVER_CMD,
-                    "--get-issue-events",
-                    issue_id,
-                    "--limit",
-                    str(limit),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT,
-                check=True
+            # Use our helper function to safely call the MCP tool
+            result = _safe_use_mcp_tool(
+                server_name=MCP_SERVER_NAME,
+                tool_name="get_issue_events",
+                arguments={
+                    "issue_id": issue_id,
+                    "limit": limit
+                }
             )
 
-            if result.returncode != 0:
+            if not result or "error" in result:
                 span.set_status("internal_error")
-                error_msg = f"MCP server returned error: {result.stderr}"
+                error_msg = f"MCP server returned error: {result.get('error', 'Unknown error')}"
                 span.set_data("error", error_msg)
                 raise ServerResponseError(error_msg)
 
-            try:
-                data = json.loads(result.stdout)
-                span.set_status("ok")
-                span.set_data("event_count", len(data))
-                return data
-            except json.JSONDecodeError as e:
-                span.set_status("internal_error")
-                error_msg = (
-                    f"Failed to parse MCP server output: {result.stdout[:200]}..."
-                )
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg) from e
+            span.set_status("ok")
+            span.set_data("event_count", len(result))
+            return result
 
-        except subprocess.TimeoutExpired as e:
-            span.set_status("internal_error")
-            span.set_data("error", "MCP server request timed out")
-            raise ServerConnectionError("MCP server request timed out") from e
         except Exception as e:
             span.set_status("internal_error")
             span.set_data("error", str(e))
-            raise
-
-
-def run_mcp_query(command_args: List[str], operation_name: str) -> Dict[str, Any]:
-    """
-    Run a generic query against the Sentry MCP server.
-
-    Args:
-        command_args: List of command arguments to pass to the MCP server
-        operation_name: Name of the operation for logging and span naming
-
-    Returns:
-        Parsed response data from the MCP server
-
-    Raises:
-        ServerConnectionError: If the MCP server is not running or unreachable
-        ServerResponseError: If the MCP server returns an error
-    """
-    logger.debug(f"Running MCP query: {operation_name} with args: {command_args}")
-
-    # Check server and start if needed
-    if not check_mcp_server() and not start_mcp_server():
-        raise ServerConnectionError(
-            "Sentry MCP server is not running and could not be started"
-        )
-
-    # Create a span for this operation
-    with sentry_sdk.start_span(
-        op="mcp.request", description=f"Sentry MCP: {operation_name}"
-    ) as span:
-        try:
-            # Construct full command
-            full_command = ["python", "-m", SERVER_CMD] + command_args
-
-            # Execute command
-            result = subprocess.run(
-                full_command,
-                capture_output=True,
-                text=True,
-                timeout=DEFAULT_TIMEOUT,
-                check=True
-            )
-
-            if result.returncode != 0:
-                span.set_status("internal_error")
-                error_msg = f"MCP server returned error: {result.stderr}"
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg)
-
-            # Try to parse the JSON output
-            try:
-                data = json.loads(result.stdout)
-                span.set_status("ok")
-                return data
-            except json.JSONDecodeError as e:
-                span.set_status("internal_error")
-                error_msg = (
-                    f"Failed to parse MCP server output: {result.stdout[:200]}..."
-                )
-                span.set_data("error", error_msg)
-                raise ServerResponseError(error_msg) from e
-
-        except subprocess.TimeoutExpired as e:
-            span.set_status("internal_error")
-            span.set_data("error", "MCP server request timed out")
-            raise ServerConnectionError("MCP server request timed out") from e
-        except Exception as exc:
-            span.set_status("internal_error")
-            span.set_data("error", str(exc))
-            raise exc
+            logger.error(f"Error getting issue events: {e}")
+            raise ServerResponseError(f"Failed to get issue events: {str(e)}") from e
 
 
 def get_project_stats(
@@ -559,10 +337,40 @@ def get_project_stats(
     Returns:
         Dictionary containing project statistics
     """
-    return run_mcp_query(
-        ["--project-stats", project_id, "--type", stat_type, "--days", str(days)],
-        f"Get {stat_type.capitalize()} Stats",
-    )
+    # Create a span for this operation
+    with sentry_sdk.start_span(
+        op="mcp.request", description=f"Get {stat_type.capitalize()} Stats"
+    ) as span:
+        span.set_data("project_id", project_id)
+        span.set_data("stat_type", stat_type)
+        span.set_data("days", days)
+
+        try:
+            # Use our helper function to safely call the MCP tool
+            result = _safe_use_mcp_tool(
+                server_name=MCP_SERVER_NAME,
+                tool_name="get_project_stats",
+                arguments={
+                    "project_id": project_id,
+                    "stat_type": stat_type,
+                    "days": days
+                }
+            )
+
+            if not result or "error" in result:
+                span.set_status("internal_error")
+                error_msg = f"MCP server returned error: {result.get('error', 'Unknown error')}"
+                span.set_data("error", error_msg)
+                raise ServerResponseError(error_msg)
+
+            span.set_status("ok")
+            return result
+
+        except Exception as e:
+            span.set_status("internal_error")
+            span.set_data("error", str(e))
+            logger.error(f"Error getting project stats: {e}")
+            raise ServerResponseError(f"Failed to get project stats: {str(e)}") from e
 
 
 def resolve_issue(issue_id: str) -> Dict[str, Any]:
@@ -575,7 +383,36 @@ def resolve_issue(issue_id: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing the updated issue details
     """
-    return run_mcp_query(["--resolve-issue", issue_id], "Resolve Issue")
+    # Create a span for this operation
+    with sentry_sdk.start_span(
+        op="mcp.request", description="Resolve Issue"
+    ) as span:
+        span.set_data("issue_id", issue_id)
+
+        try:
+            # Use our helper function to safely call the MCP tool
+            result = _safe_use_mcp_tool(
+                server_name=MCP_SERVER_NAME,
+                tool_name="resolve_issue",
+                arguments={
+                    "issue_id": issue_id
+                }
+            )
+
+            if not result or "error" in result:
+                span.set_status("internal_error")
+                error_msg = f"MCP server returned error: {result.get('error', 'Unknown error')}"
+                span.set_data("error", error_msg)
+                raise ServerResponseError(error_msg)
+
+            span.set_status("ok")
+            return result
+
+        except Exception as e:
+            span.set_status("internal_error")
+            span.set_data("error", str(e))
+            logger.error(f"Error resolving issue: {e}")
+            raise ServerResponseError(f"Failed to resolve issue: {str(e)}") from e
 
 
 def get_breadcrumbs(event_id: str) -> Dict[str, Any]:
@@ -588,23 +425,65 @@ def get_breadcrumbs(event_id: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing breadcrumbs from the event
     """
-    return run_mcp_query(["--get-breadcrumbs", event_id], "Get Event Breadcrumbs")
+    # Create a span for this operation
+    with sentry_sdk.start_span(
+        op="mcp.request", description="Get Event Breadcrumbs"
+    ) as span:
+        span.set_data("event_id", event_id)
+
+        try:
+            # Use our helper function to safely call the MCP tool
+            result = _safe_use_mcp_tool(
+                server_name=MCP_SERVER_NAME,
+                tool_name="get_breadcrumbs",
+                arguments={
+                    "event_id": event_id
+                }
+            )
+
+            if not result or "error" in result:
+                span.set_status("internal_error")
+                error_msg = f"MCP server returned error: {result.get('error', 'Unknown error')}"
+                span.set_data("error", error_msg)
+                raise ServerResponseError(error_msg)
+
+            span.set_status("ok")
+            return result
+
+        except Exception as e:
+            span.set_status("internal_error")
+            span.set_data("error", str(e))
+            logger.error(f"Error getting breadcrumbs: {e}")
+            raise ServerResponseError(f"Failed to get breadcrumbs: {str(e)}") from e
 
 
 def enable_mcp_integrations() -> bool:
     """
     Configure the SDK to use the Sentry MCP server for enhanced functionality.
-
-    This modifies the Sentry client configuration to ensure proper integration
-    with the MCP server capabilities.
+    Adds explicit, clear terminal output indicating whether the integration is ON and functional.
 
     Returns:
         True if configuration was successful, False otherwise
     """
     try:
-        # First make sure the server is running
-        if not check_mcp_server() and not start_mcp_server():
-            logger.error("Cannot enable MCP integrations: Server not running")
+        # Check environment variable/config before proceeding
+        mcp_enabled = os.getenv("SENTRY_MCP_SERVER_ENABLED", "").lower() == "true"
+        try:
+            from config import settings
+            mcp_enabled = getattr(settings, "SENTRY_MCP_SERVER_ENABLED", mcp_enabled)
+        except Exception:
+            pass
+
+        if not mcp_enabled:
+            print("Sentry MCP integration is DISABLED. Set SENTRY_MCP_SERVER_ENABLED=true to activate MCP features.")
+            logger.info("Sentry MCP integration is DISABLED.")
+            return False
+
+        # Verify MCP server is accessible by getting its status
+        status = get_mcp_status()
+        if not status:
+            logger.error("Cannot enable MCP integrations: Server not available")
+            print("ERROR: Sentry MCP integration could NOT START (server unavailable).")
             return False
 
         # Configure the SDK to use the MCP server
@@ -612,37 +491,17 @@ def enable_mcp_integrations() -> bool:
             scope.set_tag("using_mcp_server", "true")
             scope.set_context(
                 "mcp_integration",
-                {"enabled": True, "server_version": get_server_version()},
+                {"enabled": True, "server_version": status.get("version", "unknown")},
             )
 
+        print(f"Sentry MCP integration is ENABLED. MCP Status: {json.dumps(status) if status else 'UNKNOWN'}")
         logger.info("Sentry MCP integrations enabled successfully")
         return True
+
     except Exception as e:
         logger.error(f"Failed to enable MCP integrations: {e}")
+        print(f"ERROR: Sentry MCP integration failed during enablement: {e}")
         return False
-
-
-def get_server_version() -> str:
-    """
-    Get the version of the Sentry MCP server.
-
-    Returns:
-        Server version string or "unknown" if unable to determine
-    """
-    try:
-        result = subprocess.run(
-            ["python", "-m", SERVER_CMD, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False
-        )
-
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-        return "unknown"
-    except Exception:
-        return "unknown"
 
 
 def get_mcp_status() -> Optional[Dict[str, Any]]:
@@ -650,58 +509,35 @@ def get_mcp_status() -> Optional[Dict[str, Any]]:
     Get the current status of the Sentry MCP server.
 
     Returns:
-        Dictionary with server status information or None if the server is not running
+        Dictionary with server status information or None if the server is not available
     """
-    if not check_mcp_server():
-        logger.debug("MCP server is not running")
-        return None
-
     try:
         # Create a span for this operation
         with sentry_sdk.start_span(
             op="mcp.request", description="Get MCP Server Status"
         ) as span:
-            result = subprocess.run(
-                ["python", "-m", SERVER_CMD, "--status"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False
-            )
-
-            if result.returncode != 0:
-                span.set_status("internal_error")
-                logger.warning(f"Failed to get MCP server status: {result.stderr}")
-                return {
-                    "running": True,
-                    "responsive": False,
-                    "error": (
-                        result.stderr.strip() if result.stderr else "Unknown error"
-                    ),
-                    "version": get_server_version(),
-                }
-
             try:
-                # Try to parse JSON output if available
-                data = json.loads(result.stdout)
+                # Use our helper to safely call the MCP tool
+                result = _safe_use_mcp_tool(
+                    server_name=MCP_SERVER_NAME,
+                    tool_name="get_server_status",
+                    arguments={}
+                )
+
+                if not result:
+                    span.set_status("internal_error")
+                    logger.warning("Failed to get MCP server status")
+                    return None
+
                 span.set_status("ok")
-                return data
-            except json.JSONDecodeError:
-                # If not JSON, return basic status
-                span.set_status("ok")
-                return {
-                    "running": True,
-                    "responsive": True,
-                    "version": get_server_version(),
-                    "message": (
-                        result.stdout.strip() if result.stdout else "Server running"
-                    ),
-                }
+                return result
+
+            except Exception as e:
+                span.set_status("internal_error")
+                span.set_data("error", str(e))
+                logger.error(f"Error getting MCP status: {e}")
+                return None
+
     except Exception as e:
         logger.error(f"Error checking MCP status: {e}")
-        return {
-            "running": True,
-            "responsive": False,
-            "error": str(e),
-            "version": "unknown",
-        }
+        return None

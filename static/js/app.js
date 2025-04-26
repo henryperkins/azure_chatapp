@@ -1,11 +1,13 @@
-import { createModalManager } from './modalManager.js';
+import { createModalManager, createProjectModal } from './modalManager.js';
 import { createProjectManager } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
-// import { createProjectListComponent } from './projectListComponent.js'; // Removed unused import
+import { createProjectListComponent, ProjectListComponent } from './projectListComponent.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createModelConfig } from './modelConfig.js';
-// ... other imports ...
+// import { createProjectDashboardUtils } from './projectDashboardUtils.js'; // Use window global instead
+import './FileUploadComponent.js'; // Exposes window.FileUploadComponent
+import './notification-handler.js'; // Initializes notification system
 import { createChatManager } from './chat.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { uiRenderer } from './uiRenderer.js';
@@ -251,10 +253,24 @@ async function initializeCoreSystems() {
     DependencySystem.register('modalManager', modalManager);
     console.log('[App] Modal manager initialized and registered');
 
+    // ------ ADD: CREATE AND REGISTER THE PROJECT MODAL ------
+    const projectModal = createProjectModal();
+    projectModal.init();
+    window.projectModal = projectModal;
+    // --------------------------------------------------------
+
     // Wait for eventHandlers first to ensure app-level events are available.
     await DependencySystem.waitFor('eventHandlers', null, 5000);
     appState.currentPhase = 'event_handlers_ready';
     console.log('[App] Event handlers ready');
+
+    // Ensure notification handler is registered and using the centralized system
+    if (window.notificationHandler) {
+        DependencySystem.register('notificationHandler', window.notificationHandler);
+        console.log('[App] Notification handler initialized and registered');
+    } else {
+        console.warn('[App] Notification handler not available');
+    }
 
     // Create and initialize the project manager
     const projectManager = createProjectManager();
@@ -304,6 +320,14 @@ async function initializeAuthSystem() {
 async function initializeUIComponents() {
     console.log('[App] Initializing UI components...');
 
+    // Initialize ProjectListComponent first - needed by ProjectDashboard
+    const projectListComponent = createProjectListComponent({ elementId: 'projectList' });
+    await projectListComponent.initialize();  // Make sure it's fully initialized
+    window.ProjectListComponent = ProjectListComponent; // Register the class constructor
+    window.projectListComponent = projectListComponent; // Register the instance
+    DependencySystem.register('projectListComponent', projectListComponent);
+    console.log('[App] ProjectListComponent initialized and registered');
+
     // Create and initialize the project dashboard
     const projectDashboard = createProjectDashboard();
     window.projectDashboard = projectDashboard;
@@ -320,6 +344,20 @@ async function initializeUIComponents() {
     window.modelConfig = modelConfig;
     DependencySystem.register('modelConfig', modelConfig);
     console.log('[App] ModelConfig initialized and registered');
+
+    // --- ProjectDashboardUtils initialization/registration ---
+    const projectDashboardUtils = window.createProjectDashboardUtils();
+    window.projectDashboardUtils = projectDashboardUtils;
+    DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
+    console.log('[App] ProjectDashboardUtils initialized and registered');
+
+    // --- FileUploadComponent registration ---
+    if (window.FileUploadComponent) {
+        DependencySystem.register('FileUploadComponent', window.FileUploadComponent);
+        console.log('[App] FileUploadComponent registered');
+    } else {
+        console.warn('[App] FileUploadComponent not available');
+    }
 
     // --- ChatManager initialization/registration ---
     const chatManager = createChatManager();

@@ -1,20 +1,17 @@
-  /**
+/**
  * projectDashboardUtils.js
  * Centralized utility functions for the project dashboard.
- * Dependencies:
- * - window.eventHandlers (external utility, for event management)
- * - window.projectManager (external dependency, for project operations)
- * - window.modalManager (external dependency, for modal dialogs)
- * - window.notificationHandler (external dependency, for notifications)
- * - window.showNotification (fallback notification system)
- * - window.formatDate (external utility, for date formatting)
- * - window.formatBytes (external utility, for byte formatting)
- * - window.app (external dependency, for authentication state)
- * - document (browser built-in, for DOM manipulation)
- * - localStorage (browser built-in, for persistent state)
- * - URL (browser built-in, for URL manipulation)
- * - CustomEvent (browser built-in, for custom events)
- * - Intl.NumberFormat (browser built-in, for number formatting)
+ *
+ * @module projectDashboardUtils
+ * @requires window.DependencySystem - For module registration
+ * @requires window.eventHandlers - For event management
+ * @requires window.projectManager - For project operations
+ * @requires window.modalManager - For modal dialogs
+ * @requires window.notificationHandler - For notifications
+ * @requires window.showNotification - Fallback notification system
+ * @requires window.formatDate - For date formatting
+ * @requires window.formatBytes - For byte formatting
+ * @requires window.app - For authentication state and shared utilities
  */
 
 // Browser APIs:
@@ -39,12 +36,17 @@
 // - Date/bytes formatting falls back to basic implementations if globals missing
 // - Graceful degradation when components aren't available
 
+/**
+ * Factory function that creates the ProjectDashboard utils instance.
+ * This follows the pattern used by other modules for consistency.
+ */
+function createProjectDashboardUtils() {
   // Create the ProjectDashboard namespace
-  const ProjectDashboard = window.ProjectDashboard || {};
+  const ProjectDashboard = {};
 
   /* =========================================================================
-  * UTILITY FUNCTIONS
-  * ========================================================================= */
+   * UTILITY FUNCTIONS
+   * ========================================================================= */
 
   /**
    * UI utility functions
@@ -106,21 +108,7 @@
       return new Intl.NumberFormat().format(number || 0);
     },
 
-    /**
-     * Format date
-     * @param {string} dateString - Date string
-     * @param {boolean} includeTime - Whether to include time
-     * @returns {string} - Formatted date
-     */
-    // Removed duplicated formatDate; using window.formatDate instead
-
-    /**
-     * Format bytes to human-readable format
-     * @param {number} bytes - Bytes to format
-     * @param {number} decimals - Decimal places
-     * @returns {string} - Formatted size
-     */
-    // Removed duplicated formatBytes; using window.formatBytes instead
+    // We rely on window.formatDate for date formatting and window.formatBytes for byte formatting.
 
     /**
      * Get file icon based on type
@@ -144,11 +132,11 @@
         jpeg: '🖼️',
         png: '🖼️',
         gif: '🖼️',
-        zip: '📦'
+        zip: '📦',
       };
 
       return icons[fileType.toLowerCase()] || '📄';
-    }
+    },
   };
 
   /**
@@ -271,7 +259,7 @@
                 console.error('Failed to toggle archive:', error);
                 ProjectDashboard.showNotification('Failed to toggle archive', 'error');
               }
-            }
+            },
           });
         }
       });
@@ -297,3 +285,18 @@
   // For backward compatibility
   window.showProjectsView = ProjectDashboard.showProjectListView;
   window.uiUtilsInstance = ProjectDashboard.UIUtils;
+
+  return ProjectDashboard;
+}
+
+// Create and export the utils instance
+const projectDashboardUtils = createProjectDashboardUtils();
+
+// Register with dependency system
+if (window.DependencySystem) {
+  window.DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
+}
+
+// Make factory available on window for browser consumers; avoid ES exports to prevent SyntaxError in classic scripts.
+window.createProjectDashboardUtils = createProjectDashboardUtils;
+window.projectDashboardUtils = projectDashboardUtils;

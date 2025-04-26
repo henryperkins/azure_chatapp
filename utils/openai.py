@@ -51,8 +51,8 @@ def get_azure_api_version(model_config: Dict[str, Any]) -> str:
 # -----------------------------
 
 async def openai_chat(
-    messages: List[Dict[str, Any]], 
-    model_name: str, 
+    messages: List[Dict[str, Any]],
+    model_name: str,
     **kwargs
 ) -> Union[Dict[str, Any], AsyncGenerator[bytes, None]]:
     """
@@ -112,7 +112,7 @@ async def openai_chat(
         transaction.set_tag("error.type", "http")
         transaction.set_data("status_code", http_exc.status_code)
         metrics.incr("ai.request.failure", tags={
-            "model": model_name, 
+            "model": model_name,
             "reason": "http_error",
             "status_code": http_exc.status_code
         })
@@ -194,8 +194,8 @@ async def azure_chat(
 # -----------------------------
 
 async def validate_azure_params(
-    model_name: str, 
-    model_config: Dict[str, Any], 
+    model_name: str,
+    model_config: Dict[str, Any],
     kwargs: dict
 ) -> None:
     """Validate Azure-specific parameters against model capabilities."""
@@ -244,14 +244,14 @@ def build_azure_payload(
     """
     with sentry_span(op="ai.azure.build_payload", description="Build Azure Payload"):
         payload: Dict[str, Any] = {
-            "messages": list(messages),  
+            "messages": list(messages),
         }
 
         # Max tokens approach
         model_max_completion = model_config.get("max_completion_tokens")
-        model_max_tokens = model_config.get("max_tokens") 
+        model_max_tokens = model_config.get("max_tokens")
         client_max_tokens = kwargs.get("max_tokens")
-        
+
         if model_max_completion is not None:
             payload["max_completion_tokens"] = (
                 min(client_max_tokens, model_max_completion)
@@ -282,8 +282,8 @@ def build_azure_payload(
         # Vision
         if kwargs.get("image_data") and "vision" in model_config.get("capabilities", []):
             payload["messages"] = process_vision_messages(
-                payload["messages"], 
-                kwargs["image_data"], 
+                payload["messages"],
+                kwargs["image_data"],
                 kwargs.get("vision_detail", "auto")
             )
 
@@ -358,7 +358,7 @@ async def _send_azure_request(
     """Send non-streaming Azure request with Sentry context."""
     if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="Azure configuration missing"
         )
 
@@ -408,7 +408,7 @@ async def _stream_azure_response(
     """Handle streaming Azure responses via an async generator."""
     if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="Azure configuration missing"
         )
 
@@ -444,7 +444,7 @@ async def claude_chat(
     model_name: str,
     model_config: Dict[str, Any],
     **kwargs
-) -> Dict[str, Any]:
+) -> Union[Dict[str, Any], AsyncGenerator[bytes, None]]:
     """Handle Claude requests with Sentry-based tracing."""
     transaction = start_transaction(
         op="ai.claude",
@@ -541,7 +541,7 @@ def build_claude_payload(
                     logger.debug("Removing temperature param due to thinking enabled.")
             else:
                 logger.warning("Thinking requested but not supported by this Claude model.")
-        
+
         # Temperature
         if kwargs.get("temperature") is not None:
             payload["temperature"] = kwargs["temperature"]
@@ -666,7 +666,7 @@ async def get_moderation(text: str) -> Dict[str, Any]:
         "api-key": settings.AZURE_OPENAI_API_KEY
     }
     payload = {"input": text}
-    
+
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(url, json=payload, headers=headers, timeout=15)
@@ -677,9 +677,9 @@ async def get_moderation(text: str) -> Dict[str, Any]:
         return {"error": str(e), "flagged": False}
 
 async def get_completion(
-    prompt: str, 
-    model_name: str = "o3-mini", 
-    max_tokens: int = 500, 
+    prompt: str,
+    model_name: str = "o3-mini",
+    max_tokens: int = 500,
     **kwargs
 ) -> str:
     """
