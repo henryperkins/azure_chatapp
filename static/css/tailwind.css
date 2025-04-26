@@ -35,12 +35,13 @@
     --color-secondary: #8be9fd;
     --color-secondary-content: #191926;
     --color-accent: #f1fa8c;
-  --color-neutral: #44475a;
-  --color-neutral-content: #fff;
-  --color-base-100: #1e1f28;
-  --color-base-200: #23243a;
-  --color-base-300: #191926;
-  --color-base-content: #f8f8f2;
+    --color-neutral: #44475a;
+    --color-neutral-content: #fff;
+    --color-base-100: #1e1f28;
+    --color-base-200: #23243a;
+    --color-base-300: #191926;
+    --color-base-content: #f8f8f2;
+  }
 }
 
 /* Sidebar pinned state highlight */
