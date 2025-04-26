@@ -60,7 +60,7 @@ export function initProjectList() {
                     console.error('Failed to find #projectSearchInput or #sidebarProjectSearch after 5 attempts');
                     return;
                 }
-                const searchHandler = debounce((e) => {
+                const searchHandler = window.eventHandlers.debounce((e) => {
                     const searchTerm = e.target.value.toLowerCase();
                     const projectCards = document.querySelectorAll('#projectList .project-card');
                     projectCards.forEach(card => {
@@ -81,66 +81,7 @@ export function initProjectList() {
                 }
             };
 
-            // Setup create project button
-            const createProjectBtn = document.getElementById('projectListCreateBtn');
-            if (createProjectBtn) {
-                const handler = async () => {
-                    await ensureProjectModalReady();
-                    console.log('[ProjectListInit] Create Project button clicked.');
-                    window.modalManager?.show('project', {
-                        updateContent: (modalEl) => {
-                            const form = modalEl.querySelector('#projectModalForm');
-                            if (form) {
-                                form.reset();
-                                form.querySelector('#projectModalIdInput').value = '';
-                                // Clear validation errors
-                                form.querySelectorAll('.error-message').forEach(el => el.classList.add('hidden'));
-                            }
-                            const title = modalEl.querySelector('#projectModalTitle');
-                            if (title) title.textContent = 'Create New Project';
-                        }
-                    });
-                };
-
-                // Remove existing listeners via cleanup utility, avoid cloning node (preserves bindings)
-                if (window.eventHandlers?.cleanupListeners) {
-                    window.eventHandlers.cleanupListeners(createProjectBtn);
-                }
-                window.eventHandlers?.trackListener(createProjectBtn, 'click', handler);
-            }
-
-// Hoist function setupSidebarNewProjectBtn so it is defined before use and available globally
-function setupSidebarNewProjectBtn() {
-    const sidebarNewProjectBtn = document.getElementById('sidebarNewProjectBtn');
-    if (sidebarNewProjectBtn) {
-        const handler = async () => {
-            // ensureProjectModalReady is in initProjectList scope, so re-define if needed
-            if (typeof ensureProjectModalReady === 'function') {
-                await ensureProjectModalReady();
-            } else if (window.projectModal?.init && !window.projectModal.modalElement) {
-                await window.projectModal.init();
-            }
-            console.log('[ProjectListInit] Sidebar New Project button clicked.');
-            window.modalManager?.show('project', {
-                updateContent: (modalEl) => {
-                    const form = modalEl.querySelector('#projectModalForm');
-                    if (form) {
-                        form.reset();
-                        form.querySelector('#projectModalIdInput').value = '';
-                    }
-                    const title = modalEl.querySelector('#projectModalTitle');
-                    if (title) title.textContent = 'Create New Project';
-                }
-            });
-        };
-        if (window.eventHandlers?.cleanupListeners) {
-            window.eventHandlers.cleanupListeners(sidebarNewProjectBtn);
-        }
-        window.eventHandlers?.trackListener(sidebarNewProjectBtn, 'click', handler);
-    }
-}
-window.setupSidebarNewProjectBtn = setupSidebarNewProjectBtn;
-setupSidebarNewProjectBtn();
+            // [Removed create project button logic – handled by ProjectListComponent]
 
             initialized = true;
             console.log('[ProjectListInit] Initialization complete.');
@@ -167,25 +108,8 @@ async function waitForDependency(name, timeout = 5000) {
     }
 }
 
-/**
- * Helper: Debounce a function call.
- * @param {Function} fn - The function to debounce
- * @param {number} delay - The debounce delay in ms
- */
-function debounce(fn, delay) {
-    let timeout;
-    return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn(...args), delay);
-    };
-}
 
-// Re-bind the sidebar new project button after modals are loaded
-document.addEventListener('modalsLoaded', () => {
-    setTimeout(() => {
-        window.setupSidebarNewProjectBtn();
-    }, 0);
-});
+// [Removed sidebar new project rebind logic – handled by ProjectListComponent]
 
 // Register with DependencySystem
 DependencySystem.register('projectListInit', { initProjectList });

@@ -429,11 +429,14 @@ function toggleElement(selector, show) {
 }
 
 /**
- * Show a notification (falls back to console if no handler)
+ * Show a notification (prefers notificationHandler, fallback to window.showNotification, else console)
  */
 function showNotification(message, type = 'info', duration = 5000) {
     if (window.notificationHandler?.show) {
         window.notificationHandler.show(message, type, { timeout: duration });
+    } else if (typeof window.showNotification === 'function' && window.showNotification !== showNotification) {
+        // Prevent recursion if our function patched the global
+        window.showNotification(message, type, { timeout: duration });
     } else {
         console.log(`[${type.toUpperCase()}] ${message}`);
     }
