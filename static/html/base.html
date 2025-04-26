@@ -272,7 +272,7 @@
   <!-- Main Container -->
   <div class="flex flex-1 overflow-hidden container-md">
     <!-- Enhanced Sidebar -->
-    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-64 bg-base-100 shadow-md md:shadow-none
+    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-56 md:w-64 bg-base-100 shadow-md md:shadow-none
                 transform transition-transform duration-300 ease-in-out
                 -translate-x-full md:translate-x-0 overflow-y-auto h-full sidebar">
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
@@ -285,7 +285,7 @@
         </svg>
       </button>
 
-      <div class="p-4 flex flex-col h-full">
+      <div class="p-4 pb-6 flex flex-col h-full">
         <!-- New Chat Button -->
         <a href="/" class="w-full btn btn-neutral mb-4 flex items-center justify-center" role="button">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
@@ -298,13 +298,13 @@
 
         <!-- Tab navigation -->
         <div class="tabs tabs-boxed mb-4" role="tablist">
-          <button id="recentChatsTab" type="button" class="tab" role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
+          <button id="recentChatsTab" type="button" class="tab focus:ring-2 focus:ring-primary" role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
             Recent
           </button>
-          <button id="starredChatsTab" type="button" class="tab" role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
+          <button id="starredChatsTab" type="button" class="tab focus:ring-2 focus:ring-primary" role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
             Starred
           </button>
-          <button id="projectsTab" type="button" class="tab tab-active" role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
+          <button id="projectsTab" type="button" class="tab tab-active focus:ring-2 focus:ring-primary" role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
             Projects
           </button>
         </div>
