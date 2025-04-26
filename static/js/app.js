@@ -253,14 +253,16 @@ async function initializeCoreSystems() {
     DependencySystem.register('modalManager', modalManager);
     console.log('[App] Modal manager initialized and registered');
 
-    // ------ ADD: CREATE AND REGISTER THE PROJECT MODAL ------
-    const projectModal = createProjectModal();
-    window.projectModal = projectModal;
-    // Delay initialization until modals are loaded in the DOM
-    document.addEventListener('modalsLoaded', () => {
-        projectModal.init();
-    });
-    // --------------------------------------------------------
+    // Project modal: Initialize and register only after modalsLoaded,
+    // and expose to window before binding any other listeners.
+    document.addEventListener('modalsLoaded', async () => {
+        console.log('[App] Detected modalsLoaded. Initializing projectModal...');
+        const projectModal = createProjectModal();
+        await projectModal.init();
+        window.projectModal = projectModal;
+        DependencySystem.register('projectModal', projectModal);
+        console.log('[App] projectModal initialized, exposed globally, and registered with DependencySystem.');
+    }, { once: true });
 
     // Wait for eventHandlers first to ensure app-level events are available.
     await DependencySystem.waitFor('eventHandlers', null, 5000);
@@ -678,9 +680,7 @@ function handleAuthStateChange(event) {
                 projectDetailsView?.classList.add('hidden');
 
                 // Only call loadProjects if we're showing the project list
-                if (window.projectDashboard?.state?.currentView === 'list') {
-                    loadProjects();
-                }
+                // Instead, let projectDashboard.showProjectList() handle loading via SPA logic.
             }
         }
     });

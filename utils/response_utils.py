@@ -15,9 +15,9 @@ API_VERSION = "2025-02-01-preview"
 
 
 async def create_standard_response(
-    data=None, message="Success", success=True, status_code=200, headers=None
+    data=None, message="Success", success=True, status_code=200, headers=None, span_or_transaction=None
 ):
-    """Ensure consistent response structure with support for headers"""
+    """Ensure consistent response structure with support for headers and Sentry tracing"""
     response_data = {
         "status": "success" if success else "error",
         "message": message,
@@ -25,10 +25,23 @@ async def create_standard_response(
         "timestamp": datetime.now().isoformat(),
         "request_id": str(uuid4()),  # Add unique ID for tracking
     }
+    resp_headers = dict(headers) if headers else {}
+
+    # Add Sentry trace headers if span_or_transaction provided
+    if span_or_transaction:
+        try:
+            resp_headers["sentry-trace"] = span_or_transaction.to_traceparent()
+            if hasattr(span_or_transaction, "containing_transaction"):
+                containing_transaction = span_or_transaction.containing_transaction()
+                if hasattr(containing_transaction, "_baggage") and hasattr(containing_transaction._baggage, "serialize"):
+                    resp_headers["baggage"] = containing_transaction._baggage.serialize()
+        except Exception:
+            pass
+
     return JSONResponse(
         content=response_data,
         status_code=status_code,
-        headers={}  # Explicit empty headers
+        headers=resp_headers
     )
 
 

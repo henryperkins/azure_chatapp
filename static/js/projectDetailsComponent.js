@@ -229,23 +229,15 @@ class ProjectDetailsComponent {
       return;
     }
 
-    // Store reference
     this.state.currentProject = project;
-
-    // Update UI
     this._updateProjectHeader(project);
 
-    // Render stats if available
-    if (project.stats) {
-      this.renderStats(project.stats);
-    }
+    // Automatically switch to the conversations tab
+    this.switchTab('conversations');
 
-    // Switch tab if needed
-    if (!this.state.activeTab) {
-      this.switchTab('files');
-    }
+    // Load conversations immediately
+    window.projectManager?.loadProjectConversations(project.id);
 
-    // Show component
     this.show();
   }
 

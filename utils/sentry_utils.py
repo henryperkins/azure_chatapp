@@ -589,3 +589,24 @@ def filter_transactions(
         return None
 
     return event
+
+# --- SENTRY TRACE RESPONSE HELPER ---
+
+from fastapi.responses import JSONResponse
+
+def make_sentry_trace_response(payload: dict, transaction) -> JSONResponse:
+    """
+    Wraps a dict payload as a JSONResponse with Sentry trace headers for distributed tracing.
+    """
+    resp = JSONResponse(content=payload)
+    try:
+        resp.headers["sentry-trace"] = transaction.to_traceparent()
+        # Add `baggage` if available (dynamic sampling):
+        if hasattr(transaction, "containing_transaction"):
+            containing_transaction = transaction.containing_transaction()
+            if hasattr(containing_transaction, "_baggage") and hasattr(containing_transaction._baggage, "serialize"):
+                resp.headers["baggage"] = containing_transaction._baggage.serialize()
+    except Exception:
+        # Defensive: don't break response on header issues
+        pass
+    return resp
