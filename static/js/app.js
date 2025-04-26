@@ -1,4 +1,11 @@
 import { createModalManager } from './modalManager.js';
+import { createProjectManager } from './projectManager.js';
+import { createProjectDashboard } from './projectDashboard.js';
+import { createProjectListComponent } from './projectListComponent.js';
+import { createProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createSidebar } from './sidebar.js';
+import { createModelConfig } from './modelConfig.js';
+import { createChatManager } from './chat.js';
 
 /**
  * @fileoverview
@@ -10,156 +17,18 @@ import { createModalManager } from './modalManager.js';
  *  - An API request utility function with support for CSRF tokens, timeouts,
  *    and request deduplication.
  *  - Event listeners for auth state changes and UI navigation.
- *
- * The end goal is to ensure that all key modules are loaded and available
- * before the user interacts with the UI, while providing robust fallback
- * and error handling during initialization.
  */
 
-/**
- * External Dependencies (Global Scope):
- *  - window.auth (authentication system)
- *  - window.eventHandlers (event management)
- *  - window.modalManager (modal management)
- *  - window.projectManager (project operations)
- *  - window.projectDashboard (project UI)
- *  - window.chatManager (chat functionality)
- *  - window.notificationHandler (user notifications)
- *
- * Optional Dependencies:
- *  - Handles missing projectDashboard with basic fallbacks.
- *  - Gracefully falls back if notificationHandler not available.
- *  - Provides error handling for a missing auth module.
+/* DependencySystem is now defined globally via inline script in base.html.
+   The local definition and window assignment are no longer needed.
  */
-
-/**
- * Browser APIs used:
- *  - document (DOM access)
- *  - fetch (network requests)
- *  - AbortController (request cancellation)
- *  - CustomEvent (event system)
- */
-
-/**
- * A robust system for module registration and availability checks.
- * Supports both callback-based and Promise-based usage to ensure all
- * required modules are loaded before continuing. This prevents
- * race conditions or "nested waitFor" timeouts.
- */
-const DependencySystem = {
-    modules: new Map(),   // Stores registered modules by name
-    states: new Map(),    // Tracks module states: 'unloaded', 'loading', 'loaded', 'error'
-    waiters: new Map(),   // Maps each module name to an array of callbacks waiting on it
-
-    /**
-     * Register a module under a given name.
-     * @param {string} name - Unique module name.
-     * @param {any} instance - The module instance/object.
-     * @param {string[]} [dependencies=[]] - Not used by default, but can be extended.
-     * @returns {any} The same instance passed in, for chaining or immediate usage.
-     */
-    register(name, instance, dependencies = []) {
-        console.log(`[DependencySystem] Registering module: ${name}`);
-        this.modules.set(name, instance);
-        this.states.set(name, 'loaded');
-
-        // Notify any callbacks that were waiting for this module.
-        this._notifyWaiters(name);
-        return instance;
-    },
-
-    /**
-     * Internal method. Notifies all waiters that a specific module is now available.
-     * @param {string} name - The module name that just became available.
-     */
-    _notifyWaiters(name) {
-        if (!this.waiters.has(name)) return;
-
-        this.waiters.get(name).forEach((callback) => {
-            try {
-                callback(this.modules.get(name));
-            } catch (error) {
-                console.error(`[DependencySystem] Error in waiter callback for ${name}:`, error);
-            }
-        });
-
-        // Clear waiters for this module to prevent repeated notifications.
-        this.waiters.delete(name);
-    },
-
-    /**
-     * Wait for one or more modules to be available. If a callback is provided,
-     * it's invoked once the modules are ready. A Promise is returned in either case.
-     * @param {string|string[]} names - Single or multiple module names to wait for.
-     * @param {function} [callback] - Optional callback invoked once modules are ready.
-     * @param {number} [timeout=5000] - How long (in ms) to wait before timing out.
-     * @returns {Promise<any[]>} Resolves with an array of the requested modules in the same order.
-     */
-    waitFor(names, callback, timeout = 5000) {
-        const nameArray = Array.isArray(names) ? names : [names];
-
-        // If all modules are already registered, resolve immediately.
-        if (nameArray.every(name => this.modules.has(name))) {
-            const modules = nameArray.map(name => this.modules.get(name));
-            if (callback) {
-                callback(...modules);
-            }
-            return Promise.resolve(modules);
-        }
-
-        return new Promise((resolve) => {
-            const missing = nameArray.filter(name => !this.modules.has(name));
-            let resolved = false;
-
-            // Set up a timeout to avoid waiting forever.
-            const timeoutId = setTimeout(() => {
-                if (!resolved) {
-                    console.warn(`[DependencySystem] Timeout waiting for: ${missing.join(', ')}`);
-                    resolved = true;
-                    // Resolve with null for missing modules instead of rejecting.
-                    resolve(nameArray.map(name => this.modules.get(name) || null));
-                }
-            }, timeout);
-
-            // For each missing module, register a callback that will fire when it becomes available.
-            missing.forEach(name => {
-                if (!this.waiters.has(name)) {
-                    this.waiters.set(name, []);
-                }
-
-                this.waiters.get(name).push(() => {
-                    // Once we've loaded all requested modules, resolve the Promise.
-                    if (nameArray.every(n => this.modules.has(n)) && !resolved) {
-                        clearTimeout(timeoutId);
-                        resolved = true;
-                        const modules = nameArray.map(n => this.modules.get(n));
-                        if (callback) {
-                            callback(...modules);
-                        }
-                        resolve(modules);
-                    }
-                });
-            });
-        });
-    }
-};
-
-// Expose DependencySystem globally if needed.
-// Initialize core dependencies that must exist before anything else.
-const modalManagerInstance = createModalManager();
-DependencySystem.register('modalManager', modalManagerInstance);
-window.modalManager = modalManagerInstance; // (optional: for legacy compatibility)
-
-window.DependencySystem = DependencySystem;
-
 // ---------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------
 
 /**
  * Global app configuration object including debug mode, timeouts, API endpoints,
- * and frequently used DOM selectors. These values are referenced across the application
- * to ensure consistency and centralize configuration.
+ * and frequently used DOM selectors.
  */
 const APP_CONFIG = {
     DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
@@ -318,7 +187,10 @@ async function init() {
     }
 
     try {
-        // Register the global `app` module early, so other modules can waitFor it.
+        // Wait for both auth and eventHandlers to be registered before continuing
+        await DependencySystem.waitFor(['auth', 'eventHandlers'], null, APP_CONFIG.TIMEOUTS.INITIALIZATION);
+
+        // Now safe to use window.auth and window.eventHandlers everywhere from here
         window.app = {
             apiRequest,
             navigateToConversation,
@@ -368,34 +240,37 @@ async function init() {
  * Waits for them via DependencySystem, logs progress, and provides fallbacks if needed.
  */
 async function initializeCoreSystems() {
+    console.log('[App] Initializing core systems...');
+
+    // Create the modal manager
+    const modalManager = createModalManager();
+    window.modalManager = modalManager;
+    DependencySystem.register('modalManager', modalManager);
+    console.log('[App] Modal manager initialized and registered');
+
     // Wait for eventHandlers first to ensure app-level events are available.
     await DependencySystem.waitFor('eventHandlers', null, 5000);
     appState.currentPhase = 'event_handlers_ready';
+    console.log('[App] Event handlers ready');
 
-    // If ensureRegistered is implemented, use it as a robust wait function.
-    if (DependencySystem.ensureRegistered) {
-        await DependencySystem.ensureRegistered(['modalManager', 'auth', 'projectManager'], 5000);
+    // Create and initialize the project manager
+    const projectManager = createProjectManager();
+    await projectManager.initialize();
+    window.projectManager = projectManager;
+    DependencySystem.register('projectManager', projectManager);
+    console.log('[App] Project manager initialized and registered');
+
+    // Initialize auth if available
+    if (DependencySystem.modules.has('auth')) {
+        console.log('[App] Auth module already registered');
     } else {
-        // Otherwise manually wait for each dependency.
-        await DependencySystem.waitFor(['modalManager', 'auth', 'projectManager'], null, 5000);
+        console.log('[App] Waiting for auth module...');
+        await DependencySystem.waitFor('auth', null, 5000);
+        console.log('[App] Auth module found');
     }
 
-    // Attempt to ensure modalManager is initialized. If not, log a warning.
-    if (!window.modalManager) {
-        console.warn('[App] modalManager not found, attempting to initialize...');
-        if (typeof window.initModalManager === 'function') {
-            window.initModalManager();
-        }
-    }
-
-    try {
-        await DependencySystem.waitFor('modalManager', null, 5000);
-        console.log('[App] Modal manager initialized');
-        appState.currentPhase = 'modals_ready';
-    } catch (error) {
-        console.warn('[App] Modal manager initialization timed out:', error);
-        // We can proceed, but modal functionality will be degraded.
-    }
+    appState.currentPhase = 'core_systems_ready';
+    console.log('[App] Core systems initialized');
 }
 
 /**
@@ -424,16 +299,74 @@ async function initializeAuthSystem() {
  * load project lists, or navigate to chat views if needed.
  */
 async function initializeUIComponents() {
-    // Wait for a projectDashboard module if available. If not, skip silently.
-    await DependencySystem.waitFor('projectDashboard',
-        (dashboard) => {
-            if (dashboard && typeof dashboard.init === 'function') {
-                dashboard.init();
-                console.log('[App] projectDashboard initialized');
+    console.log('[App] Initializing UI components...');
+
+    // Create and initialize the project dashboard
+    const projectDashboard = createProjectDashboard();
+    window.projectDashboard = projectDashboard;
+    DependencySystem.register('projectDashboard', projectDashboard);
+
+    // Initialize the dashboard
+    if (typeof projectDashboard.initialize === 'function') {
+        await projectDashboard.initialize();
+        console.log('[App] Project dashboard initialized');
+    }
+
+    // --- ModelConfig initialization/registration (before chatManager) ---
+    const modelConfig = createModelConfig();
+    window.modelConfig = modelConfig;
+    DependencySystem.register('modelConfig', modelConfig);
+    console.log('[App] ModelConfig initialized and registered');
+
+    // --- ChatManager initialization/registration ---
+    const chatManager = createChatManager();
+    window.chatManager = chatManager;
+    DependencySystem.register('chatManager', chatManager);
+    console.log('[App] ChatManager initialized and registered');
+
+    // --- ProjectListComponent initialization/registration ---
+    // DO NOT create a global ProjectListComponent here; always let ProjectDashboard manage the SPA instance.
+    // This avoids event wiring conflicts and race conditions.
+    // window.ProjectListComponent and window.projectListComponent are set by ProjectDashboard.
+
+    // Deprecate/skip this logic. Keep only for module/class registration reference.
+    // DependencySystem.register('projectListComponent', projectListComponent);
+    // console.log('[App] ProjectListComponent initialized and registered');
+
+    // --- ProjectDetailsComponent initialization/registration ---
+    const projectDetailsComponent = createProjectDetailsComponent({
+        onBack: () => {
+            if (window.projectDashboard && window.projectDashboard.showProjectList) {
+                window.projectDashboard.showProjectList();
+            } else {
+                window.location.href = '/';
             }
-        },
-        APP_CONFIG.TIMEOUTS.COMPONENT_LOAD
-    );
+        }
+    });
+    await projectDetailsComponent.initialize();
+    window.projectDetailsComponent = projectDetailsComponent;
+    DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
+    console.log('[App] ProjectDetailsComponent initialized and registered');
+
+    // --- Sidebar initialization/registration ---
+    const sidebar = createSidebar();
+    await sidebar.init();
+    window.sidebar = sidebar;
+    DependencySystem.register('sidebar', sidebar);
+    console.log('[App] Sidebar initialized and registered');
+
+    // Create other UI components as needed
+    if (window.KnowledgeBaseComponent) {
+        const knowledgeBaseComponent = new window.KnowledgeBaseComponent();
+        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
+        console.log('[App] Knowledge base component registered');
+    }
+
+    // Initialize chat manager if available
+    if (window.chatManager && typeof window.chatManager.initialize === 'function') {
+        await window.chatManager.initialize();
+        console.log('[App] Chat manager initialized');
+    }
 
     // Perform an initial navigation pass (reading URL params to determine which view to show).
     handleNavigationChange();
@@ -442,6 +375,9 @@ async function initializeUIComponents() {
     // Register global event listeners for the app.
     registerAppListeners();
     console.log('[App] Global listeners registered.');
+
+    appState.currentPhase = 'ui_components_ready';
+    console.log('[App] UI components initialized.');
 }
 
 // ---------------------------------------------------------------------
@@ -495,12 +431,6 @@ function showNotification(message, type = 'info', duration = 5000) {
     } else {
         console.log(`[${type.toUpperCase()}] ${message}`);
     }
-}
-
-// Ensure projectManager is available globally if loaded under a different variable.
-if (!window.projectManager && window.projectManagerAPI) {
-    window.projectManager = window.projectManagerAPI;
-    console.log('[App] Bound projectManagerAPI to window.projectManager');
 }
 
 /**
@@ -691,18 +621,17 @@ function handleAuthStateChange(event) {
             }, 100);
 
             // If the user is on a details view, keep the details visible. Otherwise show list.
-            if (typeof dashboardState !== "undefined" &&
-                dashboardState.currentView === 'details' &&
-                dashboardState.currentProject) {
+            if (window.projectDashboard?.state?.currentView === 'details' &&
+                window.projectDashboard?.state?.currentProject) {
                 projectListView?.classList.add('hidden');
                 projectDetailsView?.classList.remove('hidden');
             } else {
                 projectListView?.classList.remove('hidden');
                 projectDetailsView?.classList.add('hidden');
 
-                if (typeof dashboardState !== "undefined" &&
-                    dashboardState.currentView === 'list') {
-                    loadProjectList();
+                // Only call loadProjects if we're showing the project list
+                if (window.projectDashboard?.state?.currentView === 'list') {
+                    loadProjects();
                 }
             }
         }
@@ -731,15 +660,6 @@ function handleInitError(error) {
         eventHandlersAvailable: !!window.eventHandlers
     });
     showNotification('Application failed to initialize. Please refresh.', 'error');
-}
-
-/**
- * Cleanup function after initialization completes (or fails). Currently, only sets
- * appState.initializing to false, but could be extended to hide overlays or send analytics.
- */
-function cleanupInitialization() {
-    // Hide any loading overlays, dispatch final events, etc.
-    appState.initializing = false;
 }
 
 // Trigger init() automatically once the DOM is loaded, or immediately if it's ready.
@@ -775,5 +695,53 @@ window.app = {
 
 // Providing a backward-compatible global showNotification reference.
 window.showNotification = showNotification;
+
+//
+// --- Robust Chat Initialization Logic ---
+//
+function canInitializeChat() {
+  return window.auth?.isAuthenticated() && window.app?.getProjectId();
+}
+
+// Re-initialize chat when the user logs in
+DependencySystem.waitFor(['auth', 'chatManager'], (auth, chatManager) => {
+  if (auth && chatManager && auth.AuthBus) {
+    auth.AuthBus.addEventListener('authStateChanged', () => {
+      if (canInitializeChat()) {
+        chatManager.initialize();
+      }
+    });
+  }
+});
+
+// Re-initialize chat when the user selects a new project
+DependencySystem.waitFor(['projectManager', 'chatManager'], (projectManager, chatManager) => {
+  if (projectManager && chatManager) {
+    // Prefer a standard EventTarget ('addEventListener') if available
+    if (typeof projectManager.addEventListener === 'function') {
+      projectManager.addEventListener('projectSelected', () => {
+        if (canInitializeChat()) {
+          chatManager.initialize();
+        }
+      });
+    }
+    // Or custom event system: try .on or equivalent
+    else if (typeof projectManager.on === 'function') {
+      projectManager.on('projectSelected', () => {
+        if (canInitializeChat()) {
+          chatManager.initialize();
+        }
+      });
+    }
+    // Otherwise, optionally listen for a DOM event or document-level fallback
+    else {
+      document.addEventListener('projectSelected', () => {
+        if (canInitializeChat()) {
+          chatManager.initialize();
+        }
+      });
+    }
+  }
+});
 
 export default window.app;

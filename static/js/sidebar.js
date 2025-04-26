@@ -7,15 +7,16 @@
  * - DependencySystem (external dependency, used for module registration)
  */
 
-(function () {
-  // Attach this module to the global window object
-  window.sidebar = {
-    init,
-    toggleSidebar,
-    closeSidebar,
-    activateTab
-  };
+/**
+ * Modular Sidebar Component
+ * Dependencies:
+ * - localStorage (browser built-in)
+ * - DependencySystem (for registration)
+ * - Requires global: window.projectDashboard, window.projectManager
+ * - Uses auth state from DependencySystem.modules.get('app').state.isAuthenticated for all authentication checks.
+ */
 
+export function createSidebar() {
   let sidebarEl;
   let sidebarToggleBtn;
   let sidebarCloseBtn;
@@ -26,88 +27,80 @@
    * Initialization with retry mechanism for DOM elements.
    * Ensures the DOM is ready and elements exist before proceeding.
    */
-  function init() {
-    return new Promise(async (resolve) => {
-      const maxAttempts = 5;
-      let attempts = 0;
+  async function init() {
+    const maxAttempts = 5;
+    let attempts = 0;
 
-      const attemptInitialization = async () => {
-        attempts++;
+    const attemptInitialization = async () => {
+      attempts++;
 
-        // Locate required elements
-        sidebarEl = document.getElementById('mainSidebar');
-        sidebarToggleBtn = document.getElementById('navToggleBtn');
-        sidebarCloseBtn = document.getElementById('closeSidebarBtn');
+      // Locate required elements
+      sidebarEl = document.getElementById('mainSidebar');
+      sidebarToggleBtn = document.getElementById('navToggleBtn');
+      sidebarCloseBtn = document.getElementById('closeSidebarBtn');
 
-        // Check for required elements
-        if (!sidebarEl || !sidebarToggleBtn) {
-          if (attempts < maxAttempts) {
-            console.warn(
-              `[sidebar.js] Required elements not found (attempt ${attempts}/${maxAttempts}), retrying in 300ms...`
-            );
-            await new Promise(r => setTimeout(r, 300));
-            return attemptInitialization();
-          } else {
-            console.error(
-              '[sidebar.js] Failed to find critical sidebar elements after multiple retries.'
-            );
-            return resolve(false);
-          }
+      // Check for required elements
+      if (!sidebarEl || !sidebarToggleBtn) {
+        if (attempts < maxAttempts) {
+          console.warn(
+            `[sidebar.js] Required elements not found (attempt ${attempts}/${maxAttempts}), retrying in 300ms...`
+          );
+          await new Promise(r => setTimeout(r, 300));
+          return attemptInitialization();
+        } else {
+          console.error(
+            '[sidebar.js] Failed to find critical sidebar elements after multiple retries.'
+          );
+          return false;
         }
+      }
 
-        // Optional close button
-        if (!sidebarCloseBtn) {
-          console.warn('[sidebar.js] closeSidebarBtn not found; ignoring close event binding.');
-        }
+      // Optional close button
+      if (!sidebarCloseBtn) {
+        console.warn('[sidebar.js] closeSidebarBtn not found; ignoring close event binding.');
+      }
 
-        // Activate default tab from localStorage or fallback to 'recent'
-        const defaultTab = localStorage.getItem('sidebarActiveTab') || 'recent';
-        activateTab(defaultTab);
+      // Activate default tab from localStorage or fallback to 'recent'
+      const defaultTab = localStorage.getItem('sidebarActiveTab') || 'recent';
+      await activateTab(defaultTab);
 
-        // Event listener for toggle button
-        sidebarToggleBtn.addEventListener('click', (e) => {
+      // Event listener for toggle button
+      sidebarToggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleSidebar();
+      });
+
+      // Event listener for close button (if present)
+      if (sidebarCloseBtn) {
+        sidebarCloseBtn.addEventListener('click', (e) => {
           e.preventDefault();
-          toggleSidebar();
+          closeSidebar();
         });
+      }
 
-        // Event listener for close button (if present)
-        if (sidebarCloseBtn) {
-          sidebarCloseBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            closeSidebar();
-          });
-        }
+      // Initialize tab buttons
+      setupTabListeners();
 
-        // Initialize tab buttons
-        setupTabListeners();
+      // Optional: handle a pinned sidebar from localStorage
+      const pinned = localStorage.getItem('sidebarPinned');
+      if (pinned === 'true') {
+        sidebarPinned = true;
+        sidebarEl.classList.add('sidebar-pinned');
+        // If pinned means it’s permanently visible, remove hidden class
+        sidebarEl.classList.remove('-translate-x-full');
+        removeBackdrop();
+      }
 
-        // Optional: handle a pinned sidebar from localStorage
-        const pinned = localStorage.getItem('sidebarPinned');
-        if (pinned === 'true') {
-          sidebarPinned = true;
-          sidebarEl.classList.add('sidebar-pinned');
-          // If pinned means it’s permanently visible, remove hidden class
-          sidebarEl.classList.remove('-translate-x-full');
-          removeBackdrop();
-        }
+      // On window resize, remove any leftover mobile overlay if the screen gets bigger
+      window.addEventListener('resize', handleResize);
 
-        // On window resize, remove any leftover mobile overlay if the screen gets bigger
-        window.addEventListener('resize', handleResize);
+      console.log('[sidebar.js] Sidebar initialized successfully.');
+      return true;
+    };
 
-        console.log('[sidebar.js] Sidebar initialized successfully.');
-        return resolve(true);
-      };
-
-      await attemptInitialization();
-    });
+    return attemptInitialization();
   }
 
-  /**
-   * Sets up click listeners for tab buttons in the sidebar:
-   * - Recent
-   * - Starred
-   * - Projects
-   */
   function setupTabListeners() {
     const tabButtons = [
       { id: 'recentChatsTab', name: 'recent' },
@@ -132,9 +125,6 @@
     });
   }
 
-  /**
-   * Toggles the sidebar open/close, applying Tailwind classes and managing backdrop
-   */
   function toggleSidebar() {
     // If pinned, we unpin; if unpinned, we open
     const isHidden = sidebarEl.classList.contains('-translate-x-full');
@@ -159,9 +149,6 @@
     }
   }
 
-  /**
-   * Closes the sidebar. Typically called by close button or backdrop click
-   */
   function closeSidebar() {
     if (!sidebarPinned) {
       sidebarEl.classList.remove('translate-x-0');
@@ -170,9 +157,6 @@
     }
   }
 
-  /**
-   * Check window size and remove leftover mobile overlay if resized to desktop
-   */
   function handleResize() {
     if (window.innerWidth >= 1024) {
       // For large screens
@@ -185,9 +169,6 @@
     }
   }
 
-  /**
-   * Create a backdrop element for mobile overlay
-   */
   function createBackdrop() {
     if (backdropEl) return;
 
@@ -199,9 +180,6 @@
     backdropEl.addEventListener('click', closeSidebar);
   }
 
-  /**
-   * Remove the backdrop element if it exists
-   */
   function removeBackdrop() {
     if (backdropEl) {
       backdropEl.removeEventListener('click', closeSidebar);
@@ -210,10 +188,6 @@
     }
   }
 
-  /**
-   * activateTab - handles tab switching in the sidebar.
-   * Checks for projectDashboard dependency if the 'projects' tab is activated.
-   */
   async function activateTab(tabName) {
     try {
       const tabs = {
@@ -252,6 +226,15 @@
         return;
       }
 
+      // Use centralized auth state from DependencySystem (window.app is also fine here)
+      const isAuthenticated = (() => {
+        if (window.DependencySystem?.modules?.has('app')) {
+          return !!window.DependencySystem.modules.get('app').state.isAuthenticated;
+        }
+        // fallback if not available yet
+        return window.app?.state?.isAuthenticated || false;
+      })();
+
       // If user clicks "projects" tab, ensure projectDashboard is initialized
       if (tabName === 'projects') {
         try {
@@ -273,7 +256,7 @@
               projectSection.dataset.initialized = 'true';
               console.log('[sidebar] Project dashboard initialized via tab activation.');
               // Optionally reload projects
-              if (window.auth?.isAuthenticated() && window.projectManager?.loadProjects) {
+              if (isAuthenticated && window.projectManager?.loadProjects) {
                 await window.projectManager.loadProjects('all');
               }
             }
@@ -305,5 +288,11 @@
       console.error('[sidebar.js] Error in activateTab:', err);
     }
   }
-})();
-DependencySystem.register('sidebar', window.sidebar);
+
+  return {
+    init,
+    toggleSidebar,
+    closeSidebar,
+    activateTab
+  };
+}

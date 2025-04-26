@@ -1,39 +1,21 @@
 /**
  * projectDetailsComponent.js
  * Component for displaying project details, files, conversations and other content.
+ *
  * Dependencies:
- * - window.eventHandlers (external utility, for event management)
- * - window.projectManager (external dependency, for project operations)
- * - window.chatManager (external dependency, for chat functionality)
- * - window.modalManager (external dependency, for confirmation dialogs)
- * - window.showNotification (external dependency, for user feedback)
- * - window.formatBytes (optional external utility, for file size formatting)
- * - window.formatDate (optional external utility, for date formatting)
- * - window.FileUploadComponent (external component, for file uploads)
- * - document (browser built-in, for DOM manipulation)
- * - localStorage (browser built-in, for persistent state)
+ * - window.app: Application core with state management and notifications.
+ * - window.eventHandlers: Event management utilities.
+ * - window.projectManager: Project operations.
+ * - window.chatManager: Chat functionality.
+ * - window.modalManager: Confirmation dialogs.
+ * - window.FileUploadComponent: File uploads.
  */
 
-// Browser APIs:
-// - document (DOM access)
-// - localStorage (state persistence)
-
-// External Dependencies (Global Scope):
-// - window.eventHandlers (event management)
-// - window.projectManager (project operations)
-// - window.chatManager (chat functionality)
-// - window.modalManager (modal dialogs)
-// - window.showNotification (user notifications)
-// - window.formatBytes (file size formatting)
-// - window.formatDate (date formatting)
-// - window.FileUploadComponent (file upload component)
-
-// Optional Dependencies:
-// - Gracefully falls back if formatBytes/formatDate not available
-// - Handles missing modalManager with native confirm
-// - Provides basic error handling if showNotification not available
-
 class ProjectDetailsComponent {
+  /**
+   * @param {Object} options - Component options
+   * @param {Function} options.onBack - Callback for back navigation
+   */
   constructor(options = {}) {
     // Required options
     this.onBack = options.onBack || (() => {
@@ -44,10 +26,11 @@ class ProjectDetailsComponent {
     this.state = {
       currentProject: null,
       activeTab: 'files',
-      isLoading: {}
+      isLoading: {},
+      initialized: false
     };
 
-    // Provide default file constants if none were passed in.
+    // File constants
     this.fileConstants = options.fileConstants || {
       allowedExtensions: ['.pdf', '.doc', '.docx', '.txt', '.csv', '.json', '.jpg', '.jpeg', '.png', '.gif', '.zip'],
       maxSizeMB: 10
@@ -70,18 +53,37 @@ class ProjectDetailsComponent {
     // Initialize file upload component
     this.fileUploadComponent = null;
 
-    // Optionally connect KnowledgeBaseComponent if available globally
-    this.knowledgeBaseComponent = typeof window.KnowledgeBaseComponent === "function"
-      ? new window.KnowledgeBaseComponent()
-      : null;
+    // Knowledge base component reference
+    this.knowledgeBaseComponent = null;
+  }
 
-    // Find elements
+  /**
+   * Initialize the component
+   * @returns {Promise<void>}
+   */
+  async initialize() {
+    if (this.state.initialized) {
+      console.log('[ProjectDetailsComponent] Already initialized');
+      return;
+    }
+
+    // Find DOM elements
     this._findElements();
 
     // Bind events
     this._bindEvents();
 
+    this.state.initialized = true;
     console.log('[ProjectDetailsComponent] Initialized');
+  }
+
+  /**
+   * Connect to the KnowledgeBaseComponent
+   * @param {Object} knowledgeBaseComponent - Instance of KnowledgeBaseComponent
+   */
+  connectKnowledgeBase(knowledgeBaseComponent) {
+    this.knowledgeBaseComponent = knowledgeBaseComponent;
+    console.log('[ProjectDetailsComponent] Connected to KnowledgeBaseComponent');
   }
 
   /**
@@ -198,11 +200,14 @@ class ProjectDetailsComponent {
 
   /**
    * Show the component
+   * Simply unhides the container and re-binds events.
+   * The HTML template must already be present in the DOM.
    */
   show() {
-    if (this.elements.container) {
-      this.elements.container.classList.remove('hidden');
-    }
+    if (!this.elements.container) return;
+    this._findElements();
+    this._bindEvents();
+    this.elements.container.classList.remove('hidden');
   }
 
   /**
@@ -314,6 +319,24 @@ class ProjectDetailsComponent {
     const container = this.elements.conversationsList;
     if (!container) return;
 
+    // Auto-create a chat if none exists and this is the first time for this project
+    if (!conversations.length && this.state.currentProject && !this._autoCreatedConversation) {
+      this._autoCreatedConversation = true;
+      this.createNewChat();
+      // Optionally show a "Creating your first chat..." placeholder
+      container.innerHTML = `
+        <div class="text-center py-8 text-base-content/70">
+          <p>Creating your first chat...</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Reset the autocrate flag if project changes or chats are loaded
+    if (conversations.length) {
+      this._autoCreatedConversation = false;
+    }
+
     if (!conversations.length) {
       container.innerHTML = `
         <div class="text-center py-8 text-base-content/70">
@@ -389,7 +412,7 @@ class ProjectDetailsComponent {
       window.history.pushState({}, '', url.toString());
     } catch (error) {
       console.error('Error creating new chat:', error);
-      window.showNotification('Failed to create new conversation', 'error');
+      window.app.showNotification('Failed to create new conversation', 'error');
     }
   }
 
@@ -428,9 +451,7 @@ class ProjectDetailsComponent {
         // It expects kbData and projectId
         let kbData = null;
         // Try: use up-to-date currentProject data
-        if (
-          this.state.currentProject.knowledge_base
-        ) {
+        if (this.state.currentProject.knowledge_base) {
           kbData = this.state.currentProject.knowledge_base;
         }
         await this.knowledgeBaseComponent.initialize(true, kbData, projectId);
@@ -489,7 +510,7 @@ class ProjectDetailsComponent {
       }
     } catch (error) {
       console.error('[ProjectDetailsComponent] Failed to initialize chat:', error);
-      window.showNotification('Failed to initialize chat', 'error');
+      window.app.showNotification('Failed to initialize chat', 'error');
     }
   }
 
@@ -510,7 +531,7 @@ class ProjectDetailsComponent {
       return await fn();
     } catch (error) {
       console.error(`[ProjectDetailsComponent] Error in ${section}:`, error);
-      window.showNotification(`Failed to load ${section}`, 'error');
+      window.app.showNotification(`Failed to load ${section}`, 'error');
     } finally {
       this.state.isLoading[section] = false;
       this._hideLoading(section);
@@ -565,11 +586,11 @@ class ProjectDetailsComponent {
         onConfirm: async () => {
           try {
             await window.projectManager.deleteFile(projectId, fileId);
-            window.showNotification('File deleted successfully', 'success');
+            window.app.showNotification('File deleted successfully', 'success');
             await window.projectManager.loadProjectFiles(projectId);
           } catch (error) {
             console.error('Failed to delete file:', error);
-            window.showNotification('Failed to delete file', 'error');
+            window.app.showNotification('Failed to delete file', 'error');
           }
         }
       });
@@ -578,12 +599,12 @@ class ProjectDetailsComponent {
       if (confirm(`Delete "${fileName}"? This cannot be undone.`)) {
         window.projectManager.deleteFile(projectId, fileId)
           .then(() => {
-            window.showNotification('File deleted successfully', 'success');
+            window.app.showNotification('File deleted successfully', 'success');
             return window.projectManager.loadProjectFiles(projectId);
           })
           .catch(error => {
             console.error('Failed to delete file:', error);
-            window.showNotification('Failed to delete file', 'error');
+            window.app.showNotification('Failed to delete file', 'error');
           });
       }
     }
@@ -623,7 +644,7 @@ class ProjectDetailsComponent {
 
     const fileInfo = document.createElement('div');
     fileInfo.className = 'text-xs text-base-content/70';
-    fileInfo.textContent = `${window.formatBytes(file.file_size)} · ${window.formatDate(file.created_at)}`;
+    fileInfo.textContent = `${this._formatBytes(file.file_size)} · ${this._formatDate(file.created_at)}`;
 
     detailDiv.appendChild(fileName);
     detailDiv.appendChild(fileInfo);
@@ -722,7 +743,7 @@ class ProjectDetailsComponent {
     footer.className = 'flex justify-between mt-1 text-xs text-base-content/60';
 
     const date = document.createElement('span');
-    date.textContent = window.formatDate(conversation.updated_at);
+    date.textContent = this._formatDate(conversation.updated_at);
 
     const messageCount = document.createElement('span');
     messageCount.className = 'badge badge-ghost badge-sm';
@@ -761,7 +782,7 @@ class ProjectDetailsComponent {
 
     const date = document.createElement('span');
     date.className = 'text-xs text-base-content/60';
-    date.textContent = window.formatDate(artifact.created_at);
+    date.textContent = this._formatDate(artifact.created_at);
 
     header.appendChild(title);
     header.appendChild(date);
@@ -800,7 +821,7 @@ class ProjectDetailsComponent {
    */
   async _handleConversationClick(conversation) {
     if (!conversation?.id || !this.state.currentProject?.id) {
-      window.showNotification('Invalid conversation data', 'error');
+      window.app.showNotification('Invalid conversation data', 'error');
       return;
     }
 
@@ -816,7 +837,7 @@ class ProjectDetailsComponent {
       window.history.pushState({}, '', url.toString());
     } catch (error) {
       console.error('Error loading conversation:', error);
-      window.showNotification('Failed to load conversation', 'error');
+      window.app.showNotification('Failed to load conversation', 'error');
     }
   }
 
@@ -882,5 +903,27 @@ class ProjectDetailsComponent {
   }
 }
 
-// Export to window
-window.ProjectDetailsComponent = ProjectDetailsComponent;
+/**
+ * Factory function to create a new ProjectDetailsComponent instance.
+ * @param {Object} options - Component options
+ * @returns {ProjectDetailsComponent} A new ProjectDetailsComponent instance.
+ */
+export function createProjectDetailsComponent(options = {}) {
+  return new ProjectDetailsComponent(options);
+}
+
+// The app.js will handle initialization and registration like:
+/*
+const projectDetailsComponent = createProjectDetailsComponent({
+  onBack: () => {
+    if (window.projectDashboard) {
+      window.projectDashboard.showProjectList();
+    } else {
+      window.location.href = '/';
+    }
+  }
+});
+await projectDetailsComponent.initialize();
+window.projectDetailsComponent = projectDetailsComponent;
+DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
+*/
