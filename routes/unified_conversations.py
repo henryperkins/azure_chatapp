@@ -30,7 +30,7 @@ from db import get_async_session
 from models.user import User
 from services.conversation_service import ConversationService, get_conversation_service
 from utils.auth_utils import get_current_user_and_token
-from utils.sentry_utils import sentry_span
+from utils.sentry_utils import sentry_span, make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
 
@@ -122,12 +122,12 @@ async def list_project_conversations(
                 unit="millisecond"
             )
 
-            return {
+            payload = {
                 "status": "success",
                 "conversations": [serialize_conversation(conv) for conv in conversations],
-                "count": len(conversations),
-                "sentry_trace_id": sentry_sdk.get_traceparent() if hasattr(sentry_sdk, "get_traceparent") else None
+                "count": len(conversations)
             }
+            return make_sentry_trace_response(payload, span)
         except HTTPException:
             raise
         except Exception as e:
@@ -198,11 +198,11 @@ async def create_conversation(
             })
 
             logger.info(f"Created conversation {conv.id} in project {project_id}")
-            return {
+            payload = {
                 "status": "success",
-                "conversation": serialize_conversation(conv),
-                "sentry_trace_id": transaction.to_traceparent()
+                "conversation": serialize_conversation(conv)
             }
+            return make_sentry_trace_response(payload, transaction)
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
@@ -251,11 +251,11 @@ async def get_project_conversation(
             )
 
             metrics.incr("conversation.viewed")
-            return {
+            payload = {
                 "status": "success",
-                "conversation": conv_data,
-                "sentry_trace_id": sentry_sdk.get_traceparent() if hasattr(sentry_sdk, "get_traceparent") else None
+                "conversation": conv_data
             }
+            return make_sentry_trace_response(payload, span)
 
         except HTTPException:
             raise
@@ -328,11 +328,11 @@ async def update_project_conversation(
                 )
 
             logger.info(f"Updated conversation {conversation_id}")
-            return {
+            payload = {
                 "status": "success",
-                "conversation": conv_dict,
-                "sentry_trace_id": transaction.to_traceparent()
+                "conversation": conv_dict
             }
+            return make_sentry_trace_response(payload, transaction)
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
@@ -387,11 +387,11 @@ async def delete_project_conversation(
             )
 
             logger.info(f"Deleted conversation {conversation_id}")
-            return {
+            payload = {
                 "status": "success",
-                "conversation_id": str(deleted_id),
-                "sentry_trace_id": transaction.to_traceparent()
+                "conversation_id": str(deleted_id)
             }
+            return make_sentry_trace_response(payload, transaction)
 
     except HTTPException:
         raise
@@ -521,11 +521,11 @@ async def create_project_conversation_message(
                 )
 
             logger.info(f"Processed message in conversation {conversation_id}")
-            return {
+            payload = {
                 "status": "success",
-                "message": response,
-                "sentry_trace_id": transaction.to_traceparent()
+                "message": response
             }
+            return make_sentry_trace_response(payload, transaction)
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
@@ -627,15 +627,15 @@ async def summarize_conversation(
                 )
 
             logger.info(f"Generated summary for conversation {conversation_id}")
-            return {
+            payload = {
                 "summary": "success",
                 "content": {
                     "summary": summary,
                     "title": conv_data["title"],
                     "message_count": len(messages),
-                },
-                "sentry_trace_id": transaction.to_traceparent()
+                }
             }
+            return make_sentry_trace_response(payload, transaction)
 
     except HTTPException:
         raise
@@ -711,12 +711,12 @@ async def batch_delete_conversations(
                 }
             )
 
-            return {
+            payload = {
                 "status": "success",
                 "deleted": deleted_ids,
-                "failed": failed_ids,
-                "sentry_trace_id": transaction.to_traceparent()
+                "failed": failed_ids
             }
+            return make_sentry_trace_response(payload, transaction)
 
     except Exception as e:
         transaction.set_tag("error", True)
@@ -782,16 +782,16 @@ async def list_project_conversation_messages(
                 project_id=project_id
             )
 
-            return {
+            payload = {
                 "status": "success",
                 "messages": messages,
                 "metadata": {
                     "title": conv_data["title"],
                     "model_id": conv_data["model_id"],
                     "count": len(messages),
-                },
-                "sentry_trace_id": sentry_sdk.get_traceparent() if hasattr(sentry_sdk, "get_traceparent") else None
+                }
             }
+            return make_sentry_trace_response(payload, span)
 
         except HTTPException:
             raise

@@ -50,6 +50,83 @@ class ProjectManager {
     this.projectLoadingInProgress = false;
   }
 
+  // --- Always-create full workflow, user-supplied ---
+
+  async createProject(projectData) {
+    try {
+      const response = await window.app.apiRequest('/api/projects', {
+        method: 'POST',
+        body: projectData
+      });
+
+      const project = response.data || response;
+
+      if (!project || !project.id) {
+        throw new Error('Invalid project response');
+      }
+
+      console.log('[ProjectManager] Project created:', project.id);
+      this._emitEvent('projectCreated', project);
+
+      // Always create default conversation
+      await this.createDefaultConversation(project.id);
+
+      // Always initialize knowledge base
+      await this.initializeKnowledgeBase(project.id);
+
+      return project;
+    } catch (error) {
+      console.error('[ProjectManager] Error creating project:', error);
+      window.app?.showNotification('Failed to create project', 'error');
+      throw error;
+    }
+  }
+
+  async createDefaultConversation(projectId) {
+    try {
+      const response = await window.app.apiRequest(`/api/projects/${projectId}/conversations`, {
+        method: 'POST',
+        body: {
+          title: 'Default Conversation',
+          model_id: window.modelConfig?.getConfig()?.modelName || 'claude-3-sonnet-20240229'
+        }
+      });
+
+      const conversation = response.data || response;
+
+      if (!conversation.id) throw new Error('Failed to create default conversation');
+
+      console.log('[ProjectManager] Default conversation created:', conversation.id);
+      return conversation;
+    } catch (error) {
+      console.error('[ProjectManager] Failed to create default conversation:', error);
+      window.app?.showNotification('Default conversation creation failed', 'error');
+    }
+  }
+
+  async initializeKnowledgeBase(projectId) {
+    try {
+      const response = await window.app.apiRequest(`/api/projects/${projectId}/knowledge-bases`, {
+        method: 'POST',
+        body: {
+          name: 'Default Knowledge Base',
+          description: 'Auto-created knowledge base.',
+          embedding_model: 'text-embedding-3-small'  // Adjust model as needed
+        }
+      });
+
+      const kb = response.data || response;
+
+      if (!kb.id) throw new Error('Failed to initialize knowledge base');
+
+      console.log('[ProjectManager] Knowledge base initialized:', kb.id);
+      return kb;
+    } catch (error) {
+      console.error('[ProjectManager] Failed to initialize knowledge base:', error);
+      window.app?.showNotification('Knowledge base initialization failed', 'error');
+    }
+  }
+
   /**
    * Initialize the project manager
    * @returns {Promise<void>}
@@ -171,7 +248,7 @@ class ProjectManager {
       let projectData = null;
       if (response?.data?.id) projectData = response.data;
       else if (response?.id) projectData = response;
-      else if (response?.success === true && response?.data?.id) projectData = response.data;
+      else if ((response?.status === 'success' || response?.success === true) && response?.data?.id) projectData = response.data;
 
       if (!projectData || projectData.id !== projectId) {
         throw new Error("Invalid project response format or ID mismatch");

@@ -295,27 +295,46 @@ class ProjectListComponent {
      * @private
      */
     async _bindCreateProjectButtons() {
-        // Wait for the modalsLoaded event to ensure projectModal.init() has run
+        // Wait for modalsLoaded and for both DOM and projectModal instance to exist
         await new Promise(resolve => {
-            if (document.getElementById('projectModal')) { // Check if modals might already be loaded
-                resolve();
-            } else {
-                document.addEventListener('modalsLoaded', resolve, { once: true });
-                // Safety timeout in case the event never fires
-                setTimeout(resolve, 5000);
-            }
+            const checkReady = () => {
+                if (document.getElementById('projectModal') && window.projectModal) {
+                    resolve();
+                    return true;
+                }
+                return false;
+            };
+            if (checkReady()) return;
+            const listener = () => {
+                if (checkReady()) {
+                    document.removeEventListener('modalsLoaded', listener);
+                }
+            };
+            document.addEventListener('modalsLoaded', listener);
+            // As a fallback, poll for up to 5s in case of missed events
+            const t0 = Date.now();
+            const poll = () => {
+                if (!checkReady() && Date.now() - t0 < 5000)
+                    setTimeout(poll, 100);
+            };
+            poll();
         });
 
-        console.log('[ProjectListComponent] Modals loaded, binding create project buttons...');
+        console.log('[ProjectListComponent] Modals and projectModal instance ready, binding create project buttons...');
 
-        const buttonIds = ['projectListCreateBtn', 'sidebarNewProjectBtn', 'emptyStateCreateBtn']; // Added empty state button
+        const buttonIds = ['projectListCreateBtn', 'sidebarNewProjectBtn', 'emptyStateCreateBtn'];
         const maxAttempts = 5;
 
         const attach = (btn) => {
             if (!btn) return;
             const handler = (e) => {
-                e.preventDefault(); // Prevent default if it's a link/button
-                this._openNewProjectModal();
+                e.preventDefault();
+                // Now guaranteed existence
+                if (window.projectModal && typeof window.projectModal.openModal === 'function') {
+                    window.projectModal.openModal();
+                } else {
+                    console.error('[ProjectListComponent] window.projectModal.openModal not available at click time.');
+                }
             };
             if (window.eventHandlers?.trackListener) {
                 window.eventHandlers.trackListener(btn, 'click', handler, {
@@ -334,11 +353,11 @@ class ProjectListComponent {
                 attempts++;
                 // Don't wait excessively if the button simply doesn't exist (e.g., empty state not shown)
                 if (id === 'emptyStateCreateBtn' && attempts > 1) break;
-                await new Promise(r => setTimeout(r, 100 * attempts)); // Wait briefly if not found
+                await new Promise(r => setTimeout(r, 100 * attempts));
             }
             if (btn) {
                 attach(btn);
-            } else if (id !== 'emptyStateCreateBtn') { // Don't warn for the optional empty state button
+            } else if (id !== 'emptyStateCreateBtn') {
                 console.warn(`[ProjectListComponent] Could not find button #${id} after ${attempts} attempts.`);
             }
         }
@@ -854,3 +873,8 @@ export function createProjectListComponent(options = {}) {
 }
 
 export { ProjectListComponent };
+
+// Attach ProjectListComponent to window for global access (required by dashboard/legacy code)
+if (typeof window !== "undefined") {
+    window.ProjectListComponent = ProjectListComponent;
+}

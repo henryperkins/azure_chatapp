@@ -14,6 +14,21 @@
 
 class ProjectDashboard {
   constructor() {
+    // Patch: ensure we always (re)initialize after auth flips to true
+    document.addEventListener('authStateChanged', (e) => {
+      const { authenticated } = e.detail || {};
+      // If the dashboard bailed out earlier, try again the moment we have auth
+      if (authenticated && !this.state?.initialized) {
+        console.log('[ProjectDashboard] Logged in – resuming initialization');
+        this.initialize();          // Will load project_list.html etc.
+      }
+      // If we *are* initialized already just refresh the list
+      else if (authenticated && this.state?.initialized) {
+        this.showProjectList();     // makes sure list view is visible
+        this._loadProjects?.();     // pulls projects from the API
+      }
+    });
+
     // Component references
     this.components = {
       projectList: null,
@@ -26,6 +41,14 @@ class ProjectDashboard {
       currentProject: null,   // Project ID or null
       initialized: false      // Initialization flag
     };
+
+    // Listen once: when auth flips to true and not initialized, re-run initialize and fetch projects
+    document.addEventListener('authStateChanged', (e) => {
+      if (e.detail?.authenticated && !this.state.initialized) {
+        this.initialize();   // initializes the dashboard and reloads the project list UI
+        window.projectManager?.loadProjects('all');
+      }
+    });
   }
 
   /**
@@ -57,6 +80,15 @@ class ProjectDashboard {
           document.addEventListener('DOMContentLoaded', resolve, { once: true })
         );
       }
+
+      // NEW: Wait for main container (#projectListView) to exist before proceeding, retries up to 30x/3s
+      await (async () => {
+        for (let i = 0; i < 30; i++) {
+          if (document.getElementById('projectListView')) return;
+          await new Promise(r => setTimeout(r, 100));
+        }
+        throw new Error('Timeout waiting for #projectListView container in DOM during dashboard init');
+      })();
 
       // Load required HTML content
       await this._loadProjectListHtml();
@@ -101,18 +133,18 @@ class ProjectDashboard {
     // Aggressively clear localStorage for robustness
     localStorage.removeItem('selectedProjectId');
 
-    // DOM visibility toggle - ENFORCE correct state
+    // Dom-level, ARIA, and CSS toggles: ONLY #projectListView visible, details truly hidden
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
-
-    // Make absolutely sure only one view is visible
     if (listView) {
-      listView.classList.remove('hidden');
-      listView.style.display = ''; // Reset any inline display style
+      listView.classList.remove('hidden', 'opacity-0');
+      listView.setAttribute('aria-hidden', 'false');
+      listView.style.display = '';
     }
     if (detailsView) {
       detailsView.classList.add('hidden');
-      detailsView.style.display = 'none'; // Force hide with inline style
+      detailsView.setAttribute('aria-hidden', 'true');
+      detailsView.style.display = 'none';
     }
 
     // Components visibility control
@@ -159,6 +191,20 @@ class ProjectDashboard {
       localStorage.removeItem('selectedProjectId');
       this.showProjectList();
       return false;
+    }
+
+    // Dom-level, ARIA, and CSS toggles: ONLY #projectDetailsView visible, list truly hidden
+    const listView = document.getElementById('projectListView');
+    const detailsView = document.getElementById('projectDetailsView');
+    if (listView) {
+      listView.classList.add('hidden');
+      listView.setAttribute('aria-hidden', 'true');
+      listView.style.display = 'none';
+    }
+    if (detailsView) {
+      detailsView.classList.remove('hidden', 'opacity-0');
+      detailsView.setAttribute('aria-hidden', 'false');
+      detailsView.style.display = '';
     }
 
     if (this.components.projectList) {
@@ -231,12 +277,7 @@ class ProjectDashboard {
       throw new Error('Missing projectListView container');
     }
 
-    // Avoid reloading if already present
-    if (container.querySelector('#projectList')) {
-      console.log('[ProjectDashboard] project_list.html seems already loaded.');
-      return;
-    }
-
+    // Always load and set value—never shortcut if #projectList is present, to ensure proper markup and listeners
     console.log('[ProjectDashboard] Loading project_list.html...');
     try {
       const response = await fetch('/static/html/project_list.html');
@@ -304,13 +345,23 @@ class ProjectDashboard {
     // Ensure DOM updates complete if markup was dynamically injected
     await new Promise(requestAnimationFrame);
 
+    // Ensure #projectList exists before building component (addresses async DOM issue)
+    await (async () => {
+      for (let i = 0; i < 30; i++) {
+        if (document.getElementById('projectList')) return;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      throw new Error('Timeout waiting for #projectList in DOM during dashboard component init');
+    })();
+
     // Project list component
     if (window.ProjectListComponent) {
       this.components.projectList = new window.ProjectListComponent({
         elementId: 'projectList',
         onViewProject: this._handleViewProject.bind(this)
       });
-      console.log('[ProjectDashboard] ProjectListComponent created.');
+      await this.components.projectList.initialize();
+      console.log('[ProjectDashboard] ProjectListComponent created and initialized.');
     } else {
       console.error('[ProjectDashboard] ProjectListComponent not found on window.');
     }
@@ -361,11 +412,31 @@ class ProjectDashboard {
     document.addEventListener('projectArtifactsLoaded', this._handleArtifactsLoaded.bind(this));
     document.addEventListener('projectNotFound', this._handleProjectNotFound.bind(this));
 
+    // Always navigate to new project after creation
+    document.addEventListener('projectCreated', this._handleProjectCreated.bind(this));
+
     // URL navigation
     window.addEventListener('popstate', this._handlePopState.bind(this));
 
     // Auth state changes
     document.addEventListener('authStateChanged', this._handleAuthStateChange.bind(this));
+  }
+
+  /**
+   * Handles the 'projectCreated' event.
+   * Navigates to project details and stores selection in localStorage.
+   * @param {CustomEvent} e
+   * @private
+   */
+  _handleProjectCreated(e) {
+    const project = e.detail;
+    console.log('[ProjectDashboard] Project created:', project);
+
+    // Load project details immediately
+    this.showProjectDetails(project.id);
+
+    // Store in local storage
+    localStorage.setItem('selectedProjectId', project.id);
   }
 
   /**
