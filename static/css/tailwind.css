@@ -3,22 +3,38 @@
 /* ================ */
 
 @import "tailwindcss";
-@plugin "daisyui" {
-  themes: dracula --default, light, dark, cupcake;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Add any base styles here */
+}
+
+@layer components {
+  /* Add any component styles here */
+}
+
+@layer utilities {
+  /* Add any utility styles here */
+}
+
+/* DaisyUI plugin configuration */
+@import "daisyui";
+
+@daisyui {
+  themes: ["dracula", "light", "dark", "cupcake"];
   logs: true;
 }
 
 /* If you want to keep your dracula theme custom colors, add: */
-@plugin "daisyui/theme" {
-  name: "dracula";
-  default: true;
-  prefersdark: false;
-
-  --color-primary: #ff55a8;
-  --color-primary-content: #fff;
-  --color-secondary: #8be9fd;
-  --color-secondary-content: #191926;
-  --color-accent: #f1fa8c;
+@layer theme {
+  :root {
+    --color-primary: #ff55a8;
+    --color-primary-content: #fff;
+    --color-secondary: #8be9fd;
+    --color-secondary-content: #191926;
+    --color-accent: #f1fa8c;
   --color-neutral: #44475a;
   --color-neutral-content: #fff;
   --color-base-100: #1e1f28;
