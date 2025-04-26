@@ -301,6 +301,9 @@ class ProjectDashboard {
   async _initializeComponents() {
     console.log('[ProjectDashboard] Initializing components...');
 
+    // Ensure DOM updates complete if markup was dynamically injected
+    await new Promise(requestAnimationFrame);
+
     // Project list component
     if (window.ProjectListComponent) {
       this.components.projectList = new window.ProjectListComponent({

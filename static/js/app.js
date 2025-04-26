@@ -255,8 +255,11 @@ async function initializeCoreSystems() {
 
     // ------ ADD: CREATE AND REGISTER THE PROJECT MODAL ------
     const projectModal = createProjectModal();
-    projectModal.init();
     window.projectModal = projectModal;
+    // Delay initialization until modals are loaded in the DOM
+    document.addEventListener('modalsLoaded', () => {
+        projectModal.init();
+    });
     // --------------------------------------------------------
 
     // Wait for eventHandlers first to ensure app-level events are available.
@@ -320,9 +323,9 @@ async function initializeAuthSystem() {
 async function initializeUIComponents() {
     console.log('[App] Initializing UI components...');
 
-    // ProjectListComponent class constructor provided for legacy DI.
-    window.ProjectListComponent = ProjectListComponent; // Register the class constructor
-    // DO NOT create or initialize global projectListComponent instance in app.js; let ProjectDashboard handle SPA lifecycle.
+    // Register legacy/global SPA component classes for ProjectDashboard to access
+    window.ProjectListComponent = ProjectListComponent;
+    window.ProjectDetailsComponent = (await import('./projectDetailsComponent.js')).ProjectDetailsComponent || createProjectDetailsComponent;
 
     // Create and initialize the project dashboard
     const projectDashboard = createProjectDashboard();

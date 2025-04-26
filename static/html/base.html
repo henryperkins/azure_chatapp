@@ -272,20 +272,20 @@
   <!-- Main Container -->
   <div class="flex flex-1 overflow-hidden container-md">
     <!-- Enhanced Sidebar -->
-    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-56 md:w-64 bg-base-100 shadow-md md:shadow-none
-                transform transition-transform duration-300 ease-in-out
-                -translate-x-full md:translate-x-0 overflow-y-auto h-full sidebar">
+    <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true" class="fixed md:relative inset-y-0 left-0 z-50 w-60 md:w-72 bg-base-100 shadow-xl md:shadow-none
+                border-r border-base-300 transform transition-transform duration-300 ease-in-out
+                -translate-x-full md:translate-x-0 overflow-y-auto h-full sidebar focus-within:ring-2 focus-within:ring-primary focus-within:outline-none">
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
 
       <button id="closeSidebarBtn" type="button"
-        class="md:hidden absolute top-2 right-2 btn btn-ghost btn-sm btn-square" aria-label="Close sidebar">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+        class="md:hidden absolute top-3 right-3 btn btn-ghost btn-md btn-square focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close sidebar" tabindex="0">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24"
           stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
 
-      <div class="p-4 pb-6 flex flex-col h-full">
+      <div class="p-4 pb-6 flex flex-col h-full min-h-0">
         <!-- New Chat Button -->
         <a href="/" class="w-full btn btn-neutral mb-4 flex items-center justify-center" role="button">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
@@ -297,27 +297,45 @@
         </a>
 
         <!-- Tab navigation -->
-        <div class="tabs tabs-boxed mb-4" role="tablist">
-          <button id="recentChatsTab" type="button" class="tab focus:ring-2 focus:ring-primary" role="tab" aria-selected="false" aria-controls="recentChatsSection" tabindex="-1">
+        <div class="tabs tabs-boxed mb-4 overflow-x-auto no-scrollbar" role="tablist">
+          <button id="recentChatsTab"
+                  type="button"
+                  class="tab font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="recentChatsSection"
+                  tabindex="-1">
             Recent
           </button>
-          <button id="starredChatsTab" type="button" class="tab focus:ring-2 focus:ring-primary" role="tab" aria-selected="false" aria-controls="starredChatsSection" tabindex="-1">
+          <button id="starredChatsTab"
+                  type="button"
+                  class="tab font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="starredChatsSection"
+                  tabindex="-1">
             Starred
           </button>
-          <button id="projectsTab" type="button" class="tab tab-active focus:ring-2 focus:ring-primary" role="tab" aria-selected="true" aria-controls="projectsSection" tabindex="0">
+          <button id="projectsTab"
+                  type="button"
+                  class="tab tab-active !bg-primary !text-primary-content font-semibold shadow transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="projectsSection"
+                  tabindex="0">
             Projects
           </button>
         </div>
 
         <!-- Recent Chats Section -->
-        <div id="recentChatsSection" class="hidden flex-1 flex-col overflow-hidden bg-base-200 rounded-box p-2" role="tabpanel"
+        <div id="recentChatsSection" class="hidden flex-1 flex-col min-h-0 overflow-hidden bg-base-200 rounded-xl p-3" role="tabpanel"
           aria-labelledby="recentChatsTab" tabindex="0">
           <div class="mb-3 flex items-center">
             <div class="relative flex-grow">
               <label for="chatSearchInput" class="sr-only">Search conversations</label>
               <input type="search" aria-label="Search conversations" id="chatSearchInput"
                 placeholder="Search conversations..."
-                class="input input-bordered w-full pl-8 pr-2 py-1 text-sm" />
+                class="input input-bordered w-full pl-8 pr-2 py-1 text-sm rounded-lg" />
               <svg xmlns="http://www.w3.org/2000/svg"
                 class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -325,9 +343,10 @@
                          7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <button id="pinSidebarBtn" type="button" class="ml-2 p-1.5 btn btn-ghost btn-sm btn-circle"
-              title="Pin sidebar open" aria-label="Pin sidebar">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+            <button id="pinSidebarBtn" type="button"
+                    class="ml-2 p-2 btn btn-ghost btn-md btn-circle border border-base-300 focus-visible:ring-2 focus-visible:ring-primary"
+              title="Pin sidebar open" aria-label="Pin sidebar" tabindex="0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2
                          2 0 012 2v16l-7-3.5L5
@@ -336,16 +355,16 @@
             </button>
           </div>
 
-          <ul id="sidebarConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list"></ul>
+          <ul id="sidebarConversations" class="overflow-y-auto flex-1 gap-y-2 text-sm pr-1" role="list"></ul>
         </div>
 
         <!-- Starred Chats Section -->
-        <div id="starredChatsSection" class="flex-1 flex flex-col overflow-hidden bg-base-200 rounded-box p-2" role="tabpanel"
+        <div id="starredChatsSection" class="flex-1 flex flex-col min-h-0 overflow-hidden bg-base-200 rounded-xl p-3" role="tabpanel"
           aria-labelledby="starredChatsTab" tabindex="0">
-          <p class="text-xs text-base-content/60 mb-3">
+          <p class="text-xs text-base-content/60 mb-2">
             Starred chats are conversations you've marked as important for quick access.
           </p>
-          <ul id="starredConversations" class="overflow-y-auto flex-1 gap-y-1 text-sm" role="list">
+          <ul id="starredConversations" class="overflow-y-auto flex-1 gap-y-2 text-sm pr-1" role="list">
             <li class="text-center text-base-content/60 py-4">
               No starred conversations yet. Click the star icon on any conversation to add it here.
             </li>
@@ -353,11 +372,12 @@
         </div>
 
         <!-- Projects Section -->
-        <div id="projectsSection" class="flex-1 flex flex-col overflow-hidden bg-base-200 rounded-box p-2" role="tabpanel"
+        <div id="projectsSection" class="flex-1 flex flex-col min-h-0 overflow-hidden bg-base-200 rounded-xl p-3" role="tabpanel"
           aria-labelledby="projectsTab" tabindex="0">
-          <div class="mb-3 flex gap-2">
+          <div class="mb-3 flex flex-wrap gap-2">
             <button id="manageProjectsLink" type="button"
-              class="flex-1 btn btn-outline btn-primary btn-sm flex items-center justify-center font-medium">
+              class="flex-1 min-w-[120px] btn btn-outline btn-primary btn-md flex items-center justify-center font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              tabindex="0">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002
@@ -368,7 +388,8 @@
               Manage Projects
             </button>
             <button id="sidebarNewProjectBtn" type="button"
-              class="flex-1 btn btn-primary btn-sm flex items-center justify-center">
+              class="flex-1 min-w-[120px] btn btn-primary btn-md flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              tabindex="0">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6
@@ -381,7 +402,7 @@
           <div class="relative mb-2">
             <label for="sidebarProjectSearch" class="sr-only">Search projects</label>
             <input type="search" id="sidebarProjectSearch" aria-label="Search projects" placeholder="Search projects..."
-              class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-box focus:ring-primary focus:outline-none" />
+              class="w-full pl-8 pr-2 py-1 text-sm border border-base-300 rounded-lg focus:ring-primary focus:outline-none" />
             <svg xmlns="http://www.w3.org/2000/svg"
               class="h-4 w-4 absolute left-2 top-1.5 text-base-content/40 pointer-events-none" aria-hidden="true"
               fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -391,11 +412,11 @@
             </svg>
           </div>
 
-          <ul id="sidebarProjects" class="menu menu-vertical overflow-y-auto flex-1 gap-y-1 text-sm" role="list"></ul>
+          <ul id="sidebarProjects" class="menu menu-vertical overflow-y-auto flex-1 gap-y-2 text-sm pr-1" role="list"></ul>
         </div>
 
         <!-- Settings section -->
-        <div class="mt-auto pt-4 border-t border-base-200">
+        <div class="mt-auto pt-4 border-t-2 border-base-300/60 shadow-inner bg-base-100 sticky bottom-0 z-20">
           <button id="toggleModelConfig" type="button"
             class="w-full flex items-center justify-between py-2 px-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
             aria-expanded="false" aria-controls="modelConfigPanel">
@@ -518,50 +539,8 @@
         <section id="projectManagerPanel"
           class="bg-base-100 rounded-box shadow-xs p-4 mb-6 flex flex-col min-h-0 border border-base-200">
           <div id="projectListView" class="flex-1 flex flex-col min-h-0 opacity-0 transition-opacity duration-300">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold">Projects</h2>
-              <div class="flex gap-2">
-                <input id="projectSearchInput" type="search" placeholder="Search projects..."
-                  class="border px-2 py-1 rounded-box text-sm" />
-                <button id="projectListCreateBtn" type="button" class="btn btn-primary btn-sm">
-                  New Project
-                </button>
-              </div>
-            </div>
-
-            <div class="flex border-b border-base-200 mb-4" id="projectFilterTabs">
-              <button class="project-filter-btn px-4 py-2 text-sm font-medium transition-colors duration-200" data-filter="all"
-                type="button" aria-current="page">
-                <span class="relative py-1.5">
-                  <span class="block">All Projects</span>
-                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>
-                </span>
-              </button>
-              <button
-                class="project-filter-btn px-4 py-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors duration-200"
-                data-filter="pinned" type="button">
-                <span class="relative py-1.5">
-                  <span class="block">Pinned</span>
-                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
-                </span>
-              </button>
-              <button
-                class="project-filter-btn px-4 py-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors duration-200"
-                data-filter="archived" type="button">
-                <span class="relative py-1.5">
-                  <span class="block">Archived</span>
-                  <span class="absolute bottom-0 left-0 w-full h-0.5 bg-transparent"></span>
-                </span>
-              </button>
-            </div>
-
-            <div id="projectList" class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 h-full overflow-y-auto p-4">
-              <!-- Project cards will be dynamically inserted here using daisyUI card component -->
-            </div>
-
-            <div id="noProjectsMessage" class="hidden text-center py-8 text-base-content/60">
-              No projects found. Create your first project using the "New Project" button.
-            </div>
+            <!-- Inner contents and structure for the project list view (including project card grid)
+                 are injected dynamically by projectDashboard.js using /static/html/project_list.html -->
           </div>
           <div id="projectDetailsView" class="hidden"></div>
         </section>

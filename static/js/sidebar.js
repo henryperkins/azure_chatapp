@@ -21,6 +21,7 @@ export function createSidebar() {
   let sidebarToggleBtn;
   let sidebarCloseBtn;
   let sidebarPinned = false;
+  let pinSidebarBtn;
   let backdropEl;
 
   /**
@@ -57,6 +58,12 @@ export function createSidebar() {
       }
 
       // Optional close button
+      if (pinSidebarBtn && !pinSidebarBtn.classList.contains('sidebar-btn')) {
+        pinSidebarBtn.classList.add('sidebar-btn');
+      }
+      if (sidebarCloseBtn && !sidebarCloseBtn.classList.contains('sidebar-btn')) {
+        sidebarCloseBtn.classList.add('sidebar-btn');
+      }
       if (!sidebarCloseBtn) {
         console.warn('[sidebar.js] closeSidebarBtn not found; ignoring close event binding.');
       }
@@ -325,7 +332,9 @@ export function createSidebar() {
           // Initialize if not already
           const projectSection = document.getElementById('projectsSection');
           if (projectSection && !projectSection.dataset.initialized) {
-            const success = await window.projectDashboard.init();
+            const success = typeof window.projectDashboard.initialize === 'function'
+              ? await window.projectDashboard.initialize()
+              : true;
             if (success) {
               projectSection.dataset.initialized = 'true';
               console.log('[sidebar] Project dashboard initialized via tab activation.');
