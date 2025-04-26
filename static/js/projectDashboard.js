@@ -429,15 +429,36 @@ class ProjectDashboard {
         if (projectListView) projectListView.classList.remove('hidden');
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
 
-        if (this.components.projectList) {
-          this.components.projectList.show();
-        }
-        if (this.components.projectDetails) {
-          this.components.projectDetails.hide();
-        }
+        // Make sure components are initialized if they weren't already
+        if (!this.components.projectList || !this.components.projectList.initialized) {
+          console.log('[ProjectDashboard] Components not initialized after auth, reinitializing...');
+          this._initializeComponents().then(() => {
+            if (this.components.projectList) {
+              this.components.projectList.show();
+              this._loadProjects();
+            }
+          });
+        } else {
+          // Show and load
+          if (this.components.projectList) {
+            this.components.projectList.show();
+          }
+          if (this.components.projectDetails) {
+            this.components.projectDetails.hide();
+          }
 
-        // Load projects
-        this._loadProjects();
+          // Load projects with a sufficient delay to ensure DOM is ready
+          setTimeout(() => {
+            console.log('[ProjectDashboard] Loading projects after authentication state change');
+            this._loadProjects();
+
+            // Verify project list element is visible and update opacity
+            const projectListView = document.getElementById('projectListView');
+            if (projectListView) {
+              projectListView.classList.remove('opacity-0');
+            }
+          }, 300);
+        }
       }
     });
   }

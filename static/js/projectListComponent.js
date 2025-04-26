@@ -853,12 +853,4 @@ export function createProjectListComponent(options = {}) {
     return new ProjectListComponent(options);
 }
 
-// For backward compatibility and module registration, app.js will use this code
-// instead of having the module self-initialize:
-/*
-const projectListComponent = createProjectListComponent({ elementId: 'projectList' });
-await projectListComponent.initialize();
-window.ProjectListComponent = ProjectListComponent; // Keep class constructor for backward compatibility
-window.projectListComponent = projectListComponent; // Instance for immediate use
-DependencySystem.register('projectListComponent', projectListComponent);
-*/
+export { ProjectListComponent };
