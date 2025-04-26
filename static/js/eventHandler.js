@@ -55,18 +55,20 @@ const PRIORITY = {
 function trackListener(element, type, handler, options = {}) {
   if (!element) return;
 
-  // Set appropriate defaults for passive option
-  let usePassive = options.passive;
-  if (usePassive === undefined) {
-    // Events that typically need preventDefault()
-    const nonPassiveEvents = ['submit', 'wheel', 'touchstart', 'touchmove'];
-    usePassive = !nonPassiveEvents.includes(type);
-  }
+  // Robust option inference
+  const {
+    capture = false,
+    once = false,
+    signal = undefined,
+    passive
+  } = options;
 
-  const finalOptions = {
-    ...options,
-    passive: usePassive
-  };
+  // Only these events default to non-passive
+  const nonPassiveEvents = ['click', 'submit', 'wheel', 'touchstart', 'touchmove', 'keydown', 'keypress', 'keyup'];
+  // If passive is specified, use it literally, otherwise infer
+  const usePassive = (typeof passive === 'boolean') ? passive : !nonPassiveEvents.includes(type);
+
+  const finalOptions = { capture, once, signal, passive: usePassive };
 
   // Create wrapped handler with error handling
   const wrappedHandler = async function (event) {
@@ -469,14 +471,7 @@ function handleKeyDown(e) {
  * Set up navigation-related events
  */
 function setupNavigation() {
-  const backToProjectsBtn = document.getElementById('backToProjectsBtn');
-  if (backToProjectsBtn) {
-    trackListener(backToProjectsBtn, 'click', () => {
-      if (window.app?.showProjectListView) {
-        window.app.showProjectListView();
-      }
-    });
-  }
+  // Intentionally left blank: back navigation for projects should be handled solely by ProjectDetailsComponent.
 
   const newConversationBtn = document.getElementById('newConversationBtn');
   if (newConversationBtn) {

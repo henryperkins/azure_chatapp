@@ -161,21 +161,23 @@ class ProjectListComponent {
         // Set the active tab
         this._updateActiveTab();
 
-        // Bind tab clicks
+        // Bind tab clicks & keydown
         tabs.forEach((tab, idx) => {
             tab.tabIndex = 0;
-            tab.addEventListener('keydown', (e) => {
-              if (e.key === 'ArrowRight') {
-                tabs[(idx + 1) % tabs.length].focus();
-              } else if (e.key === 'ArrowLeft') {
-                tabs[(idx - 1 + tabs.length) % tabs.length].focus();
-              } else if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                tab.click();
-              }
-            });
 
-            const handler = () => {
+            // Keydown handler for arrow keys, Enter, and Space
+            const keydownHandler = (e) => {
+                if (e.key === 'ArrowRight') {
+                    tabs[(idx + 1) % tabs.length].focus();
+                } else if (e.key === 'ArrowLeft') {
+                    tabs[(idx - 1 + tabs.length) % tabs.length].focus();
+                } else if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    tab.click();
+                }
+            };
+
+            const clickHandler = () => {
                 const filter = tab.dataset.filter;
                 if (filter === this.state.filter) return;
 
@@ -187,10 +189,19 @@ class ProjectListComponent {
                 this._loadProjects();
             };
 
+            // Remove any existing keydown listeners forcibly to avoid duplicates/passive bugs (browser-specific)
+            tab.removeEventListener('keydown', keydownHandler);
             if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(tab, 'click', handler);
+                window.eventHandlers.trackListener(tab, 'keydown', keydownHandler, {
+                    passive: false,
+                    description: `Filter tab keydown (${tab.dataset.filter})`
+                });
+                window.eventHandlers.trackListener(tab, 'click', clickHandler, {
+                    description: `Filter tab click (${tab.dataset.filter})`
+                });
             } else {
-                tab.addEventListener('click', handler);
+                tab.addEventListener('keydown', keydownHandler, { passive: false });
+                tab.addEventListener('click', clickHandler, false);
             }
         });
     }
@@ -270,35 +281,56 @@ class ProjectListComponent {
     }
 
     /**
-     * Open the edit modal (via modalManager), populating data for the given project.
+     * Binds event listeners to main and sidebar "Create Project" buttons with retry logic,
+     * ensuring modals are loaded first.
      * @private
      */
-    _openEditModal(project) {
-        if (window.projectModal?.openModal) {
-            window.projectModal.openModal(project);
-        } else {
-            console.error('[ProjectListComponent] window.projectModal.openModal not available');
-        }
-    }
+    async _bindCreateProjectButtons() {
+        // Wait for the modalsLoaded event to ensure projectModal.init() has run
+        await new Promise(resolve => {
+            if (document.getElementById('projectModal')) { // Check if modals might already be loaded
+                resolve();
+            } else {
+                document.addEventListener('modalsLoaded', resolve, { once: true });
+                // Safety timeout in case the event never fires
+                setTimeout(resolve, 5000);
+            }
+        });
 
-    /**
-     * Confirm and handle the project deletion.
-     * @private
-     */
-    _confirmDelete(project) {
-        if (window.modalManager?.confirmAction) {
-            window.modalManager.confirmAction({
-                title: 'Delete Project',
-                message: `Are you sure you want to delete "${project.name}"? This cannot be undone.`,
-                confirmText: 'Delete',
-                confirmClass: 'btn-error',
-                onConfirm: () => this._executeDelete(project.id)
-            });
-        } else {
-            // Fallback to native confirm
-            const confirmed = confirm(`Delete "${project.name}"? This cannot be undone.`);
-            if (confirmed) {
-                this._executeDelete(project.id);
+        console.log('[ProjectListComponent] Modals loaded, binding create project buttons...');
+
+        const buttonIds = ['projectListCreateBtn', 'sidebarNewProjectBtn', 'emptyStateCreateBtn']; // Added empty state button
+        const maxAttempts = 5;
+
+        const attach = (btn) => {
+            if (!btn) return;
+            const handler = (e) => {
+                e.preventDefault(); // Prevent default if it's a link/button
+                this._openNewProjectModal();
+            };
+            if (window.eventHandlers?.trackListener) {
+                window.eventHandlers.trackListener(btn, 'click', handler, {
+                    description: `Open New Project Modal (${btn.id})`
+                });
+            } else {
+                btn.addEventListener('click', handler);
+            }
+            console.log(`[ProjectListComponent] Attached listener to #${btn.id}`);
+        };
+
+        for (const id of buttonIds) {
+            let attempts = 0;
+            let btn = null;
+            while (attempts < maxAttempts && !(btn = document.getElementById(id))) {
+                attempts++;
+                // Don't wait excessively if the button simply doesn't exist (e.g., empty state not shown)
+                if (id === 'emptyStateCreateBtn' && attempts > 1) break;
+                await new Promise(r => setTimeout(r, 100 * attempts)); // Wait briefly if not found
+            }
+            if (btn) {
+                attach(btn);
+            } else if (id !== 'emptyStateCreateBtn') { // Don't warn for the optional empty state button
+                console.warn(`[ProjectListComponent] Could not find button #${id} after ${attempts} attempts.`);
             }
         }
     }
@@ -648,11 +680,12 @@ class ProjectListComponent {
                         }
                     } else {
                         // Fallback: notify user or log error
-        if (window.app?.showNotification) {
-            window.app.showNotification(message, "error");
-        } else {
-            alert(message);
-        }
+                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
+                        if (window.app?.showNotification) {
+                            window.app.showNotification(fallbackMsg, "error");
+                        } else {
+                            alert(fallbackMsg);
+                        }
                     }
                 });
             } else {
@@ -669,11 +702,12 @@ class ProjectListComponent {
                             switchAuthTab('login');
                         }
                     } else {
-        if (window.app?.showNotification) {
-            window.app.showNotification(message, "success");
-        } else {
-            console.log(message);
-        }
+                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
+                        if (window.app?.showNotification) {
+                            window.app.showNotification(fallbackMsg, "success");
+                        } else {
+                            console.log(fallbackMsg);
+                        }
                     }
                 });
             }
@@ -688,13 +722,17 @@ class ProjectListComponent {
     _showErrorState(message) {
         if (!this.element) return;
 
+        const fallbackMsg = typeof message === 'string' && message.trim().length > 0
+            ? message
+            : "An unknown error occurred.";
+
         this.element.innerHTML = `
       <div class="col-span-3 text-center py-10">
         <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
-        <p class="mt-4 text-lg text-error">${message}</p>
+        <p class="mt-4 text-lg text-error">${fallbackMsg}</p>
         <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
       </div>
     `;
@@ -721,42 +759,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Binds event listeners to main and sidebar "Create Project" buttons with retry logic.
-     * @private
-     */
-    async _bindCreateProjectButtons() {
-        const buttonIds = ['projectListCreateBtn', 'sidebarNewProjectBtn'];
-        const maxAttempts = 5;
-        const attach = (btn) => {
-            if (!btn) return;
-            if (window.eventHandlers?.cleanupListeners) {
-                window.eventHandlers.cleanupListeners(btn);
-            }
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(btn, 'click', () => this._openNewProjectModal());
-            } else {
-                btn.addEventListener('click', () => this._openNewProjectModal());
-            }
-        };
-
-        for (const id of buttonIds) {
-            let attempts = 0;
-            let btn = null;
-            while (attempts < maxAttempts && !(btn = document.getElementById(id))) {
-                // eslint-disable-next-line no-await-in-loop
-                await new Promise((r) => setTimeout(r, 100 * (attempts + 1)));
-                attempts += 1;
-            }
-            if (!btn) {
-                console.error(`[ProjectListComponent] Failed to find #${id} after ${maxAttempts} attempts`);
-            } else {
-                attach(btn);
-                // Optionally, expose on window for legacy compatibility
-                window[id + '_handler'] = () => this._openNewProjectModal();
-            }
-        }
-    }
 
     /**
      * Format date strings for display.

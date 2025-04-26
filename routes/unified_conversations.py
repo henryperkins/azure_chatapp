@@ -80,6 +80,66 @@ class BatchConversationIds(BaseModel):
 # Conversation CRUD with Monitoring
 # ============================
 
+@router.get("/{project_id}/conversations", response_model=dict)
+async def list_project_conversations(
+    project_id: UUID,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    conv_service: ConversationService = Depends(get_conversation_service),
+):
+    """List all conversations for a project with full monitoring"""
+    with sentry_span(
+        op="conversation",
+        name="List Project Conversations",
+        description=f"List all conversations for project {project_id}",
+    ) as span:
+        try:
+            current_user = current_user_tuple[0]
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(current_user.id))
+            span.set_data("pagination.skip", skip)
+            span.set_data("pagination.limit", limit)
+
+            # Validate access
+            await validate_project_access(project_id, current_user, db)
+
+            # Get conversations
+            start_time = time.time()
+            conversations = await conv_service.list_conversations(
+                user_id=current_user.id,
+                project_id=project_id,
+                skip=skip,
+                limit=limit
+            )
+            duration = (time.time() - start_time) * 1000
+
+            span.set_data("db_query_time_ms", duration)
+            metrics.distribution(
+                "conversation.list.duration",
+                duration,
+                unit="millisecond"
+            )
+
+            return {
+                "status": "success",
+                "conversations": [serialize_conversation(conv) for conv in conversations],
+                "count": len(conversations),
+                "sentry_trace_id": sentry_sdk.get_traceparent() if hasattr(sentry_sdk, "get_traceparent") else None
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            span.set_tag("error", True)
+            capture_exception(e)
+            metrics.incr("conversation.list.failure")
+            logger.error(f"Failed to list conversations: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve conversations"
+            ) from e
+
 @router.post("/{project_id}/conversations", response_model=dict)
 async def create_conversation(
     project_id: UUID,
@@ -744,4 +804,3 @@ async def list_project_conversation_messages(
                 status_code=500,
                 detail="Failed to retrieve messages"
             ) from e
-            
