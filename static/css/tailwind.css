@@ -58,4 +58,8 @@
   scrollbar-color: var(--color-primary, #ff55a8) var(--color-base-200, #23243a);
 }
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @plugin "daisyui";
