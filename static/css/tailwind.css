@@ -26,3 +26,18 @@
   --color-base-300: #191926;
   --color-base-content: #f8f8f2;
 }
+
+/* Sidebar pinned state highlight */
+.sidebar.sidebar-pinned {
+  box-shadow: 0 0 0 2px var(--color-primary, #ff55a8);
+}
+
+/* Themed scrollbar for sidebar */
+.sidebar ::-webkit-scrollbar {
+  width: 8px;
+  background: var(--color-base-200, #23243a);
+}
+.sidebar ::-webkit-scrollbar-thumb {
+  background: var(--color-primary, #ff55a8);
+  border-radius: 4px;
+}
