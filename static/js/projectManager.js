@@ -1,17 +1,43 @@
 /**
  * projectManager.js
- * Dependencies:
- * - window.app.apiRequest (external dependency, expected to be available in global scope)
- * - window.auth (external dependency, expected to be available in global scope)
- * - window.chatManager (external dependency, expected to be available in global scope)
- * - window.DependencySystem (external dependency, used for module registration)
- * - localStorage (browser built-in)
- * - document (browser built-in, for CustomEvent dispatch)
- * - FormData (browser built-in, for file uploads)
+ *
+ * Project management module for web applications.
+ *
+ * ## Dependencies:
+ * - window.app.apiRequest: Function for making API requests.
+ * - window.app.validateUUID: Function to validate UUIDs.
+ * - window.auth: Authentication module with isAuthenticated().
+ * - window.chatManager: Chat/conversation management module.
+ * - window.DependencySystem: Optional dependency injection/registration system.
+ * - localStorage: Browser built-in for persisting selected project.
+ * - document: For dispatching CustomEvents.
+ * - FormData: For file uploads.
+ *
+ * ## Exports:
+ * - projectManagerAPI: Main API object (also attached to window.projectManager).
  */
 
+/** @typedef {Object} Project
+ *  @property {string} id
+ *  @property {string} name
+ *  @property {boolean} [archived]
+ *  @property {boolean} [pinned]
+ *  @property {any} [otherProps]
+ */
 
-// Configuration
+/** @typedef {Object} ProjectStats
+ *  @property {string} projectId
+ *  @property {number} [fileCount]
+ *  @property {number} [conversationCount]
+ *  @property {any} [otherStats]
+ */
+
+/** @typedef {Object} FileUploadResult
+ *  @property {Array<{file: File}>} validatedFiles
+ *  @property {Array<{file: File, reason: string}>} invalidFiles
+ */
+
+// Configuration constants
 const PROJECT_CONFIG = {
   DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
   ENDPOINTS: {
@@ -24,12 +50,19 @@ const PROJECT_CONFIG = {
   }
 };
 
-// Current state
+// Internal state
 let currentProject = null;
 let projectLoadingInProgress = false;
 
 /**
- * Load a list of projects with optional filtering
+ * Load a list of projects, optionally filtered.
+ *
+ * @param {string} [filter='all'] - Filter type (e.g., 'all', 'archived', etc.)
+ * @returns {Promise<Project[]>} - Resolves to an array of projects.
+ *
+ * Emits:
+ * - "projectsLoading" when loading starts.
+ * - "projectsLoaded" when loading completes (with projects or error).
  */
 async function loadProjects(filter = 'all') {
   if (projectLoadingInProgress) {
@@ -38,7 +71,7 @@ async function loadProjects(filter = 'all') {
   }
 
   try {
-    // Check auth state
+    // Check authentication before loading projects
     if (!window.auth?.isAuthenticated()) {
       console.warn("[projectManager] Not authenticated, can't load projects");
       emitEvent("projectsLoaded", {
@@ -60,17 +93,18 @@ async function loadProjects(filter = 'all') {
   emitEvent("projectsLoading", { filter });
 
   try {
-    // Build URL with filter
+    // Build API endpoint with filter and pagination
     const params = new URLSearchParams();
     params.append("filter", filter);
     params.append("skip", "0");
     params.append("limit", "100");
 
     const endpoint = `${PROJECT_CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
-    console.log(`[projectManager] Requesting projects from: ${endpoint}`); // ADDED: log endpoint
+    PROJECT_CONFIG.DEBUG && console.log(`[projectManager] Requesting projects from: ${endpoint}`);
     const response = await window.app.apiRequest(endpoint, { method: 'GET' });
-    console.log('[projectManager] Raw projects response:', response); // ADDED: log raw response
+    PROJECT_CONFIG.DEBUG && console.log('[projectManager] Raw projects response:', response);
 
+    // Support various API response shapes
     const projects =
       response?.data?.projects ||
       response?.projects ||
@@ -107,7 +141,17 @@ async function loadProjects(filter = 'all') {
 }
 
 /**
- * Load details for a specific project
+ * Load details for a specific project, including related data.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<Project|null>} - Resolves to the project object or null on error.
+ *
+ * Emits:
+ * - "projectDetailsLoading" when loading starts.
+ * - "projectLoaded" when project details are loaded.
+ * - "projectArchivedNotice" if the project is archived.
+ * - "projectDetailsError" on error.
+ * - "projectNotFound" if project is not found (404).
  */
 async function loadProjectDetails(projectId) {
   if (!window.app.validateUUID(projectId)) {
@@ -120,7 +164,6 @@ async function loadProjectDetails(projectId) {
   }
 
   try {
-    // FIXED: Use the direct auth module check for consistency with loadProjects
     if (!window.auth?.isAuthenticated()) {
       console.warn("[projectManager] Not authenticated, can't load project details");
       emitEvent("projectDetailsError", {
@@ -145,6 +188,7 @@ async function loadProjectDetails(projectId) {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
+    // Support various API response shapes
     let projectData = null;
     if (response?.data?.id) projectData = response.data;
     else if (response?.id) projectData = response;
@@ -157,13 +201,13 @@ async function loadProjectDetails(projectId) {
     currentProject = projectData;
     emitEvent("projectLoaded", JSON.parse(JSON.stringify(currentProject)));
 
-    // Skip related data if archived
+    // If archived, skip loading related data
     if (currentProject.archived) {
       emitEvent("projectArchivedNotice", { id: currentProject.id });
       return JSON.parse(JSON.stringify(currentProject));
     }
 
-    // Load related data
+    // Load related data in parallel (stats, files, conversations, artifacts)
     await Promise.allSettled([
       loadProjectStats(projectId),
       loadProjectFiles(projectId),
@@ -188,7 +232,14 @@ async function loadProjectDetails(projectId) {
 }
 
 /**
- * Load project stats
+ * Load statistics for a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<ProjectStats>} - Resolves to stats object.
+ *
+ * Emits:
+ * - "projectStatsLoaded" on success.
+ * - "projectStatsError" on error.
  */
 async function loadProjectStats(projectId) {
   try {
@@ -212,13 +263,21 @@ async function loadProjectStats(projectId) {
 }
 
 /**
- * Load project files
+ * Load files for a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<Array>} - Resolves to an array of files.
+ *
+ * Emits:
+ * - "projectFilesLoaded" on success.
+ * - "projectFilesError" on error.
  */
 async function loadProjectFiles(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
+    // Support various API response shapes
     const files =
       response?.data?.files ||
       response?.files ||
@@ -238,13 +297,21 @@ async function loadProjectFiles(projectId) {
 }
 
 /**
- * Load project conversations
+ * Load conversations for a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<Array>} - Resolves to an array of conversations.
+ *
+ * Emits:
+ * - "projectConversationsLoaded" on success.
+ * - "projectConversationsError" on error.
  */
 async function loadProjectConversations(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
+    // Support various API response shapes
     const conversations =
       response?.data?.conversations ||
       response?.conversations ||
@@ -264,13 +331,21 @@ async function loadProjectConversations(projectId) {
 }
 
 /**
- * Load project artifacts
+ * Load artifacts for a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<Array>} - Resolves to an array of artifacts.
+ *
+ * Emits:
+ * - "projectArtifactsLoaded" on success.
+ * - "projectArtifactsError" on error.
  */
 async function loadProjectArtifacts(projectId) {
   try {
     const endpoint = PROJECT_CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
     const response = await window.app.apiRequest(endpoint, { method: 'GET' });
 
+    // Support various API response shapes
     const artifacts =
       response?.data?.artifacts ||
       response?.artifacts ||
@@ -290,7 +365,17 @@ async function loadProjectArtifacts(projectId) {
 }
 
 /**
- * Create or update a project
+ * Create a new project or update an existing one.
+ *
+ * @param {string|null} projectId - The project UUID (null for create).
+ * @param {Object} projectData - The project data to save.
+ * @returns {Promise<Project>} - Resolves to the saved project object.
+ *
+ * Emits:
+ * - "projectCreated" on creation.
+ * - "projectUpdated" on update.
+ *
+ * @throws {Error} - If not authenticated or save fails.
  */
 async function createOrUpdateProject(projectId, projectData) {
   if (!window.auth?.isAuthenticated()) {
@@ -326,7 +411,15 @@ async function createOrUpdateProject(projectId, projectData) {
 }
 
 /**
- * Delete a project
+ * Delete a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<any>} - Resolves to API response.
+ *
+ * Emits:
+ * - "projectDeleted" on success.
+ *
+ * @throws {Error} - If not authenticated or delete fails.
  */
 async function deleteProject(projectId) {
   if (!window.auth?.isAuthenticated()) {
@@ -350,7 +443,15 @@ async function deleteProject(projectId) {
 }
 
 /**
- * Toggle pin status for a project
+ * Toggle the pin status for a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<any>} - Resolves to API response.
+ *
+ * Emits:
+ * - "projectPinToggled" on success.
+ *
+ * @throws {Error} - If not authenticated or toggle fails.
  */
 async function togglePinProject(projectId) {
   if (!window.auth?.isAuthenticated()) {
@@ -374,7 +475,15 @@ async function togglePinProject(projectId) {
 }
 
 /**
- * Toggle archive status for a project
+ * Toggle the archive status for a project.
+ *
+ * @param {string} projectId - The project UUID.
+ * @returns {Promise<any>} - Resolves to API response.
+ *
+ * Emits:
+ * - "projectArchiveToggled" on success.
+ *
+ * @throws {Error} - If not authenticated or toggle fails.
  */
 async function toggleArchiveProject(projectId) {
   if (!window.auth?.isAuthenticated()) {
@@ -398,11 +507,15 @@ async function toggleArchiveProject(projectId) {
 }
 
 /**
- * Create a new conversation (delegated to chatManager)
+ * Create a new conversation for a project (delegated to chatManager).
+ *
+ * @param {string} projectId - The project UUID.
+ * @param {Object} [options={}] - Conversation options.
+ * @returns {Promise<any>} - Resolves to the new conversation.
  */
 async function createConversation(projectId, options = {}) {
   try {
-    // Ensure project is selected
+    // Persist selected project for context
     localStorage.setItem("selectedProjectId", projectId);
     return await window.chatManager.createNewConversation(options);
   } catch (error) {
@@ -412,7 +525,11 @@ async function createConversation(projectId, options = {}) {
 }
 
 /**
- * Delete conversation (delegated to chatManager)
+ * Delete a conversation from a project (delegated to chatManager).
+ *
+ * @param {string} projectId - The project UUID.
+ * @param {string} conversationId - The conversation UUID.
+ * @returns {Promise<boolean>} - Resolves to true on success.
  */
 async function deleteProjectConversation(projectId, conversationId) {
   try {
@@ -426,7 +543,10 @@ async function deleteProjectConversation(projectId, conversationId) {
 }
 
 /**
- * Emit a custom event (simplified)
+ * Emit a custom DOM event for projectManager state changes.
+ *
+ * @param {string} eventName - The event name.
+ * @param {Object} detail - Event detail object.
  */
 function emitEvent(eventName, detail) {
   document.dispatchEvent(new CustomEvent(eventName, {
@@ -438,13 +558,21 @@ function emitEvent(eventName, detail) {
 }
 
 /**
- * Get current project
+ * Get the currently loaded project.
+ *
+ * @returns {Project|null} - The current project or null.
  */
 function getCurrentProject() {
   return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null;
 }
 
-// File upload utilities
+/**
+ * Validate and prepare files for upload.
+ *
+ * @param {string} projectId - The project UUID.
+ * @param {FileList|Array<File>} fileList - List of files to validate.
+ * @returns {Promise<FileUploadResult>} - Object with validated and invalid files.
+ */
 async function prepareFileUploads(projectId, fileList) {
   const validatedFiles = [];
   const invalidFiles = [];
@@ -459,6 +587,15 @@ async function prepareFileUploads(projectId, fileList) {
   return { validatedFiles, invalidFiles };
 }
 
+/**
+ * Upload a file to a project, with retry and exponential backoff.
+ *
+ * @param {string} projectId - The project UUID.
+ * @param {{file: File}} fileObj - Object containing the file to upload.
+ * @param {number} [maxRetries=3] - Maximum number of retries.
+ * @returns {Promise<boolean>} - Resolves to true on success.
+ * @throws {Error} - If upload fails after all retries.
+ */
 async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
   let attempt = 0;
   while (attempt < maxRetries) {
@@ -477,7 +614,7 @@ async function uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
   }
 }
 
-// Export public API
+// Exported API
 const projectManagerAPI = {
   loadProjects,
   loadProjectDetails,
@@ -496,25 +633,24 @@ const projectManagerAPI = {
   uploadFileWithRetry
 };
 
-// Attach to window and register with DependencySystem
+// Attach to window and register with DependencySystem if available
 window.projectManager = window.projectManager || projectManagerAPI;
 
-// Register with DependencySystem when it becomes available
 if (window.DependencySystem) {
-    window.DependencySystem.register('projectManager', window.projectManager);
+  window.DependencySystem.register('projectManager', window.projectManager);
 } else {
-    // Wait for DependencySystem to be available
-    Object.defineProperty(window, 'DependencySystem', {
+  // Wait for DependencySystem to be available, then register
+  Object.defineProperty(window, 'DependencySystem', {
+    configurable: true,
+    set: function (value) {
+      Object.defineProperty(window, 'DependencySystem', {
+        value: value,
         configurable: true,
-        set: function(value) {
-            Object.defineProperty(window, 'DependencySystem', {
-                value: value,
-                configurable: true,
-                writable: true
-            });
-            value.register('projectManager', window.projectManager);
-        }
-    });
+        writable: true
+      });
+      value.register('projectManager', window.projectManager);
+    }
+  });
 }
 
 export default projectManagerAPI;
