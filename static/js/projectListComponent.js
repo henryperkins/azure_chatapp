@@ -74,7 +74,10 @@ class ProjectListComponent {
             // Step 2: Bind event listeners
             this._bindEventListeners();
 
-            // Step 3: Mark as initialized
+            // Step 3: Bind create project buttons (main and sidebar)
+            await this._bindCreateProjectButtons();
+
+            // Step 4: Mark as initialized
             this.state.initialized = true;
             console.log('[ProjectListComponent] Initialization complete.');
         } catch (error) {
@@ -271,29 +274,11 @@ class ProjectListComponent {
      * @private
      */
     _openEditModal(project) {
-        if (!window.modalManager?.show) {
-            console.error('[ProjectListComponent] modalManager.show is not available');
-            return;
+        if (window.projectModal?.openModal) {
+            window.projectModal.openModal(project);
+        } else {
+            console.error('[ProjectListComponent] window.projectModal.openModal not available');
         }
-        window.modalManager.show('project', {
-            updateContent: (modalEl) => {
-                const form = modalEl.querySelector('#projectModalForm');
-                const title = modalEl.querySelector('#projectModalTitle');
-
-                if (form) {
-                    form.reset();
-                    form.querySelector('#projectModalIdInput').value = project.id || '';
-                    form.querySelector('#projectModalNameInput').value = project.name || '';
-                    form.querySelector('#projectModalDescInput').value = project.description || '';
-                    form.querySelector('#projectModalGoalsInput').value = project.goals || '';
-                    form.querySelector('#projectModalMaxTokensInput').value = project.max_tokens || '';
-                }
-
-                if (title) {
-                    title.textContent = 'Edit Project';
-                }
-            }
-        });
     }
 
     /**
@@ -663,11 +648,11 @@ class ProjectListComponent {
                         }
                     } else {
                         // Fallback: notify user or log error
-                        if (window.showNotification) {
-                            window.showNotification('Login form is not available. Please use the login button in the header.', 'error');
-                        } else {
-                            alert('Login form is not available. Please use the login button in the header.');
-                        }
+        if (window.app?.showNotification) {
+            window.app.showNotification(message, "error");
+        } else {
+            alert(message);
+        }
                     }
                 });
             } else {
@@ -684,11 +669,11 @@ class ProjectListComponent {
                             switchAuthTab('login');
                         }
                     } else {
-                        if (window.showNotification) {
-                            window.showNotification('Login form is not available. Please use the login button in the header.', 'error');
-                        } else {
-                            alert('Login form is not available. Please use the login button in the header.');
-                        }
+        if (window.app?.showNotification) {
+            window.app.showNotification(message, "success");
+        } else {
+            console.log(message);
+        }
                     }
                 });
             }
@@ -729,27 +714,48 @@ class ProjectListComponent {
      * @private
      */
     _openNewProjectModal() {
-        if (!window.modalManager?.show) {
-            console.error('[ProjectListComponent] modalManager.show not available');
-            return;
+        if (window.projectModal?.openModal) {
+            window.projectModal.openModal();
+        } else {
+            console.error('[ProjectListComponent] window.projectModal.openModal not available');
         }
+    }
 
-        window.modalManager.show('project', {
-            updateContent: (modalEl) => {
-                // Reset form
-                const form = modalEl.querySelector('#projectForm');
-                if (form) {
-                    form.reset();
-                    form.querySelector('#projectIdInput').value = '';
-                }
-
-                // Update title
-                const title = modalEl.querySelector('#projectModalTitle');
-                if (title) {
-                    title.textContent = 'Create New Project';
-                }
+    /**
+     * Binds event listeners to main and sidebar "Create Project" buttons with retry logic.
+     * @private
+     */
+    async _bindCreateProjectButtons() {
+        const buttonIds = ['projectListCreateBtn', 'sidebarNewProjectBtn'];
+        const maxAttempts = 5;
+        const attach = (btn) => {
+            if (!btn) return;
+            if (window.eventHandlers?.cleanupListeners) {
+                window.eventHandlers.cleanupListeners(btn);
             }
-        });
+            if (window.eventHandlers?.trackListener) {
+                window.eventHandlers.trackListener(btn, 'click', () => this._openNewProjectModal());
+            } else {
+                btn.addEventListener('click', () => this._openNewProjectModal());
+            }
+        };
+
+        for (const id of buttonIds) {
+            let attempts = 0;
+            let btn = null;
+            while (attempts < maxAttempts && !(btn = document.getElementById(id))) {
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise((r) => setTimeout(r, 100 * (attempts + 1)));
+                attempts += 1;
+            }
+            if (!btn) {
+                console.error(`[ProjectListComponent] Failed to find #${id} after ${maxAttempts} attempts`);
+            } else {
+                attach(btn);
+                // Optionally, expose on window for legacy compatibility
+                window[id + '_handler'] = () => this._openNewProjectModal();
+            }
+        }
     }
 
     /**

@@ -93,10 +93,8 @@
      * @param {boolean} visible - Whether element should be visible
      */
     toggleVisible(element, visible) {
-      const el = typeof element === 'string' ? document.querySelector(element) : element;
-      if (!el) return;
-
-      el.classList.toggle('hidden', !visible);
+      // Use canonical utility from eventHandlers
+      window.eventHandlers.toggleVisible(element, visible);
     },
 
     /**
@@ -160,17 +158,14 @@
    * @param {Object} options - Additional options
    */
   ProjectDashboard.showNotification = (message, type = 'info', options = {}) => {
-    // Use global notification handler if available
+    // Canonical: always use notificationHandler if available, fallback to window.showNotification, else console.
     if (window.notificationHandler?.show) {
       return window.notificationHandler.show(message, type, options);
     }
-
-    // Fallback to window.showNotification
-    if (window.showNotification) {
+    if (typeof window.showNotification === 'function') {
       return window.showNotification(message, type, options);
     }
-
-    // Last resort: console
+    // Last resort
     console.log(`[${type.toUpperCase()}] ${message}`);
   };
 
@@ -181,32 +176,8 @@
    * @param {Function} onExpand - Callback on expand
    */
   ProjectDashboard.setupCollapsible = (toggleId, panelId, onExpand) => {
-    const toggleBtn = document.getElementById(toggleId);
-    const panel = document.getElementById(panelId);
-
-    if (!toggleBtn || !panel) return;
-
-    // Set initial state
-    const initialState = localStorage.getItem(`${toggleId}_expanded`) === 'true';
-    panel.classList.toggle('hidden', !initialState);
-    toggleBtn.setAttribute('aria-expanded', initialState ? 'true' : 'false');
-
-    // Add click handler
-    window.eventHandlers.trackListener(toggleBtn, 'click', () => {
-      const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-      const newState = !isExpanded;
-
-      panel.classList.toggle('hidden', !newState);
-      toggleBtn.setAttribute('aria-expanded', newState ? 'true' : 'false');
-
-      // Save state
-      localStorage.setItem(`${toggleId}_expanded`, newState ? 'true' : 'false');
-
-      // Callback
-      if (newState && typeof onExpand === 'function') {
-        onExpand();
-      }
-    });
+    // Use canonical helper from eventHandlers
+    window.eventHandlers.setupCollapsible(toggleId, panelId, undefined, onExpand);
   };
 
   /**
@@ -247,22 +218,10 @@
     if (editBtn) {
       window.eventHandlers.trackListener(editBtn, 'click', () => {
         const currentProject = window.projectManager?.currentProject;
-        if (currentProject?.id && window.modalManager) {
-          window.modalManager.show('project', {
-            updateContent: (modal) => {
-              const form = modal.querySelector('#projectForm');
-              const title = modal.querySelector('#projectModalTitle');
-
-              if (form) {
-                form.reset();
-                form.querySelector('#projectIdInput').value = currentProject.id;
-                form.querySelector('#projectNameInput').value = currentProject.name || '';
-                form.querySelector('#projectDescInput').value = currentProject.description || '';
-              }
-
-              if (title) title.textContent = 'Edit Project';
-            }
-          });
+        if (currentProject && window.projectModal?.openModal) {
+          window.projectModal.openModal(currentProject);
+        } else {
+          console.error('[projectDashboardUtils] projectModal.openModal not available');
         }
       });
     }

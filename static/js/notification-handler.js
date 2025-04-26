@@ -184,23 +184,31 @@
 
       // Send response if this is a MessageEvent from another window
       if (handled && event.source && event.origin) {
-        event.source.postMessage({
-          type: 'notification-handled',
-          success: true,
-          messageId: message.id || null
-        }, event.origin);
+        try {
+          event.source.postMessage({
+            type: 'notification-handled',
+            success: true,
+            messageId: message.id || null
+          }, event.origin);
+        } catch (postErr) {
+          console.debug('Notification: postMessage failed - target window likely closed:', postErr);
+        }
       }
     } catch (err) {
       console.warn('Error handling notification message:', err);
 
       // Send error response if possible
       if (event.source && event.origin) {
-        event.source.postMessage({
-          type: 'notification-error',
-          success: false,
-          error: err.message,
-          messageId: event.data.id || null
-        }, event.origin);
+        try {
+          event.source.postMessage({
+            type: 'notification-error',
+            success: false,
+            error: err.message,
+            messageId: event.data.id || null
+          }, event.origin);
+        } catch (postErr) {
+          console.debug('Notification: postMessage (error response) failed - target window likely closed:', postErr);
+        }
       }
     }
   }
