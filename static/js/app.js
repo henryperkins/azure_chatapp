@@ -93,45 +93,45 @@ const DependencySystem = {
 
         // Check if already available
         if (nameArray.every(name => this.modules.has(name))) {
-          const modules = nameArray.map(name => this.modules.get(name));
-          if (callback) {
-            callback(...modules);
-          }
-          return Promise.resolve(modules);
+            const modules = nameArray.map(name => this.modules.get(name));
+            if (callback) {
+                callback(...modules);
+            }
+            return Promise.resolve(modules);
         }
 
-        return new Promise((resolve, reject) => {
-          const missing = nameArray.filter(name => !this.modules.has(name));
-          let resolved = false;
+        return new Promise((resolve) => {
+            const missing = nameArray.filter(name => !this.modules.has(name));
+            let resolved = false;
 
-          // Setup timeout
-          const timeoutId = setTimeout(() => {
-            if (!resolved) {
-              console.warn(`[DependencySystem] Timeout waiting for: ${missing.join(', ')}`);
-              resolved = true;
-              // Resolve anyway instead of rejecting
-              resolve(nameArray.map(name => this.modules.get(name) || null));
-            }
-          }, timeout);
-
-          // Setup waiters
-          missing.forEach(name => {
-            if (!this.waiters.has(name)) {
-              this.waiters.set(name, []);
-            }
-
-            this.waiters.get(name).push(() => {
-              if (nameArray.every(n => this.modules.has(n)) && !resolved) {
-                clearTimeout(timeoutId);
-                resolved = true;
-                const modules = nameArray.map(n => this.modules.get(n));
-                if (callback) {
-                  callback(...modules);
+            // Setup timeout
+            const timeoutId = setTimeout(() => {
+                if (!resolved) {
+                    console.warn(`[DependencySystem] Timeout waiting for: ${missing.join(', ')}`);
+                    resolved = true;
+                    // Resolve anyway instead of rejecting
+                    resolve(nameArray.map(name => this.modules.get(name) || null));
                 }
-                resolve(modules);
-              }
+            }, timeout);
+
+            // Setup waiters
+            missing.forEach(name => {
+                if (!this.waiters.has(name)) {
+                    this.waiters.set(name, []);
+                }
+
+                this.waiters.get(name).push(() => {
+                    if (nameArray.every(n => this.modules.has(n)) && !resolved) {
+                        clearTimeout(timeoutId);
+                        resolved = true;
+                        const modules = nameArray.map(n => this.modules.get(n));
+                        if (callback) {
+                            callback(...modules);
+                        }
+                        resolve(modules);
+                    }
+                });
             });
-          });
         });
     }
 };
@@ -200,10 +200,10 @@ async function apiRequest(url, options = {}, skipCache = false) {
 
     // Set up headers
     options.headers = options.headers || {};
-    // PATCH: fetch live CSRF token from auth.js, not possibly stale meta.
+    // PATCH: fetch live CSRF token from auth.js; use unified header name (X-CSRF-Token)
     const csrfToken = window.auth?.getCSRFToken();
     if (csrfToken) {
-        options.headers['X-CSRFToken'] = csrfToken;
+        options.headers['X-CSRF-Token'] = csrfToken;
     }
 
     // Enforce JSON for writes
@@ -263,114 +263,109 @@ async function apiRequest(url, options = {}, skipCache = false) {
 // Main App Initialization
 // ---------------------------------------------------------------------
 async function init() {
-  if (window.projectDashboardInitialized) {
-    console.log('[App] Already initialized.');
-    return true;
-  }
-
-  try {
-    // Register app module immediately
-    window.app = {
-      apiRequest,
-      navigateToConversation,
-      showNotification,
-      state: appState,
-      initialize: init,
-      loadProjects,
-      getProjectId: () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('project') || localStorage.getItem('selectedProjectId');
-      },
-      // Example utility function
-      validateUUID: (uuid) => {
-        if (!uuid) return false;
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        return uuidRegex.test(uuid);
-      }
-    };
-    DependencySystem.register('app', window.app);
-    console.log('[App] Registered app module');
-
-    // Continue with normal initialization
-    await initializeCoreSystems();
-    await initializeAuthSystem();
-    await initializeUIComponents();
-
-    // Finalize app state
-    appState.currentPhase = 'initialized';
-    appState.initialized = true;
-    console.log('[App] Initialization complete.');
-
-  } catch (error) {
-    handleInitError(error);
-  } finally {
-    // Cleanup
-    appState.initializing = false;
-    const loadingDiv = document.getElementById('appLoading');
-    if (loadingDiv) {
-      loadingDiv.style.display = 'none';
+    if (window.projectDashboardInitialized) {
+        console.log('[App] Already initialized.');
+        return true;
     }
-    document.dispatchEvent(new CustomEvent('appInitialized'));
-    console.log('[App] Initialization ended. Phase:', appState.currentPhase);
-  }
+
+    try {
+        // Register app module immediately
+        window.app = {
+            apiRequest,
+            navigateToConversation,
+            showNotification,
+            state: appState,
+            initialize: init,
+            loadProjects,
+            getProjectId: () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                return urlParams.get('project') || localStorage.getItem('selectedProjectId');
+            },
+            // Example utility function
+            validateUUID: (uuid) => {
+                if (!uuid) return false;
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                return uuidRegex.test(uuid);
+            }
+        };
+        DependencySystem.register('app', window.app);
+        console.log('[App] Registered app module');
+
+        // Continue with normal initialization
+        await initializeCoreSystems();
+        await initializeAuthSystem();
+        await initializeUIComponents();
+
+        // Finalize app state
+        appState.currentPhase = 'initialized';
+        appState.initialized = true;
+        console.log('[App] Initialization complete.');
+
+    } catch (error) {
+        handleInitError(error);
+    } finally {
+        // Cleanup
+        appState.initializing = false;
+        const loadingDiv = document.getElementById('appLoading');
+        if (loadingDiv) {
+            loadingDiv.style.display = 'none';
+        }
+        document.dispatchEvent(new CustomEvent('appInitialized'));
+        console.log('[App] Initialization ended. Phase:', appState.currentPhase);
+    }
 }
 
 /**
  * Initialize core systems (e.g., event handlers, modal manager)
  */
 async function initializeCoreSystems() {
-  // Wait for eventHandlers first
-  await DependencySystem.waitFor('eventHandlers', null, 5000);
-  appState.currentPhase = 'event_handlers_ready';
+    // Wait for eventHandlers first
+    await DependencySystem.waitFor('eventHandlers', null, 5000);
+    appState.currentPhase = 'event_handlers_ready';
 
-  // Register app module early
-  // PATCH: Removed duplicate DependencySystem.register('app', ...)
-  // DependencySystem.register('app', window.app);
-  // console.log('[App] Registered app module');
-
-  // --- Ensure required dependencies are registered before proceeding ---
-  if (DependencySystem.ensureRegistered) {
-    // Custom robust wait (if ensureRegistered is implemented)
-    await DependencySystem.ensureRegistered(['modalManager', 'auth', 'projectManager'], 5000);
-  } else {
-    // Fallback: manually wait for each
-    await DependencySystem.waitFor(['modalManager', 'auth', 'projectManager'], null, 5000);
-  }
-
-  // ModalManager explicit init (redundant safe-guard)
-  if (!window.modalManager) {
-    console.warn('[App] modalManager not found, attempting to initialize...');
-    if (typeof window.initModalManager === 'function') {
-      window.initModalManager();
+    // --- Ensure required dependencies are registered before proceeding ---
+    if (DependencySystem.ensureRegistered) {
+        // Custom robust wait (if ensureRegistered is implemented)
+        await DependencySystem.ensureRegistered(['modalManager', 'auth', 'projectManager'], 5000);
+    } else {
+        // Fallback: manually wait for each
+        await DependencySystem.waitFor(['modalManager', 'auth', 'projectManager'], null, 5000);
     }
-  }
 
-  try {
-    await DependencySystem.waitFor('modalManager', null, 5000);
-    console.log('[App] Modal manager initialized');
-    appState.currentPhase = 'modals_ready';
-  } catch (error) {
-    console.warn('[App] Modal manager initialization timed out:', error);
-    // Continue anyway - modal functionality will be degraded but app can still work
-  }
+    // ModalManager explicit init (redundant safe-guard)
+    if (!window.modalManager) {
+        console.warn('[App] modalManager not found, attempting to initialize...');
+        if (typeof window.initModalManager === 'function') {
+            window.initModalManager();
+        }
+    }
+
+    try {
+        await DependencySystem.waitFor('modalManager', null, 5000);
+        console.log('[App] Modal manager initialized');
+        appState.currentPhase = 'modals_ready';
+    } catch (error) {
+        console.warn('[App] Modal manager initialization timed out:', error);
+        // Continue anyway - modal functionality will be degraded but app can still work
+    }
 }
 
 /**
  * Initialize auth system
  */
 async function initializeAuthSystem() {
-  await DependencySystem.waitFor('auth', async (auth) => {
-    try {
-      console.log('[Auth] Starting auth initialization...');
-      const initialized = await auth.init();
-      appState.isAuthenticated = auth.isAuthenticated();
-      console.log(`[Auth] Auth module ready. Initialized: ${initialized}, Authenticated: ${appState.isAuthenticated}`);
-    } catch (error) {
-      console.error('[Auth] Initialization error:', error);
-      appState.isAuthenticated = false;
-    }
-  }, APP_CONFIG.TIMEOUTS.AUTH_CHECK);
-  appState.currentPhase = 'auth_ready';
+    await DependencySystem.waitFor('auth', async (auth) => {
+        try {
+            console.log('[Auth] Starting auth initialization...');
+            const initialized = await auth.init();
+            appState.isAuthenticated = auth.isAuthenticated();
+            console.log(`[Auth] Auth module ready. Initialized: ${initialized}, Authenticated: ${appState.isAuthenticated}`);
+        } catch (error) {
+            console.error('[Auth] Initialization error:', error);
+            appState.isAuthenticated = false;
+        }
+    }, APP_CONFIG.TIMEOUTS.AUTH_CHECK);
+    appState.currentPhase = 'auth_ready';
 }
 
 /**
@@ -557,15 +552,28 @@ function showProjectListView() {
 // ---------------------------------------------------------------------
 // Auth & Event Listeners
 // ---------------------------------------------------------------------
-if (window.auth?.AuthBus) {
-    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
-}
+/**
+ * Ensure the listener is attached robustly, preventing duplicates even in HMR stacks.
+ * Attaches after auth module is loaded via DependencySystem.
+ */
+DependencySystem.waitFor('auth', (auth) => {
+    if (auth?.AuthBus) {
+        if (!auth.AuthBus._hasAuthStateChangeListener) {
+            auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+            auth.AuthBus._hasAuthStateChangeListener = true;
+            console.log('[App] Attached authStateChanged listener.');
+        }
+    } else {
+        console.error('[App] Auth module or AuthBus not found for attaching authStateChanged listener.');
+    }
+}, 5000);
 
 /**
- * Handle auth state changes
+ * Handle auth state changes, including header UI toggle.
  */
 function handleAuthStateChange(event) {
-    const { authenticated } = event.detail || {};
+    const { authenticated, username } = event.detail || {};
+    appState.isAuthenticated = authenticated; // Keep synchronized with appState
 
     // Batch DOM updates using requestAnimationFrame
     requestAnimationFrame(() => {
@@ -573,34 +581,73 @@ function handleAuthStateChange(event) {
         const projectListView = document.getElementById('projectListView');
         const projectDetailsView = document.getElementById('projectDetailsView');
 
+        // --- HEADER UPDATE LOGIC START ---
+        const authButton = document.getElementById('authButton');
+        const userMenu = document.getElementById('userMenu');
+        const authStatusSpan = document.getElementById('authStatus');
+        const userStatusSpan = document.getElementById('userStatus');
+        if (authenticated) {
+            // Show user menu, hide login button, set username, update status
+            authButton?.classList.add('hidden');
+            userMenu?.classList.remove('hidden');
+            if (authStatusSpan) {
+                authStatusSpan.textContent = username || 'Authenticated';
+            }
+            if (userStatusSpan) {
+                userStatusSpan.textContent = 'Online';
+                userStatusSpan.classList.remove('text-error');
+                userStatusSpan.classList.add('text-success');
+            }
+        } else {
+            authButton?.classList.remove('hidden');
+            userMenu?.classList.add('hidden');
+            if (authStatusSpan) {
+                authStatusSpan.textContent = 'Not Authenticated';
+            }
+            if (userStatusSpan) {
+                userStatusSpan.textContent = 'Offline';
+                userStatusSpan.classList.remove('text-success');
+                userStatusSpan.classList.add('text-error');
+            }
+        }
+        // --- HEADER UPDATE LOGIC END ---
+
         if (!authenticated) {
             // Hide project views, show login message
             if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
             if (projectListView) {
-                projectListView.classList.add('hidden');
-                projectListView.classList.add('opacity-0');
+                projectListView.classList.add('hidden', 'opacity-0');
             }
-            if (projectDetailsView) projectDetailsView.classList.add('hidden');
+            if (projectDetailsView) {
+                projectDetailsView.classList.add('hidden');
+            }
         } else {
             // Show appropriate dashboard view
-            if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+            if (loginRequiredMessage) {
+                loginRequiredMessage.classList.add('hidden');
+            }
             if (projectListView) {
                 projectListView.classList.remove('hidden');
-                // Use a small delay to ensure smooth transition
                 setTimeout(() => {
                     projectListView.classList.remove('opacity-0');
                 }, 100);
             }
 
-            if (dashboardState.currentView === 'details' && dashboardState.currentProject) {
+            if (
+                typeof dashboardState !== "undefined" &&
+                dashboardState.currentView === 'details' &&
+                dashboardState.currentProject
+            ) {
                 projectListView?.classList.add('hidden');
                 projectDetailsView?.classList.remove('hidden');
             } else {
                 projectListView?.classList.remove('hidden');
                 projectDetailsView?.classList.add('hidden');
 
-                // Only load projects if we're showing the list view
-                if (dashboardState.currentView === 'list') {
+                if (
+                    typeof dashboardState !== "undefined" &&
+                    dashboardState.currentView === 'list'
+                ) {
                     loadProjectList();
                 }
             }

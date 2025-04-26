@@ -241,6 +241,8 @@ async def register_user(
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
+    from utils.auth_utils import validate_csrf_token
+    validate_csrf_token(request)
     user_lower = creds.username.strip().lower()
     if not user_lower:
         raise HTTPException(status_code=400, detail="Username cannot be empty.")
@@ -295,6 +297,8 @@ async def login_user(
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
+    from utils.auth_utils import validate_csrf_token
+    validate_csrf_token(request)
     """
     Login user, set cookies for access/refresh tokens.
     """
@@ -367,6 +371,8 @@ async def refresh_token(
     response: Response,
     session: DBSessionDep
 ) -> LoginResponse:
+    from utils.auth_utils import validate_csrf_token
+    validate_csrf_token(request)
     """
     Refreshes the access token using a valid refresh cookie.
     """
@@ -483,6 +489,8 @@ async def set_cookies_endpoint(
     response: Response,
     token_req: TokenRequest
 ):
+    from utils.auth_utils import validate_csrf_token
+    validate_csrf_token(request)
     if settings.ENV.lower() != "local":
         raise HTTPException(status_code=403, detail="Insecure cookie endpoint disabled in non-local env.")
 
@@ -525,6 +533,8 @@ async def logout_user(
     response: Response,
     session: AsyncSession = Depends(get_async_session),
 ):
+    from utils.auth_utils import validate_csrf_token
+    validate_csrf_token(request)
     current_user = None
     access_cookie = request.cookies.get("access_token")
     refresh_cookie = request.cookies.get("refresh_token")

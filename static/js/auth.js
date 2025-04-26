@@ -133,15 +133,26 @@ function getCSRFToken() {
 /**
  * Central API request wrapper
  * Handles credentials, CSRF, and basic error formatting.
+ *
+ * For all auth-changing endpoints, always run internal logic to guarantee X-CSRF-Token.
  */
 async function authRequest(endpoint, method, body = null) {
-  // Use global apiRequest if available
-  if (window.apiRequest && endpoint !== '/api/auth/csrf') {
+  const AUTH_PROTECTED_ENDPOINTS = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/logout',
+    '/api/auth/refresh'
+  ];
+
+  // For these endpoints, always use internal logic (never delegate to window.apiRequest)
+  const isAuthProtected = AUTH_PROTECTED_ENDPOINTS.includes(endpoint);
+
+  if (!isAuthProtected && window.apiRequest && endpoint !== '/api/auth/csrf') {
     console.debug(`[Auth] Using global apiRequest for ${endpoint}`);
     return window.apiRequest(endpoint, method, body);
   }
 
-  // Fallback implementation
+  // Internal logic for state-changing and auth endpoints
   console.debug(`[Auth] Using internal authRequest for ${endpoint}`);
   // PATCH: Clone headers per request, don't mutate shared object.
   const baseHeaders = { Accept: 'application/json' };
@@ -155,13 +166,13 @@ async function authRequest(endpoint, method, body = null) {
   // Add CSRF token for non-GET requests if not local dev
   const isStateChanging =
     !['GET', 'HEAD', 'OPTIONS'].includes(options.method) &&
-    endpoint !== '/api/auth/csrf' &&
-    !isLocalDev();
+    endpoint !== '/api/auth/csrf';
 
   if (isStateChanging) {
     const token = await getCSRFTokenAsync();
     if (token) {
       options.headers['X-CSRF-Token'] = token;
+      console.debug('[Auth][DEBUG] About to send X-CSRF-Token header:', token, 'All headers:', options.headers);
     } else {
       console.warn(`[Auth] CSRF token missing for request: ${endpoint}`);
     }
@@ -356,17 +367,22 @@ async function loginUser(username, password) {
     console.log('[Auth] Login API call successful.');
 
     // --- MODIFICATION START ---
-    // Trust the successful login response initially.
-    // The backend has set the cookies. Broadcast the state change.
-    // The regular verification interval or subsequent actions will confirm.
+    // --- MODIFICATION START ---
+    // REMOVED: Optimistic broadcastAuth call.
+    // INSTEAD: Trigger verification immediately after successful login API call.
+
     if (response && response.username) {
-        broadcastAuth(true, response.username, 'login_success_immediate');
-        console.log(`[Auth] User ${response.username} logged in (state updated immediately). Verification will occur later.`);
-        // Optionally trigger a non-blocking verification after a short delay
-        // setTimeout(() => verifyAuthState(false).catch(console.warn), 500);
-        return response; // Return the original login response
+        console.log('[Auth] Triggering verification immediately after login...');
+        const verified = await verifyAuthState(true);
+        if (verified) {
+            console.log(`[Auth] Post-login verification successful for user: ${authState.username}`);
+            return response;
+        } else {
+            console.error('[Auth] Login API succeeded but immediate verification failed.');
+            await clearTokenState({ source: 'login_verify_fail' });
+            throw new Error('Login succeeded but session could not be verified immediately.');
+        }
     } else {
-        // If login response was weird, clear state and throw
         console.error('[Auth] Login API succeeded but response lacked username.');
         await clearTokenState({ source: 'login_bad_response' });
         throw new Error('Login succeeded but received invalid response data.');

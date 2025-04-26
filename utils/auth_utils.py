@@ -202,6 +202,45 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
 
 # -----------------------------------------------------------------------------
+# CSRF Protection Utilities
+# -----------------------------------------------------------------------------
+from fastapi import Request
+
+def validate_csrf_token(request: Request) -> None:
+    """
+    Validates CSRF token for state-changing (non-GET/HEAD/OPTIONS) requests.
+    - Checks X-CSRF-Token header matches csrf_token cookie.
+    - Raises HTTPException(403) if missing or mismatched.
+    - Always logs the received tokens for troubleshooting.
+    """
+    debugging = hasattr(settings, "DEBUG") and settings.DEBUG
+
+    # Only validate on unsafe methods
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    csrf_cookie = request.cookies.get("csrf_token")
+    csrf_header = request.headers.get("x-csrf-token")
+    logger.warning(
+        "[CSRF CHECK] request.method=%s "
+        "csrf_cookie=%r csrf_header=%r raw_cookies=%r",
+        request.method,
+        csrf_cookie,
+        csrf_header,
+        request.headers.get("cookie"),
+    )
+    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+        logger.error(
+            "[CSRF FAILURE] CSRF mismatch: cookie=%r header=%r all_cookies=%r",
+            csrf_cookie,
+            csrf_header,
+            request.headers.get("cookie"),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"CSRF token missing or incorrect (cookie={csrf_cookie!r} header={csrf_header!r})"
+        )
+
+# -----------------------------------------------------------------------------
 # Cookie Extraction for HTTP / WebSocket
 # -----------------------------------------------------------------------------
 def extract_token(request_or_websocket, token_type="access"):

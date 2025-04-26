@@ -36,7 +36,7 @@ storage = get_file_storage(storage_config)
 @router.get("", response_model=dict)
 async def list_project_files(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -51,9 +51,10 @@ async def list_project_files(
     List files in a project with metadata only.
     Does not include knowledge base processing details.
     """
+    user, _ = current_user_and_token
     try:
         # Validate project access
-        await validate_project_access(project_id, current_user, db)
+        await validate_project_access(project_id, user, db)
 
         conditions = [ProjectFile.project_id == project_id]
         if file_type:
@@ -96,16 +97,17 @@ async def list_project_files(
 async def get_project_file_metadata(
     project_id: UUID,
     file_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
     Get metadata for a specific file.
     NOTE: Actual file content retrieval will be handled separately.
     """
+    user, _ = current_user_and_token
     try:
         # Validate project access
-        await validate_project_access(project_id, current_user, db)
+        await validate_project_access(project_id, user, db)
 
         file = await db.get(ProjectFile, file_id)
         if not file or file.project_id != project_id:
@@ -135,16 +137,17 @@ async def get_project_file_metadata(
 async def delete_project_file(
     project_id: UUID,
     file_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
     Delete a file from project storage.
     NOTE: KB cleanup is handled by the KB service via database triggers/signals.
     """
+    user, _ = current_user_and_token
     try:
         # Validate project access
-        await validate_project_access(project_id, current_user, db)
+        await validate_project_access(project_id, user, db)
 
         file = await db.get(ProjectFile, file_id)
         if not file or file.project_id != project_id:
@@ -160,10 +163,7 @@ async def delete_project_file(
         await db.delete(file)
         await db.commit()
 
-        return await create_standard_response(
-            {"id": str(file_id)},
-            "File deleted successfully"
-        )
+        return await create_standard_response({"id": str(file_id)}, "File deleted successfully")
 
     except HTTPException:
         raise
@@ -179,13 +179,14 @@ async def delete_project_file(
 async def download_project_file(
     project_id: UUID,
     file_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
     Stub for future file download endpoint.
     Actual implementation will depend on storage backend.
     """
+    user, _ = current_user_and_token
     raise HTTPException(
         status_code=501,
         detail="File download endpoint not yet implemented"

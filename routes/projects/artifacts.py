@@ -49,10 +49,11 @@ class ArtifactCreate(BaseModel):
 async def create_artifact(
     project_id: UUID,
     artifact_data: ArtifactCreate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Create a new artifact for the project."""
+    user, _ = current_user_and_token
     try:
         artifact = await artifact_service.create_artifact(
             db=db,
@@ -61,15 +62,14 @@ async def create_artifact(
             content_type=artifact_data.content_type,
             content=artifact_data.content,
             conversation_id=artifact_data.conversation_id,
-            user_id=current_user.id,
+            user_id=user.id,
         )
 
         serialized_artifact = serialize_artifact(artifact)
         return await create_standard_response(
             serialized_artifact, "Artifact created successfully"
         )
-    except HTTPException:  # pylint: disable=unused-variable
-        # Re-raise HTTP exceptions (e is used in the raise statement)
+    except HTTPException:
         raise
     except Exception as _e:
         logger.error("Error creating artifact", exc_info=True)
@@ -82,7 +82,7 @@ async def create_artifact(
 @router.get("", response_model=dict)
 async def list_artifacts(
     project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conversation_id: Optional[UUID] = None,
     content_type: Optional[str] = None,
@@ -93,6 +93,7 @@ async def list_artifacts(
     limit: int = 100,
 ):
     """List all artifacts for a project with optional filtering."""
+    user, _ = current_user_and_token
     try:
         artifacts = await artifact_service.list_artifacts(
             project_id=project_id,
@@ -104,7 +105,7 @@ async def list_artifacts(
             sort_desc=sort_desc,
             skip=skip,
             limit=limit,
-            user_id=current_user.id,
+            user_id=user.id,
         )
 
         return await create_standard_response(
@@ -114,7 +115,7 @@ async def list_artifacts(
                 "project_id": str(project_id),
             }
         )
-    except HTTPException:  # pylint: disable=unused-variable
+    except HTTPException:
         raise
     except Exception as _e:
         logger.error("Error listing artifacts", exc_info=True)
@@ -124,25 +125,52 @@ async def list_artifacts(
         ) from _e
 
 
+@router.get("/stats", response_model=dict)
+async def get_artifact_stats(
+    project_id: UUID,
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Get statistics about artifacts in the project."""
+    user, _ = current_user_and_token
+    try:
+        stats = await artifact_service.get_artifact_stats(
+            project_id=project_id,
+            db=db,
+            user_id=user.id,
+        )
+
+        return await create_standard_response(stats)
+    except HTTPException:
+        raise
+    except Exception as _e:
+        logger.error("Error retrieving artifact statistics", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve artifact statistics",
+        ) from _e
+
+
 @router.get("/{artifact_id}", response_model=dict)
 async def get_artifact(
     project_id: UUID,
     artifact_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get a specific artifact by ID."""
+    user, _ = current_user_and_token
     try:
         artifact = await artifact_service.get_artifact(
             db=db,
             artifact_id=artifact_id,
             project_id=project_id,
-            user_id=current_user.id,
+            user_id=user.id,
         )
 
         serialized_artifact = serialize_artifact(artifact)
         return await create_standard_response(serialized_artifact)
-    except HTTPException:  # pylint: disable=unused-variable
+    except HTTPException:
         raise
     except Exception as _e:
         logger.error("Error retrieving artifact", exc_info=True)
@@ -157,24 +185,25 @@ async def update_artifact(
     project_id: UUID,
     artifact_id: UUID,
     update_data: dict,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Update an artifact by ID."""
+    user, _ = current_user_and_token
     try:
         artifact = await artifact_service.update_artifact(
             db=db,
             artifact_id=artifact_id,
             project_id=project_id,
             update_data=update_data,
-            user_id=current_user.id,
+            user_id=user.id,
         )
 
         serialized_artifact = serialize_artifact(artifact)
         return await create_standard_response(
             serialized_artifact, message="Artifact updated successfully"
         )
-    except HTTPException:  # pylint: disable=unused-variable
+    except HTTPException:
         raise
     except Exception as _e:
         logger.error("Error updating artifact", exc_info=True)
@@ -188,16 +217,17 @@ async def update_artifact(
 async def delete_artifact(
     project_id: UUID,
     artifact_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Delete an artifact by ID."""
+    user, _ = current_user_and_token
     try:
         result = await artifact_service.delete_artifact(
             db=db,
             artifact_id=artifact_id,
             project_id=project_id,
-            user_id=current_user.id,
+            user_id=user.id,
         )
 
         return await create_standard_response(
@@ -218,17 +248,18 @@ async def export_artifact(
     project_id: UUID,
     artifact_id: UUID,
     export_format: str = "text",
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Export an artifact in various formats."""
+    user, _ = current_user_and_token
     try:
         export_data = await artifact_service.export_artifact(
             db=db,
             artifact_id=artifact_id,
             project_id=project_id,
             export_format=export_format,
-            user_id=current_user.id,
+            user_id=user.id,
         )
 
         return await create_standard_response(
@@ -241,29 +272,4 @@ async def export_artifact(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to export artifact",
-        ) from _e
-
-
-@router.get("/stats", response_model=dict)
-async def get_artifact_stats(
-    project_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-):
-    """Get statistics about artifacts in the project."""
-    try:
-        stats = await artifact_service.get_artifact_stats(
-            project_id=project_id,
-            db=db,
-            user_id=current_user.id,
-        )
-
-        return await create_standard_response(stats)
-    except HTTPException:  # pylint: disable=unused-variable
-        raise
-    except Exception as _e:
-        logger.error("Error retrieving artifact statistics", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve artifact statistics",
         ) from _e

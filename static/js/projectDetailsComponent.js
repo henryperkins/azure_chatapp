@@ -70,6 +70,11 @@ class ProjectDetailsComponent {
     // Initialize file upload component
     this.fileUploadComponent = null;
 
+    // Optionally connect KnowledgeBaseComponent if available globally
+    this.knowledgeBaseComponent = typeof window.KnowledgeBaseComponent === "function"
+      ? new window.KnowledgeBaseComponent()
+      : null;
+
     // Find elements
     this._findElements();
 
@@ -95,11 +100,11 @@ class ProjectDetailsComponent {
 
     // Tab content sections
     this.elements.tabContents = {
-      files: document.getElementById('filesTabContent'),
-      knowledge: document.getElementById('knowledgeTabContent'),
-      conversations: document.getElementById('conversationsTabContent'),
-      artifacts: document.getElementById('artifactsTabContent'),
-      chat: document.getElementById('chatTabContent')
+      files: document.getElementById('filesTab'),
+      knowledge: document.getElementById('knowledgeTab'),
+      conversations: document.getElementById('conversationsTab'),
+      artifacts: document.getElementById('artifactsTab'),
+      chat: document.getElementById('chatTab')
     };
 
     // Loading indicators
@@ -125,7 +130,22 @@ class ProjectDetailsComponent {
   _bindEvents() {
     // Back button
     if (this.elements.backBtn) {
-      window.eventHandlers.trackListener(this.elements.backBtn, 'click', this.onBack);
+      // Remove all previous event listeners and inline handlers from back button
+      const oldBtn = this.elements.backBtn;
+      const newBackBtn = oldBtn.cloneNode(true);
+      // Remove any inline onclick
+      newBackBtn.onclick = null;
+      // Replace the button in the DOM
+      oldBtn.parentNode.replaceChild(newBackBtn, oldBtn);
+      this.elements.backBtn = newBackBtn;
+      // Defensive: remove event listeners as well (if any)
+      this.elements.backBtn.removeEventListener('click', this.onBack); // No harm if not present
+      // Attach definitive event handler with a debug log
+      window.eventHandlers.trackListener(this.elements.backBtn, 'click', (e) => {
+        // Instrumentation for bug tracing
+        console.log('[ProjectDetailsComponent] Back button clicked, triggering onBack');
+        this.onBack(e);
+      });
     }
 
     // Tab buttons
@@ -396,10 +416,29 @@ class ProjectDetailsComponent {
    * @param {string} tabName - Tab name
    * @private
    */
-  _loadTabContent(tabName) {
+  async _loadTabContent(tabName) {
     if (!this.state.currentProject?.id) return;
 
     const projectId = this.state.currentProject.id;
+
+    // Gracefully handle knowledge tab visibility/component
+    if (this.knowledgeBaseComponent) {
+      if (tabName === 'knowledge') {
+        // Optionally fetch latest KB data (or rely on already-stored)
+        // It expects kbData and projectId
+        let kbData = null;
+        // Try: use up-to-date currentProject data
+        if (
+          this.state.currentProject.knowledge_base
+        ) {
+          kbData = this.state.currentProject.knowledge_base;
+        }
+        await this.knowledgeBaseComponent.initialize(true, kbData, projectId);
+      } else {
+        // Hide KB component when not active
+        await this.knowledgeBaseComponent.initialize(false);
+      }
+    }
 
     switch (tabName) {
       case 'files':
@@ -421,9 +460,7 @@ class ProjectDetailsComponent {
         break;
 
       case 'knowledge':
-        if (this.state.currentProject.knowledge_base_id) {
-          window.projectManager?.loadKnowledgeBaseDetails?.(this.state.currentProject.knowledge_base_id);
-        }
+        // Previously just fetched data; now handled by KnowledgeBaseComponent.initialize
         break;
 
       case 'chat':
